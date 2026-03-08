@@ -43,28 +43,44 @@ object Bootstrap {
         }
         val h2PriorPassword = System.getProperty("H2_PRIOR_PASSWORD") ?: System.getenv("H2_PRIOR_PASSWORD") ?: ""
         val h2FilePassword = System.getProperty("H2_FILE_PASSWORD") ?: System.getenv("H2_FILE_PASSWORD") ?: ""
+        if (h2FilePassword.isBlank()) {
+            throw RuntimeException("H2_FILE_PASSWORD must be set in .env or environment. The database file is AES-encrypted at rest and requires this key.")
+        }
+
+        val placeholders = setOf(
+            "change_me_to_a_strong_password",
+            "change_me_to_another_strong_password",
+            "your-database-password",
+            "your-file-encryption-password"
+        )
+        if (h2Password in placeholders) {
+            throw RuntimeException("H2_PASSWORD is still set to a placeholder value. Change it to a real password.")
+        }
+        if (h2FilePassword in placeholders) {
+            throw RuntimeException("H2_FILE_PASSWORD is still set to a placeholder value. Change it to a real password.")
+        }
 
         val basePath = "./data/mediamanager"
-        val encrypted = h2FilePassword.isNotBlank()
-        log.info("Database encryption: {}", if (encrypted) "ENABLED (H2_FILE_PASSWORD set)" else "disabled")
+        log.info("Database encryption: ENABLED (H2_FILE_PASSWORD set)")
 
         // Check for restore sentinel before any DB operations
         val restoreSentinel = File("./data/restore.sql")
         if (restoreSentinel.exists()) {
-            restoreFromBackup(basePath, restoreSentinel, h2Password, h2FilePassword, encrypted)
+            restoreFromBackup(basePath, restoreSentinel, h2Password, h2FilePassword)
         }
 
-        // If encryption requested and DB exists unencrypted, migrate it
-        if (encrypted && File("${basePath}.mv.db").exists()) {
+        // If DB exists unencrypted, migrate it to encrypted format
+        if (File("${basePath}.mv.db").exists()) {
             migrateToEncryptedDb(basePath, h2Password, h2PriorPassword, h2FilePassword)
         }
 
-        val dbUrl = if (encrypted) "jdbc:h2:file:$basePath;CIPHER=AES" else "jdbc:h2:file:$basePath"
-        val dbPassword = if (encrypted) "$h2FilePassword $h2Password" else h2Password
+        val dbUrl = "jdbc:h2:file:$basePath;CIPHER=AES"
+        val dbPassword = "$h2FilePassword $h2Password"
         log.info("JDBC URL: {}", dbUrl)
 
-        if (!encrypted) {
-            migrateH2Password(dbUrl, h2Password, h2PriorPassword)
+        // Rotate H2_PASSWORD if H2_PRIOR_PASSWORD is set
+        if (h2PriorPassword.isNotBlank()) {
+            migrateH2Password(dbUrl, h2Password, h2PriorPassword, h2FilePassword)
         }
 
         val ds = HikariDataSource(HikariConfig().apply {
@@ -117,22 +133,19 @@ object Bootstrap {
     }
 
     /**
-     * Migrates the H2 database password from H2_PRIOR_PASSWORD to H2_PASSWORD.
-     *
-     * - If the DB doesn't exist yet, no migration needed (new DB created with target password).
-     * - If the target password already works, no migration needed.
-     * - Otherwise, connects with the prior password and runs ALTER USER to set the new one.
+     * Migrates the H2 database user password from H2_PRIOR_PASSWORD to H2_PASSWORD.
+     * Works with encrypted (CIPHER=AES) databases using compound passwords.
      *
      * To change the password: move current H2_PASSWORD to H2_PRIOR_PASSWORD, set new H2_PASSWORD.
      * After one successful startup, H2_PRIOR_PASSWORD can be removed.
      */
-    private fun migrateH2Password(dbUrl: String, targetPassword: String, priorPassword: String) {
+    private fun migrateH2Password(dbUrl: String, targetPassword: String, priorPassword: String, filePassword: String) {
         // New database — will be created with the target password
         if (!File("./data/mediamanager.mv.db").exists()) return
 
         // Try connecting with the target password — if it works, no migration needed
         try {
-            DriverManager.getConnection(dbUrl, "sa", targetPassword).use { it.createStatement().execute("SELECT 1") }
+            DriverManager.getConnection(dbUrl, "sa", "$filePassword $targetPassword").use { it.createStatement().execute("SELECT 1") }
             return
         } catch (_: Exception) {
             // Target password didn't work — need to migrate from prior password
@@ -140,7 +153,7 @@ object Bootstrap {
 
         log.info("H2_PASSWORD does not match database — attempting migration from H2_PRIOR_PASSWORD")
         try {
-            DriverManager.getConnection(dbUrl, "sa", priorPassword).use { conn ->
+            DriverManager.getConnection(dbUrl, "sa", "$filePassword $priorPassword").use { conn ->
                 val escaped = targetPassword.replace("'", "''")
                 conn.createStatement().execute("ALTER USER sa SET PASSWORD '$escaped'")
                 log.info("H2 database password changed successfully")
@@ -292,9 +305,8 @@ object Bootstrap {
      * 3. Create a fresh database and import the backup via RUNSCRIPT FROM
      * 4. Delete the sentinel file
      *
-     * The sentinel file must match the current encryption setting:
-     * - If H2_FILE_PASSWORD is set: the file must be a CIPHER AES backup
-     * - If H2_FILE_PASSWORD is not set: the file must be a plain or GZIP backup
+     * The sentinel file must be a CIPHER AES backup matching the current
+     * H2_FILE_PASSWORD.
      *
      * To restore: copy a backup file to `data/restore.sql` and restart the server.
      */
@@ -302,8 +314,7 @@ object Bootstrap {
         basePath: String,
         sentinelFile: File,
         h2Password: String,
-        h2FilePassword: String,
-        encrypted: Boolean
+        h2FilePassword: String
     ) {
         log.warn("=== DATABASE RESTORE DETECTED ===")
         log.warn("Sentinel file: {} ({} bytes)", sentinelFile.absolutePath, sentinelFile.length())
@@ -324,18 +335,13 @@ object Bootstrap {
 
         // Step 2: Create fresh database and import
         log.warn("Step 2/3: Importing backup into fresh database")
-        val dbUrl = if (encrypted) "jdbc:h2:file:$basePath;CIPHER=AES" else "jdbc:h2:file:$basePath"
-        val compoundPassword = if (encrypted) "$h2FilePassword $h2Password" else h2Password
+        val dbUrl = "jdbc:h2:file:$basePath;CIPHER=AES"
+        val compoundPassword = "$h2FilePassword $h2Password"
         try {
             DriverManager.getConnection(dbUrl, "sa", compoundPassword).use { conn ->
                 val path = sentinelFile.absolutePath.replace("\\", "/").replace("'", "''")
-                val sql = if (encrypted) {
-                    val escapedPw = h2FilePassword.replace("'", "''")
-                    "RUNSCRIPT FROM '$path' CIPHER AES PASSWORD '$escapedPw'"
-                } else {
-                    "RUNSCRIPT FROM '$path' FROM_1X"
-                }
-                conn.createStatement().execute(sql)
+                val escapedPw = h2FilePassword.replace("'", "''")
+                conn.createStatement().execute("RUNSCRIPT FROM '$path' CIPHER AES PASSWORD '$escapedPw'")
             }
             val newDbFile = File("${basePath}.mv.db")
             log.warn("Step 2/3: Imported backup successfully ({} bytes)", newDbFile.length())

@@ -2747,3 +2747,14 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files modified: README.md, docker-compose.yml, docs/GETTING_STARTED.md,
   docs/index.md, claude.log
 ===
+
+=== 2026-03-08 16:15 — Make H2_FILE_PASSWORD mandatory (#23) ===
+- H2_FILE_PASSWORD now required on startup (RuntimeException if blank)
+- Reject placeholder passwords from docs/docker-compose examples
+- Removed dead code: unencrypted DB path (encrypted is always true now)
+- Simplified restoreFromBackup: removed encrypted parameter, always AES
+- Adapted migrateH2Password for encrypted DBs (compound passwords)
+- H2_PASSWORD rotation still works via H2_PRIOR_PASSWORD mechanism
+- All tests pass (24s)
+- Files modified: src/main/kotlin/.../Bootstrap.kt, claude.log
+===
