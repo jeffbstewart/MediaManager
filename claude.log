@@ -2731,3 +2731,19 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files modified: docker-compose.yml, docs/GETTING_STARTED.md, CLAUDE.md,
   .github/workflows/release.yml, claude.log
 ===
+
+=== 2026-03-08 15:45 — Documentation rewrite for docker-compose onboarding ===
+- Rewrote GETTING_STARTED.md: Docker-first, links to docker-compose.yml
+  for copy/paste (no git clone), Portainer mentioned, H2_FILE_PASSWORD
+  required, media volume read/write emphasized, MM_FFMPEG_PATH removed
+  from Docker path, local dev section with FFmpeg/Whisper setup guidance
+- Updated docker-compose.yml: added H2_FILE_PASSWORD, removed MM_FFMPEG_PATH,
+  media volume comment emphasizes read/write for transcodes
+- Updated README.md and docs/index.md: Quick Start as numbered steps with
+  copy/paste link, Feature Tracker points to GitHub Issues
+- Created issue #23: Make H2_FILE_PASSWORD mandatory
+- Created issue #24: Support H2_FILE_PASSWORD rotation
+- Closed issue #19: Polished docker-compose.yml
+- Files modified: README.md, docker-compose.yml, docs/GETTING_STARTED.md,
+  docs/index.md, claude.log
+===

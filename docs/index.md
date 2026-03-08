@@ -42,21 +42,15 @@ Media Manager is a self-hosted web application for people who own physical media
 | [Roku Setup](ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
 | [Transcode Buddy](TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
-| [Feature Tracker](FEATURES.md) | Contributors | Planned, in-progress, and completed features |
+| [Feature Tracker](FEATURES.md) | Contributors | Completed features history; open items in [GitHub Issues](https://github.com/jeffbstewart/MediaManager/issues) |
 
 ## Quick Start
 
-```bash
-# Clone and configure
-cp secrets/example.env secrets/.env
-# Edit secrets/.env — set H2_PASSWORD and TMDB_API_KEY
-
-# Build and run
-./gradlew build
-./gradlew --no-daemon run
-
-# Open http://localhost:8080 — create your admin account
-```
+1. Copy the [`docker-compose.yml`](https://github.com/jeffbstewart/MediaManager/blob/main/docker-compose.yml) to your server (or paste it into Portainer)
+2. Set `H2_PASSWORD`, `H2_FILE_PASSWORD`, and `TMDB_API_KEY` ([free signup](https://www.themoviedb.org/settings/api))
+3. Update the volume paths to point at your cache directory and media files
+4. `docker compose up -d`
+5. Open **http://your-host:8080** and create your admin account
 
 See [Getting Started](GETTING_STARTED.md) for the full walkthrough.
 

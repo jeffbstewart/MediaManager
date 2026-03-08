@@ -12,7 +12,17 @@
 
 ---
 
-See the [architecture diagram](docs/index.md#architecture) in the documentation for a visual overview of the deployment topology.
+## Quick Start
+
+1. Copy the [`docker-compose.yml`](docker-compose.yml) to your server (or paste it into Portainer)
+2. Set `H2_PASSWORD`, `H2_FILE_PASSWORD`, and `TMDB_API_KEY` ([free signup](https://www.themoviedb.org/settings/api))
+3. Update the volume paths to point at your cache directory and media files
+4. `docker compose up -d`
+5. Open **http://your-host:8080** and create your admin account
+
+See [Getting Started](docs/GETTING_STARTED.md) for the full walkthrough.
+
+See the [architecture diagram](docs/index.md#architecture) for a visual overview of the deployment topology.
 
 ## Documentation
 
@@ -24,7 +34,7 @@ See the [architecture diagram](docs/index.md#architecture) in the documentation 
 | [Roku Setup](docs/ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
 | [Transcode Buddy](docs/TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](docs/GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
-| [Feature Tracker](docs/FEATURES.md) | Contributors | Planned, in-progress, and completed features |
+| [Feature Tracker](docs/FEATURES.md) | Contributors | Completed features history; open items tracked in [GitHub Issues](https://github.com/jeffbstewart/MediaManager/issues) |
 
 ## Tech Stack
 

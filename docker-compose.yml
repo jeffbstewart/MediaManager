@@ -28,28 +28,29 @@ services:
     # ── Volumes ──────────────────────────────────────────────────────
     # cache: persistent storage for the H2 database, poster cache, and
     #        backups. Must survive container recreation.
-    # media: your ripped media files. The app reads sources and writes
-    #        transcoded copies to a ForBrowser/ subdirectory.
+    # media: your ripped media files. MUST BE READ/WRITE — the app writes
+    #        browser- and media-appliance-optimized transcodes into a
+    #        ForBrowser/ subdirectory alongside your source files.
     volumes:
       - /volume1/docker/mediamanager/cache:/cache
       - /volume1/your-media-share:/media
 
     # ── Environment ──────────────────────────────────────────────────
-    # H2_PASSWORD:   Required. Password for the embedded H2 database.
-    # TMDB_API_KEY:  Required. Sign up at https://www.themoviedb.org/signup
-    #                then go to https://www.themoviedb.org/settings/api
-    #                and copy "API Key (v3 auth)".
-    # MM_NAS_ROOT:   Path to media inside the container (matches volume mount).
-    # MM_BEHIND_PROXY: Set to true if behind a reverse proxy (nginx, traefik)
-    #                  so the app trusts X-Forwarded-* headers.
-    # MM_FFMPEG_PATH: Override FFmpeg location (default: /usr/bin/ffmpeg).
-    #                 Set to empty string to disable local transcoding.
+    # H2_PASSWORD:      Required. Password for the embedded H2 database.
+    # H2_FILE_PASSWORD: Required. AES encryption key for the database file.
+    #                   Use a different password than H2_PASSWORD.
+    # TMDB_API_KEY:     Required. Sign up at https://www.themoviedb.org/signup
+    #                   then go to https://www.themoviedb.org/settings/api
+    #                   and copy "API Key (v3 auth)".
+    # MM_NAS_ROOT:      Path to media inside the container (matches volume mount).
+    # MM_BEHIND_PROXY:  Set to true if behind a reverse proxy (nginx, traefik)
+    #                   so the app trusts X-Forwarded-* headers.
     environment:
       - H2_PASSWORD=change_me_to_a_strong_password
+      - H2_FILE_PASSWORD=change_me_to_another_strong_password
       - TMDB_API_KEY=your_tmdb_api_key_here
       - MM_NAS_ROOT=/media
       - MM_BEHIND_PROXY=true
-      - MM_FFMPEG_PATH=/usr/bin/ffmpeg
 
     # ── Health Check ─────────────────────────────────────────────────
     healthcheck:
