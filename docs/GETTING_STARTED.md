@@ -12,10 +12,10 @@ This guide walks you through setting up your own Media Manager instance, from pr
 
 | Service | Required? | Purpose | Sign Up |
 |---------|-----------|---------|---------|
-| **TMDB** | Recommended | Poster images, cast, descriptions, release years | [Create account](https://www.themoviedb.org/signup) &rarr; [API settings](https://www.themoviedb.org/settings/api) &rarr; copy "API Key (v3 auth)" |
+| **TMDB** | **Yes** | Poster images, cast, descriptions, release years | [Create account](https://www.themoviedb.org/signup) &rarr; [API settings](https://www.themoviedb.org/settings/api) &rarr; copy "API Key (v3 auth)" |
 | **UPCitemdb** | No account needed | Barcode &rarr; product name lookup | Free tier, IP-throttled (6 req/min, 100/day) |
 
-Without a TMDB key the app still works &mdash; titles are cleaned and cataloged but won't have poster art, cast data, or descriptions.
+A TMDB API key is required. Without it, titles won't have poster art, cast data, descriptions, or popularity sorting &mdash; the catalog is essentially unusable.
 
 ### Software
 
@@ -58,7 +58,7 @@ Edit `secrets/.env`:
 # Required — pick any password for the embedded database
 H2_PASSWORD=your-database-password
 
-# Recommended — enables poster art, cast data, descriptions
+# Required — enables poster art, cast, descriptions, popularity sorting
 TMDB_API_KEY=your-tmdb-v3-api-key
 ```
 
@@ -101,7 +101,7 @@ Docker is the recommended way to run Media Manager on a NAS or home server.
 ```yaml
 services:
   mediamanager:
-    image: your-registry/mediamanager:latest
+    image: ghcr.io/jeffbstewart/mediamanager:latest
     container_name: mediamanager
     # Run as non-root — UID:GID must own the volumes.
     # See Admin Guide > Docker Deployment Notes for how to find your UID.
@@ -142,7 +142,7 @@ Open **http://your-host:8080** and create your admin account.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `H2_PASSWORD` | **Yes** | Database password |
-| `TMDB_API_KEY` | Recommended | TMDB enrichment |
+| `TMDB_API_KEY` | **Yes** | TMDB enrichment (poster art, cast, descriptions) |
 | `MM_NAS_ROOT` | For media streaming | Path to media inside the container |
 | `MM_BEHIND_PROXY` | If proxied | Enables `X-Forwarded-*` header trust |
 | `MM_FFMPEG_PATH` | Rarely | Override FFmpeg location (default: `/usr/bin/ffmpeg`) |

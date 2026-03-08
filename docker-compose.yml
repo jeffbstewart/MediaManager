@@ -1,33 +1,71 @@
 services:
   mediamanager:
-    image: your_docker_registry/mediamanager:latest
+    image: ghcr.io/jeffbstewart/mediamanager:latest
     container_name: mediamanager
     restart: unless-stopped
-    # Run as a non-root user for security. The UID:GID must have read/write
-    # access to the cache and media volumes. On Synology DSM, find your user's
-    # UID with `id -u <username>` via SSH. See the Admin Guide for details.
+
+    # ── User ID ──────────────────────────────────────────────────────
+    # Run as a non-root user for security. The UID:GID must have
+    # read/write access to the cache and media volumes.
+    #   Synology: SSH in and run `id -u <username>` / `id -g <username>`
+    #   Linux:    same commands, or use 1000:1000 for a typical first user
     user: "1046:100"
+
+    # ── Memory ───────────────────────────────────────────────────────
     mem_limit: 4g
     memswap_limit: 4g
-    # Host networking is required for SSDP (Roku device discovery) which uses
-    # UDP multicast on 239.255.255.250:1900. Bridge networking blocks multicast.
+
+    # ── Networking ───────────────────────────────────────────────────
+    # Host networking is required for SSDP (Roku device discovery) which
+    # uses UDP multicast on 239.255.255.250:1900. Bridge networking
+    # blocks multicast. If you don't use Roku, you can switch to bridge
+    # mode and uncomment the ports section below instead.
     network_mode: host
     # ports:
     #   - "8080:8080"        # Main app (Vaadin UI + streaming)
-    #   - "16002:8081"       # Internal health/metrics (LAN only, not internet)
+    #   - "16002:8081"       # Internal health/metrics (LAN only)
+
+    # ── Volumes ──────────────────────────────────────────────────────
+    # cache: persistent storage for the H2 database, poster cache, and
+    #        backups. Must survive container recreation.
+    # media: your ripped media files. The app reads sources and writes
+    #        transcoded copies to a ForBrowser/ subdirectory.
     volumes:
       - /volume1/docker/mediamanager/cache:/cache
       - /volume1/your-media-share:/media
+
+    # ── Environment ──────────────────────────────────────────────────
+    # H2_PASSWORD:   Required. Password for the embedded H2 database.
+    # TMDB_API_KEY:  Required. Sign up at https://www.themoviedb.org/signup
+    #                then go to https://www.themoviedb.org/settings/api
+    #                and copy "API Key (v3 auth)".
+    # MM_NAS_ROOT:   Path to media inside the container (matches volume mount).
+    # MM_BEHIND_PROXY: Set to true if behind a reverse proxy (nginx, traefik)
+    #                  so the app trusts X-Forwarded-* headers.
+    # MM_FFMPEG_PATH: Override FFmpeg location (default: /usr/bin/ffmpeg).
+    #                 Set to empty string to disable local transcoding.
     environment:
       - H2_PASSWORD=change_me_to_a_strong_password
       - TMDB_API_KEY=your_tmdb_api_key_here
-      - TMDB_API_READ_ACCESS_TOKEN=your_token_here
       - MM_NAS_ROOT=/media
       - MM_BEHIND_PROXY=true
       - MM_FFMPEG_PATH=/usr/bin/ffmpeg
+
+    # ── Health Check ─────────────────────────────────────────────────
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
       timeout: 5s
       start_period: 30s
       retries: 3
+
+  # ── Watchtower (optional) ────────────────────────────────────────
+  # Automatically pulls new :latest images and restarts the container.
+  # Remove this service if you prefer manual updates.
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --interval 300 --cleanup mediamanager

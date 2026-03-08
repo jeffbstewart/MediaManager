@@ -2719,3 +2719,15 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Repository made public
 - Files created: .github/workflows/ci.yml, .github/workflows/release.yml
 ===
+
+=== 2026-03-08 15:15 — Docker compose and docs polish ===
+- Updated docker-compose.yml: ghcr.io image, thorough inline comments,
+  commented-out Watchtower example
+- Marked TMDB API key as required in GETTING_STARTED.md, CLAUDE.md
+- Updated GETTING_STARTED.md docker example to use ghcr.io image
+- Added paths-ignore to release.yml: docs, markdown, and claude.log
+  changes no longer trigger Docker image builds
+- Closed issues #17 and #18
+- Files modified: docker-compose.yml, docs/GETTING_STARTED.md, CLAUDE.md,
+  .github/workflows/release.yml, claude.log
+===
