@@ -65,7 +65,9 @@ enum class MatchMethod {
 
 enum class WishType { MEDIA, TRANSCODE }
 
-enum class WishStatus { ACTIVE, FULFILLED }
+enum class WishStatus { ACTIVE, CANCELLED, FULFILLED, DISMISSED }
+
+enum class AcquisitionStatus { UNKNOWN, NOT_AVAILABLE, REJECTED, ORDERED, OWNED, NEEDS_ASSISTANCE }
 
 enum class EntrySource { UPC_SCAN, MANUAL }
 

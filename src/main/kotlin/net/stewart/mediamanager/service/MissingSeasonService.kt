@@ -2,8 +2,9 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
+import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.entity.DismissedNotification
-import net.stewart.mediamanager.entity.TvSeason
+import net.stewart.mediamanager.entity.TitleSeason
 import org.slf4j.LoggerFactory
 
 /** A TV title with seasons above the highest owned that we don't have. */
@@ -13,7 +14,7 @@ data class MissingSeasonSummary(
     val posterPath: String?,
     val tmdbId: Int?,
     val tmdbMediaType: String?,
-    val missingSeasons: List<TvSeason>
+    val missingSeasons: List<TitleSeason>
 )
 
 object MissingSeasonService {
@@ -25,7 +26,7 @@ object MissingSeasonService {
      * (they may have been renumbered or our data is stale).
      */
     fun storeSeasons(titleId: Long, seasons: List<TmdbSeasonInfo>) {
-        val existing = TvSeason.findAll().filter { it.title_id == titleId }
+        val existing = TitleSeason.findAll().filter { it.title_id == titleId }
             .associateBy { it.season_number }
 
         for (s in seasons) {
@@ -36,7 +37,7 @@ object MissingSeasonService {
                 row.air_date = s.airDate
                 row.save()
             } else {
-                TvSeason(
+                TitleSeason(
                     title_id = titleId,
                     season_number = s.seasonNumber,
                     name = s.name,
@@ -48,8 +49,10 @@ object MissingSeasonService {
     }
 
     /**
-     * Updates the `owned` flag on all tv_season rows by checking which seasons
-     * have at least one transcode with an episode. Call after NAS scan completes.
+     * Updates acquisition_status on title_season rows by checking which seasons
+     * have at least one transcode with an episode. Only promotes UNKNOWN → OWNED;
+     * does not demote seasons that were manually set to ORDERED, etc.
+     * Call after NAS scan completes.
      */
     fun refreshOwnership() {
         // Build a set of (title_id, season_number) pairs that have transcodes
@@ -63,10 +66,10 @@ object MissingSeasonService {
         }
 
         var updated = 0
-        for (row in TvSeason.findAll()) {
-            val shouldOwn = (row.title_id to row.season_number) in ownedPairs
-            if (row.owned != shouldOwn) {
-                row.owned = shouldOwn
+        for (row in TitleSeason.findAll()) {
+            val hasTranscodes = (row.title_id to row.season_number) in ownedPairs
+            if (hasTranscodes && row.acquisition_status == AcquisitionStatus.UNKNOWN.name) {
+                row.acquisition_status = AcquisitionStatus.OWNED.name
                 row.save()
                 updated++
             }
@@ -87,17 +90,20 @@ object MissingSeasonService {
             .map { it.notification_key }
             .toSet()
 
-        // Group all tv_season rows by title
-        val byTitle = TvSeason.findAll().groupBy { it.title_id }
+        // Group all title_season rows by title
+        val byTitle = TitleSeason.findAll().groupBy { it.title_id }
 
         val results = mutableListOf<MissingSeasonSummary>()
 
         for ((titleId, seasons) in byTitle) {
-            val owned = seasons.filter { it.owned }.map { it.season_number }
+            val owned = seasons
+                .filter { it.acquisition_status == AcquisitionStatus.OWNED.name }
+                .map { it.season_number }
             if (owned.isEmpty()) continue // we don't own any seasons of this show
 
             val highestOwned = owned.max()
-            val missing = seasons.filter { !it.owned && it.season_number > highestOwned }
+            val missing = seasons
+                .filter { it.acquisition_status != AcquisitionStatus.OWNED.name && it.season_number > highestOwned }
                 .filter { s -> "missing_season:${titleId}:${s.season_number}" !in dismissed }
                 .sortedBy { it.season_number }
 
@@ -141,7 +147,9 @@ object MissingSeasonService {
 
     /** Dismiss all missing seasons for a title for a user. */
     fun dismissAllForTitle(userId: Long, titleId: Long) {
-        val seasons = TvSeason.findAll().filter { it.title_id == titleId && !it.owned }
+        val seasons = TitleSeason.findAll().filter {
+            it.title_id == titleId && it.acquisition_status != AcquisitionStatus.OWNED.name
+        }
         for (s in seasons) {
             dismiss(userId, titleId, s.season_number)
         }

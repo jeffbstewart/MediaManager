@@ -2,13 +2,13 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.Title
-import net.stewart.mediamanager.entity.TvSeason
+import net.stewart.mediamanager.entity.TitleSeason
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Backfills TMDB season data for existing enriched TV titles.
- * For each TV title with a tmdb_id that has no tv_season rows,
+ * For each TV title with a tmdb_id that has no title_season rows,
  * fetches the detail response and stores the season list.
  */
 class PopulateSeasonsUpdater(
@@ -22,7 +22,7 @@ class PopulateSeasonsUpdater(
     override val version = 1
 
     override fun run() {
-        val existingTitleIds = TvSeason.findAll().map { it.title_id }.toSet()
+        val existingTitleIds = TitleSeason.findAll().map { it.title_id }.toSet()
 
         val titles = Title.findAll().filter {
             it.tmdb_id != null && it.media_type == "TV" && it.id !in existingTitleIds
