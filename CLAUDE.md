@@ -31,7 +31,7 @@ At the start of every session, `cd` to the project root (`/c/Programming/github/
 
 Use `deploy-all.sh` for changes that affect both the server and the transcode buddy (shared code in transcode-common, buddy code, or server code). It stops the buddy, builds and pushes the Docker image (which triggers Watchtower), then restarts the buddy in the background. Use `docker-build.sh` alone for server-only changes.
 
-The `docker-build.sh` script builds the Docker image, tags the previous `latest` as `rollback`, 
+The `docker-build.sh` script builds the Docker image, tags the previous `latest` as `rollback`,
 pushes both the timestamped and `latest` tags to an in-house private docker registry,
 and triggers a Watchtower redeploy via HTTP API.
 

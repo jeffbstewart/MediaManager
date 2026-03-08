@@ -48,27 +48,21 @@ Verify by opening `http://<roku-ip>` in a browser and logging in as `rokudev`.
 
 ## Installing the Channel
 
-### Automated (from your dev machine)
+### 1. Download the channel
 
-If you have the project checked out locally:
+Download **roku-channel.zip** from the [latest GitHub Release](https://github.com/jeffbstewart/MediaManager/releases/latest).
 
-```bash
-# Configure your Roku IP and developer password
-cp secrets/example.roku-deploy.env secrets/roku-deploy.env
-# Edit roku-deploy.env with your values
+### 2. Upload to your Roku
 
-# Deploy
-./lifecycle/roku-deploy.sh
-```
+1. Open `http://<roku-ip>` in a browser (use your Roku's IP address)
+2. Log in with username `rokudev` and the developer password you set above
+3. Click **Upload**, select `roku-channel.zip`, and click **Install with zip**
 
-The channel zips, uploads, and auto-launches on your Roku.
+The channel installs and auto-launches on your Roku.
 
-### Manual
+### Updating the channel
 
-1. Zip the `roku-channel/` directory into a `.zip` file
-2. Open `http://<roku-ip>` in a browser
-3. Log in with `rokudev` and your developer password
-4. Click **Upload**, select the zip, click **Install with zip**
+Repeat the same steps with the `roku-channel.zip` from the newer release. Uploading a new zip replaces the previous installation. Your pairing token and playback progress are stored on the server, so nothing is lost.
 
 ---
 

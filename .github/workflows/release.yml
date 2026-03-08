@@ -73,8 +73,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Package Roku channel
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cd roku-channel && zip -r ../roku-channel.zip . -x '.*'
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: roku-channel.zip
