@@ -17,11 +17,13 @@ import com.vaadin.flow.component.progressbar.ProgressBar
 import com.vaadin.flow.component.textfield.TextField
 import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
+import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TmdbId
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.WishListItem
+import net.stewart.mediamanager.entity.WishStatus
 import net.stewart.mediamanager.service.*
 
 @Route(value = "wishlist", layout = MainLayout::class)
@@ -306,7 +308,7 @@ class WishListView : VerticalLayout() {
     }
 
     private fun refreshMediaWishes() {
-        val wishes = WishListService.getActiveMediaWishes()
+        val wishes = WishListService.getVisibleMediaWishes()
 
         mediaWishGrid.removeAll()
         mediaEmptyState.isVisible = wishes.isEmpty()
@@ -318,13 +320,16 @@ class WishListView : VerticalLayout() {
     }
 
     private fun buildMediaWishCard(wish: WishListItem): VerticalLayout {
+        val isFulfilled = wish.status == WishStatus.FULFILLED.name
+        val acqStatus = WishListService.getAcquisitionStatus(wish)
+
         return VerticalLayout().apply {
             isPadding = false
             isSpacing = false
             style.set("align-items", "center")
             style.set("position", "relative")
 
-            // Poster
+            // Poster (dimmed for fulfilled)
             if (wish.tmdb_poster_path != null) {
                 add(Image("https://image.tmdb.org/t/p/w185${wish.tmdb_poster_path}",
                     wish.tmdb_title ?: "").apply {
@@ -332,6 +337,7 @@ class WishListView : VerticalLayout() {
                     height = "195px"
                     style.set("border-radius", "8px")
                     style.set("object-fit", "cover")
+                    if (isFulfilled) style.set("opacity", "0.6")
                 })
             } else {
                 add(Div().apply {
@@ -349,17 +355,32 @@ class WishListView : VerticalLayout() {
                 })
             }
 
-            // Title
-            add(Span(wish.tmdb_title ?: "Unknown").apply {
-                style.set("color", "#FFFFFF")
-                style.set("font-size", "var(--lumo-font-size-xs)")
-                style.set("text-align", "center")
-                style.set("margin-top", "var(--lumo-space-xs)")
-                style.set("overflow", "hidden")
-                style.set("text-overflow", "ellipsis")
-                style.set("white-space", "nowrap")
-                style.set("max-width", "150px")
-            })
+            // Title (as link for fulfilled wishes so clicking navigates to title detail)
+            val titleId = lookupTitleId(wish)
+            if (isFulfilled && titleId != null) {
+                add(Anchor("title/$titleId", wish.tmdb_title ?: "Unknown").apply {
+                    style.set("color", "#FFFFFF")
+                    style.set("font-size", "var(--lumo-font-size-xs)")
+                    style.set("text-align", "center")
+                    style.set("margin-top", "var(--lumo-space-xs)")
+                    style.set("text-decoration", "none")
+                    // Clicking through to title detail dismisses the fulfilled wish
+                    element.addEventListener("click") {
+                        WishListService.dismissWish(wish.id!!)
+                    }
+                })
+            } else {
+                add(Span(wish.tmdb_title ?: "Unknown").apply {
+                    style.set("color", "#FFFFFF")
+                    style.set("font-size", "var(--lumo-font-size-xs)")
+                    style.set("text-align", "center")
+                    style.set("margin-top", "var(--lumo-space-xs)")
+                    style.set("overflow", "hidden")
+                    style.set("text-overflow", "ellipsis")
+                    style.set("white-space", "nowrap")
+                    style.set("max-width", "150px")
+                })
+            }
 
             // Year + type + season
             val metaParts = mutableListOf<String>()
@@ -379,17 +400,62 @@ class WishListView : VerticalLayout() {
                 })
             }
 
-            // Remove button
-            add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
-                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR)
-                style.set("margin-top", "var(--lumo-space-xs)")
-                addClickListener {
-                    WishListService.removeWish(wish.id!!)
-                    refreshMediaWishes()
-                    Notification.show("Removed from wish list", 2000, Notification.Position.BOTTOM_START)
+            // Status badge or action button
+            if (isFulfilled) {
+                // Tombstone: "Ready to watch!" with dismiss button
+                add(Span("Ready to watch!").apply {
+                    style.set("color", "var(--lumo-success-color)")
+                    style.set("font-size", "var(--lumo-font-size-xs)")
+                    style.set("font-weight", "600")
+                    style.set("margin-top", "var(--lumo-space-xs)")
+                })
+                add(Button("Dismiss", VaadinIcon.CHECK.create()).apply {
+                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+                    addClickListener {
+                        WishListService.dismissWish(wish.id!!)
+                        refreshMediaWishes()
+                    }
+                })
+            } else {
+                // Acquisition status badge
+                when (acqStatus) {
+                    AcquisitionStatus.ORDERED.name -> {
+                        add(Span("Ordered!").apply {
+                            style.set("color", "var(--lumo-primary-color)")
+                            style.set("font-size", "var(--lumo-font-size-xs)")
+                            style.set("font-weight", "600")
+                            style.set("margin-top", "var(--lumo-space-xs)")
+                        })
+                    }
+                    AcquisitionStatus.REJECTED.name -> {
+                        add(Span("Won't be purchased").apply {
+                            style.set("color", "var(--lumo-error-text-color)")
+                            style.set("font-size", "var(--lumo-font-size-xs)")
+                            style.set("margin-top", "var(--lumo-space-xs)")
+                        })
+                    }
                 }
-            })
+
+                // Cancel button (works for any active wish)
+                add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
+                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR)
+                    style.set("margin-top", "var(--lumo-space-xs)")
+                    addClickListener {
+                        WishListService.cancelWish(wish.id!!)
+                        refreshMediaWishes()
+                        Notification.show("Wish cancelled", 2000, Notification.Position.BOTTOM_START)
+                    }
+                })
+            }
         }
+    }
+
+    /** Look up the internal title ID for a wish's TMDB reference. */
+    private fun lookupTitleId(wish: WishListItem): Long? {
+        val tmdbKey = wish.tmdbKey() ?: return null
+        return Title.findAll().firstOrNull {
+            it.tmdb_id == tmdbKey.id && it.media_type == tmdbKey.typeString
+        }?.id
     }
 
     private fun refreshTranscodeWishes() {

@@ -1,19 +1,29 @@
 package net.stewart.mediamanager
 
+import com.vaadin.flow.component.button.Button
+import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.grid.Grid
 import com.vaadin.flow.component.html.H2
 import com.vaadin.flow.component.html.Image
 import com.vaadin.flow.component.html.Span
+import com.vaadin.flow.component.icon.VaadinIcon
+import com.vaadin.flow.component.notification.Notification
+import com.vaadin.flow.component.notification.NotificationVariant
+import com.vaadin.flow.component.orderedlayout.FlexComponent
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
 import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
+import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.service.MediaWishAggregate
 import net.stewart.mediamanager.service.WishListService
 
 @Route(value = "purchase-wishes", layout = MainLayout::class)
 @PageTitle("Purchase Wishes")
 class PurchaseWishesView : VerticalLayout() {
+
+    private lateinit var grid: Grid<MediaWishAggregate>
 
     init {
         isPadding = true
@@ -28,38 +38,103 @@ class PurchaseWishesView : VerticalLayout() {
             style.set("margin-bottom", "var(--lumo-space-m)")
         })
 
-        val aggregates = WishListService.getMediaWishVoteCounts()
+        grid = Grid(MediaWishAggregate::class.java, false).apply {
+            width = "100%"
+            isAllRowsVisible = true
 
+            addColumn(ComponentRenderer { agg ->
+                val url = agg.tmdbPosterPath?.let { "https://image.tmdb.org/t/p/w185$it" }
+                if (url != null) {
+                    Image(url, agg.tmdbTitle).apply {
+                        height = "75px"; width = "50px"
+                        style.set("object-fit", "cover")
+                        style.set("border-radius", "4px")
+                    }
+                } else {
+                    Span("-")
+                }
+            }).setHeader("").setWidth("70px").setFlexGrow(0)
+
+            addColumn { it.displayTitle }.setHeader("Title").setFlexGrow(3)
+            addColumn { it.tmdbReleaseYear?.toString() ?: "" }.setHeader("Year").setWidth("80px").setFlexGrow(0)
+            addColumn { if (it.tmdbMediaType == "TV") "TV" else "Movie" }.setHeader("Type").setWidth("80px").setFlexGrow(0)
+            addColumn { it.voteCount.toString() }.setHeader("Votes").setWidth("80px").setFlexGrow(0)
+            addColumn { it.voters.joinToString(", ") }.setHeader("Requested by").setFlexGrow(1)
+
+            addColumn(ComponentRenderer { agg -> buildStatusCell(agg) })
+                .setHeader("Status").setWidth("200px").setFlexGrow(0)
+        }
+        add(grid)
+
+        refreshGrid()
+    }
+
+    private fun refreshGrid() {
+        val aggregates = WishListService.getMediaWishVoteCounts()
         if (aggregates.isEmpty()) {
+            grid.isVisible = false
             add(Span("No active media wishes from any user.").apply {
                 style.set("color", "rgba(255,255,255,0.5)")
             })
         } else {
-            val grid = Grid<MediaWishAggregate>(MediaWishAggregate::class.java, false).apply {
-                width = "100%"
-                isAllRowsVisible = true
-
-                addColumn(ComponentRenderer { agg ->
-                    val url = agg.tmdbPosterPath?.let { "https://image.tmdb.org/t/p/w185$it" }
-                    if (url != null) {
-                        Image(url, agg.tmdbTitle).apply {
-                            height = "75px"; width = "50px"
-                            style.set("object-fit", "cover")
-                            style.set("border-radius", "4px")
-                        }
-                    } else {
-                        Span("-")
-                    }
-                }).setHeader("").setWidth("70px").setFlexGrow(0)
-
-                addColumn { it.displayTitle }.setHeader("Title").setFlexGrow(3)
-                addColumn { it.tmdbReleaseYear?.toString() ?: "" }.setHeader("Year").setWidth("80px").setFlexGrow(0)
-                addColumn { if (it.tmdbMediaType == "TV") "TV" else "Movie" }.setHeader("Type").setWidth("80px").setFlexGrow(0)
-                addColumn { it.voteCount.toString() }.setHeader("Votes").setWidth("80px").setFlexGrow(0)
-                addColumn { it.voters.joinToString(", ") }.setHeader("Requested by").setFlexGrow(1)
-            }
             grid.setItems(aggregates)
-            add(grid)
+        }
+    }
+
+    private fun buildStatusCell(agg: MediaWishAggregate): HorizontalLayout {
+        return HorizontalLayout().apply {
+            isSpacing = true
+            isPadding = false
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+
+            val status = agg.acquisitionStatus
+
+            when (status) {
+                AcquisitionStatus.ORDERED.name -> {
+                    add(Span("Ordered").apply {
+                        style.set("color", "var(--lumo-primary-color)")
+                        style.set("font-weight", "500")
+                        style.set("font-size", "var(--lumo-font-size-s)")
+                    })
+                }
+                AcquisitionStatus.REJECTED.name -> {
+                    add(Span("Rejected").apply {
+                        style.set("color", "var(--lumo-error-color)")
+                        style.set("font-weight", "500")
+                        style.set("font-size", "var(--lumo-font-size-s)")
+                    })
+                }
+                AcquisitionStatus.OWNED.name -> {
+                    add(Span("Owned").apply {
+                        style.set("color", "var(--lumo-success-color)")
+                        style.set("font-weight", "500")
+                        style.set("font-size", "var(--lumo-font-size-s)")
+                    })
+                }
+                else -> {
+                    // Show Order and Reject buttons
+                    add(Button("Order", VaadinIcon.CART.create()).apply {
+                        addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
+                        addClickListener {
+                            WishListService.setAcquisitionStatus(agg, AcquisitionStatus.ORDERED)
+                            Notification.show("Marked as ordered: ${agg.displayTitle}", 3000,
+                                Notification.Position.BOTTOM_START)
+                                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                            refreshGrid()
+                        }
+                    })
+                    add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
+                        addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR)
+                        element.setAttribute("title", "Reject")
+                        addClickListener {
+                            WishListService.setAcquisitionStatus(agg, AcquisitionStatus.REJECTED)
+                            Notification.show("Rejected: ${agg.displayTitle}", 3000,
+                                Notification.Position.BOTTOM_START)
+                            refreshGrid()
+                        }
+                    })
+                }
+            }
         }
     }
 }

@@ -1,7 +1,10 @@
 package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
+import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TitleSeason
 import net.stewart.mediamanager.entity.TmdbId
 import net.stewart.mediamanager.entity.WishListItem
 import net.stewart.mediamanager.entity.WishStatus
@@ -19,7 +22,8 @@ data class MediaWishAggregate(
     val tmdbPopularity: Double?,
     val seasonNumber: Int?,
     val voteCount: Int,
-    val voters: List<String>   // display names
+    val voters: List<String>,   // display names
+    val acquisitionStatus: String? = null  // current title_season status, if title exists
 ) {
     /** Returns a type-safe TMDB key, or null if media type is missing. */
     fun tmdbKey(): TmdbId? = TmdbId.of(tmdbId, tmdbMediaType)
@@ -98,6 +102,28 @@ object WishListService {
         log.info("Wish removed: id={} user={}", wishId, userId)
     }
 
+    /** Cancel an active wish (user changed their mind). */
+    fun cancelWish(wishId: Long) {
+        val userId = currentUserId() ?: return
+        val wish = WishListItem.findById(wishId) ?: return
+        if (wish.user_id != userId) return
+        if (wish.status != WishStatus.ACTIVE.name) return
+        wish.status = WishStatus.CANCELLED.name
+        wish.save()
+        log.info("Wish cancelled: id={} user={}", wishId, userId)
+    }
+
+    /** Dismiss a fulfilled wish (user acknowledged it). */
+    fun dismissWish(wishId: Long) {
+        val userId = currentUserId() ?: return
+        val wish = WishListItem.findById(wishId) ?: return
+        if (wish.user_id != userId) return
+        if (wish.status != WishStatus.FULFILLED.name) return
+        wish.status = WishStatus.DISMISSED.name
+        wish.save()
+        log.info("Wish dismissed: id={} user={}", wishId, userId)
+    }
+
     fun hasActiveMediaWish(tmdbId: TmdbId): Boolean {
         val userId = currentUserId() ?: return false
         return WishListItem.findAll().any {
@@ -126,6 +152,32 @@ object WishListService {
                 it.wish_type == WishType.MEDIA.name &&
                 it.status == WishStatus.ACTIVE.name
         }.sortedByDescending { it.created_at }
+    }
+
+    /** Returns ACTIVE + FULFILLED media wishes for user wish list display (includes tombstones). */
+    fun getVisibleMediaWishes(): List<WishListItem> {
+        val userId = currentUserId() ?: return emptyList()
+        return WishListItem.findAll().filter {
+            it.user_id == userId &&
+                it.wish_type == WishType.MEDIA.name &&
+                (it.status == WishStatus.ACTIVE.name || it.status == WishStatus.FULFILLED.name)
+        }.sortedByDescending { it.created_at }
+    }
+
+    /**
+     * Looks up the acquisition status for a wish's title+season.
+     * Returns null if the title doesn't exist in our DB yet.
+     */
+    fun getAcquisitionStatus(wish: WishListItem): String? {
+        val tmdbKey = wish.tmdbKey() ?: return null
+        val title = Title.findAll().firstOrNull {
+            it.tmdb_id == tmdbKey.id && it.media_type == tmdbKey.typeString
+        } ?: return null
+        val seasonNum = wish.season_number ?: 0
+        val season = TitleSeason.findAll().firstOrNull {
+            it.title_id == title.id && it.season_number == seasonNum
+        }
+        return season?.acquisition_status
     }
 
     fun getActiveTranscodeWishes(): List<WishListItem> {
@@ -208,11 +260,26 @@ object WishListService {
 
         val userMap = AppUser.findAll().associateBy { it.id }
 
+        // Pre-load titles and seasons for acquisition status lookup
+        val titlesByTmdb = Title.findAll()
+            .filter { it.tmdb_id != null && it.media_type != null }
+            .groupBy { Pair(it.tmdb_id!!, it.media_type!!) }
+        val seasonsByTitle = TitleSeason.findAll().groupBy { it.title_id }
+
         return activeMedia
             .groupBy { Pair(it.tmdbKey()!!, it.season_number) }
             .map { (key, wishes) ->
                 val (tmdbKey, seasonNumber) = key
                 val first = wishes.first()
+
+                // Look up acquisition status
+                val title = titlesByTmdb[Pair(tmdbKey.id, tmdbKey.typeString)]?.firstOrNull()
+                val acqStatus = if (title != null) {
+                    val seasonNum = seasonNumber ?: 0
+                    seasonsByTitle[title.id]?.firstOrNull { it.season_number == seasonNum }
+                        ?.acquisition_status
+                } else null
+
                 MediaWishAggregate(
                     tmdbId = tmdbKey.id,
                     tmdbTitle = first.tmdb_title ?: "Unknown",
@@ -222,7 +289,8 @@ object WishListService {
                     tmdbPopularity = first.tmdb_popularity,
                     seasonNumber = seasonNumber,
                     voteCount = wishes.size,
-                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name }
+                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name },
+                    acquisitionStatus = acqStatus
                 )
             }
             .sortedByDescending { it.voteCount }
@@ -265,6 +333,51 @@ object WishListService {
         wish.save()
         log.info("Season wish added: user={} tmdb_id={} title=\"{}\" season={}", userId, tmdbId, title, seasonNumber)
         return wish
+    }
+
+    /**
+     * Sets the acquisition status for a wished title+season. Creates the Title and
+     * TitleSeason records if they don't exist yet (common when admin orders something
+     * that hasn't been scanned via barcode).
+     */
+    fun setAcquisitionStatus(agg: MediaWishAggregate, status: AcquisitionStatus) {
+        val tmdbKey = agg.tmdbKey() ?: return
+
+        // Find or create the title
+        var title = Title.findAll().firstOrNull {
+            it.tmdb_id == tmdbKey.id && it.media_type == tmdbKey.typeString
+        }
+        if (title == null) {
+            title = Title(
+                name = agg.tmdbTitle,
+                media_type = tmdbKey.typeString,
+                tmdb_id = tmdbKey.id,
+                release_year = agg.tmdbReleaseYear,
+                poster_path = agg.tmdbPosterPath,
+                enrichment_status = "REASSIGNMENT_REQUESTED",
+                created_at = LocalDateTime.now(),
+                updated_at = LocalDateTime.now()
+            )
+            title.save()
+            log.info("Created title '{}' (tmdb_id={}) from wish aggregate", title.name, tmdbKey)
+        }
+
+        // Find or create the title_season
+        val seasonNum = agg.seasonNumber ?: 0
+        var season = TitleSeason.findAll().firstOrNull {
+            it.title_id == title.id && it.season_number == seasonNum
+        }
+        if (season == null) {
+            season = TitleSeason(
+                title_id = title.id!!,
+                season_number = seasonNum
+            )
+        }
+        season.acquisition_status = status.name
+        season.save()
+
+        log.info("Set acquisition status {} for '{}' season {} (title_season_id={})",
+            status, title.name, seasonNum, season.id)
     }
 
     fun userHasAnyMediaWish(): Boolean {
