@@ -64,12 +64,15 @@ class WishListView : VerticalLayout() {
             style.set("margin-bottom", "var(--lumo-space-xs)")
         })
 
+        val searchButton = Button("Search", VaadinIcon.SEARCH.create()).apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+        }
         val searchField = TextField().apply {
             placeholder = "Search for a movie or TV show..."
             width = "100%"
-        }
-        val searchButton = Button("Search", VaadinIcon.SEARCH.create()).apply {
-            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            element.addEventListener("keypress") {
+                searchButton.click()
+            }.filter = "event.key == 'Enter'"
         }
         val searchBar = HorizontalLayout(searchField, searchButton).apply {
             width = "100%"
@@ -329,34 +332,75 @@ class WishListView : VerticalLayout() {
             style.set("align-items", "center")
             style.set("position", "relative")
 
-            // Poster (dimmed for fulfilled)
-            if (wish.tmdb_poster_path != null) {
-                add(Image("https://image.tmdb.org/t/p/w185${wish.tmdb_poster_path}",
-                    wish.tmdb_title ?: "").apply {
-                    width = "130px"
-                    height = "195px"
-                    style.set("border-radius", "8px")
-                    style.set("object-fit", "cover")
-                    if (isFulfilled) style.set("opacity", "0.6")
-                })
-            } else {
-                add(Div().apply {
-                    style.set("width", "130px")
-                    style.set("height", "195px")
-                    style.set("border-radius", "8px")
-                    style.set("background", "rgba(255,255,255,0.1)")
-                    style.set("display", "flex")
-                    style.set("align-items", "center")
-                    style.set("justify-content", "center")
-                    add(Span((wish.tmdb_title ?: "?").take(1)).apply {
-                        style.set("color", "rgba(255,255,255,0.4)")
-                        style.set("font-size", "var(--lumo-font-size-xl)")
+            // Poster container with cancel overlay
+            val titleId = lookupTitleId(wish)
+            val posterContainer = Div().apply {
+                style.set("position", "relative")
+                style.set("width", "130px")
+                style.set("height", "195px")
+                style.set("flex-shrink", "0")
+                if (isFulfilled && titleId != null) style.set("cursor", "pointer")
+
+                if (wish.tmdb_poster_path != null) {
+                    add(Image("https://image.tmdb.org/t/p/w185${wish.tmdb_poster_path}",
+                        wish.tmdb_title ?: "").apply {
+                        width = "130px"
+                        height = "195px"
+                        style.set("border-radius", "8px")
+                        style.set("object-fit", "cover")
+                        if (isFulfilled) style.set("opacity", "0.6")
                     })
-                })
+                } else {
+                    add(Div().apply {
+                        style.set("width", "130px")
+                        style.set("height", "195px")
+                        style.set("border-radius", "8px")
+                        style.set("background", "rgba(255,255,255,0.1)")
+                        style.set("display", "flex")
+                        style.set("align-items", "center")
+                        style.set("justify-content", "center")
+                        add(Span((wish.tmdb_title ?: "?").take(1)).apply {
+                            style.set("color", "rgba(255,255,255,0.4)")
+                            style.set("font-size", "var(--lumo-font-size-xl)")
+                        })
+                    })
+                }
+
+                // Fulfilled: clicking poster navigates to title detail and dismisses
+                if (isFulfilled && titleId != null) {
+                    element.addEventListener("click") {
+                        WishListService.dismissWish(wish.id!!)
+                        ui.ifPresent { it.navigate("title/$titleId") }
+                    }
+                }
+
+                // Cancel button overlaid on poster (active wishes only)
+                if (!isFulfilled) {
+                    add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
+                        addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ICON)
+                        style.set("position", "absolute")
+                        style.set("top", "4px")
+                        style.set("right", "4px")
+                        style.set("min-width", "24px")
+                        style.set("width", "24px")
+                        style.set("height", "24px")
+                        style.set("padding", "0")
+                        style.set("border-radius", "50%")
+                        style.set("background", "rgba(0,0,0,0.7)")
+                        style.set("color", "rgba(255,255,255,0.8)")
+                        style.set("cursor", "pointer")
+                        element.setAttribute("title", "Cancel wish")
+                        addClickListener {
+                            WishListService.cancelWish(wish.id!!)
+                            refreshMediaWishes()
+                            Notification.show("Wish cancelled", 2000, Notification.Position.BOTTOM_START)
+                        }
+                    })
+                }
             }
+            add(posterContainer)
 
             // Title (as link for fulfilled wishes so clicking navigates to title detail)
-            val titleId = lookupTitleId(wish)
             if (isFulfilled && titleId != null) {
                 add(Anchor("title/$titleId", wish.tmdb_title ?: "Unknown").apply {
                     style.set("color", "#FFFFFF")
@@ -402,13 +446,34 @@ class WishListView : VerticalLayout() {
 
             // Status badge or action button
             if (isFulfilled) {
-                // Tombstone: "Ready to watch!" with dismiss button
-                add(Span("Ready to watch!").apply {
-                    style.set("color", "var(--lumo-success-color)")
-                    style.set("font-size", "var(--lumo-font-size-xs)")
-                    style.set("font-weight", "600")
-                    style.set("margin-top", "var(--lumo-space-xs)")
-                })
+                // Check if there's actually a playable transcode
+                val nasRoot = TranscoderAgent.getNasRoot()
+                val isPlayable = if (titleId != null) {
+                    val transcodes = Transcode.findAll().filter {
+                        it.title_id == titleId && it.file_path != null
+                    }
+                    transcodes.isNotEmpty() && transcodes.any { tc ->
+                        if (TranscoderAgent.needsTranscoding(tc.file_path!!)) {
+                            nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, tc.file_path!!)
+                        } else true
+                    }
+                } else false
+
+                if (isPlayable) {
+                    add(Span("Ready to watch!").apply {
+                        style.set("color", "var(--lumo-success-color)")
+                        style.set("font-size", "var(--lumo-font-size-xs)")
+                        style.set("font-weight", "600")
+                        style.set("margin-top", "var(--lumo-space-xs)")
+                    })
+                } else {
+                    add(Span("Added to collection").apply {
+                        style.set("color", "var(--lumo-primary-color)")
+                        style.set("font-size", "var(--lumo-font-size-xs)")
+                        style.set("font-weight", "600")
+                        style.set("margin-top", "var(--lumo-space-xs)")
+                    })
+                }
                 add(Button("Dismiss", VaadinIcon.CHECK.create()).apply {
                     addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
                     addClickListener {
@@ -434,18 +499,16 @@ class WishListView : VerticalLayout() {
                             style.set("margin-top", "var(--lumo-space-xs)")
                         })
                     }
+                    AcquisitionStatus.NOT_AVAILABLE.name -> {
+                        add(Span("Not yet available").apply {
+                            style.set("color", "rgba(255,255,255,0.5)")
+                            style.set("font-size", "var(--lumo-font-size-xs)")
+                            style.set("font-style", "italic")
+                            style.set("margin-top", "var(--lumo-space-xs)")
+                        })
+                    }
                 }
 
-                // Cancel button (works for any active wish)
-                add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
-                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR)
-                    style.set("margin-top", "var(--lumo-space-xs)")
-                    addClickListener {
-                        WishListService.cancelWish(wish.id!!)
-                        refreshMediaWishes()
-                        Notification.show("Wish cancelled", 2000, Notification.Position.BOTTOM_START)
-                    }
-                })
             }
         }
     }

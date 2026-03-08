@@ -60,6 +60,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
     private val expandBadge: Span
     private val purchasesParentBadge: Span
     private val dataQualityBadge: Span
+    private val wishListBadge: Span
 
     init {
         // --- Top navbar: [DrawerToggle] [Title] [Search] [..spacer..] [Profile] ---
@@ -237,6 +238,19 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         val homeItem = createDrawerItem(VaadinIcon.HOME, "Home", "")
         val browseItem = createDrawerItem(VaadinIcon.GRID_BIG, "Browse", "catalog")
         val wishListItem = createDrawerItem(VaadinIcon.HEART, "My Wish List", "wishlist")
+        wishListBadge = Span().apply {
+            style.set("background-color", "var(--lumo-success-color)")
+            style.set("color", "white")
+            style.set("font-size", "var(--lumo-font-size-xxs)")
+            style.set("font-weight", "700")
+            style.set("padding", "1px 6px")
+            style.set("border-radius", "9999px")
+            style.set("margin-left", "auto")
+            style.set("flex-shrink", "0")
+            isVisible = false
+            element.setAttribute("title", "Wishes ready to watch")
+        }
+        wishListItem.first.add(wishListBadge)
 
         items.add(homeItem)
         items.add(browseItem)
@@ -760,15 +774,42 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
 
     fun refreshDataQualityBadge(user: net.stewart.mediamanager.entity.AppUser? = AuthService.getCurrentUser()) {
         if (user?.isAdmin() == true) {
-            val count = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+            val enrichmentCount = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
                 handle.createQuery(
                     "SELECT COUNT(*) FROM title WHERE enrichment_status IS NOT NULL AND enrichment_status <> 'ENRICHED'"
                 ).mapTo(Int::class.java).one()
             }
+            // Count media_item_title rows with freetext seasons but no structured joins
+            val unparseableCount = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+                handle.createQuery(
+                    """SELECT COUNT(*) FROM media_item_title mit
+                       JOIN title t ON t.id = mit.title_id
+                       WHERE mit.seasons IS NOT NULL AND mit.seasons <> ''
+                       AND t.media_type = 'TV'
+                       AND NOT EXISTS (
+                           SELECT 1 FROM media_item_title_season mits WHERE mits.media_item_title_id = mit.id
+                       )"""
+                ).mapTo(Int::class.java).one()
+            }
+            val count = enrichmentCount + unparseableCount
             dataQualityBadge.text = count.toString()
             dataQualityBadge.isVisible = count > 0
         } else {
             dataQualityBadge.isVisible = false
+        }
+    }
+
+    fun refreshWishListBadge(user: net.stewart.mediamanager.entity.AppUser? = AuthService.getCurrentUser()) {
+        if (user != null) {
+            val count = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+                handle.createQuery(
+                    "SELECT COUNT(*) FROM wish_list_item WHERE user_id = :userId AND wish_type = 'MEDIA' AND status = 'FULFILLED'"
+                ).bind("userId", user.id).mapTo(Int::class.java).one()
+            }
+            wishListBadge.text = count.toString()
+            wishListBadge.isVisible = count > 0
+        } else {
+            wishListBadge.isVisible = false
         }
     }
 
@@ -818,6 +859,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         adminSection.isVisible = user?.isAdmin() == true
         profileDisplayName.text = user?.display_name ?: ""
 
+        refreshWishListBadge(user)
         refreshUnmatchedBadge(user)
         refreshExpandBadge(user)
         refreshDataQualityBadge(user)

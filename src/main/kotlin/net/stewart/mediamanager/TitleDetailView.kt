@@ -548,6 +548,9 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
             transcodes.mapNotNull { it.id }.toSet()
         )
 
+        // Season lifecycle overview
+        buildSeasonOverview(title, container)
+
         if (allEpisodes.isEmpty()) {
             container.add(Span("No episodes on disk yet.").apply {
                 style.set("color", "rgba(255,255,255,0.5)")
@@ -612,6 +615,169 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         // Initial load — must match the combo's default value
         refreshEpisodeGrid(episodeGrid, allEpisodes, transcodes,
             transcodedEpisodeIds, seasonCombo.value)
+    }
+
+    // --- Season Overview ---
+
+    private fun buildSeasonOverview(title: Title, container: VerticalLayout) {
+        val titleSeasons = TitleSeason.findAll()
+            .filter { it.title_id == title.id && it.season_number > 0 }
+            .sortedBy { it.season_number }
+
+        if (titleSeasons.isEmpty()) return
+
+        val isAdmin = AuthService.getCurrentUser()?.isAdmin() == true
+
+        container.add(H3("Seasons").apply {
+            style.set("margin-bottom", "var(--lumo-space-s)")
+        })
+
+        // Check for media items with unparseable freetext seasons
+        val mitJoins = MediaItemTitle.findAll().filter { it.title_id == title.id }
+        val mitIds = mitJoins.mapNotNull { it.id }.toSet()
+        val structuredJoins = MediaItemTitleSeason.findAll().filter { it.media_item_title_id in mitIds }
+        val unparseableJoins = mitJoins.filter { join ->
+            !join.seasons.isNullOrBlank() &&
+                structuredJoins.none { it.media_item_title_id == join.id }
+        }
+        if (unparseableJoins.isNotEmpty() && isAdmin) {
+            container.add(HorizontalLayout().apply {
+                isPadding = true
+                isSpacing = true
+                width = "100%"
+                defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+                style.set("background", "rgba(255,165,0,0.15)")
+                style.set("border", "1px solid rgba(255,165,0,0.4)")
+                style.set("border-radius", "8px")
+                style.set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
+                style.set("margin-bottom", "var(--lumo-space-s)")
+
+                add(VaadinIcon.WARNING.create().apply {
+                    style.set("color", "#FFA500")
+                    style.set("flex-shrink", "0")
+                })
+                val seasonTexts = unparseableJoins.map { "\"${it.seasons}\"" }.joinToString(", ")
+                add(Span("Unparseable season data: $seasonTexts — needs manual review").apply {
+                    style.set("color", "rgba(255,255,255,0.9)")
+                    style.set("font-size", "var(--lumo-font-size-s)")
+                })
+            })
+        }
+
+        val chipRow = HorizontalLayout().apply {
+            isSpacing = true
+            isPadding = false
+            style.set("flex-wrap", "wrap")
+            style.set("gap", "var(--lumo-space-s)")
+            style.set("margin-bottom", "var(--lumo-space-m)")
+        }
+
+        for (ts in titleSeasons) {
+            chipRow.add(buildSeasonChip(ts, isAdmin, title))
+        }
+
+        container.add(chipRow)
+    }
+
+    private fun buildSeasonChip(ts: TitleSeason, isAdmin: Boolean, title: Title): Div {
+        val status = try {
+            AcquisitionStatus.valueOf(ts.acquisition_status)
+        } catch (_: Exception) {
+            AcquisitionStatus.UNKNOWN
+        }
+
+        val (bgColor, textColor, label) = when (status) {
+            AcquisitionStatus.OWNED -> Triple("rgba(0,200,83,0.2)", "var(--lumo-success-color)", "Owned")
+            AcquisitionStatus.ORDERED -> Triple("rgba(30,136,229,0.2)", "var(--lumo-primary-color)", "Ordered")
+            AcquisitionStatus.REJECTED -> Triple("rgba(244,67,54,0.15)", "var(--lumo-error-color)", "Rejected")
+            AcquisitionStatus.NOT_AVAILABLE -> Triple("rgba(255,255,255,0.08)", "rgba(255,255,255,0.5)", "N/A")
+            AcquisitionStatus.NEEDS_ASSISTANCE -> Triple("rgba(255,165,0,0.2)", "#FFA500", "Needs Help")
+            AcquisitionStatus.UNKNOWN -> Triple("rgba(255,255,255,0.08)", "rgba(255,255,255,0.4)", "Unknown")
+        }
+
+        return Div().apply {
+            style.set("display", "inline-flex")
+            style.set("align-items", "center")
+            style.set("gap", "var(--lumo-space-xs)")
+            style.set("background", bgColor)
+            style.set("border-radius", "9999px")
+            style.set("padding", "4px 12px")
+            if (isAdmin) style.set("cursor", "pointer")
+
+            add(Span("S${ts.season_number}").apply {
+                style.set("color", "#FFFFFF")
+                style.set("font-size", "var(--lumo-font-size-s)")
+                style.set("font-weight", "600")
+            })
+            add(Span(label).apply {
+                style.set("color", textColor)
+                style.set("font-size", "var(--lumo-font-size-xs)")
+            })
+
+            if (isAdmin) {
+                element.setAttribute("title", "Click to change status")
+                element.addEventListener("click") {
+                    openSeasonStatusDialog(ts, title)
+                }
+            }
+        }
+    }
+
+    private fun openSeasonStatusDialog(ts: TitleSeason, title: Title) {
+        val dialog = Dialog().apply {
+            headerTitle = "Season ${ts.season_number} — Set Status"
+            width = "350px"
+        }
+
+        val statusOptions = listOf(
+            AcquisitionStatus.UNKNOWN, AcquisitionStatus.NOT_AVAILABLE,
+            AcquisitionStatus.ORDERED, AcquisitionStatus.OWNED,
+            AcquisitionStatus.REJECTED
+        )
+
+        val combo = ComboBox<AcquisitionStatus>("Acquisition Status").apply {
+            setItems(statusOptions)
+            setItemLabelGenerator { it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace('_', ' ') }
+            value = try {
+                AcquisitionStatus.valueOf(ts.acquisition_status)
+            } catch (_: Exception) {
+                AcquisitionStatus.UNKNOWN
+            }
+            width = "100%"
+        }
+        dialog.add(combo)
+
+        val footer = HorizontalLayout().apply {
+            justifyContentMode = FlexComponent.JustifyContentMode.END
+            width = "100%"
+            isSpacing = true
+        }
+        footer.add(Button("Cancel") { dialog.close() })
+        footer.add(Button("Save").apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            addClickListener {
+                val newStatus = combo.value ?: return@addClickListener
+                ts.acquisition_status = newStatus.name
+                ts.save()
+
+                // If marked as OWNED, fulfill matching media wishes
+                if (newStatus == AcquisitionStatus.OWNED) {
+                    val tmdbKey = TmdbId.of(title.tmdb_id, title.media_type)
+                    if (tmdbKey != null) {
+                        WishListService.fulfillMediaWishes(tmdbKey)
+                    }
+                }
+
+                dialog.close()
+                Notification.show("Season ${ts.season_number} → ${newStatus.name}", 3000,
+                    Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                buildContent(title)
+            }
+        })
+        footer.element.setAttribute("slot", "footer")
+        dialog.add(footer)
+        dialog.open()
     }
 
     // --- Cast Row ---

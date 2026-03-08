@@ -40,6 +40,7 @@ import net.stewart.mediamanager.service.UserTitleFlagService
 import java.time.LocalDateTime
 
 private const val NEEDS_ATTENTION = "Needs attention"
+private const val UNPARSEABLE_SEASONS = "Unparseable seasons"
 
 @Route(value = "data-quality", layout = MainLayout::class)
 @PageTitle("Data Quality")
@@ -89,6 +90,7 @@ class DataQualityView : KComposite() {
                     width = "14em"
                     setItems(
                         NEEDS_ATTENTION,
+                        UNPARSEABLE_SEASONS,
                         *EnrichmentStatus.entries.map { it.name }.toTypedArray()
                     )
                     addValueChangeListener { refreshGrid() }
@@ -255,10 +257,13 @@ class DataQualityView : KComposite() {
 
         // Apply status filter
         if (statusValue != null) {
-            filtered = if (statusValue == NEEDS_ATTENTION) {
-                filtered.filter { it.enrichment_status != EnrichmentStatus.ENRICHED.name }
-            } else {
-                filtered.filter { it.enrichment_status == statusValue }
+            filtered = when (statusValue) {
+                NEEDS_ATTENTION -> filtered.filter { it.enrichment_status != EnrichmentStatus.ENRICHED.name }
+                UNPARSEABLE_SEASONS -> {
+                    val unparseableTitleIds = findUnparseableSeasonTitleIds()
+                    filtered.filter { it.id in unparseableTitleIds }
+                }
+                else -> filtered.filter { it.enrichment_status == statusValue }
             }
         }
 
@@ -285,6 +290,21 @@ class DataQualityView : KComposite() {
             "Showing ${filtered.size} of $totalCount titles$hiddenSuffix"
         } else {
             "Showing ${filtered.size} titles$hiddenSuffix"
+        }
+    }
+
+    /** Finds title IDs that have freetext seasons but no structured media_item_title_season joins. */
+    private fun findUnparseableSeasonTitleIds(): Set<Long> {
+        return JdbiOrm.jdbi().withHandle<Set<Long>, Exception> { handle ->
+            handle.createQuery(
+                """SELECT DISTINCT mit.title_id FROM media_item_title mit
+                   JOIN title t ON t.id = mit.title_id
+                   WHERE mit.seasons IS NOT NULL AND mit.seasons <> ''
+                   AND t.media_type = 'TV'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM media_item_title_season mits WHERE mits.media_item_title_id = mit.id
+                   )"""
+            ).mapTo(Long::class.java).set()
         }
     }
 

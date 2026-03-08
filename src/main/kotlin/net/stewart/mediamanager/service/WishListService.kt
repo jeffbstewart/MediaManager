@@ -213,7 +213,11 @@ object WishListService {
             .mapValues { it.value.size }
     }
 
-    /** Marks all ACTIVE media wishes matching this tmdb_id + media_type as FULFILLED. */
+    /**
+     * Marks ACTIVE media wishes matching this tmdb_id + media_type as FULFILLED,
+     * but only if the corresponding title_season has acquisition_status = OWNED.
+     * Wishes for titles that are merely ordered, not available, etc. are left active.
+     */
     fun fulfillMediaWishes(tmdbId: TmdbId) {
         val wishes = WishListItem.findAll().filter {
             it.wish_type == WishType.MEDIA.name &&
@@ -223,13 +227,29 @@ object WishListService {
         }
         if (wishes.isEmpty()) return
 
+        // Look up the title and its seasons to check ownership
+        val title = Title.findAll().firstOrNull {
+            it.tmdb_id == tmdbId.id && it.media_type == tmdbId.typeString
+        } ?: return
+        val seasonsByNum = TitleSeason.findAll()
+            .filter { it.title_id == title.id }
+            .associateBy { it.season_number }
+
         val now = LocalDateTime.now()
+        var fulfilled = 0
         for (wish in wishes) {
+            val seasonNum = wish.season_number ?: 0
+            val season = seasonsByNum[seasonNum] ?: continue
+            if (season.acquisition_status != AcquisitionStatus.OWNED.name) continue
+
             wish.status = WishStatus.FULFILLED.name
             wish.fulfilled_at = now
             wish.save()
+            fulfilled++
         }
-        log.info("Fulfilled {} media wish(es) for tmdb_id={}", wishes.size, tmdbId)
+        if (fulfilled > 0) {
+            log.info("Fulfilled {} media wish(es) for tmdb_id={}", fulfilled, tmdbId)
+        }
     }
 
     /** Marks all ACTIVE transcode wishes matching this title_id as FULFILLED. */
