@@ -1,0 +1,34 @@
+# Build outputs
+.gradle/
+.kotlin/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+
+# Runtime data
+data/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Claude Code
+.claude/
+
+# Roku channel zip
+roku-channel.zip
+
+# Secrets
+secrets/.env
+secrets/roku-deploy.env
+secrets/roku-deploy-dev.env
+secrets/*.agent_visible_env
+
+# Vaadin generated (src/main)
+src/main/bundles/
+src/main/frontend/
+
+# Transcode buddy local config
+transcode-buddy/buddy.properties

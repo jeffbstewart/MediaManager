@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EpisodePicker" extends="Group">
+    <interface>
+        <field id="seriesContent" type="node" onChange="onSeriesContentSet" />
+        <field id="episodeSelected" type="boolean" alwaysNotify="true" />
+        <field id="videoContent" type="node" />
+    </interface>
+
+    <script type="text/brightscript" uri="EpisodePicker.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Show title -->
+        <Label
+            id="showTitle"
+            translation="[80, 40]"
+            width="1760"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            maxLines="1" />
+
+        <!-- Season list (left column) -->
+        <Rectangle
+            translation="[60, 110]"
+            width="350"
+            height="920"
+            color="#22223a" />
+
+        <Label
+            translation="[80, 120]"
+            text="Seasons"
+            font="font:MediumBoldSystemFont"
+            color="#b0b0b0" />
+
+        <LabelList
+            id="seasonList"
+            translation="[80, 170]"
+            itemSize="[310, 50]"
+            numRows="15"
+            textColor="#c0c0c0"
+            focusedTextColor="#ffffff"
+            color="#6366f1"
+            focusedColor="#6366f1" />
+
+        <!-- Episode list (right column) -->
+        <Rectangle
+            translation="[430, 110]"
+            width="1440"
+            height="920"
+            color="#22223a" />
+
+        <Label
+            id="episodeHeader"
+            translation="[450, 120]"
+            text="Episodes"
+            font="font:MediumBoldSystemFont"
+            color="#b0b0b0" />
+
+        <LabelList
+            id="episodeList"
+            translation="[450, 170]"
+            itemSize="[1400, 50]"
+            numRows="15"
+            textColor="#c0c0c0"
+            focusedTextColor="#ffffff"
+            color="#6366f1"
+            focusedColor="#6366f1" />
+    </children>
+</component>

@@ -1,0 +1,33 @@
+services:
+  mediamanager:
+    image: your_docker_registry/mediamanager:latest
+    container_name: mediamanager
+    restart: unless-stopped
+    # Run as a non-root user for security. The UID:GID must have read/write
+    # access to the cache and media volumes. On Synology DSM, find your user's
+    # UID with `id -u <username>` via SSH. See the Admin Guide for details.
+    user: "1046:100"
+    mem_limit: 4g
+    memswap_limit: 4g
+    # Host networking is required for SSDP (Roku device discovery) which uses
+    # UDP multicast on 239.255.255.250:1900. Bridge networking blocks multicast.
+    network_mode: host
+    # ports:
+    #   - "8080:8080"        # Main app (Vaadin UI + streaming)
+    #   - "16002:8081"       # Internal health/metrics (LAN only, not internet)
+    volumes:
+      - /volume1/docker/mediamanager/cache:/cache
+      - /volume1/your-media-share:/media
+    environment:
+      - H2_PASSWORD=change_me_to_a_strong_password
+      - TMDB_API_KEY=your_tmdb_api_key_here
+      - TMDB_API_READ_ACCESS_TOKEN=your_token_here
+      - MM_NAS_ROOT=/media
+      - MM_BEHIND_PROXY=true
+      - MM_FFMPEG_PATH=/usr/bin/ffmpeg
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

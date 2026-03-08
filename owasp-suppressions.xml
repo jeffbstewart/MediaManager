@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!-- kotlin-css-jvm: false positive. The CVEs are about the Kotlin compiler/build
+         tooling (pre-1.3.30, 1.4.21, 1.6.0), not the Kotlin CSS wrapper library.
+         We use Kotlin 2.3.10 which has all fixes. -->
+    <suppress>
+        <notes>False positive: CVE is about Kotlin build tooling HTTP artifact resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10101</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Ktor IDE template HTTP resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10102</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about IntelliJ IDEA Kotlin template HTTP resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10103</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Kotlin temp file permissions pre-1.4.21; we use 2.3.10</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin.*@.*$</packageUrl>
+        <cve>CVE-2020-29582</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Kotlin multiplatform dependency locking pre-1.6.0; we use 2.3.10</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin.*@.*$</packageUrl>
+        <cve>CVE-2022-24329</cve>
+    </suppress>
+
+    <!-- jackson-databind: vendor disputes this CVE as not externally exploitable
+         (attacker cannot construct cyclic data structures remotely) -->
+    <suppress>
+        <notes>Disputed by FasterXML: requires attacker to construct cyclic objects, not externally exploitable</notes>
+        <packageUrl regex="true">^pkg:maven/com\.fasterxml\.jackson\.core/jackson-databind@.*$</packageUrl>
+        <cve>CVE-2023-35116</cve>
+    </suppress>
+
+</suppressions>

@@ -1,0 +1,1 @@
+ALTER TABLE app_user ADD COLUMN subtitles_enabled BOOLEAN NOT NULL DEFAULT TRUE;

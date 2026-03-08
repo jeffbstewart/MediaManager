@@ -1,0 +1,33 @@
+# Transcode Buddy Configuration
+# Copy this to buddy.properties and fill in values
+
+# mediaManager server URL (no trailing slash)
+server_url=http://192.168.1.100:8080
+
+# API key from Settings > Transcode Buddy > Buddy API Key
+api_key=your-buddy-api-key-here
+
+# Name for this worker (shown in UI)
+buddy_name=desktop-4090
+
+# Local path to NAS mount (same files the server sees)
+# Windows: \\\\NAS\\Prometheus\\prometheus
+# Linux: /mnt/nas/prometheus
+nas_root=\\\\NAS\\Prometheus\\prometheus
+
+# FFmpeg/FFprobe paths
+ffmpeg_path=C:\\ffmpeg\\bin\\ffmpeg.exe
+ffprobe_path=C:\\ffmpeg\\bin\\ffprobe.exe
+
+# Number of concurrent transcode workers (default 1)
+worker_count=1
+
+# Encoder preference: comma-separated, first available wins
+# Options: nvenc, qsv, cpu
+encoder_preference=nvenc,qsv,cpu
+
+# Seconds between polling for new work (default 30)
+poll_interval_seconds=30
+
+# Seconds between progress reports to server (default 15)
+progress_interval_seconds=15

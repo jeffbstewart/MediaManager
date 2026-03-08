@@ -1,0 +1,2684 @@
+=== Session: 2026-02-21 10:55 ===
+Project initialized:
+- Created Kotlin/Ktor HelloWorld server scaffolding
+  - Gradle with Kotlin DSL (build.gradle.kts)
+  - Ktor 2.3.7 + Netty engine
+  - Package: net.stewart.mediamanager
+  - Server runs on localhost:8080, responds "Hello, World!" at /
+- Kotlin 1.9.22, targeting JDK 19 (Corretto)
+- Dependencies: ktor-server-core, ktor-server-netty, ktor-server-content-negotiation,
+  ktor-serialization-jackson, logback-classic
+- Verified: build succeeds, server starts and serves correctly
+- Created CLAUDE.md and claude.log for project documentation and session tracking
+- Discussed Kotlin dependency management options (Gradle vs Maven vs other)
+===
+
+=== 2026-02-21 11:00 — Gradle confirmed, svn setup ===
+- Decision: sticking with Gradle (Kotlin DSL) over Maven
+- Updated CLAUDE.md: strengthened transcript logging instructions to log every
+  substantive exchange with date/timestamps, not just session summaries.
+  Added svn version control note.
+- Set up svn for initial commit:
+  - Added mediaManager directory and all source files to svn
+  - svn:ignore set on project root: .gradle, build, .idea, *.iml, out
+  - Files staged (not committed — user will review and commit from IntelliJ)
+===
+
+=== 2026-02-21 11:05 — Fix logback CVEs ===
+- User flagged 4 CVE vulnerabilities in ch.qos.logback:logback-classic 1.4.14
+  - CVE-2023-6378: DoS via receiver serialization
+  - CVE-2024-12798: Janino event evaluator issue
+  - CVE-2024-12801: SaxEventRecorder issue
+  - CVE-2025-11226: ACE via config file processing
+- Bumped logback-classic from 1.4.14 to 1.5.19 (all four CVEs patched)
+- Clean build verified
+===
+
+=== 2026-02-21 11:55 — Upgrade all dependencies to latest ===
+- User noted logback 1.5.19 still has a CVE; reviewed all deps for staleness
+- Upgraded everything to current latest:
+  - Kotlin JVM:       1.9.22  → 2.3.10
+  - Ktor:             2.3.7   → 3.4.0  (major version bump, 2.x → 3.x)
+  - io.ktor.plugin:   2.3.7   → 3.4.0
+  - logback-classic:  1.5.19  → 1.5.32
+  - kotlin-test-junit: 1.9.22 → 2.3.10
+- Ktor 3.x artifact names changed: dropped -jvm suffix
+  (ktor-server-core-jvm → ktor-server-core, etc.)
+- Gradle wrapper upgraded: 8.8 → 8.12 (required by Ktor plugin's Shadow dep)
+- Application.kt unchanged — HelloWorld code is compatible as-is
+- Clean build and server startup verified on all new versions
+- Files modified: build.gradle.kts, gradle/wrapper/gradle-wrapper.properties
+===
+
+=== 2026-02-21 12:00 — Startup/shutdown logging ===
+- Updated Application.kt:
+  - Start server with wait=false, then read resolved connector to confirm port
+  - Log "Listening on http://localhost:8080/" via SLF4J after bind confirmed
+  - Register JVM shutdown hook that logs shutdown and calls server.stop(1s, 5s)
+  - Main thread blocks on Thread.currentThread().join()
+- Note: resolvedConnectors() is a suspend function in Ktor 3.x, wrapped in runBlocking
+- Shutdown hook fires on graceful exit (Ctrl+C, IntelliJ stop, System.exit)
+  but not on force kill (taskkill /F, kill -9) — this is expected JVM behavior
+- Build and startup verified
+- File modified: Application.kt
+===
+
+=== 2026-02-21 12:10 — IntelliJ troubleshooting ===
+- IntelliJ wasn't picking up updated dependencies (still using Ktor 2.3.7 jars)
+  → Fixed by upgrading IntelliJ and reimporting Gradle project
+- JDK reference lost during IntelliJ upgrade
+  → Re-added Corretto 19 from C:\Users\Jeff Stewart\.jdks\corretto-19.0.2
+- Note: Corretto 19 is EOL; consider upgrading to Corretto 21+ via IntelliJ's
+  download JDK feature
+===
+
+=== 2026-02-21 12:27 — CLI flags for port and host ===
+- Added command-line argument parsing to main():
+  --port PORT   Set listen port (default: 8080)
+  --public      Listen on 0.0.0.0 instead of localhost
+  Unknown flags print usage and exit(1)
+- Verified: default (localhost:8080), --port 9090, --public --port 9091, --bogus
+- File modified: Application.kt
+===
+
+=== 2026-02-21 12:35 — Committed HelloWorld to svn ===
+- svn commit r226: "Initial mediaManager: Ktor/Netty HelloWorld server"
+- Added .kotlin to svn:ignore
+===
+
+=== 2026-02-21 12:45 — Research: full-stack Kotlin web apps ===
+- Explored Kotlin-native 3-tier web app options to avoid npm ecosystem
+- Options evaluated: Compose Multiplatform/Wasm, Kobweb, KVision, Fritz2, Vaadin-on-Kotlin
+- Key finding: all Kotlin/JS and Kotlin/Wasm approaches still use node/webpack
+  under the hood via Gradle plugin. Only Vaadin-on-Kotlin is truly npm-free.
+- Decision: prototype Vaadin-on-Kotlin for this project
+===
+
+=== 2026-02-21 13:00 — Architecture: Vaadin-on-Kotlin + H2 + Flyway ===
+- Decided on Vaadin-on-Kotlin stack:
+  - Vaadin 25.0.5 + vaadin-boot 13.6 (embedded Jetty)
+  - Karibu-DSL 2.5.0 for Kotlin UI DSL
+  - vok-framework-vokdb 0.18.1 (jdbi-orm for DB access)
+  - H2 in file mode (over SQLite — native Java, full VoK ecosystem support)
+  - HikariCP for connection pooling
+  - Flyway for migrations (V{NNN}__{description}.sql in src/main/resources/db/migration/)
+  - Gradle version catalog (libs.versions.toml)
+- Requires Java 21+ — user upgraded to Corretto 25
+- Scaffolded project (IN PROGRESS — build not yet verified):
+  - Replaced Ktor deps with Vaadin/VoK/H2/Flyway in build.gradle.kts
+  - Created gradle/libs.versions.toml version catalog
+  - Created Main.kt (entry point), Bootstrap.kt (DB init + Flyway),
+    AppShell.kt (Vaadin config), MainView.kt (hello world view)
+  - Created src/main/resources/db/migration/V001__baseline.sql (empty placeholder)
+  - Deleted old Application.kt and logback.xml
+  - Added "data" to svn:ignore (H2 database files)
+- Updated CLAUDE.md with full architecture documentation
+- NEXT: restart Claude with updated JAVA_HOME, then build and verify
+===
+
+=== 2026-02-21 14:00 — Gradle 9 breaking changes research ===
+- User asked for Gradle 9 migration guide, specifically for Kotlin+Vaadin build.gradle.kts
+- Researched: Vaadin 25 plugin + Gradle 9, Kotlin 2.3 + Gradle 9, all breaking changes
+- Key findings:
+  1. Vaadin 25 Gradle plugin IS compatible with Gradle 9 (officially supported)
+  2. Kotlin 2.3.x plugin IS compatible with Gradle 9.0-9.3
+  3. jcenter() fully removed in Gradle 9 (project already uses mavenCentral, no issue)
+  4. kotlinOptions{} deprecated since Kotlin 2.0, should use compilerOptions{}
+  5. tasks.withType<KotlinCompile> should use .configureEach (lazy) not eager config
+  6. mainClassName removed in Gradle 8; project already uses mainClass.set() (OK)
+  7. Java 25/Corretto 25: Gradle 9.1 works from CLI but IDE may show false errors;
+     Kotlin 2.3.0 added JVM_25 target support
+  8. Gradle 9 embeds Kotlin 2.2 for .kts scripts; JSpecify replaces JSR-305 nullability
+  9. Configuration Cache now preferred mode; reproducible archives default
+  10. Minimum KGP version is 2.0.0; project uses 2.3.10 (OK)
+- Current build.gradle.kts already mostly correct; only needs .configureEach on withType
+- No files changed
+===
+
+=== 2026-02-21 14:30 — Research: vaadin-boot webapp/ROOT structure ===
+- Researched vaadin-boot 13.6 by mvysny — what Env.findWebRoot() expects
+- Source: common/src/main/java/com/github/mvysny/vaadinboot/common/Env.java (main branch)
+- findWebRoot() calls Env.class.getResource("/webapp/ROOT") on classpath
+  - If ROOT file missing → IllegalStateException crash
+  - Strips "/ROOT" suffix to get webapp/ directory URL
+  - Purely classloader-based, NOT filesystem-based
+- Minimum requirement: src/main/resources/webapp/ROOT (marker file, any content OK)
+- ROOT file content in examples: "Required by Vaadin Boot" or similar comment text
+- Example structures from 3 repos:
+  - vaadin-boot/testapp-kotlin: webapp/ROOT only
+  - vok-helloworld-app: webapp/ROOT + webapp/images/ (static assets)
+  - vaadin-boot-example-gradle: webapp/ROOT + webapp/icons/icon.png + webapp/styles.css
+- Project currently missing webapp/ directory entirely — needs to be created
+- No files changed
+===
+
+=== 2026-02-21 15:00 — Build verified: Gradle 9 + Java 25 + Vaadin running ===
+- Resumed after JAVA_HOME updated to Corretto 25
+- Gradle 8.12 could not run on Java 25 — Kotlin compiler's JavaVersion.parse()
+  throws IllegalArgumentException on "25.0.2"
+- Confirmed: Java 25 requires Gradle 9.1+ (8.x will never support it)
+- User chose to upgrade Gradle (over downgrading JDK or toolchain workaround)
+- Manually edited gradle-wrapper.properties: 8.12 → 9.3.1 (current stable)
+  (could not use `gradlew wrapper` because 8.12 itself can't run on Java 25)
+- Applied Gradle 9 compatibility fix: added .configureEach to withType<KotlinCompile>
+- Removed deprecated @Theme("my-theme") from AppShell.kt (deprecated in Vaadin 25,
+  no custom theme exists; Lumo default theme used automatically)
+- Created src/main/resources/webapp/ROOT marker file ("Required by Vaadin Boot")
+  — required by vaadin-boot's Env.findWebRoot() classpath lookup
+- BUILD SUCCESSFUL — zero warnings
+- SERVER STARTED — Jetty with virtual threads, Vaadin 25 dev mode on port 8080
+  HikariCP pool OK, Flyway migrations applied, Atmosphere/WebSocket push configured
+- Updated CLAUDE.md: Gradle version, webapp/ROOT in key files, Gradle 9 decision
+- Files modified: gradle-wrapper.properties, build.gradle.kts, AppShell.kt, CLAUDE.md
+- Files created: src/main/resources/webapp/ROOT
+- NEXT: svn add new files and commit; then discuss database schema
+===
+
+=== 2026-02-21 14:03 — Research: UPC barcode → media metadata APIs ===
+- Researched current options for looking up DVD/Blu-ray/HD media metadata from UPC barcodes
+- Categories investigated:
+  1. UPC→product databases (UPCitemdb, Barcode Lookup, Go-UPC, EAN-search.org, Open Products Facts)
+  2. Movie/TV metadata APIs (TMDB, OMDb) — neither supports UPC directly
+  3. Physical media specific (Blu-ray.com scraping, DVDUPC.com)
+  4. Amazon PA-API (supports UPC→ASIN, but being deprecated April 2026)
+  5. Wikidata (P3962 property for GTIN/EAN/UPC, but sparse coverage)
+  6. MusicBrainz (audio discs only, not video)
+- Recommended approach: two-step — UPCitemdb (free, 100/day) for UPC→title,
+  then TMDB (free, ~50 req/sec) for title→rich metadata
+- Kotlin/Java libraries found: tmdb-kotlin (app.moviebase:tmdb-api:1.5.0),
+  tmdb-java (UweTrottmann), openmoviedb-api (Kotlin/Ktor OMDb wrapper)
+- No API provides disc-level detail (what's on each disc in multi-disc sets)
+- Full summary delivered to user
+===
+
+=== 2026-02-21 16:30 — Database schema & entity classes implemented ===
+- Implemented full data model: 9 database tables + 12 Kotlin source files
+- Modified Bootstrap.kt:
+  - Added JdbiOrm.setDataSource(ds) before Flyway migration (required for entity operations)
+  - Added destroy() method calling JdbiOrm.destroy() for clean shutdown
+- Created Flyway migration V002__create_schema.sql with 9 tables:
+  - genre, title, title_genre, media_item, media_item_title, barcode_scan,
+    episode, transcode, app_config
+  - All foreign keys, unique constraints, and performance indexes included
+- Created entity/Enums.kt with 5 enums:
+  - MediaFormat (DVD, BLURAY, UHD_BLURAY, HD_DVD)
+  - MediaType (MOVIE, TV)
+  - ItemCondition (MINT, EXCELLENT, GOOD, FAIR, POOR)
+  - TranscodeStatus (NOT_STARTED, PENDING, IN_PROGRESS, COMPLETE, NOT_FEASIBLE, DEFECTIVE)
+  - LookupStatus (NOT_LOOKED_UP, FOUND, NOT_FOUND)
+- Created 9 entity data classes (KEntity<Long> + Dao companion):
+  - Genre, Title, TitleGenre, MediaItem, MediaItemTitle, BarcodeScan,
+    Episode, Transcode, AppConfig
+  - @Table annotation used where class name differs from table name (multi-word tables)
+- All files added to SVN
+- BUILD SUCCESSFUL — compiles cleanly
+- Files modified: Bootstrap.kt
+- Files created: V002__create_schema.sql, entity/Enums.kt, entity/Genre.kt,
+  entity/Title.kt, entity/TitleGenre.kt, entity/MediaItem.kt,
+  entity/MediaItemTitle.kt, entity/BarcodeScan.kt, entity/Episode.kt,
+  entity/Transcode.kt, entity/AppConfig.kt
+===
+
+=== 2026-02-21 17:15 — Barcode Scan View implemented ===
+- Created ScanView.kt: Vaadin view at route /scan
+  - Text field with allowedCharPattern="[0-9]", autofocus, placeholder
+  - Hidden submit button with Enter key shortcut (barcode scanner fires Enter)
+  - handleScan(): validates non-empty, UPC length 8-14 digits, checks duplicate
+    via BarcodeScan.count { BarcodeScan::upc eq upc }, saves new scan with
+    LookupStatus.NOT_LOOKED_UP, shows success notification (1.5s), refreshes grid
+  - Duplicate scans silently discarded (no notification)
+  - Recent scans grid: last 25 scans via BarcodeScan.findAll(::scanned_at.desc, range=0..24)
+  - Success notifications: 1.5s, bottom-start, LUMO_SUCCESS theme
+  - Error notifications: 4s, bottom-start, LUMO_ERROR theme
+- Modified MainView.kt: replaced hello-world scaffold with landing page + routerLink to /scan
+- Used vok-orm API: count{}, findAll(orderBy, range), .desc extension, eq operator
+- BUILD SUCCESSFUL
+- svn add ScanView.kt
+- Files created: ScanView.kt
+- Files modified: MainView.kt
+===
+
+=== 2026-02-21 17:30 — Fix: Enter key not triggering scan ===
+- Bug: hidden button (isVisible=false) is removed from DOM entirely in Vaadin,
+  so its addClickShortcut(Key.ENTER) never fires — Enter key did nothing
+- Fix: removed the hidden button, added addKeyDownListener(Key.ENTER, { handleScan() })
+  directly on the text field
+- Note: Kotlin/Java vararg interop requires the lambda inside parentheses, not trailing:
+  addKeyDownListener(Key.ENTER, { handler }) — NOT addKeyDownListener(Key.ENTER) { handler }
+- BUILD SUCCESSFUL
+- File modified: ScanView.kt
+===
+
+=== 2026-02-21 17:00 — Research: vok-orm / jdbi-orm Dao API ===
+- Researched vok-orm 3.2 (com.github.vokorm) + jdbi-orm 2.9 (com.gitlab.mvysny.jdbiorm)
+- Read full source of: Dao.kt, ConditionBuilder.kt, Utils.kt, KEntity.kt, Person.kt (test),
+  AbstractDbDaoTests.kt (test)
+- Key findings:
+  1. count with filter: BarcodeScan.count { BarcodeScan::upc eq "value" } -> Long
+  2. findAll with ordering+limit: BarcodeScan.findAll(BarcodeScan::scanned_at.desc, range=0..24)
+  3. findAllBy with filter+ordering+limit: BarcodeScan.findAllBy(BarcodeScan::scanned_at.desc, range=0..24) { ... }
+  4. KProperty1 extensions: .asc and .desc produce OrderBy objects
+  5. ConditionBuilder operators: eq, ne, lt, le, gt, ge, in, like, likeIgnoreCase,
+     between, isNull, isNotNull, isTrue, isFalse, and/or combinators, native SQL via String.invoke
+  6. Dao base methods (from DaoOfAny): findAll, findById, getById, deleteAll, deleteById,
+     count() (no-arg), existsAny, existsById
+  7. vok-orm extension methods on DaoOfAny: count{}, findAllBy{}, findAll(orderBy, range),
+     singleBy{}, findSingleBy{}, deleteBy{}, existsBy{}, tableProperty()
+- No files changed
+===
+
+=== 2026-02-21 17:45 — Research: vaadin-boot custom servlet + H2 web console ===
+- Researched two questions:
+  1. How to register a custom servlet with vaadin-boot 13.6
+  2. The H2 web console servlet class for Jakarta Servlet API
+
+- vaadin-boot 13.6 API (decompiled from actual JARs in Gradle cache):
+  - VaadinBoot extends VaadinBootBase<VaadinBoot>
+  - Two approaches to add custom servlets:
+    a. @WebServlet annotation auto-discovery (simplest — Jetty classpath scanning finds it)
+    b. Override onStarted(WebAppContext) to programmatically add servlets after startup
+  - onStarted(WebAppContext) is a protected method on VaadinBoot
+  - WebAppContext.addServlet() has 4 overloads:
+    - addServlet(String className, String pathSpec) -> ServletHolder
+    - addServlet(Class<? extends Servlet>, String pathSpec) -> ServletHolder
+    - addServlet(ServletHolder, String pathSpec) -> void
+    - addServlet(HttpServlet, String pathSpec) -> ServletHolder
+  - NO createWebAppContext() method in version 13.6 (that was from older docs/README)
+  - JettyWebServer has getContext() -> WebAppContext (accessible after start)
+
+- H2 web console servlet:
+  - Class: org.h2.server.web.JakartaWebServlet (Jakarta Servlet API)
+  - NOT org.h2.server.web.WebServlet (that's the javax.servlet version)
+  - JakartaWebServlet extends jakarta.servlet.http.HttpServlet
+  - Available in h2-2.2.224.jar (already a project dependency)
+  - Init parameters passed as -flag value pairs to internal WebServer.init()
+
+- Exact code for Main.kt provided to user (both approaches)
+- No files changed
+===
+
+=== 2026-02-21 18:00 — H2 console + --developer_mode flag ===
+- Added --developer_mode CLI flag (default false) to conditionally expose H2 web console
+- Created AppConfig singleton in Main.kt to hold the flag (shared with UI views)
+- Main.kt: parses args for --developer_mode, subclasses VaadinBoot to override
+  onStarted(WebAppContext), registers JakartaWebServlet at /h2-console/* when enabled
+- MainView.kt: conditionally shows "H2 Database Console" link when developerMode is true
+- H2 console accessible at http://localhost:8080/h2-console when --developer_mode passed
+  - JDBC URL: jdbc:h2:file:./data/mediamanager, user: sa, no password
+- BUILD SUCCESSFUL
+- Files modified: Main.kt, MainView.kt
+===
+
+=== 2026-02-21 18:10 — Added README.md ===
+- Created README.md with build/run instructions, --developer_mode flag docs,
+  and H2 console connection settings (JDBC URL, username, password)
+- svn add README.md
+- Files created: README.md
+===
+
+=== 2026-02-21 18:20 — Fix: H2 console routing conflict with Vaadin ===
+- Problem: Vaadin's /* servlet mapping intercepted /h2-console requests, returning
+  "Couldn't find route for 'h2-console'" error. Adding servlet via onStarted() was
+  too late — context already initialized.
+- Fix: replaced in-process servlet approach with H2's standalone web server
+  (org.h2.tools.Server.createWebServer) on separate port 8082
+- Main.kt: starts H2 web server before VaadinBoot when --developer_mode is set,
+  registers shutdown hook to stop it cleanly. Removed Jetty servlet imports.
+- MainView.kt: link now points to http://localhost:8082
+- README.md: updated URL to port 8082
+- BUILD SUCCESSFUL
+- Files modified: Main.kt, MainView.kt, README.md
+===
+
+=== 2026-02-21 19:00 — Background UPC Lookup Agent with Server Push ===
+- Implemented background agent that processes scanned UPCs with mock API lookups
+  and pushes live updates to the scan UI via Vaadin server push (WebSocket)
+- Created 4 new service files:
+  - service/Broadcaster.kt: thread-safe event bus (CopyOnWriteArrayList) connecting
+    agent to open ScanView UIs via ScanUpdateEvent data class
+  - service/QuotaTracker.kt: daily UPCitemdb quota tracking via app_config table,
+    auto-resets on new day, DAILY_LIMIT=100
+  - service/UpcLookupService.kt: interface + MockUpcLookupService with 10 deterministic
+    fake products keyed by UPC last digit, 200-800ms simulated latency
+  - service/UpcLookupAgent.kt: daemon thread polls every 5s for oldest NOT_LOOKED_UP
+    scan, creates MediaItem + Title + MediaItemTitle on FOUND, updates BarcodeScan
+    status/notes, broadcasts events for live UI updates
+- Modified AppShell.kt: added @Push(AUTOMATIC, WEBSOCKET_XHR) for server push
+- Modified Main.kt: starts UpcLookupAgent after Bootstrap.init(), shutdown hook for clean stop
+- Modified Bootstrap.kt: added .env file loader (KEY=VALUE parser → System.setProperty)
+- Modified ScanView.kt: added push listener (register/unregister on attach/detach),
+  quota display span ("UPC Lookups today: X / 100"), Notes column in grid
+- Created example.env: template for UPCITEMDB_API_KEY and TMDB_API_KEY
+- Modified CLAUDE.md: added Security section (never read .env, never commit secrets),
+  added ScanView and service/ to Key Files, updated svn:ignore list
+- Modified README.md: added Configuration section for .env setup
+- Added .env to svn:ignore property
+- svn add: service/ directory (4 files) and example.env
+- BUILD SUCCESSFUL
+- Files created: service/Broadcaster.kt, service/QuotaTracker.kt,
+  service/UpcLookupService.kt, service/UpcLookupAgent.kt, example.env
+- Files modified: AppShell.kt, Main.kt, Bootstrap.kt, ScanView.kt, CLAUDE.md, README.md
+===
+
+=== 2026-02-21 19:30 — Real UPCitemdb API client ===
+- Added UpcItemDbLookupService to UpcLookupService.kt — real API client for UPCitemdb
+  - Free tier: GET https://api.upcitemdb.com/prod/trial/lookup?upc=... (no API key needed)
+  - Uses java.net.http.HttpClient (standard library) + Jackson ObjectMapper (transitive via Vaadin)
+  - HTTP 200 → parse items[0], extract title/brand/description/category
+  - HTTP 404 → found=false (valid response, counts against quota)
+  - HTTP 429 → apiError=true (rate limited, don't count against quota, retry later)
+  - Other errors → apiError=true
+  - detectMediaFormat() scans title/category/description for keywords:
+    "4k uhd"/"ultra hd"/"uhd" → UHD_BLURAY, "hd dvd" → HD_DVD,
+    "blu-ray"/"bluray" → BLURAY, "dvd" → DVD
+  - No new dependencies — HttpClient is JDK standard, Jackson is already on classpath
+- Changed UpcLookupAgent default from MockUpcLookupService to UpcItemDbLookupService
+  - MockUpcLookupService still available via constructor injection for testing
+- BUILD SUCCESSFUL
+- Files modified: service/UpcLookupService.kt, service/UpcLookupAgent.kt
+===
+
+=== 2026-02-21 20:00 — Throttle UPC lookups to 10s minimum gap ===
+- Problem: UPCitemdb returning 429 rate limits despite being under daily quota
+- Fix: added 10-second minimum gap between API calls in UpcLookupAgent
+  - Tracks lastLookupTime, sleeps remaining gap before each lookup
+  - MIN_LOOKUP_GAP_MS = 10_000
+- BUILD SUCCESSFUL
+- File modified: service/UpcLookupAgent.kt
+===
+
+=== 2026-02-21 20:30 — Unit tests for UPC lookup service ===
+- Created UpcLookupServiceTest.kt with 29 tests across two test classes:
+  - UpcItemDbLookupServiceTest (24 tests):
+    - HTTP status handling: 404 (not found, no api error), 429 (api error), 500, 401
+    - 200 response parsing: valid item, empty items, missing items field, malformed JSON,
+      null fields, blank fields treated as null
+    - detectMediaFormat: 4K UHD/Ultra HD/UHD → UHD_BLURAY, HD DVD/HD-DVD → HD_DVD,
+      Blu-ray/bluray/blu ray → BLURAY, DVD → DVD, no match → null, all null → null,
+      priority (UHD over Blu-ray, HD DVD over DVD), case insensitivity
+  - MockUpcLookupServiceTest (5 tests):
+    - All 10 digits return found, matching last two digits returns not found,
+      correct products for digits 0 and 7, never returns api error
+- Refactored UpcItemDbLookupService: extracted parseResponse() and detectMediaFormat()
+  as internal methods for testability
+- All 29 tests pass
+- svn add test file
+- Files created: src/test/.../service/UpcLookupServiceTest.kt
+- Files modified: service/UpcLookupService.kt (internal visibility for testable methods)
+===
+
+=== 2026-02-22 — Title normalization + TMDB enrichment implementation ===
+- Implemented full Title enrichment pipeline: title cleaning + TMDB API search + background agent
+- Schema migration V003__title_enrichment.sql:
+  - Added sort_name, raw_upc_title, enrichment_status, retry_after columns to title table
+  - Created enrichment_attempt table for logging attempts and tracking consecutive failures
+  - Index on enrichment_status for efficient polling
+- Entity changes:
+  - Added EnrichmentStatus enum (PENDING, ENRICHED, SKIPPED, FAILED, REASSIGNMENT_REQUESTED, ABANDONED)
+  - Modified Title.kt: new fields (sort_name, raw_upc_title, enrichment_status, retry_after),
+    PosterSize enum, posterUrl() method for TMDB poster URL construction
+  - Created EnrichmentAttempt.kt entity
+- New services:
+  - TmdbService.kt: TMDB API v3 client (searchMovie, searchTv, getDetails) using
+    java.net.http.HttpClient + Jackson. API key from System.getProperty("TMDB_API_KEY").
+  - TitleCleanerService.kt: deterministic title normalization — strips bracketed tags,
+    parenthesized format text, edition markers, moves trailing articles, generates sort names
+  - TmdbEnrichmentAgent.kt: background daemon thread, polls every 3s, processes PENDING →
+    clean title + TMDB search → ENRICHED/SKIPPED/FAILED. Handles REASSIGNMENT_REQUESTED
+    (fetch by TMDB ID). Exponential backoff: 30m → 1w, ABANDONED after 11 failures.
+- Modified existing files:
+  - UpcLookupAgent.kt: sets raw_upc_title and enrichment_status=PENDING on new Title records
+  - Broadcaster.kt: added TitleUpdateEvent and separate title listener methods
+  - Main.kt: starts TmdbEnrichmentAgent alongside UpcLookupAgent
+  - CLAUDE.md: documented External APIs section (UPCitemdb free tier, TMDB key required)
+  - README.md: expanded Configuration section with API key table and behavior without keys
+- Tests (3 new test files):
+  - TmdbServiceTest.kt: 22 tests — movie/TV search parsing, get-by-ID, empty results,
+    missing API key, HTTP error codes (401/429/500), malformed JSON, null/missing fields
+  - TitleCleanerServiceTest.kt: 25 tests — bracket/paren stripping, edition markers,
+    trailing articles, sort name generation, edge cases
+  - TitleTest.kt: 4 tests — posterUrl(THUMBNAIL/FULL), null poster_path
+- Files created: V003__title_enrichment.sql, EnrichmentAttempt.kt, TmdbService.kt,
+  TitleCleanerService.kt, TmdbEnrichmentAgent.kt, TmdbServiceTest.kt,
+  TitleCleanerServiceTest.kt, TitleTest.kt
+- Files modified: Enums.kt, Title.kt, UpcLookupAgent.kt, Broadcaster.kt, Main.kt,
+  CLAUDE.md, README.md
+===
+
+=== 2026-02-22 — Integration test + philosophy + VARCHAR fix ===
+- Added "Debugging sucks, Testing Rocks" philosophy to CLAUDE.md
+- Created EnrichmentIntegrationTest.kt: 9 integration tests exercising the full
+  scan → UPC lookup → title enrichment pipeline against an in-memory H2 database
+  with real Flyway migrations and mocked HTTP services (TestUpcLookupService,
+  TestTmdbService)
+- Tests cover: full pipeline end-to-end, title cleaning through enrichment,
+  no TMDB key (SKIPPED), no TMDB match (SKIPPED), API error (FAILED with
+  retry_after), TV fallback after no movie match, REASSIGNMENT_REQUESTED flow,
+  priority ordering (PENDING before FAILED), UPC not found
+- Fixed VARCHAR(20) too narrow for REASSIGNMENT_REQUESTED (22 chars):
+  created V004__widen_enrichment_status.sql to ALTER COLUMN to VARCHAR(30)
+- Made processNext() internal on UpcLookupAgent and TmdbEnrichmentAgent for
+  test access (Kotlin internal = same module, accessible from src/test)
+- Made TmdbService and its public methods open for test subclassing
+- Improved enrichment agent logging: detailed ENRICH/REASSIGN log lines showing
+  raw title, cleaned title, sort name, TMDB match details, and final status
+- Files created: EnrichmentIntegrationTest.kt, V004__widen_enrichment_status.sql
+- Files modified: CLAUDE.md, TmdbService.kt, UpcLookupAgent.kt,
+  TmdbEnrichmentAgent.kt
+===
+
+=== 2026-02-22 12:57 — Clock abstraction + failure/retry integration tests ===
+- Created Clock interface + SystemClock production implementation (service/Clock.kt)
+- Created TestClock with controllable time and no-op sleeps (test service/TestClock.kt)
+- Injected Clock into TmdbEnrichmentAgent (constructor param, replaced 8 time calls:
+  Thread.sleep → clock.sleep, System.currentTimeMillis → clock.millis,
+  LocalDateTime.now → clock.now)
+- Injected Clock into UpcLookupAgent (constructor param, replaced 4 time calls)
+- Added mutable clock property to QuotaTracker singleton (replaced LocalDate.now)
+- All injections use SystemClock as default — fully backward-compatible
+- Added 3 new enrichment integration tests:
+  1. Exponential backoff progression to ABANDONED (11 failure cycles,
+     verifies 30m→60m→120m→...→10080m→ABANDONED)
+  2. FAILED title not retried before retry_after (timing gate verification)
+  3. REASSIGNMENT_REQUESTED after failure sequence recovers (user override path)
+- Created QuotaTrackerIntegrationTest with 5 tests:
+  1. Quota resets when clock advances to next day
+  2. Quota does NOT reset on same day
+  3. Quota exhaustion at daily limit
+  4. Exhausted quota resets on new day
+  5. Multiple day transitions
+- Fixed AppConfig name collision: entity.AppConfig vs Main.kt object AppConfig
+  (used FQN in enrichment test, import alias in quota test)
+- All 26 tests pass (12 enrichment + 5 quota + 4 title + 5 mock UPC)
+- Files created: Clock.kt, TestClock.kt, QuotaTrackerIntegrationTest.kt
+- Files modified: TmdbEnrichmentAgent.kt, UpcLookupAgent.kt, QuotaTracker.kt,
+  EnrichmentIntegrationTest.kt
+- svn add: Clock.kt, TestClock.kt, QuotaTrackerIntegrationTest.kt
+===
+
+=== 2026-02-22 — Rename AppConfig → CommandLineFlags, make ports tunable ===
+- Renamed `object AppConfig` to `object CommandLineFlags` in Main.kt to eliminate
+  name collision with entity.AppConfig (which required FQN and alias workarounds in tests)
+- Converted `const val H2_CONSOLE_PORT` to `var h2ConsolePort`, added `var port`
+- Added `parseFlags(args)` method for CLI argument parsing (--developer_mode, --port, --h2_console_port)
+- Wired `CommandLineFlags.port` into VaadinBoot via `setPort()`
+- Updated MainView.kt references (AppConfig → CommandLineFlags)
+- Simplified EnrichmentIntegrationTest.kt: FQN `net.stewart.mediamanager.entity.AppConfig` → plain `AppConfig`
+- Simplified QuotaTrackerIntegrationTest.kt: removed `import ... as AppConfigEntity` alias
+- Created CommandLineFlagsTest.kt with 7 unit tests for parseFlags()
+- All tests pass (`./gradlew clean build` successful)
+- Files modified: Main.kt, MainView.kt, EnrichmentIntegrationTest.kt, QuotaTrackerIntegrationTest.kt
+- Files created: CommandLineFlagsTest.kt (svn added)
+===
+
+=== 2026-02-22 13:50 — Catalog Browsing View ===
+- Implemented CatalogView.kt at route /catalog: paginated grid of titles with
+  search filtering, format column via SQL join, Broadcaster integration, and
+  TitleEditDialog for editing TMDB ID, sort name, and media type
+- Grid columns: Poster (thumbnail image), Title, Type, Year, Format (joined via
+  MediaItemTitle→MediaItem), Status (Lumo badges: green=ENRICHED, red=FAILED/ABANDONED),
+  Edit button
+- Search: debounced TextField filters by name or raw_upc_title (case-insensitive)
+- TitleEditDialog: read-only info (name, raw title, status) + editable sort_name,
+  tmdb_id (IntegerField), media_type (ComboBox). Changing TMDB ID sets
+  enrichment_status=REASSIGNMENT_REQUESTED for background agent re-enrichment.
+  Fresh reload from DB before save to avoid stale writes.
+- Format column loads Map<Long, String> via raw JDBI query (GROUP_CONCAT on
+  media_item_title JOIN media_item) — single query per grid refresh
+- Broadcaster: registers/unregisters TitleUpdateEvent listener on attach/detach
+- Fixed Vaadin `title` attribute shadowing: HTML element's title property shadows
+  class field inside `apply {}` blocks — used local alias `val t = title`
+- Created V005__title_sort_name_index.sql: index on title(sort_name) for default sort
+- Modified MainView.kt: added routerLink to CatalogView
+- svn add: CatalogView.kt, V005__title_sort_name_index.sql
+- BUILD SUCCESSFUL (zero warnings)
+- Files created: CatalogView.kt, V005__title_sort_name_index.sql
+- Files modified: MainView.kt
+===
+
+=== 2026-02-22 — Format icons in catalog grid ===
+- Replaced raw text Format column with SVG badge icons in CatalogView
+- Created 4 SVG badge icons in src/main/resources/webapp/icons/:
+  - dvd.svg (silver bg, dark text)
+  - bluray.svg (blue bg, white text)
+  - uhd-bluray.svg (black bg, gold text)
+  - hd-dvd.svg (dark red bg, white text)
+- Format column now uses ComponentRenderer with Image elements
+  - Maps enum names: DVD→dvd.svg, BLURAY→bluray.svg, UHD_BLURAY→uhd-bluray.svg, HD_DVD→hd-dvd.svg
+  - Multiple formats render in a HorizontalLayout
+  - Falls back to "—" Span when no format data
+  - Column width increased from 100px to 120px
+- BUILD SUCCESSFUL, all tests pass
+- Files created: icons/dvd.svg, icons/bluray.svg, icons/uhd-bluray.svg, icons/hd-dvd.svg
+- Files modified: CatalogView.kt
+- svn add done for icons/ directory and all 4 SVGs
+===
+
+=== 2026-02-22 — Log delayed enrichment retry status ===
+- Added once-per-minute logging when enrichment agent is idle with pending retry jobs
+- When all FAILED titles have retry_after in the future, logs:
+  "Next enrichment delayed for retry backoff for 7.3 minutes (2 failed titles waiting)"
+- Time displayed in human-friendly relative format (seconds/minutes/hours)
+- Throttled to once per 60 seconds via lastDelayedLogTime tracker
+- Uses existing Clock abstraction for testability
+- Added logDelayedRetryStatus() and findNextRetryTime() methods
+- File modified: TmdbEnrichmentAgent.kt
+===
+
+=== 2026-02-22 — Add enrichment status filter to catalog ===
+- Added status filter ComboBox to CatalogView toolbar next to search field
+- Options: "Needs attention" (everything except ENRICHED), plus each individual EnrichmentStatus
+- "Needs attention" is the key workflow filter — shows SKIPPED, FAILED, PENDING, ABANDONED, REASSIGNMENT_REQUESTED
+- Filters compose: status filter + text search both apply simultaneously
+- Status label shows "X of Y titles" when any filter is active
+- Search field and status filter wrapped in HorizontalLayout with baseline alignment
+- File modified: CatalogView.kt
+===
+
+=== 2026-02-22 — Preserve custom sort keys during enrichment ===
+- Added hasCustomSortName() helper: detects if sort_name differs from auto-generated
+- processInitialEnrichment: captures customSort flag before changes, guards sort_name write
+- processReassignment: same — captures flag, guards both applyTmdbResult and post-reassignment sort_name write
+- applyTmdbResult: new preserveSortName parameter (default false), skips sort_name regeneration when true
+- Log messages include "(custom sort key preserved)" when a custom sort key was kept
+- File modified: TmdbEnrichmentAgent.kt
+===
+
+=== 2026-02-22 — Show sort key column and default sort ===
+- Added "Sort Key" column to catalog grid showing title.sort_name
+- Grid defaults to ascending sort on the Sort Key column
+- Title column no longer sortable (redundant with Sort Key)
+- File modified: CatalogView.kt
+===
+
+=== 2026-02-22 — Multi-pack expansion feature ===
+- Implemented full multi-pack expansion pipeline for media items containing multiple titles under one UPC
+- What was done:
+  1. Migration V006: added expansion_status column to media_item, disc_number to media_item_title
+  2. Added ExpansionStatus enum (SINGLE, NEEDS_EXPANSION, EXPANDED) to Enums.kt
+  3. Updated MediaItem entity (expansion_status field) and MediaItemTitle entity (disc_number field)
+  4. Created MultiPackDetector service — stateless detector for multi-pack product names
+     - Detects: Double/Triple Feature, N-Film Collection, slash-separated titles, Trilogy, Box Set
+  5. Modified UpcLookupAgent.handleFound() to run MultiPackDetector on UPC results
+     - Multi-packs: expansion_status=NEEDS_EXPANSION, placeholder title enrichment_status=SKIPPED
+     - Single titles: unchanged behavior (SINGLE, PENDING)
+     - Appends "[MULTI-PACK: ~N titles]" to scan notes
+  6. Added searchMovieMultiple() and searchTvMultiple() to TmdbService (returns List<TmdbSearchResult>)
+  7. Created ExpandView (/expand route) with ExpandDialog for multi-pack title linking
+     - Grid of NEEDS_EXPANSION media items, click to open dialog
+     - Dialog: linked titles grid, TMDB search, Add/Remove title, Mark Expanded/Not a Multi-Pack
+  8. Updated MainView with nav link to ExpandView (with count badge)
+  9. Updated MockUpcLookupService digit '3' to multi-pack name for dev testing
+  10. Tests: MultiPackDetectorTest (unit), EnrichmentIntegrationTest (2 new integration tests),
+      TmdbServiceTest (5 new multi-result search tests)
+- Files created: V006__multi_pack_expansion.sql, MultiPackDetector.kt, ExpandView.kt, MultiPackDetectorTest.kt
+- Files modified: Enums.kt, MediaItem.kt, MediaItemTitle.kt, UpcLookupAgent.kt, TmdbService.kt,
+  UpcLookupService.kt, MainView.kt, EnrichmentIntegrationTest.kt, TmdbServiceTest.kt
+- All new files added to svn. Build successful, all tests pass.
+===
+
+=== 2026-02-22 — Flag as Multi-Pack from Title Catalog ===
+- Added "Flag as Multi-Pack" button to TitleEditDialog in CatalogView
+- Button appears only when the title's linked MediaItem has expansion_status=SINGLE
+- Clicking it sets the MediaItem to NEEDS_EXPANSION and the title to SKIPPED
+- User is directed to /expand to complete the expansion
+- File modified: CatalogView.kt
+===
+
+=== 2026-02-22 16:22 — TV Season Tracking + Title Dedup ===
+- What was discussed: Implement TV season tracking, auto-detect season info from UPC names, and deduplicate Titles when TMDB enrichment reveals duplicate tmdb_ids
+- What was decided: Follow the pre-approved 7-step implementation plan
+- What was changed:
+  - Created V007__season_tracking.sql — adds `seasons VARCHAR(20)` column to media_item_title
+  - Modified MediaItemTitle.kt — added `var seasons: String? = null` property
+  - Created SeasonDetector.kt — stateless object detecting 6 season patterns (complete series, range, single, short form, British, ordinals)
+  - Modified UpcLookupAgent.kt — calls SeasonDetector.detect() in handleFound(), populates seasons on join, appends [SEASON: X] to notes
+  - Modified TmdbEnrichmentAgent.kt — added title dedup in processInitialEnrichment() (findExistingByTmdbId, relinkMediaItems, delete orphaned enrichment attempts)
+  - Modified CatalogView.kt — added seasonMap/loadSeasonMap(), Seasons grid column, Seasons TextField in TitleEditDialog (editable for single join, disabled for multiple)
+  - Modified UpcLookupService.kt — changed mock product '5' from Forrest Gump to "Breaking Bad Season 1 [Blu-ray]"
+  - Created SeasonDetectorTest.kt — 20 tests covering all 6 patterns + negatives + priority
+  - Modified EnrichmentIntegrationTest.kt — added 4 tests: season populates join, non-season null, title dedup merge, single-title regression
+  - BUILD SUCCESSFUL, all tests pass (100% success rate)
+===
+
+=== 2026-02-22 16:30 — Hidden Title Support in Catalog ===
+- What was discussed: Add ability to hide titles from the default catalog view, with UI to toggle and filter
+- What was changed:
+  - Created V008__title_hidden.sql — adds `hidden BOOLEAN DEFAULT FALSE NOT NULL` to title table
+  - Modified Title.kt — added `var hidden: Boolean = false`
+  - Modified CatalogView.kt:
+    - Added "Show hidden" checkbox to filter bar
+    - Hidden titles filtered out by default in refreshGrid()
+    - Status label shows hidden count (e.g. "Showing 42 titles (3 hidden)")
+    - Added "Hidden" checkbox to TitleEditDialog, wired to save
+  - BUILD SUCCESSFUL, all tests pass
+===
+
+=== 2026-02-22 — Purchase tracking feature ===
+- Implemented purchase tracking for media items
+- What was changed:
+  - Created V009__purchase_details.sql — adds purchase_place, purchase_date, purchase_price columns to media_item (all nullable)
+  - Modified entity/MediaItem.kt — added 3 purchase fields (String?, LocalDate?, BigDecimal?)
+  - Created PurchaseView.kt — grid showing all media items with UPC, product name, linked titles, purchase place/date/price, and edit button
+    - Titles column uses GROUP_CONCAT query (same pattern as CatalogView.loadFormatMap)
+    - Product column uses lookupRawTitle (same pattern as ExpandView)
+    - PurchaseEditDialog: shows UPC, product, linked titles (read-only), editable place/date/price fields
+    - Place defaults to "Amazon" when currently blank
+  - Modified MainLayout.kt — added "Purchases" nav link between "Catalog" and "Expand"
+- BUILD SUCCESSFUL, all tests pass
+===
+
+=== 2026-02-22 — Poster cache implementation ===
+- Implemented on-demand poster caching (plan from previous session)
+- Created V010__poster_cache.sql: adds nullable poster_cache_id VARCHAR(36) to title table
+- Updated Title.kt: added poster_cache_id field, changed posterUrl() to route through /posters/{size}/{id} servlet
+- Created PosterCacheService.kt: singleton that fetches from TMDB CDN on first request, saves to data/poster-cache/{ab}/{cd}/{uuid}.jpg (two-level UUID sharding), serves from disk on subsequent requests
+- Created PosterServlet.kt: @WebServlet at /posters/*, parses size+titleId, calls PosterCacheService, streams image with Cache-Control immutable, falls back to TMDB CDN redirect on fetch failure
+- Updated ExpandView.kt: linked titles grid now uses PosterServlet URL instead of hardcoded TMDB CDN URL (search results grid unchanged — transient TMDB results)
+- Updated TitleTest.kt and EnrichmentIntegrationTest.kt: assertions now expect servlet URLs instead of TMDB CDN URLs
+- All 170 tests pass, BUILD SUCCESSFUL
+- New files added to svn tracking
+- Committed as r245
+===
+
+=== 2026-02-22 14:00 — SVN status check and commit ===
+- Checked svn status: found uncommitted poster cache changes from previous session
+- Removed claude-code-bug-report.md (already filed as https://github.com/anthropics/claude-code/issues/27775)
+- Committed r245: poster caching (PosterServlet, PosterCacheService, V010 migration, Title/ExpandView/test updates)
+===
+
+=== 2026-02-22 19:14 — NAS directory structure exploration ===
+- Explored //nas/PlexServedMedia/media/ disk hierarchy
+- Documented top-level dirs: BLURAY, DVD, UHD, TV Series From Media, Family Movies
+- TV Series: Show Name / Season NN / episode files (Plex-standard structure)
+  - Some shows (Downton Abbey) are flat — all episodes in show root, no Season subdirs
+  - Some shows (V The Miniseries, V The Final Battle) have no season dirs — files directly in show folder
+  - Season 00 = specials/bonus content
+- Movies (BLURAY/DVD/UHD): flat directories, no subdirs, one .mkv per movie
+- File extensions: .mkv (dominant), .mp4 (rare — Arrival, Mummy trilogy), .nfo (XML metadata from DVDFab)
+- Two naming generations observed:
+  - Older transcodes: doubled name pattern "Show - S01E01 - Show - s01e01 - Episode Title" (DS9, Cheers)
+  - Newer transcodes: clean pattern "Show - S01E01 - Episode Title" (Star Trek TOS, Wednesday, Firefly, Wheel of Time)
+  - Some use year: "Star Trek Discovery (2017) - S01E01 - Title"
+  - Miami Vice uses lowercase: "s01e01" instead of "S01E01"
+- Movie naming: just title + extension, no year typically (exceptions: "Karate Kid The (1984)", "How To Train Your Dragon 2025")
+  - Sequels: inconsistent numbering — "Die Hard (1)", "Austin Powers 1", "Star Wars 4", "Bourne (1) Identity"
+  - UHD has MakeMKV artifacts: "_t00", "_t02" suffixes on some files
+- .nfo files: DVDFab-generated XML, mostly empty for movies, populated with TMDB data for newer TV episodes
+  - Movie .nfo: empty stub (no title, no year, no plot)
+  - TV .nfo: has title, plot, season, episode, TMDB ID, actor info, poster URLs
+- File sizes: DVD ~4-7 GB, BLURAY ~12-64 GB, UHD ~48-90 GB
+===
+
+=== 2026-02-22 19:48 — Transcode Discovery, Linking, and VLC Playback ===
+- Implemented full 8-step plan for NAS file discovery, title matching, and playback
+- What was created (10 new files):
+  - V011__transcode_discovery.sql: ALTER TABLE transcode (transcode_format, match_method) + CREATE TABLE discovered_file
+  - entity/DiscoveredFile.kt: KEntity for staging table
+  - service/TranscodeFileParser.kt: Stateless movie/TV filename parser (MakeMKV suffix, year extraction, trailing articles, SxxExx)
+  - service/TranscodeMatcherService.kt: Title matching (exact + normalized with article/punctuation stripping)
+  - service/NasScannerService.kt: NAS scan orchestration (discover, dedup, parse, match, cleanup with mass-deletion guard)
+  - service/VlcLauncherService.kt: Fire-and-forget VLC launch via ProcessBuilder
+  - TranscodeView.kt: Route /transcodes — scan button, unmatched grid with Link/Ignore, linked grid with filters, settings dialog
+  - TitleDetailView.kt: Route /title/{titleId} — movie transcodes grid, TV episode browser with season ComboBox
+  - test/TranscodeFileParserTest.kt: 14 tests for movie + TV filename parsing
+  - test/TranscodeMatcherServiceTest.kt: 12 tests for exact/normalized/year matching
+- What was modified (5 files):
+  - entity/Enums.kt: Added DiscoveredFileStatus, MatchMethod enums
+  - entity/Transcode.kt: Added transcode_format, match_method fields
+  - service/Broadcaster.kt: Added NasScanProgress event type + listener registration
+  - Main.kt: Added --max_transcode_deletes flag to CommandLineFlags
+  - MainLayout.kt: Added Transcodes nav link
+  - CatalogView.kt: Clickable title names → TitleDetailView, play icon column for titles with transcodes
+- Build: compiles clean, all tests pass
+- All new files added to SVN (svn add)
+===
+
+=== 2026-02-22 — Fuzzy matching for transcode-to-title linking ===
+- Implemented in-house normalized Levenshtein distance for fuzzy title matching
+- No new dependencies — pure Kotlin DP algorithm (~15 lines)
+- Created: service/FuzzyMatchService.kt
+  - levenshtein(a, b): raw edit distance
+  - similarity(a, b): normalized 0.0–1.0 score (inputs run through TranscodeMatcherService.normalize())
+  - findSuggestions(query, titles, maxResults=3, threshold=0.60): top scored titles
+  - ScoredTitle data class (title + score)
+- Created: test/.../service/FuzzyMatchServiceTest.kt
+  - 16 tests covering levenshtein distance, similarity, and findSuggestions
+  - Tests typos, article stripping, missing punctuation, threshold, maxResults, sort order
+- Modified: TranscodeView.kt
+  - Unmatched grid: added "Suggestion" column between Year and Actions
+    - Pre-loads all titles once in refreshUnmatchedGrid(), computes suggestions per file
+    - Renders top suggestion as "Title Name (85%)" in secondary text style
+  - LinkTranscodeDialog.refreshTitles(): fuzzy-ranked search
+    - Substring matches sorted by similarity score (best ordering)
+    - When no substring matches, falls back to FuzzyMatchService.findSuggestions with threshold=0.50 and maxResults=10
+- Build: compiles clean, all tests pass
+- New files added to SVN (svn add)
+
+Follow-up changes in same session:
+- FuzzyMatchService: hidden titles excluded from suggestions
+- LinkTranscodeDialog: hidden titles excluded from search results
+- TV series batch linking: clicking Link/Accept on a TV episode now links all
+  unmatched episodes with the same parsed show name in one operation
+- Extracted linkDiscoveredFileToTitle() shared function (Accept button + dialog)
+- Added Accept button to suggestion column for one-click linking
+- Removed all DO NOT SUBMIT debug log statements from NasScannerService (26 lines)
+- Fixed grid overflow error: replaced isAllRowsVisible with fixed heights and
+  pageSize=100 on both unmatched (400px) and linked (600px) grids
+===
+
+=== 2026-02-22 — In-Browser Video Playback with Remux Cache ===
+- Implemented in-browser video playback replacing local-only VLC restriction
+- New files:
+  - VideoStreamServlet.kt — /stream/{id} servlet with:
+    - Direct MP4/M4V streaming with full HTTP Range request support (seeking)
+    - Cache-based MKV/AVI streaming via FFmpeg remux to ./data/stream-cache/
+    - LRU cache eviction (20 files max) by last-modified time
+    - Subtitle extraction (SRT/ASS → WebVTT) during remux
+    - /stream/{id}/subs/{index} for serving WebVTT subtitle tracks
+    - Atomic .tmp → .mp4 rename to avoid serving partial files
+  - VideoPlayerDialog.kt — Vaadin Dialog with HTML5 <video> element
+    - 80vw × 80vh, resizable, draggable
+    - <track> elements for cached subtitle files
+    - Native browser fullscreen via video controls
+- Modified TranscodeView.kt:
+  - Play column always visible (removed isLocal guard)
+  - Browser play button (triangle) → VideoPlayerDialog
+  - VLC button (desktop icon) shown only for local clients
+  - Added ffmpeg_path TextField to TranscodeSettingsDialog
+  - Saves as app_config key "ffmpeg_path"
+- Modified TitleDetailView.kt:
+  - Same play button pattern (browser + conditional VLC)
+  - Added transcodeId to EpisodeRow for video player dialog
+  - Movie transcodes and TV episodes both support in-browser play
+- No new dependencies, no database migration (ffmpeg_path uses existing app_config)
+- Build successful, all tests pass
+===
+
+=== 2026-02-22 — Remux interstitial, NAS cache, log timestamps, progress tracking ===
+- Added simplelogger.properties with timestamp format (yyyy-MM-dd HH:mm:ss.SSS)
+- Created RemuxService.kt — extracted remux logic into shared singleton:
+  - FFmpeg duration probing (parses Duration: from ffmpeg -i output)
+  - Progress tracking (parses time= from FFmpeg stderr, computes percent)
+  - Progress callback support for UI updates
+  - NAS-based cache: {nas_root_path}/ForBrowser/ (no LRU eviction — files persist)
+  - Subtitle extraction moved here too
+- Rewrote VideoPlayerDialog.kt with interstitial:
+  - MP4/M4V: shows video immediately
+  - MKV/AVI not yet cached: shows progress bar with "Remuxing... N%" via server push
+  - On completion: swaps interstitial for video player
+  - On failure: shows error message
+- Rewrote VideoStreamServlet.kt:
+  - Uses RemuxService for cache dir (NAS ForBrowser/) and remux
+  - Removed LRU eviction (no MAX_CACHE_FILES, no evictOldCacheFiles)
+  - Removed local ./data/stream-cache/ — all cache goes to NAS
+  - Servlet remux is now fallback only (dialog pre-remuxes with progress)
+- Promoted pre-error and exception log lines to permanent (removed DO NOT SUBMIT)
+- Promoted FFmpeg remux lifecycle logging to permanent
+- Fixed getFfmpegPath() returning null — now always falls back to default (matching VLC pattern)
+- Files: new RemuxService.kt, new simplelogger.properties; modified VideoStreamServlet.kt,
+  VideoPlayerDialog.kt
+- Build successful, all tests pass
+===
+
+=== 2026-02-22 — Revert local-tmp-then-copy remux approach ===
+- User reported that separating transcode (local disk) and copy (to NAS) was slower
+- Reverted RemuxService.remux() to write FFmpeg output directly to NAS ForBrowser/ directory
+- Removed LOCAL_TMP_DIR constant and all local temp directory logic
+- FFmpeg writes to {cacheDir}/{transcodeId}.tmp, renamed to .mp4 on completion
+- Progress bar now 0-95% for remux phase (was 0-85% + 90% copy), 97% subs, 100% ready
+- Cancellation still cleans up the .tmp file on abort
+- Build passes
+===
+
+=== 2026-02-23 — Background Transcoder + ForBrowser Cache + Schema Updater ===
+- Implemented full plan: replace on-the-fly FFmpeg remux with background batch transcoder
+- Created V012 migration: popularity column on title + schema_updater table
+- Added popularity field to Title entity
+- Created SchemaUpdater framework (interface + runner using raw JDBI SQL)
+- Created PopulatePopularityUpdater: backfills TMDB popularity for enriched titles
+- Updated TmdbService: parse popularity from TMDB JSON (added doubleOrNull helper)
+- Updated TmdbEnrichmentAgent.applyTmdbResult(): saves popularity for future enrichments
+- Deleted RemuxService.kt (was already deleted from disk; cleaned up all references)
+- Created TranscoderAgent.kt: background daemon, processes one MKV/AVI at a time
+  - Path mirroring: {nasRoot}/BLURAY/Movie.mkv → {nasRoot}/ForBrowser/BLURAY/Movie.mp4
+  - Priority by TMDB popularity DESC NULLS LAST
+  - Static utility methods: getForBrowserPath(), isTranscoded(), needsTranscoding(), hasSubtitles()
+  - Subtitle extraction to VTT alongside MP4
+  - Broadcasts TranscoderProgressEvent via Broadcaster
+- Updated Broadcaster: added transcoder listener channel
+- Updated Main.kt: starts TranscoderAgent with shutdown hook
+- Updated Bootstrap.kt: runs SchemaUpdaterRunner after Flyway
+- Rewrote VideoStreamServlet: removed fallback remux, uses ForBrowser paths, 404 if not ready
+- Simplified VideoPlayerDialog: removed interstitial/remux logic, always shows player directly
+- Updated TranscodeView: conditional play button, subtitle icon (CC), transcoder status panel
+- Updated TitleDetailView: conditional play button, subtitle icon, extracted buildPlayColumn()
+- Updated CLAUDE.md: new Video Playback docs, Schema Updater section, updated Decisions
+- Build passes: BUILD SUCCESSFUL
+===
+
+=== 2026-02-23 09:29 — Add TMDB search to catalog edit dialog ===
+- Added inline TMDB search to TitleEditDialog in CatalogView.kt
+  - Widened dialog from 500px to 700px
+  - Added search row: TextField (pre-populated with title name) + Movie/TV toggle + Search button
+  - Added results Grid with poster thumbnail, title, year, overview (80 char truncated), Select button
+  - Select button populates TMDB ID field and media type combo from the result
+  - Reused same column pattern from ExpandView's TMDB search grid
+  - Manual TMDB ID entry still works; existing save logic handles REASSIGNMENT_REQUESTED
+- Added imports: TmdbService, TmdbSearchResult
+- Build passes: BUILD SUCCESSFUL (zero warnings in new code)
+===
+
+=== 2026-02-23 10:23 — Startup cleanup: delete hidden titles ===
+- Created service/HiddenTitleCleaner.kt: object with clean() method
+  - Runs every startup unconditionally
+  - For each hidden title, deletes FK children in dependency order:
+    1. transcode (title_id)
+    2. episode (title_id)
+    3. discovered_file (matched_title_id → nulled out, reset to UNMATCHED)
+    4. title_genre (title_id)
+    5. media_item_title (title_id)
+    6. enrichment_attempt (title_id)
+    7. title (the hidden title itself)
+  - Logs count and per-title deletion details
+- Modified Bootstrap.kt: added HiddenTitleCleaner.clean() call after SchemaUpdaterRunner.runAll()
+- No changes to ExpandView.kt — plan mentioned removing "preserve UPC lookup history" comments
+  but no such comments exist in the current code
+- svn add for new file
+- BUILD SUCCESSFUL (zero warnings)
+===
+
+=== 2026-02-23 — Merge duplicate titles via TMDB ID dedup in reassignment ===
+- Added `mergeInto(fromTitle, intoTitle)` helper to TmdbEnrichmentAgent.kt
+  - Relinks all FK children: MediaItemTitle, Transcode, Episode, DiscoveredFile, TitleGenre
+  - Handles episode dedup (same season+episode on target), genre dedup
+  - Cleans up EnrichmentAttempt records for the duplicate, then deletes it
+- Refactored `processInitialEnrichment()` dedup block (was inline) to call `mergeInto()`
+- Added dedup to `processReassignment()` — after TMDB details fetch, checks for existing
+  title with same tmdb_id and merges if found
+- User workflow: edit SKIPPED duplicate in catalog → TMDB search → Save → agent merges
+  into existing enriched title, combining format badges
+- BUILD SUCCESSFUL, all tests pass
+===
+
+=== 2026-02-23 — Tighten format icons: stylized SVGs everywhere ===
+- Redesigned bluray.svg: gradient blue background, curved accent sweep line, "Blu-ray" text, viewBox 100x40
+- Redesigned dvd.svg: dark background, disc arc element, bold "DVD" text, viewBox 72x40
+- Tightened uhd-bluray.svg: viewBox 80x40 (was 120x40), kept black/gold "4K UHD"
+- Tightened hd-dvd.svg: viewBox 85x40 (was 120x40), kept dark red "HD DVD"
+- TitleDetailView.kt: replaced text-badge format spans with SVG Image icons at 20px height, deleted formatLabel() helper
+- ExpandView.kt: replaced text-badge format span in ExpandDialog header with SVG Image icon
+- All three views (CatalogView, TitleDetailView, ExpandView) now use consistent SVG format icons
+- BUILD SUCCESSFUL, no warnings
+===
+
+=== 2026-02-23 12:00 — UI migration: Steps 1-5 (context continued) ===
+- Steps 1-4 committed in previous context (r256-r259)
+- Step 5 (Title Detail redesign): committed as r260
+  - Hero section with 300px poster, H1 title, metadata row, format badges, description
+  - "Watch from these locations" with styled rows, VLC/browser play buttons
+  - Horizontal scrolling cast row with 80px circular headshots
+===
+
+=== 2026-02-23 17:55 — Step 6: Navbar search with autocomplete ===
+- Replaced MainLayout search placeholder Div with functional ComboBox<Title>
+- Pill-shaped styling via shadow DOM CSS injection (addAttachListener + executeJs)
+- Key fix: Vaadin ComboBox part attributes are multi-valued ("field-button toggle-button"),
+  so [part=toggle-button] doesn't match — use #toggleButton instead
+- Shadow DOM styles: border-radius 9999px, rgba background, hidden toggle button,
+  suppressed ::after focus ring
+- Substring filter (min 2 chars) on title name and sort_name
+- Custom dropdown renderer: 30x45 poster thumbnail + title + "TYPE · YEAR" metadata
+- On selection: navigates to /title/{id}, then clears ComboBox value
+- Overlay width set to 400px via document-level <style>
+- Fixed width (300px) with min-width/max-width — does NOT change size on focus/use
+- BUILD SUCCESSFUL, all tests pass, verified with Playwright
+===
+
+=== 2026-02-23 18:30 — Step 7: Polish remaining views for dark theme ===
+- Code audit across all 7 view files (MainView, ScanView, CatalogView, PurchaseView,
+  ExpandView, TranscodeView, TitleDetailView) found zero dark theme issues
+- All views use Lumo CSS variables (--lumo-contrast-*, --lumo-secondary-text-color, etc.)
+  which auto-adapt to the Lumo.DARK variant set in Step 1
+- Visual verification via Playwright screenshots confirmed all views look good:
+  Catalog, Scan, Transcodes, Purchases, Expand — consistent dark theme, readable text
+- No code changes needed — the Lumo dark variant plus existing CSS variable usage
+  provides full dark theme coverage across all views
+- UI Migration Plan is COMPLETE (all 7 steps done)
+===
+
+=== 2026-02-23 18:45 — Fix browser video playback (audio works, video blank) ===
+- Root cause: TranscoderAgent used `-c:v copy` which preserved non-browser-safe codecs
+  - DVD sources → MPEG-2 (browsers can't play)
+  - UHD sources → HEVC/H.265 (browsers can't play)
+  - Blu-ray sources → mostly H.264 (works fine)
+- Fix: codec-aware transcoding in TranscoderAgent.kt
+  - Added probeVideoCodec(): runs `ffmpeg -i` and parses "Video: <codec>" from stream info
+  - Added isBrowserSafeCodec(): checks against {"h264", "avc1", "avc"}
+  - H.264 sources: `-c:v copy` (fast, ~minutes)
+  - Non-H.264 sources: `-c:v libx264 -preset medium -crf 18` (re-encode, slower but necessary)
+- Startup cleanup: cleanupBadCodecFiles() runs once at TranscoderAgent start
+  - Walks ForBrowser/ directory, probes each MP4's video codec
+  - Deletes any with non-browser-safe codecs (+ associated VTT subtitle files)
+  - Transcoder then re-processes them with correct encoding
+- Verified: Cheers ForBrowser files (MPEG-2) deleted, Wednesday files (H.264) preserved
+- Verified: Wednesday S01E01 plays in browser with video and audio
+- Updated CLAUDE.md Video Playback section with codec-aware transcoding docs
+- Files modified: TranscoderAgent.kt, CLAUDE.md
+===
+
+=== 2026-02-23 18:55 — Fix TV season dropdown defaults and Season 0 label ===
+- Season ComboBox now uses setItemLabelGenerator: Season 0 → "Special Features", others → "Season N"
+- Default value changed from seasons.first() to Season 1 (if available), falling back to first
+- Fixed initial refreshEpisodeGrid() call to use seasonCombo.value instead of seasons.first()
+  (combo showed Season 1 but grid was loading Season 0 episodes — mismatch)
+- Verified on Cheers (has Season 0 + Seasons 1-11): defaults to Season 1, shows correct episodes
+- File modified: TitleDetailView.kt
+===
+
+=== 2026-02-23 14:08 — Actor Landing Pages ===
+- Implemented actor detail pages accessible by clicking cast member headshots/names
+- TmdbService.kt: Added TmdbPersonResult + TmdbCreditEntry data classes, fetchPersonDetails()
+  and fetchPersonCredits() methods with in-memory 1-hour TTL cache (ConcurrentHashMap),
+  internal parse methods for testability. Combined credits: deduped by tmdbId, capped at 50,
+  sorted by popularity DESC. Handles movie vs TV field name differences (title/name, release_date/first_air_date).
+- ActorView.kt (new): Route /actor/:personId with MainLayout. Hero section (TMDB CDN headshot,
+  name, department, lifespan, birthplace, biography with "Show more" toggle at 500 chars).
+  "In Your Collection" horizontal scroll row linking to owned titles. "Other Works" CSS grid
+  showing TMDB filmography minus owned titles. Graceful fallback when no API key.
+- TitleDetailView.kt: Made cast cards clickable — added cursor:pointer and click listener
+  navigating to /actor/{tmdb_person_id}
+- TmdbServicePersonTest.kt (new): 14 unit tests covering parsePersonDetailsResponse (full, missing
+  fields, deceased, 404, error codes, malformed JSON) and parsePersonCreditsResponse (movies+TV,
+  dedup, cap at 50, sort by popularity, empty, unknown media type, missing fields, malformed JSON)
+- Build: ./gradlew build passes, all tests green
+- Files created: ActorView.kt, TmdbServicePersonTest.kt (svn add'd)
+- Files modified: TmdbService.kt, TitleDetailView.kt
+===
+
+=== 2026-02-23 14:14 — Actors in navbar search ===
+- MainLayout.kt: Changed search ComboBox from ComboBox<Title> to ComboBox<SearchItem>
+- Added sealed class SearchItem with TitleItem and ActorItem variants
+- Actors deduplicated by tmdb_person_id from CastMember table
+- Dropdown renderer: titles show poster+name+type/year; actors show circular headshot+name+"Actor"
+- Selecting actor navigates to /actor/{personId}; selecting title navigates to /title/{id}
+- Headshot uses existing /headshots/{castMemberId} servlet (picks a cast member with cached headshot)
+- File modified: MainLayout.kt
+===
+
+=== 2026-02-23 16:00 — Popularity-based search ranking ===
+- V014 migration: ALTER TABLE cast_member ADD COLUMN popularity DOUBLE
+- TmdbService.kt: Added popularity field to TmdbPersonResult, extracted in parsePersonDetailsResponse()
+- CastMember.kt: Added var popularity: Double? = null property
+- TmdbEnrichmentAgent.kt: fetchAndStoreCast() now fetches person popularity via fetchPersonDetails()
+  for each unique person; skips persons already known from other titles' CastMember rows
+- PopulateActorPopularityUpdater.kt (new): Backfills TMDB popularity for existing actors, registered
+  in Bootstrap.kt alongside other updaters
+- MainLayout.kt: SearchItem sealed class now carries popularity; sorting changed from alphabetical
+  (sortedBy sortKey) to sortedByDescending { it.popularity }; actors use maxOf popularity from members
+- TmdbServicePersonTest.kt: Updated to verify popularity field extraction (present and missing cases)
+- Replaced Thread.sleep with clock.sleep() in: PopulatePopularityUpdater, PopulateCastUpdater,
+  MockUpcLookupService, TranscoderAgent (all now accept Clock constructor param)
+- CLAUDE.md: Added "Coding Rules" section with Clock.sleep() rule
+- Files created: V014__cast_member_popularity.sql, PopulateActorPopularityUpdater.kt
+- Files modified: TmdbService.kt, CastMember.kt, TmdbEnrichmentAgent.kt, Bootstrap.kt,
+  MainLayout.kt, TmdbServicePersonTest.kt, PopulatePopularityUpdater.kt, PopulateCastUpdater.kt,
+  UpcLookupService.kt, TranscoderAgent.kt, CLAUDE.md
+===
+
+=== Feature requests moved to FEATURES.md ===
+
+=== 2026-02-23 15:10 — Feature 1: Manage Submenu ===
+- Implemented "Manage" dropdown in navbar per FEATURES.md Feature 1
+- Replaced 4 admin RouterLinks (Scan, Purchases, Expand, Transcodes) with a MenuBar dropdown
+- Top-level nav: Home, Catalog, Manage (with cog icon)
+- MenuBar uses LUMO_TERTIARY_INLINE variant + shadow DOM style injection to match nav link appearance
+- Highlight logic: Manage button shows bold/white when current route is an admin route
+- afterNavigation() updated to handle both RouterLink and MenuBar highlighting
+- Build passes, all tests pass
+- Verified with Playwright: dropdown opens, navigation works, highlighting toggles correctly
+- Updated FEATURES.md: marked Feature 1 as done
+- Added Feature 9: Roku App (per user request)
+- Files modified: MainLayout.kt, FEATURES.md, claude.log
+===
+
+=== 2026-02-23 15:47 — Feature 2+4: User Authentication & First-User Setup ===
+- Implemented full user authentication with two access levels (Viewer/Admin)
+- New files (11):
+  - V015__user_auth.sql — app_user and session_token tables
+  - entity/AppUser.kt — user entity with isAdmin() helper
+  - entity/SessionToken.kt — session token entity
+  - service/PasswordService.kt — bcrypt hash/verify via jBCrypt
+  - service/AuthService.kt — login, session management, cookie validation, token cleanup
+  - SecurityServiceInitListener.kt — Vaadin route guard (public/logged-in/admin)
+  - AuthFilter.kt — servlet filter for /posters/*, /headshots/*, /stream/*
+  - LoginView.kt — login form with cookie-based session
+  - SetupView.kt — first-user setup wizard (creates admin account)
+  - UserManagementView.kt — admin user CRUD (promote/demote/reset pw/delete)
+  - META-INF/services/com.vaadin.flow.server.VaadinServiceInitListener — SPI registration
+- Modified files:
+  - libs.versions.toml — added jbcrypt dependency
+  - build.gradle.kts — added jbcrypt implementation
+  - Bootstrap.kt — added expired token cleanup on startup
+  - MainLayout.kt — added Users submenu, replaced account icon with profile MenuBar (display name + logout)
+  - CLAUDE.md — added User Authentication documentation section (already present from planning)
+- Created test-credentials.env (svn:ignore'd) with placeholder test credentials
+- Added test-credentials.env to svn:ignore property
+- Build passes, all tests pass
+===
+
+=== 2026-02-23 — Feature 6: User Wish Lists ===
+- Implemented complete wish list feature (media wishes + transcode wishes)
+- New files (5):
+  - V016__wish_list.sql — migration for wish_list_item table with indexes
+  - entity/WishListItem.kt — KEntity with dual-purpose fields (MEDIA vs TRANSCODE)
+  - service/WishListService.kt — stateless service with add/remove/fulfill/aggregate methods
+  - WishListView.kt — route /wishlist with TMDB search, media wish grid, transcode wish list with live Broadcaster progress
+  - PurchaseWishesView.kt — admin-only route /purchase-wishes showing aggregated vote counts
+- Modified files (7):
+  - Enums.kt — added WishType (MEDIA, TRANSCODE) and WishStatus (ACTIVE, FULFILLED)
+  - MainLayout.kt — "My Wish List" in profile submenu, "Purchase Wishes" in Manage submenu
+  - SecurityServiceInitListener.kt — added "purchase-wishes" to adminRoutes
+  - ActorView.kt — heart button overlay on Other Works credit cards with first-wish interstitial dialog
+  - TitleDetailView.kt — star button for transcode wishes next to disabled play buttons, Broadcaster subscription for live progress
+  - TranscoderAgent.kt — wished titles sorted first in priority queue, auto-fulfill on transcode completion
+  - TmdbEnrichmentAgent.kt — auto-fulfill media wishes on enrichment (both initial and reassignment flows)
+  - ExpandView.kt — auto-fulfill media wishes when titles created from TMDB in multi-pack expansion
+- All new files added to svn tracking
+- Build passes, all tests pass
+===
+
+=== 2026-02-23 — Security Hardening (Feature #7) ===
+- Implemented login rate limiting with progressive delay
+  - V017__login_attempt.sql migration (login_attempt table with IP index)
+  - LoginAttempt.kt entity
+  - AuthService.login() now takes IP parameter, returns sealed LoginResult (Success/Failed/RateLimited)
+  - 5 failures in 15 minutes from same IP triggers 30-second cooldown
+  - LoginView passes IP, shows rate-limit message via LoginI18n
+- Session hygiene improvements
+  - establishSession() invalidates all existing tokens for the user before creating new one
+  - logout() deletes the current session token from DB (not just VaadinSession)
+- Audit logging with consistent AUDIT: prefix
+  - AuthService: login success/failure/rate-limited, session creation, logout
+  - UserManagementView: promote, demote, delete, password reset, user creation
+  - SetupView: first admin creation
+  - VlcLauncherService: blocked launch when MM_DISABLE_VLC=true
+- Bootstrap.init() calls cleanupOldAttempts() (30-day retention)
+- FEATURES.md #7 marked done
+- Files changed: V017__login_attempt.sql (new), LoginAttempt.kt (new),
+  AuthService.kt, LoginView.kt, SetupView.kt, UserManagementView.kt,
+  VlcLauncherService.kt, Bootstrap.kt, FEATURES.md
+- Build passes, all tests pass
+===
+
+=== 2026-02-23 22:15 — Roku BrightScript Channel (Feature #9, Phase 2) ===
+- Implemented custom Roku sideloaded channel consuming the /roku/feed.json endpoint
+- Created roku-channel/ directory with full BrightScript/SceneGraph app:
+  - manifest: channel metadata, splash screen config, FHD resolution
+  - source/main.brs: standard Roku entry point with message loop
+  - components/MainScene.xml/.brs: root scene controller with screen stack navigation,
+    video playback, bookmark/resume support (registry-based), Back/Options key handling
+  - components/HomeScreen.xml/.brs: two-row RowList (Movies, TV Series) of poster tiles
+  - components/PosterItem.xml/.brs: item renderer with poster image + title label
+  - components/DetailScreen.xml/.brs: poster, metadata, cast, description, Play/Episodes buttons
+  - components/EpisodePicker.xml/.brs: two-column season/episode selector with focus navigation
+  - components/SettingsScreen.xml/.brs: server URL + API key config via KeyboardDialog, registry storage
+  - components/FeedTask.xml/.brs: background Task for HTTP fetch + JSON parse → ContentNode tree
+- Generated 5 placeholder PNG images (pure Python, no dependencies):
+  - channel-icon-fhd (504x315), channel-icon-hd (336x210)
+  - splash-screen-fhd (1920x1080), splash-screen-hd (1280x720)
+  - placeholder-poster (230x290)
+- Created deploy tooling:
+  - roku-deploy.sh: packages zip and sideloads via curl to Roku device
+  - example.roku-deploy.env: template for Roku IP + dev password
+  - roku-deploy.env and roku-channel.zip added to svn:ignore
+- All 26 files added to svn tracking
+- Key design: raw SceneGraph (no SGDEX), visibility-based navigation, registry bookmarks,
+  single feed fetch, HTTP for local network, API key auth embedded in feed URLs
+===
+
+=== 2026-02-24 — Extract Settings into standalone view ===
+- Created SettingsView.kt — standalone page at route `/settings` (admin-only)
+  - NAS Root Path, VLC Path (hidden when MM_DISABLE_VLC=true), FFmpeg Path fields
+  - FFmpeg placeholder uses TranscoderAgent.getDefaultFfmpegPath() (OS-aware)
+  - Roku Feed URL (read-only) + Roku API Key (read-only) with Regenerate button
+  - Card-style layout in a VerticalLayout
+- Added getDefaultFfmpegPath() public accessor to TranscoderAgent companion
+- Removed gear icon button, openSettingsDialog(), and TranscodeSettingsDialog from TranscodeView
+- Added "Settings" to Manage submenu in MainLayout
+- Added "settings" to adminRoutes in both MainLayout and SecurityServiceInitListener
+- svn add for SettingsView.kt
+===
+
+=== 2026-02-25 19:45 — Mobile-responsive navigation with drawer ===
+- Rewrote MainLayout.kt to replace horizontal navbar with drawer navigation
+- Top bar: DrawerToggle + "Media Manager" title + flex search ComboBox + profile MenuBar
+- Left drawer: Home, Catalog, My Wish List (all users) + MANAGE section (admin only)
+  - MANAGE items: Expand, Purchase Wishes, Purchases, Scan, Settings, Transcodes, Users
+  - Each item has icon + label, click navigates via ui.navigate()
+- Removed: navLinks, manageMenuBar, styleNavLink/highlightLink/unhighlightLink/highlightManageMenu methods, adminRoutes set
+- Moved "My Wish List" from profile submenu to drawer; profile menu now has Logout only
+- Search ComboBox changed from fixed 300px to flexible (min 150px, max 400px, flex-grow 1)
+- Drawer styled via shadow DOM injection on AppLayout (dark background, border)
+- afterNavigation: highlights active drawer item, toggles admin section visibility, auto-closes drawer on mobile (< 800px)
+- Divider + admin section grouped in single VerticalLayout so both hide together for viewers
+- Verified: desktop persistent sidebar, mobile overlay drawer, auto-close on nav, viewer vs admin roles
+===
+
+=== 2026-02-25 20:00 — Compact mobile navbar with search expand/collapse ===
+- Modified: MainLayout.kt
+- Added CSS media query + class toggle pattern for mobile-responsive navbar
+- Desktop (>600px): no change — search pill, profile name visible
+- Mobile (≤600px) idle: ComboBox hidden, replaced by search icon button; profile name hidden, only user icon
+- Mobile (≤600px) active: `search-active` class on header — ComboBox takes full row, title/profile hidden, back-arrow dismisses
+- Added two new buttons: mobile-search-btn (VaadinIcon.SEARCH) and search-close-btn (VaadinIcon.ARROW_LEFT)
+- Responsive CSS injected into document.head via executeJs (id="navbar-responsive"), using @media(max-width:600px)
+- Blur listener on ComboBox with 200ms delay removes search-active class (allows dropdown clicks to register)
+- Value change listener also removes search-active class via JS for reliable dismiss after SPA navigation
+- Removed min-width:150px from search ComboBox (was too wide for mobile)
+- Added CSS class names to existing elements: app-title, navbar-search, navbar-right, profile-name, navbar-header
+- Verified with Playwright at 1200px (desktop) and 375px (mobile): idle, active, dismiss, search+navigate all work
+===
+
+=== 2026-02-26 01:25 — Title detail mobile usability + video player loading overlay ===
+Three changes to improve mobile UX:
+
+1. Hero poster halved on mobile (TitleDetailView.kt)
+   - Added className "hero-poster" to poster Image
+   - Injected responsive CSS: @media(max-width:600px){.hero-poster{width:150px!important}}
+
+2. Removed "Transcoded" column from TV episode grid (TitleDetailView.kt)
+   - Deleted addColumn({ if (it.transcoded) "Yes" else "—" }).setHeader("Transcoded") line
+   - Frees horizontal space for episode title on narrow screens
+
+3. Video player loading/buffering overlay (VideoPlayerDialog.kt + VideoStreamServlet.kt)
+   - VideoStreamServlet: Added Clock.sleep(5.seconds) on initial chunk (simulateSlowStart flag) to simulate slow connection
+   - VideoPlayerDialog: Added overlay with spinner + status text ("Starting playback…", "Buffering…", "Playback error")
+   - Key fix: Vaadin's Html component strips <script> tags — moved JS event listener wiring to contentArea.element.executeJs()
+   - Events: loadstart→show overlay, waiting→"Buffering…", canplay/playing→hide overlay, error→"Playback error"
+   - CSS animation for spinner: @keyframes vpd-spin{to{transform:rotate(360deg)}}
+   - Overlay uses opacity 0/1 transition (stays in DOM, pointer-events toggled)
+
+Files modified:
+- src/main/kotlin/net/stewart/mediamanager/TitleDetailView.kt
+- src/main/kotlin/net/stewart/mediamanager/VideoPlayerDialog.kt
+- src/main/kotlin/net/stewart/mediamanager/VideoStreamServlet.kt
+
+Verified with Playwright: dialog opens, overlay shows "Starting playback…" during 5s delay, overlay hides (opacity:0) once video reaches readyState 4 (playing).
+===
+
+=== 2026-02-26 19:14 — synologymon monitoring stack + FEATURES.md update ===
+- Created new project synologymon at c:\programming\jhome\monitoring\nas\
+  - docker-compose.yml with 6 services: Prometheus, Grafana, cAdvisor,
+    Node Exporter, SNMP Exporter, Alertmanager
+  - All NAS volume mappings configured for /volume1/docker/prometheus/ paths
+  - Non-root analysis: Prometheus/Grafana/Alertmanager/SNMP run non-root;
+    cAdvisor and Node Exporter require root/privileged
+  - prometheus/prometheus.yml — scrape configs for all services + mediaManager
+  - prometheus/alert.rules.yml — starter rules: OOM, high memory, restarts,
+    target down, host memory, disk space
+  - grafana/grafana.ini — minimal config, anonymous access disabled
+  - alertmanager/alertmanager.yml — null receiver (placeholder)
+  - snmpmon/snmp.yml — placeholder with generator instructions for Synology MIBs
+  - README.md — deployment steps, directory creation, ownership, config placement,
+    SNMP setup, non-root notes, volume mapping reference, hot-reload instructions
+- Updated FEATURES.md: added Feature 10 (Prometheus Metrics Endpoint) as planned [ ]
+  - MetricsRegistry, MetricsServlet, JVM metrics, FFmpeg memory gauge,
+    application metrics, HTTP metrics
+
+Files created:
+- c:\programming\jhome\monitoring\nas\docker-compose.yml
+- c:\programming\jhome\monitoring\nas\prometheus\prometheus.yml
+- c:\programming\jhome\monitoring\nas\prometheus\alert.rules.yml
+- c:\programming\jhome\monitoring\nas\grafana\grafana.ini
+- c:\programming\jhome\monitoring\nas\alertmanager\alertmanager.yml
+- c:\programming\jhome\monitoring\nas\snmpmon\snmp.yml
+- c:\programming\jhome\monitoring\nas\README.md
+
+Files modified:
+- FEATURES.md (added Feature 10)
+===
+
+=== 2026-02-26 21:24 — Implement /metrics endpoint (Feature 10) ===
+- Added Micrometer Prometheus registry dependency (micrometer-registry-prometheus 1.14.4)
+- Created MetricsRegistry singleton with JVM metric binders (heap, GC, threads, classloader, processor, uptime)
+- Created MetricsServlet at /metrics — unauthenticated Prometheus scrape endpoint
+  - Blocks router IP [redacted IP address] with 404
+  - Returns text/plain Prometheus exposition format
+- Marked Feature 10 as done in FEATURES.md
+- Built and pushed Docker image: [redacted IP address]:15000/mediamanager:202602262124
+
+Files created:
+- src/main/kotlin/net/stewart/mediamanager/service/MetricsRegistry.kt
+- src/main/kotlin/net/stewart/mediamanager/MetricsServlet.kt
+
+Files modified:
+- gradle/libs.versions.toml (added micrometer version + library)
+- build.gradle.kts (added micrometer-prometheus dependency)
+- FEATURES.md (marked Feature 10 done)
+===
+
+=== 2026-02-26 — Application Metrics Instrumentation (Part 2) ===
+- Implemented 18 application-specific Prometheus metrics across all agents, services, and servlets
+- MetricsRegistry: added countHttpResponse() helper, registerEntityGauges() for mm_active_sessions gauge
+- Main.kt: wired registerEntityGauges() after Bootstrap.init()
+- TranscoderAgent: 6 metrics — mm_transcoder_running gauge, mm_ffmpeg_rss_bytes gauge (reads /proc/pid/statm on Linux),
+  mm_transcodes_pending gauge, mm_transcodes_completed_total counter, mm_transcodes_failed_total counter,
+  mm_transcoded_bytes_total counter. All use type=for_browser label. Added currentProcess field for metrics.
+- VideoStreamServlet: mm_stream_bytes_total and mm_stream_chunks_total counters, HTTP response counting
+- AuthService: mm_login_attempts_total counter (result: success/failed/rate_limited)
+- All servlets HTTP response counting via mm_http_responses_total (servlet + status labels):
+  PosterServlet, HeadshotServlet, RokuFeedServlet, HealthServlet, MetricsServlet, VideoStreamServlet
+- UpcLookupAgent: mm_upc_lookups_total counter (result: found/not_found/error)
+- QuotaTracker: mm_upc_quota_remaining gauge
+- TmdbEnrichmentAgent: mm_enrichments_total counter (result: enriched/skipped/failed/abandoned/deduped)
+- NasScannerService: mm_nas_scans_total counter (result: success/failed),
+  mm_nas_scan_files_matched_total counter, mm_nas_scan_files_unmatched_total counter
+- PosterCacheService: mm_poster_cache_total counter (result: hit/miss/fetch_failed)
+- Build successful, all tests pass
+Files modified:
+- service/MetricsRegistry.kt
+- Main.kt
+- service/TranscoderAgent.kt
+- VideoStreamServlet.kt
+- service/AuthService.kt
+- PosterServlet.kt, HeadshotServlet.kt, RokuFeedServlet.kt, HealthServlet.kt, MetricsServlet.kt
+- service/UpcLookupAgent.kt, service/QuotaTracker.kt, service/TmdbEnrichmentAgent.kt
+- service/NasScannerService.kt, service/PosterCacheService.kt
+===
+
+=== 2026-02-27 — PurchaseView improvements ===
+- Added filter bar with text search (title/UPC/place) and price filter (with/without prices)
+- Added inventory total summary line showing dollar value, priced count, total count
+- Added "Add Other Items to This Purchase" bulk entry button in PurchaseEditDialog
+- BulkPurchaseDialog: searches unpriced items, inline price entry per row, saves all with shared place/date
+- Optimized raw title lookups with a batch query (loadRawTitleMap) instead of per-row queries
+- Passed titleMap through to dialogs to avoid redundant DB queries
+- File modified: src/main/kotlin/net/stewart/mediamanager/PurchaseView.kt
+===
+
+=== 2026-02-27 — PurchaseView grouped multi-pack display ===
+- Merged separate "Product" and "Titles" columns into a single "Item" column
+  using ComponentRenderer with VerticalLayout
+- Product name shown bold; child titles listed below in smaller secondary text
+  for multi-packs (title_count > 1), each on its own line
+- Single-title items show just the title name once (no duplication)
+- Price column converted to ComponentRenderer; shows "(bundle)" label below
+  price for multi-packs to clarify that price covers the whole group
+- Search unchanged — already matches both product_name and child titles
+- Files modified: PurchaseView.kt
+===
+
+=== 2026-02-27 — PurchaseView grouped multi-pack display ===
+- Merged separate "Product" and "Titles" columns into single "Item" column
+- Product name bold; child titles listed below for multi-packs (title_count > 1)
+- Price column shows "(bundle)" label for multi-packs
+- Files modified: PurchaseView.kt
+===
+
+=== 2026-02-28 09:30 — Split TranscodeView + Unified Transcode Request System ===
+- Split monolithic TranscodeView into 4 sub-pages + redirect:
+  - TranscodeStatusView (transcodes/status) — NAS scan + transcoder progress panel
+  - TranscodeUnmatchedView (transcodes/unmatched) — unmatched files grid
+  - TranscodeLinkedView (transcodes/linked) — linked transcodes grid with play/re-transcode
+  - TranscodeBacklogView (transcodes/backlog) — enriched titles with zero transcodes
+  - TranscodeRedirectView (transcodes/) — redirects to status
+- Deleted TranscodeView.kt; moved linkDiscoveredFileToTitle + LinkTranscodeDialog to TranscodeUnmatchedView
+- MainLayout: collapsible Transcodes drawer group with 4 children, auto-expands on sub-routes
+- SecurityServiceInitListener: prefix-based admin route matching for transcodes/*
+- Unified transcode request system:
+  - Replaced STAR/STAR_O icons with ARROW_CIRCLE_UP (toggleable on/off)
+  - Shows on ALL non-playable rows (not just MKV files)
+  - Added REFRESH button for re-transcode requests on playable MKV rows
+- Re-transcode support:
+  - V020 migration: retranscode_requested + file_modified_at on transcode/discovered_file
+  - TranscoderAgent detects MKV replacement (size/modified_at change), deletes old ForBrowser, re-transcodes
+  - NasScannerService populates file_modified_at on new records
+  - PopulateFileModifiedUpdater backfills existing records
+- WishListService: removed userId params, infers from AuthService.getCurrentUser()
+  - Added removeTranscodeWish(titleId), getTranscodeWishCounts()
+  - Updated all callers: ActorView, WishListView, TitleDetailView
+- FEATURES.md: added audit task for user ID transmission in non-admin endpoints
+- Files created: TranscodeStatusView.kt, TranscodeUnmatchedView.kt, TranscodeLinkedView.kt,
+  TranscodeBacklogView.kt, TranscodeRedirectView.kt, PopulateFileModifiedUpdater.kt,
+  V020__retranscode_and_file_modified.sql
+- Files modified: MainLayout.kt, SecurityServiceInitListener.kt, TitleDetailView.kt,
+  WishListService.kt, TranscoderAgent.kt, NasScannerService.kt, Transcode.kt,
+  DiscoveredFile.kt, ActorView.kt, WishListView.kt, Bootstrap.kt, FEATURES.md
+- Files deleted: TranscodeView.kt
+===
+
+=== 2026-02-28 12:10 — Fix Dialog rendering inline on split Transcode views ===
+- Problem: After splitting TranscodeView into sub-pages (Status, Unmatched,
+  Linked, Backlog), Dialog components rendered inline at page bottom instead
+  of as floating overlays on /transcodes/unmatched and /transcodes/linked.
+- Root cause: Vaadin 25's pre-compiled bundle lazy-loads Dialog in a separate
+  JS chunk (chunk-b6f90b2b). The chunk is transitively loaded via hash
+  039da0aa... on pages like CatalogView (which uses IntegerField/Checkbox),
+  but the Transcode sub-pages only use base-bundle components (Grid, Button,
+  TextField, ComboBox) that don't trigger any chunk loading.
+- Failed attempts: @Uses(Dialog::class) annotation, hidden Checkbox in initial
+  render — neither triggers the Dialog chunk in the pre-compiled bundle.
+- Fix: Added onAttach() override to both TranscodeUnmatchedView and
+  TranscodeLinkedView that calls executeJs with
+  window.Vaadin.Flow.loadOnDemand('039da0aa...') to force-load the Dialog
+  chunk on page attach.
+- Removed ineffective @Uses(Dialog::class) annotations and hidden Checkbox
+  workaround from both views.
+- Verified: Dialog and Notification custom elements register correctly;
+  Link dialog on Unmatched page opens as proper overlay; re-transcode
+  confirmation on Linked page expected to work similarly.
+- Files modified: TranscodeUnmatchedView.kt, TranscodeLinkedView.kt
+===
+
+=== 2026-02-28 20:45 — Tesla Powerwall Prometheus monitoring ===
+- Implemented custom Python Prometheus exporter for Tesla Energy Gateway (TEG)
+- Exporter polls 3 TEG endpoints (grid_status, soe, aggregates) on each scrape
+- Exposes 6 metrics: grid_up, battery_percentage, site/battery/solar/load power watts
+- Session-based auth with automatic re-login on 401/403
+- Files created:
+  - \\NAS\Prometheus\powerwall_exporter\exporter.py
+  - \\NAS\Prometheus\powerwall_exporter\Dockerfile (python:3.11-slim)
+  - \\NAS\Prometheus\powerwall_exporter\.env (placeholder credentials)
+  - \\NAS\Prometheus\powerwall_exporter\CLAUDE.md
+- Files modified:
+  - \\NAS\Prometheus\docker-compose.yml — added powerwall-exporter service
+  - \\NAS\Prometheus\prometheus\prometheus.yml — added powerwall scrape job
+  - \\NAS\Prometheus\prometheus\alert.rules.yml — added GridDown + PowerwallBatteryLow alerts
+- Alertmanager pushover-critical priority left unchanged (user preference)
+- Human actions required: fill .env credentials, build+push Docker image on NAS, redeploy stack
+===
+
+=== 2026-03-01 — Amazon Purchase History Import ===
+- Implemented Amazon CSV import feature for backfilling purchase data
+- Created files:
+  - V021__amazon_order_id.sql — adds amazon_order_id column to media_item
+  - AmazonImportService.kt — CSV parser (RFC 4180), media detection, three-phase matching
+    (exact product name, normalized, fuzzy title), commit logic
+  - AmazonImportView.kt — Three-state UI (upload, review grid with filters, commit)
+    with manual link dialog for unmatched rows
+  - AmazonImportServiceTest.kt — 20 unit tests covering parsing, media detection, matching
+- Modified files:
+  - MediaItem.kt — added amazon_order_id field
+  - MainLayout.kt — added "Import Purchases" drawer item (VaadinIcon.UPLOAD) in admin section
+  - SecurityServiceInitListener.kt — added "import" to adminRoutes set
+- Matching phases: Phase 1 exact product name (1.0), Phase 2 normalized (0.95),
+  Phase 3 fuzzy via FuzzyMatchService (0.65+ threshold, confidence tiers)
+- Duplicate detection via composite key (orderId + productName prefix)
+- All tests pass, build successful
+===
+
+=== 2026-03-01 14:20 — Revised Amazon Purchase History Import (V022) ===
+- Replaced the old in-memory matching workflow with a persistent DB approach
+- Created V022 migration: `amazon_order` table with dedup index, wiped old purchase data
+- Created AmazonOrder entity (KEntity<Long>, 20 columns)
+- Rewrote AmazonImportService with 4 responsibilities:
+  - Parsing: parseZip + parseCsv (ISO-8601 dates, BOM handling, single-quote discounts)
+  - Import: importRows() persists all orders with dedup
+  - Search: searchOrders() with filters (media-only, unlinked-only, hide-cancelled)
+  - Linking: linkToMediaItem() / unlinkFromMediaItem() copies purchase data to MediaItem
+- Rewrote AmazonImportView with two-state UI:
+  - Upload state: .zip and .csv support, 20 MB limit
+  - Browse state: summary bar, search field, filter toggles, grid with Link/Unlink buttons
+  - LinkMediaItemDialog for manual linking with fuzzy search fallback
+- Rewrote tests: ISO-8601 dates, plain prices, single-quote discounts, zip parsing, BOM
+- Removed: MatchConfidence, ImportMatch, all auto-matching logic
+- Fixes during implementation:
+  - H2 doesn't support COALESCE in indexes → made asin NOT NULL DEFAULT ''
+  - JDBI has no auto-mapper for KEntity → replaced raw mapTo(AmazonOrder) with findAll()
+  - Added explicit grid height (600px) for proper virtual scrolling
+- Tested with real 17 MB Amazon zip: 1,785 orders stored, 61 media-related detected
+- Files created: V022__amazon_order.sql, AmazonOrder.kt
+- Files modified: AmazonImportService.kt, AmazonImportView.kt, AmazonImportServiceTest.kt
+===
+
+=== 2026-03-01 — Amazon order suggestions on PurchaseView ===
+- Added AmazonSuggestion data class, matchSuggestions() pure function, and
+  findSuggestionsForMediaItems() wrapper to AmazonImportService
+- matchSuggestions: cleans Amazon product_name via TitleCleanerService, computes
+  FuzzyMatchService.similarity() against each item's titles from titleMap,
+  threshold >= 0.50, greedy assignment (sort by descending score, each order/item
+  used at most once)
+- PurchaseView grid: added suggestions field, computed in refreshGrid() after
+  loading titleMap. Place/Date/Price column renderers show suggestion data in
+  italic primary-color styling for unpriced items with matching Amazon orders.
+  Price column gets a "Link" button that calls linkToMediaItem() and refreshes.
+- PurchaseEditDialog: widened to 600px, added Amazon order search section below
+  purchase fields (separator, search TextField with LAZY 300ms, Grid with
+  Product/Date/Price/Use columns). Search pre-populated with cleaned product name.
+  "Use" button fills Place/Date/Price fields and stores selectedAmazonOrderId.
+  Save links the AmazonOrder (sets linked_media_item_id, linked_at, amazon_order_id)
+  alongside the user's edited field values.
+- Added 8 unit tests for matchSuggestions (exact match, low similarity rejection,
+  one-to-one assignment, preference for higher score, items without titles,
+  multi-title items, cleaned Amazon product names)
+- Files modified: AmazonImportService.kt, PurchaseView.kt, AmazonImportServiceTest.kt
+- Build: successful, all tests pass
+===
+
+=== 2026-03-01 — Amazon order suggestions on PurchaseView ===
+- Added AmazonSuggestion data class, matchSuggestions() pure function, and
+  findSuggestionsForMediaItems() wrapper to AmazonImportService
+- matchSuggestions: cleans Amazon product_name via TitleCleanerService, computes
+  FuzzyMatchService.similarity() against each item's titles, threshold >= 0.50,
+  greedy assignment (sort by descending score, each order/item used at most once)
+- PurchaseView grid: Place/Date/Price columns show suggestion data in italic
+  primary-color for unpriced items. Price column gets Link button.
+- PurchaseEditDialog: widened to 600px, added Amazon order search section
+  (TextField + Grid). Use button fills fields, Save links the AmazonOrder.
+- Added 8 unit tests for matchSuggestions
+- Files modified: AmazonImportService.kt, PurchaseView.kt, AmazonImportServiceTest.kt
+- Build: successful, all tests pass
+===
+
+=== 2026-03-01 — Fix Amazon import duplicate row crash ===
+- importRows dedup set was immutable, only checked pre-existing DB records
+- Duplicate rows within the same CSV passed in-memory check but hit DB unique constraint
+- Fix: changed to MutableSet with seen.add(key) for atomic check-and-add
+- Files modified: AmazonImportService.kt
+===
+
+=== 2026-03-01 — Manual Title Entry feature ===
+- Added V023__entry_source.sql migration: entry_source VARCHAR(20) column on media_item
+- Added EntrySource enum (UPC_SCAN, MANUAL) to Enums.kt
+- Added entry_source field to MediaItem.kt entity
+- Created ManualEntryView.kt (/manual-entry route):
+  - TMDB search with Movie/TV toggle, results grid with poster thumbnails
+  - Entry form: format picker (DVD/Blu-ray/UHD/HD DVD), seasons field for TV
+  - Title dedup by tmdb_id (reuses existing, creates new with REASSIGNMENT_REQUESTED)
+  - Creates MediaItem with entry_source=MANUAL, MediaItemTitle join
+  - Fulfills media wishes for new titles
+  - Recent entries grid tracks additions in current session
+  - Seasons parser: "2" → "S2", "1-3" → "S1, S2, S3"
+- Added "manual-entry" to adminRoutes in SecurityServiceInitListener.kt
+- Added "Add Title" drawer item (PLUS icon) in MainLayout.kt MANAGE section
+- All tests pass
+===
+
+=== 2026-03-01 — Add TMDB search to Unmatched Link dialog ===
+- Added TMDB search section to LinkTranscodeDialog in TranscodeUnmatchedView.kt
+- Below the existing catalog search grid, a new section allows searching TMDB directly
+- Components: section header, search TextField (pre-filled with parsed_title), Movie/TV ComboBox, Search button
+- TMDB results grid shows poster thumbnail, title, year, overview (truncated), "Add & Link" button
+- "Add & Link" creates a new Title (dedup by tmdb_id), sets enrichment_status=REASSIGNMENT_REQUESTED,
+  calls linkDiscoveredFileToTitle() to create Transcode records, fulfills wish list
+- Reuses existing patterns from ManualEntryView/ExpandView (TmdbService, poster CDN, dedup)
+- Added imports: ComboBox, Image
+- Dialog width widened from 600px to 700px to accommodate new content
+- Build passes, all tests pass
+===
+
+=== 2026-03-01 — Content Ratings and Parental Controls ===
+Implemented full content ratings system with TMDB integration and per-user parental controls.
+
+Data Model:
+- V024__content_rating.sql: Added content_rating to title, rating_ceiling to app_user
+- ContentRating enum in Enums.kt: 11 entries (MPAA + TV ratings) with ordinal levels 0-6
+  - Cross-system comparison: G/TV-G=2, PG/TV-PG=3, PG-13/TV-14=4, R/TV-MA=5
+  - fromTmdbCertification() parser, ceilingChoices() for UI dropdowns
+- Title.kt: Added content_rating field + contentRatingEnum() helper
+- AppUser.kt: Added rating_ceiling field + canSeeRating() method
+  - Admin always sees everything; null ceiling = unrestricted
+  - Unrated titles hidden from ceiling-limited accounts
+
+TMDB Integration:
+- TmdbSearchResult: Added contentRating field
+- TmdbService.getDetails(): Uses append_to_response for release_dates (movies) / content_ratings (TV)
+- extractMovieRating(): Finds US MPAA certification from release_dates.results[]
+- extractTvRating(): Finds US TV rating from content_ratings.results[]
+- TmdbEnrichmentAgent: Extra getDetails() call after successful search to populate rating
+
+Backfill:
+- PopulateContentRatingUpdater: Backfills ratings for existing enriched titles with TMDB IDs
+- Registered in Bootstrap.kt alongside other schema updaters
+
+Enforcement:
+- CatalogView: Filters grid by user's rating ceiling
+- MainLayout: Filters search ComboBox results by ceiling
+- TitleDetailView: Blocks access in beforeEnter() for restricted titles
+- AuthFilter: Stores authenticated AppUser on request attribute (USER_ATTRIBUTE)
+- VideoStreamServlet: Checks title rating against user ceiling before streaming (403)
+- PosterServlet: Checks title rating against user ceiling before serving (403)
+- RokuFeedService: Reads roku_rating_ceiling from app_config, filters titles in feed
+
+UI:
+- CatalogView: Rating column with badge
+- TitleDetailView: Rating badge in hero section metadata row (bordered pill style)
+- UserManagementView: Rating Ceiling column + "Rating" button with dialog (ComboBox of ceiling choices)
+- SettingsView: Roku Rating Ceiling ComboBox
+
+Tests:
+- ContentRatingTest: Enum parsing, ordinal ordering, case insensitivity, null handling, ceiling choices
+- ContentRatingFilterTest: Admin bypass, null ceiling, unrated titles, ordinal comparisons, TV/movie cross-system
+- TmdbServiceTest additions: extractMovieRating, extractTvRating, parseDetailsResponse with ratings
+
+Files created:
+- src/main/resources/db/migration/V024__content_rating.sql
+- src/main/kotlin/.../service/PopulateContentRatingUpdater.kt
+- src/test/kotlin/.../entity/ContentRatingTest.kt
+- src/test/kotlin/.../service/ContentRatingFilterTest.kt
+
+Files modified:
+- entity/Enums.kt, entity/Title.kt, entity/AppUser.kt
+- service/TmdbService.kt, service/TmdbEnrichmentAgent.kt
+- service/RokuFeedService.kt
+- Bootstrap.kt, AuthFilter.kt
+- VideoStreamServlet.kt, PosterServlet.kt
+- CatalogView.kt, MainLayout.kt, TitleDetailView.kt
+- UserManagementView.kt, SettingsView.kt
+- TmdbServiceTest.kt (existing, extended)
+
+Build passes, all tests pass.
+===
+
+=== 2026-03-01 — User Tags, Favorites, and Personal Hide ===
+- Implemented full tags + user flags feature per plan
+- V025 migration: tag, title_tag, user_title_flag tables
+- Added UserFlagType enum (STARRED, HIDDEN) to Enums.kt
+- Created entities: Tag (with textColor() luminance helper, createTagBadge()),
+  TitleTag, UserTitleFlag
+- Created TagService (CRUD, associations, color palette, OR-logic tag filtering)
+- Created UserTitleFlagService (toggle/query starred/hidden per-user)
+- Created TagManagementView (/tags, admin) with color picker, grid, delete cascade
+- Created TagDetailView (/tag/{tagId}, all users) with titles grid, admin add/remove
+- Updated SecurityServiceInitListener: "tags" added to adminRoutes
+- Updated MainLayout: Tags nav item in MANAGE section, personal hide filter on search
+- Updated TitleDetailView: star toggle, tag badges (clickable), edit tags dialog,
+  personal hide button
+- Updated CatalogView: MultiSelectComboBox tag filter, star column, personal hide
+  filter, search width 20em
+- Tests: TagTest (textColor unit), TagServiceTest (integration), UserTitleFlagServiceTest
+- Updated FEATURES.md: marked User Tags [x], added Viewed flag backlog, added
+  Enhanced Search and Rating Ceiling Self-Service backlog items
+- All 370 tests pass
+===
+
+=== 2026-03-01 — Faded backdrop on Title Detail page ===
+- Implemented TMDB backdrop image support end-to-end:
+  - V026__backdrop.sql migration: added backdrop_path and backdrop_cache_id to title table
+  - Title.kt: added backdrop_path, backdrop_cache_id fields and backdropUrl() method
+  - TmdbService.kt: added backdropPath to TmdbSearchResult, extracted from TMDB API
+  - TmdbEnrichmentAgent.kt: saves backdrop_path during enrichment (applyTmdbResult)
+  - BackdropCacheService.kt (new): on-demand TMDB backdrop caching (w1280, sharded UUID paths)
+  - BackdropServlet.kt (new): serves cached backdrops at /backdrops/{titleId}
+  - AuthFilter.kt: added /backdrops/* to protected URL patterns
+  - PopulateBackdropUpdater.kt (new): backfills backdrop_path for existing enriched titles
+  - Bootstrap.kt: registered PopulateBackdropUpdater
+  - TitleDetailView.kt: wrapped hero section in Div container with absolute-positioned
+    backdrop image div using CSS mask-image fade (transparent left, opaque right), opacity 0.4.
+    Hidden on mobile (<600px). Graceful fallback when no backdrop available.
+  - RokuFeedService.kt: added backdropUrl as "imageUrl" field in movie/series entries
+- Added "Missing Season Detection" feature to FEATURES.md
+- Build successful, all tests pass
+===
+
+=== 2026-03-01 — Playback Progress Tracking ===
+- Implemented full playback progress tracking feature (resume, continue watching, progress bars)
+- New files:
+  - V027__playback_progress.sql: migration for playback_progress table (user_id, transcode_id, position, duration, unique constraint)
+  - entity/PlaybackProgress.kt: KEntity + Dao
+  - service/PlaybackProgressService.kt: recordProgress (with auto-clear at >=95%), getProgress, getContinueWatching, clearProgress, getOrCreateRokuUser, getProgressByTitle, VIEWED flag auto-set at >25%
+  - PlaybackProgressServlet.kt: REST endpoint at /playback-progress/{transcodeId} (POST/GET/DELETE), cookie + API key auth
+- Modified files:
+  - entity/Enums.kt: added VIEWED to UserFlagType
+  - AuthFilter.kt: added /playback-progress/* to @WebFilter urlPatterns
+  - VideoPlayerDialog.kt: resume prompt (Resume/Start Over), periodic position reporting (~60s via timeupdate), pause reporting, close reporting (sendBeacon), seek-to-position on resume
+  - RokuFeedService.kt: loads Roku user progress, includes playbackPosition in feed content entries
+  - MainView.kt: "Continue Watching" horizontal scroll section (poster cards with progress bar, play button, dismiss X, time remaining, limit 5)
+  - TitleDetailView.kt: "Resume from MM:SS" label next to play buttons for movie transcodes and TV episodes
+  - CatalogView.kt: thin progress bar overlay at bottom of poster thumbnails in catalog grid
+- Build successful, all tests pass
+===
+
+=== 2026-03-01 — Fix movie/TV title mismatch in NAS scanner ===
+- Problem: "Buffy the Vampire Slayer" exists as both MOVIE and TV. The NAS scanner
+  matched all TV episodes to the movie because TranscodeMatcherService.matchByName()
+  didn't consider media_type when disambiguating same-name titles.
+- Step 1: UnlinkMovieEpisodesUpdater (one-time SchemaUpdater)
+  - Finds MOVIE titles with >1 transcode (anomaly signal for mismatched TV episodes)
+  - Deletes all transcodes + orphaned episodes for those movies
+  - Deletes corresponding discovered_file records so next NAS scan re-processes them
+  - Registered in Bootstrap.kt
+- Step 2: TranscodeMatcherService media_type-aware disambiguation
+  - matchMovie() passes MediaType.MOVIE, matchTvShow() passes MediaType.TV
+  - disambiguate() now filters candidates to preferred media_type first
+  - Falls back to all candidates if no same-type match exists
+  - Added 5 new test cases: TV prefers TV title, movie prefers movie title,
+    year+type combo, fallback when only wrong type exists, normalized+type
+- Files changed:
+  - service/UnlinkMovieEpisodesUpdater.kt (new)
+  - service/TranscodeMatcherService.kt (modified: added preferredMediaType param)
+  - Bootstrap.kt (register UnlinkMovieEpisodesUpdater)
+  - TranscodeMatcherServiceTest.kt (added media type disambiguation tests)
+- All tests pass
+===
+
+=== 2026-03-01 23:50 — TMDB ID namespace collision fix (context continuation) ===
+- Continued session from context compaction
+- Built and deployed Docker image 202603011848 with three critical fixes:
+  1. Fixed addFromTmdbAndLink in TranscodeUnmatchedView.kt: dedup now checks
+     tmdb_id + media_type (was tmdb_id only). Prevents TV show ID 253 (Star Trek)
+     from colliding with movie ID 253 (Live and Let Die).
+  2. Fixed TmdbEnrichmentAgent.findExistingByTmdbId: now accepts and filters by
+     mediaType parameter. Both call sites (processInitialEnrichment,
+     processReassignment) updated to pass title.media_type.
+  3. Bumped UnlinkMovieEpisodesUpdater to version 3 to clean up Live and Let Die
+     having Star Trek episodes attached.
+- Root cause: TMDB uses separate ID namespaces for movies and TV shows. Any
+  dedup/lookup by tmdb_id MUST also filter by media_type.
+===
+
+=== 2026-03-01 19:40 — Typed TmdbId refactor ===
+- Implemented `data class TmdbId(val id: Int, val type: MediaType)` in entity/TmdbId.kt
+- Added `tmdbKey()` accessor methods to Title, WishListItem, TmdbSearchResult, TmdbCreditEntry, MediaWishAggregate
+- Changed TmdbService.getDetails() and fetchCredits() from (Int, String) to (TmdbId)
+- Changed WishListService.addMediaWish, hasActiveMediaWish, fulfillMediaWishes from bare Int+String to TmdbId
+- Migrated TmdbEnrichmentAgent: findExistingByTmdbId, processReassignment, processInitialEnrichment, fetchAndStoreCast
+- Migrated 4 Populate*Updaters: PopulatePopularity, PopulateBackdrop, PopulateContentRating, PopulateCast
+- Migrated 5 views: ActorView, WishListView, ManualEntryView, ExpandView, TranscodeUnmatchedView
+  - Set<Pair<Int, String?>> replaced with Set<TmdbId> throughout
+- Created V028__tmdb_unique_constraint.sql: UNIQUE(tmdb_id, media_type) on title, drops old idx_title_tmdb_id
+- Created TmdbIdTest with equality, nullability, factory, set membership tests
+- Updated EnrichmentIntegrationTest and TmdbServiceTest for new signatures
+- All tests pass, docker image built and pushed (202603011940)
+- Committed r311, FEATURES.md marked complete
+===
+
+=== 2026-03-01 — Enhanced Search: In-Memory Inverted Index ===
+- Created SearchQuery.kt: data class + SearchQueryParser with support for
+  quoted phrases, negation (-term), tag filters (tag:name), and required terms
+- Created SearchIndexService.kt: singleton inverted index with
+  tokenIndex (token -> title IDs), titleTokens (phrase matching with field
+  sentinels), tagIndex, genreIndex. Thread-safe via ReentrantReadWriteLock.
+  Indexes title name, sort_name, raw_upc_title, description fields.
+- Bootstrap.kt: SearchIndexService.rebuild() called after all migrations/cleanup
+- CatalogView.kt: replaced O(N) substring search with index lookup;
+  broadcastListener now fires onTitleChanged for incremental updates
+- MainLayout.kt: navbar ComboBox filter now uses SearchIndexService for titles,
+  keeps substring match for actors
+- Wired incremental index updates in:
+  - TmdbEnrichmentAgent.broadcastUpdate() -> onTitleChanged
+  - TagService: addTagToTitle, removeTagFromTitle, deleteTag, updateTag -> onTagChanged
+  - UpcLookupAgent: after title creation -> onTitleChanged
+  - ManualEntryView: after title save -> onTitleChanged
+  - ExpandView: after title creation/hide/delete -> onTitleChanged/onTitleDeleted
+- Created SearchQueryParserTest.kt (12 tests) and SearchIndexServiceTest.kt (18 tests)
+- All 418 tests pass
+===
+
+=== 2026-03-01 20:20 — Purchases collapsible drawer group + renames ===
+- Grouped purchase-related drawer items under collapsible "Purchases" sub-menu
+  (replicating Transcodes pattern with purchasesParent, purchasesChildren, purchasesChevron)
+- Children: Scan New Purchase, Amazon Order Import, Expand, Valuation, User Wishes
+- PurchaseView.kt: route `purchases` → `valuation`, page title + heading renamed
+- AmazonImportView.kt: page title → "Amazon Order Import", heading → "Amazon Order Import"
+- SecurityServiceInitListener.kt: replaced "purchases" with "valuation" in adminRoutes set
+- MainLayout.kt afterNavigation(): auto-expands Purchases group on child routes
+- CLAUDE.md: updated PurchaseView route docs
+- Build passes, all tests pass, verified visually via Playwright
+- Files modified: MainLayout.kt, PurchaseView.kt, AmazonImportView.kt,
+  SecurityServiceInitListener.kt, CLAUDE.md
+===
+
+=== 2026-03-01 20:30 — Add explanatory subtitles to Purchases sub-pages ===
+- Added muted-style intro paragraph below the h2 heading on all 5 Purchases sub-pages
+- ScanView: explains barcode scanning workflow
+- AmazonImportView: top-level import instructions + shortened upload section text
+- ExpandView: explains multi-pack concept
+- PurchaseView (Valuation): explains insurance/valuation purpose with Amazon linking tip
+- PurchaseWishesView: expanded wish-list explanation replacing terse one-liner
+- All use consistent styling: color rgba(255,255,255,0.6), margin-bottom var(--lumo-space-m)
+- Build + tests pass, committed as r315, Docker image pushed (202603012032)
+===
+
+=== 2026-03-01 — Security audit of full codebase ===
+- Performed comprehensive security review across auth/sessions, servlets/streaming, and DB/input handling
+- Found 2 CRITICAL (H2 empty password + console binding), 3 HIGH (cookie not HttpOnly, plaintext session tokens, timing-vulnerable API key comparison), 7 MEDIUM, 8 LOW
+- Documented positive findings: no SQL injection, no XSS, no command injection, no unsafe deserialization
+- Created SECURITY_FIXES.md with all findings, fix recommendations, and prioritized remediation order
+- Added to svn tracking
+===
+
+=== 2026-03-02 00:00 — FEATURES.md updates (video thumbnails + TMDB wish search) ===
+- Added "Video Preview Thumbnails on Seek Bar" as backlog item in FEATURES.md
+  - Sprite sheet generation via FFmpeg during ForBrowser transcoding
+  - WebVTT metadata tracks mapping time ranges to sprite coordinates
+  - Custom player tooltip overlay on seek bar hover/drag
+- Documented already-implemented "TMDB Search on Wish List" feature as done
+- Committed as r322
+===
+
+=== 2026-03-02 14:30 — Security Fixes #6-10 + Force Password Change ===
+- Implemented security fixes L1, L4, H2, M1, M2 from SECURITY_FIXES.md
+- L1: BCrypt work factor upgraded from 10 to 12 in PasswordService
+- L4: URL-encoded UPC parameter in UpcLookupService API call
+- H2: Session tokens now stored as SHA-256 hashes in DB; plaintext cleared
+  - V030 migration: added token_hash column, backfilled via H2 HASH(), cleared token, added index
+  - AuthService.hashToken() helper for all token operations
+- M1: Replaced all findAll() patterns with parameterized SQL queries
+  - AuthService: login, checkRateLimit, establishSession, logout, validateToken,
+    invalidateUserSessions, countAdmins, cleanupExpiredTokens, cleanupOldAttempts
+  - UserManagementView: deleteUser (session cleanup), openAddUserDialog (uniqueness check)
+  - MetricsRegistry: active session gauge
+- M2: Improved rate limiting with per-username checks + exponential backoff
+  - Both per-IP and per-username failure counts checked via SQL
+  - Exponential backoff: 30s base, doubling per failure beyond threshold, capped at 15min
+  - checkRateLimit() now accepts username parameter
+- New feature: Force password change on next login
+  - V029 migration: must_change_password column on app_user (defaults TRUE for existing users)
+  - New ChangePasswordView at /change-password (standalone, no MainLayout)
+  - SecurityServiceInitListener intercepts flagged users → redirects to change-password
+  - LoginView redirects to change-password when flag is set
+  - UserManagementView: "Require password change" checkbox in Add User + Reset Password dialogs
+  - UserManagementView: "Force PW Change" button in actions column
+  - UserManagementView: "PW Change" badge in grid for flagged users
+- Files created: ChangePasswordView.kt, V029__force_password_change.sql, V030__hash_session_tokens.sql
+- Files modified: AppUser.kt, SessionToken.kt, PasswordService.kt, AuthService.kt,
+  SecurityServiceInitListener.kt, LoginView.kt, UserManagementView.kt, UpcLookupService.kt,
+  MetricsRegistry.kt, SECURITY_FIXES.md
+- Build: compiles, all tests pass
+===
+
+=== 2026-03-02 — Security Fixes Batch 3 (M4, M5, M6, L3, L5, L6, L7) ===
+- Implemented 7 remaining security audit fixes from SECURITY_FIXES.md
+- M4: Added AuthService.invalidateUserSessions() calls in UserManagementView
+  after promote, demote, and rating ceiling changes (same pattern as password reset)
+- M5: RokuFeedServlet now reads roku_base_url from app_config instead of Host header;
+  SettingsView gains Roku Base URL field; baseUrl() fixed to use serverName/serverPort
+- M6: AuthFilter returns 403 in pre-setup state instead of allowing all requests through
+- L3: Added maskUsername() function in AuthService; applied to failed login audit log
+  (keeps first 2 and last 2 chars, masks middle)
+- L5: TmdbService refactored with buildUrl()/buildRequest() helpers; uses Bearer token
+  auth when TMDB_API_READ_ACCESS_TOKEN is set, falls back to api_key query param
+- L6: Removed descriptive error messages from VideoStreamServlet sendError() calls;
+  added server-side log.warn/info where not already present
+- L7: Added Content-Type validation (must start with "image/") in fetchAndWrite() for
+  PosterCacheService, HeadshotCacheService, and BackdropCacheService
+- Updated SECURITY_FIXES.md to mark all 7 items as fixed; L8 deferred as acceptable risk
+- Build successful, all tests pass
+- Files modified: UserManagementView.kt, RokuFeedServlet.kt, SettingsView.kt,
+  AuthFilter.kt, AuthService.kt, TmdbService.kt, VideoStreamServlet.kt,
+  PosterCacheService.kt, HeadshotCacheService.kt, BackdropCacheService.kt,
+  SECURITY_FIXES.md
+===
+
+=== 2026-03-02 — Security Audit 2, Batch 1 (H1, M1, M2, M3, M4) ===
+- Implemented all 5 fixes from Security Audit #2 Batch 1:
+  - H1: Escaped single quotes in H2 password migration (Bootstrap.kt)
+  - M1: Added session invalidation on self-service password change (ChangePasswordView.kt)
+  - M2: Fixed Set-Cookie header collision — removed addCookie, changed setHeader to addHeader (AuthService.kt)
+  - M3: Wrapped CatalogView edit button column in admin check (CatalogView.kt)
+  - M4: Created synthetic Roku user with rating ceiling in AuthFilter; handled null id in PlaybackProgressServlet
+- Updated SECURITY_AUDIT_2.md: marked H1, M1, M2, M3, M4, L6 as fixed
+- Build passes, all tests pass
+===
+
+=== 2026-03-02 — Security Audit 2 Batch 2 (M5, M6, L1–L5, L7 + VLC Removal) ===
+- Implemented the remaining MEDIUM and LOW findings from Security Audit #2
+- **VLC removal (resolves L5):**
+  - `svn delete` VlcLauncherService.kt
+  - Removed `isLocal`, VLC button block, `playFile()` from TitleDetailView.kt and TranscodeLinkedView.kt
+  - Removed "VLC path" from MainView.kt help text
+  - Removed vlcDisabled field, VLC Path TextField, vlc_path save handler from SettingsView.kt
+  - Removed MM_DISABLE_VLC from docker-compose.yml
+  - Removed all VLC references from CLAUDE.md, README.md, SECURITY_FIXES.md, SECURITY_AUDIT_2.md
+- **M5 — Open redirect prevention:**
+  - Added `isValidTmdbPath()` validation to PosterServlet, BackdropServlet, HeadshotServlet
+  - Returns 404 instead of redirect if path is malformed (starts with //, contains unexpected chars)
+- **M6 — Session fixation protection:**
+  - Added `servletRequest.changeSessionId()` at start of AuthService.establishSession()
+- **L1 — Constant-time API key in AccessLogFilter:**
+  - Replaced `==` with `MessageDigest.isEqual()` for API key comparison
+- **L2 — Mask username in rate limit log:**
+  - Changed raw `username` to `maskUsername(username)` in rate limit log line
+- **L3 — docker-compose.yml H2_PASSWORD:**
+  - Added H2_PASSWORD and MM_FFMPEG_PATH environment variables
+- **L4 — PlaybackProgress POST body limit:**
+  - Limited POST body to 1024 bytes via `readNBytes(1024)` before JSON parsing
+- **L7 — UPC format validation:**
+  - Added `^\d{8,14}$` regex check at start of UpcItemDbLookupService.lookup()
+- All changes compile, tests pass, zero VLC references in source
+===
+
+=== 2026-03-02 22:33 — M7: Docker non-root user ===
+- Added non-root user to Dockerfile: UID 1046, GID 100 (Synology `users` group)
+- Dockerfile: adduser, --chown on COPY, chown /cache, USER app directive
+- docker-compose.yml: added `user: "1046:100"`
+- First attempt with UID 1000 hit read-only DB (needed chown on host cache dir)
+- UID 1000 also hit Synology ACL issues on /media (streaming failed)
+- UID 1046 (matching Synology user) resolved both issues
+- Key learning: Synology ACL layer overrides unix 777 permissions; must match actual UID
+===
+
+=== 2026-03-02 — Transcode Buddy System implementation ===
+- Implemented full distributed transcoding system (Phase 1 server + Phase 2 client)
+- Phase 1 (Server):
+  - V033__transcode_lease.sql: lease table, indexes, buddy_api_key + lease duration config seeds
+  - TranscodeLease entity + LeaseStatus enum (CLAIMED, IN_PROGRESS, COMPLETED, FAILED, EXPIRED)
+  - TranscodeLeaseService: unified lease management with claimWork(), reportProgress/Complete/Failure,
+    heartbeat, poison pill detection (3 failures = skip), stale lease expiration + .tmp cleanup
+  - BuddyApiServlet: REST API at /buddy/* (claim, progress, complete, fail, heartbeat, status)
+    with API key auth via ?key= or X-Buddy-Key header, using Gson for JSON
+  - Added Gson dependency to libs.versions.toml + build.gradle.kts
+  - Refactored TranscoderAgent to use leases: claimWork("local") for work selection,
+    reportProgress/Complete/Failure for result tracking. Re-transcode logic extracted to
+    handleRetranscodeRequests() helper
+  - Broadcaster: added BuddyProgressEvent + listener registration/broadcast methods
+  - TranscodeStatusView: added "Transcode Buddies" panel with active leases + progress bars
+    and recent completions, updated via Broadcaster events
+  - SettingsView: added "Transcode Buddy" section with API key display + regenerate button
+    and lease duration field
+- Phase 2 (Client - transcode-buddy subproject):
+  - Gradle subproject with application plugin, Gson + slf4j-simple deps
+  - BuddyConfig: loads from .properties file (server_url, api_key, buddy_name, nas_root,
+    ffmpeg/ffprobe paths, worker_count, encoder_preference, poll/progress intervals)
+  - BuddyApiClient: HTTP client using java.net.http.HttpClient + Gson, all endpoints
+  - EncoderDetector: tests NVENC/QSV/CPU encoders via 1-second synthetic test encode
+  - PathTranslator: maps server relative paths to local NAS mount paths
+  - TranscodeWorker: claims work, probes codec, runs FFmpeg with heartbeat thread,
+    extracts subtitles, reports results with retry on completion
+  - Main.kt: loads config, verifies NAS + FFmpeg + server connectivity, detects encoder,
+    starts worker thread pool with shutdown hook
+  - buddy.properties.example: template config
+- Build: clean build passes, all tests pass
+- Files created: 12 new, 7 modified
+===
+
+=== 2026-03-02 23:30 — Docker deploy + OOM diagnosis ===
+- Added --disable_local_transcoding CLI flag to Main.kt (gates TranscoderAgent.start())
+- Updated Dockerfile: COPY transcode-buddy/ for build, added --disable_local_transcoding to CMD
+- Updated docker-compose.yml to match deployed version (mem_limit: 4g, memswap_limit: 4g)
+- Built and pushed Docker image 202603022323 to NAS registry
+- OOM diagnosis: cAdvisor showed "memory cached" spiking within 1-2 minutes of startup
+  - Root cause: TranscoderAgent.cleanupBadCodecFiles() on startup walks entire ForBrowser/
+    directory and runs `ffmpeg -i` on every MP4 to probe codecs
+  - Each probe causes kernel to page-cache chunks of multi-GB MP4 files
+  - Hundreds of files × several MB cached per probe blows past 4 GB cgroup limit
+  - With --disable_local_transcoding, TranscoderAgent never starts, no probes run
+- Deployed new image, confirmed "Local transcoding DISABLED" in logs
+- Monitoring memory stability
+===
+
+=== 2026-03-02 23:55 — Transcode Buddy: throughput stats, lease release, parallelism, smart sleep ===
+- Added unified "Overall Transcode Progress" panel to TranscodeStatusView showing
+  total completed, bytes processed, files/hr throughput, active workers, failed count
+- Added ThroughputStats data class with human-readable byte formatting (KB/MB/GB/TB)
+- Added getThroughputStats() to TranscodeLeaseService using 24-hour rolling window
+- Added POST /buddy/release endpoint — buddies release stale leases on startup
+- Added releaseLeases() to TranscodeLeaseService (expires active leases for a buddy,
+  cleans up orphaned .tmp files)
+- BuddyApiClient calls releaseLeases() on startup in Main.kt
+- Tested 3 concurrent NVENC workers on RTX 4090 — GPU handled it fine but NAS I/O
+  was the bottleneck (no faster than 1 worker). Reverted to worker_count=1.
+- Raised worker_count config limit from 8 to 16, default from 1 to 3
+- SleepInhibitor refactored to reference-counted: acquire()/release()/shutdown().
+  Only prevents Windows sleep while actively transcoding. Machine can sleep when idle.
+- TranscodeWorker now uses binary exponential backoff when no work available:
+  30s → 60s → 2m → 4m → ... → 1hr cap. Resets on successful claim.
+- Built and pushed Docker image 202603022351 with all server-side changes
+- Buddy running overnight with 1 worker, NVENC, smart sleep, lease release
+
+Files created:
+  (none new this session)
+
+Files modified:
+  src/main/kotlin/.../service/TranscodeLeaseService.kt — getThroughputStats(), releaseLeases(), ThroughputStats data class
+  src/main/kotlin/.../TranscodeStatusView.kt — Overall Progress panel, refreshOverallProgress()
+  src/main/kotlin/.../BuddyApiServlet.kt — handleRelease() endpoint
+  transcode-buddy/src/main/kotlin/.../SleepInhibitor.kt — reference-counted acquire/release/shutdown
+  transcode-buddy/src/main/kotlin/.../TranscodeWorker.kt — exponential backoff, SleepInhibitor acquire/release
+  transcode-buddy/src/main/kotlin/.../BuddyApiClient.kt — releaseLeases()
+  transcode-buddy/src/main/kotlin/.../BuddyConfig.kt — default workers=3, max=16
+  transcode-buddy/src/main/kotlin/.../Main.kt — releaseLeases on startup, removed unconditional sleep inhibitor
+  transcode-buddy/buddy.properties — worker_count=1
+===
+
+=== 2026-03-02 23:55 — Transcode Buddy: throughput stats, lease release, parallelism, smart sleep ===
+- Added unified Overall Transcode Progress panel to TranscodeStatusView
+- Added ThroughputStats, getThroughputStats(), releaseLeases() to TranscodeLeaseService
+- Added POST /buddy/release endpoint to BuddyApiServlet
+- Tested 3 NVENC workers: GPU fine but NAS I/O bottleneck, reverted to 1
+- SleepInhibitor refactored to reference-counted acquire/release/shutdown
+- TranscodeWorker binary exponential backoff: 30s to 1hr cap
+- Built and pushed Docker image 202603022351
+===
+
+=== 2026-03-02 23:55 — Buddy: throughput stats, lease release, smart sleep ===
+- Added unified Overall Transcode Progress panel to TranscodeStatusView
+- Added ThroughputStats, getThroughputStats(), releaseLeases()
+- Added POST /buddy/release endpoint to BuddyApiServlet
+- Tested 3 NVENC workers: GPU fine but NAS I/O bottleneck, reverted to 1
+- SleepInhibitor refactored to reference-counted acquire/release/shutdown
+- TranscodeWorker binary exponential backoff: 30s to 1hr cap
+- Built and pushed Docker image 202603022351
+===
+
+=== 2026-03-03 08:00 — FEATURES.md: Roku debugging proposals ===
+- Continued from previous session (context compacted)
+- Previous session accomplished:
+  - Unified progress indicator in TranscodeStatusView (throughput stats)
+  - Adaptive parallelism (tested 3 workers, reverted to 1 due to NAS I/O bottleneck)
+  - Buddy session ID + lease release on restart (POST /buddy/release)
+  - Sleep inhibitor fix (reference-counted, only active during transcoding, releases after 2min idle)
+  - Binary exponential backoff in TranscodeWorker (30s → 1hr, reset on work found)
+  - Docker image update (tag 202603022351)
+- This session: synthesized research from 3 parallel agents into FEATURES.md proposals
+- Updated Feature 9 (Roku App) with current implementation status and 5 new sub-features:
+  - 9a: In-RAM Request Log Endpoint — circular buffer in AccessLogFilter, /admin/requests servlet
+  - 9b: BrightScript Debug Logging — [MM] prefixed print statements throughout channel code
+  - 9c: Roku Deployment from Claude — document roku-deploy.sh workflow
+  - 9d: Roku Debug Log Tailing — telnet port 8085, roku-debug.sh helper
+  - 9e: Roku Remote Control via ECP — HTTP REST API on port 8060 for keypresses, app queries
+- Added Feature 10 (Transcode Buddy) as completed item (renumbered Prometheus to 11)
+- Research findings: AccessLogFilter already exists with Apache Combined Log Format,
+  roku-deploy.sh already handles sideloading, channel code is complete but not reaching server
+===
+
+=== 2026-03-03 20:20 — Implement 9a request log + 9a-ii app log endpoints ===
+- Committed Transcode Buddy system to SVN (r329)
+  - Set svn:ignore on transcode-buddy/ for build, .gradle, .kotlin, buddy.properties
+  - Excluded buddy.properties (contains real API key)
+- Implemented Feature 9a: In-RAM Request Log Endpoint
+  - RequestLogBuffer: circular ArrayDeque of last 200 HTTP requests
+  - Modified AccessLogFilter to capture timing (System.nanoTime) and entries
+  - RequestLogServlet at /admin/requests: dark-themed HTML table + JSON view
+  - Filterable by user-agent, URI path, status code range
+  - Quick-filter links: All, 4xx, 5xx, Roku, Buddy, JSON
+- Implemented Feature 9a-ii: In-RAM Application Log Endpoint
+  - Replaced slf4j-simple with custom SLF4J 2.x service provider
+  - BufferingLogger extends LegacyAbstractLogger: writes to stderr + captures to buffer
+  - BufferingLoggerFactory, BufferingServiceProvider (SPI via META-INF/services)
+  - AppLogBuffer: ring buffers for ERROR(10), WARN(10), INFO(30)
+  - AppLogServlet at /admin/logs: color-coded HTML table, collapsible stack traces
+  - Fix: SLF4J calls getMDCAdapter() before initialize() — changed from lateinit to eager init
+  - Build dependency: replaced libs.slf4j.simple with libs.slf4j.api in main project
+  - transcode-buddy keeps slf4j-simple independently
+- All tests pass (404 tests, 0 failures)
+- Committed r330, Docker image built and pushed (tag 202603032016)
+- Updated FEATURES.md: 9a and 9a-ii marked [x] done
+===
+
+=== 2026-03-03 20:30 — Production validation of 9a/9a-ii endpoints ===
+- Validated both new admin endpoints against production ([redacted hostname])
+- /admin/requests: 50 entries with timestamps, IPs, usernames, methods, URIs, status codes,
+  response sizes, timing (ms), user-agents. Correctly returns 401 for unauthenticated access.
+- /admin/logs: 30 INFO entries showing server startup (Jetty, Atmosphere, Vaadin) and
+  login audit trail. No errors or warnings in buffer (healthy server state).
+- Both endpoints confirmed fully functional in production.
+===
+
+=== 2026-03-03 21:15 — Roku debug tooling (9b, 9c, 9d) ===
+- Implemented Feature 9b: BrightScript Debug Logging
+  - Added [MM] prefixed print statements to all 8 .brs files
+  - Covers: init, screen transitions, feed fetch (URL/HTTP status/body size/parse),
+    content tree structure, item selection, playback lifecycle, settings, key events, errors
+  - API keys masked (first 8 chars only) in log output
+  - PosterItem.brs left without logging (too noisy per-item render)
+- Implemented Feature 9c: Roku Deployment from Claude
+  - roku-deploy.sh already existed; documented full workflow in CLAUDE.md
+- Implemented Feature 9d: Roku Debug Log Tailing
+  - Created roku-debug.sh: netcat to Roku port 8085, tee to log file
+  - Created roku-remote.sh: ECP wrapper for key presses, launch, apps, info, text entry
+- Added "Roku Debugging" section to CLAUDE.md with deploy/debug/remote reference
+- Updated CLAUDE.md architecture: slf4j-simple -> custom BufferingServiceProvider
+- Decision: CLAUDE.md section is the right persistence mechanism for debug workflows
+  (always loaded into context). Skills are user-invocable slash commands, not a fit here.
+- Committed r331
+===
+
+=== 2026-03-03 21:00 — Roku playback debugging & fixes ===
+- Investigated Roku playback errors through iterative debug cycle:
+  1. FeedTask never executing: FeedTask.xml missing functionName field, added it + explicit
+     assignment in MainScene.brs before control="run"
+  2. API key truncated (401): user re-entered full UUID on Roku settings
+  3. VideoStreamServlet forced 206 even without Range header: Roku needs initial 200 OK
+     to probe moov atom. Fixed to return 200 for no-Range requests, 206 only for Range.
+  4. ForBrowser files have AAC 5.1 (6ch) + embedded subtitle tracks: Roku only supports
+     AAC stereo. Added -ac 2 (stereo downmix) and -sn (strip subs) to FFmpeg args.
+- Updated cleanupBadCodecFiles() in TranscoderAgent to also detect and delete ForBrowser
+  files with multichannel audio (>2ch) for re-transcoding on server startup
+- Added probeAudioChannels() utility to TranscoderAgent companion object
+- Files modified:
+  - roku-channel/components/FeedTask.xml (added functionName field)
+  - roku-channel/components/MainScene.brs (functionName assignment before control="run")
+  - VideoStreamServlet.kt (200 OK for no-Range, 206 only for Range)
+  - TranscoderAgent.kt (-ac 2, -sn in FFmpeg args; probeAudioChannels();
+    cleanupBadCodecFiles() checks audio channels too)
+  - transcode-buddy/TranscodeWorker.kt (-ac 2, -sn in FFmpeg args)
+- Docker image 202603032100 pushed
+- Transcode buddy rebuilt and restarted with NVENC, confirmed -ac 2 -sn in command
+===
+
+=== 2026-03-03 23:00 — transcode-common module, NVENC SEI fix, interlace detection ===
+- Added Roku-compatible transcode output requirements to CLAUDE.md (video/audio/container specs)
+- Noted in FEATURES.md that subtitle extraction has never worked; added backlog item to remove it
+- Created transcode-common Gradle subproject — single source of truth for FFmpeg transcode logic:
+  - EncoderProfile.kt: NVENC/QSV/CPU encoder arg profiles
+  - VideoProbe.kt: probe result data class, probeVideo(), constants, interlace detection
+  - TranscodeCommand.kt: builds complete FFmpeg commands (video decision, filters, fps, SEI strip)
+- Refactored TranscoderAgent.kt: removed ~120 lines of duplicated code, imports from shared module
+- Refactored EncoderDetector.kt: stripped to detection-only, imports EncoderProfile from shared
+- Refactored TranscodeWorker.kt: uses TranscodeCommand.build() from shared module
+- Updated settings.gradle.kts, build.gradle.kts, transcode-buddy/build.gradle.kts for new module
+- Added interlace detection: parses "top first"/"bottom first" from FFprobe, adds yadif deinterlace
+- Key discovery: NVENC (h264_nvenc) emits extra SEI NAL units (type 6) that Roku rejects
+  - Fix: -bsf:v "filter_units=remove_types=6" strips SEI NALs, harmless for libx264
+  - Validated with Star Trek TOS S02E10 (MPEG-2 DVD source, anamorphic 720x480 SAR 32:27)
+  - Test sequence: NVENC raw (fail) -> libx264 (pass) -> NVENC+SEI strip (pass)
+- Fixed Dockerfile: added COPY transcode-common/ transcode-common/ for Docker build
+- Docker image 202603032315 built and pushed (not deployed — OOM concern with full backlog)
+- Noted SleepInhibitor bug in FEATURES.md: Windows sleep prevention not working during transcoding
+- Updated Feature 9f status to [x] with detailed description of all fixes
+- Files created: transcode-common/{build.gradle.kts, EncoderProfile.kt, VideoProbe.kt, TranscodeCommand.kt}
+- Files modified: CLAUDE.md, FEATURES.md, Dockerfile, settings.gradle.kts, build.gradle.kts,
+  transcode-buddy/build.gradle.kts, TranscoderAgent.kt, EncoderDetector.kt, TranscodeWorker.kt
+===
+
+=== 2026-03-04 19:55 — Remove subtitle extraction pipeline ===
+- Removed all subtitle extraction, serving, and UI code per FEATURES.md backlog item
+- TranscoderAgent: removed extractSubtitles(), hasSubtitles(), withSubtitles from
+  TranscoderProgressEvent, VTT cleanup in cleanupBadCodecFiles and handleRetranscodeRequests
+- TranscodeWorker (buddy): removed extractSubtitles() method
+- VideoStreamServlet: removed /stream/{id}/subs/{index} endpoint and serveSubtitle() method
+- VideoPlayerDialog: removed buildSubtitleTracks(), sourceFilePath field, <track> elements,
+  unused Transcode and TranscoderAgent imports
+- TranscodeLinkedView, TitleDetailView: removed subtitle COMMENT icons next to play buttons
+- TranscodeStatusView: removed "with subtitles" count from transcoder summary line
+- CLAUDE.md: removed subtitle references from Video Playback and Key Files sections
+- FEATURES.md: marked "Remove Subtitle Extraction Support" as done with details
+- ForBrowser README.md on NAS: removed Subtitle Extraction section and .vtt references
+- Also earlier in session: wrote ForBrowser/README.md on NAS documenting all transcode
+  settings, FFmpeg commands, and Roku compatibility rationale
+- Committed as r333, Docker image pushed as 202603041958, transcode buddy rebuilt
+===
+
+=== 2026-03-04 — ForBrowser Validator agent ===
+- Created `ForBrowserValidator.kt` — standalone background daemon that daily validates
+  ForBrowser MP4 files by probing with FFmpeg for bad codecs, multichannel audio, and
+  extra streams. Deletes invalid files so TranscoderAgent re-transcodes them.
+  - 30s initial delay, hourly due-check, 2s throttle between probes
+  - Tracks last run via `forbrowser_validator_last_run` in app_config (ISO-8601)
+  - Prometheus counter: `mm_forbrowser_validations_deleted_total`
+- Cleaned up `TranscoderAgent.kt` — removed commented-out `cleanupBadCodecFiles()` call
+  and the entire method body (~70 lines). Probe companion methods retained for reuse.
+- Wired validator in `Main.kt` — unconditional start (runs even with --disable_local_transcoding)
+- Created `ForBrowserValidatorTest.kt` — 9 unit tests for isDue() and recordCompletion()
+  logic with TestClock and in-memory H2
+- Build passes, all tests green
+===
+
+=== 2026-03-04 — ForBrowser Probe Capture & Stale Failure Cleanup ===
+- Created V034 migration: `forbrowser_probe` and `forbrowser_probe_stream` tables
+  - Parent row per ForBrowser MP4, child row per stream (video, audio, subtitle, etc.)
+  - FK to `transcode(id)`, unique index on transcode_id, cascade delete on streams
+- Created `ForBrowserProbe.kt` entity — both ForBrowserProbe and ForBrowserProbeStream KEntities
+- Enhanced `transcode-common/VideoProbe.kt` — added `probeForBrowser()` function and
+  `ForBrowserProbeResult`/`StreamInfo` data classes that capture ALL streams (not just first video)
+- Created `ForBrowserProbeService.kt` — recordProbe (upsert), deleteForTranscode, hasProbe,
+  cleanupStale, getAllProbesWithStreams, getProfileSummary
+- Added `TranscodeLeaseService.clearAllFailures()` — wipes all FAILED/EXPIRED lease rows
+- Updated `BuddyApiServlet.kt`:
+  - `POST /buddy/clear-failures` endpoint to clear stale failures
+  - `GET /buddy/probes` endpoint returning all probe data as JSON
+  - `GET /buddy/probe-profiles` endpoint returning distinct encoding profiles
+  - `handleComplete()` now parses optional `probe` object from buddy's JSON body
+- Wired probe capture into `TranscoderAgent.processNext()` — probes output MP4 after
+  successful rename, records via ForBrowserProbeService
+- Wired probe capture into buddy pipeline:
+  - `TranscodeWorker.processOne()` — probes output file before reportComplete
+  - `BuddyApiClient.reportComplete()` — accepts ForBrowserProbeResult, serializes to JSON
+  - `BuddyApiServlet.handleComplete()` — deserializes probe data, calls ForBrowserProbeService
+- Added probe backfill to `ForBrowserValidator.runValidation()`:
+  - After validation, walks ForBrowser files, matches to transcodes via path
+  - Probes files without existing probe rows, records results
+  - Calls `ForBrowserProbeService.cleanupStale()` to remove orphaned probe rows
+- Created `ForBrowserProbeServiceTest.kt` — 7 tests: recordProbe, upsert, delete,
+  hasProbe, getAllProbesWithStreams, getProfileSummary, extra streams handling
+- Build passes, all tests green
+
+Files created:
+  - src/main/resources/db/migration/V034__forbrowser_probe.sql
+  - src/main/kotlin/net/stewart/mediamanager/entity/ForBrowserProbe.kt
+  - src/main/kotlin/net/stewart/mediamanager/service/ForBrowserProbeService.kt
+  - src/test/kotlin/net/stewart/mediamanager/service/ForBrowserProbeServiceTest.kt
+
+Files modified:
+  - transcode-common/src/main/kotlin/net/stewart/transcode/VideoProbe.kt
+  - src/main/kotlin/net/stewart/mediamanager/service/TranscoderAgent.kt
+  - src/main/kotlin/net/stewart/mediamanager/service/TranscodeLeaseService.kt
+  - src/main/kotlin/net/stewart/mediamanager/service/ForBrowserValidator.kt
+  - src/main/kotlin/net/stewart/mediamanager/BuddyApiServlet.kt
+  - transcode-buddy/src/main/kotlin/net/stewart/transcodebuddy/BuddyApiClient.kt
+  - transcode-buddy/src/main/kotlin/net/stewart/transcodebuddy/TranscodeWorker.kt
+===
+
+=== 2026-03-04 — Transcode Reclassify feature ===
+- Created ReclassifyService.kt — moves transcode files between NAS format
+  directories (BLURAY ↔ DVD ↔ UHD) and updates all related DB records
+  (Transcode path/format, ForBrowser output, probe data, failed leases)
+- Added POST /buddy/reclassify endpoint to BuddyApiServlet (buddy API key auth)
+  Request: { "transcode_id": 123, "target_format": "UHD_BLURAY" }
+  Response: { "ok": true, "old_path": "...", "new_path": "...", ... }
+- Created ReclassifyServiceTest.kt — 8 integration tests with temp directories
+  covering: file move, DB update, ForBrowser cleanup, probe deletion,
+  lease clearing, validation (same format, missing source, target exists,
+  nonexistent transcode), formatToDirectory mapping
+- Files created: service/ReclassifyService.kt, service/ReclassifyServiceTest.kt
+- Files modified: BuddyApiServlet.kt (new endpoint + imports)
+- All 460 tests pass
+===
+
+=== 2026-03-05 — Filename sanitization during NAS scan ===
+- Created FilenameSanitizer.kt — detects and renames files with Windows-disallowed
+  characters (: ? * " < > |) on the NAS during scan
+  - Colons → " -", question marks → removed, others → underscore
+  - Also renames corresponding ForBrowser files
+  - Scans BLURAY, DVD, UHD (flat) and TV Series From Media (recursive)
+- Integrated into NasScannerService.doScan() as Phase 0 before file discovery
+  - Updates existing transcode and discovered_file DB paths after renames
+- Created FilenameSanitizerTest.kt — 15 unit tests for detection and sanitization
+- Files created: service/FilenameSanitizer.kt, service/FilenameSanitizerTest.kt
+- Files modified: service/NasScannerService.kt
+===
+
+=== 2026-03-05 — Security audit batch: M1–M5, M7, M8, M9 + H1–H3 ===
+- H1 (No TLS): marked accepted risk — reverse proxy handles TLS, LAN traffic trusted
+- H2 (Placeholder credentials): marked accepted risk — template file, real creds on NAS
+- H3 (Unauthenticated metrics): marked accepted risk — read-only counters, no PII
+- M1 (Timing enumeration): added PasswordService.dummyVerify() with pre-computed hash;
+  AuthService.login() calls it when user not found to equalize BCrypt timing
+- M2 (Stale privileges): SecurityServiceInitListener now calls refreshCurrentUser()
+  on every navigation, re-fetching AppUser from DB; forces logout if deleted
+- M3 (No max password): added MAX_PASSWORD_LENGTH=128 to PasswordService; enforced in
+  SetupView, ChangePasswordView, UserManagementView (reset + create dialogs)
+- M4 (Exception leaking): BuddyApiServlet returns generic errors to clients;
+  details logged server-side only
+- M5 (No body size limit): parseBody() caps reads at 1MB via readNBytes()
+- M7 (Setup race): wrapped first-user creation in JdbiOrm transaction
+- M8 (Plain HTTP registry): marked accepted risk — private LAN
+- M9 (Gradle checksum): pinned SHA-256 for gradle-9.3.1-bin.zip
+- Files modified: SECURITY-AUDIT.md, gradle-wrapper.properties, BuddyApiServlet.kt,
+  ChangePasswordView.kt, SecurityServiceInitListener.kt, SetupView.kt,
+  UserManagementView.kt, AuthService.kt, PasswordService.kt
+===
+
+=== 2026-03-05 17:30 — Feature #36: Missing Season Detection ===
+- Continued implementation from prior session (steps 1-5 were done)
+- Step 6: Wired MissingSeasonService.storeSeasons() into TmdbEnrichmentAgent
+  - processInitialEnrichment(): stores seasons after getDetails() call for TV titles
+  - processReassignment(): stores seasons after getDetails() call for TV titles
+- Step 7: Wired MissingSeasonService.refreshOwnership() into NasScannerService
+  - Called after cleanup phase (Phase 5), before COMPLETE broadcast
+- Step 8: Added season_number field to WishListItem entity
+  - Added WishListService.addSeasonWish() for season-level wish creation
+- Step 9: Built "New Seasons Available" section on MainView home page
+  - Horizontal scroll row of poster cards (matching Continue Watching style)
+  - Each card shows poster, title name, missing season labels (S2, S3, etc.)
+  - Dismiss (X) button dismisses all seasons for that title for the user
+  - "Wish S{n}" button adds a season-level media wish for the first missing season
+  - Fixed poster URL from w342 (invalid) to w185 (THUMBNAIL PosterSize)
+- Step 10: Registered PopulateSeasonsUpdater in Bootstrap.kt
+- svn added 5 new files: V036 migration, TvSeason.kt, DismissedNotification.kt,
+  MissingSeasonService.kt, PopulateSeasonsUpdater.kt
+- Verified: build succeeds, V036 migration applies, server starts,
+  "New Seasons Available" shows correctly (Wednesday S2/S3, Downton Abbey S4/S5/S6,
+  Dune: Prophecy S2), dismiss works (removes card), posters load
+- Marked feature #36 complete in FEATURES.md
+- Files created: V036__missing_seasons.sql, TvSeason.kt, DismissedNotification.kt,
+  MissingSeasonService.kt, PopulateSeasonsUpdater.kt
+- Files modified: TmdbEnrichmentAgent.kt, NasScannerService.kt, Bootstrap.kt,
+  WishListItem.kt, WishListService.kt, MainView.kt, FEATURES.md
+===
+
+=== 2026-03-05 18:00 — Feature: Similar Titles on Title Detail Page ===
+- Added TmdbRecommendation data class and fetchRecommendations() to TmdbService
+  - Calls TMDB /movie/{id}/recommendations or /tv/{id}/recommendations
+  - Parses top 20 results into TmdbRecommendation (tmdbId + mediaType)
+- Created SimilarTitlesService: combines 3 scoring signals
+  - TMDB recommendations (+10), shared genres (+2 each), shared top-5 cast (+3 each)
+  - Filters hidden titles, rating-restricted, non-enriched; returns top 12
+- Added "Similar Titles" row to TitleDetailView after cast section
+  - Horizontal scroll row of 120px poster cards with title name and year
+  - Clickable cards navigate to the similar title's detail page
+- Files created: SimilarTitlesService.kt
+- Files modified: TmdbService.kt, TitleDetailView.kt, FEATURES.md
+===
+
+=== 2026-03-05 18:15 — Fix: Missing Seasons wish button UX ===
+- Wish button now shows green success toast notification
+- Wished season auto-dismissed so card disappears/updates after clicking
+- Added JS stopPropagation so button clicks don't navigate to title detail
+- Added Notification/NotificationVariant imports to MainView
+- File modified: MainView.kt
+===
+
+=== 2026-03-05 18:30 — Fix: Show season number on wish list cards ===
+- WishListView.buildMediaWishCard() now displays "Season N" label
+  below the year/type metadata for season-level media wishes
+- File modified: WishListView.kt
+===
+
+=== 2026-03-05 18:40 — Insurance Inventory Report + Transcoder Maintenance ===
+- Implemented Insurance Inventory PDF report (Feature request)
+  - Added OpenPDF library dependency (libs.versions.toml + build.gradle.kts)
+  - Created InventoryReportView at /report route
+  - PDF auto-downloads with two sections: valued purchases (with total) and unvalued
+  - Added "Report" sub-item to Purchases drawer group in MainLayout
+  - Registered "report" as admin route in SecurityServiceInitListener
+- Created run-buddy.sh convenience script for starting transcoder buddy
+- Cleared 17 transcoder failures on production server via /buddy/clear-failures
+- Restarted transcoder buddy (desktop-4090, running with nvenc)
+- Built and pushed Docker image 202603051840
+- Committed r347
+===
+
+=== 2026-03-06 — Video Preview Thumbnails on Seek Bar ===
+- Implemented full thumbnail sprite generation + hover preview feature
+- V037 migration: added lease_type column to transcode_lease table
+- LeaseType enum (TRANSCODE, THUMBNAILS) added to Enums.kt
+- TranscodeLease entity: added lease_type field
+- ThumbnailSpriteGenerator (transcode-common): generates 160x90 sprite sheets
+  (10x10 grid, 100 per sheet) at 10s intervals + WebVTT index file
+- TranscodeLeaseService: two-phase claimWork() — TRANSCODE priority, then
+  THUMBNAILS. Independent poison pill tracking per lease type.
+- BuddyApiServlet: claim response now includes lease_type field
+- TranscoderAgent: dispatches THUMBNAILS leases to processThumbnails()
+- TranscodeWorker (buddy): dispatches THUMBNAILS leases to processThumbnails()
+- BuddyApiClient: ClaimResponse gains leaseType field
+- VideoStreamServlet: new routes /stream/{id}/thumbs.vtt and
+  /stream/{id}/thumbs_{n}.jpg for serving sprite files
+- VideoPlayerDialog: JS hover handler fetches VTT, parses cues, shows sprite
+  region overlay when hovering near the seek bar
+- Respects disable_local_transcoding flag (TranscoderAgent doesn't start,
+  so no local thumbnail generation; buddies can still claim work)
+- FEATURES.md: marked Video Preview Thumbnails as complete
+===
+
+=== 2026-03-06 19:30 — Project reorganization: lifecycle/ and secrets/ ===
+- Moved 6 shell scripts to lifecycle/ via svn move (preserves history):
+  docker-build.sh, rollback_docker.sh, run-buddy.sh, roku-deploy.sh,
+  roku-remote.sh, roku-debug.sh
+- All scripts updated to resolve project root via SCRIPT_DIR/.. and
+  reference secrets/ for env files
+- Moved env files to secrets/ directory:
+  - example.env, example.roku-deploy.env via svn move (tracked)
+  - .env, roku-deploy.env via filesystem move (svn:ignore'd)
+- Renamed test-credentials.env → test-credentials.agent_visible_env
+  (new convention: Claude may read .agent_visible_env but never .env)
+- Added ROKU_API_KEY to test-credentials.agent_visible_env
+- Created roku-deploy-dev.sh and secrets/roku-deploy-dev.env for second
+  Roku device (dev Roku at [redacted IP address])
+- Updated CLAUDE.md: all script/env paths, svn:ignore docs, security rules
+- Committed as r353
+===
+
+=== 2026-03-06 19:38 — Fix video playback on Roku, Safari, and Chrome iOS ===
+
+Problem: Video playback worked on Chrome desktop but was broken on Roku,
+Safari/iOS, and Chrome/iOS.
+
+Root cause 1 — Truncated moov atom (Roku + Safari):
+- VideoStreamServlet had maxChunkSize = 2 MiB for Range responses
+- Voyager S03E01 ForBrowser MP4 has a 3 MB moov atom (ftyp→moov→mdat)
+- Video trak (1.3 MB) fit within the 2 MB cap, but audio trak (starts at
+  1.3 MB, extends to 3 MB) was truncated
+- Roku: entered "playing" then immediately errored with -5 "malformed data"
+  and availableAudioTracks=[] (audio trak metadata cut off)
+- Safari: similar failure parsing incomplete moov atom
+- Fix: increased maxChunkSize from 2 MiB to 16 MiB
+
+Root cause 2 — Unsolicited 206 (Safari fix, Chrome iOS still broken):
+- Applied FEATURES.md 9g: all requests (with or without Range header) now
+  return 206 Partial Content capped at 16 MiB
+- This avoids streaming entire 700 MB+ files in one response
+- Safari iOS started working; Roku already working; Chrome iOS still broken
+
+Root cause 3 — Missing playsinline attribute (Chrome iOS):
+- <video> element lacked the `playsinline` attribute
+- On iOS, without playsinline, video attempts fullscreen takeover
+- Safari handles this gracefully; Chrome's WKWebView does not
+- Chrome iOS downloaded 160 MB of video data (10 × 16 MB chunks) but
+  refused to render it
+- Fix: added `playsinline` to the <video> element in VideoPlayerDialog
+
+Investigation approach:
+- Connected to Roku debug console (ncat port 8085) and captured error logs
+- Probed ForBrowser MP4 with ffprobe: verified H.264 High, AAC-LC, faststart,
+  no SEI NALs — encoding was correct per spec
+- Compared bytes through Synology HTTPS reverse proxy vs direct — identical
+- Used /admin/requests endpoint to compare Safari vs Chrome iOS behavior:
+  Safari made sustained range requests; Chrome burst-downloaded then stopped
+
+Files modified:
+- VideoStreamServlet.kt: maxChunkSize 2→16 MiB, unified 206 path for all
+  requests (no-Range treated as bytes=0-), removed separate 200 full-file path
+- VideoPlayerDialog.kt: added playsinline to <video> element
+- FEATURES.md: marked 9g done, updated 9 status (playback working)
+
+Docker images: 202603061938, 202603061943, 202603061954
+===
+
+=== 2026-03-06 20:30 — Competitive analysis & feature planning ===
+- Generated competitive analysis PDF (data/mediaManager-competitive-analysis.pdf)
+  comparing Plex, Jellyfin, Emby, Kodi, Infuse against mediaManager
+- Feature comparison matrix across 19 capabilities, 10 feature recommendations
+- Generated via fpdf2 Python script (data/generate_report.py)
+
+- Added Feature 40: Continue Watching & Watch History UI (FEATURES.md)
+  - Backend already complete (playback_progress table, PlaybackProgressService,
+    PlaybackProgressServlet, VideoPlayerDialog resume prompt)
+  - 40a: Continue Watching row on home screen (getContinueWatching() exists)
+  - 40b: Recently Watched row (VIEWED flag data exists)
+  - 40c: Progress indicators on catalog/title detail
+  - 40d: Roku resume playback (REST endpoint ready, channel needs wiring)
+  - 40e: Recently Added row
+
+- Added Feature 41: Subtitle Retrieval & Generation (FEATURES.md)
+  - Probed MKV catalog: subtitles ARE present but bitmap-based (PGS/VobSub)
+    -- Avatar: hdmv_pgs_subtitle, Die Hard: 2x PGS, Alexander: dvd_subtitle,
+    Angel S01E01: dvd_subtitle. All need OCR or alternative source.
+  - 41a: OpenSubtitles API (TMDB ID search, 20 downloads/day free)
+  - 41b: Alternative sources (SubDL, Podnapisi, Addic7ed)
+  - 41c: Self-hosted Whisper via transcode buddy (detailed implementation)
+    -- whisper-standalone-win (faster-whisper-xxl.exe, no Python needed)
+    -- RTX 4090 + large-v3-turbo: ~23 hrs for full 2,407-file catalog
+    -- New SUBTITLES lease type, processSubtitles() in TranscodeWorker
+    -- SRT stored in ForBrowser (primary) + source directory (backup)
+    -- .srt.failed sentinel for files Whisper can't decode
+    -- Buddy config: whisper_path, whisper_model, whisper_model_dir
+  - 41d: OpenSubtitles AI cloud fallback ($247-$550 for full catalog)
+  - 41e: Edition/version tracking (parse from UPC product name)
+  - 41f: Subtitle playback (WebVTT <track> in web, SRT sideband on Roku)
+
+- Added Whisper setup guide to README.md
+  - Step-by-step: download exe, download model, test, configure buddy
+  - Model comparison table (large-v3 vs turbo vs medium vs small)
+  - Processing time estimates per content type
+  - Output file layout and sentinel mechanism
+  - Troubleshooting table
+
+Files modified: FEATURES.md, README.md, claude.log
+Files created: data/generate_report.py, data/mediaManager-competitive-analysis.pdf
+===
+
+=== 2026-03-06 ~19:00 — Subtitle playback pipeline (Feature 41f completion) ===
+
+Completed the local Whisper subtitle generation pipeline end-to-end:
+
+Server-side subtitle serving:
+- Implemented serveSubtitleFile() in VideoStreamServlet.kt
+  - Locates .en.srt files alongside ForBrowser MP4s (or direct MP4/M4V)
+  - On-the-fly SRT-to-WebVTT conversion (comma->dot timestamps, WEBVTT header)
+  - Routes: /stream/{id}/subs.vtt and /stream/{id}/subs.srt
+  - Path traversal guard against NAS root
+
+Web player subtitle display:
+- VideoPlayerDialog.kt: dynamic track insertion via JS HEAD request
+  - Only adds <track> element when server confirms subtitle file exists
+  - CC button hidden when no subtitles available (no false affordance)
+  - Respects per-user subtitles_enabled preference (default on/off)
+- Updated MainView, TitleDetailView, TranscodeLinkedView to pass subtitle pref
+
+Buddy skip_types capability negotiation:
+- BuddyApiClient.claimWork() sends skip_types set to server
+- TranscodeLeaseService.claimWork() skips phases matching skip_types
+- TranscodeWorker auto-detects Whisper availability, adds SUBTITLES to skipTypes
+- Prevents buddies without Whisper from consuming subtitle leases
+
+Whisper crash-on-exit handling:
+- faster-whisper-xxl exits with -1073740791 (STATUS_STACK_BUFFER_OVERRUN) on
+  Windows after successfully writing output (PyInstaller cleanup crash)
+- TranscodeWorker.processSubtitles() checks if output file exists (>100 bytes)
+  before treating non-zero exit as failure — treats as success if SRT is valid
+
+TranscodeStatusView updates:
+- Shows [subs] tag for SUBTITLES lease type in active/recent buddy display
+- Added subtitle stats (total + today) to overall progress panel
+
+Lifecycle scripts:
+- Created lifecycle/stop-buddy.sh: finds transcode-buddy Java processes via
+  wmic, kills with taskkill, handles multiple PIDs
+
+FEATURES.md updated with Feature 41f details and Feature 42 (subtitle controls)
+
+Files modified: VideoStreamServlet.kt, VideoPlayerDialog.kt, MainView.kt,
+  TitleDetailView.kt, TranscodeLinkedView.kt, TranscodeStatusView.kt,
+  BuddyApiServlet.kt, TranscodeLeaseService.kt, BuddyApiClient.kt,
+  TranscodeWorker.kt, FEATURES.md, claude.log
+Files created: lifecycle/stop-buddy.sh
+===
+
+=== 2026-03-06 ~21:00 — Roku subtitle support + QR code pairing (Feature 43) ===
+
+Roku subtitle support:
+- RokuFeedService: added subtitleUrl to feed JSON content entries when
+  SRT file exists alongside playable MP4 (hasSubtitleFile check)
+- FeedTask.brs: parses subtitleUrl from feed for movies and episodes
+- DetailScreen.brs/EpisodePicker.brs: pass subtitleUrl to video content node
+- MainScene.brs: configures SubtitleTracks/SubtitleConfig on Video node,
+  sets globalCaptionMode On/Off based on subtitle availability
+- Roku gets SRT directly (native format support), not VTT
+
+Feature 43 — Roku QR Code Pairing (implemented):
+- V039 migration: device_token + pair_code tables
+- DeviceToken entity: permanent per-user device sessions (no expiry)
+- PairCode entity: ephemeral 5-minute pairing codes with status tracking
+- PairingService: createPairCode, confirmPairing, checkStatus,
+  generateQrCode (ZXing), validateDeviceToken, revokeAllForUser,
+  revokeToken, getDeviceTokensForUser, getSessionTokensForUser
+- PairingServlet: REST API at /api/pair/* (start/status/qr endpoints)
+- PairConfirmView: Vaadin page for phone-side pairing confirmation
+  (/pair?code=X7K9M2), shows user confirmation with styled badge
+- SsdpResponder: background thread listening on SSDP multicast
+  239.255.255.250:1900, responds with server LOCATION to M-SEARCH
+  queries for urn:stewart:service:mediamanager:1
+- AuthFilter: device token auth via ?key= parameter (replaces legacy
+  shared roku_api_key for stream/poster/backdrop endpoints)
+- RokuFeedServlet: device token auth only (legacy API key removed)
+- AuthService.invalidateUserSessions: now also revokes device tokens
+- SecurityServiceInitListener: saves returnPath on auth redirect
+- LoginView: redirects to returnPath after login (supports pair flow)
+- ZXing dependency added (core + javase 3.5.3)
+
+Roku channel updates:
+- PairTask.brs/xml: background worker for SSDP discovery, pair code
+  request, and completion polling
+- SettingsScreen: redesigned with SSDP auto-discovery → QR code display
+  → polling → success flow. Manual server/key entry as fallback
+- Stores username alongside serverUrl/apiKey in Roku registry
+
+Legacy Roku API key auth removed:
+- AuthFilter no longer falls back to roku_api_key for stream endpoints
+- RokuFeedServlet requires device token (no shared key)
+- BuddyApiServlet still uses buddy_api_key (unchanged)
+- Feature 46 added: future buddy auth improvement via pairing
+
+FEATURES.md updated: Features 43a-d (in progress), 44 (planned),
+  45a-c (planned), 46 (planned)
+
+Files created: V039 migration, DeviceToken.kt, PairCode.kt,
+  PairingService.kt, PairingServlet.kt, PairConfirmView.kt,
+  SsdpResponder.kt, PairTask.brs, PairTask.xml
+Files modified: libs.versions.toml, build.gradle.kts, AuthFilter.kt,
+  RokuFeedServlet.kt, RokuFeedService.kt, AuthService.kt, Main.kt,
+  SecurityServiceInitListener.kt, LoginView.kt, SettingsScreen.brs,
+  SettingsScreen.xml, FeedTask.brs, DetailScreen.brs, EpisodePicker.brs,
+  MainScene.brs, FEATURES.md, claude.log
+===
+
+=== 2026-03-06 — Roku SSDP + QR Pairing Debugging ===
+End-to-end debugging of SSDP discovery and QR code pairing between
+Roku channel and mediaManager server running in Docker on Synology NAS.
+
+Docker networking:
+- Switched to `network_mode: host` with port 16000 (avoids port 8080
+  conflicts with Synology DSM). Removed `ports:` mappings from
+  docker-compose.yml
+- Added `--port` CLI flag to Main.kt for configurable listen port
+- Dockerfile CMD reformatted to multi-line
+
+SSDP fixes (SsdpResponder.kt):
+- Explicit LAN interface selection: filter out docker*/veth/br- interfaces,
+  join multicast on the first non-Docker interface with an IPv4 address
+- Unicast response: send SSDP response via a fresh DatagramSocket bound to
+  the LAN IP, not the multicast socket (fixes Roku not receiving responses)
+- Fatal bind failure: System.exit(1) on BindException (port 1900 conflict
+  with Synology UPnP)
+- Suppress log noise from non-M-SEARCH SSDP packets (NOTIFY from other
+  devices)
+
+Roku PairTask.brs fixes:
+- SSDP receive: bind to Roku's own IP (via roDeviceInfo.GetIPAddrs()),
+  add notifyReadable(true), read data via udp.ReceiveStr() not msg.GetString()
+- HTTP POST (pair/start): switched from sync PostFromString() to async
+  AsyncPostFromString() + roUrlEvent — sync PostFromString returns HTTP code
+  as integer, then GetResponseCode() crashes ("Member function not found")
+- HTTP GET (pair/status poll): switched from sync GetToString() to async
+  AsyncGetToString() + roUrlEvent for same reason
+- Field ordering fix: set pairToken and pairUsername BEFORE pairStatus,
+  because the pairStatus observer fires immediately on the render thread
+  and needs token/username to already be populated. This was causing
+  "Server URL and API key are required" error after successful pairing
+
+Result: Full pairing flow working — SSDP discovery -> pair code -> QR display
+  -> phone scan -> login -> confirmation -> token saved -> feed fetched
+
+Files modified: SsdpResponder.kt, PairTask.brs, Dockerfile, FEATURES.md
+Features 43a-c marked done, 43 (parent) marked done
+===
+
+=== 2026-03-07 00:40 — Fix Roku video streaming (full-range 206) ===
+Diagnosed and fixed Roku playback failure at ~1 minute mark.
+
+Root cause: VideoStreamServlet's 16 MiB chunk cap on Range responses. The Roku
+sends open-ended Range headers (e.g., bytes=0-) and expects the server to stream
+the full file via a persistent connection with TCP flow control. The 16 MiB cap
+forced the Roku into a multi-request pattern it doesn't follow — after receiving
+the first 16 MiB, the Roku never requested more data and failed with "malformed
+data" (-5) when the buffer was exhausted (~1 minute of video).
+
+Iterative debugging:
+1. Restored 16 MiB cap with proper 206 headers (baseline: plays ~1 min, then fails)
+2. Analyzed server logs: Roku makes 6 rapid parallel requests in first 0.3s,
+   all in the 0-19MiB range, some canceled (connection reset). No further
+   requests ever made — Roku expects continuous streaming, not chunked fetching.
+3. Removed chunk cap entirely + added proper response headers (resp.status=206,
+   Content-Range, Content-Length) — this was the fix. Previous no-cap attempt
+   failed because response headers were missing entirely.
+
+Key insight: Normal HTTP servers (Apache/Nginx) serve the full requested range
+and let TCP flow control handle backpressure. The artificial 16 MiB cap was a
+workaround that only delayed the failure by one buffer's worth of playback.
+
+Also fixed Jetty idle timeout (300s, up from 30s default) in previous iteration
+to prevent timeout kills on long-lived streaming connections.
+
+Files modified:
+- VideoStreamServlet.kt — removed maxChunkSize cap, added proper 206 response
+  headers (Content-Range, Content-Length, explicit status code)
+- Main.kt — Jetty idle timeout override (from previous iteration, already committed)
+- FEATURES.md — updated 9g description
+
+Docker images deployed: 202603070029 (cap+headers), 202603070036 (no-cap+headers, final)
+===
+
+=== 2026-03-07 08:40 — Active Sessions & Watchtower ===
+
+Marked Bulk Tag Seeding (FEATURES.md) as done.
+
+Implemented Feature 44: Active Sessions & Token Management
+- V040 migration: added user_agent and last_used_at columns to session_token
+- SessionToken entity: added user_agent and last_used_at fields
+- AuthService: captures user-agent on login, updates last_used_at on cookie
+  validation, tracks current token hash in VaadinSession, added revokeSession(),
+  revokeAllSessionsExceptCurrent(), getCurrentTokenHash() with lazy cookie derivation
+- ActiveSessionsView (route /sessions): unified grid showing browser sessions and
+  Roku device tokens with type badges, user-agent summary, created/last-used/expiry
+  dates, "Current" label for active session, per-item revoke, "Revoke All Other
+  Sessions" with confirmation dialog
+- MainLayout: added "Active Sessions" to profile dropdown menu
+- UserManagementView: added "Sessions" button per user for admin cross-user viewing,
+  cleaned up deleteUser to use invalidateUserSessions
+- SecurityServiceInitListener: /sessions accessible to all authenticated users
+- FEATURES.md: marked Feature 44 as done
+
+Bug fix: getCurrentTokenHash() returned null for pre-upgrade sessions because
+the token hash was only set during establishSession() or validateToken(), but
+SecurityServiceInitListener skips cookie restore when user is already in Vaadin
+session. Fixed by lazily deriving hash from mm_auth cookie on first access.
+
+Watchtower auto-deploy:
+- Added Watchtower service to NAS docker-compose (polls :latest every 60s,
+  HTTP API on port 16001 for on-demand trigger)
+- secrets/deploy.agent_visible_env: WATCHTOWER_TOKEN for API auth
+- lifecycle/docker-build.sh: loads token, triggers POST /v1/update after push,
+  graceful fallback if Watchtower unreachable
+- CLAUDE.md: replaced manual deploy instructions with Watchtower documentation
+- Docker socket on Synology DSM: /volume1/docker/docker.sock
+
+Files created:
+- src/main/kotlin/net/stewart/mediamanager/ActiveSessionsView.kt
+- src/main/resources/db/migration/V040__session_token_metadata.sql
+- secrets/deploy.agent_visible_env
+
+Files modified:
+- src/main/kotlin/net/stewart/mediamanager/entity/SessionToken.kt
+- src/main/kotlin/net/stewart/mediamanager/service/AuthService.kt
+- src/main/kotlin/net/stewart/mediamanager/MainLayout.kt
+- src/main/kotlin/net/stewart/mediamanager/UserManagementView.kt
+- lifecycle/docker-build.sh
+- CLAUDE.md
+- FEATURES.md
+
+Docker images deployed: 202603070843, 202603070844, 202603070851
+===
+
+=== 2026-03-07 — Remove catalog-specific tags from auto-populate ===
+- Removed franchise tag definitions (24 entries) and "80s Classic" decade tag from BulkTagUpdater
+- Kept TMDB genre-based tag population (7 genre definitions driven by TMDB metadata)
+- Removed FranchiseTagDef data class and all franchise/decade matching code
+- Bumped SchemaUpdater version to 2 (re-run will only seed genre tags going forward)
+- Existing franchise and 80s tags remain in DB (not deleted), just no longer auto-created
+- Updated docs/FEATURES.md: removed feature section, added to completed features table
+- Files modified: service/BulkTagUpdater.kt, docs/FEATURES.md
+===
+
+=== 2026-03-07 12:30 — Buddy API key hashing: fix and commit ===
+- Continued from previous session that implemented buddy API key hashing
+- Diagnosed FlywayException: duplicate V040 migration number (V040__buddy_api_key_table.sql
+  conflicted with existing V040__session_token_metadata.sql). File was already renamed to V042
+  in source but stale build cache still had the old V040 copy.
+- Ran `./gradlew clean test` — all 423 tests pass
+- svn add + commit as r375: BuddyApiKey entity, BuddyKeyService, V042 migration,
+  updated BuddyApiServlet auth, redesigned SettingsView with multi-key grid
+- Updated docs/FEATURES.md: marked "Hash Buddy API Key" as done (r375)
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+===
+
+=== 2026-03-07 15:20 — User self-service password changes ===
+- Added PasswordService.validate() with centralized password policy:
+  min 8, max 128 chars, cannot match username, must differ from current
+- Updated ChangePasswordView to support both forced (must_change_password
+  intercept) and voluntary access from profile menu
+- Added "Change Password" to MainLayout profile menu (between Active
+  Sessions and Logout)
+- Wired centralized validation into UserManagementView (reset PW + add
+  user dialogs) and SetupView
+- Extracted MIN_PASSWORD_LENGTH constant, replaced all hardcoded "8"s
+- Committed r389, deployed Docker image
+===
+
+=== 2026-03-07 21:54 — Smart Tag Association (Feature #4) ===
+- Added TagSourceType enum: MANUAL, GENRE, COLLECTION
+- V044 migration: source_type/source_key on tag, tmdb_collection_id/name on title
+- TmdbService extracts belongs_to_collection from TMDB detail responses
+- TmdbEnrichmentAgent stores collection data and calls autoAssociateOnEnrichment
+- TagService: autoAssociateOnEnrichment (genre + collection matching),
+  createCollectionTag (with auto-association), getSuggestedCollections
+- TagManagementView: Source column in grid, Suggested Collections UI with
+  color picker and one-click tag creation
+- PopulateCollectionUpdater: backfills collection data via TMDB API,
+  runs auto-association for all enriched titles
+- Deployed as Docker image 202603072154, committed r402
+===

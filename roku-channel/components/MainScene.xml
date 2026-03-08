@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+    <interface>
+    </interface>
+
+    <script type="text/brightscript" uri="MainScene.brs" />
+
+    <children>
+        <!-- Dark background -->
+        <Rectangle
+            id="background"
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Screens (toggled via visibility) -->
+        <SettingsScreen
+            id="settingsScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <HomeScreen
+            id="homeScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <DetailScreen
+            id="detailScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <EpisodePicker
+            id="episodePicker"
+            visible="false"
+            translation="[0, 0]" />
+
+        <!-- Video player -->
+        <Video
+            id="videoPlayer"
+            visible="false"
+            width="1920"
+            height="1080"
+            translation="[0, 0]"
+            enableUI="true"
+            notificationInterval="10" />
+
+        <!-- Feed fetcher task -->
+        <FeedTask id="feedTask" />
+    </children>
+</component>

@@ -1,0 +1,31 @@
+[versions]
+vaadin = "25.0.5"
+vok = "0.18.1"
+kotlin = "2.3.10"
+slf4j = "2.0.17"
+micrometer = "1.14.4"
+
+[libraries]
+vaadin-core = { module = "com.vaadin:vaadin-core", version.ref = "vaadin" }
+vaadin-dev = { module = "com.vaadin:vaadin-dev", version.ref = "vaadin" }
+vaadin-boot = "com.github.mvysny.vaadin-boot:vaadin-boot:13.6"
+karibu-dsl = "com.github.mvysny.karibudsl:karibu-dsl-v23:2.5.0"
+vok-db = { module = "eu.vaadinonkotlin:vok-framework-vokdb", version.ref = "vok" }
+hikaricp = "com.zaxxer:HikariCP:5.1.0"
+h2 = "com.h2database:h2:2.4.240"
+flyway-core = "org.flywaydb:flyway-core:10.15.2"
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+jbcrypt = "org.mindrot:jbcrypt:0.4"
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
+gson = "com.google.code.gson:gson:2.11.0"
+openpdf = "com.github.librepdf:openpdf:2.0.3"
+zxing-core = "com.google.zxing:core:3.5.3"
+zxing-javase = "com.google.zxing:javase:3.5.3"
+karibu-testing = "com.github.mvysny.kaributesting:karibu-testing-v24:2.6.2"
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+
+[plugins]
+vaadin = { id = "com.vaadin", version.ref = "vaadin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+owasp-depcheck = { id = "org.owasp.dependencycheck", version = "12.1.1" }
