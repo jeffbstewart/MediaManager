@@ -2682,3 +2682,40 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   runs auto-association for all enriched titles
 - Deployed as Docker image 202603072154, committed r402
 ===
+
+=== 2026-03-08 05:00 — GitHub Issues: labels and feature tracker migration ===
+- Verified gh CLI on PATH and authenticated as jeffbstewart
+- Deleted 4 unused default labels: good first issue, help wanted, invalid, question
+- Kept default labels: bug, enhancement, documentation, duplicate, wontfix
+- Created 8 project-specific labels: security, roku, ios, transcoding, ui,
+  wish-list, backlog, accepted-risk
+- Migrated 16 open items from docs/FEATURES.md to GitHub Issues (#1–#16):
+  - 8 enhancements: iOS app (#1), Roku ECP (#2), family movies (#3),
+    popularity refresh (#4), mobile offline (#5), buddy auth pairing (#7),
+    Roku trick play (#10), multi-user Roku (#11)
+  - 4 bugs: session revocation notification (#6), Roku token revocation (#8),
+    Roku navigation freeze (#9), wish list season bugs (#14, #15)
+  - 3 security: Docker secrets (#12), buddy API hardening (#13),
+    username hashing accepted risk (#16)
+- Updated docs/FEATURES.md: replaced all open/completed sections with migration
+  notice pointing to GitHub Issues; kept completed features table; added
+  "Feature Tracker Migration" to completed features
+- Files modified: docs/FEATURES.md, claude.log
+===
+
+=== 2026-03-08 14:30 — Usability issues and GitHub Actions CI/CD ===
+- Created "usability" label on GitHub
+- Created 6 usability issues (#17-#22):
+  #17 Publish Docker image to ghcr.io
+  #18 GitHub Actions CI: test, build, push
+  #19 Polished docker-compose.yml for new users
+  #20 Dockerized transcode buddy with GPU support
+  #21 CPU-based Whisper subtitle generation on NAS
+  #22 Update documentation for docker-compose onboarding
+- Decided on tagging scheme: :dev (local builds), :latest (CI), :rollback (previous)
+- Decided on Option B: GitHub Actions is sole publisher to ghcr.io (no extra PAT needed)
+- Created .github/workflows/ci.yml (test on PR)
+- Created .github/workflows/release.yml (test + build + push to ghcr.io on merge to main)
+- Repository made public
+- Files created: .github/workflows/ci.yml, .github/workflows/release.yml
+===

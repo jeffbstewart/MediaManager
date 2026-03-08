@@ -62,31 +62,45 @@ See [Getting Started](GETTING_STARTED.md) for the full walkthrough.
 
 ## Architecture
 
-```
-                              ┌─── Synology NAS ──────────────────────────┐
-                              │                                           │
-Clients                       │  Reverse Proxy         Docker             │
-─────────                     │  ──────────────        ──────             │
-                              │                                           │
-Browser ──────┐               │  DSM Reverse    HTTP   mediaManager       │
-              ├── HTTPS ──►   │  Proxy (nginx) ──────► (Jetty :8080)      │
-Roku Channel ─┘               │  TLS terminate         │   │              │
-                              │  Let's Encrypt         │   │  Volume      │
-                              │                        │   ├──► /media    │
-                              │  Watchtower            │   │   (NAS files)│
-                              │  (auto-deploy)         │   │              │
-                              │                        │   └──► /cache    │
-                              │  Prometheus            │      (H2 + data) │
-                              │  ──────────            │                  │
-                              │  :9090 ──► scrape ──►  │  Internal server │
-                              │                        │  (:8081 → :16002)│
-                              │                        │  /health /metrics│
-                              └────────────────────────│──────────────────┘
-                                                       │
-                                                       │ REST API
-                                                       ▼
-                                               Transcode Buddy
-                                               (GPU worker)
+```mermaid
+graph LR
+    subgraph Clients
+        Browser
+        Roku[Roku Channel]
+    end
+
+    subgraph NAS["Synology NAS"]
+        subgraph Proxy["Reverse Proxy"]
+            nginx["DSM Reverse Proxy (nginx)<br/>TLS terminate<br/>Let's Encrypt"]
+        end
+
+        subgraph Docker
+            subgraph App["mediaManager (Jetty :8080)"]
+                direction TB
+            end
+            subgraph Internal["Internal Server (:8081 → :16002)"]
+                health["/health /metrics"]
+            end
+        end
+
+        Watchtower["Watchtower<br/>(auto-deploy)"]
+        Prometheus[":9090"]
+
+        subgraph Volumes
+            media["/media (NAS files)"]
+            cache["/cache (H2 + data)"]
+        end
+    end
+
+    Buddy["Transcode Buddy<br/>(GPU worker)"]
+
+    Browser -- HTTPS --> nginx
+    Roku -- HTTPS --> nginx
+    nginx -- HTTP --> App
+    App --> media
+    App --> cache
+    Prometheus -- scrape --> Internal
+    App -- REST API --> Buddy
 ```
 
 The Synology NAS hosts everything: the DSM built-in reverse proxy terminates TLS with a Let's Encrypt certificate and forwards traffic to the mediaManager Docker container on port 8080. The server runs as a single Java process with an embedded Jetty web server. A separate internal Jetty server on port 8081 (mapped to LAN port 16002) serves `/health` and `/metrics` — these are not internet-accessible. Background agents handle barcode lookups, TMDB enrichment, NAS file scanning, and video transcoding. Watchtower monitors for new Docker images and auto-deploys updates. An optional Transcode Buddy worker offloads GPU-intensive transcoding to a separate machine.
