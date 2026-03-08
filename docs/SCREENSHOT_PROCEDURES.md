@@ -53,5 +53,5 @@ Start from a logged-out state. Navigate to the login page first.
 ## Notes
 
 - All screenshots saved as PNG
-- The `data/screenshots/` directory is for throwaway/debug screenshots (svn:ignore'd)
+- The `data/screenshots/` directory is for throwaway/debug screenshots (gitignored)
 - The `docs/images/screenshots/` directory is for committed doc screenshots

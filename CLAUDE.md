@@ -8,7 +8,7 @@ The history of the app's evolution is recorded in `claude.log` in the project ro
 
 ## Working Directory
 
-At the start of every session, `cd` to the project root (`/c/programming/jhome/kotlin/mediaManager`) as your **first Bash command** so all subsequent commands can use relative paths without repeating the `cd` prefix. Do this before any other shell operations on the mediaManager project.
+At the start of every session, `cd` to the project root (`/c/Programming/github/MediaManager`) as your **first Bash command** so all subsequent commands can use relative paths without repeating the `cd` prefix. Do this before any other shell operations on the mediaManager project.
 
 ## Build and Run Commands
 
@@ -171,7 +171,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 
 ### Database
 
-H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, which is svn-ignored). Flyway manages schema migrations via SQL files in `src/main/resources/db/migration/`, applied in lexicographic order on startup. Flyway tracks applied migrations in its `flyway_schema_history` table and checksums each file to detect tampering.
+H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, which is gitignored). Flyway manages schema migrations via SQL files in `src/main/resources/db/migration/`, applied in lexicographic order on startup. Flyway tracks applied migrations in its `flyway_schema_history` table and checksums each file to detect tampering.
 
 **Encryption at rest:** When `H2_FILE_PASSWORD` is set, the database uses AES encryption (`CIPHER=AES`). On first startup with the env var, Bootstrap automatically exports the unencrypted DB to SQL, backs up the original file (`.mv.db.pre-encryption`), creates a new encrypted DB, and reimports. The JDBC URL becomes `jdbc:h2:file:./data/mediamanager;CIPHER=AES` and the HikariCP password is the compound `"filePassword userPassword"` format. Once encrypted, `H2_FILE_PASSWORD` is required on every startup.
 
@@ -313,15 +313,11 @@ Two access levels enforce role-based access:
 
 **Sessions:** 30-day persistent login via `mm_session` cookie mapped to `session_token` DB rows. Cookie set via client-side JS. Expired tokens cleaned on startup.
 
-**Testing:** `secrets/test-credentials.agent_visible_env` (svn:ignore'd) contains test account credentials for automated UI and API testing. Claude may read this file. Copy from `secrets/example.test-credentials.env` and create the test accounts manually after first setup.
+**Testing:** `secrets/test-credentials.agent_visible_env` (gitignored) contains test account credentials for automated UI and API testing. Claude may read this file. Copy from `secrets/example.test-credentials.env` and create the test accounts manually after first setup.
 
 ## Version Control
 
-This repository uses **Subversion (svn)**, not git. When creating new files, always add them to svn tracking with `svn add`.
-
-**svn:ignore** on project root: `.gradle`, `.kotlin`, `build`, `.idea`, `*.iml`, `out`, `data`, `.playwright-mcp`, `.claude`, `roku-channel.zip`
-**svn:ignore** on `secrets/`: `.env`, `roku-deploy.env`, `*.agent_visible_env`
-**svn:ignore** on `src/main/`: `bundles`, `frontend`
+This repository uses **git** hosted on GitHub. See `.gitignore` for excluded files and directories.
 
 ### Commit Message Style
 
@@ -340,29 +336,15 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - **First line**: imperative verb ("Add", "Fix", "Replace", "Redesign"), concise summary
 - **Body**: explain the what/why, list notable changes with `-` bullets
 - **Co-author trailer**: always include when Claude authored or co-authored the change
-- No need to check `svn log` for style — just follow this format
+- No need to check `git log` for style — just follow this format
 
 ### Presubmit Check
 
-Before any `svn commit`, Claude must run the presubmit checker:
-
-```bash
-svn diff | bash lifecycle/presubmit-check.sh
-```
-
-This scans added lines in the diff for sensitive data: banned commit markers, hardcoded IP addresses, UUIDs, long hex strings (possible keys/hashes), and API key prefixes (`sk-`, `Bearer`). Known-safe values (localhost, SSDP multicast, etc.) are excluded via `lifecycle/presubmit-allowlist.txt`.
-
-This is a **hard block** — if the script exits non-zero, do not commit. Instead, report the violations so they can be cleaned up or allowlisted.
-
-For Git repositories, wire this into `.git/hooks/pre-commit`:
-```bash
-#!/bin/sh
-git diff --cached | ./lifecycle/presubmit-check.sh
-```
+A git pre-commit hook scans staged changes for sensitive data (hardcoded IPs, UUIDs, API keys, etc.). If the commit is rejected, fix the violations or add known-safe values to `lifecycle/presubmit-allowlist.txt`.
 
 ### Documentation Check Before Commit
 
-Before each `svn commit`, consider whether the changes require documentation updates. Check:
+Before each commit, consider whether the changes require documentation updates. Check:
 
 - **CLAUDE.md** — Does a new flag, entity, service, servlet, or architectural change need to be reflected here?
 - **README.md** — Does the user-facing overview need updating?
@@ -375,7 +357,7 @@ If documentation updates are needed, include them in the same commit or a follow
 
 ## Roku Debugging
 
-Three helper scripts in `lifecycle/` support Roku channel development. All read `ROKU_IP` and `ROKU_DEV_PASSWORD` from `secrets/roku-deploy.env` (svn:ignore'd; copy from `secrets/example.roku-deploy.env`).
+Three helper scripts in `lifecycle/` support Roku channel development. All read `ROKU_IP` and `ROKU_DEV_PASSWORD` from `secrets/roku-deploy.env` (gitignored; copy from `secrets/example.roku-deploy.env`).
 
 ### Deploy Channel
 
@@ -397,7 +379,7 @@ The Roku debug console (port 8085) streams all BrightScript `print` output in re
 ./lifecycle/roku-debug.sh data/custom-output.log           # Custom log file name
 ```
 
-Always write debug logs to the `data/` directory (svn:ignore'd) to avoid cluttering the project root.
+Always write debug logs to the `data/` directory (gitignored) to avoid cluttering the project root.
 
 All mediaManager channel logs use the `[MM]` prefix. Filter with:
 ```bash
@@ -438,7 +420,7 @@ grep '\[MM\]' data/roku-debug.log
 
 ## Screenshots
 
-Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/navbar-test.png`). The `data/` directory is svn:ignore'd so screenshots never enter version control.
+Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/navbar-test.png`). The `data/` directory is gitignored so screenshots never enter version control.
 
 ## MCP Tools
 
@@ -450,7 +432,7 @@ The Playwright MCP server is available for browser automation and visual verific
 
 **Login persistence:** The browser session persists across Playwright launches. The default state when opening the browser is **already logged in** as the admin test user. You do not need to navigate to `/login` or enter credentials at the start of each session — just navigate directly to the page you want to test.
 
-Console logs are stored in `.playwright-mcp/` (svn:ignore'd).
+Console logs are stored in `.playwright-mcp/` (gitignored).
 
 ## Conversation Transcript
 

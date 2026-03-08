@@ -2,7 +2,6 @@
 # presubmit-check.sh — Scan staged changes for sensitive data before commit.
 #
 # Usage:
-#   svn diff | ./lifecycle/presubmit-check.sh        # Subversion
 #   git diff --cached | ./lifecycle/presubmit-check.sh  # Git pre-commit hook
 #
 # Exit codes:
@@ -96,7 +95,7 @@ check_pattern() {
 DIFF_INPUT=$(cat)
 
 if [[ -z "$DIFF_INPUT" ]]; then
-    echo "presubmit: no diff input (pipe svn diff or git diff --cached)"
+    echo "presubmit: no diff input (pipe git diff --cached)"
     exit 0
 fi
 

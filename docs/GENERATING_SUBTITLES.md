@@ -65,7 +65,7 @@ The first time you run Whisper with `--model large-v3-turbo`, it auto-downloads 
 2. Place them in a local directory, e.g., `C:\whisper\models\large-v3-turbo\`
 3. Set `whisper_model_dir=C:\whisper\models` in your buddy config
 
-**Do NOT check the model into Subversion.** Model files are large binaries that don't diff well and would bloat the repository. They are downloaded once per machine and cached locally.
+**Do NOT commit the model to git.** Model files are large binaries that don't diff well and would bloat the repository. They are downloaded once per machine and cached locally.
 
 ---
 
