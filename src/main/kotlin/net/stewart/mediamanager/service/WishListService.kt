@@ -17,11 +17,16 @@ data class MediaWishAggregate(
     val tmdbPosterPath: String?,
     val tmdbReleaseYear: Int?,
     val tmdbPopularity: Double?,
+    val seasonNumber: Int?,
     val voteCount: Int,
     val voters: List<String>   // display names
 ) {
     /** Returns a type-safe TMDB key, or null if media type is missing. */
     fun tmdbKey(): TmdbId? = TmdbId.of(tmdbId, tmdbMediaType)
+
+    /** Display title including season if present. */
+    val displayTitle: String
+        get() = if (seasonNumber != null) "$tmdbTitle — Season $seasonNumber" else tmdbTitle
 }
 
 object WishListService {
@@ -204,17 +209,18 @@ object WishListService {
         val userMap = AppUser.findAll().associateBy { it.id }
 
         return activeMedia
-            .groupBy { it.tmdbKey()!! }
+            .groupBy { Pair(it.tmdbKey()!!, it.season_number) }
             .map { (key, wishes) ->
-                val tmdbId = key.id
+                val (tmdbKey, seasonNumber) = key
                 val first = wishes.first()
                 MediaWishAggregate(
-                    tmdbId = tmdbId,
+                    tmdbId = tmdbKey.id,
                     tmdbTitle = first.tmdb_title ?: "Unknown",
                     tmdbMediaType = first.tmdb_media_type,
                     tmdbPosterPath = first.tmdb_poster_path,
                     tmdbReleaseYear = first.tmdb_release_year,
                     tmdbPopularity = first.tmdb_popularity,
+                    seasonNumber = seasonNumber,
                     voteCount = wishes.size,
                     voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name }
                 )

@@ -52,7 +52,7 @@ class PurchaseWishesView : VerticalLayout() {
                     }
                 }).setHeader("").setWidth("70px").setFlexGrow(0)
 
-                addColumn { it.tmdbTitle }.setHeader("Title").setFlexGrow(1)
+                addColumn { it.displayTitle }.setHeader("Title").setFlexGrow(3)
                 addColumn { it.tmdbReleaseYear?.toString() ?: "" }.setHeader("Year").setWidth("80px").setFlexGrow(0)
                 addColumn { if (it.tmdbMediaType == "TV") "TV" else "Movie" }.setHeader("Type").setWidth("80px").setFlexGrow(0)
                 addColumn { it.voteCount.toString() }.setHeader("Votes").setWidth("80px").setFlexGrow(0)
