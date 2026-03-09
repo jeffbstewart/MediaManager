@@ -40,6 +40,10 @@ data class Title(
 
     /** Returns a poster URL routed through the local cache servlet, or null if no poster. */
     fun posterUrl(size: PosterSize): String? {
+        // Personal videos use local hero images instead of TMDB posters
+        if (media_type == MediaType.PERSONAL.name && poster_cache_id != null) {
+            return "/local-images/$poster_cache_id"
+        }
         poster_path ?: return null
         return "/posters/${size.pathSegment}/${id}"
     }

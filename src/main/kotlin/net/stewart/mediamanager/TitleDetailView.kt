@@ -1005,6 +1005,11 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                 addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
                 addClickListener { openEditPersonalVideoDialog(title) }
             })
+
+            add(Button("Set Hero Image", VaadinIcon.PICTURE.create()).apply {
+                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+                addClickListener { openHeroImagePicker(title) }
+            })
         })
 
         val detailItems = mutableListOf<String>()
@@ -1086,6 +1091,140 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         footer.element.setAttribute("slot", "footer")
         dialog.add(footer)
         dialog.open()
+    }
+
+    // --- Hero Image Picker ---
+
+    private fun openHeroImagePicker(title: Title) {
+        // Find the video file for this title
+        val transcode = Transcode.findAll().firstOrNull { it.title_id == title.id && it.file_path != null }
+        if (transcode == null) {
+            Notification.show("No video file found", 3000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            return
+        }
+
+        val videoFile = java.io.File(transcode.file_path!!)
+        // If the source needs transcoding, try the ForBrowser copy
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val actualFile = if (nasRoot != null && TranscoderAgent.needsTranscoding(videoFile.absolutePath)) {
+            val forBrowser = TranscoderAgent.getForBrowserPath(nasRoot, videoFile.absolutePath)
+            if (forBrowser.exists()) forBrowser else videoFile
+        } else {
+            videoFile
+        }
+
+        if (!actualFile.exists()) {
+            Notification.show("Video file not accessible", 3000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            return
+        }
+
+        val dialog = Dialog().apply {
+            headerTitle = "Choose Hero Image"
+            width = "700px"
+        }
+
+        val statusLabel = Span("Extracting frames...").apply {
+            style.set("color", "var(--lumo-secondary-text-color)")
+        }
+        val frameGrid = Div().apply {
+            style.set("display", "grid")
+            style.set("grid-template-columns", "repeat(4, 1fr)")
+            style.set("gap", "var(--lumo-space-s)")
+        }
+
+        dialog.add(VerticalLayout().apply {
+            isPadding = false
+            isSpacing = true
+            add(statusLabel, frameGrid)
+        })
+
+        var jitterSeed = 0
+        var currentFrames: List<java.io.File> = emptyList()
+
+        val shuffleBtn = Button("Shuffle").apply {
+            icon = VaadinIcon.REFRESH.create()
+            addThemeVariants(ButtonVariant.LUMO_TERTIARY)
+            isEnabled = false
+        }
+        val cancelBtn = Button("Cancel") {
+            dialog.close()
+            HeroImageService.cleanupTempFrames(currentFrames)
+        }
+        val footer = HorizontalLayout().apply {
+            justifyContentMode = FlexComponent.JustifyContentMode.BETWEEN
+            width = "100%"
+            isSpacing = true
+            add(shuffleBtn, cancelBtn)
+        }
+        footer.element.setAttribute("slot", "footer")
+        dialog.add(footer)
+
+        fun loadFrames() {
+            frameGrid.removeAll()
+            statusLabel.text = "Extracting frames..."
+            shuffleBtn.isEnabled = false
+
+            val ui = this.ui.orElse(null) ?: return
+            val seed = jitterSeed
+            Thread {
+                val oldFrames = currentFrames
+                val frames = HeroImageService.extractCandidateFrames(actualFile, seed)
+                ui.access {
+                    HeroImageService.cleanupTempFrames(oldFrames)
+                    currentFrames = frames
+
+                    if (frames.isEmpty()) {
+                        statusLabel.text = "Could not extract frames from this video."
+                        return@access
+                    }
+                    statusLabel.text = "Click a frame to set it as the hero image:"
+                    shuffleBtn.isEnabled = true
+
+                    for (frame in frames) {
+                        val bytes = frame.readBytes()
+                        val base64 = java.util.Base64.getEncoder().encodeToString(bytes)
+
+                        frameGrid.add(Div().apply {
+                            style.set("border-radius", "var(--lumo-border-radius-m)")
+                            style.set("overflow", "hidden")
+                            style.set("cursor", "pointer")
+                            style.set("border", "2px solid transparent")
+                            style.set("transition", "border-color 0.15s")
+                            element.executeJs(
+                                "this.addEventListener('mouseenter',()=>this.style.borderColor='var(--lumo-primary-color)');" +
+                                "this.addEventListener('mouseleave',()=>this.style.borderColor='transparent');"
+                            )
+
+                            add(Image("data:image/jpeg;base64,$base64", "candidate frame").apply {
+                                width = "100%"
+                                style.set("height", "auto")
+                                style.set("display", "block")
+                            })
+
+                            addClickListener {
+                                HeroImageService.setHeroImage(title, bytes)
+                                HeroImageService.cleanupTempFrames(frames)
+                                currentTitle = Title.findById(title.id!!)
+                                buildContent(currentTitle!!)
+                                dialog.close()
+                                Notification.show("Hero image set", 2000, Notification.Position.BOTTOM_START)
+                                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                            }
+                        })
+                    }
+                }
+            }.start()
+        }
+
+        shuffleBtn.addClickListener {
+            jitterSeed++
+            loadFrames()
+        }
+
+        dialog.open()
+        loadFrames()
     }
 
     // --- Cast Row ---

@@ -2,6 +2,7 @@ package net.stewart.mediamanager
 
 import com.github.mvysny.karibudsl.v10.*
 import com.vaadin.flow.component.html.Div
+import com.vaadin.flow.component.html.Image
 import com.vaadin.flow.component.html.Span
 import com.vaadin.flow.component.icon.VaadinIcon
 import com.vaadin.flow.component.orderedlayout.FlexComponent
@@ -143,9 +144,26 @@ class PersonalVideosView : KComposite() {
         return Div().apply {
             style.set("background", "var(--lumo-contrast-5pct)")
             style.set("border-radius", "var(--lumo-border-radius-l)")
-            style.set("padding", "var(--lumo-space-m)")
+            style.set("overflow", "hidden")
             style.set("cursor", "pointer")
             style.set("transition", "background-color 0.2s")
+
+            // Hero image thumbnail (if set)
+            val heroUrl = title.posterUrl(PosterSize.FULL)
+            if (heroUrl != null) {
+                add(Image(heroUrl, title.name).apply {
+                    width = "100%"
+                    style.set("height", "160px")
+                    style.set("object-fit", "cover")
+                    style.set("display", "block")
+                })
+            }
+
+            // Card body with padding
+            val cardBody = Div().apply {
+                style.set("padding", "var(--lumo-space-m)")
+            }
+            add(cardBody)
 
             // Title row with play indicator
             val titleRow = HorizontalLayout().apply {
@@ -171,11 +189,11 @@ class PersonalVideosView : KComposite() {
                     style.set("flex-grow", "1")
                 })
             }
-            add(titleRow)
+            cardBody.add(titleRow)
 
             // Event date
             if (title.event_date != null) {
-                add(Span(title.event_date!!.format(DATE_FORMAT)).apply {
+                cardBody.add(Span(title.event_date!!.format(DATE_FORMAT)).apply {
                     style.set("color", "var(--lumo-secondary-text-color)")
                     style.set("font-size", "var(--lumo-font-size-s)")
                     style.set("display", "block")
@@ -186,7 +204,7 @@ class PersonalVideosView : KComposite() {
             // Description (truncated)
             if (!title.description.isNullOrBlank()) {
                 val desc = if (title.description!!.length > 120) title.description!!.take(120) + "..." else title.description!!
-                add(Span(desc).apply {
+                cardBody.add(Span(desc).apply {
                     style.set("color", "rgba(255,255,255,0.6)")
                     style.set("font-size", "var(--lumo-font-size-s)")
                     style.set("display", "block")
@@ -212,7 +230,7 @@ class PersonalVideosView : KComposite() {
                         style.set("white-space", "nowrap")
                     })
                 }
-                add(memberRow)
+                cardBody.add(memberRow)
             }
 
             // Tags
@@ -226,7 +244,7 @@ class PersonalVideosView : KComposite() {
                 for (tag in tags) {
                     tagRow.add(createTagBadge(tag))
                 }
-                add(tagRow)
+                cardBody.add(tagRow)
             }
 
             // Progress bar
@@ -234,7 +252,7 @@ class PersonalVideosView : KComposite() {
             if (progress != null && dur != null && dur > 0.0) {
                 val pct = ((progress.position_seconds / dur) * 100).toInt().coerceIn(0, 100)
                 if (pct in 1..94) {
-                    add(Div().apply {
+                    cardBody.add(Div().apply {
                         style.set("margin-top", "var(--lumo-space-xs)")
                         style.set("height", "3px")
                         style.set("background", "rgba(255,255,255,0.1)")

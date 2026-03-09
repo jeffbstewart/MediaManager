@@ -34,7 +34,7 @@ object LocalImageService {
             source_type = sourceType.name,
             content_type = contentType,
             created_at = LocalDateTime.now()
-        ).save()
+        ).create()
 
         log.info("Local image stored: id={} type={} size={} bytes", uuid, sourceType, bytes.size)
         return uuid
