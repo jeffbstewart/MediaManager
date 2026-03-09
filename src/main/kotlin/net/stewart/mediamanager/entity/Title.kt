@@ -2,6 +2,7 @@ package net.stewart.mediamanager.entity
 
 import com.github.vokorm.KEntity
 import com.gitlab.mvysny.jdbiorm.Dao
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /** TMDB image CDN sizes used for poster URL construction. */
@@ -30,6 +31,8 @@ data class Title(
     var content_rating: String? = null,                            // MPAA or TV rating (e.g. "PG-13", "TV-MA")
     var tmdb_collection_id: Int? = null,                           // TMDB collection ID (belongs_to_collection)
     var tmdb_collection_name: String? = null,                      // TMDB collection name
+    var event_date: LocalDate? = null,                             // Date filmed (personal videos)
+    var event_group_id: Long? = null,                              // FK to event_group (personal videos)
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

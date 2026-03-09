@@ -13,6 +13,7 @@ import com.vaadin.flow.component.notification.NotificationVariant
 import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
+import com.vaadin.flow.component.checkbox.Checkbox
 import com.vaadin.flow.component.textfield.TextField
 import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.router.PageTitle
@@ -60,6 +61,26 @@ class SettingsView : KComposite() {
                     value = configs.firstOrNull { it.config_key == "roku_base_url" }?.config_val ?: ""
                     placeholder = "https://myserver.example.com:8080"
                     helperText = "Base URL for Roku feed poster/stream URLs. Leave blank to auto-detect."
+                }
+
+                // --- Personal / Home Videos Section ---
+                hr()
+                add(Span("Personal / Home Videos").apply {
+                    style.set("font-weight", "bold")
+                    style.set("font-size", "var(--lumo-font-size-l)")
+                })
+
+                val personalEnabledCheck = Checkbox("Enable personal video support").apply {
+                    value = configs.firstOrNull { it.config_key == "personal_video_enabled" }?.config_val == "true"
+                }
+                add(personalEnabledCheck)
+
+                val personalDirField = textField("Personal Video Directory") {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "personal_video_nas_dir" }?.config_val ?: ""
+                    placeholder = "e.g., Family Videos"
+                    helperText = "Name of the directory inside the NAS root (not a full path). " +
+                        "For example, if your NAS root is /media and your home videos are in /media/Family Videos, enter \"Family Videos\"."
                 }
 
                 // --- Transcode Buddy Section ---
@@ -115,6 +136,8 @@ class SettingsView : KComposite() {
                         saveConfig("nas_root_path", nasPathField.value.trim())
                         saveConfig("ffmpeg_path", ffmpegPathField.value.trim())
                         saveConfig("roku_base_url", rokuBaseUrlField.value.trim())
+                        saveConfig("personal_video_enabled", if (personalEnabledCheck.value) "true" else "false")
+                        saveConfig("personal_video_nas_dir", personalDirField.value.trim())
                         saveConfig("buddy_lease_duration_minutes", leaseDurationField.value.trim())
                         Notification.show("Settings saved", 2000, Notification.Position.BOTTOM_START)
                             .addThemeVariants(NotificationVariant.LUMO_SUCCESS)

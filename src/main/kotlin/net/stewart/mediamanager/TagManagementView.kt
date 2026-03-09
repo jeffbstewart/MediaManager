@@ -68,6 +68,7 @@ class TagManagementView : VerticalLayout() {
                 TagSourceType.MANUAL -> "Manual"
                 TagSourceType.GENRE -> "Genre"
                 TagSourceType.COLLECTION -> "Collection"  // Legacy; no longer created
+                TagSourceType.EVENT_TYPE -> "Event Type"
             }
             Span(label).apply {
                 style.set("font-size", "var(--lumo-font-size-xs)")

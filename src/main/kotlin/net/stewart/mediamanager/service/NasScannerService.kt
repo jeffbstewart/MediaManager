@@ -97,7 +97,31 @@ object NasScannerService {
                 .toList()
         }
 
+        val personalVideoDir = getPersonalVideoDir()
+
+        // Reclassify existing discovered files from the personal video directory
+        if (personalVideoDir != null) {
+            val reclassified = DiscoveredFile.findAll()
+                .filter { it.directory.equals(personalVideoDir, ignoreCase = true) }
+                .filter { it.media_type != MediaType.PERSONAL.name }
+            if (reclassified.isNotEmpty()) {
+                for (df in reclassified) {
+                    df.media_type = MediaType.PERSONAL.name
+                    df.save()
+                }
+                log.info("Reclassified {} existing discovered files from '{}' as PERSONAL",
+                    reclassified.size, personalVideoDir)
+            }
+        }
+
         for (dir in topLevelDirs) {
+            // Personal video directory: classify all files as PERSONAL, discover recursively
+            if (personalVideoDir != null && dir.fileName.toString().equals(personalVideoDir, ignoreCase = true)) {
+                log.info("Directory '{}' classified as PERSONAL (configured personal_video_nas_dir)", dir.fileName)
+                discoverRecursive(dir, MediaType.PERSONAL.name, discovered)
+                continue
+            }
+
             val classification = classifyDirectory(dir)
             log.info("Directory '{}' classified as {}", dir.fileName, classification)
             when (classification) {
@@ -323,6 +347,24 @@ object NasScannerService {
             TranscodeFileParser.parseTvEpisodeFile(candidate.fileName)
         } else {
             TranscodeFileParser.parseMovieFile(candidate.fileName)
+        }
+
+        // Personal videos are never auto-matched; they require manual title creation
+        if (candidate.mediaType == MediaType.PERSONAL.name) {
+            DiscoveredFile(
+                file_path = candidate.filePath,
+                file_name = candidate.fileName,
+                directory = candidate.directory,
+                file_size_bytes = candidate.fileSizeBytes,
+                media_format = MediaFormat.UNKNOWN.name,
+                media_type = candidate.mediaType,
+                parsed_title = parsed.title,
+                parsed_year = parsed.year,
+                match_status = DiscoveredFileStatus.UNMATCHED.name,
+                file_modified_at = candidate.fileModifiedAt,
+                discovered_at = now
+            ).save()
+            return false
         }
 
         val matchResult = if (candidate.mediaType == MediaType.TV.name) {
@@ -551,6 +593,17 @@ object NasScannerService {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "nas_root_path" }
             ?.config_val
+    }
+
+    private fun getPersonalVideoDir(): String? {
+        val enabled = AppConfig.findAll()
+            .firstOrNull { it.config_key == "personal_video_enabled" }
+            ?.config_val
+        if (enabled != "true") return null
+        return AppConfig.findAll()
+            .firstOrNull { it.config_key == "personal_video_nas_dir" }
+            ?.config_val
+            ?.ifBlank { null }
     }
 
     private data class DiscoveredFileCandidate(

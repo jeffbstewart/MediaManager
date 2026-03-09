@@ -5,13 +5,14 @@ enum class MediaFormat {
 }
 
 enum class MediaType {
-    MOVIE, TV
+    MOVIE, TV, PERSONAL
 }
 
 enum class TagSourceType {
     MANUAL,      // User-created tag, manually populated
     GENRE,       // Backed by a TMDB genre name; auto-populated on enrichment
-    COLLECTION   // Backed by a TMDB collection ID; auto-populated on enrichment
+    COLLECTION,  // Backed by a TMDB collection ID; auto-populated on enrichment (legacy, no longer created)
+    EVENT_TYPE   // Pre-seeded event categories for personal/home videos
 }
 
 enum class ItemCondition {
