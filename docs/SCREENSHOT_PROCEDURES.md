@@ -37,18 +37,20 @@ Start from a logged-out state. Navigate to the login page first.
 | `docs/images/screenshots/catalog.png` | `/catalog` | Viewer | Catalog grid with posters |
 | `docs/images/screenshots/title-detail.png` | `/title/{id}` | Viewer | Pick a well-known enriched movie title with poster/cast/description. Use tall viewport (see Browser Setup). |
 | `docs/images/screenshots/player.png` | (video dialog) | Viewer | Find a playable title via catalog search (e.g., House S01E01). Click "Watch in Browser", let video start playing, then wait for user prompt before capturing. |
+| `docs/images/screenshots/wishlist.png` | `/wishlist` | Viewer | Wish list with a mix of active and status-updated wishes. Populate wishes first, then have admin set various statuses before capturing. |
 
 ### 3. Admin Screenshots (log out, log in as admin)
 
 | File | Route | Account | Notes |
 |------|-------|---------|-------|
+| `docs/images/screenshots/purchase-wishes.png` | `/purchase-wishes` | Admin | User wishes grid with mixed statuses (Ordered, Rejected, Not Available, Unreviewed). Populate viewer wishes first. |
 | `docs/images/screenshots/transcode-status.png` | `/transcodes/status` | Admin | Transcoder status panel |
 | `docs/images/screenshots/users.png` | `/users` | Admin | User management grid |
 
 ## Referenced In
 
-- `docs/USER_GUIDE.md` — home, catalog, title-detail, player
-- `docs/ADMIN_GUIDE.md` — transcode-status, users
+- `docs/USER_GUIDE.md` — home, catalog, title-detail, player, wishlist
+- `docs/ADMIN_GUIDE.md` — purchase-wishes, transcode-status, users
 
 ## Notes
 

@@ -130,15 +130,34 @@ Toggle subtitles on or off from your profile settings. When enabled, subtitles a
 
 ## Wish Lists
 
-Open **My Wish List** from the sidebar. You have two lists:
+Open **My Wish List** from the sidebar. Your wish list lets you request new media and track priority transcoding.
+
+![Wish list](images/screenshots/wishlist.png)
 
 ### Media Wishes
 
-Movies or shows you'd like the collection owner to buy as physical media. Browse actor pages or search TMDB to find titles and add them to your list. Admins see an aggregated view of all users' wishes, sorted by vote count.
+Movies or shows you'd like the collection owner to buy as physical media. Search TMDB by name or browse actor filmography pages to find titles and add them. For TV shows, you can wish for a specific season.
+
+**Finding titles to wish for:**
+- **Search** &mdash; Type a title name in the search box at the top of the wish list page and click a result to add it
+- **Actor pages** &mdash; Click any actor's headshot elsewhere in the app, then click the wish-list button on titles in their "Other Works" section
+
+**Status tracking** &mdash; After you submit a wish, the collection admin reviews it. You'll see status updates on your wish list:
+
+| Status | Meaning |
+|--------|---------|
+| *(no badge)* | Wish is active &mdash; the admin hasn't acted on it yet |
+| **Ordered** | The admin has ordered the title |
+| **Won't be purchased** | The admin has declined the request |
+| **Not yet available** | The title isn't available for purchase yet |
+| **Added to collection** | The title has been acquired and added to the catalog, but isn't transcoded for playback yet |
+| **Ready to watch!** | The title is in the catalog with a playable transcode &mdash; click the poster to start watching |
+
+When a wish is fulfilled ("Added to collection" or "Ready to watch!"), click **Dismiss** to clear it from your list. A badge on the sidebar's "My Wish List" link shows how many fulfilled wishes are waiting to be dismissed.
 
 ### Transcode Wishes
 
-Titles that exist in the catalog but aren't yet playable in the browser (the source MKV hasn't been transcoded to MP4 yet). Request priority transcoding from the title detail page &mdash; wished titles jump ahead in the transcoding queue.
+Titles that exist in the catalog but aren't yet playable in the browser (the source MKV hasn't been transcoded to MP4 yet). Request priority transcoding from the title detail page using the star icon &mdash; wished titles jump ahead in the transcoding queue. Your wish list shows live progress as transcoding runs.
 
 ---
 

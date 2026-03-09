@@ -246,6 +246,33 @@ Catalog titles that have no transcoded files at all. This is your "rip these nex
 
 ---
 
+## User Wishes
+
+**Sidebar &rarr; User Wishes**
+
+![User wishes](images/screenshots/purchase-wishes.png)
+
+This page aggregates media wish list requests from all users into a single view, sorted by vote count. When multiple users wish for the same title, their votes are combined so you can prioritize popular requests.
+
+Each row shows the title poster, name (with season number for TV shows), release year, media type, vote count, and the list of users who requested it.
+
+### Setting Acquisition Status
+
+Click the status badge on any row to update its acquisition status:
+
+| Status | Color | Meaning |
+|--------|-------|---------|
+| **Unknown** | Gray | Not yet reviewed |
+| **Ordered** | Blue | You've ordered it &mdash; users see "Ordered" on their wish list |
+| **Owned** | Green | Acquired and in the catalog &mdash; automatically fulfills matching user wishes |
+| **Rejected** | Red | Won't be purchased &mdash; users see "Won't be purchased" |
+| **Not Available** | Gray | Title isn't available for purchase yet |
+| **Needs Assistance** | Orange | Requires special handling |
+
+Setting a title to **Owned** triggers automatic fulfillment: all users who wished for that title (and season, for TV) see their wish updated to "Added to collection" or "Ready to watch!" depending on whether a playable transcode exists.
+
+---
+
 ## Tags
 
 **Sidebar &rarr; Tags**
