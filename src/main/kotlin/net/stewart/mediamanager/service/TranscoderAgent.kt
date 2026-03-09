@@ -354,6 +354,7 @@ class TranscoderAgent(
                 ffmpegPath, sourceFile, tmpFile, probe, EncoderProfile.CPU
             )
 
+            log.info("Running: {}", command.joinToString(" "))
             val process = ProcessBuilder(command).redirectErrorStream(true).start()
             currentProcess = process
 

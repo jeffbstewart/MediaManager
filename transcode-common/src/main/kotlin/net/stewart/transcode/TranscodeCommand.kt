@@ -57,7 +57,10 @@ object TranscodeCommand {
             filters.add("yadif")
         }
         if (probe.isAnamorphic) {
-            filters.add("scale=iw*sar:ih")
+            // Round to even dimensions — libx264/NVENC require even width and height.
+            // Without rounding, odd SAR ratios like 853:720 produce odd widths (e.g., 853px)
+            // which crash the encoder.
+            filters.add("scale=trunc(iw*sar/2)*2:trunc(ih/2)*2")
             filters.add("setsar=1:1")
         }
         if (filters.isEmpty()) return emptyList()

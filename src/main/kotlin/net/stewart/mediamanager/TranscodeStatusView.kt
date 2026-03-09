@@ -8,6 +8,7 @@ import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.html.Span
 import com.vaadin.flow.component.notification.Notification
+import com.vaadin.flow.component.notification.NotificationVariant
 import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
 import com.vaadin.flow.component.progressbar.ProgressBar
@@ -91,6 +92,15 @@ class TranscodeStatusView : KComposite() {
                 scanButton = button("Scan NAS") {
                     addThemeVariants(ButtonVariant.LUMO_PRIMARY)
                     addClickListener { startScan() }
+                }
+
+                button("Clear Failures") {
+                    addThemeVariants(ButtonVariant.LUMO_TERTIARY)
+                    addClickListener {
+                        val cleared = TranscodeLeaseService.clearAllFailures()
+                        Notification.show("Cleared $cleared failure record(s)", 2000, Notification.Position.BOTTOM_START)
+                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                    }
                 }
 
                 statusLabel = span()

@@ -8,7 +8,7 @@ import java.time.LocalDateTime
  * In-memory ring buffers for recent application log messages.
  * Separate buffers per severity level to retain the most relevant messages.
  *
- * Buffer sizes: ERROR=10, WARN=10, INFO=30.
+ * Buffer sizes: ERROR=100, WARN=100, INFO=300.
  */
 object AppLogBuffer {
 
@@ -20,9 +20,9 @@ object AppLogBuffer {
         val stackTrace: String?
     )
 
-    private const val ERROR_CAPACITY = 10
-    private const val WARN_CAPACITY = 10
-    private const val INFO_CAPACITY = 30
+    private const val ERROR_CAPACITY = 100
+    private const val WARN_CAPACITY = 100
+    private const val INFO_CAPACITY = 300
 
     private val errors = java.util.ArrayDeque<LogEntry>(ERROR_CAPACITY)
     private val warnings = java.util.ArrayDeque<LogEntry>(WARN_CAPACITY)

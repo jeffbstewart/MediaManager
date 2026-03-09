@@ -259,8 +259,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         val cTvItem = createDrawerItem(null, "TV Shows", "content/tv", indent = true)
         val cCollectionsItem = createDrawerItem(null, "Collections", "content/collections", indent = true)
         val cTagsItem = createDrawerItem(null, "Tags", "content/tags", indent = true)
-        // Placeholder: Family (home videos) — enable when #3/#28 ship
-        // val cFamilyItem = createDrawerItem(null, "Family", "content/family", indent = true)
+        val cFamilyItem = createDrawerItem(null, "Family", "content/family", indent = true)
         // Placeholder: Live — enable when #27/#41 ship
         // val cLiveItem = createDrawerItem(null, "Live", "content/live", indent = true)
         //   Sub-entries: Cameras (#27), Television (#41)
@@ -304,8 +303,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             isVisible = false
-            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first)
-            // add(cFamilyItem.first)  // Placeholder: Family (#3/#28)
+            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first, cFamilyItem.first)
             // add(cLiveItem.first)     // Placeholder: Live (#27/#41)
         }
 
@@ -314,6 +312,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(cTvItem)
         items.add(cCollectionsItem)
         items.add(cTagsItem)
+        items.add(cFamilyItem)
         items.add(wishListItem)
 
         val mainSection = VerticalLayout().apply {
@@ -898,7 +897,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
 
         // Content group: auto-expand and highlight parent when on any sub-route
-        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags")
+        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags", "content/family")
         val onContent = path in contentRoutes || path.startsWith("content/collection/")
         if (onContent) {
             contentChildren.isVisible = true
