@@ -2,6 +2,7 @@
 <component name="SettingsScreen" extends="Group">
     <interface>
         <field id="settingsSaved" type="boolean" alwaysNotify="true" />
+        <field id="reauthenticate" type="boolean" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="SettingsScreen.brs" />
@@ -28,9 +29,9 @@
             text="Searching for server..."
             font="font:SmallSystemFont"
             color="#a0a0a0"
-            width="600"
+            width="700"
             wrap="true"
-            maxLines="3" />
+            maxLines="4" />
 
         <!-- QR code image (shown during pairing) -->
         <Poster
@@ -55,12 +56,12 @@
         <!-- Pair code instruction -->
         <Label
             id="pairInstructionLabel"
-            translation="[160, 680]"
+            translation="[110, 680]"
             text="Or enter this code at your server"
             font="font:SmallSystemFont"
             color="#a0a0a0"
             horizAlign="center"
-            width="400"
+            width="500"
             visible="false" />
 
         <!-- Button group (context-sensitive) -->

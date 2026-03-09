@@ -6,6 +6,7 @@
         <field id="apiKey" type="string" />
         <field id="feedContent" type="node" />
         <field id="feedError" type="string" />
+        <field id="feedHttpCode" type="integer" value="0" />
     </interface>
 
     <script type="text/brightscript" uri="FeedTask.brs" />

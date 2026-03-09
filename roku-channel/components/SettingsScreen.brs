@@ -14,6 +14,8 @@ sub init()
     m.pairTask.observeField("pairStatus", "onPairStatus")
     m.pairTask.observeField("pairError", "onPairError")
 
+    m.top.observeField("reauthenticate", "onReauthenticate")
+
     m.serverUrl = ""
     m.apiKey = ""
 
@@ -172,6 +174,23 @@ sub showConfigured()
     m.buttonGroup.buttons = ["Re-pair Device", "Change Server", "Save & Connect"]
     m.buttonGroup.setFocus(true)
     hideQrCode()
+end sub
+
+' ---- Reauthenticate (triggered by MainScene on 401) ----
+
+sub onReauthenticate()
+    print "[MM] SettingsScreen: reauthenticate triggered — clearing stale key, starting re-pair"
+    ' Re-read registry (MainScene already cleared the apiKey)
+    reg = CreateObject("roRegistrySection", "MediaManager")
+    m.serverUrl = reg.Read("serverUrl")
+    m.apiKey = ""
+    m.statusLabel.visible = false
+
+    if m.serverUrl <> ""
+        startPairing()
+    else
+        startDiscovery()
+    end if
 end sub
 
 ' ---- Button Handler ----

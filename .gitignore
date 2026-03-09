@@ -24,6 +24,7 @@ roku-channel.zip
 secrets/.env
 secrets/roku-deploy.env
 secrets/roku-deploy-dev.env
+secrets/roku-deploy-prod.env
 secrets/*.agent_visible_env
 
 # Vaadin generated (src/main)

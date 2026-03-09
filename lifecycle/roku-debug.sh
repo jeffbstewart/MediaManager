@@ -3,7 +3,10 @@
 # Output is both displayed and saved to roku-debug.log.
 # Filter for [MM] lines with: grep '\[MM\]' roku-debug.log
 #
-# Reads connection info from secrets/roku-deploy.env.
+# Usage:
+#   ./roku-debug.sh                    # Connect to dev Roku
+#   ./roku-debug.sh prod               # Connect to prod Roku
+#   ./roku-debug.sh dev path/to/log    # Custom log file
 
 set -e
 
@@ -11,15 +14,23 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 cd "$PROJECT_ROOT"
 
-# Load config
-if [ ! -f secrets/roku-deploy.env ]; then
-    echo "Error: secrets/roku-deploy.env not found. Copy secrets/example.roku-deploy.env and fill in your values."
+# Determine target (dev or prod)
+TARGET="${1:-dev}"
+if [ "$TARGET" = "dev" ] || [ "$TARGET" = "prod" ]; then
+    shift
+else
+    TARGET="dev"
+fi
+
+ENV_FILE="secrets/roku-deploy-${TARGET}.env"
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Error: $ENV_FILE not found. Copy secrets/example.roku-deploy.env and fill in your values."
     exit 1
 fi
-source secrets/roku-deploy.env
+source "$ENV_FILE"
 
 if [ -z "$ROKU_IP" ]; then
-    echo "Error: ROKU_IP must be set in secrets/roku-deploy.env"
+    echo "Error: ROKU_IP must be set in $ENV_FILE"
     exit 1
 fi
 

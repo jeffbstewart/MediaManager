@@ -47,13 +47,33 @@ Start from a logged-out state. Navigate to the login page first.
 | `docs/images/screenshots/transcode-status.png` | `/transcodes/status` | Admin | Transcoder status panel |
 | `docs/images/screenshots/users.png` | `/users` | Admin | User management grid |
 
+### 4. Roku Screenshots (via HDMI capture)
+
+Roku screenshots use an HDMI capture card + OBS Virtual Camera + FFmpeg, not Playwright.
+
+**Setup:**
+1. Connect HDMI capture card to the Roku
+2. Open OBS, add the capture card as a Video Capture source
+3. Start Virtual Camera in OBS (Output Type: Program)
+4. Use `./lifecycle/roku-screenshot.sh <path>` to capture frames
+
+**Reproducing:** Deploy the dev channel to the Roku first (`./lifecycle/roku-deploy.sh`).
+The channel must have data to show — the server should be running with enriched titles
+and playable transcodes.
+
+| File | Roku Screen | Notes |
+|------|-------------|-------|
+| `docs/images/screenshots/roku-home.png` | Roku Home | Navigate to the Roku home screen. Select the "Media Manager (dev)" channel tile so it has the white selection outline. The channel name and item count appear above the tile row. |
+
 ## Referenced In
 
 - `docs/USER_GUIDE.md` — home, catalog, title-detail, player, wishlist
 - `docs/ADMIN_GUIDE.md` — purchase-wishes, transcode-status, users
+- `docs/ROKU_GUIDE.md` — roku-home
 
 ## Notes
 
 - All screenshots saved as PNG
 - The `data/screenshots/` directory is for throwaway/debug screenshots (gitignored)
 - The `docs/images/screenshots/` directory is for committed doc screenshots
+- Roku screenshots are captured via `lifecycle/roku-screenshot.sh` (FFmpeg from OBS Virtual Camera)

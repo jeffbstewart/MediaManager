@@ -51,6 +51,8 @@ sub doTask()
     responseCode = msg.GetResponseCode()
     print "[MM] FeedTask: HTTP " ; str(responseCode).trim()
 
+    m.top.feedHttpCode = responseCode
+
     if responseCode <> 200
         if responseCode = 401
             print "[MM] FeedTask: ERROR — auth failed (401)"

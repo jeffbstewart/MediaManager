@@ -101,8 +101,27 @@ end sub
 sub onFeedError()
     errorMsg = m.feedTask.feedError
     if errorMsg <> "" and errorMsg <> invalid
-        print "[MM] MainScene: onFeedError — " ; errorMsg
-        showMessage("Feed Error", errorMsg + chr(10) + "Press * to open Settings.")
+        httpCode = m.feedTask.feedHttpCode
+        print "[MM] MainScene: onFeedError — code=" ; str(httpCode).trim() ; " msg=" ; errorMsg
+
+        if httpCode = 401
+            ' Auth failed — clear stale apiKey and go straight to re-pair
+            print "[MM] MainScene: 401 auth failure — clearing apiKey, navigating to settings"
+            reg = CreateObject("roRegistrySection", "MediaManager")
+            reg.Delete("apiKey")
+            reg.Flush()
+            m.apiKey = ""
+
+            ' Clear the empty HomeScreen from the stack before showing settings
+            ' so Back from settings exits the app instead of showing a blank screen
+            m.screenStack = []
+            m.homeScreen.visible = false
+
+            showScreen(m.settingsScreen)
+            m.settingsScreen.reauthenticate = true
+        else
+            showMessage("Feed Error", errorMsg + chr(10) + "Press * to open Settings.")
+        end if
     end if
 end sub
 

@@ -3,7 +3,9 @@
 # ECP is an HTTP REST API on port 8060 that controls the Roku remotely.
 #
 # Usage:
-#   ./roku-remote.sh                    # Press Select (OK)
+#   ./roku-remote.sh [dev|prod] <command>
+#   ./roku-remote.sh                    # Press Select (OK) on dev Roku
+#   ./roku-remote.sh prod Home          # Press Home on prod Roku
 #   ./roku-remote.sh <key>              # Press a key (e.g. Home, Back, Up, Down, Left, Right, Select)
 #   ./roku-remote.sh launch             # Launch the sideloaded dev channel
 #   ./roku-remote.sh apps               # List installed apps
@@ -15,8 +17,6 @@
 # Key names: Home, Rev, Fwd, Play, Select, Left, Right, Down, Up, Back,
 #            InstantReplay, Info, Backspace, Search, Enter,
 #            VolumeDown, VolumeUp, VolumeMute
-#
-# Reads ROKU_IP from secrets/roku-deploy.env.
 
 set -e
 
@@ -24,15 +24,23 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 cd "$PROJECT_ROOT"
 
-# Load config
-if [ ! -f secrets/roku-deploy.env ]; then
-    echo "Error: secrets/roku-deploy.env not found. Copy secrets/example.roku-deploy.env and fill in your values."
+# Determine target (dev or prod)
+if [ "$1" = "dev" ] || [ "$1" = "prod" ]; then
+    TARGET="$1"
+    shift
+else
+    TARGET="dev"
+fi
+
+ENV_FILE="secrets/roku-deploy-${TARGET}.env"
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Error: $ENV_FILE not found. Copy secrets/example.roku-deploy.env and fill in your values."
     exit 1
 fi
-source secrets/roku-deploy.env
+source "$ENV_FILE"
 
 if [ -z "$ROKU_IP" ]; then
-    echo "Error: ROKU_IP must be set in secrets/roku-deploy.env"
+    echo "Error: ROKU_IP must be set in $ENV_FILE"
     exit 1
 fi
 
