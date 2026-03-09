@@ -72,23 +72,27 @@ class TranscodeUnmatchedView : KComposite() {
                     }).setHeader("Parsed Title").setWidth("200px").setFlexGrow(0)
                     addColumn({ it.parsed_year?.toString() ?: "" }).setHeader("Year").setWidth("80px").setFlexGrow(0)
                     addColumn(ComponentRenderer { file ->
-                        val suggestions = unmatchedSuggestions[file.id]
-                        if (suggestions.isNullOrEmpty()) {
-                            Span("\u2014")
+                        if (file.media_type == MediaType.PERSONAL.name) {
+                            Span("\u2014")  // No suggestions for personal videos
                         } else {
-                            val top = suggestions.first()
-                            HorizontalLayout().apply {
-                                isSpacing = true
-                                isPadding = false
-                                defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
-                                add(Span("${top.title.name} (${(top.score * 100).toInt()}%)").apply {
-                                    style.set("color", "var(--lumo-secondary-text-color)")
-                                    style.set("font-size", "var(--lumo-font-size-s)")
-                                })
-                                add(Button("Accept").apply {
-                                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS)
-                                    addClickListener { acceptSuggestion(file, top.title) }
-                                })
+                            val suggestions = unmatchedSuggestions[file.id]
+                            if (suggestions.isNullOrEmpty()) {
+                                Span("\u2014")
+                            } else {
+                                val top = suggestions.first()
+                                HorizontalLayout().apply {
+                                    isSpacing = true
+                                    isPadding = false
+                                    defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
+                                    add(Span("${top.title.name} (${(top.score * 100).toInt()}%)").apply {
+                                        style.set("color", "var(--lumo-secondary-text-color)")
+                                        style.set("font-size", "var(--lumo-font-size-s)")
+                                    })
+                                    add(Button("Accept").apply {
+                                        addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS)
+                                        addClickListener { acceptSuggestion(file, top.title) }
+                                    })
+                                }
                             }
                         }
                     }).setHeader("Suggestion").setWidth("280px").setFlexGrow(0)
@@ -96,10 +100,17 @@ class TranscodeUnmatchedView : KComposite() {
                         HorizontalLayout().apply {
                             isSpacing = true
                             isPadding = false
-                            add(Button("Link").apply {
-                                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
-                                addClickListener { openLinkDialog(file) }
-                            })
+                            if (file.media_type == MediaType.PERSONAL.name) {
+                                add(Button("Create").apply {
+                                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS)
+                                    addClickListener { openCreatePersonalVideoDialog(file) }
+                                })
+                            } else {
+                                add(Button("Link").apply {
+                                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
+                                    addClickListener { openLinkDialog(file) }
+                                })
+                            }
                             add(Button("Ignore").apply {
                                 addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
                                 addClickListener { ignoreFile(file) }
@@ -127,8 +138,12 @@ class TranscodeUnmatchedView : KComposite() {
 
         val allTitles = Title.findAll()
         unmatchedSuggestions = unmatched.associate { file ->
-            val query = file.parsed_title ?: file.file_name
-            file.id to FuzzyMatchService.findSuggestions(query, allTitles)
+            if (file.media_type == MediaType.PERSONAL.name) {
+                file.id to emptyList()
+            } else {
+                val query = file.parsed_title ?: file.file_name
+                file.id to FuzzyMatchService.findSuggestions(query, allTitles)
+            }
         }.toMutableMap()
 
         unmatchedGrid.setItems(cachedUnmatchedFiles.toList())
@@ -188,6 +203,12 @@ class TranscodeUnmatchedView : KComposite() {
         fresh.save()
 
         removeUnmatchedFiles(setOfNotNull(file.id))
+    }
+
+    private fun openCreatePersonalVideoDialog(file: DiscoveredFile) {
+        CreatePersonalVideoDialog(file) {
+            removeUnmatchedFiles(setOfNotNull(file.id))
+        }.open()
     }
 
     private fun openLinkDialog(file: DiscoveredFile) {
