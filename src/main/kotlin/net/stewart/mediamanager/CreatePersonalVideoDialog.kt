@@ -79,12 +79,13 @@ internal class CreatePersonalVideoDialog(
                             .addThemeVariants(NotificationVariant.LUMO_CONTRAST)
                         return@addClickListener
                     }
+                    // Capture selection BEFORE setItems clears it
+                    val previousIds = familyMemberSelect.selectedItems.mapNotNull { it.id }.toSet()
                     val member = FamilyMemberService.createMember(name)
                     val updatedMembers = FamilyMemberService.getAllMembers()
                     familyMemberSelect.setItems(updatedMembers)
                     // Re-select previously selected + the new one
-                    val currentSelection = familyMemberSelect.selectedItems.map { it.id }.toSet()
-                    val newSelection = updatedMembers.filter { it.id in currentSelection || it.id == member.id }.toSet()
+                    val newSelection = updatedMembers.filter { it.id in previousIds || it.id == member.id }.toSet()
                     familyMemberSelect.select(newSelection)
                     newMemberField.clear()
                     Notification.show("Added $name", 1500, Notification.Position.BOTTOM_START)

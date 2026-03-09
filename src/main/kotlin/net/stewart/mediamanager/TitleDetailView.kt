@@ -120,8 +120,13 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
             buildMovieTranscodes(title, contentArea)
         }
 
-        buildCastRow(title, contentArea)
-        buildSimilarTitlesRow(title, contentArea)
+        if (title.media_type == MediaType.PERSONAL.name) {
+            buildFamilyMembersRow(title, contentArea)
+            buildPersonalEditSection(title, contentArea)
+        } else {
+            buildCastRow(title, contentArea)
+            buildSimilarTitlesRow(title, contentArea)
+        }
 
         add(contentArea)
     }
@@ -200,25 +205,39 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     style.set("flex-wrap", "wrap")
                     style.set("margin-bottom", "var(--lumo-space-s)")
 
-                    if (title.release_year != null) {
-                        add(Span(title.release_year.toString()).apply {
-                            style.set("color", "rgba(255,255,255,0.8)")
+                    if (title.media_type == MediaType.PERSONAL.name) {
+                        // Personal videos: show formatted event date
+                        if (title.event_date != null) {
+                            add(Span(title.event_date!!.format(java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy"))).apply {
+                                style.set("color", "rgba(255,255,255,0.8)")
+                                style.set("font-size", "var(--lumo-font-size-s)")
+                            })
+                        }
+                        add(Span("Family Video").apply {
+                            style.set("color", "rgba(255,255,255,0.6)")
+                            style.set("font-size", "var(--lumo-font-size-s)")
+                        })
+                    } else {
+                        if (title.release_year != null) {
+                            add(Span(title.release_year.toString()).apply {
+                                style.set("color", "rgba(255,255,255,0.8)")
+                                style.set("font-size", "var(--lumo-font-size-s)")
+                            })
+                        }
+                        if (title.content_rating != null) {
+                            add(Span(title.content_rating).apply {
+                                style.set("color", "rgba(255,255,255,0.9)")
+                                style.set("font-size", "var(--lumo-font-size-xs)")
+                                style.set("border", "1px solid rgba(255,255,255,0.4)")
+                                style.set("border-radius", "var(--lumo-border-radius-s)")
+                                style.set("padding", "2px 6px")
+                            })
+                        }
+                        add(Span(title.media_type).apply {
+                            style.set("color", "rgba(255,255,255,0.6)")
                             style.set("font-size", "var(--lumo-font-size-s)")
                         })
                     }
-                    if (title.content_rating != null) {
-                        add(Span(title.content_rating).apply {
-                            style.set("color", "rgba(255,255,255,0.9)")
-                            style.set("font-size", "var(--lumo-font-size-xs)")
-                            style.set("border", "1px solid rgba(255,255,255,0.4)")
-                            style.set("border-radius", "var(--lumo-border-radius-s)")
-                            style.set("padding", "2px 6px")
-                        })
-                    }
-                    add(Span(title.media_type).apply {
-                        style.set("color", "rgba(255,255,255,0.6)")
-                        style.set("font-size", "var(--lumo-font-size-s)")
-                    })
                     if (genres.isNotEmpty()) {
                         add(Span(genres.joinToString(", ")).apply {
                             style.set("color", "rgba(255,255,255,0.6)")
@@ -775,6 +794,295 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                 buildContent(title)
             }
         })
+        footer.element.setAttribute("slot", "footer")
+        dialog.add(footer)
+        dialog.open()
+    }
+
+    // --- Family Members Row (for PERSONAL titles) ---
+
+    private fun buildFamilyMembersRow(title: Title, container: VerticalLayout) {
+        val members = FamilyMemberService.getMembersForTitle(title.id!!)
+        val isAdmin = AuthService.getCurrentUser()?.isAdmin() == true
+
+        container.add(HorizontalLayout().apply {
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+            isSpacing = true
+            isPadding = false
+            style.set("margin-top", "var(--lumo-space-l)")
+            style.set("margin-bottom", "var(--lumo-space-s)")
+
+            add(H3("People in this Video").apply {
+                style.set("margin", "0")
+            })
+
+            if (isAdmin) {
+                add(Button(VaadinIcon.PENCIL.create()).apply {
+                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON)
+                    element.setAttribute("title", "Edit people")
+                    addClickListener { openEditFamilyMembersDialog(title) }
+                })
+            }
+        })
+
+        if (members.isEmpty()) {
+            container.add(Span("No family members tagged").apply {
+                style.set("color", "var(--lumo-secondary-text-color)")
+                style.set("font-size", "var(--lumo-font-size-s)")
+            })
+            return
+        }
+
+        val scrollRow = HorizontalLayout().apply {
+            isSpacing = true
+            isPadding = false
+            width = "100%"
+            style.set("overflow-x", "auto")
+            style.set("padding-bottom", "var(--lumo-space-s)")
+        }
+
+        for (member in members) {
+            scrollRow.add(buildFamilyMemberCard(member, title))
+        }
+
+        container.add(scrollRow)
+    }
+
+    private fun buildFamilyMemberCard(member: FamilyMember, title: Title): VerticalLayout {
+        return VerticalLayout().apply {
+            isPadding = false
+            isSpacing = false
+            width = "120px"
+            style.set("min-width", "120px")
+            style.set("align-items", "center")
+
+            // Initial circle (no headshots yet)
+            val initial = member.name.firstOrNull()?.uppercase() ?: "?"
+            add(Span(initial).apply {
+                style.set("display", "flex")
+                style.set("align-items", "center")
+                style.set("justify-content", "center")
+                style.set("width", "80px")
+                style.set("height", "80px")
+                style.set("border-radius", "50%")
+                style.set("background", "var(--lumo-primary-color-10pct)")
+                style.set("color", "var(--lumo-primary-text-color)")
+                style.set("font-size", "var(--lumo-font-size-xl)")
+                style.set("font-weight", "bold")
+                style.set("flex-shrink", "0")
+            })
+
+            // Name
+            add(Span(member.name).apply {
+                style.set("font-size", "var(--lumo-font-size-xs)")
+                style.set("text-align", "center")
+                style.set("margin-top", "var(--lumo-space-xs)")
+                style.set("overflow", "hidden")
+                style.set("text-overflow", "ellipsis")
+                style.set("white-space", "nowrap")
+                style.set("max-width", "120px")
+            })
+
+            // Age at event date
+            if (member.birth_date != null && title.event_date != null) {
+                val age = member.ageAt(title.event_date!!)
+                if (age != null && age >= 0) {
+                    add(Span("Age $age").apply {
+                        style.set("color", "var(--lumo-secondary-text-color)")
+                        style.set("font-size", "var(--lumo-font-size-xxs)")
+                        style.set("text-align", "center")
+                    })
+                }
+            }
+        }
+    }
+
+    private fun openEditFamilyMembersDialog(title: Title) {
+        val dialog = Dialog().apply {
+            headerTitle = "Edit People in Video"
+            width = "500px"
+        }
+
+        val allMembers = FamilyMemberService.getAllMembers()
+        val currentMemberIds = FamilyMemberService.getMembersForTitle(title.id!!).mapNotNull { it.id }.toMutableSet()
+
+        val memberCombo = com.vaadin.flow.component.combobox.MultiSelectComboBox<FamilyMember>().apply {
+            label = "Family Members"
+            width = "100%"
+            setItems(allMembers)
+            setItemLabelGenerator { it.name }
+            select(allMembers.filter { it.id in currentMemberIds })
+        }
+
+        // Inline "Add new member" row
+        val newNameField = com.vaadin.flow.component.textfield.TextField().apply {
+            placeholder = "New member name"
+            width = "100%"
+        }
+        val addNewBtn = Button("Add") {
+            val name = newNameField.value.trim()
+            if (name.isBlank()) return@Button
+            if (!FamilyMemberService.isNameUnique(name)) {
+                Notification.show("Name already exists", 2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                return@Button
+            }
+            // Capture selection BEFORE setItems clears it
+            val previousIds = memberCombo.selectedItems.mapNotNull { it.id }.toSet()
+            val created = FamilyMemberService.createMember(name)
+            newNameField.value = ""
+            val updatedMembers = FamilyMemberService.getAllMembers()
+            memberCombo.setItems(updatedMembers)
+            memberCombo.select(updatedMembers.filter { it.id in previousIds || it.id == created.id })
+            Notification.show("Added \"$name\"", 2000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+        }.apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL)
+        }
+
+        val addRow = HorizontalLayout(newNameField, addNewBtn).apply {
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
+            width = "100%"
+            expand(newNameField)
+        }
+
+        val content = VerticalLayout().apply {
+            isPadding = false
+            isSpacing = true
+            add(memberCombo, addRow)
+        }
+        dialog.add(content)
+
+        val cancelBtn = Button("Cancel") { dialog.close() }
+        val saveBtn = Button("Save").apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            addClickListener {
+                val selectedIds = memberCombo.selectedItems.mapNotNull { it.id }.toSet()
+                // Remove unselected
+                for (id in currentMemberIds - selectedIds) {
+                    FamilyMemberService.removeMemberFromTitle(title.id!!, id)
+                }
+                // Add newly selected
+                for (id in selectedIds - currentMemberIds) {
+                    FamilyMemberService.addMemberToTitle(title.id!!, id)
+                }
+                dialog.close()
+                buildContent(title)
+                Notification.show("People updated", 2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            }
+        }
+
+        val footer = HorizontalLayout().apply {
+            justifyContentMode = FlexComponent.JustifyContentMode.END
+            width = "100%"
+            isSpacing = true
+            add(cancelBtn, saveBtn)
+        }
+        footer.element.setAttribute("slot", "footer")
+        dialog.add(footer)
+        dialog.open()
+    }
+
+    // --- Personal Video Edit Section ---
+
+    private fun buildPersonalEditSection(title: Title, container: VerticalLayout) {
+        val isAdmin = AuthService.getCurrentUser()?.isAdmin() == true
+        if (!isAdmin) return
+
+        container.add(HorizontalLayout().apply {
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+            isSpacing = true
+            isPadding = false
+            style.set("margin-top", "var(--lumo-space-l)")
+            style.set("margin-bottom", "var(--lumo-space-s)")
+
+            add(H3("Details").apply {
+                style.set("margin", "0")
+            })
+
+            add(Button("Edit", VaadinIcon.PENCIL.create()).apply {
+                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+                addClickListener { openEditPersonalVideoDialog(title) }
+            })
+        })
+
+        val detailItems = mutableListOf<String>()
+        if (title.event_date != null) {
+            detailItems.add("Event date: ${title.event_date!!.format(java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy"))}")
+        }
+        if (!title.description.isNullOrBlank()) {
+            detailItems.add(title.description!!)
+        }
+        if (detailItems.isEmpty()) {
+            container.add(Span("No additional details").apply {
+                style.set("color", "var(--lumo-secondary-text-color)")
+                style.set("font-size", "var(--lumo-font-size-s)")
+            })
+        }
+    }
+
+    private fun openEditPersonalVideoDialog(title: Title) {
+        val dialog = Dialog().apply {
+            headerTitle = "Edit Video Details"
+            width = "500px"
+        }
+
+        val nameField = com.vaadin.flow.component.textfield.TextField("Title").apply {
+            width = "100%"
+            value = title.name
+            setMaxLength(500)
+        }
+
+        val dateField = com.vaadin.flow.component.datepicker.DatePicker("Event Date").apply {
+            width = "100%"
+            value = title.event_date
+        }
+
+        val descField = com.vaadin.flow.component.textfield.TextArea("Description").apply {
+            width = "100%"
+            value = title.description ?: ""
+            setMaxLength(2000)
+            height = "120px"
+        }
+
+        val content = VerticalLayout().apply {
+            isPadding = false
+            isSpacing = true
+            add(nameField, dateField, descField)
+        }
+        dialog.add(content)
+
+        val cancelBtn = Button("Cancel") { dialog.close() }
+        val saveBtn = Button("Save").apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            addClickListener {
+                val name = nameField.value.trim()
+                if (name.isBlank()) {
+                    Notification.show("Title is required", 3000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    return@addClickListener
+                }
+                title.name = name
+                title.sort_name = name.replace(Regex("^(?:The|A|An)\\s+", RegexOption.IGNORE_CASE), "").trim()
+                title.event_date = dateField.value
+                title.release_year = dateField.value?.year
+                title.description = descField.value?.trim()?.ifBlank { null }
+                title.save()
+                dialog.close()
+                currentTitle = Title.findById(title.id!!)
+                buildContent(currentTitle!!)
+                Notification.show("Video updated", 2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            }
+        }
+
+        val footer = HorizontalLayout().apply {
+            justifyContentMode = FlexComponent.JustifyContentMode.END
+            width = "100%"
+            isSpacing = true
+            add(cancelBtn, saveBtn)
+        }
         footer.element.setAttribute("slot", "footer")
         dialog.add(footer)
         dialog.open()
