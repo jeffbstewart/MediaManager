@@ -27,10 +27,6 @@ import net.stewart.mediamanager.service.TagService
 class TagManagementView : VerticalLayout() {
 
     private val grid: Grid<TagRow>
-    private val suggestionsLayout = VerticalLayout().apply {
-        isPadding = false
-        isSpacing = true
-    }
 
     init {
         isPadding = true
@@ -71,7 +67,7 @@ class TagManagementView : VerticalLayout() {
             val label = when (sourceType) {
                 TagSourceType.MANUAL -> "Manual"
                 TagSourceType.GENRE -> "Genre"
-                TagSourceType.COLLECTION -> "Collection"
+                TagSourceType.COLLECTION -> "Collection"  // Legacy; no longer created
             }
             Span(label).apply {
                 style.set("font-size", "var(--lumo-font-size-xs)")
@@ -99,81 +95,13 @@ class TagManagementView : VerticalLayout() {
 
         add(grid)
 
-        // Suggested Collections section
-        add(Span("Suggested Collections").apply {
-            style.set("font-size", "var(--lumo-font-size-l)")
-            style.set("font-weight", "600")
-            style.set("margin-top", "var(--lumo-space-l)")
-        })
-        add(Span("TMDB collections in your catalog with 2+ titles that don't have a tag yet.").apply {
-            style.set("font-size", "var(--lumo-font-size-s)")
-            style.set("color", "var(--lumo-secondary-text-color)")
-        })
-        add(suggestionsLayout)
-
         refreshGrid()
-        refreshSuggestions()
     }
 
     private fun refreshGrid() {
         val tags = TagService.getAllTags()
         val counts = TagService.getTagTitleCounts()
         grid.setItems(tags.map { TagRow(it, counts[it.id] ?: 0) })
-    }
-
-    private fun refreshSuggestions() {
-        suggestionsLayout.removeAll()
-        val suggestions = TagService.getSuggestedCollections()
-        if (suggestions.isEmpty()) {
-            suggestionsLayout.add(Span("No suggestions — all collections with 2+ titles already have tags.").apply {
-                style.set("color", "var(--lumo-secondary-text-color)")
-                style.set("font-size", "var(--lumo-font-size-s)")
-                style.set("font-style", "italic")
-            })
-            return
-        }
-
-        for ((collectionId, collectionName, titleCount) in suggestions) {
-            val row = HorizontalLayout().apply {
-                defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
-                isSpacing = true
-                isPadding = false
-                width = "100%"
-                style.set("padding", "var(--lumo-space-xs) 0")
-
-                add(Span(collectionName).apply {
-                    style.set("font-weight", "500")
-                })
-                add(Span("$titleCount titles").apply {
-                    style.set("color", "var(--lumo-secondary-text-color)")
-                    style.set("font-size", "var(--lumo-font-size-s)")
-                })
-
-                val colorCombo = ComboBox<Pair<String, String>>().apply {
-                    placeholder = "Color"
-                    width = "140px"
-                    setItems(TagService.COLOR_PALETTE)
-                    setItemLabelGenerator { it.first }
-                    value = TagService.COLOR_PALETTE.first()
-                }
-                add(colorCombo)
-
-                val createBtn = Button("Create Tag") {
-                    val color = colorCombo.value?.second ?: "#6B7280"
-                    val userId = AuthService.getCurrentUser()?.id
-                    TagService.createCollectionTag(collectionId, collectionName, color, userId)
-                    refreshGrid()
-                    refreshSuggestions()
-                    Notification.show("Collection tag \"$collectionName\" created and $titleCount titles linked",
-                        3000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
-                }.apply {
-                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
-                }
-                add(createBtn)
-            }
-            suggestionsLayout.add(row)
-        }
     }
 
     private fun openCreateEditDialog(existingTag: Tag?) {
@@ -284,7 +212,6 @@ class TagManagementView : VerticalLayout() {
                 TagService.deleteTag(tag.id!!)
                 dialog.close()
                 refreshGrid()
-                refreshSuggestions()
                 Notification.show("Tag deleted", 2000, Notification.Position.BOTTOM_START)
                     .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
             }

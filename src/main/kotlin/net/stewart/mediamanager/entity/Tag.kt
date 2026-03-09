@@ -32,7 +32,7 @@ data class Tag(
     }
 }
 
-/** Creates a styled pill-shaped badge for a tag. Collection tags get a two-line layout. */
+/** Creates a styled pill-shaped badge for a tag. */
 fun createTagBadge(tag: Tag): Div = Div().apply {
     style.set("background-color", tag.bg_color)
     style.set("color", tag.textColor())
@@ -40,24 +40,8 @@ fun createTagBadge(tag: Tag): Div = Div().apply {
     style.set("font-weight", "500")
     style.set("white-space", "nowrap")
     style.set("display", "inline-flex")
-    style.set("flex-direction", "column")
     style.set("align-items", "center")
-    style.set("line-height", "1.2")
-
-    if (tag.source_type == TagSourceType.COLLECTION.name) {
-        style.set("padding", "2px 12px 4px")
-        add(Span("Collection").apply {
-            style.set("font-size", "0.55em")
-            style.set("text-transform", "uppercase")
-            style.set("letter-spacing", "0.05em")
-            style.set("opacity", "0.7")
-        })
-        add(Span(tag.name).apply {
-            style.set("font-size", "var(--lumo-font-size-xs)")
-        })
-    } else {
-        style.set("padding", "2px 10px")
-        style.set("font-size", "var(--lumo-font-size-xs)")
-        add(Span(tag.name))
-    }
+    style.set("padding", "2px 10px")
+    style.set("font-size", "var(--lumo-font-size-xs)")
+    add(Span(tag.name))
 }

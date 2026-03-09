@@ -16,7 +16,7 @@ import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.*
 
 @Route(value = "catalog", layout = MainLayout::class)
-@PageTitle("Browse")
+@PageTitle("All Content")
 class BrowseView : KComposite() {
 
     // Filter state

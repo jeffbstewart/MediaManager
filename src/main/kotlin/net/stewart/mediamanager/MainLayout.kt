@@ -49,6 +49,9 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
     private var profileDisplayName: Span
     private val adminSection: VerticalLayout
     private val drawerItems: List<Pair<HorizontalLayout, String>> // layout to route
+    private lateinit var contentParent: HorizontalLayout
+    private lateinit var contentChildren: VerticalLayout
+    private lateinit var contentChevron: Icon
     private lateinit var purchasesParent: HorizontalLayout
     private lateinit var purchasesChildren: VerticalLayout
     private lateinit var purchasesChevron: Icon
@@ -236,7 +239,6 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
 
         // Main section (all users)
         val homeItem = createDrawerItem(VaadinIcon.HOME, "Home", "")
-        val browseItem = createDrawerItem(VaadinIcon.GRID_BIG, "Browse", "catalog")
         val wishListItem = createDrawerItem(VaadinIcon.HEART, "My Wish List", "wishlist")
         wishListBadge = Span().apply {
             style.set("background-color", "var(--lumo-success-color)")
@@ -252,15 +254,73 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
         wishListItem.first.add(wishListBadge)
 
+        // Content collapsible group (replaces Browse)
+        val cMoviesItem = createDrawerItem(null, "Movies", "content/movies", indent = true)
+        val cTvItem = createDrawerItem(null, "TV Shows", "content/tv", indent = true)
+        val cCollectionsItem = createDrawerItem(null, "Collections", "content/collections", indent = true)
+        val cTagsItem = createDrawerItem(null, "Tags", "content/tags", indent = true)
+        // Placeholder: Family (home videos) — enable when #3/#28 ship
+        // val cFamilyItem = createDrawerItem(null, "Family", "content/family", indent = true)
+        // Placeholder: Live — enable when #27/#41 ship
+        // val cLiveItem = createDrawerItem(null, "Live", "content/live", indent = true)
+        //   Sub-entries: Cameras (#27), Television (#41)
+
+        contentChevron = VaadinIcon.CHEVRON_DOWN.create().apply {
+            setSize("14px")
+            style.set("transition", "transform 0.2s")
+            style.set("flex-shrink", "0")
+        }
+        contentParent = HorizontalLayout().apply {
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+            isPadding = false
+            isSpacing = true
+            width = "100%"
+            style.set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
+            style.set("cursor", "pointer")
+            style.set("border-radius", "var(--lumo-border-radius-m)")
+            style.set("margin", "1px var(--lumo-space-xs)")
+            style.set("transition", "background-color 0.2s")
+            style.set("color", "rgba(255,255,255,0.7)")
+
+            val gridIcon = VaadinIcon.GRID_BIG.create().apply {
+                setSize("18px")
+                style.set("flex-shrink", "0")
+            }
+            val labelSpan = Span("Content").apply {
+                style.set("font-size", "var(--lumo-font-size-s)")
+                style.set("flex-grow", "1")
+            }
+            add(gridIcon, labelSpan, contentChevron)
+
+            addClickListener {
+                val wasVisible = contentChildren.isVisible
+                contentChildren.isVisible = !wasVisible
+                contentChevron.style.set("transform", if (wasVisible) "rotate(0deg)" else "rotate(180deg)")
+            }
+        }
+
+        contentChildren = VerticalLayout().apply {
+            isPadding = false
+            isSpacing = false
+            width = "100%"
+            isVisible = false
+            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first)
+            // add(cFamilyItem.first)  // Placeholder: Family (#3/#28)
+            // add(cLiveItem.first)     // Placeholder: Live (#27/#41)
+        }
+
         items.add(homeItem)
-        items.add(browseItem)
+        items.add(cMoviesItem)
+        items.add(cTvItem)
+        items.add(cCollectionsItem)
+        items.add(cTagsItem)
         items.add(wishListItem)
 
         val mainSection = VerticalLayout().apply {
             isPadding = false
             isSpacing = false
             width = "100%"
-            add(homeItem.first, browseItem.first, wishListItem.first)
+            add(homeItem.first, contentParent, contentChildren, wishListItem.first)
         }
 
         // Admin section (divider included so it hides with the section)
@@ -836,6 +896,15 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         drawerItems.forEach { (layout, route) ->
             highlightDrawerItem(layout, path == route)
         }
+
+        // Content group: auto-expand and highlight parent when on any sub-route
+        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags")
+        val onContent = path in contentRoutes || path.startsWith("content/collection/")
+        if (onContent) {
+            contentChildren.isVisible = true
+            contentChevron.style.set("transform", "rotate(180deg)")
+        }
+        highlightDrawerItem(contentParent, onContent)
 
         // Purchases group: auto-expand and highlight parent when on any sub-route
         val purchaseRoutes = setOf("scan", "import", "expand", "valuation", "purchase-wishes", "report")
