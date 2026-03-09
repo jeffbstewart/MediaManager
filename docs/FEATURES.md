@@ -62,6 +62,7 @@ see git history for full specifications.
 | Remove Roku API Key | Dropped `roku_api_key` from DB, UI, and auth; device tokens only |
 | Scrub Sensitive Data | Removed hardcoded IPs, leaked keys, and secrets from all tracked files |
 | Remove Catalog Tags | Removed franchise and decade tag auto-population; genre tags only |
+| Family Videos | Personal video management with family member tagging, hero image extraction, event dates |
 | Browse View | Poster grid at `/catalog` with sort, filter chips, tag chips, playable toggle |
 | Data Quality View | Admin enrichment triage at `/data-quality` with status badges and filters |
 | Tag Browsing | Tag chips in browse view for OR-mode filtering by tag |

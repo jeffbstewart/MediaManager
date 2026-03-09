@@ -161,6 +161,38 @@ Titles that exist in the catalog but aren't yet playable in the browser (the sou
 
 ---
 
+## Family Videos
+
+Family Videos is an optional feature that is off by default. A server admin must enable it in Settings before the Family link appears in the sidebar. Once enabled, open **Family** from the Content section in the sidebar to browse your family video collection. This section is separate from the movie/TV catalog and is designed for personal recordings &mdash; home movies, recitals, sports events, vacations, and anything else you've filmed.
+
+### Browsing
+
+The Family Videos page shows a card grid with poster-style thumbnails, titles, event dates, descriptions, and family member badges. Each card also shows a play button icon if the video is ready to watch, and a progress bar if you've started watching.
+
+### Filtering &amp; Sorting
+
+Filter chips across the top let you narrow the grid:
+
+- **Playable** &mdash; Toggle to show only videos with a browser-playable transcode
+- **Family member chips** &mdash; Click one or more names to filter to videos featuring those people. Click "All People" to clear the filter.
+- **Sort chips** &mdash; Choose between Newest (event date), Oldest, Name (alphabetical), or Recently Added (creation date)
+
+### Title Detail for Family Videos
+
+Click any card to open the title detail page, which shows:
+
+- **Hero image** &mdash; A poster-style thumbnail extracted from the video (set by an admin)
+- **Event date** &mdash; When the video was filmed
+- **Description** &mdash; Notes about the video
+- **People in this Video** &mdash; Family members tagged in the video, shown as initial circles with names and ages at the time of filming (if birth dates are set)
+- **Play button** &mdash; Watch the video in the browser player with full progress tracking and resume support
+
+### Playback
+
+Family videos use the same in-browser player as movies and TV shows. Your watch progress is saved automatically, and videos appear in the **Continue Watching** row on the home screen just like any other content.
+
+---
+
 ## Actor Pages
 
 Click any actor's headshot (from a title detail page or search results) to see their filmography page. This shows:

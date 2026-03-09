@@ -33,6 +33,8 @@ Media Manager is a self-hosted web application for people who own physical media
 
 **Organize** with tags, wish lists, favorites, and per-user content rating filters. Each household member gets their own account with personalized views.
 
+**Preserve** family videos alongside your disc collection. Tag family members, set event dates, extract hero images from the video, and browse a timeline of personal recordings with the same playback experience as your movie library.
+
 ## Documentation
 
 | Guide | Audience | Covers |

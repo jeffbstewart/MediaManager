@@ -2804,3 +2804,24 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files created: docs/COMPETITIVE_ANALYSIS.md, data/competitive-analysis.md (draft)
 - Files modified: README.md, docs/index.md
 ===
+
+=== 2026-03-09 17:30 — Phase 3 personal videos, bug fixes, priority ordering ===
+- Committed Phase 3: PersonalVideosView at content/family (card-based browse
+  view with filter chips, family member filters, sort modes)
+- Enabled Family nav item in MainLayout Content submenu
+- Fixed FFmpeg crash on anamorphic SAR: scale filter now rounds to even
+  dimensions (trunc(iw*sar/2)*2) — libx264/NVENC require even width/height
+- Added FFmpeg command logging in TranscoderAgent for debugging
+- Increased AppLogBuffer ring buffer sizes (ERROR=100, WARN=100, INFO=300)
+- Added Clear Failures button to TranscodeStatusView (plain tertiary style)
+  for resetting poison-pilled transcodes from the admin UI
+- Redesigned TranscodeLeaseService priority ordering: replaced rigid 3-phase
+  system (all thumbnails → all subtitles → all transcodes) with unified
+  per-title queue sorted by wished first, then popularity, then work type
+  within a title (transcode → thumbnails → subtitles)
+- Commits: e3b80f5 (Phase 3 + bug fixes), e16ad13 (priority ordering)
+- Local only — not pushed to GitHub, no Docker rebuild
+- Files created: PersonalVideosView.kt
+- Files modified: MainLayout.kt, TranscodeStatusView.kt, AppLogBuffer.kt,
+  TranscoderAgent.kt, TranscodeCommand.kt, TranscodeLeaseService.kt
+===

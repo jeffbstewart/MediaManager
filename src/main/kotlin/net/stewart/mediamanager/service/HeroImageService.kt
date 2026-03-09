@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
 
+/** A candidate hero frame with its file and the timestamp it was extracted from. */
+data class CandidateFrame(val file: File, val seekTimeSeconds: Long)
+
 /**
  * Extracts candidate hero frames from a video file using FFmpeg.
  * Returns a list of temporary JPEG files that the user can choose from.
@@ -18,10 +21,10 @@ object HeroImageService {
 
     /**
      * Extracts [FRAME_COUNT] evenly-spaced frames from [videoFile].
-     * Returns a list of temporary JPEG files, or empty if extraction fails.
+     * Returns a list of [CandidateFrame] with temp files and their seek timestamps.
      * Caller is responsible for deleting temp files after use.
      */
-    fun extractCandidateFrames(videoFile: File, jitterSeed: Int = 0): List<File> {
+    fun extractCandidateFrames(videoFile: File, jitterSeed: Int = 0): List<CandidateFrame> {
         val ffmpegPath = TranscoderAgent.getFfmpegPath()
         if (!File(ffmpegPath).exists()) {
             log.warn("FFmpeg not found at {}", ffmpegPath)
@@ -45,7 +48,7 @@ object HeroImageService {
         val interval = if (FRAME_COUNT > 1) span.toDouble() / (FRAME_COUNT - 1) else span.toDouble()
         val jitter = if (jitterSeed > 0) (interval * 0.5 * ((jitterSeed % 7 + 1).toDouble() / 8.0)).toLong() else 0L
 
-        val frames = mutableListOf<File>()
+        val frames = mutableListOf<CandidateFrame>()
         for (i in 0 until FRAME_COUNT) {
             val seekTime = (startOffset + (i * interval).toLong() + jitter).coerceAtMost(endOffset)
             val outputFile = File(tempDir, "frame_%02d.jpg".format(i + 1))
@@ -68,7 +71,7 @@ object HeroImageService {
                 process.inputStream.readBytes() // consume output
                 val exitCode = process.waitFor()
                 if (exitCode == 0 && outputFile.exists() && outputFile.length() > 0) {
-                    frames.add(outputFile)
+                    frames.add(CandidateFrame(outputFile, seekTime))
                 }
             } catch (e: Exception) {
                 log.warn("Frame extraction failed at {}s: {}", seekTime, e.message)
@@ -119,11 +122,11 @@ object HeroImageService {
     }
 
     /** Cleans up temporary frame files. */
-    fun cleanupTempFrames(frames: List<File>) {
+    fun cleanupTempFrames(frames: List<CandidateFrame>) {
         if (frames.isEmpty()) return
-        val tempDir = frames.first().parentFile
+        val tempDir = frames.first().file.parentFile
         for (f in frames) {
-            try { f.delete() } catch (_: Exception) {}
+            try { f.file.delete() } catch (_: Exception) {}
         }
         try { tempDir?.delete() } catch (_: Exception) {}
     }

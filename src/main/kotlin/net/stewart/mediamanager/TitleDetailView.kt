@@ -251,14 +251,15 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                 }
                 add(metaRow)
 
-                // Format badges
-                if (formats.isNotEmpty()) {
+                // Format badges (skip UNKNOWN/OTHER — they add no useful info)
+                val displayFormats = formats.filter { it != "UNKNOWN" && it != "OTHER" }
+                if (displayFormats.isNotEmpty()) {
                     val badgeRow = HorizontalLayout().apply {
                         isSpacing = true
                         isPadding = false
                         defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
                         style.set("margin-bottom", "var(--lumo-space-m)")
-                        for (fmt in formats) {
+                        for (fmt in displayFormats) {
                             val file = when (fmt) {
                                 "DVD" -> "dvd.svg"
                                 "BLURAY" -> "bluray.svg"
@@ -1145,7 +1146,12 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         })
 
         var jitterSeed = 0
-        var currentFrames: List<java.io.File> = emptyList()
+        var currentFrames: List<CandidateFrame> = emptyList()
+
+        // Clean up temp files if dialog is closed or detached (e.g. user closes browser tab)
+        dialog.addDetachListener {
+            HeroImageService.cleanupTempFrames(currentFrames)
+        }
 
         val shuffleBtn = Button("Shuffle").apply {
             icon = VaadinIcon.REFRESH.create()
@@ -1154,7 +1160,6 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         }
         val cancelBtn = Button("Cancel") {
             dialog.close()
-            HeroImageService.cleanupTempFrames(currentFrames)
         }
         val footer = HorizontalLayout().apply {
             justifyContentMode = FlexComponent.JustifyContentMode.BETWEEN
@@ -1186,9 +1191,10 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     statusLabel.text = "Click a frame to set it as the hero image:"
                     shuffleBtn.isEnabled = true
 
-                    for (frame in frames) {
-                        val bytes = frame.readBytes()
+                    for (candidate in frames) {
+                        val bytes = candidate.file.readBytes()
                         val base64 = java.util.Base64.getEncoder().encodeToString(bytes)
+                        val timestamp = formatTimestamp(candidate.seekTimeSeconds)
 
                         frameGrid.add(Div().apply {
                             style.set("border-radius", "var(--lumo-border-radius-m)")
@@ -1201,16 +1207,23 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                                 "this.addEventListener('mouseleave',()=>this.style.borderColor='transparent');"
                             )
 
-                            add(Image("data:image/jpeg;base64,$base64", "candidate frame").apply {
+                            add(Image("data:image/jpeg;base64,$base64", "frame at $timestamp").apply {
                                 width = "100%"
                                 style.set("aspect-ratio", "2/3")
                                 style.set("object-fit", "cover")
                                 style.set("display", "block")
                             })
 
+                            add(Span(timestamp).apply {
+                                style.set("display", "block")
+                                style.set("text-align", "center")
+                                style.set("font-size", "var(--lumo-font-size-xs)")
+                                style.set("color", "var(--lumo-secondary-text-color)")
+                                style.set("padding", "var(--lumo-space-xs) 0")
+                            })
+
                             addClickListener {
                                 HeroImageService.setHeroImage(title, bytes)
-                                HeroImageService.cleanupTempFrames(frames)
                                 currentTitle = Title.findById(title.id!!)
                                 buildContent(currentTitle!!)
                                 dialog.close()
@@ -1230,6 +1243,13 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
 
         dialog.open()
         loadFrames()
+    }
+
+    private fun formatTimestamp(totalSeconds: Long): String {
+        val h = totalSeconds / 3600
+        val m = (totalSeconds % 3600) / 60
+        val s = totalSeconds % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
     }
 
     // --- Cast Row ---

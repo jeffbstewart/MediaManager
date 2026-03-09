@@ -204,6 +204,79 @@ Catalog titles that have no transcoded files at all. This is your "rip these nex
 
 ---
 
+## Family Videos
+
+Family videos let you add personal recordings (home movies, recitals, events) to Media Manager alongside your movie and TV collection. The feature must be enabled in Settings before use.
+
+### Enabling the Feature
+
+**Sidebar &rarr; Settings &rarr; Personal Video Enabled** &mdash; Toggle on. When enabled, the NAS scanner classifies files in designated directories as personal video candidates, and a "Family" link appears in the sidebar's Content section.
+
+### Creating Family Videos
+
+Family videos are created from unmatched NAS files:
+
+1. **Scan your NAS** (Transcodes &rarr; Status &rarr; Scan NAS) to discover new files
+2. Go to **Transcodes &rarr; Unmatched** &mdash; personal video files show a "Create" button
+3. Click **Create** to open the dialog where you enter:
+   - **Title** &mdash; A name for the video (e.g., "Emma's Dance Recital 2024")
+   - **Event date** &mdash; When it was filmed
+   - **Description** &mdash; Optional notes
+   - **Family members** &mdash; Tag the people who appear in the video
+   - **Tags** &mdash; Apply any existing tags for organization
+
+The system creates a catalog entry, links it to the file, and it immediately appears in the Family Videos grid.
+
+### Managing Family Members
+
+**Navigate to `/family`** to manage the global family member registry. This page lets you:
+
+- **Add members** with a name, optional birth date, and notes
+- **Edit** existing member details
+- **Delete** members (removes all video associations)
+
+Family members are shared across all videos &mdash; add a person once, then tag them in as many videos as you like. Birth dates are used to calculate and display ages at the time of each video's event date.
+
+You can also add new family members on the fly from the title detail page's "Edit Family Members" dialog.
+
+### Setting Hero Images
+
+Each family video can have a custom hero image extracted from the video itself, displayed in the poster-style 2:3 aspect ratio used throughout the app.
+
+From a family video's title detail page:
+
+1. Click **Set Hero Image** (admin only)
+2. The system extracts 12 evenly-spaced frames from the video using FFmpeg
+3. Each frame shows its **timestamp** (e.g., "1:23", "12:45") so you can identify the scene
+4. Click a frame to set it as the hero image
+5. Click **Shuffle** to get a different set of frame offsets if none of the current options work
+
+Hero images are stored locally (not on TMDB) and served from the `/local-images/` endpoint.
+
+### Editing Family Video Details
+
+From the title detail page, click **Edit** to update:
+
+- **Title** &mdash; Display name
+- **Event date** &mdash; Date filmed
+- **Description** &mdash; Notes about the video
+
+Click the pencil icon next to "People in this Video" to add or remove family member tags.
+
+### How Family Videos Differ from Catalog Titles
+
+| Aspect | Catalog titles | Family videos |
+|--------|---------------|---------------|
+| **Source** | UPC scan or TMDB search | Unmatched NAS file |
+| **Enrichment** | TMDB metadata, posters, cast | Manual entry only |
+| **Poster** | TMDB poster image | Extracted video frame (hero image) |
+| **People** | TMDB cast members | Family member registry |
+| **Sorting** | Alphabetical, popularity | Event date, name, recently added |
+| **Playback** | Same HTML5 player | Same HTML5 player |
+| **Progress** | Same tracking &amp; resume | Same tracking &amp; resume |
+
+---
+
 ## Settings
 
 **Sidebar &rarr; Settings**
