@@ -237,7 +237,7 @@ class DataQualityView : KComposite() {
         val allTitles = Title.findAll(Title::sort_name.asc)
         totalCount = allTitles.size.toLong()
 
-        var filtered = allTitles
+        var filtered = allTitles.filter { it.media_type != MediaType.PERSONAL.name }
 
         // Filter by rating ceiling for non-admin users
         val currentUser = AuthService.getCurrentUser()
