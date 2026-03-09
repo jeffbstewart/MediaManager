@@ -27,7 +27,27 @@ object TranscodeLeaseService {
     private const val DEFAULT_MAX_FAILURES = 3
 
     /**
-     * Claims the next available transcode for a buddy worker.
+     * Work item representing a single piece of work (transcode, thumbnail, or subtitle)
+     * for unified priority sorting.
+     */
+    private data class WorkItem(
+        val transcode: Transcode,
+        val leaseType: LeaseType,
+        val titleId: Long,
+        /** 0 = TRANSCODE, 1 = THUMBNAILS, 2 = SUBTITLES — order within a title */
+        val typeOrder: Int
+    )
+
+    /**
+     * Claims the next available work item for a buddy worker.
+     *
+     * Unified priority ordering:
+     * 1. Wished titles first (priority transcodes jump to top)
+     * 2. Then by TMDB popularity (most popular first)
+     * 3. Within the same title: transcode → thumbnails → subtitles
+     *
+     * This ensures a high-priority title gets fully processed (transcode,
+     * thumbnails, subtitles) before moving to the next title.
      *
      * Synchronized to prevent two workers from claiming the same file.
      * Returns the lease record, or null if no work is available.
@@ -38,83 +58,80 @@ object TranscodeLeaseService {
         val nasRoot = TranscoderAgent.getNasRoot() ?: return null
 
         val activeLeasedIds = getActiveLeasedTranscodeIds()
+        val activeThumbnailIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
+        val activeSubtitleIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
+
         val poisonPillIds = getPoisonPillTranscodeIds()
         val thumbnailPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
         val subtitlePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
 
         val titles = Title.findAll().associateBy { it.id }
         val hiddenTitleIds = titles.values.filter { it.hidden }.map { it.id }.toSet()
+        val wishedTitleIds = WishListService.getTranscodeWishedTitleIds()
 
-        // --- Phase 1: THUMBNAILS work (higher priority — clear backlog first) ---
-        if (LeaseType.THUMBNAILS.name !in skipTypes) {
-            val activeThumbnailIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
-            val thumbCandidates = Transcode.findAll().filter { tc ->
-                tc.file_path != null &&
-                    tc.title_id !in hiddenTitleIds &&
-                    tc.id !in activeThumbnailIds &&
-                    tc.id !in thumbnailPoisonPillIds
-            }.filter { tc ->
-                val filePath = tc.file_path!!
-                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
-                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-                } else {
-                    File(filePath)
-                }
-                mp4File.exists() && !net.stewart.transcode.ThumbnailSpriteGenerator.hasSprites(mp4File)
-            }
+        val workItems = mutableListOf<WorkItem>()
 
-            if (thumbCandidates.isNotEmpty()) {
-                val sorted = thumbCandidates.sortedByDescending { titles[it.title_id]?.popularity ?: Double.MIN_VALUE }
-                return createLease(sorted.first(), nasRoot, buddyName, LeaseType.THUMBNAILS)
-            }
-        }
+        for (tc in Transcode.findAll()) {
+            if (tc.file_path == null || tc.title_id in hiddenTitleIds) continue
+            val filePath = tc.file_path!!
 
-        // --- Phase 2: SUBTITLES work (after thumbnails, before transcodes) ---
-        if (LeaseType.SUBTITLES.name !in skipTypes) {
-            val activeSubtitleIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
-            val subCandidates = Transcode.findAll().filter { tc ->
-                tc.file_path != null &&
-                    tc.title_id !in hiddenTitleIds &&
-                    tc.id !in activeSubtitleIds &&
-                    tc.id !in subtitlePoisonPillIds
-            }.filter { tc ->
-                val filePath = tc.file_path!!
-                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
-                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-                } else {
-                    File(filePath)
-                }
-                mp4File.exists() && !hasSubtitleFile(mp4File) && !hasSubtitleSentinel(mp4File)
-            }
-
-            if (subCandidates.isNotEmpty()) {
-                val sorted = subCandidates.sortedByDescending { titles[it.title_id]?.popularity ?: Double.MIN_VALUE }
-                return createLease(sorted.first(), nasRoot, buddyName, LeaseType.SUBTITLES)
-            }
-        }
-
-        // --- Phase 3: TRANSCODE work ---
-        val transcodes = Transcode.findAll().filter { tc ->
-            tc.file_path != null &&
-                TranscoderAgent.needsTranscoding(tc.file_path!!) &&
-                tc.title_id !in hiddenTitleIds &&
+            // --- Check TRANSCODE eligibility ---
+            if (LeaseType.TRANSCODE.name !in skipTypes &&
+                TranscoderAgent.needsTranscoding(filePath) &&
                 tc.id !in activeLeasedIds &&
                 tc.id !in poisonPillIds &&
-                !TranscoderAgent.isTranscoded(nasRoot, tc.file_path!!) &&
-                File(tc.file_path!!).exists()
+                !TranscoderAgent.isTranscoded(nasRoot, filePath) &&
+                File(filePath).exists()
+            ) {
+                workItems.add(WorkItem(tc, LeaseType.TRANSCODE, tc.title_id, 0))
+            }
+
+            // --- Check THUMBNAILS eligibility ---
+            if (LeaseType.THUMBNAILS.name !in skipTypes &&
+                tc.id !in activeThumbnailIds &&
+                tc.id !in thumbnailPoisonPillIds
+            ) {
+                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
+                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+                } else {
+                    File(filePath)
+                }
+                if (mp4File.exists() && !net.stewart.transcode.ThumbnailSpriteGenerator.hasSprites(mp4File)) {
+                    workItems.add(WorkItem(tc, LeaseType.THUMBNAILS, tc.title_id, 1))
+                }
+            }
+
+            // --- Check SUBTITLES eligibility ---
+            if (LeaseType.SUBTITLES.name !in skipTypes &&
+                tc.id !in activeSubtitleIds &&
+                tc.id !in subtitlePoisonPillIds
+            ) {
+                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
+                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+                } else {
+                    File(filePath)
+                }
+                if (mp4File.exists() && !hasSubtitleFile(mp4File) && !hasSubtitleSentinel(mp4File)) {
+                    workItems.add(WorkItem(tc, LeaseType.SUBTITLES, tc.title_id, 2))
+                }
+            }
         }
 
-        if (transcodes.isNotEmpty()) {
-            val wishedTitleIds = WishListService.getTranscodeWishedTitleIds()
-            val sorted = transcodes.sortedWith(
-                compareByDescending<Transcode> {
-                    if (it.title_id in wishedTitleIds) 1 else 0
-                }.thenByDescending { titles[it.title_id]?.popularity ?: Double.MIN_VALUE }
-            )
-            return createLease(sorted.first(), nasRoot, buddyName, LeaseType.TRANSCODE)
-        }
+        if (workItems.isEmpty()) return null
 
-        null
+        // Unified sort: wished first, then popularity, then work type within title
+        val sorted = workItems.sortedWith(
+            compareByDescending<WorkItem> {
+                if (it.titleId in wishedTitleIds) 1 else 0
+            }.thenByDescending {
+                titles[it.titleId]?.popularity ?: Double.MIN_VALUE
+            }.thenBy {
+                it.typeOrder
+            }
+        )
+
+        val winner = sorted.first()
+        return createLease(winner.transcode, nasRoot, buddyName, winner.leaseType)
     }
 
     private fun createLease(tc: Transcode, nasRoot: String, buddyName: String, leaseType: LeaseType): TranscodeLease {
