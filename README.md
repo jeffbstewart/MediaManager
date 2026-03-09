@@ -35,6 +35,7 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 | [Transcode Buddy](docs/TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](docs/GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Feature Tracker](docs/FEATURES.md) | Contributors | Completed features history; open items tracked in [GitHub Issues](https://github.com/jeffbstewart/MediaManager/issues) |
+| [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) | Contributors | Market positioning vs Plex, Jellyfin, CLZ Movies, and others |
 
 ## Tech Stack
 

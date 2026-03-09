@@ -15,7 +15,8 @@
   <a href="USER_GUIDE.md">User Guide</a> &bull;
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;
   <a href="ROKU_GUIDE.md">Roku Setup</a> &bull;
-  <a href="TRANSCODE_BUDDY.md">Transcode Buddy</a>
+  <a href="TRANSCODE_BUDDY.md">Transcode Buddy</a> &bull;
+  <a href="COMPETITIVE_ANALYSIS.md">Competitive Analysis</a>
 </p>
 
 ---
@@ -43,6 +44,7 @@ Media Manager is a self-hosted web application for people who own physical media
 | [Transcode Buddy](TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Feature Tracker](FEATURES.md) | Contributors | Completed features history; open items in [GitHub Issues](https://github.com/jeffbstewart/MediaManager/issues) |
+| [Competitive Analysis](COMPETITIVE_ANALYSIS.md) | Contributors | Market positioning vs Plex, Jellyfin, CLZ Movies, and others |
 
 ## Quick Start
 

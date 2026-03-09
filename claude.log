@@ -2758,3 +2758,49 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - All tests pass (24s)
 - Files modified: src/main/kotlin/.../Bootstrap.kt, claude.log
 ===
+
+=== 2026-03-08 21:00 — Roku channel bug fixes and deploy infrastructure ===
+- Fixed Roku 401 auth error flow (issue #8): channel now auto-navigates
+  to re-pair settings instead of showing dead-end error dialog
+  - Added feedHttpCode field to FeedTask for status code detection
+  - Added reauthenticate trigger to SettingsScreen
+  - MainScene clears stale apiKey and resets screen stack on 401
+  - Fixed truncated labels on pairing screen (wider widths)
+- Fixed roUrlTransfer crash on Render thread: reportProgressToServer()
+  was creating roUrlTransfer on the SceneGraph Render thread (forbidden),
+  crashing the channel at the 60-second progress mark. Moved to ProgressTask.
+- Fixed post-video focus freeze: after stopping playback, focus landed on
+  parent Group nodes instead of focusable children. Added focusedChild
+  observers to EpisodePicker, DetailScreen, and HomeScreen for focus delegation.
+- Split roku-deploy.sh into roku-deploy-dev.sh and roku-deploy-prod.sh
+  with separate .env files per device
+- Updated roku-debug.sh and roku-remote.sh to accept dev/prod target
+- Added roku-screenshot.sh for HDMI capture via OBS Virtual Camera
+- Added Roku screenshot procedures and roku-home.png to docs
+- Commits: e40ec1c (401 fix + deploy scripts), 5419778 (playback crash + focus fix)
+- Files modified: MainScene.brs, FeedTask.brs/xml, SettingsScreen.brs/xml,
+  EpisodePicker.brs, DetailScreen.brs, HomeScreen.brs, MainScene.xml,
+  ProgressTask.brs/xml (new), roku-deploy-dev.sh, roku-deploy-prod.sh (new),
+  roku-debug.sh, roku-remote.sh, roku-deploy.sh (deprecated),
+  roku-screenshot.sh (new), SCREENSHOT_PROCEDURES.md, .gitignore
+===
+
+=== 2026-03-08 — Roku feature gap analysis, issue filing, competitive analysis ===
+- Identified all viewer feature gaps between web and Roku interfaces
+- Filed 12 Roku enhancement issues (#29-#40):
+  #29 Continue Watching row, #30 Multi-user picker, #31 User profile switching,
+  #32 Roku search with voice, #33 Auto-play next episode, #34 Title detail enhancements,
+  #35 Subtitle toggle, #36 Genre/year/rating filtering, #37 Favorites row,
+  #38 Playback speed controls, #39 BIF trick play thumbnails, #40 Recently added row
+- Filed 7 additional feature requests (#41-#47):
+  #41 Live TV tuner, #42 Phone camera barcode scanning, #43 Shareable wish lists,
+  #44 Proof of ownership, #45 Insurance report executive summary,
+  #46 Missing price gap analysis, #47 Replacement value estimation
+- Closed duplicate/fixed issues: #9 (fixed in 5419778), #10 (dup of #39), #11 (dup of #30)
+- Wrote competitive analysis: MediaManager vs Plex, Jellyfin, Emby, CLZ Movies, DVD Profiler,
+  My Movies, Overseerr/Jellyseerr, Ombi
+- Created docs/COMPETITIVE_ANALYSIS.md with issue annotations linking to #1-#47
+- Linked competitive analysis from README.md and docs/index.md
+- Files created: docs/COMPETITIVE_ANALYSIS.md, data/competitive-analysis.md (draft)
+- Files modified: README.md, docs/index.md
+===
