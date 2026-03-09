@@ -156,6 +156,10 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     style.set("border-radius", "8px")
                     style.set("box-shadow", "0 8px 24px rgba(0,0,0,0.4)")
                     style.set("flex-shrink", "0")
+                    if (title.media_type == MediaType.PERSONAL.name) {
+                        style.set("aspect-ratio", "2/3")
+                        style.set("object-fit", "cover")
+                    }
                 })
             }
 
@@ -1122,7 +1126,7 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
 
         val dialog = Dialog().apply {
             headerTitle = "Choose Hero Image"
-            width = "700px"
+            width = "800px"
         }
 
         val statusLabel = Span("Extracting frames...").apply {
@@ -1199,7 +1203,8 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
 
                             add(Image("data:image/jpeg;base64,$base64", "candidate frame").apply {
                                 width = "100%"
-                                style.set("height", "auto")
+                                style.set("aspect-ratio", "2/3")
+                                style.set("object-fit", "cover")
                                 style.set("display", "block")
                             })
 

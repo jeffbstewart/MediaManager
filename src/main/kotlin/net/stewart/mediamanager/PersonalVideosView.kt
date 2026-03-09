@@ -153,7 +153,7 @@ class PersonalVideosView : KComposite() {
             if (heroUrl != null) {
                 add(Image(heroUrl, title.name).apply {
                     width = "100%"
-                    style.set("height", "160px")
+                    style.set("aspect-ratio", "2/3")
                     style.set("object-fit", "cover")
                     style.set("display", "block")
                 })
