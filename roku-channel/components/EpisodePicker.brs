@@ -7,9 +7,26 @@ sub init()
 
     m.seasonList.observeField("itemFocused", "onSeasonFocused")
     m.episodeList.observeField("itemSelected", "onEpisodeSelected")
+    m.top.observeField("focusedChild", "onFocusChanged")
+
+    ' Track which child last had focus for restoring after video playback
+    m.lastFocusedChild = "episodes"
 
     ' Store seasons data for lookup
     m.seasonsData = []
+end sub
+
+sub onFocusChanged()
+    ' When the EpisodePicker Group itself receives focus (e.g., returning from video),
+    ' delegate to the last focused child list so remote input works
+    if m.top.hasFocus()
+        print "[MM] EpisodePicker: group received focus, delegating to " ; m.lastFocusedChild
+        if m.lastFocusedChild = "seasons"
+            m.seasonList.setFocus(true)
+        else
+            m.episodeList.setFocus(true)
+        end if
+    end if
 end sub
 
 sub onSeriesContentSet()
@@ -141,6 +158,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "right"
         if m.seasonList.hasFocus()
             print "[MM] EpisodePicker: focus — seasons -> episodes"
+            m.lastFocusedChild = "episodes"
             m.episodeList.setFocus(true)
             return true
         end if
@@ -149,6 +167,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "left"
         if m.episodeList.hasFocus()
             print "[MM] EpisodePicker: focus — episodes -> seasons"
+            m.lastFocusedChild = "seasons"
             m.seasonList.setFocus(true)
             return true
         end if

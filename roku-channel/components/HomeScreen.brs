@@ -5,6 +5,14 @@ sub init()
     m.emptyLabel = m.top.findNode("emptyLabel")
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
+    m.top.observeField("focusedChild", "onFocusChanged")
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus()
+        print "[MM] HomeScreen: group received focus, delegating to rowList"
+        m.rowList.setFocus(true)
+    end if
 end sub
 
 sub onContentSet()

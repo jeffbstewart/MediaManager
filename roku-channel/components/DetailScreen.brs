@@ -8,8 +8,16 @@ sub init()
     m.buttonGroup = m.top.findNode("buttonGroup")
 
     m.buttonGroup.observeField("buttonSelected", "onButtonSelected")
+    m.top.observeField("focusedChild", "onFocusChanged")
 
     m.itemType = ""
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus()
+        print "[MM] DetailScreen: group received focus, delegating to buttonGroup"
+        m.buttonGroup.setFocus(true)
+    end if
 end sub
 
 sub onItemContentSet()

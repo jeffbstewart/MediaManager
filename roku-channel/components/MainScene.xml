@@ -46,5 +46,8 @@
 
         <!-- Feed fetcher task -->
         <FeedTask id="feedTask" />
+
+        <!-- Progress reporting task -->
+        <ProgressTask id="progressTask" />
     </children>
 </component>

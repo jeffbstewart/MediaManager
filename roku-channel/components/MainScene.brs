@@ -328,21 +328,17 @@ sub reportProgressToServer(contentId as string, position as dynamic, duration as
     if m.serverUrl = "" or m.apiKey = "" then return
     if contentId = "" or contentId = invalid then return
 
-    url = m.serverUrl + "/playback-progress/" + contentId + "?key=" + m.apiKey
-    body = "{" + chr(34) + "position" + chr(34) + ":" + str(position).trim() + "," + chr(34) + "duration" + chr(34) + ":" + str(duration).trim() + "}"
-
-    transfer = CreateObject("roUrlTransfer")
-    transfer.SetUrl(url)
-    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
-    transfer.InitClientCertificates()
-    transfer.AddHeader("Content-Type", "application/json")
-    transfer.SetRequest("POST")
-
-    ' Fire and forget — don't block playback waiting for response
-    port = CreateObject("roMessagePort")
-    transfer.SetMessagePort(port)
-    transfer.AsyncPostFromString(body)
-    ' Don't wait for response — let it complete in background
+    ' Use ProgressTask to make the HTTP call on a Task thread
+    ' (roUrlTransfer cannot be created on the Render thread)
+    m.progressTask = m.top.findNode("progressTask")
+    m.progressTask.control = "stop"
+    m.progressTask.serverUrl = m.serverUrl
+    m.progressTask.apiKey = m.apiKey
+    m.progressTask.contentId = contentId
+    m.progressTask.position = str(position).trim()
+    m.progressTask.duration = str(duration).trim()
+    m.progressTask.functionName = "doTask"
+    m.progressTask.control = "run"
 end sub
 
 ' ---- Resume Dialog ----
