@@ -101,7 +101,16 @@ There are three ways to add titles:
 
 **Sidebar &rarr; Scan New Purchase**
 
-Type or scan a UPC barcode. The system:
+Two input methods are available:
+
+- **Text field** &mdash; Type or scan a UPC barcode using a USB barcode scanner. Press Enter to submit.
+- **Scan with Camera** &mdash; Tap the button to open your phone's camera as a barcode scanner. Point the camera at a UPC barcode and it is detected automatically. Supports continuous scanning &mdash; after each scan, the camera stays active so you can scan the next disc immediately. Audio and visual feedback confirm each scan (green flash for new, blue for duplicate, red for error).
+
+The camera scanner works on **iOS Safari**, **iOS Chrome**, and other mobile browsers with camera access. It supports UPC-A, UPC-E, EAN-8, and EAN-13 barcode formats. On desktop browsers without a camera, the dialog shows an appropriate error message.
+
+If you scan a barcode that's already in the database, a notification tells you so (with the title name if known) instead of silently ignoring it.
+
+After scanning, the system:
 
 1. Looks up the barcode via UPCitemdb (free, no API key)
 2. Creates a catalog entry with the product name

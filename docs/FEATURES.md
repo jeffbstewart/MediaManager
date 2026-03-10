@@ -70,6 +70,7 @@ see git history for full specifications.
 | Collection Sort Names | Auto-generate sort keys from TMDB collection order (e.g., "Back to the Future Collection 001") |
 | Probe-Based Format Detection | FFprobe resolution analysis replaces directory-name format inference; `.mm-ignore` marker files; auto-classify TV vs Movie by directory structure (r404) |
 | Feature Tracker Migration | Migrated all open items from FEATURES.md to GitHub Issues with project-specific labels |
+| Camera Barcode Scanning | Mobile camera scanning via html5-qrcode with continuous scan, audio/visual feedback, duplicate detection |
 
 ---
 

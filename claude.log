@@ -2825,3 +2825,55 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files modified: MainLayout.kt, TranscodeStatusView.kt, AppLogBuffer.kt,
   TranscoderAgent.kt, TranscodeCommand.kt, TranscodeLeaseService.kt
 ===
+
+=== 2026-03-09 19:00 — Hero image fixes, docs, cleanup, deploy ===
+- Fixed hero image picker: added DetachListener for temp file cleanup on
+  abandoned dialogs (medium security finding from audit)
+- Hide UNKNOWN/OTHER format badges on title detail (personal videos showed
+  "UNKNOWN" below the date)
+- HeroImageService now returns CandidateFrame(file, seekTimeSeconds); hero
+  picker displays timestamps below each frame for scene identification
+- Documented family video features in User Guide (browsing, filtering,
+  playback) and Admin Guide (enabling, creating, family members, hero images,
+  editing, comparison table)
+- Added Family Videos to FEATURES.md completed features
+- Updated index.md with "Preserve" paragraph for family videos
+- Excluded personal videos from Data Quality view (they skip TMDB enrichment
+  by design, shouldn't appear as needing attention)
+- Pushed all local commits to GitHub (90118ae..cd68674)
+- Closed GitHub issue #28 (Personal / home video support) — Phases 1-5 done
+- Closed GitHub issue #25 (Structured season lifecycle tracking) — Phases 1-3
+  substantially complete
+- Built and deployed Docker images to local registry
+- Rebuilt transcode buddy with latest shared code
+- Commits: 89732c3 (hero fixes + docs), cd68674 (Data Quality exclusion)
+- Files modified: TitleDetailView.kt, HeroImageService.kt, DataQualityView.kt,
+  docs/USER_GUIDE.md, docs/ADMIN_GUIDE.md, docs/FEATURES.md, docs/index.md
+===
+
+=== 2026-03-09 20:30 — Camera barcode scanning & scan view improvements ===
+- Implemented browser-based camera barcode scanning (GitHub issue #42)
+  - Created BarcodeScannerDialog.kt with html5-qrcode integration
+  - Uses @ClientCallable for JS→server communication
+  - Supports UPC-A, UPC-E, EAN-8, EAN-13 formats
+  - Continuous scanning with 3-second cooldown per barcode
+  - Audio beep and visual flash feedback (green=new, blue=dup, red=error)
+  - Mobile fullscreen on small screens, camera cleanup on close
+  - Works on iOS Safari and iOS Chrome (tested on iPhone)
+- Downloaded html5-qrcode v2.3.8 (Apache 2.0) as local static resource
+  - Bundled at src/main/resources/webapp/html5-qrcode.min.js
+  - Avoids CDN dependency for offline/LAN use
+- Fixed duplicate UPC scan handling in ScanView
+  - Was: silent return when scanning an existing UPC
+  - Now: shows notification "Already scanned: <upc> (<title name>)"
+- Added Notes column hover tooltip in ScanView scan grid
+  - Shows full text on hover for truncated notes cells
+- Excluded personal videos from Data Quality badge count in MainLayout
+- Updated documentation:
+  - ADMIN_GUIDE.md: expanded barcode scanning section with camera details
+  - FEATURES.md: added Camera Barcode Scanning to completed features
+  - CLAUDE.md: added html5-qrcode dependency documentation
+- Files created: BarcodeScannerDialog.kt, html5-qrcode.min.js
+- Files modified: ScanView.kt, MainLayout.kt, CLAUDE.md, ADMIN_GUIDE.md,
+  FEATURES.md, claude.log
+===

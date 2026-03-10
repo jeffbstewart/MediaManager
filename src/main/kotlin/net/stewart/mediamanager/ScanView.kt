@@ -10,6 +10,7 @@ import com.vaadin.flow.component.Key
 import com.vaadin.flow.component.grid.Grid
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
+import com.vaadin.flow.component.icon.VaadinIcon
 import com.vaadin.flow.component.html.Span
 import com.vaadin.flow.component.notification.Notification
 import com.vaadin.flow.component.notification.NotificationVariant
@@ -51,12 +52,29 @@ class ScanView : KComposite() {
 
             quotaLabel = span()
 
-            upcField = textField("UPC") {
-                placeholder = "Scan or type UPC barcode"
-                allowedCharPattern = "[0-9]"
-                isAutofocus = true
-                width = "20em"
-                addKeyDownListener(Key.ENTER, { handleScan() })
+            horizontalLayout {
+                defaultVerticalComponentAlignment =
+                    com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment.BASELINE
+                isSpacing = true
+                isPadding = false
+
+                upcField = textField("UPC") {
+                    placeholder = "Scan or type UPC barcode"
+                    allowedCharPattern = "[0-9]"
+                    isAutofocus = true
+                    width = "20em"
+                    addKeyDownListener(Key.ENTER, { handleScan() })
+                }
+
+                add(Button("Scan with Camera", VaadinIcon.CAMERA.create()).apply {
+                    addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+                    addClickListener {
+                        BarcodeScannerDialog {
+                            refreshGrid()
+                            refreshQuota()
+                        }.open()
+                    }
+                })
             }
 
             h4("Recent Scans")
@@ -68,7 +86,17 @@ class ScanView : KComposite() {
                 addColumn({ it.lookup_status }).setHeader("Status").setSortable(false).setWidth("100px").setFlexGrow(0)
                 addComponentColumn { scan -> buildEnrichmentCell(scan) }
                     .setHeader("Enrichment").setSortable(false).setFlexGrow(0).setWidth("250px")
-                addColumn({ it.notes ?: "" }).setHeader("Notes").setSortable(false).setFlexGrow(1)
+                addComponentColumn { scan ->
+                    Span(scan.notes ?: "").apply {
+                        style.set("overflow", "hidden")
+                        style.set("text-overflow", "ellipsis")
+                        style.set("white-space", "nowrap")
+                        style.set("display", "block")
+                        if (!scan.notes.isNullOrBlank()) {
+                            element.setAttribute("title", scan.notes)
+                        }
+                    }
+                }.setHeader("Notes").setSortable(false).setFlexGrow(1)
                 addColumn({ it.scanned_at?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) ?: "" })
                     .setHeader("Scanned At").setSortable(false).setWidth("160px").setFlexGrow(0)
             }

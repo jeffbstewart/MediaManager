@@ -165,6 +165,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 **Other:**
 - `secrets/example.env` — Template for required environment variables (TMDB API key)
 - `src/main/resources/webapp/ROOT` — Marker file required by vaadin-boot
+- `src/main/resources/webapp/html5-qrcode.min.js` — html5-qrcode v2.3.8 (Apache 2.0 license), client-side barcode detection for mobile camera scanning. Bundled locally to avoid CDN dependency. Source: https://github.com/mebjas/html5-qrcode
 - `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V018)
 - `build.gradle.kts` — Build config
 - `gradle/libs.versions.toml` — Dependency version catalog
