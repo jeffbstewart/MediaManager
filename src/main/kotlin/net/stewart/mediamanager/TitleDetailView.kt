@@ -314,6 +314,37 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     add(tagRow)
                 }
 
+                // Collection membership link
+                if (title.tmdb_collection_id != null) {
+                    val collection = CollectionService.findByTmdbId(title.tmdb_collection_id!!)
+                    if (collection != null) {
+                        val parts = TmdbCollectionPart.findAll()
+                            .filter { it.collection_id == collection.id }
+                        val part = parts.firstOrNull { it.tmdb_movie_id == title.tmdb_id }
+                        val positionText = if (part != null)
+                            "Movie ${part.position} of ${parts.size} in"
+                        else
+                            "Part of"
+
+                        add(HorizontalLayout().apply {
+                            isPadding = false
+                            isSpacing = false
+                            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+                            style.set("margin-bottom", "var(--lumo-space-s)")
+
+                            add(Span("$positionText ").apply {
+                                style.set("color", "rgba(255,255,255,0.6)")
+                                style.set("font-size", "var(--lumo-font-size-s)")
+                            })
+                            add(Anchor("content/collection/${collection.id}", collection.name).apply {
+                                style.set("color", "var(--lumo-primary-color)")
+                                style.set("font-size", "var(--lumo-font-size-s)")
+                                style.set("text-decoration", "none")
+                            })
+                        })
+                    }
+                }
+
                 // Personal hide toggle
                 val isPersonallyHidden = UserTitleFlagService.hasFlag(title.id!!, UserFlagType.HIDDEN)
                 add(Button(if (isPersonallyHidden) "Unhide for me" else "Hide for me").apply {

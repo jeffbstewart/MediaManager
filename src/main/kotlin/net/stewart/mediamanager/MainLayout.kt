@@ -27,12 +27,14 @@ import com.vaadin.flow.router.RouterLink
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TmdbCollection
+import net.stewart.mediamanager.entity.TmdbCollectionPart
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.UserTitleFlagService
 
-/** Wrapper for search results that can be either a Title or an Actor. */
+/** Wrapper for search results that can be a Title, Actor, or Collection. */
 private sealed class SearchItem(val displayName: String, val popularity: Double) {
     class TitleItem(val title: Title) : SearchItem(title.name, title.popularity ?: 0.0)
     class ActorItem(
@@ -41,6 +43,10 @@ private sealed class SearchItem(val displayName: String, val popularity: Double)
         val headshotCastId: Long?,    // any CastMember.id for this person (for headshot servlet)
         popularity: Double
     ) : SearchItem(name, popularity)
+    class CollectionItem(
+        val collection: TmdbCollection,
+        val titleCount: Int
+    ) : SearchItem(collection.name, 0.0)
 }
 
 class MainLayout : AppLayout(), AfterNavigationObserver {
@@ -658,7 +664,14 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
                     )
                 }
 
-            val allItems: List<SearchItem> = (titleItems + actorItems)
+            // Load collections with part counts
+            val allParts = TmdbCollectionPart.findAll()
+            val partCountByCollectionId = allParts.groupBy { it.collection_id }
+                .mapValues { it.value.size }
+            val collectionItems = TmdbCollection.findAll()
+                .map { SearchItem.CollectionItem(it, partCountByCollectionId[it.id] ?: 0) }
+
+            val allItems: List<SearchItem> = (titleItems + actorItems + collectionItems)
                 .sortedByDescending { it.popularity }
 
             setItems(
@@ -670,6 +683,10 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
                             matchingIds != null && item.title.id in matchingIds
                         }
                         is SearchItem.ActorItem -> {
+                            val lower = filterString.lowercase()
+                            item.displayName.lowercase().contains(lower)
+                        }
+                        is SearchItem.CollectionItem -> {
                             val lower = filterString.lowercase()
                             item.displayName.lowercase().contains(lower)
                         }
@@ -765,6 +782,32 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
                                 })
                             })
                         }
+                        is SearchItem.CollectionItem -> {
+                            // Collection icon
+                            add(VaadinIcon.FOLDER.create().apply {
+                                setSize("30px")
+                                style.set("color", "rgba(255,255,255,0.6)")
+                                style.set("flex-shrink", "0")
+                            })
+
+                            add(Div().apply {
+                                style.set("display", "flex")
+                                style.set("flex-direction", "column")
+                                style.set("overflow", "hidden")
+
+                                add(Span(item.displayName).apply {
+                                    style.set("font-weight", "500")
+                                    style.set("white-space", "nowrap")
+                                    style.set("overflow", "hidden")
+                                    style.set("text-overflow", "ellipsis")
+                                })
+
+                                add(Span("Collection \u00b7 ${item.titleCount} titles").apply {
+                                    style.set("color", "var(--lumo-secondary-text-color)")
+                                    style.set("font-size", "var(--lumo-font-size-xs)")
+                                })
+                            })
+                        }
                     }
                 }
             })
@@ -780,6 +823,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
                     when (item) {
                         is SearchItem.TitleItem -> ui.navigate("title/${item.title.id}")
                         is SearchItem.ActorItem -> ui.navigate("actor/${item.personId}")
+                        is SearchItem.CollectionItem -> ui.navigate("content/collection/${item.collection.id}")
                     }
                 }
             }
