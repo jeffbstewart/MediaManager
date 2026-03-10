@@ -168,15 +168,21 @@ class ActiveSessionsView : KComposite(), BeforeEnterObserver {
         when (item.type) {
             "Browser" -> {
                 if (AuthService.revokeSession(item.id, currentTokenHash)) {
-                    Notification.show("Session revoked", 2000, Notification.Position.MIDDLE)
+                    ui.ifPresent { it.access {
+                        Notification.show("Session revoked", 2000, Notification.Position.MIDDLE)
+                    } }
                 } else {
-                    Notification.show("Cannot revoke current session", 2000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    ui.ifPresent { it.access {
+                        Notification.show("Cannot revoke current session", 2000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    } }
                 }
             }
             "Roku Device" -> {
                 PairingService.revokeToken(item.id)
-                Notification.show("Device token revoked", 2000, Notification.Position.MIDDLE)
+                ui.ifPresent { it.access {
+                    Notification.show("Device token revoked", 2000, Notification.Position.MIDDLE)
+                } }
             }
         }
         refreshGrid()
@@ -196,9 +202,11 @@ class ActiveSessionsView : KComposite(), BeforeEnterObserver {
                 val currentUser = AuthService.getCurrentUser()
                 log.info("AUDIT: All other sessions revoked for user_id={} by '{}'",
                     userId, currentUser?.username)
-                dialog.close()
-                Notification.show("All other sessions revoked", 3000, Notification.Position.MIDDLE)
                 refreshGrid()
+                dialog.close()
+                ui.ifPresent { it.access {
+                    Notification.show("All other sessions revoked", 3000, Notification.Position.MIDDLE)
+                } }
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR) }
         )
         dialog.open()

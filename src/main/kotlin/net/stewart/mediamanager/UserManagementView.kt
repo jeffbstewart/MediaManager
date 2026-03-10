@@ -236,9 +236,11 @@ class UserManagementView : KComposite() {
                 val currentUser = AuthService.getCurrentUser()
                 log.info("AUDIT: User '{}' deleted by '{}'", user.username, currentUser?.username)
                 user.delete()
-                dialog.close()
-                Notification.show("User deleted", 3000, Notification.Position.MIDDLE)
                 refreshGrid()
+                dialog.close()
+                ui.ifPresent { it.access {
+                    Notification.show("User deleted", 3000, Notification.Position.MIDDLE)
+                } }
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR) }
         )
         dialog.open()
@@ -291,9 +293,11 @@ class UserManagementView : KComposite() {
                 AuthService.invalidateUserSessions(user.id!!)
                 log.info("AUDIT: Password reset for '{}' by '{}' — all sessions invalidated, force_change={}",
                     user.username, currentUser.username, forcePwChange.value)
-                dialog.close()
-                Notification.show("Password reset for ${user.display_name} — all sessions invalidated", 3000, Notification.Position.MIDDLE)
                 refreshGrid()
+                dialog.close()
+                ui.ifPresent { it.access {
+                    Notification.show("Password reset for ${user.display_name} — all sessions invalidated", 3000, Notification.Position.MIDDLE)
+                } }
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY); isEnabled = false }
 
         // Live validation
@@ -365,9 +369,11 @@ class UserManagementView : KComposite() {
                 val label = combo.value?.second ?: "Unrestricted"
                 log.info("AUDIT: Rating ceiling for '{}' set to '{}' by '{}' — all sessions invalidated",
                     user.username, label, currentUser?.username)
-                dialog.close()
-                Notification.show("Rating ceiling set to $label — sessions invalidated", 3000, Notification.Position.MIDDLE)
                 refreshGrid()
+                dialog.close()
+                ui.ifPresent { it.access {
+                    Notification.show("Rating ceiling set to $label — sessions invalidated", 3000, Notification.Position.MIDDLE)
+                } }
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY) }
         )
         dialog.open()

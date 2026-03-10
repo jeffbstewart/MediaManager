@@ -2876,4 +2876,15 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files created: BarcodeScannerDialog.kt, html5-qrcode.min.js
 - Files modified: ScanView.kt, MainLayout.kt, CLAUDE.md, ADMIN_GUIDE.md,
   FEATURES.md, claude.log
+
+=== 2026-03-09 20:30 — Fix session revocation notification delay (#6) ===
+- Fixed notifications not appearing immediately after session revocation
+- Root cause: with PushMode.AUTOMATIC, dialog.close() + Notification.show()
+  in the same handler caused the notification to be swallowed by the dialog
+  close. Fixed by wrapping Notification.show() in ui.access {} to ensure it
+  flushes as a separate push, and moving refreshGrid() before dialog.close()
+- Fixed in ActiveSessionsView.kt: revokeItem() and confirmRevokeAll()
+- Fixed in UserManagementView.kt: deleteUser(), resetPassword(), ratingCeiling()
+- Also closed #15 (multi-season wish duplicates) — already fixed by season-aware
+  wish list implementation in Phase 2
 ===
