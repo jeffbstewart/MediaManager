@@ -305,6 +305,7 @@ private class PurchaseEditDialog(
     private lateinit var placeField: TextField
     private lateinit var dateField: DatePicker
     private lateinit var priceField: NumberField
+    private lateinit var replacementField: NumberField
 
     init {
         headerTitle = "Edit Purchase"
@@ -334,6 +335,15 @@ private class PurchaseEditDialog(
             value = mediaItem.purchase_price?.toDouble()
             width = "100%"
         }
+        replacementField = NumberField("Replacement Value").apply {
+            prefixComponent = Span("$")
+            value = mediaItem.replacement_value?.toDouble()
+            width = "100%"
+            val updatedAt = mediaItem.replacement_value_updated_at
+            if (updatedAt != null) {
+                helperText = "Last updated: ${updatedAt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))}"
+            }
+        }
         dateField = DatePicker("Purchase Date").apply {
             value = mediaItem.purchase_date
             width = "100%"
@@ -351,7 +361,7 @@ private class PurchaseEditDialog(
         val content = VerticalLayout().apply {
             isPadding = false
             isSpacing = true
-            add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField)
+            add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField, replacementField)
         }
 
         // Amazon order search section
@@ -484,6 +494,15 @@ private class PurchaseEditDialog(
             fresh.purchase_place = placeValue
             fresh.purchase_date = date
             fresh.purchase_price = price
+
+            val newReplacementValue = replacementField.value?.let {
+                BigDecimal.valueOf(it).setScale(2, RoundingMode.HALF_UP)
+            }
+            if (newReplacementValue != fresh.replacement_value) {
+                fresh.replacement_value = newReplacementValue
+                fresh.replacement_value_updated_at = if (newReplacementValue != null) LocalDateTime.now() else null
+            }
+
             fresh.updated_at = LocalDateTime.now()
 
             // Link Amazon order if one was selected via "Use"

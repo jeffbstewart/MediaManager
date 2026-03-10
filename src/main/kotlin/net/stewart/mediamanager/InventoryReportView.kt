@@ -109,7 +109,7 @@ class InventoryReportView : KComposite() {
         val sorted = data.allItems.sortedBy { sortKey(data.titleNames(it)) }
         val sb = StringBuilder()
 
-        sb.appendLine("Title(s),Format,UPC,Purchase Date,Purchase Place,Order #,Purchase Price")
+        sb.appendLine("Title(s),Format,UPC,Purchase Date,Purchase Place,Order #,Purchase Price,Replacement Value")
 
         for (item in sorted) {
             sb.append(csvField(data.titleNames(item)))
@@ -125,6 +125,8 @@ class InventoryReportView : KComposite() {
             sb.append(csvField(item.amazon_order_id ?: ""))
             sb.append(',')
             sb.append(csvField(item.purchase_price?.setScale(2)?.toString() ?: ""))
+            sb.append(',')
+            sb.append(csvField(item.replacement_value?.setScale(2)?.toString() ?: ""))
             sb.appendLine()
         }
 
@@ -159,6 +161,8 @@ class InventoryReportView : KComposite() {
         val headerFont = Font(Font.HELVETICA, 9f, Font.BOLD, Color.WHITE)
         val subtotalFont = Font(Font.HELVETICA, 10f, Font.BOLD)
         val totalFont = Font(Font.HELVETICA, 12f, Font.BOLD)
+        val summaryLabelFont = Font(Font.HELVETICA, 10f, Font.NORMAL, Color(80, 80, 80))
+        val summaryValueFont = Font(Font.HELVETICA, 10f, Font.BOLD)
 
         // Report title
         val titlePara = Paragraph("Insurance Inventory Report", titleFont)
@@ -170,8 +174,160 @@ class InventoryReportView : KComposite() {
             normalFont
         )
         datePara.alignment = Element.ALIGN_CENTER
-        datePara.spacingAfter = 20f
+        datePara.spacingAfter = 16f
         document.add(datePara)
+
+        // === Executive Summary ===
+        val summarySection = Paragraph("Executive Summary", sectionFont)
+        summarySection.spacingAfter = 8f
+        document.add(summarySection)
+
+        val totalItems = data.allItems.size
+        val grandTotal = valued.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
+        val replacementTotal = data.allItems.mapNotNull { it.replacement_value }.fold(BigDecimal.ZERO, BigDecimal::add)
+        val itemsWithReplacement = data.allItems.count { it.replacement_value != null }
+
+        // Format breakdown
+        val formatCounts = data.allItems.groupBy { it.media_format }
+        val formatBreakdown = listOf("DVD", "BLURAY", "UHD_BLURAY", "HD_DVD")
+            .mapNotNull { fmt ->
+                val count = formatCounts[fmt]?.size ?: 0
+                if (count > 0) "${count} ${fmt.replace("_", " ")}${if (count != 1) "s" else ""}" else null
+            }
+
+        val summaryTable = PdfPTable(2).apply {
+            widthPercentage = 70f
+            horizontalAlignment = Element.ALIGN_LEFT
+            setWidths(floatArrayOf(2f, 3f))
+        }
+
+        fun addSummaryRow(label: String, value: String) {
+            val labelCell = PdfPCell(Phrase(label, summaryLabelFont)).apply {
+                border = Rectangle.NO_BORDER; setPadding(3f)
+            }
+            val valueCell = PdfPCell(Phrase(value, summaryValueFont)).apply {
+                border = Rectangle.NO_BORDER; setPadding(3f)
+            }
+            summaryTable.addCell(labelCell)
+            summaryTable.addCell(valueCell)
+        }
+
+        addSummaryRow("Total items:", "$totalItems")
+        if (formatBreakdown.isNotEmpty()) {
+            addSummaryRow("Format breakdown:", formatBreakdown.joinToString(", "))
+        }
+        addSummaryRow("Documented value:", "\$${grandTotal.setScale(2)}")
+        if (valued.isNotEmpty()) {
+            val avgPrice = grandTotal.divide(BigDecimal(valued.size), 2, java.math.RoundingMode.HALF_UP)
+            addSummaryRow("Average price per item:", "\$${avgPrice}")
+        }
+        val coveragePct = if (totalItems > 0) (valued.size * 100) / totalItems else 0
+        addSummaryRow("Price coverage:", "${valued.size} of $totalItems items ($coveragePct%)")
+
+        if (itemsWithReplacement > 0) {
+            addSummaryRow("Replacement value:", "\$${replacementTotal.setScale(2)} ($itemsWithReplacement items)")
+        }
+
+        // Date range
+        val dates = valued.mapNotNull { it.purchase_date }
+        if (dates.isNotEmpty()) {
+            val earliest = dates.min()
+            val latest = dates.max()
+            val fmt = DateTimeFormatter.ofPattern("MMM yyyy")
+            addSummaryRow("Date range:", "${earliest.format(fmt)} \u2013 ${latest.format(fmt)}")
+        }
+
+        // Top retailers
+        val topRetailers = valued.groupBy { it.purchase_place ?: "Unknown" }
+            .entries.sortedByDescending { it.value.size }
+            .take(5)
+            .joinToString(", ") { "${it.key} (${it.value.size})" }
+        if (topRetailers.isNotEmpty()) {
+            addSummaryRow("Top retailers:", topRetailers)
+        }
+
+        document.add(summaryTable)
+
+        // === Gap Analysis ===
+        if (unvalued.isNotEmpty()) {
+            val gapSection = Paragraph("\nValuation Gap Analysis", sectionFont)
+            gapSection.spacingBefore = 12f
+            gapSection.spacingAfter = 8f
+            document.add(gapSection)
+
+            val gapTable = PdfPTable(2).apply {
+                widthPercentage = 70f
+                horizontalAlignment = Element.ALIGN_LEFT
+                setWidths(floatArrayOf(2f, 3f))
+            }
+
+            fun addGapRow(label: String, value: String) {
+                val labelCell = PdfPCell(Phrase(label, summaryLabelFont)).apply {
+                    border = Rectangle.NO_BORDER; setPadding(3f)
+                }
+                val valueCell = PdfPCell(Phrase(value, summaryValueFont)).apply {
+                    border = Rectangle.NO_BORDER; setPadding(3f)
+                }
+                gapTable.addCell(labelCell)
+                gapTable.addCell(valueCell)
+            }
+
+            addGapRow("Unpriced items:", "${unvalued.size} of $totalItems")
+
+            // Estimate gap value using format-average pricing
+            val avgByFormat = valued.groupBy { it.media_format }
+                .mapValues { (_, items) ->
+                    val prices = items.mapNotNull { it.purchase_price }
+                    if (prices.isNotEmpty()) prices.fold(BigDecimal.ZERO, BigDecimal::add)
+                        .divide(BigDecimal(prices.size), 2, java.math.RoundingMode.HALF_UP)
+                    else null
+                }
+
+            val overallAvg = if (valued.isNotEmpty())
+                grandTotal.divide(BigDecimal(valued.size), 2, java.math.RoundingMode.HALF_UP)
+            else BigDecimal.ZERO
+
+            val gapByFormat = unvalued.groupBy { it.media_format }
+            var totalEstGap = BigDecimal.ZERO
+            val gapFormatLines = mutableListOf<String>()
+            var bestFormatKey: String? = null
+            var bestFormatDisplay: String? = null
+            var bestFormatValue = BigDecimal.ZERO
+
+            for ((fmt, items) in gapByFormat) {
+                val avg = avgByFormat[fmt] ?: overallAvg
+                val est = avg.multiply(BigDecimal(items.size))
+                totalEstGap += est
+                val displayFmt = fmt.replace("_", " ")
+                gapFormatLines.add("${items.size} $displayFmt (~\$${est.setScale(2)})")
+                if (est > bestFormatValue) {
+                    bestFormatValue = est
+                    bestFormatKey = fmt
+                    bestFormatDisplay = displayFmt
+                }
+            }
+
+            if (gapFormatLines.isNotEmpty()) {
+                addGapRow("Unpriced by format:", gapFormatLines.joinToString(", "))
+            }
+            addGapRow("Estimated gap value:", "~\$${totalEstGap.setScale(2)}")
+            addGapRow("Est. total with gap:", "\$${grandTotal.setScale(2)} \u2013 \$${(grandTotal + totalEstGap).setScale(2)}")
+
+            document.add(gapTable)
+
+            if (bestFormatKey != null && gapByFormat.size > 1) {
+                val guidancePara = Paragraph(
+                    "Tip: Adding prices for the ${gapByFormat[bestFormatKey]?.size ?: ""} " +
+                            "unpriced ${bestFormatDisplay}s would add the most estimated value (~\$${bestFormatValue.setScale(2)}).",
+                    Font(Font.HELVETICA, 9f, Font.ITALIC, Color(100, 100, 100))
+                )
+                guidancePara.spacingBefore = 4f
+                document.add(guidancePara)
+            }
+        }
+
+        // Spacing before detail sections
+        document.add(Paragraph(" ").apply { spacingAfter = 12f })
 
         // Section 1: Purchases with Valuations — grouped by seller
         val sec1 = Paragraph("Purchases with Valuations", sectionFont)
@@ -184,7 +340,7 @@ class InventoryReportView : KComposite() {
             val bySeller = valued.groupBy { it.purchase_place ?: "Unknown" }
                 .toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
-            var grandTotal = BigDecimal.ZERO
+            var runningTotal = BigDecimal.ZERO
 
             for ((seller, items) in bySeller) {
                 val sorted = items.sortedBy { sortKey(data.titleNames(it)) }
@@ -195,22 +351,37 @@ class InventoryReportView : KComposite() {
                 document.add(sellerPara)
 
                 val hasOrders = sorted.any { it.amazon_order_id != null }
-                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders)
+                val hasReplacement = sorted.any { it.replacement_value != null }
+                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement)
                 document.add(table)
 
                 val subtotal = sorted.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
-                grandTotal += subtotal
-                val subtotalPara = Paragraph("Subtotal: \$${subtotal.setScale(2)}", subtotalFont)
+                runningTotal += subtotal
+                val subtotalText = "Subtotal: \$${subtotal.setScale(2)}"
+                val replSubtotal = sorted.mapNotNull { it.replacement_value }.fold(BigDecimal.ZERO, BigDecimal::add)
+                val displaySubtotal = if (hasReplacement && replSubtotal > BigDecimal.ZERO)
+                    "$subtotalText  (Replacement: \$${replSubtotal.setScale(2)})"
+                else subtotalText
+                val subtotalPara = Paragraph(displaySubtotal, subtotalFont)
                 subtotalPara.alignment = Element.ALIGN_RIGHT
                 subtotalPara.spacingBefore = 4f
                 document.add(subtotalPara)
             }
 
-            val totalPara = Paragraph("Total Value: \$${grandTotal.setScale(2)}", totalFont)
+            val totalPara = Paragraph("Total Purchase Value: \$${grandTotal.setScale(2)}", totalFont)
             totalPara.alignment = Element.ALIGN_RIGHT
             totalPara.spacingBefore = 12f
-            totalPara.spacingAfter = 20f
-            document.add(totalPara)
+            if (replacementTotal > BigDecimal.ZERO) {
+                totalPara.spacingAfter = 2f
+                document.add(totalPara)
+                val replTotalPara = Paragraph("Total Replacement Value: \$${replacementTotal.setScale(2)} ($itemsWithReplacement items)", subtotalFont)
+                replTotalPara.alignment = Element.ALIGN_RIGHT
+                replTotalPara.spacingAfter = 20f
+                document.add(replTotalPara)
+            } else {
+                totalPara.spacingAfter = 20f
+                document.add(totalPara)
+            }
         }
 
         // Section 2: Purchases without Valuations
@@ -237,17 +408,20 @@ class InventoryReportView : KComposite() {
         headerFont: Font,
         normalFont: Font,
         boldFont: Font,
-        includeOrderNumber: Boolean
+        includeOrderNumber: Boolean,
+        includeReplacement: Boolean = false
     ): PdfPTable {
-        val colCount = if (includeOrderNumber) 6 else 5
+        var colCount = 5
+        if (includeOrderNumber) colCount++
+        if (includeReplacement) colCount++
         val table = PdfPTable(colCount)
         table.widthPercentage = 100f
 
-        if (includeOrderNumber) {
-            table.setWidths(floatArrayOf(3f, 1f, 1.2f, 1.5f, 1.5f, 1f))
-        } else {
-            table.setWidths(floatArrayOf(3.5f, 1f, 1.2f, 1.5f, 1f))
-        }
+        val widths = mutableListOf(3f, 1f, 1.2f, 1.5f)
+        if (includeOrderNumber) widths.add(1.5f)
+        widths.add(1f) // purchase price
+        if (includeReplacement) widths.add(1f) // replacement value
+        table.setWidths(widths.toFloatArray())
 
         val headerBg = Color(51, 51, 51)
         fun addHeader(text: String) {
@@ -263,6 +437,7 @@ class InventoryReportView : KComposite() {
         addHeader("Purchase Date")
         if (includeOrderNumber) addHeader("Order #")
         addHeader("Purchase Price")
+        if (includeReplacement) addHeader("Repl. Value")
 
         val altBg = Color(245, 245, 245)
         items.forEachIndexed { index, item ->
@@ -282,6 +457,9 @@ class InventoryReportView : KComposite() {
             addCell(item.purchase_date?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: "")
             if (includeOrderNumber) addCell(item.amazon_order_id ?: "")
             addCell("\$${item.purchase_price!!.setScale(2)}", normalFont, Element.ALIGN_RIGHT)
+            if (includeReplacement) {
+                addCell(item.replacement_value?.let { "\$${it.setScale(2)}" } ?: "", normalFont, Element.ALIGN_RIGHT)
+            }
         }
 
         return table

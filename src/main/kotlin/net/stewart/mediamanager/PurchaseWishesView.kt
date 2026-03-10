@@ -98,7 +98,19 @@ class PurchaseWishesView : VerticalLayout() {
                 style.set("color", "rgba(255,255,255,0.5)")
             })
         } else {
-            grid.setItems(aggregates)
+            val statusOrder = mapOf(
+                null to 0, "UNKNOWN" to 0,
+                "OWNED" to 1,
+                "ORDERED" to 2,
+                "NOT_AVAILABLE" to 3,
+                "NEEDS_ASSISTANCE" to 4,
+                "REJECTED" to 5
+            )
+            val sorted = aggregates.sortedWith(
+                compareBy<MediaWishAggregate> { statusOrder[it.acquisitionStatus] ?: 99 }
+                    .thenBy { it.tmdbTitle.lowercase() }
+            )
+            grid.setItems(sorted)
         }
     }
 
@@ -111,10 +123,10 @@ class PurchaseWishesView : VerticalLayout() {
             AcquisitionStatus.OWNED -> Triple("rgba(0,200,83,0.2)", "var(--lumo-success-color)", "Owned")
             AcquisitionStatus.ORDERED -> Triple("rgba(30,136,229,0.2)", "var(--lumo-primary-color)", "Ordered")
             AcquisitionStatus.REJECTED -> Triple("rgba(244,67,54,0.15)", "var(--lumo-error-color)", "Rejected")
-            AcquisitionStatus.NOT_AVAILABLE -> Triple("rgba(255,255,255,0.08)", "rgba(255,255,255,0.5)", "Not Available")
+            AcquisitionStatus.NOT_AVAILABLE -> Triple("rgba(158,158,158,0.2)", "rgba(255,255,255,0.6)", "Not Available")
             AcquisitionStatus.NEEDS_ASSISTANCE -> Triple("rgba(255,165,0,0.2)", "#FFA500", "Needs Help")
-            AcquisitionStatus.UNKNOWN -> Triple("rgba(255,255,255,0.08)", "rgba(255,255,255,0.4)", "Unreviewed")
-            null -> Triple("rgba(255,255,255,0.08)", "rgba(255,255,255,0.4)", "Unreviewed")
+            AcquisitionStatus.UNKNOWN -> Triple("rgba(255,193,7,0.15)", "#FFD54F", "Unreviewed")
+            null -> Triple("rgba(255,193,7,0.15)", "#FFD54F", "Unreviewed")
         }
 
         return Div().apply {
