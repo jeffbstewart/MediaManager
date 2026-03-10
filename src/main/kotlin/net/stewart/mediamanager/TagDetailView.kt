@@ -153,8 +153,11 @@ class TagDetailView : VerticalLayout(), BeforeEnterObserver {
                             style.set("position", "absolute")
                             style.set("top", "-4px")
                             style.set("right", "-4px")
-                            style.set("background", "var(--lumo-error-color)")
-                            style.set("color", "white")
+                            style.set("background", "rgba(0,0,0,0.6)")
+                            style.set("color", "rgba(255,255,255,0.7)")
+                            style.set("opacity", "0.6")
+                            element.addEventListener("mouseover") {}
+                            element.executeJs("this.addEventListener('mouseover',function(){this.style.opacity='1';this.style.background='rgba(0,0,0,0.8)'});this.addEventListener('mouseout',function(){this.style.opacity='0.6';this.style.background='rgba(0,0,0,0.6)'})")
                             style.set("border-radius", "50%")
                             style.set("min-width", "20px")
                             style.set("width", "20px")
