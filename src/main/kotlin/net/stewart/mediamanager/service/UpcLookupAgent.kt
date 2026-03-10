@@ -177,6 +177,11 @@ class UpcLookupAgent(
         scan.notes = notes
         scan.save()
 
+        // Link any orphaned ownership photos captured before the media item existed
+        if (scan.upc != null) {
+            OwnershipPhotoService.resolveOrphans(scan.upc!!, mediaItem.id!!)
+        }
+
         log.info("FOUND: {} -> {}", scan.upc, notes)
     }
 

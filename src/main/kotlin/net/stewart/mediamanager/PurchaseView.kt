@@ -3,13 +3,17 @@ package net.stewart.mediamanager
 import com.github.mvysny.karibudsl.v10.*
 import com.github.vokorm.findAll
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
+import com.vaadin.flow.component.ClientCallable
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.combobox.ComboBox
 import com.vaadin.flow.component.datepicker.DatePicker
 import com.vaadin.flow.component.dialog.Dialog
 import com.vaadin.flow.component.grid.Grid
+import com.vaadin.flow.component.html.Div
+import com.vaadin.flow.component.html.Image
 import com.vaadin.flow.component.html.Span
+import com.vaadin.flow.component.icon.VaadinIcon
 import com.vaadin.flow.component.notification.Notification
 import com.vaadin.flow.component.notification.NotificationVariant
 import com.vaadin.flow.component.orderedlayout.FlexComponent
@@ -24,10 +28,12 @@ import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.AmazonOrder
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.service.AmazonImportService
+import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.AmazonSuggestion
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.TitleCleanerService
 import java.math.BigDecimal
+import java.util.Base64
 import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -306,6 +312,8 @@ private class PurchaseEditDialog(
     private lateinit var dateField: DatePicker
     private lateinit var priceField: NumberField
     private lateinit var replacementField: NumberField
+    private lateinit var photoStrip: HorizontalLayout
+    private lateinit var photoLabel: Span
 
     init {
         headerTitle = "Edit Purchase"
@@ -363,6 +371,66 @@ private class PurchaseEditDialog(
             isSpacing = true
             add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField, replacementField)
         }
+
+        // Ownership photos section
+        val photoSeparator = Span().apply {
+            width = "100%"
+            style.set("border-top", "1px solid var(--lumo-contrast-20pct)")
+            style.set("margin-top", "var(--lumo-space-xs)")
+        }
+        content.add(photoSeparator)
+
+        photoLabel = Span().apply {
+            style.set("font-size", "var(--lumo-font-size-s)")
+            style.set("color", "var(--lumo-secondary-text-color)")
+            style.set("font-weight", "500")
+        }
+        content.add(photoLabel)
+
+        photoStrip = HorizontalLayout().apply {
+            isPadding = false
+            isSpacing = true
+            style.set("flex-wrap", "wrap")
+            style.set("gap", "var(--lumo-space-xs)")
+        }
+        content.add(photoStrip)
+
+        // Add Photo button with native camera capture
+        val addPhotoBtn = Button("Add Photo", VaadinIcon.CAMERA.create()).apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+        }
+        val captureContainer = Div().apply {
+            add(addPhotoBtn)
+        }
+
+        // Wire the button to a native file input with capture=environment
+        element.executeJs(
+            "var dlgEl=\$0;" +
+            "var container=\$1;" +
+            "var input=document.createElement('input');" +
+            "input.type='file';" +
+            "input.accept='image/*';" +
+            "input.capture='environment';" +
+            "input.style.display='none';" +
+            "container.appendChild(input);" +
+            "container.firstElementChild.addEventListener('click',function(e){" +
+            "e.preventDefault();e.stopPropagation();input.click();});" +
+            "input.addEventListener('change',function(){" +
+            "if(!input.files||!input.files[0])return;" +
+            "var file=input.files[0];" +
+            "var reader=new FileReader();" +
+            "reader.onload=function(){" +
+            "var base64=reader.result.split(',')[1];" +
+            "var mimeType=file.type||'image/jpeg';" +
+            "dlgEl.\$server.onPhotoCapture(base64,mimeType);" +
+            "};" +
+            "reader.readAsDataURL(file);" +
+            "input.value='';});",
+            this.element, captureContainer.element
+        )
+        content.add(captureContainer)
+
+        refreshPhotoStrip()
 
         // Amazon order search section
         val userId = AuthService.getCurrentUser()?.id
@@ -470,6 +538,103 @@ private class PurchaseEditDialog(
         }
         footer.element.setAttribute("slot", "footer")
         add(footer)
+    }
+
+    private fun refreshPhotoStrip() {
+        photoStrip.removeAll()
+        val photos = OwnershipPhotoService.findAllForItem(mediaItem.id!!, mediaItem.upc)
+        photoLabel.text = "Evidence Photos (${photos.size})"
+
+        for (photo in photos) {
+            val container = Div().apply {
+                style.set("position", "relative")
+                style.set("display", "inline-block")
+
+                val img = Image("/ownership-photos/${photo.id}", "Evidence").apply {
+                    height = "70px"
+                    style.set("border-radius", "4px")
+                    style.set("object-fit", "cover")
+                    style.set("max-width", "105px")
+                    style.set("cursor", "pointer")
+                }
+                img.element.addEventListener("click") {
+                    img.element.executeJs(
+                        "window.open('/ownership-photos/' + $0 + '?download=1', '_blank')",
+                        photo.id!!
+                    )
+                }
+                add(img)
+
+                // Delete overlay
+                val deleteBtn = Div().apply {
+                    style.set("position", "absolute")
+                    style.set("top", "2px")
+                    style.set("right", "2px")
+                    style.set("width", "20px")
+                    style.set("height", "20px")
+                    style.set("border-radius", "50%")
+                    style.set("background", "rgba(0,0,0,0.6)")
+                    style.set("color", "rgba(255,255,255,0.7)")
+                    style.set("display", "flex")
+                    style.set("align-items", "center")
+                    style.set("justify-content", "center")
+                    style.set("cursor", "pointer")
+                    style.set("font-size", "14px")
+                    style.set("line-height", "1")
+                    element.setProperty("innerHTML", "&#10005;")
+                    element.setAttribute("title", "Remove photo")
+                }
+                deleteBtn.addClickListener {
+                    OwnershipPhotoService.delete(photo.id!!)
+                    Notification.show("Photo removed", 2000, Notification.Position.BOTTOM_START)
+                    refreshPhotoStrip()
+                }
+                add(deleteBtn)
+
+                // Download overlay
+                val dlBtn = Div().apply {
+                    style.set("position", "absolute")
+                    style.set("bottom", "2px")
+                    style.set("right", "2px")
+                    style.set("width", "20px")
+                    style.set("height", "20px")
+                    style.set("border-radius", "50%")
+                    style.set("background", "rgba(0,0,0,0.6)")
+                    style.set("color", "rgba(255,255,255,0.7)")
+                    style.set("display", "flex")
+                    style.set("align-items", "center")
+                    style.set("justify-content", "center")
+                    style.set("cursor", "pointer")
+                    style.set("font-size", "12px")
+                    element.setProperty("innerHTML", "&#8628;")
+                    element.setAttribute("title", "Download photo")
+                }
+                dlBtn.addClickListener {
+                    dlBtn.element.executeJs(
+                        "window.open('/ownership-photos/' + $0 + '?download=1', '_blank')",
+                        photo.id!!
+                    )
+                }
+                add(dlBtn)
+            }
+            photoStrip.add(container)
+        }
+
+        if (photos.isEmpty()) {
+            photoStrip.add(Span("No evidence photos").apply {
+                style.set("color", "var(--lumo-secondary-text-color)")
+                style.set("font-size", "var(--lumo-font-size-s)")
+            })
+        }
+    }
+
+    @ClientCallable
+    fun onPhotoCapture(base64Data: String, mimeType: String) {
+        val bytes = Base64.getDecoder().decode(base64Data)
+        OwnershipPhotoService.store(bytes, mimeType, mediaItem.id!!)
+        Notification.show("Photo saved", 2000, Notification.Position.BOTTOM_START)
+            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+        refreshPhotoStrip()
     }
 
     private fun applyAmazonOrder(order: AmazonOrder) {

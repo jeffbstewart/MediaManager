@@ -102,6 +102,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `TranscodeRedirectView.kt` — Redirects `/transcodes` to `/transcodes/status`
 - `TitleDetailView.kt` — Title detail with transcode/episode grids (route `/title/{titleId}`)
 - `PurchaseView.kt` — Media item valuation tracking (route `/valuation`)
+- `DocumentOwnershipView.kt` — Mobile photo capture for proof of ownership (route `/document-ownership`)
 - `ExpandView.kt` — Multi-pack title expansion (route `/expand`)
 - `MainLayout.kt` — Shared AppLayout with nav bar
 - `VideoPlayerDialog.kt` — In-browser video player dialog (HTML5 `<video>`)
@@ -122,6 +123,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `AppUser.kt` — User accounts with access levels (1=viewer, 2=admin)
 - `SessionToken.kt` — Persistent login tokens (30-day cookie sessions)
 - `BuddyApiKey.kt` — Bcrypt-hashed API keys for transcode buddy workers (multiple keys, show-once)
+- `OwnershipPhoto.kt` — Proof-of-ownership photos linked to media items (stored on disk, metadata in DB)
 
 **Services (`service/`):**
 - `UpcLookupAgent.kt` — Background daemon: polls for unprocessed scans, calls UPCitemdb API
@@ -149,6 +151,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `AuthService.kt` — Central auth coordinator (login, session management, cookie validation, token cleanup)
 - `BuddyKeyService.kt` — Buddy API key management (create with bcrypt hash, validate, delete)
 - `RokuFeedService.kt` — Builds Roku-compatible JSON feed from enriched titles with playable transcodes
+- `OwnershipPhotoService.kt` — Store/retrieve/delete proof-of-ownership photos (disk files at `data/ownership-photos/`)
 
 **Security:**
 - `SecurityServiceInitListener.kt` — VaadinServiceInitListener enforcing route-level authentication and authorization
@@ -159,6 +162,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `VideoStreamServlet.kt` — `/stream/{id}` — video streaming with HTTP Range support; serves MP4/M4V directly, MKV/AVI from ForBrowser mirror
 - `RokuFeedServlet.kt` — `/roku/feed.json?key={apiKey}` — Roku channel JSON feed (device token auth, 5-minute cache)
 - `BuddyApiServlet.kt` — `/buddy/*` — REST API for transcode buddy workers (bcrypt API key auth)
+- `OwnershipPhotoServlet.kt` — `/ownership-photos/{uuid}` — serves proof-of-ownership photos (supports `?download=1` for attachment)
 - `HealthServlet.kt` — `/health` — health check (internal port only)
 - `MetricsServlet.kt` — `/metrics` — Prometheus metrics (internal port only)
 - `AppLogServlet.kt` — `/admin/logs` — in-memory application log viewer (internal port only)

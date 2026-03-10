@@ -1,0 +1,1 @@
+ALTER TABLE ownership_photo ADD COLUMN IF NOT EXISTS orientation INT DEFAULT 1;

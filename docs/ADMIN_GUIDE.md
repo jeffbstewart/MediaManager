@@ -371,7 +371,29 @@ Create colored tags to organize your collection. Each tag has a name and a backg
 
 **Sidebar &rarr; Valuation**
 
-Track what you paid for each disc &mdash; useful for insurance documentation or curiosity. Links to Amazon order data when available. The inventory report (Sidebar &rarr; Report) generates a downloadable summary.
+Track what you paid for each disc &mdash; useful for insurance documentation or curiosity. Links to Amazon order data when available. The edit dialog also shows any evidence photos attached to the item, with download links.
+
+### Document Ownership
+
+**Sidebar &rarr; Document Ownership**
+
+Capture proof-of-ownership photos for insurance claims. This mobile-friendly view supports two workflows:
+
+1. **Scan &amp; Snap** &mdash; Scan a UPC barcode to identify a media item, then take photos of the disc case or shelf using the device camera.
+2. **Search &amp; Snap** &mdash; Search for an item by title or UPC, then capture photos.
+
+Photos are stored as original files (EXIF/GPS metadata preserved) in `data/ownership-photos/` on disk, with only metadata tracked in the database.
+
+### Insurance Report
+
+**Sidebar &rarr; Report**
+
+Generates a downloadable PDF and CSV inventory summary. The PDF includes:
+
+- **Executive summary** &mdash; total items, format breakdown, documented value, evidence coverage percentage
+- **Gap analysis** &mdash; estimates the value of unpriced items using format-average pricing
+- **Detailed item tables** &mdash; grouped by retailer, with purchase dates, prices, and replacement values
+- **Ownership photos** (optional) &mdash; check the "Include ownership photos in PDF" box to embed evidence photos inline below each item, approximately 1 inch tall
 
 ---
 

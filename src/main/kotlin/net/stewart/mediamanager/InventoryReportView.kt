@@ -20,9 +20,13 @@ import com.vaadin.flow.server.StreamResource
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.service.OwnershipPhotoService
 import java.awt.Color
+import java.awt.geom.AffineTransform
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -30,6 +34,8 @@ import java.time.format.DateTimeFormatter
 @Route(value = "report", layout = MainLayout::class)
 @PageTitle("Insurance Inventory Report")
 class InventoryReportView : KComposite() {
+
+    private var includePhotos = false
 
     private val root = ui {
         verticalLayout {
@@ -43,10 +49,24 @@ class InventoryReportView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
 
+            val photosCheckbox = com.vaadin.flow.component.checkbox.Checkbox("Include ownership photos in PDF").apply {
+                value = false
+                addValueChangeListener { includePhotos = it.value }
+                val photoCount = OwnershipPhotoService.totalCount()
+                val itemCount = OwnershipPhotoService.itemsWithPhotos()
+                if (photoCount > 0) {
+                    label = "Include ownership photos in PDF ($photoCount photos across $itemCount items)"
+                } else {
+                    isEnabled = false
+                    label = "Include ownership photos in PDF (no photos captured yet)"
+                }
+            }
+            add(photosCheckbox)
+
             val timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
             val pdfResource = StreamResource("inventory-report-$timestamp.pdf") {
-                ByteArrayInputStream(generatePdf())
+                ByteArrayInputStream(generatePdf(includePhotos))
             }
             pdfResource.setContentType("application/pdf")
 
@@ -143,10 +163,11 @@ class InventoryReportView : KComposite() {
 
     // ---- PDF ----
 
-    private fun generatePdf(): ByteArray {
+    private fun generatePdf(withPhotos: Boolean = false): ByteArray {
         val data = loadData()
         val valued = data.allItems.filter { it.purchase_price != null }
         val unvalued = data.allItems.filter { it.purchase_price == null }
+        val photoCounts = if (withPhotos) OwnershipPhotoService.countByMediaItem() else emptyMap()
 
         val out = ByteArrayOutputStream()
         val document = Document(PageSize.LETTER, 36f, 36f, 36f, 36f)
@@ -226,6 +247,15 @@ class InventoryReportView : KComposite() {
 
         if (itemsWithReplacement > 0) {
             addSummaryRow("Replacement value:", "\$${replacementTotal.setScale(2)} ($itemsWithReplacement items)")
+        }
+
+        // Evidence coverage
+        val allPhotoCounts = OwnershipPhotoService.countByMediaItem()
+        val itemsWithEvidence = allPhotoCounts.keys.intersect(data.allItems.mapNotNull { it.id }.toSet()).size
+        val totalPhotos = allPhotoCounts.values.sum()
+        if (totalPhotos > 0) {
+            val evidencePct = if (totalItems > 0) (itemsWithEvidence * 100) / totalItems else 0
+            addSummaryRow("Evidence coverage:", "$itemsWithEvidence of $totalItems items ($evidencePct%) — $totalPhotos photos")
         }
 
         // Date range
@@ -352,7 +382,7 @@ class InventoryReportView : KComposite() {
 
                 val hasOrders = sorted.any { it.amazon_order_id != null }
                 val hasReplacement = sorted.any { it.replacement_value != null }
-                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement)
+                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement, photoCounts)
                 document.add(table)
 
                 val subtotal = sorted.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
@@ -394,7 +424,7 @@ class InventoryReportView : KComposite() {
             document.add(Paragraph("All purchases have valuations.", normalFont))
         } else {
             val sorted = unvalued.sortedBy { sortKey(data.titleNames(it)) }
-            val table = createUnvaluedTable(sorted, data, headerFont, normalFont, boldFont)
+            val table = createUnvaluedTable(sorted, data, headerFont, normalFont, boldFont, photoCounts)
             document.add(table)
         }
 
@@ -409,7 +439,8 @@ class InventoryReportView : KComposite() {
         normalFont: Font,
         boldFont: Font,
         includeOrderNumber: Boolean,
-        includeReplacement: Boolean = false
+        includeReplacement: Boolean = false,
+        photoCounts: Map<Long, Int> = emptyMap()
     ): PdfPTable {
         var colCount = 5
         if (includeOrderNumber) colCount++
@@ -460,6 +491,11 @@ class InventoryReportView : KComposite() {
             if (includeReplacement) {
                 addCell(item.replacement_value?.let { "\$${it.setScale(2)}" } ?: "", normalFont, Element.ALIGN_RIGHT)
             }
+
+            // Photo row (if photos are included and this item has evidence)
+            if (photoCounts.containsKey(item.id)) {
+                addPhotoRow(table, colCount, item.id!!, bg)
+            }
         }
 
         return table
@@ -470,7 +506,8 @@ class InventoryReportView : KComposite() {
         data: ReportData,
         headerFont: Font,
         normalFont: Font,
-        boldFont: Font
+        boldFont: Font,
+        photoCounts: Map<Long, Int> = emptyMap()
     ): PdfPTable {
         val table = PdfPTable(4)
         table.widthPercentage = 100f
@@ -505,8 +542,107 @@ class InventoryReportView : KComposite() {
             addCell(item.media_format.replace("_", " "))
             addCell(item.upc ?: "")
             addCell(item.purchase_place ?: "")
+
+            if (photoCounts.containsKey(item.id)) {
+                addPhotoRow(table, 4, item.id!!, bg)
+            }
         }
 
         return table
+    }
+
+    private fun addPhotoRow(table: PdfPTable, colCount: Int, mediaItemId: Long, bg: Color?) {
+        val photos = OwnershipPhotoService.findByMediaItem(mediaItemId)
+        if (photos.isEmpty()) return
+
+        val photoCell = PdfPCell().apply {
+            colspan = colCount
+            setPadding(4f)
+            border = Rectangle.BOX
+            borderWidth = 0.5f
+            borderColor = Color(200, 200, 200)
+            if (bg != null) backgroundColor = bg
+        }
+
+        // Build a sub-table to hold photos in a row
+        val photoTable = PdfPTable(photos.size.coerceAtMost(6)).apply {
+            widthPercentage = 100f
+        }
+
+        val targetHeight = 72f // 1 inch
+
+        for (photo in photos.take(6)) {
+            val file = OwnershipPhotoService.getFile(photo.id!!)
+            if (file != null && file.exists()) {
+                try {
+                    val img = applyOrientation(file, photo.orientation)
+                    val scale = targetHeight / img.height
+                    img.scaleAbsolute(img.width * scale, targetHeight)
+                    val imgCell = PdfPCell(img).apply {
+                        border = Rectangle.NO_BORDER
+                        setPadding(2f)
+                        horizontalAlignment = Element.ALIGN_LEFT
+                        verticalAlignment = Element.ALIGN_MIDDLE
+                    }
+                    photoTable.addCell(imgCell)
+                } catch (_: Exception) {
+                    val fallbackCell = PdfPCell(Phrase("[photo]", Font(Font.HELVETICA, 8f, Font.ITALIC, Color(150, 150, 150)))).apply {
+                        border = Rectangle.NO_BORDER
+                        setPadding(2f)
+                    }
+                    photoTable.addCell(fallbackCell)
+                }
+            }
+        }
+
+        // Pad remaining cells if fewer than column count
+        val remaining = photos.size.coerceAtMost(6) - photos.take(6).count { OwnershipPhotoService.getFile(it.id!!)?.exists() == true || true }
+        // PdfPTable requires all cells to be filled — but we already added one per photo above
+
+        photoCell.addElement(photoTable)
+        table.addCell(photoCell)
+    }
+
+    /**
+     * Load an image and apply EXIF orientation correction for PDF embedding.
+     * Browsers handle EXIF orientation automatically, but PDF libraries don't.
+     * EXIF orientation values:
+     *   1 = normal, 2 = flip H, 3 = 180°, 4 = flip V,
+     *   5 = transpose, 6 = 90° CW, 7 = transverse, 8 = 90° CCW
+     */
+    private fun applyOrientation(file: java.io.File, orientation: Int): com.lowagie.text.Image {
+        if (orientation == 1 || orientation == 0) {
+            return com.lowagie.text.Image.getInstance(file.absolutePath)
+        }
+
+        val original = ImageIO.read(file) ?: return com.lowagie.text.Image.getInstance(file.absolutePath)
+        val w = original.width
+        val h = original.height
+
+        val (newW, newH) = when (orientation) {
+            6, 8, 5, 7 -> h to w  // 90° rotations swap dimensions
+            else -> w to h
+        }
+
+        val rotated = BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB)
+        val g = rotated.createGraphics()
+        val tx = AffineTransform()
+
+        when (orientation) {
+            2 -> { tx.scale(-1.0, 1.0); tx.translate(-w.toDouble(), 0.0) }           // flip H
+            3 -> { tx.translate(w.toDouble(), h.toDouble()); tx.rotate(Math.PI) }     // 180°
+            4 -> { tx.scale(1.0, -1.0); tx.translate(0.0, -h.toDouble()) }           // flip V
+            5 -> { tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0) }                     // transpose
+            6 -> { tx.translate(h.toDouble(), 0.0); tx.rotate(Math.PI / 2) }         // 90° CW
+            7 -> { tx.translate(h.toDouble(), w.toDouble()); tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0); tx.translate(0.0, -w.toDouble()) }  // transverse
+            8 -> { tx.translate(0.0, w.toDouble()); tx.rotate(-Math.PI / 2) }        // 90° CCW
+        }
+
+        g.drawImage(original, tx, null)
+        g.dispose()
+
+        val baos = java.io.ByteArrayOutputStream()
+        ImageIO.write(rotated, "jpg", baos)
+        return com.lowagie.text.Image.getInstance(baos.toByteArray())
     }
 }

@@ -10,7 +10,7 @@ class SecurityServiceInitListener : VaadinServiceInitListener {
 
     private val publicRoutes = setOf("login", "setup", "change-password")
     // Keep sorted alphabetically
-    private val adminRoutes = setOf("data-quality", "expand", "family", "import", "manual-entry", "purchase-wishes", "report", "scan", "settings", "tags", "transcodes", "users", "valuation")
+    private val adminRoutes = setOf("data-quality", "document-ownership", "expand", "family", "import", "manual-entry", "purchase-wishes", "report", "scan", "settings", "tags", "transcodes", "users", "valuation")
 
     override fun serviceInit(event: ServiceInitEvent) {
         event.source.addUIInitListener { uiEvent ->

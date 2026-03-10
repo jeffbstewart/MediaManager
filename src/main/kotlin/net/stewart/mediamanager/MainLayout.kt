@@ -387,6 +387,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         pExpandItem.first.add(expandBadge)
         val pValuationItem = createDrawerItem(null, "Valuation", "valuation", indent = true)
         val pWishesItem = createDrawerItem(null, "User Wishes", "purchase-wishes", indent = true)
+        val pOwnershipItem = createDrawerItem(null, "Document Ownership", "document-ownership", indent = true)
         val pReportItem = createDrawerItem(null, "Report", "report", indent = true)
 
         purchasesChevron = VaadinIcon.CHEVRON_DOWN.create().apply {
@@ -439,7 +440,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             isVisible = false
-            add(pScanItem.first, pImportItem.first, pExpandItem.first, pValuationItem.first, pWishesItem.first, pReportItem.first)
+            add(pScanItem.first, pImportItem.first, pExpandItem.first, pValuationItem.first, pWishesItem.first, pOwnershipItem.first, pReportItem.first)
         }
 
         // Transcodes collapsible group
@@ -521,6 +522,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(pExpandItem)
         items.add(pValuationItem)
         items.add(pWishesItem)
+        items.add(pOwnershipItem)
         items.add(settingsItem)
         items.add(tagsItem)
         items.add(tcStatusItem)

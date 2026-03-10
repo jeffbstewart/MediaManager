@@ -46,7 +46,8 @@ see git history for full specifications.
 | User Tags | Admin-managed colored tags, star (priority transcode), personal hide |
 | Playback Progress | Per-user resume, continue watching, viewed flags, Roku sync |
 | Enhanced Search | In-memory inverted index with phrases, negation, tag operators |
-| Inventory Export | Downloadable CSV valuation report for insurance documentation |
+| Inventory Export | Downloadable CSV/PDF valuation report for insurance documentation |
+| Ownership Evidence | Mobile photo capture for proof-of-ownership, optional inline photos in PDF report |
 | Bulk Tag Seeding | Auto-create genre tags from TMDB data via SchemaUpdater |
 | TMDB Wish Search | Search TMDB directly from wish list page |
 | Missing Seasons | Detect unowned TV seasons, home page notifications, season wishes |

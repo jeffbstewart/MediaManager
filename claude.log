@@ -2904,3 +2904,20 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files created: PopularityRefreshAgent.kt, V050__popularity_refresh_tracking.sql
 - Files modified: Main.kt, Title.kt, CastMember.kt
 ===
+
+=== 2026-03-09 23:00 — Proof of ownership photo capture (#44) ===
+- Implemented mobile-friendly evidence capture view at /document-ownership
+  - Scan UPC barcode to identify item, or search by title/UPC
+  - Capture photos via device camera (HTML input capture=environment)
+  - View existing photos with delete affordance (subtle X overlay)
+  - Photos stored as originals (EXIF intact) in data/ownership-photos/
+- New entity: OwnershipPhoto (id UUID, media_item_id, content_type, captured_at)
+- New service: OwnershipPhotoService (store/retrieve/delete/count)
+- New servlet: OwnershipPhotoServlet at /ownership-photos/{uuid} with ?download=1 support
+- PurchaseView edit dialog: shows thumbnail strip of evidence photos with download overlay
+- Insurance report: evidence coverage stat in executive summary, optional inline photos in PDF
+- Files created: V053__ownership_photo.sql, OwnershipPhoto.kt, OwnershipPhotoService.kt,
+  OwnershipPhotoServlet.kt, DocumentOwnershipView.kt
+- Files modified: AuthFilter.kt, SecurityServiceInitListener.kt, MainLayout.kt,
+  PurchaseView.kt, InventoryReportView.kt, CLAUDE.md, docs/ADMIN_GUIDE.md, docs/FEATURES.md
+===
