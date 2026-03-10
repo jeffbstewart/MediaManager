@@ -835,7 +835,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         if (user?.isAdmin() == true) {
             val enrichmentCount = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
                 handle.createQuery(
-                    "SELECT COUNT(*) FROM title WHERE enrichment_status IS NOT NULL AND enrichment_status <> 'ENRICHED'"
+                    "SELECT COUNT(*) FROM title WHERE enrichment_status IS NOT NULL AND enrichment_status <> 'ENRICHED' AND media_type <> 'PERSONAL'"
                 ).mapTo(Int::class.java).one()
             }
             // Count media_item_title rows with freetext seasons but no structured joins
