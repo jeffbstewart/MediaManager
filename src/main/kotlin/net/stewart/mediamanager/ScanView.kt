@@ -172,8 +172,11 @@ class ScanView : KComposite() {
         }
 
         try {
-            val exists = BarcodeScan.count { BarcodeScan::upc eq upc } > 0
-            if (exists) {
+            val existingScan = BarcodeScan.findAll().firstOrNull { it.upc == upc }
+            if (existingScan != null) {
+                val titleName = findTitleForScan(existingScan)
+                val detail = if (titleName != null) " ($titleName)" else ""
+                Notification.show("Already scanned: $upc$detail", 3000, Notification.Position.BOTTOM_START)
                 upcField.clear()
                 upcField.focus()
                 return
@@ -204,6 +207,12 @@ class ScanView : KComposite() {
     private fun refreshQuota() {
         val status = QuotaTracker.getStatus()
         quotaLabel.text = "UPC Lookups today: ${status.used} / ${status.limit} (${status.remaining} remaining)"
+    }
+
+    private fun findTitleForScan(scan: BarcodeScan): String? {
+        val mediaItemId = scan.media_item_id ?: return null
+        val join = MediaItemTitle.findAll().firstOrNull { it.media_item_id == mediaItemId } ?: return null
+        return Title.findById(join.title_id)?.name
     }
 
     private fun showSuccess(message: String) {
