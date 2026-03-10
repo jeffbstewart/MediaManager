@@ -5,6 +5,7 @@ import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.combobox.ComboBox
 import com.vaadin.flow.component.grid.Grid
+import com.vaadin.flow.component.html.Div
 import com.vaadin.flow.component.html.Image
 import com.vaadin.flow.component.html.Span
 import com.vaadin.flow.component.icon.VaadinIcon
@@ -130,15 +131,43 @@ class TagDetailView : VerticalLayout(), BeforeEnterObserver {
             isAllRowsVisible = true
 
             addColumn(ComponentRenderer { title ->
-                val posterUrl = title.posterUrl(PosterSize.THUMBNAIL)
-                if (posterUrl != null) {
-                    Image(posterUrl, title.name).apply {
-                        height = "60px"
-                        width = "40px"
-                        style.set("object-fit", "cover")
+                Div().apply {
+                    style.set("position", "relative")
+                    style.set("display", "inline-block")
+
+                    val posterUrl = title.posterUrl(PosterSize.THUMBNAIL)
+                    if (posterUrl != null) {
+                        add(Image(posterUrl, title.name).apply {
+                            height = "60px"
+                            width = "40px"
+                            style.set("object-fit", "cover")
+                            style.set("border-radius", "2px")
+                        })
+                    } else {
+                        add(Span("—"))
                     }
-                } else {
-                    Span("—")
+
+                    if (isAdmin) {
+                        add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
+                            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON)
+                            style.set("position", "absolute")
+                            style.set("top", "-4px")
+                            style.set("right", "-4px")
+                            style.set("background", "var(--lumo-error-color)")
+                            style.set("color", "white")
+                            style.set("border-radius", "50%")
+                            style.set("min-width", "20px")
+                            style.set("width", "20px")
+                            style.set("height", "20px")
+                            style.set("padding", "0")
+                            element.setAttribute("title", "Remove from tag")
+                            addClickListener {
+                                TagService.removeTagFromTitle(title.id!!, tag.id!!)
+                                buildContent(tag)
+                                Notification.show("Removed from tag", 2000, Notification.Position.BOTTOM_START)
+                            }
+                        })
+                    }
                 }
             }).setHeader("Poster").setWidth("80px").setFlexGrow(0)
 
@@ -153,21 +182,6 @@ class TagDetailView : VerticalLayout(), BeforeEnterObserver {
             }).setHeader("Title").setFlexGrow(1)
 
             addColumn({ it.release_year?.toString() ?: "" }).setHeader("Year").setWidth("80px").setFlexGrow(0)
-
-            if (isAdmin) {
-                addColumn(ComponentRenderer { title ->
-                    Button(VaadinIcon.CLOSE_SMALL.create()).apply {
-                        addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON)
-                        style.set("color", "var(--lumo-error-text-color)")
-                        element.setAttribute("title", "Remove from tag")
-                        addClickListener {
-                            TagService.removeTagFromTitle(title.id!!, tag.id!!)
-                            buildContent(tag)
-                            Notification.show("Removed from tag", 2000, Notification.Position.BOTTOM_START)
-                        }
-                    }
-                }).setHeader("").setWidth("60px").setFlexGrow(0)
-            }
 
             setItems(taggedTitles)
         }
