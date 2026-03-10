@@ -141,6 +141,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `SchemaUpdater.kt` — Framework for programmatic data updates (interface + runner); runs after Flyway migrations
 - `PopulatePopularityUpdater.kt` — Backfills TMDB popularity scores for existing enriched titles
 - `PopularityRefreshAgent.kt` — Background daemon: gradually refreshes TMDB popularity for titles and cast members (~1%/day, full cycle ~100 days)
+- `CollectionRefreshAgent.kt` — Background daemon: gradually re-fetches TMDB collection data (parts, poster paths, new entries) (~1%/day, full cycle ~100 days)
 - `ManagedDirectoryService.kt` — Ensures managed NAS directories (ForBrowser/) exist with `.mm-ignore` markers
 - `FormatProbeService.kt` — Background FFprobe-based media format detection (resolution → DVD/Blu-ray/UHD)
 - `Clock.kt` — Clock interface for testable time
