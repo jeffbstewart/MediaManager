@@ -10,6 +10,7 @@ import net.stewart.mediamanager.service.ForBrowserValidator
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.SsdpResponder
+import net.stewart.mediamanager.service.PopularityRefreshAgent
 import net.stewart.mediamanager.service.TmdbEnrichmentAgent
 import net.stewart.mediamanager.service.TranscoderAgent
 import net.stewart.mediamanager.service.UpcLookupAgent
@@ -68,6 +69,10 @@ fun main(args: Array<String>) {
     val validator = ForBrowserValidator()
     validator.start()
     Runtime.getRuntime().addShutdownHook(Thread { validator.stop() })
+
+    val popularityAgent = PopularityRefreshAgent()
+    popularityAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { popularityAgent.stop() })
 
     // Periodic maintenance: cleanup + database backup (every 24 hours)
     val scheduler = Executors.newSingleThreadScheduledExecutor { r ->

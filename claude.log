@@ -2887,4 +2887,20 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Fixed in UserManagementView.kt: deleteUser(), resetPassword(), ratingCeiling()
 - Also closed #15 (multi-season wish duplicates) — already fixed by season-aware
   wish list implementation in Phase 2
+
+=== 2026-03-09 21:27 — Periodic TMDB popularity refresh (#4) ===
+- Created PopularityRefreshAgent background daemon
+  - Cycles every 4 hours with 10-minute startup delay
+  - Dynamically computes batch size: ceil(total/600) per cycle ≈ 1%/day
+  - Full catalog refresh completes in ~100 days
+  - Refreshes both Title.popularity and CastMember.popularity
+  - Cast members grouped by tmdb_person_id (one API call per person)
+  - Respects TMDB rate limits (500ms between API calls)
+  - Stops batch on API errors, handles InterruptedException for clean shutdown
+  - Uses Clock interface for testability
+- Added V050 migration: popularity_refreshed_at column on title and cast_member
+- Updated Title and CastMember entities with new field
+- Wired agent into Main.kt with shutdown hook
+- Files created: PopularityRefreshAgent.kt, V050__popularity_refresh_tracking.sql
+- Files modified: Main.kt, Title.kt, CastMember.kt
 ===

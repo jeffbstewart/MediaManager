@@ -33,6 +33,7 @@ data class Title(
     var tmdb_collection_name: String? = null,                      // TMDB collection name
     var event_date: LocalDate? = null,                             // Date filmed (personal videos)
     var event_group_id: Long? = null,                              // FK to event_group (personal videos)
+    var popularity_refreshed_at: LocalDateTime? = null,             // Last time popularity was refreshed from TMDB
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

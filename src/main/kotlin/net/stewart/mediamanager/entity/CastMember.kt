@@ -16,6 +16,7 @@ data class CastMember(
     var cast_order: Int = 0,
     var headshot_cache_id: String? = null,
     var popularity: Double? = null,
+    var popularity_refreshed_at: LocalDateTime? = null,
     var created_at: LocalDateTime? = null
 ) : KEntity<Long> {
     companion object : Dao<CastMember, Long>(CastMember::class.java)
