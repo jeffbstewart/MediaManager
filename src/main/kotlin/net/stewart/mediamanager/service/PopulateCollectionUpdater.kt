@@ -13,6 +13,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Phase 2 (v1): Auto-associate enriched titles with genre/collection tags.
  * Phase 3 (v2): Fetch full collection structure (parts + order) and generate
  *               collection-aware sort names for all collection members.
+ * Phase 4 (v3): Re-fetch all collections to populate poster_path for unowned title posters.
  */
 class PopulateCollectionUpdater(
     private val tmdbService: TmdbService = TmdbService(),
@@ -22,7 +23,7 @@ class PopulateCollectionUpdater(
     private val log = LoggerFactory.getLogger(PopulateCollectionUpdater::class.java)
 
     override val name = "populate_collections"
-    override val version = 2
+    override val version = 3
 
     override fun run() {
         // Phase 1: Backfill collection data from TMDB for movies
@@ -81,15 +82,15 @@ class PopulateCollectionUpdater(
         log.info("Auto-association complete for {} titles", associations)
 
         // Phase 3: Fetch full collection parts and generate sort names
+        // Re-fetches all collections (not just new ones) to populate poster_path for parts
         val collectionIds = Title.findAll()
             .mapNotNull { it.tmdb_collection_id }
             .distinct()
 
-        val alreadyStored = TmdbCollection.findAll().map { it.tmdb_collection_id }.toSet()
-        val toFetch = collectionIds.filter { it !in alreadyStored }
+        val toFetch = collectionIds
 
         if (toFetch.isNotEmpty()) {
-            log.info("Fetching {} collection structures ({} already stored)", toFetch.size, alreadyStored.size)
+            log.info("Fetching {} collection structures", toFetch.size)
             var fetched = 0
             var fetchFailed = 0
 

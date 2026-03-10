@@ -24,7 +24,8 @@ data class TmdbCollectionPart(
     var tmdb_movie_id: Int = 0,
     var title: String = "",
     var position: Int = 0,
-    var release_date: String? = null
+    var release_date: String? = null,
+    var poster_path: String? = null
 ) : KEntity<Long> {
     companion object : Dao<TmdbCollectionPart, Long>(TmdbCollectionPart::class.java)
 }

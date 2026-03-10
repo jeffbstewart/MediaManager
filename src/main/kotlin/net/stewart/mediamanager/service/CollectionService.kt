@@ -57,7 +57,8 @@ object CollectionService {
                 tmdb_movie_id = part.tmdbMovieId,
                 title = part.title,
                 position = part.position,
-                release_date = part.releaseDate
+                release_date = part.releaseDate,
+                poster_path = part.posterPath
             ).save()
         }
 

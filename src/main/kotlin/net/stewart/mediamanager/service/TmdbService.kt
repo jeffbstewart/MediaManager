@@ -71,7 +71,8 @@ data class TmdbCollectionPartResult(
     val tmdbMovieId: Int,
     val title: String,
     val releaseDate: String?,
-    val position: Int
+    val position: Int,
+    val posterPath: String? = null
 )
 
 /** Season metadata from TMDB TV detail response. */
@@ -393,24 +394,27 @@ open class TmdbService {
             val backdropPath = root.textOrNull("backdrop_path")
 
             val partsNode = root.get("parts")
+            data class RawPart(val movieId: Int, val title: String, val releaseDate: String?, val posterPath: String?)
             val rawParts = if (partsNode != null && partsNode.isArray) {
                 (0 until partsNode.size()).mapNotNull { i ->
                     val item = partsNode[i]
                     val movieId = item.intOrNull("id") ?: return@mapNotNull null
                     val title = item.textOrNull("title") ?: return@mapNotNull null
                     val releaseDate = item.textOrNull("release_date")
-                    Triple(movieId, title, releaseDate)
+                    val posterPath = item.textOrNull("poster_path")
+                    RawPart(movieId, title, releaseDate, posterPath)
                 }
             } else emptyList()
 
             // Sort by release date (nulls last) to derive position
-            val sorted = rawParts.sortedWith(compareBy(nullsLast()) { it.third })
-            val parts = sorted.mapIndexed { idx, (movieId, title, releaseDate) ->
+            val sorted = rawParts.sortedWith(compareBy(nullsLast()) { it.releaseDate })
+            val parts = sorted.mapIndexed { idx, raw ->
                 TmdbCollectionPartResult(
-                    tmdbMovieId = movieId,
-                    title = title,
-                    releaseDate = releaseDate,
-                    position = idx + 1
+                    tmdbMovieId = raw.movieId,
+                    title = raw.title,
+                    releaseDate = raw.releaseDate,
+                    position = idx + 1,
+                    posterPath = raw.posterPath
                 )
             }
 
