@@ -297,6 +297,21 @@ Click the pencil icon next to "People in this Video" to add or remove family mem
 | **Roku Base URL** | Base URL for Roku feed poster/stream URLs (auto-detected if blank) |
 | **Buddy API Keys** | Named API keys for Transcode Buddy workers (bcrypt-hashed, shown once at creation). Supports multiple keys with per-key delete. |
 | **Lease Duration** | How long a buddy lease lasts before expiring |
+| **Keepa API Key** | API key from keepa.com for automated replacement value estimation |
+| **Tokens per minute** | Keepa API rate limit (default 20, match to your subscription tier) |
+| **Enable Keepa** | Activates the background price lookup agent |
+
+### Price Lookup
+
+The price lookup agent uses the **Keepa API** to estimate replacement values by querying Amazon.com (US marketplace) prices. When enabled, it runs in the background pricing eligible items (DVD, Blu-ray, UHD, HD DVD) at the configured token rate.
+
+**Setup:** Subscribe to Keepa at [keepa.com](https://keepa.com), copy your API key, paste it in Settings, enable the agent. At 20 tokens/minute, a 1,000-item collection takes about 50 minutes to price.
+
+**ASIN resolution priority:** The agent resolves each item to an Amazon ASIN using: (1) user-set override ASIN, (2) linked Amazon order ASIN, (3) UPC-to-ASIN via Keepa, (4) title keyword search on Amazon. You can manually set or correct an ASIN from the Valuation edit dialog.
+
+**Price selection:** Uses 30-day weighted average of new 3rd-party prices, falling back to current new, Amazon direct, or used price. Items are re-priced every 30 days.
+
+**Deleting items:** The Valuation edit dialog includes a Delete button for removing incorrectly scanned items (e.g., non-media barcodes). This cascades to all linked data.
 
 ---
 

@@ -129,14 +129,28 @@ class InventoryReportView : KComposite() {
         val sorted = data.allItems.sortedBy { sortKey(data.titleNames(it)) }
         val sb = StringBuilder()
 
-        sb.appendLine("Title(s),Format,UPC,Purchase Date,Purchase Place,Order #,Purchase Price,Replacement Value")
+        // Load latest price lookup per item for ASIN and source info
+        val allLookups = net.stewart.mediamanager.entity.PriceLookup.findAll()
+        val latestLookupByItem = allLookups
+            .groupBy { it.media_item_id }
+            .mapValues { (_, lookups) -> lookups.maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }!! }
+        val amazonOrders = net.stewart.mediamanager.entity.AmazonOrder.findAll()
+
+        sb.appendLine("Title(s),Format,UPC,ASIN,Purchase Date,Purchase Place,Order #,Purchase Price,Replacement Value,Price Source,Price Date")
 
         for (item in sorted) {
+            val lookup = latestLookupByItem[item.id]
+            val asin = item.override_asin
+                ?: amazonOrders.firstOrNull { it.linked_media_item_id == item.id && it.asin.isNotBlank() }?.asin
+                ?: lookup?.keepa_asin
+
             sb.append(csvField(data.titleNames(item)))
             sb.append(',')
             sb.append(csvField(item.media_format.replace("_", " ")))
             sb.append(',')
             sb.append(csvField(item.upc ?: ""))
+            sb.append(',')
+            sb.append(csvField(asin ?: ""))
             sb.append(',')
             sb.append(csvField(item.purchase_date?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: ""))
             sb.append(',')
@@ -147,6 +161,10 @@ class InventoryReportView : KComposite() {
             sb.append(csvField(item.purchase_price?.setScale(2)?.toString() ?: ""))
             sb.append(',')
             sb.append(csvField(item.replacement_value?.setScale(2)?.toString() ?: ""))
+            sb.append(',')
+            sb.append(csvField(if (lookup != null) "Keepa (Amazon.com)" else if (item.replacement_value != null) "Manual" else ""))
+            sb.append(',')
+            sb.append(csvField(lookup?.looked_up_at?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: ""))
             sb.appendLine()
         }
 
@@ -247,6 +265,18 @@ class InventoryReportView : KComposite() {
 
         if (itemsWithReplacement > 0) {
             addSummaryRow("Replacement value:", "\$${replacementTotal.setScale(2)} ($itemsWithReplacement items)")
+
+            // Pricing source breakdown
+            val allLookups = net.stewart.mediamanager.entity.PriceLookup.findAll()
+            val itemIdsWithLookup = allLookups.map { it.media_item_id }.toSet()
+            val autoPriced = data.allItems.count { it.replacement_value != null && it.id in itemIdsWithLookup }
+            val manualPriced = itemsWithReplacement - autoPriced
+            val unpriced = totalItems - itemsWithReplacement
+            val pricingBreakdown = mutableListOf<String>()
+            if (autoPriced > 0) pricingBreakdown.add("$autoPriced auto-priced (Keepa/Amazon.com)")
+            if (manualPriced > 0) pricingBreakdown.add("$manualPriced manually priced")
+            if (unpriced > 0) pricingBreakdown.add("$unpriced unpriced")
+            addSummaryRow("Pricing breakdown:", pricingBreakdown.joinToString(", "))
         }
 
         // Evidence coverage

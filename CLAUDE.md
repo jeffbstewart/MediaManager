@@ -124,6 +124,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `SessionToken.kt` — Persistent login tokens (30-day cookie sessions)
 - `BuddyApiKey.kt` — Bcrypt-hashed API keys for transcode buddy workers (multiple keys, show-once)
 - `OwnershipPhoto.kt` — Proof-of-ownership photos linked to media items (stored on disk, metadata in DB)
+- `PriceLookup.kt` — Price observations from Keepa API (new/used/Amazon prices, ASIN, raw JSON)
 
 **Services (`service/`):**
 - `UpcLookupAgent.kt` — Background daemon: polls for unprocessed scans, calls UPCitemdb API
@@ -152,6 +153,9 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `BuddyKeyService.kt` — Buddy API key management (create with bcrypt hash, validate, delete)
 - `RokuFeedService.kt` — Builds Roku-compatible JSON feed from enriched titles with playable transcodes
 - `OwnershipPhotoService.kt` — Store/retrieve/delete proof-of-ownership photos (disk files at `data/ownership-photos/`)
+- `KeepaService.kt` — Keepa API client (batch ASIN lookup, UPC lookup, title search) + MockKeepaService + PriceSelectionService
+- `PriceLookupAgent.kt` — Background daemon: prices media items via Keepa (Amazon.com US), configurable token rate
+- `MediaItemDeleteService.kt` — Cascade delete for MediaItem and orphaned Titles
 
 **Security:**
 - `SecurityServiceInitListener.kt` — VaadinServiceInitListener enforcing route-level authentication and authorization
@@ -187,6 +191,7 @@ H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, whi
 - **UPCitemdb** — Free trial tier, no API key required. Per-IP throttling: 6 requests/minute, 100/day. Used for barcode-to-product lookup.
 - **TMDB (The Movie Database)** — Requires API key via `secrets/.env` file (`TMDB_API_KEY`). Used for canonical title names, poster images, release years, and descriptions. A TMDB API key is required for a functional catalog — without it, there are no poster images, cast data, descriptions, or popularity sorting.
   - **IMPORTANT: TMDB ID namespaces are separate for movies and TV shows.** A movie and a TV show can share the same integer ID (e.g., movie 253 = "Live and Let Die", TV 253 = "Star Trek"). Any lookup, dedup, or comparison involving `tmdb_id` **must also consider `media_type`**. Failing to do so causes cross-type collisions — titles silently reused, wishes fulfilled for the wrong type, etc. Always pair `tmdb_id` with `media_type` in all queries and set operations.
+- **Keepa** — Amazon price tracking API. Requires paid subscription (minimum 19 EUR/month for basic API access, 49 EUR/month for practical throughput). API key stored in `app_config` (`keepa_api_key`). Used for automated replacement value estimation. **Amazon.com (US, domain=1) only** — other Amazon marketplaces not currently supported. Token-based rate limiting configured via `keepa_tokens_per_minute` in Settings.
 
 ### NAS Integration
 

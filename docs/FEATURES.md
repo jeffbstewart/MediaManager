@@ -48,6 +48,9 @@ see git history for full specifications.
 | Enhanced Search | In-memory inverted index with phrases, negation, tag operators |
 | Inventory Export | Downloadable CSV/PDF valuation report for insurance documentation |
 | Ownership Evidence | Mobile photo capture for proof-of-ownership, optional inline photos in PDF report |
+| Automated Pricing | Keepa API integration for replacement value estimation via Amazon.com prices |
+| Delete Media Item | Cascade delete for incorrectly scanned items with full FK cleanup |
+| Override ASIN | Manual ASIN correction for price lookup, accepts Amazon URLs |
 | Bulk Tag Seeding | Auto-create genre tags from TMDB data via SchemaUpdater |
 | TMDB Wish Search | Search TMDB directly from wish list page |
 | Missing Seasons | Detect unowned TV seasons, home page notifications, season wishes |
