@@ -367,10 +367,86 @@ private class PurchaseEditDialog(
             """, priceField.element)
         }
 
+        // ASIN section
+        val currentAsin = resolveAsin(mediaItem)
+        val asinLayout = HorizontalLayout().apply {
+            width = "100%"
+            isPadding = false
+            isSpacing = true
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
+        }
+        val asinDisplay = Span().apply {
+            style.set("font-size", "var(--lumo-font-size-s)")
+            style.set("color", "var(--lumo-secondary-text-color)")
+        }
+        val asinField = TextField().apply {
+            width = "100%"
+            placeholder = "Paste Amazon URL or ASIN"
+            isVisible = false
+            style.set("font-size", "var(--lumo-font-size-s)")
+        }
+
+        fun updateAsinDisplay() {
+            val resolved = resolveAsin(MediaItem.findById(mediaItem.id!!) ?: mediaItem)
+            if (resolved != null) {
+                asinDisplay.text = "ASIN: ${resolved.first} (${resolved.second})"
+                asinDisplay.element.executeJs(
+                    "this.innerHTML='ASIN: <a href=\"https://www.amazon.com/dp/' + $0 + '\" target=\"_blank\" style=\"color:var(--lumo-primary-text-color)\">' + $0 + '</a> (' + $1 + ')'",
+                    resolved.first, resolved.second
+                )
+            } else {
+                asinDisplay.text = "ASIN: none"
+            }
+        }
+        updateAsinDisplay()
+
+        val setAsinBtn = Button("Set").apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+            addClickListener {
+                asinField.isVisible = !asinField.isVisible
+                if (asinField.isVisible) asinField.focus()
+            }
+        }
+        val clearAsinBtn = Button("Clear").apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+            isVisible = mediaItem.override_asin != null
+            addClickListener {
+                val fresh = MediaItem.findById(mediaItem.id!!) ?: return@addClickListener
+                fresh.override_asin = null
+                fresh.save()
+                mediaItem.override_asin = null
+                isVisible = false
+                asinField.isVisible = false
+                updateAsinDisplay()
+                Notification.show("ASIN override cleared", 2000, Notification.Position.BOTTOM_START)
+            }
+        }
+        asinField.addValueChangeListener { event ->
+            val input = event.value?.trim() ?: ""
+            if (input.isEmpty()) return@addValueChangeListener
+            val extracted = extractAsin(input)
+            if (extracted != null) {
+                val fresh = MediaItem.findById(mediaItem.id!!) ?: return@addValueChangeListener
+                fresh.override_asin = extracted
+                fresh.save()
+                mediaItem.override_asin = extracted
+                asinField.value = ""
+                asinField.isVisible = false
+                clearAsinBtn.isVisible = true
+                updateAsinDisplay()
+                Notification.show("ASIN set to $extracted", 2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            } else {
+                Notification.show("Could not extract ASIN from input", 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            }
+        }
+        asinLayout.add(asinDisplay, setAsinBtn, clearAsinBtn)
+
         val content = VerticalLayout().apply {
             isPadding = false
             isSpacing = true
-            add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField, replacementField)
+            add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField, replacementField, asinLayout, asinField)
         }
 
         // Ownership photos section
@@ -684,6 +760,46 @@ private class PurchaseEditDialog(
         selectedAmazonOrderId = order.id
         Notification.show("Applied Amazon order — click Save to confirm",
             2000, Notification.Position.BOTTOM_START)
+    }
+
+    /**
+     * Resolve the best known ASIN for a media item.
+     * Returns (asin, source) or null.
+     */
+    private fun resolveAsin(item: MediaItem): Pair<String, String>? {
+        // User override takes priority
+        if (!item.override_asin.isNullOrBlank()) {
+            return item.override_asin!! to "override"
+        }
+        // Linked Amazon order
+        if (!item.amazon_order_id.isNullOrBlank()) {
+            val order = AmazonOrder.findAll().firstOrNull {
+                it.linked_media_item_id == item.id && it.asin.isNotBlank()
+            }
+            if (order != null) return order.asin to "Amazon order"
+        }
+        // Most recent price lookup with a keepa_asin
+        val lookup = net.stewart.mediamanager.entity.PriceLookup.findAll()
+            .filter { it.media_item_id == item.id!! && !it.keepa_asin.isNullOrBlank() }
+            .maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }
+        if (lookup != null) return lookup.keepa_asin!! to "auto-discovered"
+
+        return null
+    }
+
+    /**
+     * Extract an ASIN from user input. Accepts:
+     * - Raw ASIN: "B00ABC1234"
+     * - Amazon URL: "https://www.amazon.com/dp/B00ABC1234/..."
+     * - Amazon URL: "https://www.amazon.com/gp/product/B00ABC1234/..."
+     */
+    private fun extractAsin(input: String): String? {
+        val trimmed = input.trim()
+        // Raw ASIN (10 alphanumeric, starts with B or 0-9)
+        if (trimmed.matches(Regex("^[A-Z0-9]{10}$"))) return trimmed
+        // URL with /dp/ or /product/
+        val urlMatch = Regex("(?:dp|product)/([A-Z0-9]{10})").find(trimmed.uppercase())
+        return urlMatch?.groupValues?.get(1)
     }
 
     private fun save(place: String?, date: LocalDate?, price: BigDecimal?) {

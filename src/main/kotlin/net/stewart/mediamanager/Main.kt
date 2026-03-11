@@ -12,6 +12,7 @@ import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.SsdpResponder
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
+import net.stewart.mediamanager.service.PriceLookupAgent
 import net.stewart.mediamanager.service.TmdbEnrichmentAgent
 import net.stewart.mediamanager.service.TranscoderAgent
 import net.stewart.mediamanager.service.UpcLookupAgent
@@ -78,6 +79,10 @@ fun main(args: Array<String>) {
     val collectionAgent = CollectionRefreshAgent()
     collectionAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { collectionAgent.stop() })
+
+    val priceLookupAgent = PriceLookupAgent()
+    priceLookupAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { priceLookupAgent.stop() })
 
     // Periodic maintenance: cleanup + database backup (every 24 hours)
     val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
