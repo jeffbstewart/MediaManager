@@ -328,7 +328,7 @@ class TranscodeWorker(
                 "--compute_type", "float16"
             )
             if (config.whisperModelDir != null) {
-                command.addAll(listOf("--model_dir", config.whisperModelDir!!))
+                command.addAll(listOf("--model_dir", config.whisperModelDir))
             }
 
             log.info("Running: {}", command.joinToString(" "))

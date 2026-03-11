@@ -29,8 +29,8 @@ class RepairFulfilledWishesUpdater : SchemaUpdater {
         if (fulfilledMedia.isEmpty()) return
 
         val titlesByTmdb = Title.findAll()
-            .filter { it.tmdb_id != null && it.media_type != null }
-            .groupBy { Pair(it.tmdb_id!!, it.media_type!!) }
+            .filter { it.tmdb_id != null }
+            .groupBy { Pair(it.tmdb_id!!, it.media_type) }
         val seasonsByTitle = TitleSeason.findAll().groupBy { it.title_id }
 
         var reverted = 0

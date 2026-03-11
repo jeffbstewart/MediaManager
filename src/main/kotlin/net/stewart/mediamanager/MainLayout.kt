@@ -61,15 +61,15 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
     private var profileDisplayName: Span
     private val adminSection: VerticalLayout
     private val drawerItems: List<Pair<HorizontalLayout, String>> // layout to route
-    private lateinit var contentParent: HorizontalLayout
-    private lateinit var contentChildren: VerticalLayout
-    private lateinit var contentChevron: Icon
-    private lateinit var purchasesParent: HorizontalLayout
-    private lateinit var purchasesChildren: VerticalLayout
-    private lateinit var purchasesChevron: Icon
-    private lateinit var transcodesParent: HorizontalLayout
-    private lateinit var transcodesChildren: VerticalLayout
-    private lateinit var transcodesChevron: Icon
+    private var contentParent: HorizontalLayout
+    private var contentChildren: VerticalLayout
+    private var contentChevron: Icon
+    private var purchasesParent: HorizontalLayout
+    private var purchasesChildren: VerticalLayout
+    private var purchasesChevron: Icon
+    private var transcodesParent: HorizontalLayout
+    private var transcodesChildren: VerticalLayout
+    private var transcodesChevron: Icon
     private val unmatchedBadge: Span
     private val transcodesParentBadge: Span
     private val expandBadge: Span

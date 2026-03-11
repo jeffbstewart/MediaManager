@@ -26,7 +26,7 @@ import net.stewart.mediamanager.service.WishListService
 @PageTitle("Purchase Wishes")
 class PurchaseWishesView : VerticalLayout() {
 
-    private lateinit var grid: Grid<MediaWishAggregate>
+    private var grid: Grid<MediaWishAggregate>
 
     init {
         isPadding = true

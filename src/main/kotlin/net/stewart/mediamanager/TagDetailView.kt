@@ -97,7 +97,7 @@ class TagDetailView : VerticalLayout(), BeforeEnterObserver {
                     val available = Title.findAll()
                         .filter { it.id !in taggedTitleIds }
                         .filter { !it.hidden }
-                        .filter { currentUser == null || currentUser.canSeeRating(it.content_rating) }
+                        .filter { currentUser.canSeeRating(it.content_rating) }
                         .sortedBy { it.sort_name?.lowercase() ?: it.name.lowercase() }
 
                     setItems(

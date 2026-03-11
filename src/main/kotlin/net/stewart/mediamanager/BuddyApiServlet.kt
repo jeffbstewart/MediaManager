@@ -75,7 +75,7 @@ class BuddyApiServlet : HttpServlet() {
             return
         }
 
-        val skipTypes = body?.get("skip_types")?.asJsonArray
+        val skipTypes = body.get("skip_types")?.asJsonArray
             ?.map { it.asString }?.toSet() ?: emptySet()
 
         val lease = TranscodeLeaseService.claimWork(buddyName, skipTypes)

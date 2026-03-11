@@ -165,9 +165,8 @@ object NasScannerService {
 
         for (candidate in newFiles) {
             try {
-                processCandidate(candidate, titles, titleById, movieTitlesWithTranscode, now)?.let { matched ->
-                    if (matched) matchedCount++ else unmatchedCount++
-                }
+                val matched = processCandidate(candidate, titles, titleById, movieTitlesWithTranscode, now)
+                if (matched) matchedCount++ else unmatchedCount++
             } catch (e: Exception) {
                 log.error("Error processing file '{}': {}", candidate.fileName, e.message)
                 unmatchedCount++

@@ -158,7 +158,6 @@ class ScanView : KComposite() {
                         EnrichmentStatus.SKIPPED -> "No TMDB match"
                         EnrichmentStatus.FAILED -> "TMDB lookup failed"
                         EnrichmentStatus.ABANDONED -> "TMDB match abandoned"
-                        else -> ""
                     }
                     val label = Span("⚠ $statusText")
                     label.style.set("color", "var(--lumo-error-text-color)")

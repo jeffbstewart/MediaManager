@@ -175,11 +175,11 @@ class DataQualityView : KComposite() {
                     }
                 }).setHeader("Rating").setWidth("100px").setFlexGrow(0).setSortable(false)
 
-                addColumn({ it.media_type ?: "" }).setHeader("Type")
+                addColumn({ it.media_type }).setHeader("Type")
                     .setWidth("80px").setFlexGrow(0).setSortable(true).setKey("media_type")
 
                 addColumn(ComponentRenderer { title ->
-                    val status = title.enrichment_status ?: ""
+                    val status = title.enrichment_status
                     Span(status).apply {
                         element.themeList.add("badge")
                         style.set("font-size", "var(--lumo-font-size-xxs)")

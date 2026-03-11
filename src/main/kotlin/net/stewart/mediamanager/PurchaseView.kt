@@ -56,6 +56,8 @@ class PurchaseView : KComposite() {
     private lateinit var inventoryLabel: Span
     private lateinit var itemGrid: Grid<MediaItem>
 
+    // Cached data — loaded once, invalidated on save
+    private var allItems: List<MediaItem> = emptyList()
     private var titleMap: Map<Long, String> = emptyMap()
     private var seasonMap: Map<Long, String> = emptyMap()
     private var suggestions: Map<Long, AmazonSuggestion> = emptyMap()
@@ -78,7 +80,7 @@ class PurchaseView : KComposite() {
                     width = "30em"
                     valueChangeMode = ValueChangeMode.LAZY
                     valueChangeTimeout = 300
-                    addValueChangeListener { refreshGrid() }
+                    addValueChangeListener { applyFilters() }
                 }
 
                 priceFilter = comboBox {
@@ -86,7 +88,7 @@ class PurchaseView : KComposite() {
                     isClearButtonVisible = true
                     width = "14em"
                     setItems("With prices", "Without prices", "Needs replacement value")
-                    addValueChangeListener { refreshGrid() }
+                    addValueChangeListener { applyFilters() }
                 }
 
                 countLabel = span()
@@ -219,11 +221,13 @@ class PurchaseView : KComposite() {
     }
 
     init {
-        refreshGrid()
+        loadData()
+        applyFilters()
     }
 
-    private fun refreshGrid() {
-        val allItems = MediaItem.findAll()
+    /** Load all data from DB and compute suggestions. Called once on init and after saves. */
+    private fun loadData() {
+        allItems = MediaItem.findAll()
         titleMap = loadTitleMap()
         seasonMap = loadSeasonMap()
 
@@ -243,8 +247,10 @@ class PurchaseView : KComposite() {
         }
         inventoryLabel.text = "Inventory: \$${totalValue.setScale(2, RoundingMode.HALF_UP)}" +
                 " \u00b7 ${pricedItems.size} of ${allItems.size} items priced"
+    }
 
-        // Apply filters
+    /** Apply search/filter to cached data. Fast — no DB queries or fuzzy matching. */
+    private fun applyFilters() {
         val searchTerm = searchField.value?.trim()?.lowercase() ?: ""
         val priceSelection = priceFilter.value
 
@@ -276,6 +282,12 @@ class PurchaseView : KComposite() {
         } else {
             "${allItems.size} media items"
         }
+    }
+
+    /** Reload data from DB and re-apply filters. Called after saves/edits. */
+    private fun refreshGrid() {
+        loadData()
+        applyFilters()
     }
 
     private fun loadTitleMap(): Map<Long, String> {
@@ -316,12 +328,12 @@ private class PurchaseEditDialog(
 ) : Dialog() {
 
     private var selectedAmazonOrderId: Long? = null
-    private lateinit var placeField: TextField
-    private lateinit var dateField: DatePicker
-    private lateinit var priceField: NumberField
-    private lateinit var replacementField: NumberField
-    private lateinit var photoStrip: HorizontalLayout
-    private lateinit var photoLabel: Span
+    private var placeField: TextField
+    private var dateField: DatePicker
+    private var priceField: NumberField
+    private var replacementField: NumberField
+    private var photoStrip: HorizontalLayout
+    private var photoLabel: Span
 
     init {
         headerTitle = "Edit Purchase"
@@ -894,16 +906,24 @@ private class PurchaseEditDialog(
         }
         // Linked Amazon order
         if (!item.amazon_order_id.isNullOrBlank()) {
-            val order = AmazonOrder.findAll().firstOrNull {
-                it.linked_media_item_id == item.id && it.asin.isNotBlank()
+            val asin = JdbiOrm.jdbi().withHandle<String?, Exception> { handle ->
+                handle.createQuery(
+                    "SELECT asin FROM amazon_order WHERE linked_media_item_id = :itemId AND asin != '' LIMIT 1"
+                ).bind("itemId", item.id)
+                    .mapTo(String::class.java)
+                    .findFirst().orElse(null)
             }
-            if (order != null) return order.asin to "Amazon order"
+            if (asin != null) return asin to "Amazon order"
         }
         // Most recent price lookup with a keepa_asin
-        val lookup = net.stewart.mediamanager.entity.PriceLookup.findAll()
-            .filter { it.media_item_id == item.id!! && !it.keepa_asin.isNullOrBlank() }
-            .maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }
-        if (lookup != null) return lookup.keepa_asin!! to "auto-discovered"
+        val keepaAsin = JdbiOrm.jdbi().withHandle<String?, Exception> { handle ->
+            handle.createQuery(
+                "SELECT keepa_asin FROM price_lookup WHERE media_item_id = :itemId AND keepa_asin IS NOT NULL ORDER BY looked_up_at DESC LIMIT 1"
+            ).bind("itemId", item.id)
+                .mapTo(String::class.java)
+                .findFirst().orElse(null)
+        }
+        if (keepaAsin != null) return keepaAsin to "auto-discovered"
 
         return null
     }
