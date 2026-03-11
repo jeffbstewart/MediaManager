@@ -208,6 +208,15 @@ class PurchaseView : KComposite() {
                                         .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
                                 }
                             })
+                        } else if (item.replacement_value != null) {
+                            add(Span("$${item.replacement_value!!.setScale(2, RoundingMode.HALF_UP)}").apply {
+                                style.set("color", "var(--lumo-secondary-text-color)")
+                                style.set("font-size", "var(--lumo-font-size-s)")
+                            })
+                            add(Span("(repl.)").apply {
+                                style.set("font-size", "var(--lumo-font-size-xs)")
+                                style.set("color", "var(--lumo-secondary-text-color)")
+                            })
                         }
                     }
                 }).setHeader("Price").setWidth("140px").setFlexGrow(0).setSortable(false)
