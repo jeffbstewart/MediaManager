@@ -188,7 +188,7 @@ class InventoryReportView : KComposite() {
         val photoCounts = if (withPhotos) OwnershipPhotoService.countByMediaItem() else emptyMap()
 
         val out = ByteArrayOutputStream()
-        val document = Document(PageSize.LETTER, 36f, 36f, 36f, 36f)
+        val document = Document(PageSize.LETTER.rotate(), 36f, 36f, 36f, 36f)
         PdfWriter.getInstance(document, out)
         document.open()
 
@@ -308,6 +308,33 @@ class InventoryReportView : KComposite() {
 
         document.add(summaryTable)
 
+        // === Pricing Methodology ===
+        if (itemsWithReplacement > 0) {
+            val methSection = Paragraph("\nReplacement Value Methodology", sectionFont)
+            methSection.spacingBefore = 12f
+            methSection.spacingAfter = 6f
+            document.add(methSection)
+
+            val methText = Paragraph()
+            methText.add(Chunk(
+                "Replacement values are sourced from ", normalFont
+            ))
+            val keepaLink = Chunk("Keepa (keepa.com)", Font(Font.HELVETICA, 9f, Font.NORMAL, Color(0, 102, 204)))
+            keepaLink.setAnchor("https://keepa.com")
+            methText.add(keepaLink)
+            methText.add(Chunk(
+                ", a price tracking service for Amazon.com. For each item, Keepa provides historical " +
+                "and current pricing data from Amazon marketplace sellers. The replacement value is selected " +
+                "using the following priority: (1) 30-day weighted average new price, (2) current new price, " +
+                "(3) Amazon direct price, (4) current used price. This ensures the replacement value reflects " +
+                "recent market conditions rather than a single point-in-time snapshot. " +
+                "All prices are from Amazon.com (US marketplace) only.",
+                normalFont
+            ))
+            methText.spacingAfter = 8f
+            document.add(methText)
+        }
+
         // === Gap Analysis ===
         if (unvalued.isNotEmpty()) {
             val gapSection = Paragraph("\nValuation Gap Analysis", sectionFont)
@@ -386,8 +413,20 @@ class InventoryReportView : KComposite() {
             }
         }
 
-        // Spacing before detail sections
-        document.add(Paragraph(" ").apply { spacingAfter = 12f })
+        // Build ASIN map for Amazon links in replacement value column
+        val allLookups2 = net.stewart.mediamanager.entity.PriceLookup.findAll()
+        val latestLookupByItem2 = allLookups2
+            .groupBy { it.media_item_id }
+            .mapValues { (_, lookups) -> lookups.maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }!! }
+        val amazonOrders2 = net.stewart.mediamanager.entity.AmazonOrder.findAll()
+        val asinByItem = data.allItems.associate { item ->
+            item.id!! to (item.override_asin
+                ?: amazonOrders2.firstOrNull { it.linked_media_item_id == item.id && it.asin.isNotBlank() }?.asin
+                ?: latestLookupByItem2[item.id]?.keepa_asin)
+        }
+
+        // Page break before detail sections
+        document.newPage()
 
         // Section 1: Purchases with Valuations — grouped by seller
         val sec1 = Paragraph("Purchases with Valuations", sectionFont)
@@ -412,7 +451,7 @@ class InventoryReportView : KComposite() {
 
                 val hasOrders = sorted.any { it.amazon_order_id != null }
                 val hasReplacement = sorted.any { it.replacement_value != null }
-                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement, photoCounts)
+                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement, photoCounts, asinByItem)
                 document.add(table)
 
                 val subtotal = sorted.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
@@ -470,18 +509,22 @@ class InventoryReportView : KComposite() {
         boldFont: Font,
         includeOrderNumber: Boolean,
         includeReplacement: Boolean = false,
-        photoCounts: Map<Long, Int> = emptyMap()
+        photoCounts: Map<Long, Int> = emptyMap(),
+        asinByItem: Map<Long, String?> = emptyMap()
     ): PdfPTable {
         var colCount = 5
         if (includeOrderNumber) colCount++
-        if (includeReplacement) colCount++
+        if (includeReplacement) colCount += 2 // replacement value + date
         val table = PdfPTable(colCount)
         table.widthPercentage = 100f
 
         val widths = mutableListOf(3f, 1f, 1.2f, 1.5f)
         if (includeOrderNumber) widths.add(1.5f)
         widths.add(1f) // purchase price
-        if (includeReplacement) widths.add(1f) // replacement value
+        if (includeReplacement) {
+            widths.add(1f)  // replacement value
+            widths.add(1.2f) // replacement date
+        }
         table.setWidths(widths.toFloatArray())
 
         val headerBg = Color(51, 51, 51)
@@ -498,7 +541,10 @@ class InventoryReportView : KComposite() {
         addHeader("Purchase Date")
         if (includeOrderNumber) addHeader("Order #")
         addHeader("Purchase Price")
-        if (includeReplacement) addHeader("Repl. Value")
+        if (includeReplacement) {
+            addHeader("Repl. Value")
+            addHeader("Repl. Date")
+        }
 
         val altBg = Color(245, 245, 245)
         items.forEachIndexed { index, item ->
@@ -519,7 +565,21 @@ class InventoryReportView : KComposite() {
             if (includeOrderNumber) addCell(item.amazon_order_id ?: "")
             addCell("\$${item.purchase_price!!.setScale(2)}", normalFont, Element.ALIGN_RIGHT)
             if (includeReplacement) {
-                addCell(item.replacement_value?.let { "\$${it.setScale(2)}" } ?: "", normalFont, Element.ALIGN_RIGHT)
+                val replText = item.replacement_value?.let { "\$${it.setScale(2)}" } ?: ""
+                val asin = asinByItem[item.id]
+                if (replText.isNotEmpty() && asin != null) {
+                    val linkFont = Font(Font.HELVETICA, 9f, Font.NORMAL, Color(0, 102, 204))
+                    val chunk = Chunk(replText, linkFont)
+                    chunk.setAnchor("https://www.amazon.com/dp/$asin")
+                    val cell = PdfPCell(Phrase(chunk))
+                    cell.setPadding(4f)
+                    cell.horizontalAlignment = Element.ALIGN_RIGHT
+                    if (bg != null) cell.backgroundColor = bg
+                    table.addCell(cell)
+                } else {
+                    addCell(replText, normalFont, Element.ALIGN_RIGHT)
+                }
+                addCell(item.replacement_value_updated_at?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: "", normalFont)
             }
 
             // Photo row (if photos are included and this item has evidence)

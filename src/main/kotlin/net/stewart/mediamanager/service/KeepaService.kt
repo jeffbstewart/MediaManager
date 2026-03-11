@@ -7,10 +7,12 @@ import net.stewart.mediamanager.entity.AppConfig
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.io.ByteArrayInputStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.zip.GZIPInputStream
 
 /**
  * Result of a Keepa product price lookup.
@@ -44,6 +46,12 @@ interface KeepaService {
 
     /** Search for a product by title keywords. Returns the best-match ASIN or null. */
     fun searchByTitle(title: String, format: String? = null): String?
+
+    /**
+     * Search for candidate products by title, returning up to 5 results with full price details.
+     * Calls the search endpoint to get ASINs, then batch-fetches product details for each.
+     */
+    fun searchCandidates(title: String, format: String? = null): List<KeepaProductResult>
 }
 
 /**
@@ -75,7 +83,7 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
         require(asins.size <= 100) { "Keepa supports up to 100 ASINs per request" }
 
         val asinCsv = asins.joinToString(",")
-        val url = "$BASE_URL/product?key=$apiKey&domain=$DOMAIN_US&asin=$asinCsv&stats=90&offers=0"
+        val url = "$BASE_URL/product?key=$apiKey&domain=$DOMAIN_US&asin=$asinCsv&stats=90"
 
         val response = executeRequest(url)
         if (response == null) return asins.map { KeepaProductResult(found = false, asin = it, errorMessage = "Request failed") }
@@ -84,7 +92,7 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
     }
 
     override fun lookupByUpc(upc: String): KeepaProductResult {
-        val url = "$BASE_URL/product?key=$apiKey&domain=$DOMAIN_US&code=$upc&stats=90&offers=0"
+        val url = "$BASE_URL/product?key=$apiKey&domain=$DOMAIN_US&code=$upc&stats=90"
 
         val response = executeRequest(url)
             ?: return KeepaProductResult(found = false, errorMessage = "Request failed")
@@ -94,20 +102,67 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
     }
 
     override fun searchByTitle(title: String, format: String?): String? {
+        return searchTopAsins(title, format, limit = 1).firstOrNull()
+    }
+
+    override fun searchCandidates(title: String, format: String?): List<KeepaProductResult> {
+        val searchTerm = if (format != null) "$title $format" else title
+        val encoded = java.net.URLEncoder.encode(searchTerm, "UTF-8")
+        // Include stats=90 so product results have price data — avoids a second API call
+        val url = "$BASE_URL/search?key=$apiKey&domain=$DOMAIN_US&type=product&term=$encoded&rootCategory=$CATEGORY_DVD_BLURAY&stats=90"
+
+        log.info("Keepa candidate search for: '{}'", searchTerm)
+        val response = executeRequest(url)
+        if (response == null) {
+            log.warn("Keepa candidate search failed (null response) for: '{}'", searchTerm)
+            return emptyList()
+        }
+
+        return try {
+            val json = JsonParser.parseString(response).asJsonObject
+            val tokensLeft = json.get("tokensLeft")?.asInt ?: 0
+            val products = json.getAsJsonArray("products")
+            if (products == null || products.isEmpty) {
+                log.info("Keepa candidate search returned no products for: '{}'", searchTerm)
+                return emptyList()
+            }
+            val results = products.take(5).map { parseProduct(it.asJsonObject, tokensLeft, "") }
+            log.info("Keepa candidate search found {} results for '{}'", results.size, searchTerm)
+            results
+        } catch (e: Exception) {
+            log.warn("Failed to parse Keepa candidate search response: {}", e.message)
+            emptyList()
+        }
+    }
+
+    private fun searchTopAsins(title: String, format: String?, limit: Int): List<String> {
         val searchTerm = if (format != null) "$title $format" else title
         val encoded = java.net.URLEncoder.encode(searchTerm, "UTF-8")
         val url = "$BASE_URL/search?key=$apiKey&domain=$DOMAIN_US&type=product&term=$encoded&rootCategory=$CATEGORY_DVD_BLURAY"
 
-        val response = executeRequest(url) ?: return null
+        val response = executeRequest(url) ?: return emptyList()
 
-        try {
+        return try {
             val json = JsonParser.parseString(response).asJsonObject
+
+            // Keepa search may return asinList (simple search) or products (detailed search)
             val asinList = json.getAsJsonArray("asinList")
-            if (asinList == null || asinList.isEmpty) return null
-            return asinList[0].asString
+            if (asinList != null && !asinList.isEmpty) {
+                return asinList.take(limit).map { it.asString }
+            }
+
+            // Fall back to extracting ASINs from products array
+            val products = json.getAsJsonArray("products")
+            if (products != null && !products.isEmpty) {
+                return products.take(limit).mapNotNull { p ->
+                    p.asJsonObject.get("asin")?.asString
+                }
+            }
+
+            emptyList()
         } catch (e: Exception) {
             log.warn("Failed to parse Keepa search response: {}", e.message)
-            return null
+            emptyList()
         }
     }
 
@@ -117,12 +172,15 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
             val logUrl = url.replace(apiKey, "***")
             log.debug("Keepa request: {}", logUrl)
 
+
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .header("Accept-Encoding", "gzip")
                 .GET()
                 .build()
 
-            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            val response = client.send(request, HttpResponse.BodyHandlers.ofByteArray())
+            val body = decodeBody(response)
 
             if (response.statusCode() == 429) {
                 log.warn("Keepa rate limited (429)")
@@ -137,14 +195,24 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
                 return null
             }
             if (response.statusCode() != 200) {
-                log.warn("Keepa returned HTTP {}", response.statusCode())
+                log.warn("Keepa returned HTTP {}: {}", response.statusCode(), body?.take(500))
                 return null
             }
 
-            return response.body()
+            return body
         } catch (e: Exception) {
             log.error("Keepa request failed: {}", e.message)
             return null
+        }
+    }
+
+    private fun decodeBody(response: HttpResponse<ByteArray>): String? {
+        val bytes = response.body() ?: return null
+        val encoding = response.headers().firstValue("Content-Encoding").orElse("")
+        return if (encoding == "gzip") {
+            GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().readText()
+        } else {
+            String(bytes)
         }
     }
 
@@ -253,6 +321,12 @@ class MockKeepaService : KeepaService {
 
     override fun searchByTitle(title: String, format: String?): String? {
         return results.entries.firstOrNull { it.value.title?.contains(title, ignoreCase = true) == true }?.key
+    }
+
+    override fun searchCandidates(title: String, format: String?): List<KeepaProductResult> {
+        return results.values
+            .filter { it.title?.contains(title, ignoreCase = true) == true }
+            .take(5)
     }
 }
 

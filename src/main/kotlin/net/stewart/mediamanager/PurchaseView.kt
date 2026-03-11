@@ -25,13 +25,19 @@ import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.data.value.ValueChangeMode
 import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
+import com.vaadin.flow.component.UI
 import net.stewart.mediamanager.entity.AmazonOrder
+import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaFormat
 import net.stewart.mediamanager.service.AmazonImportService
+import net.stewart.mediamanager.service.KeepaHttpService
+import net.stewart.mediamanager.service.KeepaProductResult
 import net.stewart.mediamanager.service.MediaItemDeleteService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.AmazonSuggestion
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.PriceSelectionService
 import net.stewart.mediamanager.service.TitleCleanerService
 import java.math.BigDecimal
 import java.util.Base64
@@ -79,7 +85,7 @@ class PurchaseView : KComposite() {
                     placeholder = "All items"
                     isClearButtonVisible = true
                     width = "14em"
-                    setItems("With prices", "Without prices")
+                    setItems("With prices", "Without prices", "Needs replacement value")
                     addValueChangeListener { refreshGrid() }
                 }
 
@@ -258,6 +264,7 @@ class PurchaseView : KComposite() {
         when (priceSelection) {
             "With prices" -> filtered = filtered.filter { it.purchase_price != null }
             "Without prices" -> filtered = filtered.filter { it.purchase_price == null }
+            "Needs replacement value" -> filtered = filtered.filter { it.replacement_value == null }
         }
 
         val sorted = filtered.sortedBy { titleMap[it.id]?.lowercase() ?: "" }.toList()
@@ -448,6 +455,120 @@ private class PurchaseEditDialog(
             isSpacing = true
             add(upcLabel, productLabel, titlesLabel, placeField, dateField, priceField, replacementField, asinLayout, asinField)
         }
+
+        // Find on Keepa section
+        val keepaApiKey = AppConfig.findAll().firstOrNull { it.config_key == "keepa_api_key" }?.config_val?.trim()
+        val keepaSeparator = Span().apply {
+            width = "100%"
+            style.set("border-top", "1px solid var(--lumo-contrast-20pct)")
+            style.set("margin-top", "var(--lumo-space-xs)")
+        }
+        content.add(keepaSeparator)
+
+        val keepaCandidateGrid = Grid<KeepaProductResult>().apply {
+            width = "100%"
+            height = "200px"
+            isVisible = false
+
+            addColumn(ComponentRenderer { r ->
+                Span(r.title ?: "").apply {
+                    element.setAttribute("title", r.title ?: "")
+                    style.set("overflow", "hidden")
+                    style.set("text-overflow", "ellipsis")
+                    style.set("white-space", "nowrap")
+                    style.set("display", "block")
+                }
+            }).setHeader("Amazon Title").setFlexGrow(1).setSortable(false)
+
+            addColumn({ r ->
+                val price = PriceSelectionService.selectPrice(r)
+                if (price != null) "\$$price" else "—"
+            }).setHeader("New Price").setWidth("90px").setFlexGrow(0).setSortable(false)
+
+            addColumn({ it.asin ?: "" }).setHeader("ASIN").setWidth("110px").setFlexGrow(0).setSortable(false)
+
+            addColumn(ComponentRenderer { result ->
+                Button("Use").apply {
+                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
+                    addClickListener {
+                        val asin = result.asin ?: return@addClickListener
+                        val fresh = MediaItem.findById(mediaItem.id!!) ?: return@addClickListener
+                        fresh.override_asin = asin
+                        // Optionally apply the best price as replacement_value
+                        val price = PriceSelectionService.selectPrice(result)
+                        if (price != null && fresh.replacement_value == null) {
+                            fresh.replacement_value = price
+                            fresh.replacement_value_updated_at = LocalDateTime.now()
+                            replacementField.value = price.toDouble()
+                        }
+                        fresh.save()
+                        mediaItem.override_asin = asin
+                        clearAsinBtn.isVisible = true
+                        asinField.isVisible = false
+                        updateAsinDisplay()
+                        Notification.show("ASIN set to $asin", 2000, Notification.Position.BOTTOM_START)
+                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                    }
+                }
+            }).setHeader("").setWidth("65px").setFlexGrow(0).setSortable(false)
+        }
+
+        val keepaStatusLabel = Span().apply {
+            style.set("font-size", "var(--lumo-font-size-s)")
+            style.set("color", "var(--lumo-secondary-text-color)")
+            isVisible = false
+        }
+
+        val findOnKeepaBtn = Button("Find on Keepa", VaadinIcon.SEARCH.create()).apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
+            if (keepaApiKey.isNullOrBlank()) {
+                isEnabled = false
+                element.setAttribute("title", "Keepa API key not configured — set it in Transcodes > Settings")
+            } else {
+                addClickListener {
+                    isEnabled = false
+                    keepaStatusLabel.text = "Searching Keepa..."
+                    keepaStatusLabel.isVisible = true
+                    keepaCandidateGrid.isVisible = false
+
+                    val formatTerm = formatToSearchTerm(mediaItem.media_format)
+                    val ui = UI.getCurrent()
+                    val log = org.slf4j.LoggerFactory.getLogger("KeepaSearch")
+                    Thread {
+                        try {
+                            log.info("Keepa search: '{}' format='{}'", productName, formatTerm)
+                            val candidates =
+                                KeepaHttpService(keepaApiKey).searchCandidates(productName, formatTerm.ifEmpty { null })
+                            log.info("Keepa search returned {} candidates", candidates.size)
+                            ui.access {
+                                isEnabled = true
+                                if (candidates.isEmpty()) {
+                                    keepaStatusLabel.text = "No results found on Keepa."
+                                    keepaStatusLabel.isVisible = true
+                                    keepaCandidateGrid.isVisible = false
+                                } else {
+                                    keepaStatusLabel.isVisible = false
+                                    keepaCandidateGrid.setItems(candidates)
+                                    keepaCandidateGrid.isVisible = true
+                                }
+                                ui.push()
+                            }
+                        } catch (e: Exception) {
+                            log.error("Keepa search failed", e)
+                            ui.access {
+                                isEnabled = true
+                                keepaStatusLabel.text = "Search failed: ${e.message}"
+                                keepaStatusLabel.isVisible = true
+                                keepaCandidateGrid.isVisible = false
+                                ui.push()
+                            }
+                        }
+                    }.also { it.isDaemon = true }.start()
+                }
+            }
+        }
+
+        content.add(findOnKeepaBtn, keepaStatusLabel, keepaCandidateGrid)
 
         // Ownership photos section
         val photoSeparator = Span().apply {
@@ -850,6 +971,14 @@ private class PurchaseEditDialog(
         }
     }
 
+}
+
+private fun formatToSearchTerm(format: String): String = when (format) {
+    MediaFormat.DVD.name -> "DVD"
+    MediaFormat.BLURAY.name -> "Blu-ray"
+    MediaFormat.UHD_BLURAY.name -> "4K UHD Blu-ray"
+    MediaFormat.HD_DVD.name -> "HD DVD"
+    else -> ""
 }
 
 private class BulkPurchaseDialog(

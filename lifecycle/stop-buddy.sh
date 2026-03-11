@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stop the transcode buddy worker by finding and killing its Java process(es).
 
-PIDS=$(wmic process where "name='java.exe'" get ProcessId,CommandLine 2>/dev/null \
+PIDS=$(wmic process where "name='java.exe' or name='javaw.exe'" get ProcessId,CommandLine 2>/dev/null \
     | grep "transcode-buddy" \
     | awk '{print $NF}' \
     | tr -d '\r')

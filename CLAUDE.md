@@ -31,6 +31,18 @@ At the start of every session, `cd` to the project root (`/c/Programming/github/
 
 Use `deploy-all.sh` for changes that affect both the server and the transcode buddy (shared code in transcode-common, buddy code, or server code). It stops the buddy, builds and pushes the Docker image (which triggers Watchtower), then restarts the buddy in the background. Use `docker-build.sh` alone for server-only changes.
 
+### Transcode Buddy Logs
+
+The buddy's stdout/stderr is redirected to `data/buddy.log` (gitignored) to prevent ffmpeg control characters from triggering Windows console beeps. All ffmpeg/whisper process output is also sanitized via `sanitizeFfmpegOutput()` in transcode-common before logging.
+
+```bash
+./lifecycle/run-buddy.sh             # Start buddy (output to data/buddy.log)
+./lifecycle/stop-buddy.sh            # Stop buddy
+./lifecycle/buddy-log.sh             # Last 50 lines of buddy log
+./lifecycle/buddy-log.sh -f          # Live follow
+./lifecycle/buddy-log.sh 100         # Last 100 lines
+```
+
 The `docker-build.sh` script builds the Docker image, tags the previous `latest` as `rollback`,
 pushes both the timestamped and `latest` tags to an in-house private docker registry,
 and triggers a Watchtower redeploy via HTTP API.
