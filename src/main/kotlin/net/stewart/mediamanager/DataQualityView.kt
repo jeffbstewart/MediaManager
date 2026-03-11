@@ -31,6 +31,7 @@ import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.Broadcaster
+import net.stewart.mediamanager.service.MediaItemDeleteService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.TitleUpdateEvent
@@ -474,6 +475,13 @@ internal class TitleEditDialog(
             }
         } else null
 
+        val deleteBtn = if (linkedMediaItem != null) {
+            Button("Delete").apply {
+                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR)
+                addClickListener { confirmDelete(linkedMediaItem) }
+            }
+        } else null
+
         val cancelBtn = Button("Cancel") { close() }
         val saveBtn = Button("Save").apply {
             addThemeVariants(ButtonVariant.LUMO_PRIMARY)
@@ -487,10 +495,14 @@ internal class TitleEditDialog(
             justifyContentMode = FlexComponent.JustifyContentMode.END
             width = "100%"
             isSpacing = true
-            if (multiPackBtn != null) {
-                add(multiPackBtn)
-                expand(multiPackBtn)
-                multiPackBtn.style.set("margin-right", "auto")
+            val leftButtons = HorizontalLayout().apply {
+                isSpacing = true
+                if (deleteBtn != null) add(deleteBtn)
+                if (multiPackBtn != null) add(multiPackBtn)
+            }
+            if (leftButtons.componentCount > 0) {
+                add(leftButtons)
+                expand(leftButtons)
             }
             add(cancelBtn, saveBtn)
         }
@@ -567,6 +579,39 @@ internal class TitleEditDialog(
     private fun findLinkedMediaItem(titleId: Long): MediaItem? {
         val join = MediaItemTitle.findAll().firstOrNull { it.title_id == titleId } ?: return null
         return MediaItem.findById(join.media_item_id)
+    }
+
+    private fun confirmDelete(mediaItem: MediaItem) {
+        val confirmDialog = Dialog().apply {
+            headerTitle = "Delete Item"
+            val msg = "Delete \"${title.name}\" and its media item? This cannot be undone."
+            add(Span(msg))
+            val cancelBtn = Button("Cancel") { close() }
+            val deleteBtn = Button("Delete").apply {
+                addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR)
+                addClickListener {
+                    try {
+                        MediaItemDeleteService.delete(mediaItem.id!!)
+                        close()
+                        this@TitleEditDialog.close()
+                        onSave()
+                        Notification.show("Deleted: ${title.name}", 3000, Notification.Position.BOTTOM_START)
+                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                    } catch (e: Exception) {
+                        Notification.show("Delete failed: ${e.message}", 4000, Notification.Position.BOTTOM_START)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    }
+                }
+            }
+            val footer = HorizontalLayout(cancelBtn, deleteBtn).apply {
+                justifyContentMode = FlexComponent.JustifyContentMode.END
+                width = "100%"
+                isSpacing = true
+            }
+            footer.element.setAttribute("slot", "footer")
+            add(footer)
+        }
+        confirmDialog.open()
     }
 
     private fun flagAsMultiPack(mediaItem: MediaItem) {
