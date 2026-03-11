@@ -30,6 +30,7 @@ import net.stewart.mediamanager.entity.AmazonOrder
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.MediaFormat
+import net.stewart.mediamanager.entity.PriceLookup
 import net.stewart.mediamanager.service.AmazonImportService
 import net.stewart.mediamanager.service.KeepaHttpService
 import net.stewart.mediamanager.service.KeepaProductResult
@@ -53,7 +54,7 @@ class PurchaseView : KComposite() {
     private lateinit var searchField: TextField
     private lateinit var priceFilter: ComboBox<String>
     private lateinit var countLabel: Span
-    private lateinit var inventoryLabel: Span
+    private lateinit var summaryContent: Div
     private lateinit var itemGrid: Grid<MediaItem>
 
     // Cached data — loaded once, invalidated on save
@@ -94,11 +95,14 @@ class PurchaseView : KComposite() {
                 countLabel = span()
             }
 
-            inventoryLabel = span {
+            summaryContent = div {
                 style.set("background", "var(--lumo-contrast-5pct)")
                 style.set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
                 style.set("border-radius", "var(--lumo-border-radius-m)")
                 style.set("font-size", "var(--lumo-font-size-s)")
+                style.set("display", "grid")
+                style.set("grid-template-columns", "repeat(auto-fit, minmax(200px, 1fr))")
+                style.set("gap", "var(--lumo-space-xs) var(--lumo-space-l)")
             }
 
             itemGrid = grid {
@@ -241,12 +245,80 @@ class PurchaseView : KComposite() {
         }
 
         // Inventory summary (always computed from ALL items, not filtered)
+        updateSummary()
+    }
+
+    private fun updateSummary() {
+        summaryContent.removeAll()
+
+        val totalItems = allItems.size
         val pricedItems = allItems.filter { it.purchase_price != null }
-        val totalValue = pricedItems.fold(BigDecimal.ZERO) { acc, item ->
-            acc + item.purchase_price!!.setScale(2, RoundingMode.HALF_UP)
+        val totalPurchase = pricedItems.fold(BigDecimal.ZERO) { acc, it ->
+            acc + it.purchase_price!!.setScale(2, RoundingMode.HALF_UP)
         }
-        inventoryLabel.text = "Inventory: \$${totalValue.setScale(2, RoundingMode.HALF_UP)}" +
-                " \u00b7 ${pricedItems.size} of ${allItems.size} items priced"
+        val itemsWithReplacement = allItems.count { it.replacement_value != null }
+        val replacementTotal = allItems.mapNotNull { it.replacement_value }.fold(BigDecimal.ZERO, BigDecimal::add)
+
+        // Format breakdown
+        val formatCounts = allItems.groupBy { it.media_format }
+        val formatParts = listOf("DVD", "BLURAY", "UHD_BLURAY", "HD_DVD").mapNotNull { fmt ->
+            val count = formatCounts[fmt]?.size ?: 0
+            if (count > 0) {
+                val label = when (fmt) {
+                    "BLURAY" -> "Blu-ray"
+                    "UHD_BLURAY" -> "UHD"
+                    "HD_DVD" -> "HD DVD"
+                    else -> fmt
+                }
+                "$count $label"
+            } else null
+        }
+
+        fun addStat(label: String, value: String) {
+            summaryContent.add(Div().apply {
+                add(Span(value).apply {
+                    style.set("font-weight", "600")
+                    style.set("font-size", "var(--lumo-font-size-m)")
+                    style.set("display", "block")
+                })
+                add(Span(label).apply {
+                    style.set("color", "var(--lumo-secondary-text-color)")
+                })
+            })
+        }
+
+        addStat("Total Items", "$totalItems items (${formatParts.joinToString(", ")})")
+
+        val purchasePct = if (totalItems > 0) (pricedItems.size * 100) / totalItems else 0
+        addStat("Purchase Data", "\$${totalPurchase.setScale(2)} \u00b7 ${pricedItems.size} of $totalItems ($purchasePct%)")
+
+        if (itemsWithReplacement > 0) {
+            val replPct = if (totalItems > 0) (itemsWithReplacement * 100) / totalItems else 0
+            addStat("Replacement Value", "\$${replacementTotal.setScale(2)} \u00b7 $itemsWithReplacement of $totalItems ($replPct%)")
+
+            // Pricing source breakdown
+            val itemIdsWithLookup = PriceLookup.findAll().map { it.media_item_id }.toSet()
+            val autoPriced = allItems.count { it.replacement_value != null && it.id in itemIdsWithLookup }
+            val manualPriced = itemsWithReplacement - autoPriced
+            val unpriced = totalItems - itemsWithReplacement
+            val parts = mutableListOf<String>()
+            if (autoPriced > 0) parts.add("$autoPriced auto")
+            if (manualPriced > 0) parts.add("$manualPriced manual")
+            if (unpriced > 0) parts.add("$unpriced unpriced")
+            addStat("Pricing Breakdown", parts.joinToString(" \u00b7 "))
+        } else {
+            addStat("Replacement Value", "No items priced yet")
+        }
+
+        // Evidence coverage
+        val photoCounts = OwnershipPhotoService.countByMediaItem()
+        val itemIds = allItems.mapNotNull { it.id }.toSet()
+        val itemsWithPhotos = photoCounts.keys.intersect(itemIds).size
+        val totalPhotos = photoCounts.values.sum()
+        if (totalPhotos > 0) {
+            val evidencePct = if (totalItems > 0) (itemsWithPhotos * 100) / totalItems else 0
+            addStat("Evidence Photos", "$totalPhotos photos \u00b7 $itemsWithPhotos of $totalItems items ($evidencePct%)")
+        }
     }
 
     /** Apply search/filter to cached data. Fast — no DB queries or fuzzy matching. */
