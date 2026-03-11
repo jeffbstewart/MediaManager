@@ -54,14 +54,14 @@ object MediaItemDeleteService {
             val mitSeasons = MediaItemTitleSeason.findAll().filter { it.media_item_title_id == mit.id }
             mitSeasons.forEach { it.delete() }
 
+            // Delete the join row before the title (FK constraint)
+            mit.delete()
+
             if (otherLinks == 0) {
                 // Title is orphaned — delete it and all dependents
                 deleteTitle(titleId)
             }
         }
-
-        // Delete media_item_title joins
-        mediaItemTitles.forEach { it.delete() }
 
         // Delete ownership photos (files + DB)
         val photos = OwnershipPhotoService.findAllForItem(mediaItemId, item.upc)
@@ -144,6 +144,9 @@ object MediaItemDeleteService {
 
         // EnrichmentAttempt
         EnrichmentAttempt.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
+
+        // Any remaining media_item_title joins (should already be deleted by caller, but safety net)
+        MediaItemTitle.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
 
         // Search index
         SearchIndexService.onTitleDeleted(titleId)
