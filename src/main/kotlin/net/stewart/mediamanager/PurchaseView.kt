@@ -28,6 +28,7 @@ import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.AmazonOrder
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.service.AmazonImportService
+import net.stewart.mediamanager.service.MediaItemDeleteService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.AmazonSuggestion
 import net.stewart.mediamanager.service.AuthService
@@ -519,6 +520,11 @@ private class PurchaseEditDialog(
             }
         }
 
+        val deleteBtn = Button("Delete Item", VaadinIcon.TRASH.create()).apply {
+            addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR)
+            addClickListener { openDeleteConfirmation() }
+        }
+
         val cancelBtn = Button("Cancel") { close() }
         val saveBtn = Button("Save").apply {
             addThemeVariants(ButtonVariant.LUMO_PRIMARY)
@@ -531,7 +537,7 @@ private class PurchaseEditDialog(
         val footer = HorizontalLayout().apply {
             width = "100%"
             isSpacing = true
-            add(bulkBtn)
+            add(deleteBtn, bulkBtn)
             val spacer = Span()
             expand(spacer)
             add(spacer, cancelBtn, saveBtn)
@@ -635,6 +641,40 @@ private class PurchaseEditDialog(
         Notification.show("Photo saved", 2000, Notification.Position.BOTTOM_START)
             .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
         refreshPhotoStrip()
+    }
+
+    private fun openDeleteConfirmation() {
+        val dialog = Dialog().apply {
+            headerTitle = "Delete Item"
+            width = "400px"
+        }
+
+        val productName = mediaItem.product_name ?: titleMap[mediaItem.id] ?: "this item"
+        dialog.add(Span("Permanently delete \"$productName\"? This removes the media item, linked titles (if not shared), ownership photos, and unlinks any Amazon orders.").apply {
+            style.set("padding", "var(--lumo-space-m)")
+        })
+
+        val dlgFooter = HorizontalLayout().apply {
+            justifyContentMode = FlexComponent.JustifyContentMode.END
+            width = "100%"
+            isSpacing = true
+        }
+        val dlgCancel = Button("Cancel") { dialog.close() }
+        val dlgDelete = Button("Delete").apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR)
+            addClickListener {
+                MediaItemDeleteService.delete(mediaItem.id!!)
+                dialog.close()
+                close()
+                onSave()
+                Notification.show("Item deleted", 2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            }
+        }
+        dlgFooter.add(dlgCancel, dlgDelete)
+        dlgFooter.element.setAttribute("slot", "footer")
+        dialog.add(dlgFooter)
+        dialog.open()
     }
 
     private fun applyAmazonOrder(order: AmazonOrder) {

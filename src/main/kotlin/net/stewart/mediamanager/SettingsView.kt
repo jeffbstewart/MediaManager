@@ -14,6 +14,7 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
 import com.vaadin.flow.component.checkbox.Checkbox
+import com.vaadin.flow.component.textfield.NumberField
 import com.vaadin.flow.component.textfield.TextField
 import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.router.PageTitle
@@ -129,6 +130,44 @@ class SettingsView : KComposite() {
                     helperText = "How long a buddy can hold a transcode job before it expires"
                 }
 
+                // --- Price Lookup Section ---
+                hr()
+                add(Span("Price Lookup").apply {
+                    style.set("font-weight", "bold")
+                    style.set("font-size", "var(--lumo-font-size-l)")
+                })
+                add(Span("Automated replacement value estimation via Keepa (Amazon.com US marketplace). " +
+                    "Queries current and historical Amazon prices by UPC or ASIN to estimate replacement cost for insurance reports.").apply {
+                    style.set("color", "var(--lumo-secondary-text-color)")
+                    style.set("font-size", "var(--lumo-font-size-s)")
+                    style.set("margin-bottom", "var(--lumo-space-s)")
+                })
+
+                val keepaEnabledCheck = Checkbox("Enable Keepa price lookups").apply {
+                    value = configs.firstOrNull { it.config_key == "keepa_enabled" }?.config_val == "true"
+                }
+                add(keepaEnabledCheck)
+
+                val keepaApiKeyField = textField("Keepa API Key") {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "keepa_api_key" }?.config_val ?: ""
+                    placeholder = "Paste your Keepa API key"
+                    helperText = "Get an API key from keepa.com (requires subscription)"
+                }
+                // Mask the API key like a password
+                keepaApiKeyField.element.setAttribute("type", "password")
+
+                val keepaTokensField = NumberField("Tokens per minute").apply {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "keepa_tokens_per_minute" }?.config_val?.toDoubleOrNull() ?: 20.0
+                    min = 1.0
+                    max = 1000.0
+                    step = 1.0
+                    helperText = "Base subscription: 20/min. Higher tiers: 250, 1000, 4000. " +
+                        "Each item lookup costs 1 token."
+                }
+                add(keepaTokensField)
+
                 // Save button
                 button("Save") {
                     addThemeVariants(ButtonVariant.LUMO_PRIMARY)
@@ -139,6 +178,9 @@ class SettingsView : KComposite() {
                         saveConfig("personal_video_enabled", if (personalEnabledCheck.value) "true" else "false")
                         saveConfig("personal_video_nas_dir", personalDirField.value.trim())
                         saveConfig("buddy_lease_duration_minutes", leaseDurationField.value.trim())
+                        saveConfig("keepa_enabled", if (keepaEnabledCheck.value) "true" else "false")
+                        saveConfig("keepa_api_key", keepaApiKeyField.value.trim())
+                        saveConfig("keepa_tokens_per_minute", keepaTokensField.value?.toInt()?.toString() ?: "20")
                         Notification.show("Settings saved", 2000, Notification.Position.BOTTOM_START)
                             .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
                     }

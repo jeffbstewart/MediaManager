@@ -25,6 +25,7 @@ data class MediaItem(
     var amazon_order_id: String? = null,
     var replacement_value: BigDecimal? = null,
     var replacement_value_updated_at: LocalDateTime? = null,
+    var override_asin: String? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
