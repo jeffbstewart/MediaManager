@@ -3,6 +3,13 @@ package net.stewart.transcode
 import org.slf4j.LoggerFactory
 import java.io.File
 
+/**
+ * Strips ASCII control characters (BEL, backspace, escape, etc.) from ffmpeg output
+ * to prevent console beeps when logged on Windows. Preserves \n, \r, \t.
+ */
+fun sanitizeFfmpegOutput(text: String): String =
+    text.replace(Regex("[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]"), "")
+
 /** Browser-compatible video codecs that can be served with -c:v copy. */
 val BROWSER_SAFE_CODECS = setOf("h264", "avc1", "avc")
 
@@ -42,7 +49,7 @@ fun probeVideo(ffmpegPath: String, sourceFile: File): VideoProbeResult {
         val process = ProcessBuilder(ffmpegPath, "-i", sourceFile.absolutePath)
             .redirectErrorStream(true)
             .start()
-        val output = process.inputStream.bufferedReader().readText()
+        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
         process.waitFor()
 
         // Codec: "Stream #0:0: Video: h264 (High), ..."
@@ -147,7 +154,7 @@ fun probeForBrowser(ffmpegPath: String, file: File): ForBrowserProbeResult {
         val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
             .redirectErrorStream(true)
             .start()
-        val output = process.inputStream.bufferedReader().readText()
+        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
         process.waitFor()
 
         // Duration

@@ -14,6 +14,7 @@ import net.stewart.transcode.probeVideo as sharedProbeVideo
 import net.stewart.transcode.probeVideoCodec as sharedProbeVideoCodec
 import net.stewart.transcode.isBrowserSafeCodec as sharedIsBrowserSafeCodec
 import net.stewart.transcode.probeDuration as sharedProbeDuration
+import net.stewart.transcode.sanitizeFfmpegOutput
 import org.slf4j.LoggerFactory
 import io.micrometer.core.instrument.Counter
 import java.io.File
@@ -175,7 +176,7 @@ class TranscoderAgent(
                 val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
                     .redirectErrorStream(true)
                     .start()
-                val output = process.inputStream.bufferedReader().readText()
+                val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
                 process.waitFor()
 
                 // Match audio stream line, e.g.:
@@ -209,7 +210,7 @@ class TranscoderAgent(
                 val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
                     .redirectErrorStream(true)
                     .start()
-                val output = process.inputStream.bufferedReader().readText()
+                val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
                 process.waitFor()
                 Regex("""Stream #\d+:\d+""").findAll(output).count()
             } catch (e: Exception) {
@@ -362,11 +363,12 @@ class TranscoderAgent(
             val reader = process.inputStream.bufferedReader()
             val outputBuilder = StringBuilder()
 
-            reader.forEachLine { line ->
+            reader.forEachLine { rawLine ->
                 if (!running.get()) {
                     process.destroyForcibly()
                     return@forEachLine
                 }
+                val line = sanitizeFfmpegOutput(rawLine)
                 outputBuilder.appendLine(line)
                 if (durationSecs != null && durationSecs > 0) {
                     val match = timeRegex.find(line)

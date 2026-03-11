@@ -1,6 +1,7 @@
 package net.stewart.transcodebuddy
 
 import net.stewart.transcode.EncoderProfile
+import net.stewart.transcode.sanitizeFfmpegOutput
 import org.slf4j.LoggerFactory
 
 /**
@@ -64,7 +65,7 @@ object EncoderDetector {
             val process = ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().readText()
+            val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
             val exitCode = process.waitFor()
 
             if (exitCode != 0) {

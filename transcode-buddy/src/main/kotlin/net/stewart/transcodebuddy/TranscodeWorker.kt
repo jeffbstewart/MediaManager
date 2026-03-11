@@ -5,6 +5,7 @@ import net.stewart.transcode.ThumbnailSpriteGenerator
 import net.stewart.transcode.TranscodeCommand
 import net.stewart.transcode.probeForBrowser
 import net.stewart.transcode.probeVideo
+import net.stewart.transcode.sanitizeFfmpegOutput
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -150,11 +151,12 @@ class TranscodeWorker(
             val reader = process.inputStream.bufferedReader()
             val outputBuilder = StringBuilder()
 
-            reader.forEachLine { line ->
+            reader.forEachLine { rawLine ->
                 if (!running.get()) {
                     process.destroyForcibly()
                     return@forEachLine
                 }
+                val line = sanitizeFfmpegOutput(rawLine)
                 outputBuilder.appendLine(line)
                 if (durationSecs != null && durationSecs > 0) {
                     val match = timeRegex.find(line)
@@ -350,12 +352,12 @@ class TranscodeWorker(
             }
 
             val outputBuilder = StringBuilder()
-            process.inputStream.bufferedReader().forEachLine { line ->
+            process.inputStream.bufferedReader().forEachLine { rawLine ->
                 if (!running.get()) {
                     process.destroyForcibly()
                     return@forEachLine
                 }
-                outputBuilder.appendLine(line)
+                outputBuilder.appendLine(sanitizeFfmpegOutput(rawLine))
             }
 
             process.waitFor()

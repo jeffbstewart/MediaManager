@@ -63,7 +63,7 @@ object ThumbnailSpriteGenerator {
 
         log.info("Running: {}", command.joinToString(" "))
         val process = ProcessBuilder(command).redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
+        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
         val exitCode = process.waitFor()
 
         if (exitCode != 0) {
@@ -163,7 +163,7 @@ object ThumbnailSpriteGenerator {
             val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().readText()
+            val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
             process.waitFor()
 
             val match = Regex("""Duration: (\d+):(\d+):(\d+)\.(\d+)""").find(output)
