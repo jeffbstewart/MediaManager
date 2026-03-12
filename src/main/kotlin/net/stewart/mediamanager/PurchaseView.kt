@@ -38,6 +38,7 @@ import net.stewart.mediamanager.service.MediaItemDeleteService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.AmazonSuggestion
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.PriceLookupAgent
 import net.stewart.mediamanager.service.PriceSelectionService
 import net.stewart.mediamanager.service.TitleCleanerService
 import java.math.BigDecimal
@@ -285,13 +286,17 @@ class PurchaseView : KComposite() {
 
         fun addStat(label: String, value: String) {
             summaryContent.add(Div().apply {
+                add(Span(label).apply {
+                    style.set("color", "var(--lumo-secondary-text-color)")
+                    style.set("font-size", "var(--lumo-font-size-xs)")
+                    style.set("text-transform", "uppercase")
+                    style.set("letter-spacing", "0.05em")
+                    style.set("display", "block")
+                    style.set("margin-bottom", "2px")
+                })
                 add(Span(value).apply {
                     style.set("font-weight", "600")
                     style.set("font-size", "var(--lumo-font-size-m)")
-                    style.set("display", "block")
-                })
-                add(Span(label).apply {
-                    style.set("color", "var(--lumo-secondary-text-color)")
                 })
             })
         }
@@ -327,6 +332,23 @@ class PurchaseView : KComposite() {
         if (totalPhotos > 0) {
             val evidencePct = if (totalItems > 0) (itemsWithPhotos * 100) / totalItems else 0
             addStat("Evidence Photos", "$totalPhotos photos \u00b7 $itemsWithPhotos of $totalItems items ($evidencePct%)")
+        }
+
+        // Pricing agent status
+        val agent = PriceLookupAgent.instance
+        if (agent != null) {
+            val statusParts = mutableListOf(agent.status)
+            if (agent.lastBatchTime != null) {
+                val timeStr = agent.lastBatchTime!!.format(DateTimeFormatter.ofPattern("HH:mm"))
+                statusParts.add("last batch $timeStr: ${agent.lastBatchPriced}/${agent.lastBatchSize} priced")
+            }
+            if (agent.lastEligibleCount > 0) {
+                statusParts.add("${agent.lastEligibleCount} remaining")
+            }
+            if (agent.totalBatches > 0) {
+                statusParts.add("${agent.totalItemsPriced} priced this session")
+            }
+            addStat("Pricing Agent", statusParts.joinToString(" \u00b7 "))
         }
     }
 

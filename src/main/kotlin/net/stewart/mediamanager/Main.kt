@@ -81,6 +81,7 @@ fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(Thread { collectionAgent.stop() })
 
     val priceLookupAgent = PriceLookupAgent()
+    PriceLookupAgent.instance = priceLookupAgent
     priceLookupAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { priceLookupAgent.stop() })
 

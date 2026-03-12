@@ -5,6 +5,7 @@ import net.stewart.mediamanager.entity.*
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -41,10 +42,22 @@ class PriceLookupAgent(
     internal val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
+    // Observable status for UI
+    @Volatile var lastBatchTime: LocalDateTime? = null; private set
+    @Volatile var lastBatchSize: Int = 0; private set
+    @Volatile var lastBatchPriced: Int = 0; private set
+    @Volatile var lastEligibleCount: Int = 0; private set
+    @Volatile var totalItemsPriced: Int = 0; private set
+    @Volatile var totalBatches: Int = 0; private set
+    @Volatile var status: String = "idle"; private set
+
     companion object {
+        /** Singleton for UI access. Set from Main.kt on startup. */
+        @Volatile var instance: PriceLookupAgent? = null
+
         private val BATCH_INTERVAL = 62.seconds
         private val DISABLED_CHECK_INTERVAL = 5.minutes
-        private val STARTUP_DELAY = 15.minutes
+        private val STARTUP_DELAY = 30.seconds
         private const val STALENESS_DAYS = 30L
         private val ELIGIBLE_FORMATS = setOf(
             MediaFormat.DVD.name, MediaFormat.BLURAY.name,
@@ -56,28 +69,36 @@ class PriceLookupAgent(
         if (running.getAndSet(true)) return
         thread = Thread({
             log.info("PriceLookupAgent started (startup delay {}min)", STARTUP_DELAY.inWholeMinutes)
+            status = "waiting (${STARTUP_DELAY.inWholeMinutes}min startup delay)"
             try {
                 clock.sleep(STARTUP_DELAY)
             } catch (_: InterruptedException) {
                 log.info("PriceLookupAgent interrupted during startup delay")
+                status = "stopped"
                 return@Thread
             }
+            status = "running"
             while (running.get()) {
                 try {
                     val config = readConfig()
                     if (config == null) {
+                        status = "disabled (check Settings)"
                         clock.sleep(DISABLED_CHECK_INTERVAL)
                         continue
                     }
+                    status = "processing batch #${totalBatches + 1}..."
                     processBatch(config)
+                    status = if (lastEligibleCount == 0) "idle (all items priced)" else "sleeping ${BATCH_INTERVAL.inWholeSeconds}s (${lastEligibleCount} eligible)"
                     clock.sleep(BATCH_INTERVAL)
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
                     log.error("PriceLookupAgent error: {}", e.message, e)
+                    status = "error: ${e.message?.take(80)}"
                     try { clock.sleep(BATCH_INTERVAL) } catch (_: InterruptedException) { break }
                 }
             }
+            status = "stopped"
             log.info("PriceLookupAgent stopped")
         }, "price-lookup-agent").apply {
             isDaemon = true
@@ -112,8 +133,9 @@ class PriceLookupAgent(
 
     internal fun processBatch(config: Config) {
         val eligible = findEligibleItems()
+        lastEligibleCount = eligible.size
         if (eligible.isEmpty()) {
-            log.debug("No items eligible for pricing")
+            log.info("No items eligible for pricing")
             return
         }
 
@@ -141,6 +163,11 @@ class PriceLookupAgent(
             }
         }
 
+        log.info("Batch breakdown: {} with ASIN, {} with UPC, {} need title search",
+            asinItems.size, upcItems.size, searchItems.size)
+
+        var pricedCount = 0
+
         // Batch ASIN lookups
         if (asinItems.isNotEmpty()) {
             val asins = asinItems.map { it.second }
@@ -148,7 +175,7 @@ class PriceLookupAgent(
             for ((idx, result) in results.withIndex()) {
                 if (idx < asinItems.size) {
                     val (item, asin) = asinItems[idx]
-                    processResult(item, result, "ASIN", asin)
+                    if (processResult(item, result, "ASIN", asin)) pricedCount++
                 }
             }
         }
@@ -156,7 +183,7 @@ class PriceLookupAgent(
         // UPC lookups (one at a time — Keepa code lookup is single-item)
         for (item in upcItems) {
             val result = config.keepaService.lookupByUpc(item.upc!!)
-            processResult(item, result, "UPC", item.upc!!)
+            if (processResult(item, result, "UPC", item.upc!!)) pricedCount++
         }
 
         // Title search lookups (last resort)
@@ -168,23 +195,30 @@ class PriceLookupAgent(
                 val results = config.keepaService.lookupByAsin(listOf(asin))
                 val result = results.firstOrNull()
                 if (result != null) {
-                    processResult(item, result, "SEARCH", titleName)
+                    if (processResult(item, result, "SEARCH", titleName)) pricedCount++
                 }
             } else {
                 log.info("No Keepa result for title search: '{}' (item #{})", titleName, item.id)
             }
         }
 
-        val priced = batch.size - searchItems.count { true } // approximate
+        lastBatchTime = LocalDateTime.now()
+        lastBatchSize = batch.size
+        lastBatchPriced = pricedCount
+        totalItemsPriced += pricedCount
+        totalBatches++
+
         MetricsRegistry.registry.counter("mm_price_lookups_total").increment(batch.size.toDouble())
-        log.info("Pricing batch complete: {} items processed, {} eligible remaining",
-            batch.size, eligible.size - batch.size)
+        log.info("Pricing batch complete: {}/{} priced, {} eligible remaining",
+            pricedCount, batch.size, eligible.size - batch.size)
     }
 
-    private fun processResult(item: MediaItem, result: KeepaProductResult, keyType: String, keyValue: String) {
+    /** Process a Keepa result for an item. Returns true if a price was set. */
+    private fun processResult(item: MediaItem, result: KeepaProductResult, keyType: String, keyValue: String): Boolean {
         if (!result.found) {
-            log.debug("No pricing found for item #{} via {} '{}'", item.id, keyType, keyValue)
-            return
+            log.info("No Keepa match for item #{} '{}' via {} '{}'",
+                item.id, item.product_name?.take(40), keyType, keyValue)
+            return false
         }
 
         val selectedPrice = PriceSelectionService.selectPrice(result)
@@ -210,12 +244,21 @@ class PriceLookupAgent(
 
         // Update media item replacement value if we got a price
         if (selectedPrice != null) {
-            val fresh = MediaItem.findById(item.id!!) ?: return
+            val fresh = MediaItem.findById(item.id!!) ?: return false
             fresh.replacement_value = selectedPrice
             fresh.replacement_value_updated_at = now
             fresh.save()
             log.info("Priced item #{} '{}': \${} via {} '{}' (ASIN: {})",
                 item.id, item.product_name?.take(40), selectedPrice, keyType, keyValue, result.asin)
+            return true
+        } else {
+            log.info("Keepa found item #{} '{}' but no price available (ASIN: {})",
+                item.id, item.product_name?.take(40), result.asin)
+            // Mark as checked so we don't retry for 30 days
+            val fresh = MediaItem.findById(item.id!!) ?: return false
+            fresh.replacement_value_updated_at = now
+            fresh.save()
+            return false
         }
     }
 

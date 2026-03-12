@@ -220,28 +220,49 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
         try {
             val root = JsonParser.parseString(json).asJsonObject
             val tokensLeft = root.get("tokensLeft")?.asInt ?: 0
-            val products = root.getAsJsonArray("products")
 
-            if (products == null || products.isEmpty) {
+            // Check for API error response
+            val error = root.getAsJsonObject("error")
+            if (error != null) {
+                val errorType = error.get("type")?.asString ?: "unknown"
+                val errorMsg = error.get("message")?.asString ?: ""
+                log.error("Keepa API error: {} - {}", errorType, errorMsg)
+                return keys.map { KeepaProductResult(found = false, asin = it, tokensLeft = tokensLeft, errorMessage = "$errorType: $errorMsg") }
+            }
+
+            val productsElement = root.get("products")
+            if (productsElement == null || productsElement.isJsonNull) {
+                log.warn("Keepa response has null products field (tokensLeft={})", tokensLeft)
                 return keys.map { KeepaProductResult(found = false, asin = it, tokensLeft = tokensLeft) }
             }
 
-            return products.map { element ->
-                val product = element.asJsonObject
-                parseProduct(product, tokensLeft, json)
+            val products = productsElement.asJsonArray
+            if (products.isEmpty) {
+                return keys.map { KeepaProductResult(found = false, asin = it, tokensLeft = tokensLeft) }
+            }
+
+            return products.mapNotNull { element ->
+                if (element == null || element.isJsonNull) {
+                    log.warn("Null element in Keepa products array, skipping")
+                    null
+                } else {
+                    parseProduct(element.asJsonObject, tokensLeft, json)
+                }
             }
         } catch (e: Exception) {
-            log.error("Failed to parse Keepa product response: {}", e.message)
+            log.error("Failed to parse Keepa product response: {} — response preview: {}", e.message, json.take(500))
             return keys.map { KeepaProductResult(found = false, asin = it, errorMessage = "Parse error: ${e.message}") }
         }
     }
 
     private fun parseProduct(product: JsonObject, tokensLeft: Int, rawJson: String): KeepaProductResult {
         val asin = product.get("asin")?.asString
-        val title = product.get("title")?.asString
+        val titleElement = product.get("title")
+        val title = if (titleElement != null && !titleElement.isJsonNull) titleElement.asString else null
 
-        // Parse stats object for price averages
-        val stats = product.getAsJsonObject("stats")
+        // Parse stats object for price averages — may be null or JsonNull
+        val statsElement = product.get("stats")
+        val stats = if (statsElement != null && statsElement.isJsonObject) statsElement.asJsonObject else null
         var priceNewCurrent: BigDecimal? = null
         var priceNewAvg30d: BigDecimal? = null
         var priceNewAvg90d: BigDecimal? = null
@@ -251,8 +272,12 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
         var offerCountUsed: Int? = null
 
         if (stats != null) {
+            fun safeArray(key: String) = stats.get(key)?.let {
+                if (it.isJsonArray) it.asJsonArray else null
+            }
+
             // current[] array: index 0=Amazon, 1=New 3P, 2=Used
-            val current = stats.getAsJsonArray("current")
+            val current = safeArray("current")
             if (current != null && current.size() > PRICE_TYPE_NEW) {
                 priceAmazonCurrent = keepaCentsToPrice(current[PRICE_TYPE_AMAZON].asInt)
                 priceNewCurrent = keepaCentsToPrice(current[PRICE_TYPE_NEW].asInt)
@@ -262,18 +287,18 @@ class KeepaHttpService(private val apiKey: String) : KeepaService {
             }
 
             // avg30[] and avg90[] arrays: same indices
-            val avg30 = stats.getAsJsonArray("avg30")
+            val avg30 = safeArray("avg30")
             if (avg30 != null && avg30.size() > PRICE_TYPE_NEW) {
                 priceNewAvg30d = keepaCentsToPrice(avg30[PRICE_TYPE_NEW].asInt)
             }
 
-            val avg90 = stats.getAsJsonArray("avg90")
+            val avg90 = safeArray("avg90")
             if (avg90 != null && avg90.size() > PRICE_TYPE_NEW) {
                 priceNewAvg90d = keepaCentsToPrice(avg90[PRICE_TYPE_NEW].asInt)
             }
 
             // offerCountCurrent[] array: index 0=New, 1=Used
-            val offerCounts = stats.getAsJsonArray("offerCountCurrent")
+            val offerCounts = safeArray("offerCountCurrent")
             if (offerCounts != null) {
                 if (offerCounts.size() > 0) offerCountNew = offerCounts[0].asInt
                 if (offerCounts.size() > 1) offerCountUsed = offerCounts[1].asInt
