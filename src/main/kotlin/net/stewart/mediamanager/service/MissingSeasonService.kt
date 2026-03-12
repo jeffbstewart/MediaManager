@@ -4,6 +4,7 @@ import com.github.vokorm.findAll
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.entity.DismissedNotification
+import net.stewart.mediamanager.entity.MediaItemTitleSeason
 import net.stewart.mediamanager.entity.TitleSeason
 import org.slf4j.LoggerFactory
 
@@ -128,6 +129,61 @@ object MissingSeasonService {
                 net.stewart.mediamanager.entity.Title.findById(summary.titleId)?.popularity ?: 0.0
             }
             .take(limit)
+    }
+
+    /**
+     * Parses freetext seasons (e.g. "2", "1,3", "S1, S2") and creates structured
+     * title_season + media_item_title_season rows. Call after saving freetext seasons.
+     */
+    fun syncStructuredSeasons(mediaItemTitleId: Long, titleId: Long, freetext: String?) {
+        // Remove old structured rows for this join
+        MediaItemTitleSeason.findAll()
+            .filter { it.media_item_title_id == mediaItemTitleId }
+            .forEach { it.delete() }
+
+        if (freetext.isNullOrBlank()) return
+
+        val seasonNumbers = parseSeasonText(freetext) ?: return
+
+        for (num in seasonNumbers) {
+            // Find or create title_season row
+            var ts = TitleSeason.findAll().firstOrNull {
+                it.title_id == titleId && it.season_number == num
+            }
+            if (ts == null) {
+                ts = TitleSeason(title_id = titleId, season_number = num,
+                    acquisition_status = AcquisitionStatus.OWNED.name)
+                ts.save()
+            } else if (ts.acquisition_status == AcquisitionStatus.UNKNOWN.name) {
+                ts.acquisition_status = AcquisitionStatus.OWNED.name
+                ts.save()
+            }
+
+            MediaItemTitleSeason(
+                media_item_title_id = mediaItemTitleId,
+                title_season_id = ts.id!!
+            ).save()
+        }
+    }
+
+    /** Parses freetext like "2", "1,3", "S1, S2", "1-3", "all" into season numbers. */
+    private fun parseSeasonText(text: String): List<Int>? {
+        val trimmed = text.trim()
+        // Single number
+        trimmed.toIntOrNull()?.let { return listOf(it) }
+        // Range: "1-3"
+        val rangeMatch = Regex("""^(\d+)\s*-\s*(\d+)$""").matchEntire(trimmed)
+        if (rangeMatch != null) {
+            val start = rangeMatch.groupValues[1].toInt()
+            val end = rangeMatch.groupValues[2].toInt()
+            if (start <= end && end - start < 50) return (start..end).toList()
+        }
+        // Comma-separated with optional S prefix
+        val parts = trimmed.split(",").map { it.trim().removePrefix("S").removePrefix("s") }
+        if (parts.all { it.toIntOrNull() != null }) {
+            return parts.map { it.toInt() }
+        }
+        return null
     }
 
     /** Dismiss a specific missing season notification for a user. */

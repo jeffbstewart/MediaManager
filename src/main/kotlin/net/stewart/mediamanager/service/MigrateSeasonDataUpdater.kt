@@ -18,7 +18,7 @@ class MigrateSeasonDataUpdater : SchemaUpdater {
     private val log = LoggerFactory.getLogger(MigrateSeasonDataUpdater::class.java)
 
     override val name = "migrate_season_data"
-    override val version = 1
+    override val version = 2
 
     override fun run() {
         createMoviePseudoSeasons()

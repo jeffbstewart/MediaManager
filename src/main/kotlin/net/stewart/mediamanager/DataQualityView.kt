@@ -32,6 +32,7 @@ import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.Broadcaster
 import net.stewart.mediamanager.service.MediaItemDeleteService
+import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.TitleUpdateEvent
@@ -523,8 +524,82 @@ internal class TitleEditDialog(
 
             var changed = false
 
+            val effectiveMediaType = newMediaType ?: fresh.media_type
             val tmdbIdChanged = newTmdbId != fresh.tmdb_id && newTmdbId != null
             if (tmdbIdChanged) {
+                // Check if another title already owns this (tmdb_id, media_type) pair.
+                // If so, merge: move our MediaItemTitle links to the existing title and delete the duplicate.
+                val existingTitle = Title.findAll().firstOrNull {
+                    it.id != fresh.id && it.tmdb_id == newTmdbId && it.media_type == effectiveMediaType
+                }
+                if (existingTitle != null) {
+                    // Merge: reassign all MediaItemTitle links from fresh → existingTitle
+                    val freshJoins = MediaItemTitle.findAll().filter { it.title_id == fresh.id }
+                    for (join in freshJoins) {
+                        // Check for duplicate link (same media_item already linked to target title)
+                        val alreadyLinked = MediaItemTitle.findAll().any {
+                            it.title_id == existingTitle.id && it.media_item_id == join.media_item_id
+                        }
+                        if (alreadyLinked) {
+                            join.delete()
+                        } else {
+                            join.title_id = existingTitle.id!!
+                            join.save()
+                        }
+                    }
+                    // Reassign transcodes from fresh → existingTitle
+                    val freshTranscodes = Transcode.findAll().filter { it.title_id == fresh.id }
+                    for (tc in freshTranscodes) {
+                        tc.title_id = existingTitle.id!!
+                        tc.save()
+                    }
+                    // Reassign episodes (delete duplicates by season+episode)
+                    val existingEpisodes = Episode.findAll().filter { it.title_id == existingTitle.id }
+                    val existingEpKeys = existingEpisodes.map { "${it.season_number}x${it.episode_number}" }.toSet()
+                    for (ep in Episode.findAll().filter { it.title_id == fresh.id }) {
+                        val key = "${ep.season_number}x${ep.episode_number}"
+                        if (key in existingEpKeys) {
+                            // Relink any transcodes pointing at this episode to the surviving one
+                            val survivorEp = existingEpisodes.first { "${it.season_number}x${it.episode_number}" == key }
+                            Transcode.findAll().filter { it.episode_id == ep.id }.forEach { t ->
+                                t.episode_id = survivorEp.id
+                                t.save()
+                            }
+                            DiscoveredFile.findAll().filter { it.matched_episode_id == ep.id }.forEach { df ->
+                                df.matched_episode_id = survivorEp.id
+                                df.save()
+                            }
+                            ep.delete()
+                        } else {
+                            ep.title_id = existingTitle.id!!
+                            ep.save()
+                        }
+                    }
+                    // Relink discovered_files
+                    DiscoveredFile.findAll().filter { it.matched_title_id == fresh.id }.forEach { df ->
+                        df.matched_title_id = existingTitle.id!!
+                        df.save()
+                    }
+                    // Merge title_genre (skip duplicates)
+                    val existingGenreIds = TitleGenre.findAll().filter { it.title_id == existingTitle.id }.map { it.genre_id }.toSet()
+                    TitleGenre.findAll().filter { it.title_id == fresh.id }.forEach { tg ->
+                        if (tg.genre_id in existingGenreIds) tg.delete() else { tg.title_id = existingTitle.id!!; tg.save() }
+                    }
+                    // Delete cast_members for the duplicate
+                    CastMember.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
+                    // Delete enrichment_attempts for the duplicate
+                    EnrichmentAttempt.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
+                    // Delete the now-orphaned duplicate title
+                    fresh.delete()
+                    SearchIndexService.onTitleChanged(existingTitle.id!!)
+                    close()
+                    onSave()
+                    Notification.show("Merged into existing title: ${existingTitle.name}",
+                        3000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                    return
+                }
+
                 fresh.tmdb_id = newTmdbId
                 fresh.enrichment_status = EnrichmentStatus.REASSIGNMENT_REQUESTED.name
                 if (newMediaType != null) {
@@ -548,6 +623,7 @@ internal class TitleEditDialog(
                 if (join != null && join.seasons != seasonsValue) {
                     join.seasons = seasonsValue
                     join.save()
+                    MissingSeasonService.syncStructuredSeasons(join.id!!, join.title_id, seasonsValue)
                     changed = true
                 }
             }

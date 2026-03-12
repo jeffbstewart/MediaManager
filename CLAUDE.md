@@ -105,7 +105,9 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 
 **Views (routes):**
 - `MainView.kt` — Root UI (route `/`)
-- `ScanView.kt` — Barcode scan UI (route `/scan`)
+- `AddItemView.kt` — Unified add-item flow: barcode scan, TMDB search, NAS linking, purchase details, photos (route `/add`)
+- `ScanView.kt` — Redirects to `/add`
+- `ManualEntryView.kt` — Redirects to `/add`
 - `CatalogView.kt` — Title catalog with search, filters, enrichment status (route `/catalog`)
 - `TranscodeStatusView.kt` — Transcoder status panel, NAS scan (route `/transcodes/status`)
 - `TranscodeUnmatchedView.kt` — Unmatched NAS files, linking, suggestions (route `/transcodes/unmatched`)
@@ -183,6 +185,9 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `MetricsServlet.kt` — `/metrics` — Prometheus metrics (internal port only)
 - `AppLogServlet.kt` — `/admin/logs` — in-memory application log viewer (internal port only)
 - `RequestLogServlet.kt` — `/admin/requests` — HTTP request log viewer (internal port only)
+
+**Shared Components:**
+- `OwnershipPhotoPanel.kt` — Reusable panel for camera capture + photo strip with delete. Used by AddItemView and DocumentOwnershipView.
 
 **Other:**
 - `secrets/example.env` — Template for required environment variables (TMDB API key)

@@ -7,6 +7,7 @@ import com.vaadin.flow.component.applayout.DrawerToggle
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.combobox.ComboBox
+import com.vaadin.flow.component.textfield.IntegerField
 import com.vaadin.flow.component.UI
 import com.vaadin.flow.component.html.Anchor
 import com.vaadin.flow.component.html.Div
@@ -363,13 +364,12 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             element.setAttribute("title", "Titles needing TMDB enrichment or metadata fixes")
         }
         dataQualityItem.first.add(dataQualityBadge)
-        val addTitleItem = createDrawerItem(VaadinIcon.PLUS, "Add Title", "manual-entry")
+        val addItemItem = createDrawerItem(VaadinIcon.PLUS, "Add Item", "add")
         val settingsItem = createDrawerItem(VaadinIcon.COG, "Settings", "settings")
         val tagsItem = createDrawerItem(VaadinIcon.BOOKMARK, "Tags", "tags")
         val usersItem = createDrawerItem(VaadinIcon.USERS, "Users", "users")
 
         // Purchases collapsible group
-        val pScanItem = createDrawerItem(null, "Scan New Purchase", "scan", indent = true)
         val pImportItem = createDrawerItem(null, "Amazon Order Import", "import", indent = true)
         val pExpandItem = createDrawerItem(null, "Expand", "expand", indent = true)
         expandBadge = Span().apply {
@@ -440,7 +440,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             isVisible = false
-            add(pScanItem.first, pImportItem.first, pExpandItem.first, pValuationItem.first, pWishesItem.first, pOwnershipItem.first, pReportItem.first)
+            add(pImportItem.first, pExpandItem.first, pValuationItem.first, pWishesItem.first, pOwnershipItem.first, pReportItem.first)
         }
 
         // Transcodes collapsible group
@@ -516,8 +516,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
 
         items.add(dataQualityItem)
-        items.add(addTitleItem)
-        items.add(pScanItem)
+        items.add(addItemItem)
         items.add(pImportItem)
         items.add(pExpandItem)
         items.add(pValuationItem)
@@ -536,7 +535,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             add(divider, manageHeader)
-            add(dataQualityItem.first, addTitleItem.first, purchasesParent, purchasesChildren,
+            add(dataQualityItem.first, addItemItem.first, purchasesParent, purchasesChildren,
                 settingsItem.first, tagsItem.first, transcodesParent, transcodesChildren, usersItem.first)
         }
 
@@ -550,21 +549,14 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             add(mainSection, adminSection)
         }
 
-        addToDrawer(drawerContent)
+        // Hidden IntegerField triggers Vaadin's UIDL to include lazy-chunk hashes
+        // that transitively load the Dialog web component. Without a trigger component
+        // like IntegerField, pages with only base-bundle components (Grid, TextField,
+        // Button) never load the Dialog chunk, causing Dialog to render inline.
+        // This replaces the fragile loadOnDemand hash hack. See docs/DIALOG_NOT_WORKING.md.
+        drawerContent.add(IntegerField().apply { isVisible = false })
 
-        // Force-load the Dialog web component chunk. Vaadin 25's production bundle
-        // code-splits vaadin-dialog into a lazy chunk that only loads transitively via
-        // certain other components. Pages with only basic components (Grid, TextField,
-        // Button) never trigger it, causing Dialog to render inline instead of as an
-        // overlay. Loading it here in MainLayout ensures it's available on every page.
-        // See docs/DIALOG_NOT_WORKING.md for full diagnosis.
-        // The hash is FRAGILE — it will change on Vaadin upgrades.
-        addAttachListener {
-            it.ui.page.executeJs(
-                "window.Vaadin.Flow.loadOnDemand(" +
-                "'039da0aa3283c862d809052d1e05f80ce5922aa4f27e77f287ec5bdfeaba3abc')"
-            )
-        }
+        addToDrawer(drawerContent)
 
         // Style the AppLayout drawer and navbar via shadow DOM
         addAttachListener {
@@ -994,7 +986,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         highlightDrawerItem(contentParent, onContent)
 
         // Purchases group: auto-expand and highlight parent when on any sub-route
-        val purchaseRoutes = setOf("scan", "import", "expand", "valuation", "purchase-wishes", "report")
+        val purchaseRoutes = setOf("import", "expand", "valuation", "purchase-wishes", "report")
         val onPurchases = path in purchaseRoutes
         if (onPurchases) {
             purchasesChildren.isVisible = true

@@ -138,8 +138,7 @@ class MainView : KComposite() {
                     "build and maintain the catalog:"
                 ))
                 add(UnorderedList(
-                    ListItem("Add Title \u2014 search TMDB and add a title directly to the catalog without scanning a barcode (useful for discs with no case)"),
-                    ListItem("Scan New Purchase \u2014 scan or type a UPC barcode to add a new disc; the system looks up the product and creates a catalog entry automatically"),
+                    ListItem("Add Item \u2014 the unified entry point for adding new media. Three tabs: scan a UPC barcode (hardware scanner or camera), search TMDB to add a title directly, or link unmatched NAS files. Items appear in a persistent grid where you can track enrichment progress, enter purchase details, take ownership photos, and link matching NAS transcodes \u2014 all in one place. Works across sessions: scan today, come back tomorrow to fill in details."),
                     ListItem("Amazon Order Import \u2014 upload your Amazon purchase history to bulk-fill purchase prices and dates"),
                     ListItem("Expand Multi-Packs \u2014 split box sets, double features, and trilogies into their individual titles"),
                     ListItem("Valuation \u2014 track what you paid for each disc for insurance inventory; link Amazon orders with one click"),

@@ -86,7 +86,7 @@ The default `network_mode: host` is required for Roku SSDP device discovery (UDP
 
 Once the server is running and you've created your admin account:
 
-1. **Scan your first disc** &mdash; Open the sidebar &rarr; **Scan New Purchase**, enter a UPC barcode. The system looks up the product, creates a catalog entry, and enriches it with TMDB data within seconds.
+1. **Scan your first disc** &mdash; Open the sidebar &rarr; **Add Item**, enter a UPC barcode (or use the camera scanner). The system looks up the product, creates a catalog entry, and enriches it with TMDB data within seconds. You can also search TMDB directly or link unmatched NAS files from the same page.
 
 2. **Browse your catalog** &mdash; Open **Catalog** from the sidebar. Titles appear with poster art as they're enriched.
 

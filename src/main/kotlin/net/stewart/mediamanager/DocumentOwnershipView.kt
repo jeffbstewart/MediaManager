@@ -1,7 +1,6 @@
 package net.stewart.mediamanager
 
 import com.github.vokorm.findAll
-import com.vaadin.flow.component.ClientCallable
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.dialog.Dialog
@@ -21,6 +20,7 @@ import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.OwnershipPhotoService
+import com.vaadin.flow.component.ClientCallable
 import java.time.LocalDateTime
 import java.util.Base64
 
@@ -248,134 +248,13 @@ class DocumentOwnershipView : VerticalLayout() {
         }
         contentArea.add(header)
 
-        // Native file input for camera capture (bypasses Vaadin Upload shadow DOM issues)
-        val captureBtn = Button("Take Photo", VaadinIcon.CAMERA.create()).apply {
-            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
-            width = "100%"
-            height = "50px"
+        // Use extracted OwnershipPhotoPanel
+        val photoPanel = OwnershipPhotoPanel().apply {
+            mediaItemId = item?.id
+            this.upc = upc
+            refresh()
         }
-
-        // Hidden file input that triggers the camera
-        val captureContainer = Div().apply {
-            style.set("position", "relative")
-            width = "100%"
-            add(captureBtn)
-        }
-
-        // Wire the button to a native file input with capture=environment
-        // $0 = the view element (has @ClientCallable), $1 = the container element
-        element.executeJs(
-            "var viewEl=\$0;" +
-            "var container=\$1;" +
-            "var input=document.createElement('input');" +
-            "input.type='file';" +
-            "input.accept='image/*';" +
-            "input.capture='environment';" +
-            "input.style.display='none';" +
-            "container.appendChild(input);" +
-            // When button is clicked, trigger the file input
-            "container.firstElementChild.addEventListener('click',function(e){" +
-            "e.preventDefault();e.stopPropagation();input.click();});" +
-            // When file is selected, read and send to server
-            "input.addEventListener('change',function(){" +
-            "if(!input.files||!input.files[0])return;" +
-            "var file=input.files[0];" +
-            "var reader=new FileReader();" +
-            "reader.onload=function(){" +
-            "var base64=reader.result.split(',')[1];" +
-            "var mimeType=file.type||'image/jpeg';" +
-            "viewEl.\$server.onPhotoCapture(base64,mimeType);" +
-            "};" +
-            "reader.readAsDataURL(file);" +
-            "input.value='';});",
-            this.element, captureContainer.element
-        )
-
-        contentArea.add(captureContainer)
-
-        // Photo strip
-        val photosLabel = Span("Evidence Photos").apply {
-            style.set("font-weight", "600")
-            style.set("margin-top", "var(--lumo-space-m)")
-        }
-
-        val photoStrip = HorizontalLayout().apply {
-            isPadding = false
-            isSpacing = true
-            width = "100%"
-            style.set("flex-wrap", "wrap")
-            style.set("gap", "var(--lumo-space-s)")
-        }
-
-        fun refreshPhotoStrip() {
-            photoStrip.removeAll()
-            val photos = if (item != null) {
-                OwnershipPhotoService.findAllForItem(item.id!!, item.upc)
-            } else if (upc != null) {
-                OwnershipPhotoService.findByUpc(upc)
-            } else emptyList()
-
-            if (photos.isEmpty()) {
-                photoStrip.add(Span("No photos yet").apply {
-                    style.set("color", "rgba(255,255,255,0.4)")
-                    style.set("font-size", "var(--lumo-font-size-s)")
-                })
-                return
-            }
-            for (photo in photos) {
-                val container = Div().apply {
-                    style.set("position", "relative")
-                    style.set("display", "inline-block")
-
-                    val img = Image("/ownership-photos/${photo.id}", "Evidence photo").apply {
-                        height = "100px"
-                        style.set("border-radius", "4px")
-                        style.set("object-fit", "cover")
-                        style.set("cursor", "pointer")
-                        style.set("max-width", "150px")
-                    }
-                    img.element.addEventListener("click") {
-                        img.element.executeJs(
-                            "window.open('/ownership-photos/' + $0 + '?download=1', '_blank')",
-                            photo.id!!
-                        )
-                    }
-                    add(img)
-
-                    // Delete overlay
-                    val deleteBtn = Div().apply {
-                        style.set("position", "absolute")
-                        style.set("top", "4px")
-                        style.set("right", "4px")
-                        style.set("width", "22px")
-                        style.set("height", "22px")
-                        style.set("border-radius", "50%")
-                        style.set("background", "rgba(0,0,0,0.6)")
-                        style.set("color", "rgba(255,255,255,0.7)")
-                        style.set("display", "flex")
-                        style.set("align-items", "center")
-                        style.set("justify-content", "center")
-                        style.set("cursor", "pointer")
-                        style.set("font-size", "14px")
-                        style.set("line-height", "1")
-                        style.set("opacity", "0.6")
-                        element.setProperty("innerHTML", "✕")
-                        element.setAttribute("title", "Delete photo")
-                        element.executeJs(
-                            "this.addEventListener('mouseover',function(){this.style.opacity='1';this.style.background='rgba(0,0,0,0.8)'});" +
-                            "this.addEventListener('mouseout',function(){this.style.opacity='0.6';this.style.background='rgba(0,0,0,0.6)'})"
-                        )
-                    }
-                    deleteBtn.addClickListener {
-                        OwnershipPhotoService.delete(photo.id!!)
-                        Notification.show("Photo deleted", 2000, Notification.Position.BOTTOM_START)
-                        refreshPhotoStrip()
-                    }
-                    add(deleteBtn)
-                }
-                photoStrip.add(container)
-            }
-        }
+        contentArea.add(photoPanel)
 
         val scanAnotherBtn = Button("Scan Another", VaadinIcon.BARCODE.create()) {
             showScanPhase()
@@ -384,33 +263,7 @@ class DocumentOwnershipView : VerticalLayout() {
             width = "100%"
         }
 
-        contentArea.add(photosLabel, photoStrip, scanAnotherBtn)
-        refreshPhotoStrip()
-    }
-
-    /**
-     * Called from JS when a photo is captured via the native file input.
-     * Receives base64-encoded image data.
-     */
-    @ClientCallable
-    fun onPhotoCapture(base64Data: String, mimeType: String) {
-        val bytes = Base64.getDecoder().decode(base64Data)
-        val item = currentItem
-        val upc = currentUpc
-
-        if (item != null) {
-            OwnershipPhotoService.store(bytes, mimeType, item.id!!)
-        } else if (upc != null) {
-            OwnershipPhotoService.storeForUpc(bytes, mimeType, upc)
-        } else {
-            Notification.show("No item selected", 3000, Notification.Position.BOTTOM_START)
-                .addThemeVariants(NotificationVariant.LUMO_ERROR)
-            return
-        }
-
-        Notification.show("Photo saved", 2000, Notification.Position.BOTTOM_START)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
-        showCapturePhase() // Refresh to show new photo
+        contentArea.add(scanAnotherBtn)
     }
 
     private fun buildTitleMap(): Map<Long, String> {

@@ -95,11 +95,11 @@ user: "1046:100"
 
 ## Adding Titles to the Catalog
 
-There are three ways to add titles:
+**Sidebar &rarr; Add Item**
 
-### Barcode Scanning
+The unified Add Item page is the single entry point for adding new media to the catalog. It has three tabs and a persistent items grid:
 
-**Sidebar &rarr; Scan New Purchase**
+### Scan Barcode Tab
 
 Two input methods are available:
 
@@ -120,11 +120,31 @@ After scanning, the system:
 
 The UPC API has a daily limit of 100 lookups. A quota tracker in the UI shows remaining capacity.
 
-### Manual TMDB Entry
+### Search TMDB Tab
 
-**Sidebar &rarr; Add Title**
+Search TMDB directly and add a title without a barcode. Useful for discs where you've thrown away the case. Select Movie or TV, pick a result, choose a format (and seasons for TV), and add to the collection. The title is immediately enriched with full TMDB data.
 
-Search TMDB directly and add a title without a barcode. Useful for discs where you've thrown away the case. The title is immediately enriched with full TMDB data.
+### From NAS Tab
+
+Shows unmatched files discovered on the NAS. You can accept a suggested title match, open a link dialog to search for the right title, or ignore files that don't belong. Linking creates the Title and Transcode records. This is the same data shown on the Transcodes &rarr; Unmatched page, but accessible inline for convenience.
+
+### Items Needing Attention
+
+Below the tabs, a persistent grid shows recently added items (last 30 days) that still need work. Items appear here regardless of how they were added. Completion indicators show what's missing: enrichment status, purchase info, and ownership photos. Click any row to open the detail panel.
+
+The grid is database-backed, so it works across sessions. Scan 150 barcodes today, hit the UPC quota limit, come back tomorrow &mdash; the items that enriched overnight appear ready for details.
+
+A filter toggle switches between "Needs Attention Only" (default) and "Show All Recent".
+
+### Item Detail Panel
+
+Clicking a row opens an inline detail panel with:
+
+- **Title &amp; Enrichment** &mdash; poster, title, format, enrichment status. "Fix" button for failed enrichment.
+- **Purchase Info** &mdash; place, date, and price fields that auto-save on change.
+- **Matching NAS Files** &mdash; if the title has unmatched NAS files with similar names, they appear here with "Link" buttons. This bridges the physical-disc and digital-file worlds.
+- **Ownership Photos** &mdash; camera capture button and photo strip for proof-of-ownership documentation.
+- **Actions** &mdash; "Done" collapses the panel; "View in Catalog" navigates to the title detail page.
 
 ### Amazon Import
 

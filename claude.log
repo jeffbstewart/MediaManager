@@ -2946,3 +2946,26 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   UpcLookupAgent, WishListService, TranscodeWorker, ScanView)
 - Closed issue #51, pushed 11 commits to GitHub (384abce → 67327a0)
 ===
+
+=== 2026-03-11 — Unified "Add Item" flow (Phase 1-4) ===
+- Created AddItemView.kt at route /add — single unified view with three zones:
+  - Zone 1: Three tabs (Scan Barcode, Search TMDB, From NAS) for identifying items
+  - Zone 2: DB-backed grid of items needing attention (last 30 days), with completion indicators
+  - Zone 3: Detail panel with purchase info, transcode bridge, ownership photos
+- Extracted OwnershipPhotoPanel.kt — reusable component for camera capture + photo strip
+  with delete, used by both AddItemView and DocumentOwnershipView
+- Refactored DocumentOwnershipView.kt to use OwnershipPhotoPanel
+- Converted ScanView.kt and ManualEntryView.kt to redirect routes (forward to /add)
+- Updated MainLayout.kt navigation:
+  - Replaced "Add Title" (manual-entry) with "Add Item" (/add)
+  - Removed "Scan New Purchase" from Purchases group (redundant)
+- Updated SecurityServiceInitListener.kt — added "add" to admin routes
+- Updated CLAUDE.md — documented new view, redirects, shared component
+- Key features:
+  - NAS tab reuses LinkTranscodeDialog and CreatePersonalVideoDialog
+  - Transcode bridge: Zone 3 shows matching unmatched NAS files for scanned items
+  - Broadcaster listeners for live scan/enrichment updates
+  - Filter toggle: "Needs Attention Only" vs "Show All Recent"
+  - Purchase fields auto-save on change (no explicit save button)
+- Build passes, all tests pass
+===

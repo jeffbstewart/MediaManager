@@ -1,7 +1,9 @@
 package net.stewart.mediamanager
 
 import com.github.vokorm.findAll
+import com.vaadin.flow.component.AttachEvent
 import com.vaadin.flow.component.ClientCallable
+import com.vaadin.flow.component.DetachEvent
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.dialog.Dialog
@@ -11,6 +13,8 @@ import com.vaadin.flow.component.icon.VaadinIcon
 import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
 import net.stewart.mediamanager.entity.*
+import net.stewart.mediamanager.service.Broadcaster
+import net.stewart.mediamanager.service.ScanUpdateEvent
 import java.time.LocalDateTime
 
 /**
@@ -34,6 +38,34 @@ class BarcodeScannerDialog(
         width = "100%"
         style.set("max-height", "150px")
         style.set("overflow-y", "auto")
+    }
+
+    /** Map of UPC → status Span, so we can update entries when lookup completes. */
+    private val statusSpans = mutableMapOf<String, Span>()
+
+    private val scanListener: (ScanUpdateEvent) -> Unit = { event ->
+        ui.ifPresent { ui -> ui.access {
+            val span = statusSpans[event.upc]
+            if (span != null) {
+                val (text, color) = when (event.newStatus) {
+                    LookupStatus.FOUND.name -> (event.notes ?: "Found") to "var(--lumo-success-text-color)"
+                    LookupStatus.NOT_FOUND.name -> "Not found" to "var(--lumo-error-text-color)"
+                    else -> event.newStatus to "var(--lumo-secondary-text-color)"
+                }
+                span.text = text
+                span.style.set("color", color)
+            }
+        } }
+    }
+
+    override fun onAttach(attachEvent: AttachEvent) {
+        super.onAttach(attachEvent)
+        Broadcaster.register(scanListener)
+    }
+
+    override fun onDetach(detachEvent: DetachEvent) {
+        Broadcaster.unregister(scanListener)
+        super.onDetach(detachEvent)
     }
 
     init {
@@ -202,6 +234,17 @@ class BarcodeScannerDialog(
         // Check for duplicate
         val existingScan = BarcodeScan.findAll().firstOrNull { it.upc == upc }
         if (existingScan != null) {
+            val mediaItemId = existingScan.media_item_id
+            if (mediaItemId != null) {
+                val join = MediaItemTitle.findAll().firstOrNull { it.media_item_id == mediaItemId }
+                val title = join?.let { Title.findById(it.title_id) }
+                if (title?.enrichment_status == EnrichmentStatus.ENRICHED.name) {
+                    // Already known and enriched — navigate to item page
+                    close()
+                    ui.ifPresent { it.navigate("item/$mediaItemId") }
+                    return "DUP:${title.name}"
+                }
+            }
             val titleName = findTitleForScan(existingScan)
             val label = titleName ?: upc
             addScanLogEntry(upc, "Already scanned: $label", "var(--lumo-primary-text-color)")
@@ -220,6 +263,13 @@ class BarcodeScannerDialog(
     }
 
     private fun addScanLogEntry(upc: String, message: String, color: String) {
+        val statusSpan = Span(message).apply {
+            style.set("color", color)
+        }
+        // Track "Queued" entries so the Broadcaster can update them
+        if (message == "Queued for lookup") {
+            statusSpans[upc] = statusSpan
+        }
         val entry = Div().apply {
             style.set("padding", "var(--lumo-space-xs) var(--lumo-space-s)")
             style.set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
@@ -229,9 +279,7 @@ class BarcodeScannerDialog(
                 style.set("font-family", "monospace")
                 style.set("margin-right", "var(--lumo-space-s)")
             })
-            add(Span(message).apply {
-                style.set("color", color)
-            })
+            add(statusSpan)
         }
         // Prepend (newest first)
         if (scanLog.componentCount > 0) {
