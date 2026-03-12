@@ -2921,3 +2921,28 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files modified: AuthFilter.kt, SecurityServiceInitListener.kt, MainLayout.kt,
   PurchaseView.kt, InventoryReportView.kt, CLAUDE.md, docs/ADMIN_GUIDE.md, docs/FEATURES.md
 ===
+
+=== 2026-03-11 20:30 — Keepa pricing agent fixes and valuation improvements (#51) ===
+- Fixed Keepa API JsonNull crash (root cause of pricing failures — only 78/500+ items priced)
+  - Keepa returns JsonNull (not Java null) for missing fields; Gson .asJsonObject/.asString crash
+  - Added safe null/JsonNull checks throughout KeepaService.parseProduct and parseProductResponse
+  - Added safeArray() helper for nested stat arrays
+  - Added API error response detection and logging
+- Fixed pricing agent visibility and behavior:
+  - Reduced startup delay from 15 minutes to 30 seconds
+  - Added @Volatile observable status fields (lastBatchTime, lastBatchSize, lastBatchPriced,
+    lastEligibleCount, totalItemsPriced, totalBatches, status)
+  - Set PriceLookupAgent singleton instance from Main.kt for UI access
+  - Improved status messages: shows batch count, eligible items, sleep/idle state
+  - Items found on Keepa with no price now marked as checked (30-day staleness skip)
+- Valuation page improvements:
+  - Fixed performance: separated loadData() (DB + fuzzy matching) from applyFilters() (in-memory)
+  - Added executive summary card with CSS grid layout (total value, item counts, format breakdown,
+    evidence photos, pricing agent status)
+  - Fixed summary card label styling: labels above values with uppercase/small font
+  - Show replacement value as fallback in grid when no purchase price exists
+- Fixed all lateinit compiler warnings across 12 files (MainLayout, PurchaseView, PurchaseWishesView,
+  BuddyApiServlet, DataQualityView, TagDetailView, NasScannerService, RepairFulfilledWishesUpdater,
+  UpcLookupAgent, WishListService, TranscodeWorker, ScanView)
+- Closed issue #51, pushed 11 commits to GitHub (384abce → 67327a0)
+===
