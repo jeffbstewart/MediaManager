@@ -7,6 +7,7 @@
         <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="titleSelected" type="assocarray" alwaysNotify="true" />
         <field id="actorSelected" type="assocarray" alwaysNotify="true" />
+        <field id="tagSelected" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="MovieDetailScreen.brs" />
@@ -15,7 +16,24 @@
         <!-- Background -->
         <Rectangle width="1920" height="1080" color="#1a1a2e" />
 
-        <!-- Poster -->
+        <!-- Backdrop hero image (full width, dimmed) -->
+        <Poster
+            id="backdropImage"
+            translation="[0, 0]"
+            width="1920"
+            height="540"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+        <!-- Gradient overlay to fade backdrop into background -->
+        <Rectangle
+            id="backdropOverlay"
+            translation="[0, 0]"
+            width="1920"
+            height="540"
+            color="#1a1a2e"
+            opacity="0.6" />
+
+        <!-- Poster (overlays the backdrop) -->
         <Poster
             id="posterImage"
             translation="[60, 60]"
@@ -48,10 +66,19 @@
             color="#999999"
             maxLines="1" />
 
+        <!-- Tag pills (positioned inline with metaLabel) -->
+        <LayoutGroup
+            id="tagsArea"
+            translation="[300, 120]"
+            layoutDirection="horiz"
+            itemSpacings="[10]"
+            visible="false" />
+        <Label id="tagFontTemplate" visible="false" font="font:SmallestSystemFont" />
+
         <!-- Description -->
         <Label
             id="descLabel"
-            translation="[300, 160]"
+            translation="[300, 175]"
             width="1560"
             font="font:SmallSystemFont"
             color="#bbbbbb"
@@ -59,7 +86,7 @@
             wrap="true" />
 
         <!-- Play button -->
-        <Group id="playButton" translation="[300, 350]">
+        <Group id="playButton" translation="[300, 370]">
             <Rectangle
                 id="playBtnBg"
                 width="240"
@@ -83,13 +110,13 @@
         <!-- Cast section (custom virtual list) -->
         <Label
             id="castHeader"
-            translation="[60, 440]"
+            translation="[60, 460]"
             text="Cast"
             font="font:MediumBoldSystemFont"
             color="#cccccc"
             visible="false" />
 
-        <Group id="castArea" translation="[60, 490]" visible="false">
+        <Group id="castArea" translation="[60, 510]" visible="false">
             <Rectangle id="castHighlight" width="800" height="44" color="#6366f1" visible="false" />
             <Label id="castFontTemplate" visible="false" font="font:SmallSystemFont" />
         </Group>
@@ -97,7 +124,7 @@
         <!-- Similar titles section -->
         <Label
             id="similarHeader"
-            translation="[60, 730]"
+            translation="[60, 740]"
             text="Similar Titles"
             font="font:MediumBoldSystemFont"
             color="#cccccc"

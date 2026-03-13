@@ -1,9 +1,12 @@
 sub init()
     print "[MM] EpisodePickerScreen: init"
+    m.backdropImage = m.top.findNode("backdropImage")
     m.posterImage = m.top.findNode("posterImage")
     m.posterFallback = m.top.findNode("posterFallback")
     m.showTitle = m.top.findNode("showTitle")
     m.metaLabel = m.top.findNode("metaLabel")
+    m.tagsArea = m.top.findNode("tagsArea")
+    m.tagFont = m.top.findNode("tagFontTemplate").font
     m.descLabel = m.top.findNode("descLabel")
     m.castSummary = m.top.findNode("castSummary")
     m.seasonBtnFocus = m.top.findNode("seasonBtnFocus")
@@ -59,8 +62,14 @@ sub init()
     m.seasonsData = []
     m.currentSeasonIndex = 0
     m.titleDetail = invalid
+    m.hasTags = false
     m.hasCast = false
     m.hasSimilar = false
+
+    ' Tag state
+    m.tagData = []
+    m.tagPills = []
+    m.tagFocusIdx = 0
 
     ' Episode list state
     m.epLabels = []          ' all computed label strings
@@ -137,10 +146,47 @@ sub onDetailResult()
     if detail.contentRating <> invalid and detail.contentRating <> ""
         metaParts.push(detail.contentRating)
     end if
-    m.metaLabel.text = metaParts.join(" · ")
+    metaText = metaParts.join(" · ")
+    m.metaLabel.text = metaText
+
+    ' Tag pills — inline to the right of the meta text
+    metaOffsetX = 220 + len(metaText) * 15 + 36
+    m.tagsArea.translation = [metaOffsetX, 95]
+    m.tagsArea.removeChildrenIndex(m.tagsArea.getChildCount(), 0)
+    m.tagData = []
+    m.tagPills = []
+    m.tagFocusIdx = 0
+    m.hasTags = false
+    if detail.tags <> invalid and detail.tags.count() > 0
+        m.hasTags = true
+        for each tag in detail.tags
+            pill = m.tagsArea.createChild("Group")
+            tagName = tag.name
+            pillW = len(tagName) * 16 + 48
+            bg = pill.createChild("Rectangle")
+            bg.width = pillW
+            bg.height = 38
+            bg.color = "#3a3a6a"
+            lbl = pill.createChild("Label")
+            lbl.translation = [24, 8]
+            lbl.text = tagName
+            lbl.font = m.tagFont
+            lbl.color = "#ccccff"
+            lbl.width = pillW - 48
+            lbl.height = 38
+            m.tagData.push({ id: tag.id, name: tagName })
+            m.tagPills.push(pill)
+        end for
+        m.tagsArea.visible = true
+    end if
 
     if detail.description <> invalid and detail.description <> ""
         m.descLabel.text = detail.description
+    end if
+
+    ' Backdrop
+    if detail.backdropUrl <> invalid and detail.backdropUrl <> ""
+        m.backdropImage.uri = detail.backdropUrl
     end if
 
     ' Update poster
@@ -326,6 +372,21 @@ sub updateEpisodeSlots()
     end if
 end sub
 
+sub updateTagPillHighlights()
+    for i = 0 to m.tagPills.count() - 1
+        pill = m.tagPills[i]
+        bg = pill.getChild(0)
+        lbl = pill.getChild(1)
+        if i = m.tagFocusIdx and m.focusSection = "tags"
+            bg.color = "#6366f1"
+            lbl.color = "#ffffff"
+        else
+            bg.color = "#3a3a6a"
+            lbl.color = "#ccccff"
+        end if
+    end for
+end sub
+
 sub updateCastSlots()
     for i = 0 to m.CAST_VISIBLE - 1
         dataIdx = m.castScrollTop + i
@@ -384,6 +445,15 @@ sub onSeasonDialogButton()
 end sub
 
 ' ---- Selection Handlers ----
+
+sub onTagChosen()
+    idx = m.tagFocusIdx
+    if idx < 0 or idx >= m.tagData.count() then return
+
+    tag = m.tagData[idx]
+    print "[MM] EpisodePickerScreen: tag selected — " ; tag.name ; " (id=" ; str(tag.id).trim() ; ")"
+    m.top.tagSelected = { id: tag.id, name: tag.name }
+end sub
 
 sub onEpisodeChosen()
     epIndex = m.epFocusIdx
@@ -449,11 +519,14 @@ sub setFocusSection(section as string)
     m.seasonBtnFocus.visible = false
     m.episodeHighlight.visible = false
     m.castHighlight.visible = false
+    updateTagPillHighlights()
 
     if section = "season"
         m.seasonBtnFocus.visible = true
-        ' Keep focus on this Group — don't give it to children
         m.top.setFocus(true)
+    else if section = "tags"
+        m.top.setFocus(true)
+        updateTagPillHighlights()
     else if section = "episodes"
         m.top.setFocus(true)
         updateEpisodeSlots()
@@ -474,6 +547,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if m.focusSection = "season"
             showSeasonDialog()
             return true
+        else if m.focusSection = "tags"
+            onTagChosen()
+            return true
         else if m.focusSection = "episodes"
             onEpisodeChosen()
             return true
@@ -483,8 +559,26 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
     end if
 
+    if key = "left" or key = "right"
+        if m.focusSection = "tags"
+            if key = "left" and m.tagFocusIdx > 0
+                m.tagFocusIdx--
+                updateTagPillHighlights()
+            else if key = "right" and m.tagFocusIdx < m.tagData.count() - 1
+                m.tagFocusIdx++
+                updateTagPillHighlights()
+            end if
+            return true
+        end if
+    end if
+
     if key = "up"
         if m.focusSection = "season"
+            if m.hasTags
+                setFocusSection("tags")
+            end if
+            return true
+        else if m.focusSection = "tags"
             return true
         else if m.focusSection = "episodes"
             if m.epFocusIdx > 0
@@ -519,7 +613,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "down"
-        if m.focusSection = "season"
+        if m.focusSection = "tags"
+            setFocusSection("season")
+            return true
+        else if m.focusSection = "season"
             setFocusSection("episodes")
             return true
         else if m.focusSection = "episodes"

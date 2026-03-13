@@ -39,6 +39,8 @@ sub init()
     m.episodePickerScreen.observeField("episodeSelected", "onEpisodeSelected")
     m.episodePickerScreen.observeField("titleSelected", "onDetailTitleSelected")
     m.episodePickerScreen.observeField("actorSelected", "onDetailActorSelected")
+    m.movieDetailScreen.observeField("tagSelected", "onDetailTagSelected")
+    m.episodePickerScreen.observeField("tagSelected", "onDetailTagSelected")
     m.videoPlayerScreen.observeField("playbackFinished", "onPlaybackFinished")
     m.videoPlayerScreen.observeField("nextEpisodeStarted", "onNextEpisodeStarted")
 
@@ -491,6 +493,26 @@ sub onDetailTitleSelected()
         m.movieDetailScreen.titleData = st
         showScreen(m.movieDetailScreen)
     end if
+end sub
+
+sub onDetailTagSelected()
+    ' Tag selected from MovieDetailScreen or EpisodePickerScreen
+    tagData = invalid
+    if m.movieDetailScreen.tagSelected <> invalid
+        tagData = m.movieDetailScreen.tagSelected
+    end if
+    if tagData = invalid and m.episodePickerScreen.tagSelected <> invalid
+        tagData = m.episodePickerScreen.tagSelected
+    end if
+    if tagData = invalid then return
+
+    print "[MM] MainScene: tag selected from detail — " ; tagData.name
+
+    m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.tagScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.tagScreen.detailType = "tag"
+    m.tagScreen.tagData = tagData
+    showScreen(m.tagScreen)
 end sub
 
 sub onDetailActorSelected()

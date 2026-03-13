@@ -7,6 +7,7 @@
         <field id="episodeSelected" type="assocarray" alwaysNotify="true" />
         <field id="titleSelected" type="assocarray" alwaysNotify="true" />
         <field id="actorSelected" type="assocarray" alwaysNotify="true" />
+        <field id="tagSelected" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="EpisodePickerScreen.brs" />
@@ -15,7 +16,23 @@
         <!-- Background -->
         <Rectangle width="1920" height="1080" color="#1a1a2e" />
 
-        <!-- Poster -->
+        <!-- Backdrop hero image (full width, dimmed) -->
+        <Poster
+            id="backdropImage"
+            translation="[0, 0]"
+            width="1920"
+            height="400"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+        <Rectangle
+            id="backdropOverlay"
+            translation="[0, 0]"
+            width="1920"
+            height="400"
+            color="#1a1a2e"
+            opacity="0.6" />
+
+        <!-- Poster (overlays the backdrop) -->
         <Poster
             id="posterImage"
             translation="[60, 50]"
@@ -48,10 +65,19 @@
             color="#999999"
             maxLines="1" />
 
+        <!-- Tag pills (positioned inline with metaLabel) -->
+        <LayoutGroup
+            id="tagsArea"
+            translation="[220, 100]"
+            layoutDirection="horiz"
+            itemSpacings="[10]"
+            visible="false" />
+        <Label id="tagFontTemplate" visible="false" font="font:SmallestSystemFont" />
+
         <!-- Description -->
         <Label
             id="descLabel"
-            translation="[220, 135]"
+            translation="[220, 150]"
             width="1640"
             font="font:SmallSystemFont"
             color="#bbbbbb"

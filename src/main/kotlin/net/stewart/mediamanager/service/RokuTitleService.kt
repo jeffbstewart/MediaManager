@@ -16,6 +16,11 @@ object RokuTitleService {
     private val DIRECT_EXTENSIONS = setOf("mp4", "m4v")
     private val TRANSCODE_EXTENSIONS = setOf("mkv", "avi")
 
+    data class TagItem(
+        val id: Long,
+        val name: String
+    )
+
     data class CastItem(
         val castMemberId: Long,
         val tmdbPersonId: Int,
@@ -61,6 +66,8 @@ object RokuTitleService {
         val description: String?,
         val contentRating: String?,
         val posterUrl: String?,
+        val backdropUrl: String?,
+        val tags: List<TagItem>,
         val streamUrl: String?,
         val subtitleUrl: String?,
         val bifUrl: String?,
@@ -91,6 +98,16 @@ object RokuTitleService {
             "$baseUrl/posters/w500/${title.id}?key=$apiKey"
         } else null
 
+        val backdropUrl = if (title.backdrop_path != null) {
+            "$baseUrl/backdrops/${title.id}?key=$apiKey"
+        } else null
+
+        // Tags for this title
+        val tagIds = TitleTag.findAll().filter { it.title_id == titleId }.map { it.tag_id }.toSet()
+        val tags = if (tagIds.isNotEmpty()) {
+            Tag.findAll().filter { it.id in tagIds }.map { TagItem(id = it.id!!, name = it.name) }
+        } else emptyList()
+
         // Full progress records for next-up and watchedPercent
         val transcodeIds = transcodes.mapNotNull { it.id }.toSet()
         val progressRecords = PlaybackProgress.findAll()
@@ -104,9 +121,9 @@ object RokuTitleService {
         val similarTitles = buildSimilarTitles(title, baseUrl, apiKey, user, nasRoot)
 
         if (title.media_type == MediaType.TV.name) {
-            return buildTvDetail(title, transcodes, posterUrl, baseUrl, apiKey, progressMap, progressRecords, nasRoot, cast, similarTitles)
+            return buildTvDetail(title, transcodes, posterUrl, backdropUrl, tags, baseUrl, apiKey, progressMap, progressRecords, nasRoot, cast, similarTitles)
         } else {
-            return buildMovieDetail(title, transcodes, posterUrl, baseUrl, apiKey, progressMap, progressRecords, nasRoot, cast, similarTitles)
+            return buildMovieDetail(title, transcodes, posterUrl, backdropUrl, tags, baseUrl, apiKey, progressMap, progressRecords, nasRoot, cast, similarTitles)
         }
     }
 
@@ -114,6 +131,8 @@ object RokuTitleService {
         title: Title,
         transcodes: List<Transcode>,
         posterUrl: String?,
+        backdropUrl: String?,
+        tags: List<TagItem>,
         baseUrl: String,
         apiKey: String,
         progressMap: Map<Long?, Int>,
@@ -137,6 +156,8 @@ object RokuTitleService {
             description = title.description,
             contentRating = title.content_rating,
             posterUrl = posterUrl,
+            backdropUrl = backdropUrl,
+            tags = tags,
             streamUrl = "$baseUrl/stream/${tc.id}?key=$apiKey",
             subtitleUrl = if (hasSubtitleFile(tc, nasRoot)) "$baseUrl/stream/${tc.id}/subs.srt?key=$apiKey" else null,
             bifUrl = if (hasSpriteSheets(tc, nasRoot)) "$baseUrl/stream/${tc.id}/trickplay.bif?key=$apiKey" else null,
@@ -156,6 +177,8 @@ object RokuTitleService {
         title: Title,
         transcodes: List<Transcode>,
         posterUrl: String?,
+        backdropUrl: String?,
+        tags: List<TagItem>,
         baseUrl: String,
         apiKey: String,
         progressMap: Map<Long?, Int>,
@@ -172,6 +195,7 @@ object RokuTitleService {
             titleId = title.id!!, name = title.name, mediaType = title.media_type,
             year = title.release_year, description = title.description,
             contentRating = title.content_rating, posterUrl = posterUrl,
+            backdropUrl = backdropUrl, tags = tags,
             streamUrl = null, subtitleUrl = null, bifUrl = null, quality = null,
             transcodeId = null, resumePosition = 0, watchedPercent = 0,
             seasons = emptyList(),
@@ -242,6 +266,8 @@ object RokuTitleService {
             description = title.description,
             contentRating = title.content_rating,
             posterUrl = posterUrl,
+            backdropUrl = backdropUrl,
+            tags = tags,
             streamUrl = null,
             subtitleUrl = null,
             bifUrl = null,
