@@ -31,6 +31,7 @@ object RokuHomeService {
         val contentRating: String?,
         val transcodeId: Long?,
         val subtitleUrl: String? = null,
+        val bifUrl: String? = null,
         val resumePosition: Int? = null,
         val wishFulfilled: Boolean = false
     )
@@ -219,6 +220,10 @@ object RokuHomeService {
             "$baseUrl/stream/${transcode.id}/subs.srt?key=$apiKey"
         } else null
 
+        val bifUrl = if (transcode != null && hasSpriteSheets(transcode, nasRoot)) {
+            "$baseUrl/stream/${transcode.id}/trickplay.bif?key=$apiKey"
+        } else null
+
         return CarouselItem(
             titleId = title.id!!,
             name = title.name,
@@ -229,6 +234,7 @@ object RokuHomeService {
             contentRating = title.content_rating,
             transcodeId = transcode?.id,
             subtitleUrl = subtitleUrl,
+            bifUrl = bifUrl,
             resumePosition = resumePosition,
             wishFulfilled = wishFulfilled
         )
@@ -245,6 +251,18 @@ object RokuHomeService {
         if (!mp4File.exists()) return false
         val srtFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".en.srt")
         return srtFile.exists()
+    }
+
+    private fun hasSpriteSheets(transcode: Transcode, nasRoot: String?): Boolean {
+        val filePath = transcode.file_path ?: return false
+        val ext = File(filePath).extension.lowercase()
+        val mp4File = when {
+            ext in DIRECT_EXTENSIONS -> File(filePath)
+            ext in TRANSCODE_EXTENSIONS && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+            else -> return false
+        }
+        if (!mp4File.exists()) return false
+        return File(mp4File.parentFile, mp4File.nameWithoutExtension + ".thumbs.vtt").exists()
     }
 
     private fun isPlayable(transcode: Transcode, nasRoot: String?): Boolean {

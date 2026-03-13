@@ -9,6 +9,7 @@ import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.transcode.BifGenerator
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.RandomAccessFile
@@ -60,6 +61,7 @@ class VideoStreamServlet : HttpServlet() {
             when {
                 subPath == "thumbs.vtt" -> serveThumbFile(transcodeId, subPath, "text/vtt", resp)
                 subPath.matches(Regex("""thumbs_\d+\.jpg""")) -> serveThumbFile(transcodeId, subPath, "image/jpeg", resp)
+                subPath == "trickplay.bif" -> serveBifFile(transcodeId, resp)
                 subPath == "subs.vtt" -> serveSubtitleFile(transcodeId, resp)
                 subPath == "subs.srt" -> serveSubtitleFile(transcodeId, resp, asVtt = false)
                 else -> {
@@ -198,6 +200,49 @@ class VideoStreamServlet : HttpServlet() {
         resp.setContentLengthLong(thumbFile.length())
         resp.setHeader("Cache-Control", "public, max-age=86400")
         thumbFile.inputStream().use { it.copyTo(resp.outputStream) }
+        MetricsRegistry.countHttpResponse("stream", 200)
+    }
+
+    /**
+     * Generates and serves a BIF (Base Index Frame) file on-the-fly from existing
+     * thumbnail sprite sheets. No BIF stored on disk — built in memory per request.
+     */
+    private fun serveBifFile(transcodeId: Long, resp: HttpServletResponse) {
+        val transcode = Transcode.findById(transcodeId)
+        if (transcode == null || transcode.file_path == null) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+            MetricsRegistry.countHttpResponse("stream", 404)
+            return
+        }
+
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val filePath = transcode.file_path!!
+        val ext = File(filePath).extension.lowercase()
+
+        val mp4File = when {
+            ext in directExtensions -> File(filePath)
+            ext in transcodeExtensions && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+            else -> null
+        }
+
+        if (mp4File == null || !mp4File.exists()) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+            MetricsRegistry.countHttpResponse("stream", 404)
+            return
+        }
+
+        // Generate BIF on-the-fly from sprite sheets
+        val bifBytes = BifGenerator.generateBytes(mp4File)
+        if (bifBytes == null) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+            MetricsRegistry.countHttpResponse("stream", 404)
+            return
+        }
+
+        resp.contentType = "application/octet-stream"
+        resp.setContentLengthLong(bifBytes.size.toLong())
+        resp.setHeader("Cache-Control", "public, max-age=86400")
+        resp.outputStream.write(bifBytes)
         MetricsRegistry.countHttpResponse("stream", 200)
     }
 

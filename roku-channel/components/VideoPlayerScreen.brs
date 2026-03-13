@@ -1,10 +1,6 @@
 sub init()
     print "[MM] VideoPlayerScreen: init"
     m.videoPlayer = m.top.findNode("videoPlayer")
-    m.overlay = m.top.findNode("overlay")
-    m.overlayTitle = m.top.findNode("overlayTitle")
-    m.overlaySubtitle = m.top.findNode("overlaySubtitle")
-    m.ccLabel = m.top.findNode("ccLabel")
     m.progressTask = m.top.findNode("progressTask")
 
     m.videoPlayer.observeField("state", "onVideoState")
@@ -15,6 +11,7 @@ sub init()
     m.transcodeId = ""
     m.contentTitle = ""
     m.subtitleUrl = ""
+    m.bifUrl = ""
     m.ccEnabled = true
     m.lastReportTime = 0
     m.currentPosition = 0
@@ -34,11 +31,16 @@ sub onPlayContent()
     m.transcodeId = str(content.transcodeId).trim()
     m.contentTitle = content.name
     m.subtitleUrl = ""
+    m.bifUrl = ""
     m.resumePosition = 0
 
     ' Use subtitle URL from play data if provided
     if content.subtitleUrl <> invalid and content.subtitleUrl <> ""
         m.subtitleUrl = content.subtitleUrl
+    end if
+    ' Use BIF URL from play data if provided (Roku trick play thumbnails)
+    if content.bifUrl <> invalid and content.bifUrl <> ""
+        m.bifUrl = content.bifUrl
     end if
     if content.resumePosition <> invalid
         m.resumePosition = content.resumePosition
@@ -46,26 +48,11 @@ sub onPlayContent()
 
     print "[MM] VideoPlayerScreen: play request — " ; m.contentTitle ; " (transcode " ; m.transcodeId ; ")"
 
-    ' Set overlay info
-    m.overlayTitle.text = m.contentTitle
-    subtitleParts = []
-    if content.year <> invalid and content.year > 0
-        subtitleParts.push(str(content.year).trim())
-    end if
-    if content.contentRating <> invalid and content.contentRating <> ""
-        subtitleParts.push(content.contentRating)
-    end if
-    if content.quality <> invalid and content.quality <> ""
-        subtitleParts.push(content.quality)
-    end if
-    m.overlaySubtitle.text = subtitleParts.join("  |  ")
-
     ' Reset state
     m.exiting = false
     m.lastReportTime = 0
     m.currentPosition = 0
     m.currentDuration = 0
-    m.overlay.visible = false
 
     ' Check for resume position
     if m.resumePosition > 30
@@ -122,13 +109,18 @@ sub startPlayback(startPos as integer)
         configureSubtitles(videoContent, m.subtitleUrl)
     end if
 
+    ' Configure BIF trick play thumbnails if available
+    if m.bifUrl <> ""
+        print "[MM] VideoPlayerScreen: BIF trick play — " ; m.bifUrl
+        videoContent.hdBifUrl = m.bifUrl
+        videoContent.sdBifUrl = m.bifUrl
+    end if
+
     ' Set caption mode BEFORE content assignment
     if m.subtitleUrl <> "" and m.ccEnabled
         m.videoPlayer.globalCaptionMode = "On"
-        m.ccLabel.text = "CC: On"
     else
         m.videoPlayer.globalCaptionMode = "Off"
-        m.ccLabel.text = "CC: Off"
     end if
 
     m.videoPlayer.content = videoContent
@@ -160,23 +152,15 @@ sub configureSubtitles(videoContent as object, subtitleUrl as string)
         Language: "eng",
         Description: "English"
     }]
-
-    if m.ccEnabled
-        m.ccLabel.text = "CC: On"
-    else
-        m.ccLabel.text = "CC: Off"
-    end if
 end sub
 
 sub toggleCC()
     m.ccEnabled = not m.ccEnabled
     if m.ccEnabled
         m.videoPlayer.globalCaptionMode = "On"
-        m.ccLabel.text = "CC: On"
         print "[MM] VideoPlayerScreen: CC turned on"
     else
         m.videoPlayer.globalCaptionMode = "Off"
-        m.ccLabel.text = "CC: Off"
         print "[MM] VideoPlayerScreen: CC turned off"
     end if
 end sub
@@ -187,11 +171,7 @@ sub onVideoState()
     state = m.videoPlayer.state
     print "[MM] VideoPlayerScreen: video state → " ; state
 
-    if state = "playing"
-        m.overlay.visible = false
-    else if state = "paused"
-        m.overlay.visible = true
-    else if state = "stopped" or state = "finished" or state = "error"
+    if state = "stopped" or state = "finished" or state = "error"
         ' Guard against double-fire (back key sets playbackFinished, then stop state fires again)
         if m.exiting then return
 
@@ -207,7 +187,6 @@ sub onVideoState()
         end if
 
         m.exiting = true
-        m.overlay.visible = false
         m.videoPlayer.control = "stop"
         m.top.playbackFinished = true
     end if
@@ -255,7 +234,6 @@ sub stopPlayback()
     m.exiting = true
     reportProgress()
     m.videoPlayer.control = "stop"
-    m.overlay.visible = false
 end sub
 
 ' ---- Key Handling ----
@@ -273,17 +251,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
         ' Toggle CC
         toggleCC()
         return true
-    end if
-
-    ' Show overlay on play/pause when paused
-    if key = "play"
-        if m.videoPlayer.state = "paused"
-            m.videoPlayer.control = "resume"
-            return true
-        else if m.videoPlayer.state = "playing"
-            m.videoPlayer.control = "pause"
-            return true
-        end if
     end if
 
     return false

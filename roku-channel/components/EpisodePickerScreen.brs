@@ -183,6 +183,7 @@ sub onEpisodeSelected()
         transcodeId: ep.transcodeId,
         streamUrl: ep.streamUrl,
         subtitleUrl: ep.subtitleUrl,
+        bifUrl: ep.bifUrl,
         quality: ep.quality,
         resumePosition: ep.resumePosition,
         year: m.titleDetail.year,

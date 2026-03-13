@@ -24,6 +24,7 @@ object RokuTitleService {
         val name: String,
         val streamUrl: String,
         val subtitleUrl: String?,
+        val bifUrl: String?,
         val quality: String,
         val resumePosition: Int
     )
@@ -43,6 +44,7 @@ object RokuTitleService {
         val posterUrl: String?,
         val streamUrl: String?,
         val subtitleUrl: String?,
+        val bifUrl: String?,
         val quality: String?,
         val transcodeId: Long?,
         val resumePosition: Int,
@@ -101,6 +103,7 @@ object RokuTitleService {
             posterUrl = posterUrl,
             streamUrl = "$baseUrl/stream/${tc.id}?key=$apiKey",
             subtitleUrl = if (hasSubtitleFile(tc, nasRoot)) "$baseUrl/stream/${tc.id}/subs.srt?key=$apiKey" else null,
+            bifUrl = if (hasSpriteSheets(tc, nasRoot)) "$baseUrl/stream/${tc.id}/trickplay.bif?key=$apiKey" else null,
             quality = quality,
             transcodeId = tc.id,
             resumePosition = resumePos,
@@ -125,7 +128,7 @@ object RokuTitleService {
             titleId = title.id!!, name = title.name, mediaType = title.media_type,
             year = title.release_year, description = title.description,
             contentRating = title.content_rating, posterUrl = posterUrl,
-            streamUrl = null, subtitleUrl = null, quality = null,
+            streamUrl = null, subtitleUrl = null, bifUrl = null, quality = null,
             transcodeId = null, resumePosition = 0, seasons = emptyList()
         )
 
@@ -147,6 +150,9 @@ object RokuTitleService {
                     val subtitleUrl = if (hasSubtitleFile(tc, nasRoot)) {
                         "$baseUrl/stream/${tc.id}/subs.srt?key=$apiKey"
                     } else null
+                    val bifUrl = if (hasSpriteSheets(tc, nasRoot)) {
+                        "$baseUrl/stream/${tc.id}/trickplay.bif?key=$apiKey"
+                    } else null
                     EpisodeItem(
                         episodeId = ep.id!!,
                         transcodeId = tc.id!!,
@@ -155,6 +161,7 @@ object RokuTitleService {
                         name = ep.name ?: "Episode ${ep.episode_number}",
                         streamUrl = "$baseUrl/stream/${tc.id}?key=$apiKey",
                         subtitleUrl = subtitleUrl,
+                        bifUrl = bifUrl,
                         quality = qualityLabel(tc),
                         resumePosition = progressMap[tc.id] ?: 0
                     )
@@ -172,6 +179,7 @@ object RokuTitleService {
             posterUrl = posterUrl,
             streamUrl = null,
             subtitleUrl = null,
+            bifUrl = null,
             quality = null,
             transcodeId = null,
             resumePosition = 0,
@@ -193,6 +201,18 @@ object RokuTitleService {
             ext in TRANSCODE_EXTENSIONS -> nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, filePath)
             else -> false
         }
+    }
+
+    private fun hasSpriteSheets(transcode: Transcode, nasRoot: String?): Boolean {
+        val filePath = transcode.file_path ?: return false
+        val ext = File(filePath).extension.lowercase()
+        val mp4File = when {
+            ext in DIRECT_EXTENSIONS -> File(filePath)
+            ext in TRANSCODE_EXTENSIONS && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+            else -> return false
+        }
+        if (!mp4File.exists()) return false
+        return File(mp4File.parentFile, mp4File.nameWithoutExtension + ".thumbs.vtt").exists()
     }
 
     private fun hasSubtitleFile(transcode: Transcode, nasRoot: String?): Boolean {

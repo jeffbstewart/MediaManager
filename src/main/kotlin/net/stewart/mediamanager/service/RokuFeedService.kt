@@ -260,6 +260,10 @@ object RokuFeedService {
         if (hasSubtitleFile(transcode, nasRoot)) {
             content["subtitleUrl"] = "$baseUrl/stream/${transcode.id}/subs.srt?key=$apiKey"
         }
+        // Include BIF URL for Roku trick play thumbnails
+        if (hasSpriteSheets(transcode, nasRoot)) {
+            content["bifUrl"] = "$baseUrl/stream/${transcode.id}/trickplay.bif?key=$apiKey"
+        }
         return content
     }
 
@@ -274,6 +278,19 @@ object RokuFeedService {
         if (!mp4File.exists()) return false
         val srtFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".en.srt")
         return srtFile.exists()
+    }
+
+    private fun hasSpriteSheets(transcode: Transcode, nasRoot: String?): Boolean {
+        val filePath = transcode.file_path ?: return false
+        val ext = File(filePath).extension.lowercase()
+        val mp4File = when {
+            ext in DIRECT_EXTENSIONS -> File(filePath)
+            ext in TRANSCODE_EXTENSIONS && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
+            else -> return false
+        }
+        if (!mp4File.exists()) return false
+        val vttFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".thumbs.vtt")
+        return vttFile.exists()
     }
 
     private fun isPlayable(transcode: Transcode, nasRoot: String?): Boolean {
