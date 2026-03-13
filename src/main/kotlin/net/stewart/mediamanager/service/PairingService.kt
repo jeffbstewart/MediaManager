@@ -183,6 +183,16 @@ object PairingService {
             .sortedByDescending { it.expires_at }
     }
 
+    /**
+     * Returns the count of non-expired PENDING pair codes.
+     */
+    fun countPendingCodes(): Int {
+        val now = LocalDateTime.now()
+        return PairCode.findAll().count {
+            it.status == PairStatus.PENDING.name && it.expires_at.isAfter(now)
+        }
+    }
+
     private fun findActiveCode(code: String): PairCode? {
         return PairCode.findAll().firstOrNull {
             it.code.equals(code, ignoreCase = true)
