@@ -3,6 +3,7 @@
     <interface>
         <field id="profileContent" type="assocarray" alwaysNotify="true" onChange="onProfileContentChanged" />
         <field id="switchProfileRequested" type="boolean" alwaysNotify="true" />
+        <field id="removeProfileRequested" type="boolean" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
@@ -14,33 +15,66 @@
             height="1080"
             color="#1a1a2e" />
 
-        <!-- Welcome heading -->
-        <Label
-            id="welcomeLabel"
-            translation="[100, 200]"
-            text="Welcome"
-            font="font:LargeBoldSystemFont"
-            color="#e0e0e0"
-            width="1400" />
+        <!-- ===== HEADER BAR (y=30) ===== -->
+        <Group id="headerBar" translation="[60, 30]">
+            <!-- App icon -->
+            <Poster
+                id="appIcon"
+                translation="[0, 0]"
+                width="64"
+                height="64"
+                uri="pkg:/images/channel-icon-hd.png"
+                loadingBitmapOpacity="0" />
 
-        <!-- Server info -->
-        <Label
-            id="serverLabel"
-            translation="[100, 270]"
-            text=""
-            font="font:SmallSystemFont"
-            color="#888888"
-            width="1400" />
+            <!-- "Media Manager" wordmark -->
+            <Label
+                id="wordmark"
+                translation="[80, 12]"
+                text="Media Manager"
+                font="font:LargeBoldSystemFont"
+                color="#e0e0e0" />
+        </Group>
 
-        <!-- Profile widget (upper-right) -->
-        <Group id="profileWidget" translation="[1680, 40]">
-            <!-- Avatar circle -->
+        <!-- Focusable search box -->
+        <Group id="searchBox" translation="[540, 38]">
+            <!-- Focus outline (behind, slightly larger) -->
+            <Rectangle
+                id="searchFocusRing"
+                translation="[-3, -3]"
+                width="406"
+                height="54"
+                color="#ffffff"
+                visible="false" />
+            <!-- Search background (on top of focus ring, creates outline effect) -->
+            <Rectangle
+                id="searchBg"
+                width="400"
+                height="48"
+                color="#2a2a4a" />
+            <Label
+                id="searchPlaceholder"
+                translation="[16, 10]"
+                text="Search"
+                font="font:SmallSystemFont"
+                color="#666666" />
+        </Group>
+
+        <!-- Focusable profile widget (header right side) -->
+        <Group id="profileWidget" translation="[1740, 30]">
+            <!-- Focus outline (behind, slightly larger) -->
+            <Rectangle
+                id="profileFocusRing"
+                translation="[-4, -4]"
+                width="72"
+                height="72"
+                color="#ffffff"
+                visible="false" />
+            <!-- Avatar square (on top of focus ring) -->
             <Rectangle
                 id="profileAvatar"
                 width="64"
                 height="64"
                 color="#6366f1" />
-
             <!-- Letter overlay -->
             <Label
                 id="profileLetter"
@@ -50,7 +84,6 @@
                 color="#ffffff"
                 width="64"
                 horizAlign="center" />
-
             <!-- Username below avatar -->
             <Label
                 id="profileName"
@@ -61,26 +94,119 @@
                 width="104"
                 horizAlign="center"
                 truncateOnDelimiter="" />
-
-            <!-- Focus indicator -->
-            <Rectangle
-                id="profileFocusRing"
-                translation="[-4, -4]"
-                width="72"
-                height="72"
-                color="#ffffff"
-                visible="false"
-                opacity="0.3" />
         </Group>
 
-        <!-- Switch profile hint -->
+        <!-- ===== CONTENT AREA (scrollable carousels) ===== -->
+        <RowList
+            id="rowList"
+            translation="[60, 130]"
+            itemComponentName="CarouselItem"
+            numRows="3"
+            itemSize="[1800, 360]"
+            rowItemSize="[[210, 310]]"
+            rowItemSpacing="[[20, 0]]"
+            showRowLabel="[true]"
+            rowLabelOffset="[[0, 0]]"
+            drawFocusFeedback="true"
+            rowLabelFont="font:MediumBoldSystemFont"
+            rowLabelColor="#cccccc"
+            rowFocusAnimationStyle="floatingFocus"
+            vertFocusAnimationStyle="floatingFocus"
+            focusXOffset="[0]"
+            itemSpacing="[0, 20]" />
+
+        <!-- ===== FOOTER ===== -->
         <Label
             id="switchHint"
-            translation="[0, 950]"
+            translation="[0, 1010]"
             text="Press  ★  to switch profiles"
             font="font:SmallestSystemFont"
             color="#555555"
             width="1920"
             horizAlign="center" />
+
+        <!-- ===== PROFILE DROPDOWN PANEL (after RowList for z-order) ===== -->
+        <Group id="profilePanel" translation="[900, 100]" visible="false">
+            <!-- Panel border -->
+            <Rectangle
+                width="964"
+                height="264"
+                translation="[-2, -2]"
+                color="#555577" />
+            <!-- Panel background (solid, opaque) -->
+            <Rectangle
+                width="960"
+                height="260"
+                color="#1e1e3a" />
+
+            <!-- Full username -->
+            <Label
+                id="panelUsername"
+                translation="[20, 16]"
+                text=""
+                font="font:MediumBoldSystemFont"
+                color="#e0e0e0"
+                width="920" />
+
+            <!-- Server address -->
+            <Label
+                id="panelServer"
+                translation="[20, 56]"
+                text=""
+                font="font:SmallestSystemFont"
+                color="#888888"
+                width="920" />
+
+            <!-- Divider -->
+            <Rectangle
+                translation="[20, 92]"
+                width="920"
+                height="1"
+                color="#444466" />
+
+            <!-- Switch Account button -->
+            <Group id="panelSwitchBtn" translation="[20, 108]">
+                <Rectangle
+                    id="panelSwitchBg"
+                    width="920"
+                    height="56"
+                    color="#2a2a4a" />
+                <Rectangle
+                    id="panelSwitchFocus"
+                    width="920"
+                    height="56"
+                    color="#6366f1"
+                    visible="false" />
+                <Label
+                    id="panelSwitchLabel"
+                    translation="[16, 14]"
+                    text="Switch Account"
+                    font="font:SmallSystemFont"
+                    color="#e0e0e0"
+                    width="888" />
+            </Group>
+
+            <!-- Remove Account button -->
+            <Group id="panelRemoveBtn" translation="[20, 176]">
+                <Rectangle
+                    id="panelRemoveBg"
+                    width="920"
+                    height="56"
+                    color="#2a2a4a" />
+                <Rectangle
+                    id="panelRemoveFocus"
+                    width="920"
+                    height="56"
+                    color="#ef4444"
+                    visible="false" />
+                <Label
+                    id="panelRemoveLabel"
+                    translation="[16, 14]"
+                    text="Remove Account"
+                    font="font:SmallSystemFont"
+                    color="#e0e0e0"
+                    width="888" />
+            </Group>
+        </Group>
     </children>
 </component>

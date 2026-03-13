@@ -203,6 +203,11 @@ sub doStartPairing()
         return
     end if
 
+    ' Set base URL BEFORE pair code — pairCode observer fires immediately
+    if json.base_url <> invalid and json.base_url <> ""
+        m.top.pairBaseUrl = json.base_url
+        print "[MM] PairTask: canonical base URL from start: " ; json.base_url
+    end if
     m.top.pairCode = json.code
     print "[MM] PairTask: pair code = " ; json.code
 end sub
@@ -253,9 +258,13 @@ sub doPollStatus()
             if json <> invalid
                 if json.status = "paired"
                     print "[MM] PairTask: pairing complete! token received"
-                    ' Set token/username BEFORE status — status observer fires immediately
+                    ' Set token/username/baseUrl BEFORE status — status observer fires immediately
                     m.top.pairToken = json.token
                     m.top.pairUsername = json.username
+                    if json.base_url <> invalid and json.base_url <> ""
+                        m.top.pairBaseUrl = json.base_url
+                        print "[MM] PairTask: canonical base URL: " ; json.base_url
+                    end if
                     m.top.pairStatus = "paired"
                     return
                 else if json.status = "expired"

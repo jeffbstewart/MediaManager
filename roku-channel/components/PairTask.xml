@@ -10,6 +10,7 @@
         <field id="pairStatus" type="string" />
         <field id="pairToken" type="string" />
         <field id="pairUsername" type="string" />
+        <field id="pairBaseUrl" type="string" />
         <field id="pairError" type="string" />
         <field id="discoveredUrl" type="string" />
     </interface>

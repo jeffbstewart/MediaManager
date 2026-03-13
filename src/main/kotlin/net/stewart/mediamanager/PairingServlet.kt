@@ -6,6 +6,7 @@ import jakarta.servlet.annotation.WebServlet
 import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.service.PairingService
 import org.slf4j.LoggerFactory
 
@@ -63,10 +64,18 @@ class PairingServlet : HttpServlet() {
         val deviceName = body?.get("device_name")?.asString ?: ""
 
         val pairCode = PairingService.createPairCode(deviceName)
-        sendJson(resp, HttpServletResponse.SC_OK, mapOf(
+        val result = mutableMapOf<String, Any>(
             "code" to pairCode.code,
             "expires_in" to 300
-        ))
+        )
+        // Include canonical base URL so devices can show the correct pairing URL
+        val baseUrl = AppConfig.findAll()
+            .firstOrNull { it.config_key == "roku_base_url" }
+            ?.config_val?.trimEnd('/')
+        if (!baseUrl.isNullOrBlank()) {
+            result["base_url"] = baseUrl
+        }
+        sendJson(resp, HttpServletResponse.SC_OK, result)
     }
 
     private fun handleStatus(req: HttpServletRequest, resp: HttpServletResponse) {
@@ -88,6 +97,13 @@ class PairingServlet : HttpServlet() {
         if (status.status == "paired") {
             result["token"] = status.token
             result["username"] = status.username
+            // Include canonical base URL so Roku uses the proxy address for posters/streams
+            val baseUrl = AppConfig.findAll()
+                .firstOrNull { it.config_key == "roku_base_url" }
+                ?.config_val?.trimEnd('/')
+            if (!baseUrl.isNullOrBlank()) {
+                result["base_url"] = baseUrl
+            }
         }
         sendJson(resp, HttpServletResponse.SC_OK, result)
     }
@@ -99,10 +115,17 @@ class PairingServlet : HttpServlet() {
             return
         }
 
-        // Build the pairing URL from the request
-        val scheme = req.getHeader("X-Forwarded-Proto") ?: req.scheme
-        val host = req.getHeader("X-Forwarded-Host") ?: req.getHeader("Host") ?: "${req.serverName}:${req.serverPort}"
-        val baseUrl = "$scheme://$host"
+        // Use canonical base URL if configured, otherwise derive from request headers
+        val configuredBase = AppConfig.findAll()
+            .firstOrNull { it.config_key == "roku_base_url" }
+            ?.config_val?.trimEnd('/')
+        val baseUrl = if (!configuredBase.isNullOrBlank()) {
+            configuredBase
+        } else {
+            val scheme = req.getHeader("X-Forwarded-Proto") ?: req.scheme
+            val host = req.getHeader("X-Forwarded-Host") ?: req.getHeader("Host") ?: "${req.serverName}:${req.serverPort}"
+            "$scheme://$host"
+        }
         val pairUrl = "$baseUrl/pair?code=$code"
 
         val pngBytes = PairingService.generateQrCode(pairUrl)

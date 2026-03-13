@@ -20,7 +20,9 @@ sub init()
     m.profilePickerScreen.observeField("addProfileRequested", "onAddProfileRequested")
     m.profilePickerScreen.observeField("removeProfileRequested", "onRemoveProfileRequested")
     m.pairScreen.observeField("pairComplete", "onPairComplete")
+    m.pairScreen.observeField("cancelRequested", "onPairCancelled")
     m.homeScreen.observeField("switchProfileRequested", "onSwitchProfileRequested")
+    m.homeScreen.observeField("removeProfileRequested", "onRemoveProfileFromHome")
 
     ' Clean up V1 registry if needed
     cleanupV1Registry()
@@ -300,6 +302,11 @@ sub onPairComplete()
     showScreen(m.homeScreen)
 end sub
 
+sub onPairCancelled()
+    print "[MM] MainScene: onPairCancelled — returning to profile picker"
+    hideTopScreen()
+end sub
+
 sub onSwitchProfileRequested()
     print "[MM] MainScene: onSwitchProfileRequested — returning to profile picker"
     ' Pop HomeScreen
@@ -308,6 +315,31 @@ sub onSwitchProfileRequested()
     ' Refresh profile data in picker
     profiles = loadProfiles()
     m.profilePickerScreen.profiles = profiles
+end sub
+
+sub onRemoveProfileFromHome()
+    profile = m.top.findNode("homeScreen").profileContent
+    if profile = invalid then return
+
+    profileIndex = profile.index
+    if profileIndex = invalid then return
+
+    print "[MM] MainScene: onRemoveProfileFromHome — removing index " ; str(profileIndex).trim()
+    removeProfile(profileIndex)
+
+    ' Pop HomeScreen
+    hideTopScreen()
+
+    ' Reload profiles and update picker
+    profiles = loadProfiles()
+    m.profilePickerScreen.profiles = profiles
+
+    if profiles.count() = 0
+        print "[MM] MainScene: all profiles removed, showing PairScreen"
+        m.screenStack = []
+        m.profilePickerScreen.visible = false
+        showScreen(m.pairScreen)
+    end if
 end sub
 
 ' ---- Key Handling ----

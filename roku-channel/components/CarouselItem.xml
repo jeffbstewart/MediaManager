@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CarouselItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged" />
+    </interface>
+
+    <script type="text/brightscript" uri="CarouselItem.brs" />
+
+    <children>
+        <!-- Fallback background (behind poster, visible until poster loads) -->
+        <Rectangle
+            id="fallbackBg"
+            width="210"
+            height="310"
+            color="#333355" />
+
+        <!-- Poster image (on top of fallback) -->
+        <Poster
+            id="posterImage"
+            width="210"
+            height="310"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+    </children>
+</component>

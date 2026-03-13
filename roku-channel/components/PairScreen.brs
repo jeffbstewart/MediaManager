@@ -78,7 +78,12 @@ sub onPairCodeReceived()
 
     print "[MM] PairScreen: pair code received: " ; code
 
-    ' Show QR code
+    ' Use canonical base URL if available, otherwise SSDP-discovered URL
+    baseUrl = m.pairTask.pairBaseUrl
+    if baseUrl = invalid or baseUrl = "" then baseUrl = m.serverUrl
+    print "[MM] PairScreen: using base URL for pairing UI: " ; baseUrl
+
+    ' Show QR code (always fetch from internal server, QR encodes the canonical URL)
     qrUrl = m.serverUrl + "/api/pair/qr?code=" + code
     m.qrCode.uri = qrUrl
     m.qrCode.visible = true
@@ -86,7 +91,7 @@ sub onPairCodeReceived()
     m.pairCodeLabel.visible = true
     m.pairInstructionLabel.visible = true
 
-    m.instructionLabel.text = "Scan the QR code with your phone, or enter the code in your browser at:" + chr(10) + m.serverUrl + "/pair?code=" + code
+    m.instructionLabel.text = "Scan the QR code with your phone, or enter the code in your browser at:" + chr(10) + baseUrl + "/pair?code=" + code
     m.buttonGroup.buttons = ["Enter Key Manually", "Retry", "Cancel"]
     m.buttonGroup.setFocus(true)
 
@@ -112,9 +117,17 @@ sub onPairStatus()
         m.statusLabel.color = "#22c55e"
         m.statusLabel.visible = true
 
+        ' Use canonical base URL if server provided one, otherwise SSDP-discovered URL
+        baseUrl = m.pairTask.pairBaseUrl
+        if baseUrl <> invalid and baseUrl <> ""
+            print "[MM] PairScreen: using canonical base URL: " ; baseUrl
+        else
+            baseUrl = m.serverUrl
+        end if
+
         ' Fire pairComplete to parent
         m.top.pairComplete = {
-            serverUrl: m.serverUrl,
+            serverUrl: baseUrl,
             apiKey: token,
             username: username
         }
@@ -157,7 +170,9 @@ sub onButtonSelected()
             startDiscovery()
         end if
     else if label = "Cancel"
-        ' Do nothing — user can press Back to return to ProfilePickerScreen
+        print "[MM] PairScreen: cancel requested"
+        m.pairTask.control = "stop"
+        m.top.cancelRequested = true
     end if
 end sub
 
