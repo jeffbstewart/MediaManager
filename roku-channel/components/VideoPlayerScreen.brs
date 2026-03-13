@@ -18,6 +18,12 @@ sub init()
     m.currentDuration = 0
     m.resumePosition = 0
     m.exiting = false
+
+    ' Episode playlist context for auto-advance
+    m.showName = ""
+    m.playlistSeasons = invalid
+    m.playlistSeasonIndex = 0
+    m.playlistEpisodeIndex = 0
 end sub
 
 ' ---- Playback Setup ----
@@ -44,6 +50,24 @@ sub onPlayContent()
     end if
     if content.resumePosition <> invalid
         m.resumePosition = content.resumePosition
+    end if
+
+    ' Store episode playlist context for auto-advance
+    m.showName = ""
+    m.playlistSeasons = invalid
+    m.playlistSeasonIndex = 0
+    m.playlistEpisodeIndex = 0
+    if content.showName <> invalid
+        m.showName = content.showName
+    end if
+    if content.seasonsData <> invalid
+        m.playlistSeasons = content.seasonsData
+    end if
+    if content.seasonIndex <> invalid
+        m.playlistSeasonIndex = content.seasonIndex
+    end if
+    if content.episodeIndex <> invalid
+        m.playlistEpisodeIndex = content.episodeIndex
     end if
 
     print "[MM] VideoPlayerScreen: play request — " ; m.contentTitle ; " (transcode " ; m.transcodeId ; ")"
@@ -183,7 +207,14 @@ sub onVideoState()
         end if
 
         if state = "finished"
-            print "[MM] VideoPlayerScreen: playback finished"
+            ' Try auto-advance to next episode
+            nextEp = getNextEpisode()
+            if nextEp <> invalid
+                m.exiting = true ' Guard against spurious state events during transition
+                playNextEpisode(nextEp)
+                return
+            end if
+            print "[MM] VideoPlayerScreen: playback finished (last episode)"
         end if
 
         m.exiting = true
@@ -225,6 +256,78 @@ sub reportProgress()
     m.progressTask.duration = m.currentDuration
     m.progressTask.functionName = "doReport"
     m.progressTask.control = "run"
+end sub
+
+' ---- Auto-Advance ----
+
+function getNextEpisode() as object
+    if m.playlistSeasons = invalid or m.playlistSeasons.count() = 0 then return invalid
+
+    seasonIdx = m.playlistSeasonIndex
+    epIdx = m.playlistEpisodeIndex
+
+    if seasonIdx >= m.playlistSeasons.count() then return invalid
+    season = m.playlistSeasons[seasonIdx]
+    if season = invalid or season.episodes = invalid then return invalid
+
+    ' Try next episode in same season
+    if epIdx + 1 < season.episodes.count()
+        return {
+            seasonIndex: seasonIdx,
+            episodeIndex: epIdx + 1,
+            episode: season.episodes[epIdx + 1],
+            season: season
+        }
+    end if
+
+    ' Try first episode of next season
+    if seasonIdx + 1 < m.playlistSeasons.count()
+        nextSeason = m.playlistSeasons[seasonIdx + 1]
+        if nextSeason <> invalid and nextSeason.episodes <> invalid and nextSeason.episodes.count() > 0
+            return {
+                seasonIndex: seasonIdx + 1,
+                episodeIndex: 0,
+                episode: nextSeason.episodes[0],
+                season: nextSeason
+            }
+        end if
+    end if
+
+    return invalid
+end function
+
+sub playNextEpisode(nextEp as object)
+    ep = nextEp.episode
+    season = nextEp.season
+
+    epLabel = "S" + str(season.seasonNumber).trim() + "E" + str(ep.episodeNumber).trim()
+    epName = ep.name
+    if epName = invalid or epName = "" then epName = "Episode " + str(ep.episodeNumber).trim()
+
+    print "[MM] VideoPlayerScreen: auto-advancing to " ; epLabel ; " " ; epName
+
+    ' Build new play content — setting this triggers onPlayContent()
+    content = {
+        name: m.showName + " - " + epLabel + " " + epName,
+        showName: m.showName,
+        serverUrl: m.serverUrl,
+        apiKey: m.apiKey,
+        transcodeId: ep.transcodeId,
+        streamUrl: ep.streamUrl,
+        subtitleUrl: ep.subtitleUrl,
+        bifUrl: ep.bifUrl,
+        quality: ep.quality,
+        resumePosition: ep.resumePosition,
+        mediaType: "TV",
+        seasonsData: m.playlistSeasons,
+        seasonIndex: nextEp.seasonIndex,
+        episodeIndex: nextEp.episodeIndex
+    }
+
+    ' Signal MainScene about the auto-advance (for logging/tracking)
+    m.top.nextEpisodeStarted = content
+
+    m.top.playContent = content
 end sub
 
 ' ---- Stop Playback ----

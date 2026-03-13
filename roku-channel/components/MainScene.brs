@@ -34,6 +34,7 @@ sub init()
     m.homeScreen.observeField("searchRequested", "onSearchRequested")
     m.episodePickerScreen.observeField("episodeSelected", "onEpisodeSelected")
     m.videoPlayerScreen.observeField("playbackFinished", "onPlaybackFinished")
+    m.videoPlayerScreen.observeField("nextEpisodeStarted", "onNextEpisodeStarted")
 
     ' Search results screen signals
     m.searchResultsScreen.observeField("playRequested", "onSearchPlayRequested")
@@ -420,6 +421,12 @@ sub onPlaybackFinished()
 
     ' Refresh home feed to update resume positions
     m.homeScreen.profileContent = m.homeScreen.profileContent
+end sub
+
+sub onNextEpisodeStarted()
+    content = m.videoPlayerScreen.nextEpisodeStarted
+    if content = invalid then return
+    print "[MM] MainScene: auto-advancing to next episode — " ; content.name
 end sub
 
 ' ---- Search ----

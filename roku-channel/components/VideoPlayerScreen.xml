@@ -3,6 +3,7 @@
     <interface>
         <field id="playContent" type="assocarray" alwaysNotify="true" onChange="onPlayContent" />
         <field id="playbackFinished" type="boolean" alwaysNotify="true" />
+        <field id="nextEpisodeStarted" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="VideoPlayerScreen.brs" />

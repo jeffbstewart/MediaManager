@@ -179,6 +179,7 @@ sub onEpisodeSelected()
     ' Build play data matching what HomeScreen sends for movies
     playData = {
         name: m.titleDetail.name + " - S" + str(season.seasonNumber).trim() + "E" + str(ep.episodeNumber).trim() + " " + ep.name,
+        showName: m.titleDetail.name,
         titleId: m.titleDetail.titleId,
         transcodeId: ep.transcodeId,
         streamUrl: ep.streamUrl,
@@ -188,7 +189,10 @@ sub onEpisodeSelected()
         resumePosition: ep.resumePosition,
         year: m.titleDetail.year,
         contentRating: m.titleDetail.contentRating,
-        mediaType: "TV"
+        mediaType: "TV",
+        seasonsData: m.seasonsData,
+        seasonIndex: m.currentSeasonIndex,
+        episodeIndex: epIndex
     }
 
     m.top.episodeSelected = playData
