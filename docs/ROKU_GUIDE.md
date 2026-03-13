@@ -2,7 +2,7 @@
   <img src="images/logo.png" alt="Media Manager" width="96">
 </p>
 
-# Roku Setup Guide
+# Roku Channel Guide
 
 Stream your media collection on the living room TV with a custom Roku channel.
 
@@ -10,14 +10,15 @@ Stream your media collection on the living room TV with a custom Roku channel.
 
 ## Overview
 
-Media Manager includes a sideloaded Roku channel that connects to your server, fetches your media catalog, and provides a full browsing and playback experience on the TV.
+Media Manager includes a sideloaded Roku channel that connects to your server, fetches your media catalog, and provides a full browsing and playback experience on the TV. The channel supports multiple profiles — each paired to a different user account (and optionally different servers).
 
 **What you get:**
-- Movie and TV series grids with poster art
-- Episode picker for multi-season shows
-- Full video playback with Roku's native player
-- Playback progress synced with the browser
-- Subtitle support
+- Multi-profile support — each profile pairs independently via QR code
+- Home screen with browsable poster carousels
+- Episode picker for multi-season TV shows
+- Full video playback with resume support
+- Subtitle (closed caption) support with on/off toggle
+- Playback progress synced across all devices (Roku, browser)
 - QR code pairing (no typing server URLs on the remote)
 
 ---
@@ -44,14 +45,14 @@ On the Developer Settings screen:
 
 Verify by opening `http://<roku-ip>` in a browser and logging in as `rokudev`.
 
-### Enable ECP Network Control
+### Enable ECP Network Control (optional)
 
-The External Control Protocol (ECP) allows developer tools and scripts to send remote key presses to the Roku over the network. By default, this is restricted.
+The External Control Protocol (ECP) allows developer tools and scripts to send remote key presses to the Roku over the network. This is only needed if you want to use the `roku-remote.sh` helper script.
 
 1. Go to **Settings &rarr; System &rarr; Advanced system settings &rarr; Control by mobile apps &rarr; Network access**
 2. Change from **"Limited"** to **"Enabled"**
 
-This accepts ECP commands from any device on the same private network. Without this, the `roku-remote.sh` script's keypress commands will return HTTP 403. (Query endpoints like `active-app` and `device-info` work regardless of this setting.)
+Without this, `roku-remote.sh` keypress commands return HTTP 403. Query endpoints like `active-app` and `device-info` work regardless.
 
 ---
 
@@ -71,64 +72,96 @@ The channel installs and auto-launches on your Roku.
 
 ### Updating the channel
 
-Repeat the same steps with the `roku-channel.zip` from the newer release. Uploading a new zip replaces the previous installation. Your pairing token and playback progress are stored on the server, so nothing is lost.
+Repeat the same steps with the `roku-channel.zip` from the newer release. Uploading a new zip replaces the previous installation. Profiles and playback progress are stored on the Roku and server respectively, so nothing is lost.
 
 ---
 
-## Pairing Your Roku
+## Profiles and Pairing
 
-On first launch, the channel automatically discovers the Media Manager server on your local network using SSDP (no configuration needed).
+### Profile Picker
+
+On launch, the channel shows a **"Who's Watching?"** profile picker screen. Each profile represents a user account paired to a Media Manager server. Profiles can be on different servers.
+
+- **Select a profile** to enter the home screen
+- **"Add Profile"** (+) to pair a new user account
+- **Press the Options (\*) button** on a focused profile to remove it
+
+If no profiles exist (first launch), the channel skips straight to the pairing screen.
 
 ### QR Code Pairing
 
-1. The Roku displays a **QR code** on screen
-2. **Scan it with your phone's camera** (or any QR reader)
-3. Your phone opens a confirmation page in the browser: *"Link this Roku to your account?"*
-4. Tap **Confirm** &mdash; the Roku receives a device token tied to your user account
-5. The channel loads your media catalog
+When adding a new profile:
 
-The pairing code below the QR code can also be entered manually at `http://<server>/pair?code=XXXXXX` if QR scanning isn't convenient.
+1. The channel attempts **SSDP auto-discovery** of your Media Manager server on the local network
+2. A **QR code** and pairing code appear on screen
+3. **Scan the QR code with your phone's camera** (or any QR reader)
+4. Your phone opens a confirmation page: *"Link this Roku to your account?"*
+5. Tap **Confirm** — the Roku receives a device token tied to your user account
+6. The profile is saved and you're taken to the home screen
+
+The pairing code below the QR code can also be entered manually at `http://<server>/pair?code=XXXXXX` if QR scanning isn't convenient. If SSDP discovery fails, a manual server address entry option is available.
 
 ### What the token does
 
-The device token identifies which user is watching on this Roku. This enables:
-- Per-user content rating filters (age-appropriate content)
-- Personal playback progress tracking
+The device token identifies which user is watching on this profile. This enables:
+- Personal playback progress tracking (resume where you left off, on any device)
+- Per-user content filtering
 - Subtitle preferences
 
-The token is permanent and survives Roku reboots. It's revoked if you change your password or manually revoke it from **Active Sessions**.
+Tokens are permanent and survive Roku reboots. They're revoked if you change your password or manually revoke from **Active Sessions** in the web app.
 
 ---
 
 ## Using the Channel
 
-### Navigation
+### Home Screen
 
-- **Home screen** &mdash; Horizontal rows of movie and TV series posters
-- **Left/Right** &mdash; Browse within a row
-- **Up/Down** &mdash; Switch between rows
-- **Select (OK)** &mdash; Open the detail screen for the focused title
+The home screen displays horizontal rows of poster art, organized into carousels:
 
-### Detail Screen
+| Carousel | Contents |
+|----------|----------|
+| **Resume Playing** | Titles with saved playback progress for your account. Only appears if you have in-progress items. |
+| **Recently Added** | Most recently added playable titles, newest first. |
+| **Movies** | All playable movies, sorted by popularity. |
+| **TV Series** | All playable TV series (with episode-linked transcodes), sorted by popularity. |
 
-Shows the poster, backdrop, description, rating, year, and genres. For TV series, an episode list appears below.
+Each carousel only shows titles that have playable transcodes (MP4/M4V, or MKV/AVI with a completed ForBrowser transcode).
 
-- **Play** &mdash; Start playback (or resume from last position)
-- **Episodes** &mdash; Select a specific episode
+**Navigation:**
+- **Left/Right** — Browse within a row
+- **Up/Down** — Switch between rows (or move to the profile widget / search box)
+- **Select (OK)** — Play a movie or open the episode picker for a TV series
 
-### Playback
-
-- **Play/Pause** &mdash; Toggle playback
-- **Rewind/Fast Forward** &mdash; Seek backward/forward
-- **Back** &mdash; Return to the detail screen (position is saved)
-
-Progress syncs to the server every 60 seconds. Next time you open the title (on any device), you'll be offered to resume.
+**Profile widget** (upper right): Shows your profile avatar and username. Select it to open a dropdown with options to **switch profile** (return to the profile picker) or **remove this profile**.
 
 ### Search
 
-Navigate up from the poster rows to the **Search** box and press **OK** to open a keyboard. Type a title and select **Search** to submit. You can also use the **Roku mobile app** as a remote for easier typing.
+A search box appears at the top of the home screen. **Search is not yet functional** — the UI element exists but does not currently perform searches.
 
-**Voice search limitation:** The Roku remote's microphone button always triggers Roku's global search, even when the keyboard is open. This is a platform restriction for sideloaded (Developer Mode) channels &mdash; voice-to-text in app keyboards is only available to published, Roku-certified channels. Use the on-screen keyboard or the Roku mobile app's keyboard instead.
+### Episode Picker (TV Series)
+
+When you select a TV series, the episode picker shows:
+- **Left column** — Season list (Season 1, Season 2, etc.)
+- **Right column** — Episodes for the focused season
+
+Navigate between seasons and episodes with the arrow keys. Select an episode to start playback.
+
+### Playback
+
+During video playback:
+
+| Button | Action |
+|--------|--------|
+| **Play/Pause** | Toggle playback |
+| **Rewind / Fast Forward** | Seek backward / forward |
+| **Options (\*)** | Toggle subtitles (CC) on/off |
+| **Back** | Stop and return to previous screen (position is saved) |
+
+**Resume:** If you've previously watched part of a title, a dialog asks whether to **Resume** from your last position or **Start Over**.
+
+**Progress sync:** Playback position is reported to the server every 60 seconds and when you exit. Next time you open the title — on any device (Roku or browser) — you'll be offered to resume.
+
+**Subtitles:** If an SRT subtitle file exists alongside the media file on the NAS, subtitles are available. They're enabled by default; press **Options (\*)** during playback to toggle. The current CC state (On/Off) is shown on the pause overlay.
 
 ### Audio Setup
 
@@ -140,13 +173,15 @@ The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to
 
 | Problem | Solution |
 |---------|----------|
-| Channel shows "Discovering server..." indefinitely | Server may not be reachable. Check that the Roku and server are on the same network. Try entering the server IP manually in Settings. |
+| Channel shows "Discovering server..." indefinitely | Server may not be reachable. Check that the Roku and server are on the same network. Try entering the server address manually. |
 | QR code won't scan | Use the text code shown below the QR code instead. Navigate to `http://<server>/pair?code=XXXXXX` on your phone. |
-| Video won't play | Check that the file has a ForBrowser MP4 transcode. MKV files need transcoding first. |
+| Video won't play | Check that the file has a ForBrowser MP4 transcode. MKV/AVI files need transcoding first (see Transcodes > Status in the web app). |
 | Video plays but no audio | Set Roku audio output to Stereo (Settings &rarr; Audio &rarr; Digital Output Format). |
-| Channel shows old content | The feed caches for 5 minutes. Wait or restart the channel. |
-| "Authentication failed" | Your device token may have been revoked (password change or manual revocation). The channel should re-enter the pairing flow. |
-| Voice search doesn't type into the search box | The mic button always triggers Roku global search for sideloaded channels. Use the on-screen keyboard or the Roku mobile app instead. |
+| Home screen shows old content | The feed caches for 5 minutes. Wait or restart the channel. |
+| "Authentication failed" | Your device token may have been revoked (password change or manual revocation). Remove the profile and re-pair. |
+| Subtitles don't appear | Verify the SRT file exists on the NAS (named `{filename}.en.srt`). Check that subtitles display in the web app first. Press Options (\*) to toggle CC on. |
+| TV series appears but has no episodes | The title needs episode-linked transcodes. Check Transcodes > Linked in the web app. |
+| Search doesn't work | Search is not yet implemented. Browse using the carousels. |
 
 ---
 

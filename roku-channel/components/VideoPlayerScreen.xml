@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="VideoPlayerScreen" extends="Group">
+    <interface>
+        <field id="playContent" type="assocarray" alwaysNotify="true" onChange="onPlayContent" />
+        <field id="playbackFinished" type="boolean" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="VideoPlayerScreen.brs" />
+
+    <children>
+        <!-- Fullscreen video player -->
+        <Video
+            id="videoPlayer"
+            width="1920"
+            height="1080"
+            enableUI="true"
+            notificationInterval="10" />
+
+        <!-- ===== PAUSED/IDLE OVERLAY ===== -->
+        <Group id="overlay" visible="false">
+            <!-- Semi-transparent background -->
+            <Rectangle
+                width="1920"
+                height="1080"
+                color="#000000"
+                opacity="0.7" />
+
+            <!-- Title -->
+            <Label
+                id="overlayTitle"
+                translation="[100, 60]"
+                text=""
+                font="font:LargeBoldSystemFont"
+                color="#ffffff"
+                width="1720" />
+
+            <!-- Subtitle (year, rating, quality) -->
+            <Label
+                id="overlaySubtitle"
+                translation="[100, 120]"
+                text=""
+                font="font:SmallSystemFont"
+                color="#aaaaaa"
+                width="1720" />
+
+            <!-- CC status -->
+            <Group id="ccGroup" translation="[100, 920]">
+                <Rectangle
+                    id="ccBg"
+                    width="200"
+                    height="50"
+                    color="#333333" />
+                <Rectangle
+                    id="ccFocusBg"
+                    width="200"
+                    height="50"
+                    color="#6366f1"
+                    visible="false" />
+                <Label
+                    id="ccLabel"
+                    translation="[16, 10]"
+                    text="CC: On"
+                    font="font:SmallBoldSystemFont"
+                    color="#ffffff"
+                    width="168" />
+            </Group>
+
+            <!-- Hint text -->
+            <Label
+                translation="[100, 990]"
+                text="Press Play to resume  |  Press * to toggle CC  |  Press Back to exit"
+                font="font:SmallestSystemFont"
+                color="#666666"
+                width="1720" />
+
+            <!-- Scan timeline placeholder (future: frame thumbnails) -->
+            <Group id="scanTimeline" translation="[100, 800]" visible="false">
+                <Rectangle
+                    width="1720"
+                    height="100"
+                    color="#222222"
+                    opacity="0.8" />
+                <Label
+                    id="scanTimelineLabel"
+                    translation="[20, 30]"
+                    text="Timeline preview coming soon"
+                    font="font:SmallestSystemFont"
+                    color="#555555"
+                    width="1680" />
+            </Group>
+        </Group>
+
+        <!-- Background tasks -->
+        <ProgressTask id="progressTask" />
+    </children>
+</component>

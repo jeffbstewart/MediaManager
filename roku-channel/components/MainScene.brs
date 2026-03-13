@@ -3,6 +3,8 @@ sub init()
     m.profilePickerScreen = m.top.findNode("profilePickerScreen")
     m.pairScreen = m.top.findNode("pairScreen")
     m.homeScreen = m.top.findNode("homeScreen")
+    m.episodePickerScreen = m.top.findNode("episodePickerScreen")
+    m.videoPlayerScreen = m.top.findNode("videoPlayerScreen")
     m.pairTask = m.top.findNode("pairTask")
 
     ' Screen stack for Back button navigation
@@ -23,6 +25,9 @@ sub init()
     m.pairScreen.observeField("cancelRequested", "onPairCancelled")
     m.homeScreen.observeField("switchProfileRequested", "onSwitchProfileRequested")
     m.homeScreen.observeField("removeProfileRequested", "onRemoveProfileFromHome")
+    m.homeScreen.observeField("playRequested", "onPlayRequested")
+    m.episodePickerScreen.observeField("episodeSelected", "onEpisodeSelected")
+    m.videoPlayerScreen.observeField("playbackFinished", "onPlaybackFinished")
 
     ' Clean up V1 registry if needed
     cleanupV1Registry()
@@ -340,6 +345,54 @@ sub onRemoveProfileFromHome()
         m.profilePickerScreen.visible = false
         showScreen(m.pairScreen)
     end if
+end sub
+
+' ---- Video Playback ----
+
+sub onPlayRequested()
+    playData = m.homeScreen.playRequested
+    if playData = invalid then return
+
+    print "[MM] MainScene: play requested — " ; playData.name ; " (mediaType=" ; playData.mediaType ; ")"
+
+    ' Pass server credentials along with the play data
+    playData.serverUrl = m.homeScreen.profileContent.serverUrl
+    playData.apiKey = m.homeScreen.profileContent.apiKey
+
+    if playData.mediaType = "TV"
+        ' TV series: show episode picker first
+        print "[MM] MainScene: routing to episode picker for TV title"
+        m.episodePickerScreen.serverUrl = playData.serverUrl
+        m.episodePickerScreen.apiKey = playData.apiKey
+        m.episodePickerScreen.titleData = playData
+        showScreen(m.episodePickerScreen)
+    else
+        ' Movie: play directly
+        m.videoPlayerScreen.playContent = playData
+        showScreen(m.videoPlayerScreen)
+    end if
+end sub
+
+sub onEpisodeSelected()
+    playData = m.episodePickerScreen.episodeSelected
+    if playData = invalid then return
+
+    print "[MM] MainScene: episode selected — " ; playData.name ; " (transcode " ; str(playData.transcodeId).trim() ; ")"
+
+    ' Add server credentials
+    playData.serverUrl = m.homeScreen.profileContent.serverUrl
+    playData.apiKey = m.homeScreen.profileContent.apiKey
+
+    m.videoPlayerScreen.playContent = playData
+    showScreen(m.videoPlayerScreen)
+end sub
+
+sub onPlaybackFinished()
+    print "[MM] MainScene: playback finished, returning to HomeScreen"
+    hideTopScreen()
+
+    ' Refresh home feed to update resume positions
+    m.homeScreen.profileContent = m.homeScreen.profileContent
 end sub
 
 ' ---- Voice Search ----

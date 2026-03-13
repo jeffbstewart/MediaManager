@@ -399,13 +399,14 @@ After deploy, the channel auto-launches on the Roku. Verify installation:
 ./lifecycle/roku-remote.sh apps     # List installed apps (look for "dev" entry)
 ```
 
-### Tail Debug Console
+### Debug Console
 
-The Roku debug console (port 8085) streams all BrightScript `print` output in real time.
+The Roku debug console (port 8085) accumulates all BrightScript `print` output since the channel launched. The `roku-debug.sh` script connects via ncat and streams output to both the terminal and a local file via `tee` (overwrites each run, no `-a`). The connection is fragile — ncat frequently drops, so don't rely on it staying connected. The local log file (`data/roku-debug.log`) is **always stale** — it only contains output captured during the last script run. Never read the local file and assume it reflects current Roku state.
 
 ```bash
 ./lifecycle/roku-debug.sh                                  # Stream to terminal + data/roku-debug.log
-./lifecycle/roku-debug.sh data/custom-output.log           # Custom log file name
+./lifecycle/roku-debug.sh prod                             # Connect to prod Roku
+./lifecycle/roku-debug.sh dev data/custom-output.log       # Custom log file name
 ```
 
 Always write debug logs to the `data/` directory (gitignored) to avoid cluttering the project root.
@@ -415,7 +416,25 @@ All mediaManager channel logs use the `[MM]` prefix. Filter with:
 grep '\[MM\]' data/roku-debug.log
 ```
 
-**Typical debug workflow:** Run `lifecycle/roku-debug.sh` in a background terminal, deploy the channel, watch for `[MM]` lines showing init, feed fetch URL/response code/body size, content tree structure, and any errors.
+### Build Timestamp Verification
+
+Each deploy stamps a `build_timestamp` into the manifest (format `YYYYMMDD-HHMMSS`, e.g., `20260313-075327`). The deploy scripts (`roku-deploy-dev.sh`, `roku-deploy-prod.sh`) inject this into the manifest before zipping and remove it after, so it only appears in the deployed package. The channel logs it at startup:
+```
+[MM] main: starting Media Manager v2.0.0 (build 20260313-075327)
+```
+**Always check this line** after fetching debug logs to confirm you are reading output from the expected build, not a stale session.
+
+### Roku Debug Workflow
+
+Follow this exact sequence when debugging Roku channel behavior. Do NOT skip steps or read stale logs.
+
+1. **Delete the local debug log** — `rm -f data/roku-debug.log` — ensures no stale data contaminates results
+2. **Deploy the channel** — `./lifecycle/roku-deploy-dev.sh` (or `-prod.sh`) — stamps build timestamp, zips, sideloads; channel auto-launches on the Roku
+3. **Perform the user action** — navigate menus, play content, trigger the behavior under test. Use `./lifecycle/roku-remote.sh` for ECP keypresses if needed, or ask the user to perform the action manually
+4. **Fetch debug logs** — `./lifecycle/roku-debug.sh` — connects to port 8085, captures the console buffer to `data/roku-debug.log`, connection will drop on its own
+5. **Inspect logs** — `grep '\[MM\]' data/roku-debug.log` — verify the build timestamp matches the deploy (step 2), then analyze the relevant log lines
+
+**Critical:** Steps must be sequential. The log file captures output printed since the channel launched. If you fetch logs before the user action, you won't see the relevant output. If you skip step 1, you may confuse old output with new.
 
 **Important:** This Windows environment does not have `nc` (netcat). Use `ncat` (from Nmap, installed at `/c/Program Files (x86)/Nmap/ncat`) instead. The roku-debug.sh script uses `ncat` for this reason.
 

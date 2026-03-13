@@ -4,6 +4,7 @@
         <field id="profileContent" type="assocarray" alwaysNotify="true" onChange="onProfileContentChanged" />
         <field id="switchProfileRequested" type="boolean" alwaysNotify="true" />
         <field id="removeProfileRequested" type="boolean" alwaysNotify="true" />
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="searchQuery" type="string" alwaysNotify="true" onChange="onSearchQueryChanged" />
     </interface>
 

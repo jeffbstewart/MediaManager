@@ -21,11 +21,20 @@ sub init()
     m.searchBannerText = m.top.findNode("searchBannerText")
     m.searchPlaceholder = m.top.findNode("searchPlaceholder")
 
+    ' Delegate focus when the Group itself receives it (e.g. returning from another screen)
+    m.top.observeField("focusedChild", "onFocusChanged")
+
     ' Feed task
     m.homeFeedTask = m.top.findNode("homeFeedTask")
     m.homeFeedTask.observeField("feedResult", "onFeedResult")
     m.homeFeedTask.observeField("feedError", "onFeedError")
     m.loadingLabel = m.top.findNode("loadingLabel")
+
+    ' Observe item selection on RowList
+    m.rowList.observeField("rowItemSelected", "onRowItemSelected")
+
+    ' Store feed data for item lookup
+    m.feedCarousels = []
 
     m.serverUrl = ""
     m.apiKey = ""
@@ -37,6 +46,13 @@ sub init()
     ' Panel button index: 0=Switch, 1=Remove
     m.panelIndex = 0
     m.panelOpen = false
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus()
+        print "[MM] HomeScreen: group received focus, delegating to " ; m.focusTarget
+        setFocusTarget(m.focusTarget)
+    end if
 end sub
 
 sub onProfileContentChanged()
@@ -110,6 +126,9 @@ sub onFeedResult()
     m.loadingLabel.visible = false
     m.rowList.visible = true
 
+    ' Store for item lookup on selection
+    m.feedCarousels = feedData.carousels
+
     buildCarouselsFromFeed(feedData.carousels)
 end sub
 
@@ -177,6 +196,37 @@ sub buildCarouselsFromFeed(carousels as object)
     setFocusTarget("rowList")
 
     print "[MM] HomeScreen: carousels built — " ; str(numRows).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
+end sub
+
+' ---- Item Selection ----
+
+sub onRowItemSelected()
+    selected = m.rowList.rowItemSelected
+    if selected = invalid then return
+
+    rowIndex = selected[0]
+    itemIndex = selected[1]
+
+    print "[MM] HomeScreen: item selected — row=" ; str(rowIndex).trim() ; " item=" ; str(itemIndex).trim()
+
+    ' Look up the item data from the stored feed
+    if rowIndex < m.feedCarousels.count()
+        carousel = m.feedCarousels[rowIndex]
+        if carousel.items <> invalid and itemIndex < carousel.items.count()
+            item = carousel.items[itemIndex]
+            print "[MM] HomeScreen: playing " ; item.name ; " (titleId=" ; str(item.titleId).trim() ; ")"
+
+            if item.mediaType <> invalid and item.mediaType = "TV"
+                ' TV series — always route to episode picker
+                m.top.playRequested = item
+            else if item.transcodeId <> invalid and item.transcodeId > 0
+                ' Movie — play directly
+                m.top.playRequested = item
+            else
+                print "[MM] HomeScreen: no transcodeId for this item, cannot play"
+            end if
+        end if
+    end if
 end sub
 
 ' ---- Search ----

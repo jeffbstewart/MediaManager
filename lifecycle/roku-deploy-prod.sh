@@ -20,11 +20,21 @@ if [ -z "$ROKU_IP" ] || [ -z "$ROKU_DEV_PASSWORD" ]; then
     exit 1
 fi
 
+# Stamp build timestamp into manifest
+BUILD_TS=$(date +%Y%m%d-%H%M%S)
+# Remove any existing build_timestamp line, then append
+sed -i '/^build_timestamp=/d' roku-channel/manifest
+echo "build_timestamp=$BUILD_TS" >> roku-channel/manifest
+echo "Build timestamp: $BUILD_TS"
+
 # Package
 rm -f roku-channel.zip
 cd roku-channel
 zip -r ../roku-channel.zip . -x '.*'
 cd ..
+
+# Restore manifest (don't leave timestamp in source)
+sed -i '/^build_timestamp=/d' roku-channel/manifest
 echo "Packaged roku-channel.zip ($(du -h roku-channel.zip | cut -f1))"
 
 # Sideload

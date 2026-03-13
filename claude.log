@@ -2969,3 +2969,20 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   - Purchase fields auto-save on change (no explicit save button)
 - Build passes, all tests pass
 ===
+
+=== 2026-03-13 08:15 — Fix Roku subtitle playback + debug workflow ===
+- Fixed Roku SRT subtitle playback: `TrackName` in `SubtitleTracks` IS the URL
+  (not a separate identifier). Using a `Url` key caused silent stripping due to
+  ContentNode's case-insensitive `url` field collision.
+- Correct format: `SubtitleTracks = [{ TrackName: "https://.../subs.srt", Language: "eng", Description: "English" }]`
+- Set `globalCaptionMode` BEFORE content assignment (matches V1 order)
+- Removed unused `VideoContent.xml` custom component
+- Cleaned up verbose subtitle debug logging
+- Updated CLAUDE.md Roku Debugging section:
+  - Replaced "Tail Debug Console" with accurate "Debug Console" description
+  - Added "Build Timestamp Verification" section (deploy scripts inject timestamp)
+  - Added "Roku Debug Workflow" 5-step procedure: delete log, deploy, user action, fetch, inspect
+  - Documented that roku-debug.log is always stale — must re-fetch before reading
+- Files modified: roku-channel/components/VideoPlayerScreen.brs, CLAUDE.md
+- Files deleted: roku-channel/components/VideoContent.xml
+===

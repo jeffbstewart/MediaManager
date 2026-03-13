@@ -30,6 +30,16 @@
             visible="false"
             translation="[0, 0]" />
 
+        <EpisodePickerScreen
+            id="episodePickerScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <VideoPlayerScreen
+            id="videoPlayerScreen"
+            visible="false"
+            translation="[0, 0]" />
+
         <!-- Pair task (shared background worker) -->
         <PairTask id="pairTask" />
     </children>

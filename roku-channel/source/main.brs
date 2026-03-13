@@ -1,5 +1,9 @@
 sub Main(args as dynamic)
-    print "[MM] main: starting application v2"
+    appInfo = createObject("roAppInfo")
+    version = appInfo.GetValue("major_version") + "." + appInfo.GetValue("minor_version") + "." + appInfo.GetValue("build_version")
+    buildTs = appInfo.GetValue("build_timestamp")
+    if buildTs = "" then buildTs = "dev"
+    print "[MM] main: starting Media Manager v" ; version ; " (build " ; buildTs ; ")"
 
     screen = CreateObject("roSGScreen")
     m.port = CreateObject("roMessagePort")

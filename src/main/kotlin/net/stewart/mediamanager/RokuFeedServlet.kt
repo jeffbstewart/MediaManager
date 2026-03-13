@@ -13,6 +13,7 @@ import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.RokuFeedService
 import net.stewart.mediamanager.service.RokuHomeService
+import net.stewart.mediamanager.service.RokuTitleService
 import org.slf4j.LoggerFactory
 
 /**
@@ -73,9 +74,10 @@ class RokuFeedServlet : HttpServlet() {
     override fun doGet(req: HttpServletRequest, resp: HttpServletResponse) {
         val path = req.pathInfo?.removePrefix("/") ?: ""
 
-        when (path) {
-            "feed.json" -> handleFeed(req, resp)
-            "home.json" -> handleHome(req, resp)
+        when {
+            path == "feed.json" -> handleFeed(req, resp)
+            path == "home.json" -> handleHome(req, resp)
+            path.matches(Regex("title/(\\d+)\\.json")) -> handleTitleDetail(req, resp, path)
             else -> {
                 log.info("Roku request for unknown path: {}", path)
                 resp.sendError(HttpServletResponse.SC_NOT_FOUND)
@@ -96,6 +98,33 @@ class RokuFeedServlet : HttpServlet() {
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku feed served (status 200)")
+    }
+
+    private fun handleTitleDetail(req: HttpServletRequest, resp: HttpServletResponse, path: String) {
+        val (apiKey, user) = authenticateDevice(req, resp, "title-detail") ?: return
+        val baseUrl = getConfiguredBaseUrl(req)
+
+        val titleId = Regex("title/(\\d+)\\.json").find(path)?.groupValues?.get(1)?.toLongOrNull()
+        if (titleId == null) {
+            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid title ID")
+            MetricsRegistry.countHttpResponse("roku", 400)
+            return
+        }
+
+        val detail = RokuTitleService.getTitleDetail(titleId, baseUrl, apiKey, user)
+        if (detail == null) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Title not found or not playable")
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return
+        }
+
+        val json = mapper.writeValueAsString(detail)
+        resp.contentType = "application/json"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.writer.write(json)
+        MetricsRegistry.countHttpResponse("roku", 200)
+        log.info("Roku title detail served for titleId={} (status 200)", titleId)
     }
 
     private fun handleHome(req: HttpServletRequest, resp: HttpServletResponse) {
