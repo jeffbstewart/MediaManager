@@ -116,6 +116,17 @@
             focusXOffset="[0]"
             itemSpacing="[0, 20]" />
 
+        <!-- Loading indicator (shown while fetching feed) -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
         <!-- ===== FOOTER ===== -->
         <Label
             id="switchHint"
@@ -232,5 +243,7 @@
                     width="888" />
             </Group>
         </Group>
+        <!-- Background feed fetcher -->
+        <HomeFeedTask id="homeFeedTask" />
     </children>
 </component>

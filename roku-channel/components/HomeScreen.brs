@@ -21,6 +21,12 @@ sub init()
     m.searchBannerText = m.top.findNode("searchBannerText")
     m.searchPlaceholder = m.top.findNode("searchPlaceholder")
 
+    ' Feed task
+    m.homeFeedTask = m.top.findNode("homeFeedTask")
+    m.homeFeedTask.observeField("feedResult", "onFeedResult")
+    m.homeFeedTask.observeField("feedError", "onFeedError")
+    m.loadingLabel = m.top.findNode("loadingLabel")
+
     m.serverUrl = ""
     m.apiKey = ""
     m.username = ""
@@ -69,43 +75,108 @@ sub onProfileContentChanged()
     ' Close panel if open
     closePanel()
 
-    ' Build carousel content
-    buildCarousels()
+    ' Fetch real carousel content from server
+    fetchHomeFeed()
 end sub
 
-sub buildCarousels()
-    print "[MM] HomeScreen: building carousels"
+' ---- Feed Fetching ----
 
-    ' Use server poster for real content, bundled placeholder as fallback
-    posterUri = "pkg:/images/placeholder-poster.png"
-    if m.serverUrl <> "" and m.apiKey <> ""
-        posterUri = m.serverUrl + "/posters/w500/545?key=" + m.apiKey
-        print "[MM] HomeScreen: using server poster: " ; posterUri
+sub fetchHomeFeed()
+    if m.serverUrl = "" or m.apiKey = ""
+        print "[MM] HomeScreen: no server/key, showing empty state"
+        return
     end if
 
-    ' Build row content
+    feedUrl = m.serverUrl + "/roku/home.json?key=" + m.apiKey
+    print "[MM] HomeScreen: fetching home feed from " ; feedUrl
+
+    m.loadingLabel.visible = true
+    m.rowList.visible = false
+
+    m.homeFeedTask.control = "stop"
+    m.homeFeedTask.feedUrl = feedUrl
+    m.homeFeedTask.functionName = "doFetch"
+    m.homeFeedTask.control = "run"
+end sub
+
+sub onFeedResult()
+    feedData = m.homeFeedTask.feedResult
+    if feedData = invalid or feedData.carousels = invalid
+        print "[MM] HomeScreen: feed result invalid"
+        m.loadingLabel.text = "No content available"
+        return
+    end if
+
+    m.loadingLabel.visible = false
+    m.rowList.visible = true
+
+    buildCarouselsFromFeed(feedData.carousels)
+end sub
+
+sub onFeedError()
+    errorMsg = m.homeFeedTask.feedError
+    if errorMsg = invalid or errorMsg = "" then return
+
+    print "[MM] HomeScreen: feed error — " ; errorMsg
+    m.loadingLabel.text = "Failed to load content"
+    m.loadingLabel.visible = true
+end sub
+
+sub buildCarouselsFromFeed(carousels as object)
+    print "[MM] HomeScreen: building carousels from feed (" ; str(carousels.count()).trim() ; " rows)"
+
     rowContent = createObject("roSGNode", "ContentNode")
+    totalItems = 0
 
-    carouselTitles = ["Resume Playing", "Recently Added", "Wish List"]
-
-    for each title in carouselTitles
+    for each carousel in carousels
         rowNode = createObject("roSGNode", "ContentNode")
-        rowNode.title = title
+        rowNode.title = carousel.name
 
-        ' Add 8 placeholder poster items per row
-        for i = 1 to 8
-            itemNode = createObject("roSGNode", "ContentNode")
-            itemNode.HDPosterUrl = posterUri
-            rowNode.appendChild(itemNode)
-        end for
+        if carousel.items <> invalid
+            for each item in carousel.items
+                itemNode = createObject("roSGNode", "ContentNode")
 
-        rowContent.appendChild(rowNode)
+                ' Use poster URL from server, fall back to placeholder
+                if item.posterUrl <> invalid and item.posterUrl <> ""
+                    itemNode.HDPosterUrl = item.posterUrl
+                else
+                    itemNode.HDPosterUrl = "pkg:/images/placeholder-poster.png"
+                end if
+
+                ' Store metadata on the ContentNode for future use
+                itemNode.title = item.name
+                if item.titleId <> invalid
+                    itemNode.addFields({ titleId: item.titleId })
+                end if
+                if item.transcodeId <> invalid
+                    itemNode.addFields({ transcodeId: item.transcodeId })
+                end if
+                if item.mediaType <> invalid
+                    itemNode.addFields({ mediaType: item.mediaType })
+                end if
+
+                rowNode.appendChild(itemNode)
+                totalItems = totalItems + 1
+            end for
+        end if
+
+        ' Only add rows that have items
+        if rowNode.getChildCount() > 0
+            rowContent.appendChild(rowNode)
+        end if
     end for
 
     m.rowList.content = rowContent
+
+    ' Adjust numRows to match actual content
+    numRows = rowContent.getChildCount()
+    if numRows > 0
+        m.rowList.numRows = numRows
+    end if
+
     setFocusTarget("rowList")
 
-    print "[MM] HomeScreen: carousels built — 3 rows, 8 items each"
+    print "[MM] HomeScreen: carousels built — " ; str(numRows).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
 end sub
 
 ' ---- Search ----
