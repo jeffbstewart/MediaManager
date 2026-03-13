@@ -15,6 +15,10 @@ Media Manager includes a sideloaded Roku channel that connects to your server, f
 **What you get:**
 - Multi-profile support — each profile pairs independently via QR code
 - Home screen with browsable poster carousels
+- Full-text search with categorized results (movies, TV, collections, tags, actors)
+- Landing pages for collections, tags/genres, and actors
+- Wishlist integration — add wishes from actor pages via the Options button
+- Wish-fulfilled badges on Recently Added posters
 - Episode picker for multi-season TV shows
 - Full video playback with resume support
 - Subtitle (closed caption) support with on/off toggle
@@ -136,7 +140,41 @@ Each carousel only shows titles that have playable transcodes (MP4/M4V, or MKV/A
 
 ### Search
 
-A search box appears at the top of the home screen. **Search is not yet functional** — the UI element exists but does not currently perform searches.
+A search box appears at the top of the home screen. Select it and type a query using the on-screen keyboard (or voice search). Results appear on a **Search Results** screen organized by category.
+
+**Category chips** across the top let you filter results:
+- **All** — Every result, ranked by relevance
+- **Movies (N)** — Playable movies matching your query
+- **TV Shows (N)** — TV series matching your query
+- **Collections (N)** — TMDB collections (e.g., "Star Wars Collection")
+- **Tags (N)** — Tags and genres matching your query
+- **Actors (N)** — Cast members matching your query
+
+Use **Left/Right** to switch chips and **Down** to browse the filtered poster grid. Selecting a result navigates to the appropriate screen:
+
+| Result Type | Action |
+|-------------|--------|
+| Movie | Plays immediately |
+| TV Series | Opens the episode picker |
+| Collection | Opens a **Collection** landing page showing all titles in the collection |
+| Tag / Genre | Opens a **Tag** landing page showing all titles with that tag |
+| Actor | Opens an **Actor** landing page showing titles they appear in |
+
+### Actor Landing Page
+
+Shows the actor's headshot and a grid of titles from your collection that feature this actor. Select a title to play or browse episodes. Press the **Options (\*)** button on a focused title to add it to your media wish list (if not already wished).
+
+### Collection Landing Page
+
+Shows the collection poster and a grid of titles you own from that collection. Select any owned title to play or browse episodes.
+
+### Tag / Genre Landing Page
+
+Shows a grid of playable titles matching the selected tag or genre. Select any title to play or browse episodes.
+
+### Wish-Fulfilled Badge
+
+Titles on the **Recently Added** carousel that fulfill a wish from your wish list display a gold star badge on the poster thumbnail, so you can quickly spot newly available titles you asked for.
 
 ### Episode Picker (TV Series)
 
@@ -181,7 +219,7 @@ The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to
 | "Authentication failed" | Your device token may have been revoked (password change or manual revocation). Remove the profile and re-pair. |
 | Subtitles don't appear | Verify the SRT file exists on the NAS (named `{filename}.en.srt`). Check that subtitles display in the web app first. Press Options (\*) to toggle CC on. |
 | TV series appears but has no episodes | The title needs episode-linked transcodes. Check Transcodes > Linked in the web app. |
-| Search doesn't work | Search is not yet implemented. Browse using the carousels. |
+| Search returns no results | Verify the server is reachable and the query matches title names, actor names, collection names, or tag names. Results only include playable titles. |
 
 ---
 

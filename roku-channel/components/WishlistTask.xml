@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="WishlistTask" extends="Task">
+    <interface>
+        <!-- Inputs -->
+        <field id="wishUrl" type="string" />
+        <field id="wishBody" type="string" />
+
+        <!-- Outputs -->
+        <field id="wishResult" type="assocarray" alwaysNotify="true" />
+        <field id="wishError" type="string" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="WishlistTask.brs" />
+</component>

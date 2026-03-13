@@ -4,6 +4,7 @@ import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.*
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.time.LocalDateTime
 
 /**
  * Builds the Roku home screen carousel feed.
@@ -30,7 +31,8 @@ object RokuHomeService {
         val contentRating: String?,
         val transcodeId: Long?,
         val subtitleUrl: String? = null,
-        val resumePosition: Int? = null
+        val resumePosition: Int? = null,
+        val wishFulfilled: Boolean = false
     )
 
     data class Carousel(
@@ -78,9 +80,9 @@ object RokuHomeService {
             carousels.add(resumeCarousel)
         }
 
-        // 2. Recently Added — most recently created transcodes
+        // 2. Recently Added — most recently created transcodes (with wish-fulfilled badges)
         val playableTitleIds = playableTitles.mapNotNull { it.id }.toSet()
-        val recentCarousel = buildRecentlyAddedCarousel(playableTranscodes, titlesById, playableTitleIds, baseUrl, apiKey, nasRoot)
+        val recentCarousel = buildRecentlyAddedCarousel(playableTranscodes, titlesById, playableTitleIds, baseUrl, apiKey, nasRoot, user)
         if (recentCarousel.items.isNotEmpty()) {
             carousels.add(recentCarousel)
         }
@@ -144,8 +146,14 @@ object RokuHomeService {
         playableTitleIds: Set<Long>,
         baseUrl: String,
         apiKey: String,
-        nasRoot: String?
+        nasRoot: String?,
+        user: AppUser
     ): Carousel {
+        // Find fulfilled wishes for this user to mark with badge
+        val fulfilledWishes = WishListItem.findAll()
+            .filter { it.user_id == user.id && it.status == WishStatus.FULFILLED.name && it.wish_type == WishType.MEDIA.name }
+        val fulfilledTmdbKeys = fulfilledWishes.mapNotNull { it.tmdbKey() }.toSet()
+
         // Most recently created playable transcodes, deduplicated by title
         // Only includes titles that passed the playability filter (TV requires episode-linked transcodes)
         val seen = mutableSetOf<Long>()
@@ -158,7 +166,9 @@ object RokuHomeService {
             if (title.id!! !in playableTitleIds) continue
             if (title.id!! in seen) continue
             seen.add(title.id!!)
-            items.add(buildItem(title, tc, baseUrl, apiKey, nasRoot))
+
+            val isFulfilled = title.tmdbKey()?.let { it in fulfilledTmdbKeys } ?: false
+            items.add(buildItem(title, tc, baseUrl, apiKey, nasRoot, wishFulfilled = isFulfilled))
         }
 
         return Carousel("Recently Added", items)
@@ -192,7 +202,8 @@ object RokuHomeService {
         baseUrl: String,
         apiKey: String,
         nasRoot: String?,
-        resumePosition: Int? = null
+        resumePosition: Int? = null,
+        wishFulfilled: Boolean = false
     ): CarouselItem {
         val posterUrl = if (title.poster_path != null) {
             "$baseUrl/posters/w500/${title.id}?key=$apiKey"
@@ -218,7 +229,8 @@ object RokuHomeService {
             contentRating = title.content_rating,
             transcodeId = transcode?.id,
             subtitleUrl = subtitleUrl,
-            resumePosition = resumePosition
+            resumePosition = resumePosition,
+            wishFulfilled = wishFulfilled
         )
     }
 

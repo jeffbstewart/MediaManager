@@ -5,7 +5,12 @@ sub init()
     m.homeScreen = m.top.findNode("homeScreen")
     m.episodePickerScreen = m.top.findNode("episodePickerScreen")
     m.videoPlayerScreen = m.top.findNode("videoPlayerScreen")
+    m.searchResultsScreen = m.top.findNode("searchResultsScreen")
+    m.collectionScreen = m.top.findNode("collectionScreen")
+    m.tagScreen = m.top.findNode("tagScreen")
+    m.actorScreen = m.top.findNode("actorScreen")
     m.pairTask = m.top.findNode("pairTask")
+    m.wishlistTask = m.top.findNode("wishlistTask")
 
     ' Screen stack for Back button navigation
     m.screenStack = []
@@ -26,8 +31,30 @@ sub init()
     m.homeScreen.observeField("switchProfileRequested", "onSwitchProfileRequested")
     m.homeScreen.observeField("removeProfileRequested", "onRemoveProfileFromHome")
     m.homeScreen.observeField("playRequested", "onPlayRequested")
+    m.homeScreen.observeField("searchRequested", "onSearchRequested")
     m.episodePickerScreen.observeField("episodeSelected", "onEpisodeSelected")
     m.videoPlayerScreen.observeField("playbackFinished", "onPlaybackFinished")
+
+    ' Search results screen signals
+    m.searchResultsScreen.observeField("playRequested", "onSearchPlayRequested")
+    m.searchResultsScreen.observeField("episodePickerRequested", "onSearchEpisodePickerRequested")
+    m.searchResultsScreen.observeField("collectionSelected", "onCollectionSelected")
+    m.searchResultsScreen.observeField("tagSelected", "onTagSelected")
+    m.searchResultsScreen.observeField("genreSelected", "onGenreSelected")
+    m.searchResultsScreen.observeField("actorSelected", "onActorSelected")
+
+    ' Landing page screen signals
+    m.collectionScreen.observeField("playRequested", "onCollectionPlayRequested")
+    m.collectionScreen.observeField("episodePickerRequested", "onCollectionEpisodePickerRequested")
+    m.tagScreen.observeField("playRequested", "onTagPlayRequested")
+    m.tagScreen.observeField("episodePickerRequested", "onTagEpisodePickerRequested")
+    m.actorScreen.observeField("playRequested", "onActorPlayRequested")
+    m.actorScreen.observeField("episodePickerRequested", "onActorEpisodePickerRequested")
+    m.actorScreen.observeField("wishRequested", "onWishRequested")
+
+    ' Wishlist task signals
+    m.wishlistTask.observeField("wishResult", "onWishResult")
+    m.wishlistTask.observeField("wishError", "onWishError")
 
     ' Clean up V1 registry if needed
     cleanupV1Registry()
@@ -388,11 +415,214 @@ sub onEpisodeSelected()
 end sub
 
 sub onPlaybackFinished()
-    print "[MM] MainScene: playback finished, returning to HomeScreen"
+    print "[MM] MainScene: playback finished, returning"
     hideTopScreen()
 
     ' Refresh home feed to update resume positions
     m.homeScreen.profileContent = m.homeScreen.profileContent
+end sub
+
+' ---- Search ----
+
+sub onSearchRequested()
+    query = m.homeScreen.searchRequested
+    if query = invalid or query = "" then return
+
+    print "[MM] MainScene: search requested — '" ; query ; "'"
+
+    ' Pass credentials and query to search results screen
+    m.searchResultsScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.searchResultsScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.searchResultsScreen.searchQuery = query
+    showScreen(m.searchResultsScreen)
+end sub
+
+' ---- Search Results Navigation ----
+
+sub onSearchPlayRequested()
+    playData = m.searchResultsScreen.playRequested
+    if playData = invalid then return
+
+    print "[MM] MainScene: search play requested — " ; playData.name
+
+    playData.serverUrl = m.homeScreen.profileContent.serverUrl
+    playData.apiKey = m.homeScreen.profileContent.apiKey
+
+    m.videoPlayerScreen.playContent = playData
+    showScreen(m.videoPlayerScreen)
+end sub
+
+sub onSearchEpisodePickerRequested()
+    titleData = m.searchResultsScreen.episodePickerRequested
+    if titleData = invalid then return
+
+    print "[MM] MainScene: search episode picker requested — " ; titleData.name
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    m.episodePickerScreen.serverUrl = serverUrl
+    m.episodePickerScreen.apiKey = apiKey
+    m.episodePickerScreen.titleData = titleData
+    showScreen(m.episodePickerScreen)
+end sub
+
+sub onCollectionSelected()
+    collData = m.searchResultsScreen.collectionSelected
+    if collData = invalid then return
+
+    print "[MM] MainScene: collection selected — " ; collData.name
+
+    m.collectionScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.collectionScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.collectionScreen.collectionData = collData
+    showScreen(m.collectionScreen)
+end sub
+
+sub onTagSelected()
+    tagData = m.searchResultsScreen.tagSelected
+    if tagData = invalid then return
+
+    print "[MM] MainScene: tag selected — " ; tagData.name
+
+    m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.tagScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.tagScreen.detailType = "tag"
+    m.tagScreen.tagData = tagData
+    showScreen(m.tagScreen)
+end sub
+
+sub onGenreSelected()
+    genreData = m.searchResultsScreen.genreSelected
+    if genreData = invalid then return
+
+    print "[MM] MainScene: genre selected — " ; genreData.name
+
+    ' Reuse TagScreen for genres
+    m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.tagScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.tagScreen.detailType = "genre"
+    m.tagScreen.tagData = genreData
+    showScreen(m.tagScreen)
+end sub
+
+sub onActorSelected()
+    actorData = m.searchResultsScreen.actorSelected
+    if actorData = invalid then return
+
+    print "[MM] MainScene: actor selected — " ; actorData.name
+
+    m.actorScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.actorScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.actorScreen.actorData = actorData
+    showScreen(m.actorScreen)
+end sub
+
+' ---- Landing Page Navigation (Collection, Tag, Actor -> Play/Episode Picker) ----
+
+sub onCollectionPlayRequested()
+    handleLandingPlay(m.collectionScreen.playRequested)
+end sub
+
+sub onCollectionEpisodePickerRequested()
+    handleLandingEpisodePicker(m.collectionScreen.episodePickerRequested)
+end sub
+
+sub onTagPlayRequested()
+    handleLandingPlay(m.tagScreen.playRequested)
+end sub
+
+sub onTagEpisodePickerRequested()
+    handleLandingEpisodePicker(m.tagScreen.episodePickerRequested)
+end sub
+
+sub onActorPlayRequested()
+    handleLandingPlay(m.actorScreen.playRequested)
+end sub
+
+sub onActorEpisodePickerRequested()
+    handleLandingEpisodePicker(m.actorScreen.episodePickerRequested)
+end sub
+
+sub handleLandingPlay(playData as object)
+    if playData = invalid then return
+
+    print "[MM] MainScene: landing page play requested — " ; playData.name
+
+    playData.serverUrl = m.homeScreen.profileContent.serverUrl
+    playData.apiKey = m.homeScreen.profileContent.apiKey
+
+    m.videoPlayerScreen.playContent = playData
+    showScreen(m.videoPlayerScreen)
+end sub
+
+sub handleLandingEpisodePicker(titleData as object)
+    if titleData = invalid then return
+
+    print "[MM] MainScene: landing page episode picker requested — " ; titleData.name
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    m.episodePickerScreen.serverUrl = serverUrl
+    m.episodePickerScreen.apiKey = apiKey
+    m.episodePickerScreen.titleData = titleData
+    showScreen(m.episodePickerScreen)
+end sub
+
+' ---- Wishlist ----
+
+sub onWishRequested()
+    wishData = m.actorScreen.wishRequested
+    if wishData = invalid then return
+
+    print "[MM] MainScene: wish requested for " ; wishData.name
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    ' Build the POST URL and body
+    wishUrl = serverUrl + "/roku/wishlist/add?key=" + apiKey
+
+    ' Build JSON body from actor detail item data
+    bodyObj = {
+        tmdb_id: 0,
+        media_type: "",
+        title: ""
+    }
+
+    if wishData.tmdbId <> invalid then bodyObj.tmdb_id = wishData.tmdbId
+    if wishData.name <> invalid then bodyObj.title = wishData.name
+    if wishData.mediaType <> invalid then bodyObj.media_type = wishData.mediaType
+    if wishData.posterPath <> invalid then bodyObj.poster_path = wishData.posterPath
+    if wishData.year <> invalid then bodyObj.release_year = wishData.year
+
+    body = formatJSON(bodyObj)
+
+    m.wishlistTask.control = "stop"
+    m.wishlistTask.wishUrl = wishUrl
+    m.wishlistTask.wishBody = body
+    m.wishlistTask.functionName = "doPost"
+    m.wishlistTask.control = "run"
+end sub
+
+sub onWishResult()
+    result = m.wishlistTask.wishResult
+    if result = invalid then return
+
+    if result.success = true
+        print "[MM] MainScene: wish added successfully"
+    else
+        reason = ""
+        if result.reason <> invalid then reason = result.reason
+        print "[MM] MainScene: wish failed — " ; reason
+    end if
+end sub
+
+sub onWishError()
+    errorMsg = m.wishlistTask.wishError
+    if errorMsg = invalid then return
+    print "[MM] MainScene: wish error — " ; errorMsg
 end sub
 
 ' ---- Voice Search ----

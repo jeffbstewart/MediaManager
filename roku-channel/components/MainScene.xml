@@ -40,7 +40,28 @@
             visible="false"
             translation="[0, 0]" />
 
-        <!-- Pair task (shared background worker) -->
+        <SearchResultsScreen
+            id="searchResultsScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <CollectionScreen
+            id="collectionScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <TagScreen
+            id="tagScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <ActorScreen
+            id="actorScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <!-- Shared background tasks -->
         <PairTask id="pairTask" />
+        <WishlistTask id="wishlistTask" />
     </children>
 </component>

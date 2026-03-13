@@ -2986,3 +2986,47 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - Files modified: roku-channel/components/VideoPlayerScreen.brs, CLAUDE.md
 - Files deleted: roku-channel/components/VideoContent.xml
 ===
+
+=== 2026-03-13 08:50 — Roku search, landing pages, and wishlist integration ===
+- Implemented full 5-phase plan for Roku channel search and navigation
+
+Server-side (Kotlin):
+- New: RokuSearchService.kt — unified search across titles, actors, collections, tags, genres
+  with server-ranked results and score-based ordering. Detail endpoints for collection, tag,
+  genre, and actor landing pages. Wishlist add endpoint.
+- New: CollectionPosterServlet.kt — serves cached TMDB collection poster images
+- New: CollectionPosterCacheService.kt — on-demand collection poster cache from TMDB CDN
+- Modified: RokuFeedServlet.kt — added GET routes: search.json, collection/{id}.json,
+  tag/{id}.json, genre/{id}.json, actor/{id}.json. Added POST route: wishlist/add
+- Modified: RokuHomeService.kt — added wishFulfilled field to CarouselItem, checks fulfilled
+  wishes for user in Recently Added carousel
+- Modified: AuthFilter.kt — added /collection-posters/* to protected URL patterns
+
+Roku channel (BrightScript):
+- New: SearchTask.xml/.brs — background HTTP GET task for search endpoint
+- New: WishlistTask.xml/.brs — background HTTP POST task for wishlist endpoint
+- New: DetailTask.xml/.brs — generic background HTTP GET task for detail endpoints
+- New: SearchResultsScreen.xml/.brs — search results with category chip filtering
+  (All, Movies, TV Shows, Collections, Tags, Genres, Actors) and PosterGrid
+- New: CollectionScreen.xml/.brs — collection landing page with poster grid
+- New: TagScreen.xml/.brs — tag/genre landing page (shared component via detailType field)
+- New: ActorScreen.xml/.brs — actor landing page with headshot, character names, wish button
+- Modified: CarouselItem.xml/.brs — added wish-fulfilled star badge overlay
+- Modified: HomeScreen.xml/.brs — search now fires searchRequested field instead of showing
+  banner, removed search banner UI, added wishFulfilled field passthrough to ContentNodes
+- Modified: MainScene.xml — added new screen and task children
+- Modified: MainScene.brs — wired all new screen signals (search results navigation,
+  collection/tag/genre/actor selection, play/episode picker from landing pages, wishlist POST)
+
+Navigation flow:
+  HomeScreen → search → SearchResultsScreen → movie/play, TV/episodePicker,
+  collection/CollectionScreen, tag/TagScreen, genre/TagScreen, actor/ActorScreen
+  All landing pages → play movie or episode picker for TV
+  ActorScreen → ★ key adds wish via POST /roku/wishlist/add
+
+- Files created: RokuSearchService.kt, CollectionPosterServlet.kt, CollectionPosterCacheService.kt,
+  SearchTask.xml/.brs, WishlistTask.xml/.brs, DetailTask.xml/.brs, SearchResultsScreen.xml/.brs,
+  CollectionScreen.xml/.brs, TagScreen.xml/.brs, ActorScreen.xml/.brs
+- Files modified: RokuFeedServlet.kt, RokuHomeService.kt, AuthFilter.kt,
+  CarouselItem.xml/.brs, HomeScreen.xml/.brs, MainScene.xml/.brs
+===

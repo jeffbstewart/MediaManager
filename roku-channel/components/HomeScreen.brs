@@ -16,9 +16,6 @@ sub init()
     m.panelSwitchFocus = m.top.findNode("panelSwitchFocus")
     m.panelRemoveFocus = m.top.findNode("panelRemoveFocus")
 
-    ' Search banner
-    m.searchBanner = m.top.findNode("searchBanner")
-    m.searchBannerText = m.top.findNode("searchBannerText")
     m.searchPlaceholder = m.top.findNode("searchPlaceholder")
 
     ' Delegate focus when the Group itself receives it (e.g. returning from another screen)
@@ -173,6 +170,9 @@ sub buildCarouselsFromFeed(carousels as object)
                 if item.mediaType <> invalid
                     itemNode.addFields({ mediaType: item.mediaType })
                 end if
+                if item.wishFulfilled <> invalid and item.wishFulfilled = true
+                    itemNode.addFields({ wishFulfilled: true })
+                end if
 
                 rowNode.appendChild(itemNode)
                 totalItems = totalItems + 1
@@ -280,21 +280,8 @@ sub setSearchText(text as string)
     m.searchPlaceholder.text = text
     m.searchPlaceholder.color = "#e0e0e0"
 
-    ' Show the banner
-    m.searchBannerText.text = "Search: " + text
-    m.searchBanner.visible = true
-
-    ' Auto-hide banner after 4 seconds
-    m.searchBanner.observeField("visible", "onSearchBannerVisible")
-    m.bannerTimer = createObject("roSGNode", "Timer")
-    m.bannerTimer.duration = 4
-    m.bannerTimer.repeat = false
-    m.bannerTimer.observeField("fire", "onBannerTimerFire")
-    m.bannerTimer.control = "start"
-end sub
-
-sub onBannerTimerFire()
-    m.searchBanner.visible = false
+    ' Fire search request to MainScene for navigation to SearchResultsScreen
+    m.top.searchRequested = text
 end sub
 
 sub clearSearch()

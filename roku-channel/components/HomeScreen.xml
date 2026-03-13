@@ -6,6 +6,7 @@
         <field id="removeProfileRequested" type="boolean" alwaysNotify="true" />
         <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="searchQuery" type="string" alwaysNotify="true" onChange="onSearchQueryChanged" />
+        <field id="searchRequested" type="string" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
@@ -104,8 +105,8 @@
             translation="[60, 130]"
             itemComponentName="CarouselItem"
             numRows="3"
-            itemSize="[1800, 360]"
-            rowItemSize="[[210, 310]]"
+            itemSize="[1800, 400]"
+            rowItemSize="[[210, 360]]"
             rowItemSpacing="[[20, 0]]"
             showRowLabel="[true]"
             rowLabelOffset="[[0, 0]]"
@@ -137,29 +138,6 @@
             color="#555555"
             width="1920"
             horizAlign="center" />
-
-        <!-- ===== SEARCH RESULT BANNER ===== -->
-        <Group id="searchBanner" translation="[540, 38]" visible="false">
-            <Rectangle
-                width="400"
-                height="48"
-                color="#2a4a2a" />
-            <Label
-                id="searchBannerText"
-                translation="[16, 10]"
-                text=""
-                font="font:SmallSystemFont"
-                color="#e0e0e0"
-                width="330"
-                truncateOnDelimiter="" />
-            <Label
-                translation="[360, 10]"
-                text="X"
-                font="font:SmallBoldSystemFont"
-                color="#888888"
-                width="30"
-                horizAlign="center" />
-        </Group>
 
         <!-- ===== PROFILE DROPDOWN PANEL (after RowList for z-order) ===== -->
         <Group id="profilePanel" translation="[900, 100]" visible="false">

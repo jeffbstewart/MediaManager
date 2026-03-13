@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SearchTask" extends="Task">
+    <interface>
+        <!-- Inputs -->
+        <field id="searchUrl" type="string" />
+
+        <!-- Outputs -->
+        <field id="searchResult" type="assocarray" alwaysNotify="true" />
+        <field id="searchError" type="string" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="SearchTask.brs" />
+</component>

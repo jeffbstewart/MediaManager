@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DetailTask" extends="Task">
+    <interface>
+        <!-- Inputs -->
+        <field id="detailUrl" type="string" />
+
+        <!-- Outputs -->
+        <field id="detailResult" type="assocarray" alwaysNotify="true" />
+        <field id="detailError" type="string" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="DetailTask.brs" />
+</component>

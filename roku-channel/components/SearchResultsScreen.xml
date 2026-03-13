@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SearchResultsScreen" extends="Group">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="searchQuery" type="string" alwaysNotify="true" onChange="onSearchQueryChanged" />
+
+        <!-- Outputs -->
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
+        <field id="episodePickerRequested" type="assocarray" alwaysNotify="true" />
+        <field id="collectionSelected" type="assocarray" alwaysNotify="true" />
+        <field id="tagSelected" type="assocarray" alwaysNotify="true" />
+        <field id="genreSelected" type="assocarray" alwaysNotify="true" />
+        <field id="actorSelected" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="SearchResultsScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle width="1920" height="1080" color="#1a1a2e" />
+
+        <!-- Header: "Search: ..." -->
+        <Label
+            id="headerLabel"
+            translation="[60, 30]"
+            text="Search Results"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            width="1800" />
+
+        <!-- Category chips row (custom-rendered labels) -->
+        <Group id="chipRow" translation="[60, 85]">
+            <!-- Chips are dynamically created -->
+        </Group>
+
+        <!-- Results as RowList (single scrollable row, no wrapping) -->
+        <RowList
+            id="resultsRowList"
+            translation="[60, 150]"
+            itemComponentName="CarouselItem"
+            numRows="2"
+            itemSize="[1800, 400]"
+            rowItemSize="[[210, 360]]"
+            rowItemSpacing="[[20, 0]]"
+            showRowLabel="[false]"
+            drawFocusFeedback="true"
+            rowFocusAnimationStyle="floatingFocus"
+            vertFocusAnimationStyle="floatingFocus"
+            focusXOffset="[0]"
+            itemSpacing="[0, 20]" />
+
+        <!-- Loading indicator -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Searching..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- No results message -->
+        <Label
+            id="noResultsLabel"
+            translation="[0, 500]"
+            text="No results found"
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Background search task -->
+        <SearchTask id="searchTask" />
+    </children>
+</component>

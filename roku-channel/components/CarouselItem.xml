@@ -21,5 +21,31 @@
             height="310"
             loadingBitmapOpacity="0.0"
             failedBitmapOpacity="0.0" />
+
+        <!-- Title label below poster -->
+        <Label
+            id="titleLabel"
+            translation="[0, 314]"
+            text=""
+            font="font:SmallestSystemFont"
+            color="#cccccc"
+            width="210"
+            maxLines="2"
+            wrap="true" />
+
+        <!-- Wish-fulfilled star badge (top-right corner) -->
+        <Group id="wishBadge" translation="[170, 5]" visible="false">
+            <Rectangle
+                width="32"
+                height="32"
+                color="#00000088" />
+            <Label
+                translation="[4, 2]"
+                text="★"
+                font="font:SmallBoldSystemFont"
+                color="#fbbf24"
+                width="24"
+                horizAlign="center" />
+        </Group>
     </children>
 </component>
