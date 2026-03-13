@@ -281,9 +281,9 @@ sub loadEpisodes(seasonIndex as integer)
             ' Build label with watched indicator
             prefix = "  "
             if ep.watchedPercent <> invalid and ep.watchedPercent >= 90
-                prefix = chr(10003) + " "   ' checkmark
+                prefix = "[*] "   ' watched
             else if ep.resumePosition <> invalid and ep.resumePosition > 0
-                prefix = chr(9654) + " "   ' play triangle
+                prefix = "[>] "   ' in progress
             end if
 
             label = prefix + "E" + epNum + " - " + epName
