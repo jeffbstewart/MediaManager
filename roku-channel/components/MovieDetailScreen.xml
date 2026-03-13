@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<component name="EpisodePickerScreen" extends="Group">
+<component name="MovieDetailScreen" extends="Group">
     <interface>
         <field id="titleData" type="assocarray" alwaysNotify="true" onChange="onTitleDataChanged" />
         <field id="serverUrl" type="string" />
         <field id="apiKey" type="string" />
-        <field id="episodeSelected" type="assocarray" alwaysNotify="true" />
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="titleSelected" type="assocarray" alwaysNotify="true" />
         <field id="actorSelected" type="assocarray" alwaysNotify="true" />
     </interface>
 
-    <script type="text/brightscript" uri="EpisodePickerScreen.brs" />
+    <script type="text/brightscript" uri="MovieDetailScreen.brs" />
 
     <children>
         <!-- Background -->
@@ -18,32 +18,32 @@
         <!-- Poster -->
         <Poster
             id="posterImage"
-            translation="[60, 50]"
-            width="140"
-            height="207"
+            translation="[60, 60]"
+            width="210"
+            height="310"
             loadingBitmapOpacity="0.0"
             failedBitmapOpacity="0.0" />
         <Rectangle
             id="posterFallback"
-            translation="[60, 50]"
-            width="140"
-            height="207"
+            translation="[60, 60]"
+            width="210"
+            height="310"
             color="#333355" />
 
-        <!-- Show title -->
+        <!-- Title -->
         <Label
-            id="showTitle"
-            translation="[220, 50]"
-            width="1640"
+            id="titleLabel"
+            translation="[300, 60]"
+            width="1560"
             font="font:LargeBoldSystemFont"
             color="#e0e0e0"
-            maxLines="1" />
+            maxLines="2" />
 
         <!-- Year / Rating / Quality -->
         <Label
             id="metaLabel"
-            translation="[220, 100]"
-            width="1640"
+            translation="[300, 120]"
+            width="1560"
             font="font:SmallSystemFont"
             color="#999999"
             maxLines="1" />
@@ -51,70 +51,53 @@
         <!-- Description -->
         <Label
             id="descLabel"
-            translation="[220, 135]"
-            width="1640"
+            translation="[300, 160]"
+            width="1560"
             font="font:SmallSystemFont"
             color="#bbbbbb"
-            maxLines="3"
+            maxLines="5"
             wrap="true" />
 
-        <!-- Cast text (non-focusable summary) -->
-        <Label
-            id="castSummary"
-            translation="[220, 225]"
-            width="1640"
-            font="font:SmallestSystemFont"
-            color="#888888"
-            maxLines="1"
-            visible="false" />
-
-        <!-- Season selector button -->
-        <Group id="seasonButton" translation="[60, 280]">
+        <!-- Play button -->
+        <Group id="playButton" translation="[300, 350]">
             <Rectangle
-                id="seasonBtnBg"
-                width="500"
-                height="48"
+                id="playBtnBg"
+                width="240"
+                height="56"
                 color="#2a2a4a" />
             <Rectangle
-                id="seasonBtnFocus"
-                width="500"
-                height="48"
+                id="playBtnFocus"
+                width="240"
+                height="56"
                 color="#6366f1"
                 visible="false" />
             <Label
-                id="seasonBtnLabel"
-                translation="[16, 10]"
-                text="Season 1"
+                id="playBtnLabel"
+                translation="[16, 14]"
+                text="Play Movie"
                 font="font:SmallBoldSystemFont"
                 color="#e0e0e0"
-                width="468" />
+                width="208" />
         </Group>
 
-        <!-- Episode list area (custom virtual list — no LabelList) -->
-        <Group id="episodeArea" translation="[60, 345]">
-            <Rectangle id="episodeHighlight" width="1800" height="44" color="#6366f1" visible="false" />
-            <!-- Font template for episode labels -->
-            <Label id="epFontTemplate" visible="false" font="font:SmallSystemFont" />
-        </Group>
-
-        <!-- Cast list area (custom virtual list) -->
+        <!-- Cast section (custom virtual list) -->
         <Label
             id="castHeader"
-            translation="[60, 760]"
+            translation="[60, 440]"
             text="Cast"
             font="font:MediumBoldSystemFont"
             color="#cccccc"
             visible="false" />
 
-        <Group id="castArea" translation="[60, 800]" visible="false">
-            <Rectangle id="castHighlight" width="900" height="40" color="#6366f1" visible="false" />
+        <Group id="castArea" translation="[60, 490]" visible="false">
+            <Rectangle id="castHighlight" width="800" height="44" color="#6366f1" visible="false" />
             <Label id="castFontTemplate" visible="false" font="font:SmallSystemFont" />
         </Group>
 
         <!-- Similar titles section -->
         <Label
             id="similarHeader"
-            translation="[60, 930]"
+            translation="[60, 730]"
             text="Similar Titles"
             font="font:MediumBoldSystemFont"
             color="#cccccc"
@@ -122,7 +105,7 @@
 
         <RowList
             id="similarRow"
-            translation="[60, 970]"
+            translation="[60, 780]"
             itemComponentName="CarouselItem"
             numRows="1"
             itemSize="[1800, 360]"

@@ -3,6 +3,7 @@ sub init()
     m.profilePickerScreen = m.top.findNode("profilePickerScreen")
     m.pairScreen = m.top.findNode("pairScreen")
     m.homeScreen = m.top.findNode("homeScreen")
+    m.movieDetailScreen = m.top.findNode("movieDetailScreen")
     m.episodePickerScreen = m.top.findNode("episodePickerScreen")
     m.videoPlayerScreen = m.top.findNode("videoPlayerScreen")
     m.searchResultsScreen = m.top.findNode("searchResultsScreen")
@@ -32,7 +33,12 @@ sub init()
     m.homeScreen.observeField("removeProfileRequested", "onRemoveProfileFromHome")
     m.homeScreen.observeField("playRequested", "onPlayRequested")
     m.homeScreen.observeField("searchRequested", "onSearchRequested")
+    m.movieDetailScreen.observeField("playRequested", "onMovieDetailPlayRequested")
+    m.movieDetailScreen.observeField("titleSelected", "onDetailTitleSelected")
+    m.movieDetailScreen.observeField("actorSelected", "onDetailActorSelected")
     m.episodePickerScreen.observeField("episodeSelected", "onEpisodeSelected")
+    m.episodePickerScreen.observeField("titleSelected", "onDetailTitleSelected")
+    m.episodePickerScreen.observeField("actorSelected", "onDetailActorSelected")
     m.videoPlayerScreen.observeField("playbackFinished", "onPlaybackFinished")
     m.videoPlayerScreen.observeField("nextEpisodeStarted", "onNextEpisodeStarted")
 
@@ -383,21 +389,23 @@ sub onPlayRequested()
 
     print "[MM] MainScene: play requested — " ; playData.name ; " (mediaType=" ; playData.mediaType ; ")"
 
-    ' Pass server credentials along with the play data
-    playData.serverUrl = m.homeScreen.profileContent.serverUrl
-    playData.apiKey = m.homeScreen.profileContent.apiKey
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
 
     if playData.mediaType = "TV"
-        ' TV series: show episode picker first
+        ' TV series: show episode picker
         print "[MM] MainScene: routing to episode picker for TV title"
-        m.episodePickerScreen.serverUrl = playData.serverUrl
-        m.episodePickerScreen.apiKey = playData.apiKey
+        m.episodePickerScreen.serverUrl = serverUrl
+        m.episodePickerScreen.apiKey = apiKey
         m.episodePickerScreen.titleData = playData
         showScreen(m.episodePickerScreen)
     else
-        ' Movie: play directly
-        m.videoPlayerScreen.playContent = playData
-        showScreen(m.videoPlayerScreen)
+        ' Movie: show detail screen
+        print "[MM] MainScene: routing to movie detail"
+        m.movieDetailScreen.serverUrl = serverUrl
+        m.movieDetailScreen.apiKey = apiKey
+        m.movieDetailScreen.titleData = playData
+        showScreen(m.movieDetailScreen)
     end if
 end sub
 
@@ -429,6 +437,81 @@ sub onNextEpisodeStarted()
     print "[MM] MainScene: auto-advancing to next episode — " ; content.name
 end sub
 
+sub onMovieDetailPlayRequested()
+    playData = m.movieDetailScreen.playRequested
+    if playData = invalid then return
+
+    print "[MM] MainScene: movie detail play — " ; playData.name
+
+    ' playData is the full title detail from the server — build video play data
+    videoData = {
+        name: playData.name,
+        serverUrl: m.homeScreen.profileContent.serverUrl,
+        apiKey: m.homeScreen.profileContent.apiKey,
+        transcodeId: playData.transcodeId,
+        streamUrl: playData.streamUrl,
+        subtitleUrl: playData.subtitleUrl,
+        bifUrl: playData.bifUrl,
+        quality: playData.quality,
+        resumePosition: playData.resumePosition,
+        mediaType: "MOVIE"
+    }
+
+    m.videoPlayerScreen.playContent = videoData
+    showScreen(m.videoPlayerScreen)
+end sub
+
+' ---- Detail Screen Navigation (Cast & Similar from Movie/TV Detail) ----
+
+sub onDetailTitleSelected()
+    ' Similar title selected from MovieDetailScreen or EpisodePickerScreen
+    ' Determine which screen fired it
+    st = invalid
+    if m.movieDetailScreen.titleSelected <> invalid
+        st = m.movieDetailScreen.titleSelected
+    end if
+    if st = invalid and m.episodePickerScreen.titleSelected <> invalid
+        st = m.episodePickerScreen.titleSelected
+    end if
+    if st = invalid then return
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    print "[MM] MainScene: similar title selected — " ; st.name ; " (mediaType=" ; st.mediaType ; ")"
+
+    if st.mediaType = "TV"
+        m.episodePickerScreen.serverUrl = serverUrl
+        m.episodePickerScreen.apiKey = apiKey
+        m.episodePickerScreen.titleData = st
+        showScreen(m.episodePickerScreen)
+    else
+        m.movieDetailScreen.serverUrl = serverUrl
+        m.movieDetailScreen.apiKey = apiKey
+        m.movieDetailScreen.titleData = st
+        showScreen(m.movieDetailScreen)
+    end if
+end sub
+
+sub onDetailActorSelected()
+    ' Cast member selected from MovieDetailScreen or EpisodePickerScreen
+    actorData = invalid
+    if m.movieDetailScreen.actorSelected <> invalid
+        actorData = m.movieDetailScreen.actorSelected
+    end if
+    if actorData = invalid and m.episodePickerScreen.actorSelected <> invalid
+        actorData = m.episodePickerScreen.actorSelected
+    end if
+    if actorData = invalid then return
+
+    print "[MM] MainScene: actor selected from detail — " ; actorData.name
+
+    m.actorScreen.serverUrl = m.homeScreen.profileContent.serverUrl
+    m.actorScreen.apiKey = m.homeScreen.profileContent.apiKey
+    m.actorScreen.actorData = actorData
+    showScreen(m.actorScreen)
+end sub
+
 ' ---- Search ----
 
 sub onSearchRequested()
@@ -452,11 +535,14 @@ sub onSearchPlayRequested()
 
     print "[MM] MainScene: search play requested — " ; playData.name
 
-    playData.serverUrl = m.homeScreen.profileContent.serverUrl
-    playData.apiKey = m.homeScreen.profileContent.apiKey
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
 
-    m.videoPlayerScreen.playContent = playData
-    showScreen(m.videoPlayerScreen)
+    ' Route to movie detail screen instead of direct play
+    m.movieDetailScreen.serverUrl = serverUrl
+    m.movieDetailScreen.apiKey = apiKey
+    m.movieDetailScreen.titleData = playData
+    showScreen(m.movieDetailScreen)
 end sub
 
 sub onSearchEpisodePickerRequested()
@@ -556,11 +642,14 @@ sub handleLandingPlay(playData as object)
 
     print "[MM] MainScene: landing page play requested — " ; playData.name
 
-    playData.serverUrl = m.homeScreen.profileContent.serverUrl
-    playData.apiKey = m.homeScreen.profileContent.apiKey
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
 
-    m.videoPlayerScreen.playContent = playData
-    showScreen(m.videoPlayerScreen)
+    ' Route to movie detail screen instead of direct play
+    m.movieDetailScreen.serverUrl = serverUrl
+    m.movieDetailScreen.apiKey = apiKey
+    m.movieDetailScreen.titleData = playData
+    showScreen(m.movieDetailScreen)
 end sub
 
 sub handleLandingEpisodePicker(titleData as object)

@@ -104,7 +104,7 @@
             id="rowList"
             translation="[60, 130]"
             itemComponentName="CarouselItem"
-            numRows="3"
+            numRows="2"
             itemSize="[1800, 400]"
             rowItemSize="[[210, 360]]"
             rowItemSpacing="[[20, 0]]"

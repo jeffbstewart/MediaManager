@@ -187,15 +187,9 @@ sub buildCarouselsFromFeed(carousels as object)
 
     m.rowList.content = rowContent
 
-    ' Adjust numRows to match actual content
-    numRows = rowContent.getChildCount()
-    if numRows > 0
-        m.rowList.numRows = numRows
-    end if
-
     setFocusTarget("rowList")
 
-    print "[MM] HomeScreen: carousels built — " ; str(numRows).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
+    print "[MM] HomeScreen: carousels built — " ; str(rowContent.getChildCount()).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
 end sub
 
 ' ---- Item Selection ----
