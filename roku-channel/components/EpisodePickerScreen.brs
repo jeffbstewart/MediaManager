@@ -278,19 +278,14 @@ sub loadEpisodes(seasonIndex as integer)
                 epName = "Episode " + epNum
             end if
 
-            ' Build label with watched indicator
-            prefix = "  "
-            if ep.watchedPercent <> invalid and ep.watchedPercent >= 90
-                prefix = "[*] "   ' watched
-            else if ep.resumePosition <> invalid and ep.resumePosition > 0
-                prefix = "[>] "   ' in progress
-            end if
-
-            label = prefix + "E" + epNum + " - " + epName
+            ' Build label — status as suffix to keep alignment
+            label = "E" + epNum + "  " + epName
             if ep.quality <> invalid and ep.quality <> ""
                 label = label + "  [" + ep.quality + "]"
             end if
-            if ep.resumePosition <> invalid and ep.resumePosition > 0 and (ep.watchedPercent = invalid or ep.watchedPercent < 90)
+            if ep.watchedPercent <> invalid and ep.watchedPercent >= 90
+                label = label + "  (watched)"
+            else if ep.resumePosition <> invalid and ep.resumePosition > 0
                 mins = int(ep.resumePosition / 60)
                 label = label + "  (resume " + str(mins).trim() + "m)"
             end if
