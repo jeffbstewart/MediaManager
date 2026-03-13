@@ -16,9 +16,15 @@ sub init()
     m.panelSwitchFocus = m.top.findNode("panelSwitchFocus")
     m.panelRemoveFocus = m.top.findNode("panelRemoveFocus")
 
+    ' Search banner
+    m.searchBanner = m.top.findNode("searchBanner")
+    m.searchBannerText = m.top.findNode("searchBannerText")
+    m.searchPlaceholder = m.top.findNode("searchPlaceholder")
+
     m.serverUrl = ""
     m.apiKey = ""
     m.username = ""
+    m.currentSearch = ""
 
     ' Focus state: "rowList", "search", "profile", "panel"
     m.focusTarget = "rowList"
@@ -100,6 +106,82 @@ sub buildCarousels()
     setFocusTarget("rowList")
 
     print "[MM] HomeScreen: carousels built — 3 rows, 8 items each"
+end sub
+
+' ---- Search ----
+
+sub showSearchKeyboard()
+    dialog = createObject("roSGNode", "KeyboardDialog")
+    dialog.title = "Search"
+    dialog.message = ["Enter a title to search for"]
+    dialog.buttons = ["Search", "Cancel"]
+
+    if m.currentSearch <> ""
+        dialog.text = m.currentSearch
+    end if
+
+    dialog.observeField("buttonSelected", "onSearchKeyboardButton")
+    m.top.getScene().dialog = dialog
+end sub
+
+sub onSearchKeyboardButton()
+    dialog = m.top.getScene().dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    text = dialog.text
+
+    m.top.getScene().dialog = invalid
+
+    if buttonIndex = 0 and text <> invalid and text.trim() <> ""
+        ' Search pressed
+        setSearchText(text.trim())
+    else
+        print "[MM] HomeScreen: search cancelled"
+    end if
+
+    setFocusTarget("search")
+end sub
+
+sub onSearchQueryChanged()
+    query = m.top.searchQuery
+    if query = invalid or query = "" then return
+
+    print "[MM] HomeScreen: voice search received: " ; query
+    setSearchText(query)
+end sub
+
+sub setSearchText(text as string)
+    m.currentSearch = text
+    print "[MM] HomeScreen: search set to: " ; text
+
+    ' Show search text in the search box placeholder
+    m.searchPlaceholder.text = text
+    m.searchPlaceholder.color = "#e0e0e0"
+
+    ' Show the banner
+    m.searchBannerText.text = "Search: " + text
+    m.searchBanner.visible = true
+
+    ' Auto-hide banner after 4 seconds
+    m.searchBanner.observeField("visible", "onSearchBannerVisible")
+    m.bannerTimer = createObject("roSGNode", "Timer")
+    m.bannerTimer.duration = 4
+    m.bannerTimer.repeat = false
+    m.bannerTimer.observeField("fire", "onBannerTimerFire")
+    m.bannerTimer.control = "start"
+end sub
+
+sub onBannerTimerFire()
+    m.searchBanner.visible = false
+end sub
+
+sub clearSearch()
+    m.currentSearch = ""
+    m.searchPlaceholder.text = "Search"
+    m.searchPlaceholder.color = "#666666"
+    m.searchBanner.visible = false
+    print "[MM] HomeScreen: search cleared"
 end sub
 
 ' ---- Focus Management ----
@@ -185,9 +267,14 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setFocusTarget("profile")
             return true
         else if key = "OK"
-            ' Search is non-functional for now
-            print "[MM] HomeScreen: search selected (not implemented)"
+            showSearchKeyboard()
             return true
+        else if key = "replay"
+            ' InstantReplay clears current search
+            if m.currentSearch <> ""
+                clearSearch()
+                return true
+            end if
         end if
     else if m.focusTarget = "profile"
         if key = "down"

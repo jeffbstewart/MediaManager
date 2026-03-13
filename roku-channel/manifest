@@ -9,3 +9,4 @@ splash_screen_hd=pkg:/images/splash-screen-hd.png
 splash_color=#1a1a2e
 splash_min_time=0
 ui_resolutions=fhd
+supports_input_launch=1

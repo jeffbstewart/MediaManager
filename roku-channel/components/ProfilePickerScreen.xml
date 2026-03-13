@@ -32,7 +32,7 @@
             translation="[960, 380]"
             layoutDirection="horiz"
             horizAlignment="center"
-            itemSpacings="[60]" />
+            itemSpacings="[100]" />
 
         <!-- Hint label -->
         <Label

@@ -124,6 +124,12 @@ Shows the poster, backdrop, description, rating, year, and genres. For TV series
 
 Progress syncs to the server every 60 seconds. Next time you open the title (on any device), you'll be offered to resume.
 
+### Search
+
+Navigate up from the poster rows to the **Search** box and press **OK** to open a keyboard. Type a title and select **Search** to submit. You can also use the **Roku mobile app** as a remote for easier typing.
+
+**Voice search limitation:** The Roku remote's microphone button always triggers Roku's global search, even when the keyboard is open. This is a platform restriction for sideloaded (Developer Mode) channels &mdash; voice-to-text in app keyboards is only available to published, Roku-certified channels. Use the on-screen keyboard or the Roku mobile app's keyboard instead.
+
 ### Audio Setup
 
 The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to **Stereo**. When set to "Auto", the Roku may negotiate audio formats that cause video to play without sound.
@@ -140,6 +146,7 @@ The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to
 | Video plays but no audio | Set Roku audio output to Stereo (Settings &rarr; Audio &rarr; Digital Output Format). |
 | Channel shows old content | The feed caches for 5 minutes. Wait or restart the channel. |
 | "Authentication failed" | Your device token may have been revoked (password change or manual revocation). The channel should re-enter the pairing flow. |
+| Voice search doesn't type into the search box | The mic button always triggers Roku global search for sideloaded channels. Use the on-screen keyboard or the Roku mobile app instead. |
 
 ---
 

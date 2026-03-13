@@ -342,6 +342,18 @@ sub onRemoveProfileFromHome()
     end if
 end sub
 
+' ---- Voice Search ----
+
+sub onVoiceSearchQuery()
+    query = m.top.voiceSearchQuery
+    if query = invalid or query = "" then return
+
+    print "[MM] MainScene: voice search query received: " ; query
+
+    ' Forward to HomeScreen if it's on the stack
+    m.homeScreen.searchQuery = query
+end sub
+
 ' ---- Key Handling ----
 
 function onKeyEvent(key as string, press as boolean) as boolean
