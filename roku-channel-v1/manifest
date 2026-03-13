@@ -1,7 +1,7 @@
 title=Media Manager
-major_version=2
+major_version=1
 minor_version=0
-build_version=0
+build_version=1
 mm_icon_focus_fhd=pkg:/images/channel-icon-fhd.png
 mm_icon_focus_hd=pkg:/images/channel-icon-hd.png
 splash_screen_fhd=pkg:/images/splash-screen-fhd.png

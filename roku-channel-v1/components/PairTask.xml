@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PairTask" extends="Task">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="action" type="string" />
+
+        <!-- Outputs -->
+        <field id="pairCode" type="string" />
+        <field id="pairStatus" type="string" />
+        <field id="pairToken" type="string" />
+        <field id="pairUsername" type="string" />
+        <field id="pairError" type="string" />
+        <field id="discoveredUrl" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="PairTask.brs" />
+</component>

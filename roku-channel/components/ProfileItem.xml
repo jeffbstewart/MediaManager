@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProfileItem" extends="Group">
+    <interface>
+        <field id="username" type="string" value="" onChange="onFieldChanged" />
+        <field id="avatarColor" type="string" value="#6366f1" onChange="onFieldChanged" />
+        <field id="isAddButton" type="boolean" value="false" onChange="onFieldChanged" />
+        <field id="isFocused" type="boolean" value="false" onChange="onFocusChanged" />
+        <field id="profileIndex" type="integer" value="-1" />
+    </interface>
+
+    <script type="text/brightscript" uri="ProfileItem.brs" />
+
+    <children>
+        <!-- Focus ring (slightly larger, behind avatar) -->
+        <Rectangle
+            id="focusRing"
+            translation="[-6, -6]"
+            width="140"
+            height="140"
+            color="#ffffff"
+            visible="false" />
+
+        <!-- Avatar square -->
+        <Rectangle
+            id="avatarCircle"
+            width="128"
+            height="128"
+            color="#6366f1" />
+
+        <!-- Letter/symbol overlay (centered on avatar) -->
+        <Label
+            id="letterLabel"
+            translation="[0, 28]"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            width="128"
+            horizAlign="center" />
+
+        <!-- Username label (below avatar) -->
+        <Label
+            id="usernameLabel"
+            translation="[-16, 140]"
+            text=""
+            font="font:SmallSystemFont"
+            color="#c0c0c0"
+            width="160"
+            horizAlign="center"
+            truncateOnDelimiter="" />
+    </children>
+</component>

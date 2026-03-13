@@ -1,5 +1,5 @@
 sub Main(args as dynamic)
-    print "[MM] main: starting application v2"
+    print "[MM] main: starting application"
 
     screen = CreateObject("roSGScreen")
     m.port = CreateObject("roMessagePort")

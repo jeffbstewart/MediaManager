@@ -1,44 +1,186 @@
 sub init()
     print "[MM] MainScene: init"
-    m.settingsScreen = m.top.findNode("settingsScreen")
+    m.profilePickerScreen = m.top.findNode("profilePickerScreen")
+    m.pairScreen = m.top.findNode("pairScreen")
     m.homeScreen = m.top.findNode("homeScreen")
-    m.detailScreen = m.top.findNode("detailScreen")
-    m.episodePicker = m.top.findNode("episodePicker")
-    m.videoPlayer = m.top.findNode("videoPlayer")
-    m.feedTask = m.top.findNode("feedTask")
+    m.pairTask = m.top.findNode("pairTask")
 
     ' Screen stack for Back button navigation
     m.screenStack = []
 
+    ' Avatar color palette for new profiles
+    m.avatarColors = [
+        "#6366f1", "#ec4899", "#f59e0b", "#10b981",
+        "#3b82f6", "#8b5cf6", "#ef4444", "#14b8a6",
+        "#f97316", "#06b6d4", "#84cc16", "#e879f9"
+    ]
+
     ' Observe child screen signals
-    m.homeScreen.observeField("selectedItem", "onItemSelected")
-    m.detailScreen.observeField("playRequested", "onPlayRequested")
-    m.detailScreen.observeField("episodesRequested", "onEpisodesRequested")
-    m.episodePicker.observeField("episodeSelected", "onEpisodeSelected")
-    m.settingsScreen.observeField("settingsSaved", "onSettingsSaved")
-    m.feedTask.observeField("feedContent", "onFeedLoaded")
-    m.feedTask.observeField("feedError", "onFeedError")
-    m.videoPlayer.observeField("state", "onVideoState")
-    m.videoPlayer.observeField("position", "onVideoPosition")
+    m.profilePickerScreen.observeField("selectedProfile", "onProfileSelected")
+    m.profilePickerScreen.observeField("addProfileRequested", "onAddProfileRequested")
+    m.profilePickerScreen.observeField("removeProfileRequested", "onRemoveProfileRequested")
+    m.pairScreen.observeField("pairComplete", "onPairComplete")
+    m.homeScreen.observeField("switchProfileRequested", "onSwitchProfileRequested")
 
-    ' Current video content ID for bookmarks
-    m.currentVideoId = ""
+    ' Clean up V1 registry if needed
+    cleanupV1Registry()
 
-    ' Check for saved settings
-    reg = CreateObject("roRegistrySection", "MediaManager")
-    m.serverUrl = reg.Read("serverUrl")
-    m.apiKey = reg.Read("apiKey")
-
-    maskedKey = maskApiKey(m.apiKey)
-    print "[MM] MainScene: registry loaded — serverUrl=" ; m.serverUrl ; " apiKey=" ; maskedKey
-
-    if m.serverUrl = "" or m.apiKey = ""
-        print "[MM] MainScene: settings incomplete, showing settings screen"
-        showScreen(m.settingsScreen)
+    ' Load profiles and show picker
+    profiles = loadProfiles()
+    if profiles.count() = 0
+        print "[MM] MainScene: no profiles, going directly to PairScreen"
+        showScreen(m.pairScreen)
     else
-        print "[MM] MainScene: settings OK, fetching feed"
-        fetchFeed()
+        print "[MM] MainScene: " ; str(profiles.count()).trim() ; " profile(s) found, showing picker"
+        m.profilePickerScreen.profiles = profiles
+        showScreen(m.profilePickerScreen)
     end if
+end sub
+
+' ---- V1 Registry Cleanup ----
+
+sub cleanupV1Registry()
+    ' Check if new Profiles section exists
+    profilesReg = CreateObject("roRegistrySection", "Profiles")
+    countStr = profilesReg.Read("count")
+
+    if countStr <> "" and countStr <> invalid
+        ' Profiles section exists, V1 cleanup already done or not needed
+        return
+    end if
+
+    ' No Profiles data — delete stale V1 keys
+    print "[MM] MainScene: cleaning up V1 registry keys"
+
+    v1Reg = CreateObject("roRegistrySection", "MediaManager")
+    v1Reg.Delete("serverUrl")
+    v1Reg.Delete("apiKey")
+    v1Reg.Delete("username")
+    v1Reg.Flush()
+
+    bookmarksReg = CreateObject("roRegistrySection", "Bookmarks")
+    keys = bookmarksReg.GetKeyList()
+    for each key in keys
+        bookmarksReg.Delete(key)
+    end for
+    bookmarksReg.Flush()
+
+    print "[MM] MainScene: V1 registry cleanup complete"
+end sub
+
+' ---- Profile Management ----
+
+function loadProfiles() as object
+    profiles = []
+    reg = CreateObject("roRegistrySection", "Profiles")
+    countStr = reg.Read("count")
+
+    if countStr = "" or countStr = invalid
+        print "[MM] MainScene: loadProfiles — no profiles in registry"
+        return profiles
+    end if
+
+    count = val(countStr)
+    print "[MM] MainScene: loadProfiles — count=" ; str(count).trim()
+
+    for i = 0 to count - 1
+        prefix = "p" + str(i).trim() + "_"
+        profile = {
+            index: i,
+            serverUrl: reg.Read(prefix + "serverUrl"),
+            apiKey: reg.Read(prefix + "apiKey"),
+            username: reg.Read(prefix + "username"),
+            avatarColor: reg.Read(prefix + "avatarColor")
+        }
+        maskedKey = maskApiKey(profile.apiKey)
+        print "[MM] MainScene: loadProfiles — [" ; str(i).trim() ; "] " ; profile.username ; " @ " ; profile.serverUrl ; " key=" ; maskedKey
+        profiles.push(profile)
+    end for
+
+    return profiles
+end function
+
+sub saveProfiles(profiles as object)
+    reg = CreateObject("roRegistrySection", "Profiles")
+
+    ' Clear old keys first — delete up to a generous max
+    for i = 0 to 19
+        prefix = "p" + str(i).trim() + "_"
+        reg.Delete(prefix + "serverUrl")
+        reg.Delete(prefix + "apiKey")
+        reg.Delete(prefix + "username")
+        reg.Delete(prefix + "avatarColor")
+    end for
+
+    ' Write current profiles
+    reg.Write("count", str(profiles.count()).trim())
+
+    for i = 0 to profiles.count() - 1
+        prefix = "p" + str(i).trim() + "_"
+        reg.Write(prefix + "serverUrl", profiles[i].serverUrl)
+        reg.Write(prefix + "apiKey", profiles[i].apiKey)
+        reg.Write(prefix + "username", profiles[i].username)
+        reg.Write(prefix + "avatarColor", profiles[i].avatarColor)
+    end for
+
+    reg.Flush()
+    print "[MM] MainScene: saveProfiles — saved " ; str(profiles.count()).trim() ; " profile(s)"
+end sub
+
+function addProfile(serverUrl as string, apiKey as string, username as string) as object
+    profiles = loadProfiles()
+
+    ' Pick an avatar color (cycle through palette)
+    colorIndex = profiles.count() mod m.avatarColors.count()
+    avatarColor = m.avatarColors[colorIndex]
+
+    profile = {
+        index: profiles.count(),
+        serverUrl: serverUrl,
+        apiKey: apiKey,
+        username: username,
+        avatarColor: avatarColor
+    }
+
+    profiles.push(profile)
+    saveProfiles(profiles)
+
+    print "[MM] MainScene: addProfile — added " ; username ; " (color " ; avatarColor ; ")"
+    return profile
+end function
+
+sub removeProfile(profileIndex as integer)
+    profiles = loadProfiles()
+
+    if profileIndex < 0 or profileIndex >= profiles.count()
+        print "[MM] MainScene: removeProfile — index " ; str(profileIndex).trim() ; " out of range"
+        return
+    end if
+
+    removedName = profiles[profileIndex].username
+    profiles.delete(profileIndex)
+
+    ' Re-index
+    for i = 0 to profiles.count() - 1
+        profiles[i].index = i
+    end for
+
+    saveProfiles(profiles)
+
+    ' Adjust lastUsed
+    reg = CreateObject("roRegistrySection", "Profiles")
+    lastUsedStr = reg.Read("lastUsed")
+    if lastUsedStr <> "" and lastUsedStr <> invalid
+        lastUsed = val(lastUsedStr)
+        if lastUsed >= profiles.count()
+            lastUsed = profiles.count() - 1
+            if lastUsed < 0 then lastUsed = 0
+            reg.Write("lastUsed", str(lastUsed).trim())
+            reg.Flush()
+        end if
+    end if
+
+    print "[MM] MainScene: removeProfile — removed " ; removedName ; " (index " ; str(profileIndex).trim() ; ")"
 end sub
 
 ' ---- Screen Stack Navigation ----
@@ -70,339 +212,102 @@ sub hideTopScreen()
     print "[MM] MainScene: hideTopScreen — stack depth=" ; str(m.screenStack.count()).trim()
 end sub
 
-' ---- Feed Loading ----
+' ---- Event Handlers ----
 
-sub fetchFeed()
-    print "[MM] MainScene: fetchFeed starting"
-    m.feedTask.functionName = "doTask"
-    m.feedTask.serverUrl = m.serverUrl
-    m.feedTask.apiKey = m.apiKey
-    m.feedTask.control = "run"
+sub onProfileSelected()
+    profile = m.profilePickerScreen.selectedProfile
+    if profile = invalid then return
 
-    ' Show home screen with loading state
+    print "[MM] MainScene: onProfileSelected — " ; profile.username ; " @ " ; profile.serverUrl
+
+    ' Save lastUsed index
+    reg = CreateObject("roRegistrySection", "Profiles")
+    reg.Write("lastUsed", str(profile.index).trim())
+    reg.Flush()
+
+    ' Show HomeScreen with profile data
+    m.homeScreen.profileContent = profile
     showScreen(m.homeScreen)
 end sub
 
-sub onFeedLoaded()
-    content = m.feedTask.feedContent
-    if content <> invalid
-        rowCount = content.getChildCount()
-        totalItems = 0
-        for i = 0 to rowCount - 1
-            totalItems = totalItems + content.getChild(i).getChildCount()
-        end for
-        print "[MM] MainScene: onFeedLoaded — " ; str(rowCount).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
-        m.homeScreen.content = content
-    else
-        print "[MM] MainScene: onFeedLoaded — content is invalid"
+sub onAddProfileRequested()
+    print "[MM] MainScene: onAddProfileRequested — showing PairScreen"
+    showScreen(m.pairScreen)
+end sub
+
+sub onRemoveProfileRequested()
+    profile = m.profilePickerScreen.removeProfileRequested
+    if profile = invalid then return
+
+    profileIndex = profile.index
+    if profileIndex = invalid then return
+
+    print "[MM] MainScene: onRemoveProfileRequested — removing index " ; str(profileIndex).trim()
+    removeProfile(profileIndex)
+
+    ' Reload profiles and update picker
+    profiles = loadProfiles()
+    m.profilePickerScreen.profiles = profiles
+
+    if profiles.count() = 0
+        print "[MM] MainScene: all profiles removed, showing PairScreen"
+        ' Clear stack and go to PairScreen
+        m.screenStack = []
+        m.profilePickerScreen.visible = false
+        showScreen(m.pairScreen)
     end if
 end sub
 
-sub onFeedError()
-    errorMsg = m.feedTask.feedError
-    if errorMsg <> "" and errorMsg <> invalid
-        httpCode = m.feedTask.feedHttpCode
-        print "[MM] MainScene: onFeedError — code=" ; str(httpCode).trim() ; " msg=" ; errorMsg
+sub onPairComplete()
+    result = m.pairScreen.pairComplete
+    if result = invalid then return
 
-        if httpCode = 401
-            ' Auth failed — clear stale apiKey and go straight to re-pair
-            print "[MM] MainScene: 401 auth failure — clearing apiKey, navigating to settings"
-            reg = CreateObject("roRegistrySection", "MediaManager")
-            reg.Delete("apiKey")
-            reg.Flush()
-            m.apiKey = ""
+    print "[MM] MainScene: onPairComplete — " ; result.username ; " @ " ; result.serverUrl
 
-            ' Clear the empty HomeScreen from the stack before showing settings
-            ' so Back from settings exits the app instead of showing a blank screen
-            m.screenStack = []
-            m.homeScreen.visible = false
+    ' Add the new profile
+    profile = addProfile(result.serverUrl, result.apiKey, result.username)
 
-            showScreen(m.settingsScreen)
-            m.settingsScreen.reauthenticate = true
-        else
-            showMessage("Feed Error", errorMsg + chr(10) + "Press * to open Settings.")
-        end if
-    end if
-end sub
-
-' ---- Item Selection ----
-
-sub onItemSelected()
-    item = m.homeScreen.selectedItem
-    if item = invalid then return
-
-    itemType = ""
-    if item.hasField("itemType") then itemType = item.itemType
-    print "[MM] MainScene: onItemSelected — title=" ; item.title ; " type=" ; itemType
-    m.detailScreen.itemContent = item
-    showScreen(m.detailScreen)
-end sub
-
-' ---- Playback ----
-
-sub onPlayRequested()
-    videoContent = m.detailScreen.videoContent
-    if videoContent = invalid then return
-    print "[MM] MainScene: onPlayRequested — title=" ; videoContent.title
-    startPlayback(videoContent)
-end sub
-
-sub onEpisodesRequested()
-    seriesContent = m.detailScreen.itemContent
-    if seriesContent = invalid then return
-    print "[MM] MainScene: onEpisodesRequested — title=" ; seriesContent.title
-    m.episodePicker.seriesContent = seriesContent
-    showScreen(m.episodePicker)
-end sub
-
-sub onEpisodeSelected()
-    videoContent = m.episodePicker.videoContent
-    if videoContent = invalid then return
-    print "[MM] MainScene: onEpisodeSelected — title=" ; videoContent.title
-    startPlayback(videoContent)
-end sub
-
-sub startPlayback(videoContent as object)
-    m.currentVideoId = videoContent.id
-    m.lastReportedPos = 0
-    print "[MM] MainScene: startPlayback — id=" ; m.currentVideoId
-
-    ' Check for local bookmark first, then fall back to server-side position
-    bookmarkPos = readBookmark(m.currentVideoId)
-    if bookmarkPos <= 30
-        ' No local bookmark — check server-side position from feed
-        if videoContent.hasField("playbackPosition") and videoContent.playbackPosition <> invalid and videoContent.playbackPosition > 30
-            bookmarkPos = videoContent.playbackPosition
-            print "[MM] MainScene: using server-side position " ; str(bookmarkPos).trim() ; "s"
-        end if
-    end if
-
-    if bookmarkPos > 30
-        print "[MM] MainScene: bookmark found at " ; str(bookmarkPos).trim() ; "s, showing resume dialog"
-        showResumeDialog(videoContent, bookmarkPos)
-    else
-        print "[MM] MainScene: no bookmark (or <30s), playing from start"
-        playVideo(videoContent, 0)
-    end if
-end sub
-
-sub playVideo(videoContent as object, startPos as integer)
-    print "[MM] MainScene: playVideo — title=" ; videoContent.title ; " startPos=" ; str(startPos).trim()
-
-    ' Ensure audio is not muted
-    m.videoPlayer.mute = false
-
-    ' Configure subtitles if available
-    if videoContent.hasField("subtitleUrl") and videoContent.subtitleUrl <> invalid and videoContent.subtitleUrl <> ""
-        print "[MM] MainScene: configuring subtitles — " ; videoContent.subtitleUrl
-        videoContent.SubtitleConfig = {
-            TrackName: "subtitleTrack1",
-            Language: "eng",
-            Description: "English"
-        }
-        videoContent.SubtitleTracks = [{
-            TrackName: "subtitleTrack1",
-            Language: "eng",
-            Description: "English",
-            Url: videoContent.subtitleUrl
-        }]
-        m.videoPlayer.globalCaptionMode = "On"
-    else
-        m.videoPlayer.globalCaptionMode = "Off"
-    end if
-
-    m.videoPlayer.content = videoContent
-    m.videoPlayer.visible = true
-    m.videoPlayer.setFocus(true)
-
-    if startPos > 0
-        m.videoPlayer.seek = startPos
-    end if
-
-    m.videoPlayer.control = "play"
-end sub
-
-sub stopVideo()
-    print "[MM] MainScene: stopVideo"
-
-    ' Report final position to server before stopping
-    if m.currentVideoId <> ""
-        currentPos = m.videoPlayer.position
-        duration = m.videoPlayer.duration
-        if currentPos > 0
-            reportProgressToServer(m.currentVideoId, currentPos, duration)
-        end if
-    end if
-
-    m.videoPlayer.control = "stop"
-    m.videoPlayer.visible = false
-
-    ' Return focus to top screen
-    if m.screenStack.count() > 0
-        m.screenStack[m.screenStack.count() - 1].setFocus(true)
-    end if
-end sub
-
-' ---- Video State Callbacks ----
-
-sub onVideoState()
-    state = m.videoPlayer.state
-    print "[MM] MainScene: onVideoState — " ; state
-
-    if state = "playing"
-        ' Debug: log audio track info
-        if m.videoPlayer.hasField("audioTrack")
-            print "[MM] MainScene: audioTrack=" ; formatJSON(m.videoPlayer.audioTrack)
-        else
-            print "[MM] MainScene: audioTrack field not found"
-        end if
-        if m.videoPlayer.hasField("availableAudioTracks")
-            print "[MM] MainScene: availableAudioTracks=" ; formatJSON(m.videoPlayer.availableAudioTracks)
-        else
-            print "[MM] MainScene: availableAudioTracks field not found"
-        end if
-        if m.videoPlayer.hasField("mute")
-            print "[MM] MainScene: mute=" ; m.videoPlayer.mute.toStr()
-        end if
-        cnt = m.videoPlayer.content
-        if cnt <> invalid
-            print "[MM] MainScene: contentUrl=" ; cnt.url
-            print "[MM] MainScene: streamFormat=" ; cnt.streamFormat
-        end if
-    end if
-
-    if state = "finished"
-        ' Clear bookmark on completion
-        clearBookmark(m.currentVideoId)
-        stopVideo()
-    else if state = "error"
-        print "[MM] MainScene: playback error — errorCode=" ; str(m.videoPlayer.errorCode).trim() ; " errorMsg=" ; m.videoPlayer.errorMsg
-        stopVideo()
-        showMessage("Playback Error", "Could not play this video.")
-    end if
-end sub
-
-sub onVideoPosition()
-    if m.videoPlayer.state = "playing" and m.currentVideoId <> ""
-        currentPos = m.videoPlayer.position
-        writeBookmark(m.currentVideoId, int(currentPos))
-
-        ' Report to server every ~60 seconds
-        if m.lastReportedPos = invalid then m.lastReportedPos = 0
-        elapsed = abs(currentPos - m.lastReportedPos)
-        if elapsed >= 60
-            m.lastReportedPos = currentPos
-            duration = m.videoPlayer.duration
-            reportProgressToServer(m.currentVideoId, currentPos, duration)
-        end if
-    end if
-end sub
-
-' ---- Bookmark Management ----
-
-sub writeBookmark(contentId as string, position as integer)
-    reg = CreateObject("roRegistrySection", "Bookmarks")
-    reg.Write(contentId, str(position).trim())
-    reg.Flush()
-end sub
-
-function readBookmark(contentId as string) as integer
-    reg = CreateObject("roRegistrySection", "Bookmarks")
-    savedPos = reg.Read(contentId)
-    if savedPos <> "" and savedPos <> invalid
-        return savedPos.toInt()
-    end if
-    return 0
-end function
-
-sub clearBookmark(contentId as string)
-    print "[MM] MainScene: clearBookmark — id=" ; contentId
-    reg = CreateObject("roRegistrySection", "Bookmarks")
-    reg.Delete(contentId)
-    reg.Flush()
-end sub
-
-' ---- Server Progress Sync ----
-
-sub reportProgressToServer(contentId as string, position as dynamic, duration as dynamic)
-    if m.serverUrl = "" or m.apiKey = "" then return
-    if contentId = "" or contentId = invalid then return
-
-    ' Use ProgressTask to make the HTTP call on a Task thread
-    ' (roUrlTransfer cannot be created on the Render thread)
-    m.progressTask = m.top.findNode("progressTask")
-    m.progressTask.control = "stop"
-    m.progressTask.serverUrl = m.serverUrl
-    m.progressTask.apiKey = m.apiKey
-    m.progressTask.contentId = contentId
-    m.progressTask.position = str(position).trim()
-    m.progressTask.duration = str(duration).trim()
-    m.progressTask.functionName = "doTask"
-    m.progressTask.control = "run"
-end sub
-
-' ---- Resume Dialog ----
-
-sub showResumeDialog(videoContent as object, bookmarkPos as integer)
-    dialog = createObject("roSGNode", "StandardMessageDialog")
-    dialog.title = "Resume Playback"
-
-    minutes = int(bookmarkPos / 60)
-    seconds = bookmarkPos mod 60
-    timeStr = str(minutes).trim() + "m " + str(seconds).trim() + "s"
-    dialog.message = ["Resume from " + timeStr + "?"]
-    dialog.buttons = ["Resume", "Start Over"]
-
-    dialog.observeField("buttonSelected", "onResumeDialogButton")
-    m.resumeVideoContent = videoContent
-    m.resumePosition = bookmarkPos
-    m.top.dialog = dialog
-end sub
-
-sub onResumeDialogButton()
-    dialog = m.top.dialog
-    if dialog = invalid then return
-
-    buttonIndex = dialog.buttonSelected
-    m.top.dialog = invalid
-
-    if buttonIndex = 0
-        ' Resume
-        print "[MM] MainScene: resume dialog — user chose Resume at " ; str(m.resumePosition).trim() ; "s"
-        playVideo(m.resumeVideoContent, m.resumePosition)
-    else
-        ' Start Over
-        print "[MM] MainScene: resume dialog — user chose Start Over"
-        clearBookmark(m.currentVideoId)
-        playVideo(m.resumeVideoContent, 0)
-    end if
-end sub
-
-' ---- Settings ----
-
-sub onSettingsSaved()
-    reg = CreateObject("roRegistrySection", "MediaManager")
-    m.serverUrl = reg.Read("serverUrl")
-    m.apiKey = reg.Read("apiKey")
-
-    maskedKey = maskApiKey(m.apiKey)
-    print "[MM] MainScene: onSettingsSaved — serverUrl=" ; m.serverUrl ; " apiKey=" ; maskedKey
-
-    ' Remove settings from stack and fetch feed
+    ' Pop PairScreen
     hideTopScreen()
 
-    ' Reset feed task for a new run
-    m.feedTask.control = "stop"
+    ' Reload profiles into picker
+    profiles = loadProfiles()
 
-    if m.screenStack.count() = 0
-        fetchFeed()
-    else
-        ' Re-fetch feed in the background
-        m.feedTask.functionName = "doTask"
-        m.feedTask.serverUrl = m.serverUrl
-        m.feedTask.apiKey = m.apiKey
-        m.feedTask.control = "run"
+    ' Check if picker is on top of stack
+    pickerOnTop = false
+    if m.screenStack.count() > 0
+        topScreen = m.screenStack[m.screenStack.count() - 1]
+        if topScreen.isSameNode(m.profilePickerScreen)
+            pickerOnTop = true
+        end if
     end if
+
+    if not pickerOnTop
+        ' Picker wasn't on stack (first profile from fresh launch) — push it
+        m.profilePickerScreen.profiles = profiles
+        showScreen(m.profilePickerScreen)
+    else
+        m.profilePickerScreen.profiles = profiles
+    end if
+
+    ' Save lastUsed and auto-select the new profile
+    reg = CreateObject("roRegistrySection", "Profiles")
+    reg.Write("lastUsed", str(profile.index).trim())
+    reg.Flush()
+
+    ' Go directly to HomeScreen
+    m.homeScreen.profileContent = profile
+    showScreen(m.homeScreen)
+end sub
+
+sub onSwitchProfileRequested()
+    print "[MM] MainScene: onSwitchProfileRequested — returning to profile picker"
+    ' Pop HomeScreen
+    hideTopScreen()
+
+    ' Refresh profile data in picker
+    profiles = loadProfiles()
+    m.profilePickerScreen.profiles = profiles
 end sub
 
 ' ---- Key Handling ----
@@ -411,13 +316,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
     if key = "back"
-        ' Stop video if playing
-        if m.videoPlayer.visible and m.videoPlayer.state <> "none" and m.videoPlayer.state <> "stopped"
-            print "[MM] MainScene: back key — stopping video"
-            stopVideo()
-            return true
-        end if
-
         ' Close dialog if open
         if m.top.dialog <> invalid
             print "[MM] MainScene: back key — closing dialog"
@@ -437,15 +335,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return false
     end if
 
-    if key = "options"
-        ' * button — open settings from anywhere
-        if m.settingsScreen.visible = false
-            print "[MM] MainScene: options key — opening settings"
-            showScreen(m.settingsScreen)
-            return true
-        end if
-    end if
-
     return false
 end function
 
@@ -458,16 +347,3 @@ function maskApiKey(key as string) as string
     end if
     return key
 end function
-
-sub showMessage(title as string, message as string)
-    dialog = createObject("roSGNode", "StandardMessageDialog")
-    dialog.title = title
-    dialog.message = [message]
-    dialog.buttons = ["OK"]
-    dialog.observeField("buttonSelected", "onMessageDismissed")
-    m.top.dialog = dialog
-end sub
-
-sub onMessageDismissed()
-    m.top.dialog = invalid
-end sub

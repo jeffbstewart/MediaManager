@@ -1,82 +1,55 @@
 sub init()
     print "[MM] HomeScreen: init"
-    m.rowList = m.top.findNode("rowList")
-    m.loadingLabel = m.top.findNode("loadingLabel")
-    m.emptyLabel = m.top.findNode("emptyLabel")
-
-    m.rowList.observeField("rowItemSelected", "onRowItemSelected")
-    m.top.observeField("focusedChild", "onFocusChanged")
+    m.welcomeLabel = m.top.findNode("welcomeLabel")
+    m.serverLabel = m.top.findNode("serverLabel")
+    m.profileAvatar = m.top.findNode("profileAvatar")
+    m.profileLetter = m.top.findNode("profileLetter")
+    m.profileName = m.top.findNode("profileName")
+    m.profileFocusRing = m.top.findNode("profileFocusRing")
 end sub
 
-sub onFocusChanged()
-    if m.top.hasFocus()
-        print "[MM] HomeScreen: group received focus, delegating to rowList"
-        m.rowList.setFocus(true)
+sub onProfileContentChanged()
+    profile = m.top.profileContent
+    if profile = invalid then return
+
+    username = profile.username
+    serverUrl = profile.serverUrl
+    avatarColor = profile.avatarColor
+
+    if username = invalid then username = "User"
+    if serverUrl = invalid then serverUrl = ""
+    if avatarColor = invalid then avatarColor = "#6366f1"
+
+    print "[MM] HomeScreen: profile loaded — " ; username ; " @ " ; serverUrl
+
+    m.welcomeLabel.text = "Welcome, " + username
+    m.serverLabel.text = "Connected to " + serverUrl
+
+    ' Update profile widget
+    m.profileAvatar.color = avatarColor
+    if username <> ""
+        m.profileLetter.text = ucase(left(username, 1))
+    else
+        m.profileLetter.text = "?"
     end if
-end sub
-
-sub onContentSet()
-    content = m.top.content
-    m.loadingLabel.visible = false
-
-    if content = invalid or content.getChildCount() = 0
-        print "[MM] HomeScreen: onContentSet — no content, showing empty state"
-        m.emptyLabel.visible = true
-        m.rowList.visible = false
-        return
-    end if
-
-    ' Check if there are any items across all rows
-    totalItems = 0
-    for i = 0 to content.getChildCount() - 1
-        row = content.getChild(i)
-        rowTitle = ""
-        if row <> invalid then rowTitle = row.title
-        rowCount = row.getChildCount()
-        totalItems = totalItems + rowCount
-        print "[MM] HomeScreen: row " ; str(i).trim() ; " '" ; rowTitle ; "' — " ; str(rowCount).trim() ; " items"
-    end for
-
-    if totalItems = 0
-        print "[MM] HomeScreen: onContentSet — all rows empty, showing empty state"
-        m.emptyLabel.visible = true
-        m.rowList.visible = false
-        return
-    end if
-
-    print "[MM] HomeScreen: onContentSet — " ; str(content.getChildCount()).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
-    m.emptyLabel.visible = false
-    m.rowList.visible = true
-    m.rowList.content = content
-    m.rowList.setFocus(true)
-end sub
-
-sub onRowItemSelected()
-    sel = m.rowList.rowItemSelected
-    if sel = invalid then return
-
-    rowIndex = sel[0]
-    colIndex = sel[1]
-
-    content = m.rowList.content
-    if content = invalid then return
-
-    row = content.getChild(rowIndex)
-    if row = invalid then return
-
-    item = row.getChild(colIndex)
-    if item = invalid then return
-
-    print "[MM] HomeScreen: onRowItemSelected — row=" ; str(rowIndex).trim() ; " col=" ; str(colIndex).trim() ; " title=" ; item.title
-    m.top.selectedItem = item
+    m.profileName.text = username
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
+    if key = "options"
+        ' * button — switch profiles
+        print "[MM] HomeScreen: options key — requesting profile switch"
+        m.top.switchProfileRequested = true
+        return true
+    end if
+
     if key = "OK"
-        ' RowList handles this via rowItemSelected
-        return false
+        ' Select on profile widget area — also switch profiles
+        print "[MM] HomeScreen: OK key — requesting profile switch"
+        m.top.switchProfileRequested = true
+        return true
     end if
 
     return false

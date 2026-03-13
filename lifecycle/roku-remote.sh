@@ -92,7 +92,7 @@ case "$ACTION" in
     *)
         # Treat as a key press
         echo "Pressing $ACTION on $ROKU_IP..."
-        curl -s -d '' "$BASE_URL/keypress/$ACTION"
-        echo "Done."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -d '' "$BASE_URL/keypress/$ACTION")
+        echo "Done. (HTTP $HTTP_CODE)"
         ;;
 esac

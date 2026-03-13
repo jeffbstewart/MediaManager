@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="HomeScreen" extends="Group">
+    <interface>
+        <field id="content" type="node" onChange="onContentSet" />
+        <field id="selectedItem" type="node" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="HomeScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Title -->
+        <Label
+            id="titleLabel"
+            text="Media Manager"
+            translation="[80, 40]"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0" />
+
+        <!-- Poster row list -->
+        <RowList
+            id="rowList"
+            translation="[80, 120]"
+            itemComponentName="PosterItem"
+            numRows="2"
+            itemSize="[1760, 370]"
+            rowItemSize="[[230, 340]]"
+            rowItemSpacing="[[16, 0]]"
+            showRowLabel="[true]"
+            rowLabelFont="font:MediumBoldSystemFont"
+            rowLabelColor="#b0b0b0"
+            rowFocusAnimationStyle="fixedFocusWrap"
+            focusBitmapBlendColor="#6366f1"
+            vertFocusAnimationStyle="fixedFocus"
+            rowLabelOffset="[[0, 10]]"
+            itemSpacing="[0, 30]" />
+
+        <!-- Loading indicator -->
+        <Label
+            id="loadingLabel"
+            text="Loading..."
+            translation="[860, 500]"
+            font="font:MediumSystemFont"
+            color="#808080" />
+
+        <!-- Empty state label -->
+        <Label
+            id="emptyLabel"
+            text="No media found. Check server connection."
+            visible="false"
+            translation="[660, 500]"
+            font="font:MediumSystemFont"
+            color="#808080" />
+    </children>
+</component>

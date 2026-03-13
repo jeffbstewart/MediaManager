@@ -432,6 +432,8 @@ grep '\[MM\]' data/roku-debug.log
 
 ### Remote Control via ECP
 
+**Prerequisite:** The Roku must have ECP keypress enabled: **Settings > System > Advanced system settings > Control by mobile apps > Network access** set to **"Enabled"** (default is "Limited", which returns HTTP 403 for keypress commands). Query endpoints like `active-app` and `device-info` work regardless.
+
 ```bash
 ./lifecycle/roku-remote.sh                # Press Select (OK)
 ./lifecycle/roku-remote.sh Home           # Press Home

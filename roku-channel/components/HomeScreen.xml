@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="HomeScreen" extends="Group">
     <interface>
-        <field id="content" type="node" onChange="onContentSet" />
-        <field id="selectedItem" type="node" alwaysNotify="true" />
+        <field id="profileContent" type="assocarray" alwaysNotify="true" onChange="onProfileContentChanged" />
+        <field id="switchProfileRequested" type="boolean" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
@@ -14,47 +14,73 @@
             height="1080"
             color="#1a1a2e" />
 
-        <!-- Title -->
+        <!-- Welcome heading -->
         <Label
-            id="titleLabel"
-            text="Media Manager"
-            translation="[80, 40]"
+            id="welcomeLabel"
+            translation="[100, 200]"
+            text="Welcome"
             font="font:LargeBoldSystemFont"
-            color="#e0e0e0" />
+            color="#e0e0e0"
+            width="1400" />
 
-        <!-- Poster row list -->
-        <RowList
-            id="rowList"
-            translation="[80, 120]"
-            itemComponentName="PosterItem"
-            numRows="2"
-            itemSize="[1760, 370]"
-            rowItemSize="[[230, 340]]"
-            rowItemSpacing="[[16, 0]]"
-            showRowLabel="[true]"
-            rowLabelFont="font:MediumBoldSystemFont"
-            rowLabelColor="#b0b0b0"
-            rowFocusAnimationStyle="fixedFocusWrap"
-            focusBitmapBlendColor="#6366f1"
-            vertFocusAnimationStyle="fixedFocus"
-            rowLabelOffset="[[0, 10]]"
-            itemSpacing="[0, 30]" />
-
-        <!-- Loading indicator -->
+        <!-- Server info -->
         <Label
-            id="loadingLabel"
-            text="Loading..."
-            translation="[860, 500]"
-            font="font:MediumSystemFont"
-            color="#808080" />
+            id="serverLabel"
+            translation="[100, 270]"
+            text=""
+            font="font:SmallSystemFont"
+            color="#888888"
+            width="1400" />
 
-        <!-- Empty state label -->
+        <!-- Profile widget (upper-right) -->
+        <Group id="profileWidget" translation="[1680, 40]">
+            <!-- Avatar circle -->
+            <Rectangle
+                id="profileAvatar"
+                width="64"
+                height="64"
+                color="#6366f1" />
+
+            <!-- Letter overlay -->
+            <Label
+                id="profileLetter"
+                translation="[0, 12]"
+                text=""
+                font="font:MediumBoldSystemFont"
+                color="#ffffff"
+                width="64"
+                horizAlign="center" />
+
+            <!-- Username below avatar -->
+            <Label
+                id="profileName"
+                translation="[-20, 72]"
+                text=""
+                font="font:SmallestSystemFont"
+                color="#a0a0a0"
+                width="104"
+                horizAlign="center"
+                truncateOnDelimiter="" />
+
+            <!-- Focus indicator -->
+            <Rectangle
+                id="profileFocusRing"
+                translation="[-4, -4]"
+                width="72"
+                height="72"
+                color="#ffffff"
+                visible="false"
+                opacity="0.3" />
+        </Group>
+
+        <!-- Switch profile hint -->
         <Label
-            id="emptyLabel"
-            text="No media found. Check server connection."
-            visible="false"
-            translation="[660, 500]"
-            font="font:MediumSystemFont"
-            color="#808080" />
+            id="switchHint"
+            translation="[0, 950]"
+            text="Press  ★  to switch profiles"
+            font="font:SmallestSystemFont"
+            color="#555555"
+            width="1920"
+            horizAlign="center" />
     </children>
 </component>

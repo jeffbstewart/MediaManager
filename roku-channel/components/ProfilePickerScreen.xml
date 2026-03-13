@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProfilePickerScreen" extends="Group">
+    <interface>
+        <field id="profiles" type="array" alwaysNotify="true" />
+        <field id="selectedProfile" type="assocarray" alwaysNotify="true" />
+        <field id="addProfileRequested" type="boolean" alwaysNotify="true" />
+        <field id="removeProfileRequested" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="ProfilePickerScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Title -->
+        <Label
+            id="titleLabel"
+            translation="[0, 120]"
+            text="Who's Watching?"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            width="1920"
+            horizAlign="center" />
+
+        <!-- Profile grid container (positioned dynamically) -->
+        <LayoutGroup
+            id="profileGrid"
+            translation="[960, 380]"
+            layoutDirection="horiz"
+            horizAlignment="center"
+            itemSpacings="[60]" />
+
+        <!-- Hint label -->
+        <Label
+            id="hintLabel"
+            translation="[0, 720]"
+            text="Press  ★  to remove a profile"
+            font="font:SmallestSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Version label -->
+        <Label
+            id="versionLabel"
+            translation="[1780, 1040]"
+            text=""
+            font="font:SmallestSystemFont"
+            color="#444444"
+            horizAlign="right"
+            width="120" />
+    </children>
+</component>

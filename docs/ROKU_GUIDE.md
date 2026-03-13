@@ -44,6 +44,15 @@ On the Developer Settings screen:
 
 Verify by opening `http://<roku-ip>` in a browser and logging in as `rokudev`.
 
+### Enable ECP Network Control
+
+The External Control Protocol (ECP) allows developer tools and scripts to send remote key presses to the Roku over the network. By default, this is restricted.
+
+1. Go to **Settings &rarr; System &rarr; Advanced system settings &rarr; Control by mobile apps &rarr; Network access**
+2. Change from **"Limited"** to **"Enabled"**
+
+This accepts ECP commands from any device on the same private network. Without this, the `roku-remote.sh` script's keypress commands will return HTTP 403. (Query endpoints like `active-app` and `device-info` work regardless of this setting.)
+
 ---
 
 ## Installing the Channel
