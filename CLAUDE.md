@@ -124,6 +124,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `VideoPlayerDialog.kt` — In-browser video player dialog (HTML5 `<video>`)
 - `CameraGridView.kt` — Live camera MJPEG grid for browser (route `/cameras`, viewer-accessible)
 - `CameraSettingsView.kt` — Camera CRUD admin UI (route `/cameras/settings`, admin-only)
+- `LiveTvSettingsView.kt` — Live TV tuner/channel admin UI (route `/live-tv/settings`, admin-only)
 - `LoginView.kt` — Login page (route `/login`, no MainLayout)
 - `SetupView.kt` — First-user setup wizard (route `/setup`, no MainLayout)
 - `UserManagementView.kt` — Admin user management (route `/users`)
@@ -137,6 +138,8 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `Genre.kt`, `TitleGenre.kt` — Genre tagging
 - `EnrichmentAttempt.kt` — TMDB retry tracking
 - `Camera.kt` — Camera definitions (RTSP URL, go2rtc stream name, display order, enabled flag)
+- `LiveTvTuner.kt` — HDHomeRun tuner devices (IP, model, tuner count, enabled flag)
+- `LiveTvChannel.kt` — OTA channels from tuner lineup (guide number/name, stream URL, reception quality 1-5)
 - `AppConfig.kt` — Key/value app settings (NAS path, FFmpeg path, quota tracking)
 - `Enums.kt` — MediaFormat, MediaType, TranscodeStatus, DiscoveredFileStatus, MatchMethod, etc.
 - `AppUser.kt` — User accounts with access levels (1=viewer, 2=admin)
@@ -166,6 +169,8 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `CollectionRefreshAgent.kt` — Background daemon: gradually re-fetches TMDB collection data (parts, poster paths, new entries) (~1%/day, full cycle ~100 days)
 - `ManagedDirectoryService.kt` — Ensures managed NAS directories (ForBrowser/) exist with `.mm-ignore` markers
 - `Go2rtcAgent.kt` — Background daemon: manages go2rtc child process for RTSP→HLS/MJPEG camera relay, configures streams via HTTP API
+- `HdHomeRunService.kt` — Stateless HDHomeRun device discovery and channel lineup sync (HTTP/JSON)
+- `LiveTvStreamManager.kt` — Manages FFmpeg HLS transcoding processes for live OTA TV (concurrency limits, idle cleanup, per-user stream replacement)
 - `UriCredentialRedactor.kt` — Stateless singleton: redacts credentials from RTSP/HTTP URLs in logs, UI, errors
 - `FormatProbeService.kt` — Background FFprobe-based media format detection (resolution → DVD/Blu-ray/UHD)
 - `Clock.kt` — Clock interface for testable time
@@ -184,6 +189,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 
 **Servlets:**
 - `CameraStreamServlet.kt` — `/cameras/{id}/*` — proxies go2rtc HLS/MJPEG/snapshot streams to authenticated clients
+- `LiveTvStreamServlet.kt` — `/live-tv/{channelId}/*` — HLS live TV streaming (FFmpeg transcode from HDHomeRun, auth + content rating gate)
 - `PosterServlet.kt` — `/posters/{size}/{titleId}` — serves cached TMDB poster images
 - `VideoStreamServlet.kt` — `/stream/{id}` — video streaming with HTTP Range support; serves MP4/M4V directly, MKV/AVI from ForBrowser mirror
 - `RokuFeedServlet.kt` — `/roku/feed.json?key={apiKey}` — Roku channel JSON feed (device token auth, 5-minute cache)
@@ -201,7 +207,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `secrets/example.env` — Template for required environment variables (TMDB API key)
 - `src/main/resources/webapp/ROOT` — Marker file required by vaadin-boot
 - `src/main/resources/webapp/html5-qrcode.min.js` — html5-qrcode v2.3.8 (Apache 2.0 license), client-side barcode detection for mobile camera scanning. Bundled locally to avoid CDN dependency. Source: https://github.com/mebjas/html5-qrcode
-- `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V058)
+- `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V061)
 - `build.gradle.kts` — Build config
 - `gradle/libs.versions.toml` — Dependency version catalog
 
@@ -303,6 +309,30 @@ Camera streams are relayed via go2rtc (lightweight Go binary) managed as a child
 **Credential security:** RTSP URLs stored in DB (encrypted at rest via H2). `UriCredentialRedactor` redacts credentials everywhere: logs, UI, error messages. Admin UI uses blind credential updates (PasswordField for changes, never shows raw URL after initial entry). go2rtc configured via HTTP API (no credential-bearing YAML on disk).
 
 **go2rtc config:** Binary path via `app_config` key `go2rtc_path`. API port via `go2rtc_api_port` (default 1984). Never port-map 1984 in docker-compose. Dockerfile downloads go2rtc binary.
+
+### Live TV Streaming
+
+Live OTA broadcasts from an HDHomeRun networked tuner, transcoded via FFmpeg to HLS for browser/Roku playback.
+
+**Architecture:** `HDHomeRun (MPEG-TS/MPEG-2/AC-3) → FFmpeg (H.264/AAC HLS) → LiveTvStreamManager → LiveTvStreamServlet → Browser/Roku`
+
+**Tuner discovery:** Admin enters HDHomeRun IP, app validates via `http://{ip}/discover.json`. No cloud/mDNS/SSDP auto-discover. IP validated as IPv4-only to prevent SSRF.
+
+**Channel sync:** `HdHomeRunService.syncChannels()` fetches `http://{ip}/lineup.json`, updates existing channels, inserts new ones, deletes absent ones.
+
+**Stream management:** `LiveTvStreamManager` spawns FFmpeg per channel, writing HLS to `data/live-tv-streams/ch-{id}/`. Concurrency controls:
+- Global max concurrent streams (`live_tv_max_streams` app_config, default 2)
+- Per-tuner limit (active streams < `tuner_count`)
+- Per-user replacement (switching channels kills old stream — each user holds at most 1 stream)
+- Idle timeout (`live_tv_idle_timeout_seconds` app_config, default 15s)
+
+**Content rating gate:** `live_tv_min_rating` app_config (ordinal level, default 4 = TV-14). Users with `rating_ceiling >= live_tv_min_rating` can access. Admins and unrestricted users always have access.
+
+**Per-user quality filter:** Each channel has `reception_quality` (1-5). Each user has `live_tv_min_quality` (default 4). Used for UI filtering (deferred: browser/Roku views).
+
+**Stream servlet:** `LiveTvStreamServlet` at `/live-tv/{channelId}/stream.m3u8` and `/live-tv/{channelId}/segment/{file}`. Auth via cookie or device token. Segment filenames validated against `seg_\d+\.ts` to prevent path traversal.
+
+**Admin UI:** `LiveTvSettingsView` at `/live-tv/settings` — tuner management (add/edit/delete/refresh), channel grid (quality rating, enable/disable), settings (content rating, max streams, idle timeout).
 
 ### Schema Updater Framework
 

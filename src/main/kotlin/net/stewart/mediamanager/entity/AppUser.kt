@@ -16,6 +16,7 @@ data class AppUser(
     var must_change_password: Boolean = false,
     var locked: Boolean = false,
     var subtitles_enabled: Boolean = true,
+    var live_tv_min_quality: Int = 4,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

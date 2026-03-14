@@ -10,6 +10,7 @@ import net.stewart.mediamanager.service.ForBrowserValidator
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
+import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.SsdpResponder
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
@@ -90,6 +91,9 @@ fun main(args: Array<String>) {
     Go2rtcAgent.instance = go2rtcAgent
     go2rtcAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { go2rtcAgent.stop() })
+
+    LiveTvStreamManager.start()
+    Runtime.getRuntime().addShutdownHook(Thread { LiveTvStreamManager.stopAll() })
 
     // Periodic maintenance: cleanup + database backup (every 24 hours)
     val scheduler = Executors.newSingleThreadScheduledExecutor { r ->

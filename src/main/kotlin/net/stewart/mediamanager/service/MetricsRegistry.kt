@@ -54,6 +54,23 @@ object MetricsRegistry {
         registry.counter("mm_go2rtc_restarts_total").increment()
     }
 
+    // Live TV metrics
+    fun countLiveTvStreamStart() {
+        registry.counter("mm_live_tv_stream_starts_total").increment()
+    }
+
+    fun countLiveTvStreamBytes(type: String, bytes: Long) {
+        registry.counter("mm_live_tv_stream_bytes_total", "type", type).increment(bytes.toDouble())
+    }
+
+    fun countLiveTvFfmpegFailure() {
+        registry.counter("mm_live_tv_ffmpeg_failures_total").increment()
+    }
+
+    fun countLiveTvTunerBusy() {
+        registry.counter("mm_live_tv_tuner_busy_total").increment()
+    }
+
     fun registerEntityGauges() {
         registry.gauge("mm_active_sessions", this) {
             try {
@@ -81,6 +98,33 @@ object MetricsRegistry {
 
         registry.gauge("mm_go2rtc_running", this) {
             if (Go2rtcAgent.instance?.currentProcess?.isAlive == true) 1.0 else 0.0
+        }
+
+        // Live TV gauges
+        registry.gauge("mm_live_tv_tuners_configured", this) {
+            try {
+                JdbiOrm.jdbi().withHandle<Double, Exception> { handle ->
+                    handle.createQuery("SELECT COUNT(*) FROM live_tv_tuner WHERE enabled = TRUE")
+                        .mapTo(Int::class.java)
+                        .one()
+                        .toDouble()
+                }
+            } catch (_: Exception) { 0.0 }
+        }
+
+        registry.gauge("mm_live_tv_channels_configured", this) {
+            try {
+                JdbiOrm.jdbi().withHandle<Double, Exception> { handle ->
+                    handle.createQuery("SELECT COUNT(*) FROM live_tv_channel WHERE enabled = TRUE")
+                        .mapTo(Int::class.java)
+                        .one()
+                        .toDouble()
+                }
+            } catch (_: Exception) { 0.0 }
+        }
+
+        registry.gauge("mm_live_tv_active_streams", this) {
+            LiveTvStreamManager.activeStreamCount().toDouble()
         }
     }
 }

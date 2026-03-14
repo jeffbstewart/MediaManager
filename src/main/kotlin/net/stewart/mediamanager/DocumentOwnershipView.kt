@@ -194,7 +194,18 @@ class DocumentOwnershipView : VerticalLayout() {
         }
 
         contentArea.add(upcField, scanBtn, orLabel, searchField, searchResults)
+
+        // Auto-focus UPC field for Bluetooth barcode scanner workflow
         upcField.focus()
+        // On iOS, programmatic focus on the UPC field prevents the keyboard from
+        // appearing when the user later taps the search field. Force the native
+        // <input> inside the Vaadin web component to take focus on tap.
+        searchField.element.executeJs(
+            "if('ontouchstart' in window){" +
+            "this.addEventListener('touchend',function(){" +
+            "if(this.focusElement)this.focusElement.focus();" +
+            "});}"
+        )
     }
 
     private fun showCapturePhase() {

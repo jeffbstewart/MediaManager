@@ -367,6 +367,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         dataQualityItem.first.add(dataQualityBadge)
         val addItemItem = createDrawerItem(VaadinIcon.PLUS, "Add Item", "add")
         val camerasSettingsItem = createDrawerItem(VaadinIcon.MOVIE, "Cameras", "cameras/settings")
+        val liveTvSettingsItem = createDrawerItem(VaadinIcon.DESKTOP, "Live TV", "live-tv/settings")
         val settingsItem = createDrawerItem(VaadinIcon.COG, "Settings", "settings")
         val tagsItem = createDrawerItem(VaadinIcon.BOOKMARK, "Tags", "tags")
         val usersItem = createDrawerItem(VaadinIcon.USERS, "Users", "users")
@@ -525,6 +526,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(pWishesItem)
         items.add(pOwnershipItem)
         items.add(camerasSettingsItem)
+        items.add(liveTvSettingsItem)
         items.add(settingsItem)
         items.add(tagsItem)
         items.add(tcStatusItem)
@@ -538,7 +540,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             add(divider, manageHeader)
-            add(dataQualityItem.first, addItemItem.first, camerasSettingsItem.first, purchasesParent, purchasesChildren,
+            add(dataQualityItem.first, addItemItem.first, camerasSettingsItem.first, liveTvSettingsItem.first, purchasesParent, purchasesChildren,
                 settingsItem.first, tagsItem.first, transcodesParent, transcodesChildren, usersItem.first)
         }
 

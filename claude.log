@@ -762,7 +762,7 @@ Follow-up changes in same session:
   unmatched episodes with the same parsed show name in one operation
 - Extracted linkDiscoveredFileToTitle() shared function (Accept button + dialog)
 - Added Accept button to suggestion column for one-click linking
-- Removed all DO NOT SUBMIT debug log statements from NasScannerService (26 lines)
+- Removed all temporary debug log statements from NasScannerService (26 lines)
 - Fixed grid overflow error: replaced isAllRowsVisible with fixed heights and
   pageSize=100 on both unmatched (400px) and linked (600px) grids
 ===
@@ -813,7 +813,7 @@ Follow-up changes in same session:
   - Removed LRU eviction (no MAX_CACHE_FILES, no evictOldCacheFiles)
   - Removed local ./data/stream-cache/ — all cache goes to NAS
   - Servlet remux is now fallback only (dialog pre-remuxes with progress)
-- Promoted pre-error and exception log lines to permanent (removed DO NOT SUBMIT)
+- Promoted pre-error and exception log lines to permanent (removed debug markers)
 - Promoted FFmpeg remux lifecycle logging to permanent
 - Fixed getFfmpegPath() returning null — now always falls back to default (matching VLC pattern)
 - Files: new RemuxService.kt, new simplelogger.properties; modified VideoStreamServlet.kt,
@@ -3060,4 +3060,59 @@ Navigation flow:
   - MainLayout.kt: Cameras link under Content for all users
 - Tests: UriCredentialRedactorTest.kt (13 tests, all passing)
 - CLAUDE.md: updated with camera entities, services, servlets, architecture section
+===
+
+=== 2026-03-14 12:30 — HLS relay, Roku camera fixes, grid snapshot default ===
+- Built HlsCameraRelay (service/HlsCameraRelay.kt): persistent server-side HLS
+  relay with ring-buffer segment cache, solving go2rtc ephemeral session expiry
+  that prevented Roku HLS playback
+- Rewrote CameraStreamServlet to serve HLS from relay; keep direct proxy for
+  snapshot/MJPEG
+- Fixed Roku CameraListItem: changed itemContent type from assocarray to node
+  (MarkupList passes ContentNode)
+- Added retry logic to CameraPlayerScreen (3 retries, 2s intervals)
+- Renamed "CAM" to "Cameras" on Roku HomeScreen, widened button
+- Defaulted CameraGridView to snapshot polling mode (13 simultaneous MJPEG
+  streams were overwhelming go2rtc when Roku HLS was also active)
+- Removed temporary debug-only auth bypass from AuthFilter.kt
+- Auto-focus UPC field in DocumentOwnershipView for scanner workflow
+- Committed with "Closes #27", pushed to GitHub (issue auto-closed)
+- Deployed Docker image and prod Roku channel
+===
+
+=== 2026-03-14 — Live TV via HDHomeRun (Issue #41) ===
+- Implemented full Live TV streaming pipeline for HDHomeRun tuner
+- Phase 1 (DB + Entities):
+  - V059__live_tv_tuner.sql, V060__live_tv_channel.sql, V061__user_live_tv_quality.sql
+  - LiveTvTuner.kt, LiveTvChannel.kt entities (KEntity/Dao pattern)
+  - Added live_tv_min_quality field to AppUser.kt
+- Phase 2 (HDHomeRun Discovery):
+  - HdHomeRunService.kt — stateless object: discoverDevice(), fetchLineup(), syncChannels()
+  - IPv4-only IP validation (SSRF prevention), 5s/10s timeouts, Gson JSON parsing
+  - Sync: updates existing channels, inserts new, deletes absent from lineup
+- Phase 3 (Content Rating Gate):
+  - canAccessLiveTv() in LiveTvStreamServlet companion — checks user rating_ceiling
+    against live_tv_min_rating app_config (default 4 = TV-14)
+- Phase 4 (Stream Manager):
+  - LiveTvStreamManager.kt — manages FFmpeg HLS processes in data/live-tv-streams/
+  - Global max streams, per-tuner limits, per-user stream replacement
+  - Idle timeout cleanup (default 15s), stale dir cleanup on startup
+  - FFmpeg: libx264 veryfast zerolatency, yadif deinterlace, AAC audio, HLS output
+- Phase 5 (Stream Servlet):
+  - LiveTvStreamServlet.kt at /live-tv/{channelId}/stream.m3u8 and /segment/{file}
+  - Auth via cookie/device token, content rating gate, segment name validation
+  - Rewrites HLS playlist segment URLs to absolute paths
+- Phase 6 (Admin Settings View):
+  - LiveTvSettingsView.kt at /live-tv/settings — tuner CRUD, channel grid,
+    quality ratings, enable/disable toggles, settings (rating, max streams, timeout)
+  - Add Tuner dialog with IP validation against HDHomeRun discover.json
+- Phase 7 (Wiring & Metrics):
+  - SecurityServiceInitListener: added "live-tv" to adminRoutes
+  - AuthFilter: added "/live-tv/*" to urlPatterns
+  - MainLayout: added Live TV drawer item (VaadinIcon.DESKTOP)
+  - Main.kt: LiveTvStreamManager.start() + shutdown hook
+  - MetricsRegistry: mm_live_tv_* gauges and counters (tuners, channels, active
+    streams, stream starts, bytes, ffmpeg failures, tuner busy)
+- Updated CLAUDE.md with new views, entities, services, servlets, architecture section
+- Build + tests pass
 ===
