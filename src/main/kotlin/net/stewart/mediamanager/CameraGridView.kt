@@ -145,6 +145,8 @@ class CameraGridView : KComposite() {
             }, 3000)
             """.trimIndent()
         }
-        ui.ifPresent { it.page.executeJs(js) }
+        // Execute via the gridContainer's element instead of ui.ifPresent —
+        // ui is not available during KComposite's ui{} initialization
+        gridContainer.element.executeJs(js)
     }
 }
