@@ -9,6 +9,7 @@ import net.stewart.mediamanager.service.DatabaseBackupService
 import net.stewart.mediamanager.service.ForBrowserValidator
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.MetricsRegistry
+import net.stewart.mediamanager.service.Go2rtcAgent
 import net.stewart.mediamanager.service.SsdpResponder
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
@@ -84,6 +85,11 @@ fun main(args: Array<String>) {
     PriceLookupAgent.instance = priceLookupAgent
     priceLookupAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { priceLookupAgent.stop() })
+
+    val go2rtcAgent = Go2rtcAgent()
+    Go2rtcAgent.instance = go2rtcAgent
+    go2rtcAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { go2rtcAgent.stop() })
 
     // Periodic maintenance: cleanup + database backup (every 24 hours)
     val scheduler = Executors.newSingleThreadScheduledExecutor { r ->

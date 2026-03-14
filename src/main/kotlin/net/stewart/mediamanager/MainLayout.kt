@@ -25,6 +25,7 @@ import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.router.AfterNavigationEvent
 import com.vaadin.flow.router.AfterNavigationObserver
 import com.vaadin.flow.router.RouterLink
+import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
@@ -273,9 +274,9 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         val cCollectionsItem = createDrawerItem(null, "Collections", "content/collections", indent = true)
         val cTagsItem = createDrawerItem(null, "Tags", "content/tags", indent = true)
         val cFamilyItem = createDrawerItem(null, "Family", "content/family", indent = true)
-        // Placeholder: Live — enable when #27/#41 ship
-        // val cLiveItem = createDrawerItem(null, "Live", "content/live", indent = true)
-        //   Sub-entries: Cameras (#27), Television (#41)
+        val hasCameras = Camera.findAll().any { it.enabled }
+        val cCamerasItem = createDrawerItem(null, "Cameras", "cameras", indent = true)
+        cCamerasItem.first.isVisible = hasCameras
 
         contentChevron = VaadinIcon.CHEVRON_DOWN.create().apply {
             setSize("14px")
@@ -316,8 +317,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             isVisible = false
-            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first, cFamilyItem.first)
-            // add(cLiveItem.first)     // Placeholder: Live (#27/#41)
+            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first, cFamilyItem.first, cCamerasItem.first)
         }
 
         items.add(homeItem)
@@ -326,6 +326,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(cCollectionsItem)
         items.add(cTagsItem)
         items.add(cFamilyItem)
+        items.add(cCamerasItem)
         items.add(wishListItem)
 
         val mainSection = VerticalLayout().apply {
@@ -365,6 +366,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
         dataQualityItem.first.add(dataQualityBadge)
         val addItemItem = createDrawerItem(VaadinIcon.PLUS, "Add Item", "add")
+        val camerasSettingsItem = createDrawerItem(VaadinIcon.MOVIE, "Cameras", "cameras/settings")
         val settingsItem = createDrawerItem(VaadinIcon.COG, "Settings", "settings")
         val tagsItem = createDrawerItem(VaadinIcon.BOOKMARK, "Tags", "tags")
         val usersItem = createDrawerItem(VaadinIcon.USERS, "Users", "users")
@@ -522,6 +524,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(pValuationItem)
         items.add(pWishesItem)
         items.add(pOwnershipItem)
+        items.add(camerasSettingsItem)
         items.add(settingsItem)
         items.add(tagsItem)
         items.add(tcStatusItem)
@@ -535,7 +538,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             add(divider, manageHeader)
-            add(dataQualityItem.first, addItemItem.first, purchasesParent, purchasesChildren,
+            add(dataQualityItem.first, addItemItem.first, camerasSettingsItem.first, purchasesParent, purchasesChildren,
                 settingsItem.first, tagsItem.first, transcodesParent, transcodesChildren, usersItem.first)
         }
 
@@ -977,7 +980,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
 
         // Content group: auto-expand and highlight parent when on any sub-route
-        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags", "content/family")
+        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags", "content/family", "cameras")
         val onContent = path in contentRoutes || path.startsWith("content/collection/")
         if (onContent) {
             contentChildren.isVisible = true

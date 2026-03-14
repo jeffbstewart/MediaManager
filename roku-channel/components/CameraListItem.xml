@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CameraListItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="assocarray" onChange="onItemContentChanged" />
+    </interface>
+
+    <script type="text/brightscript" uri="CameraListItem.brs" />
+
+    <children>
+        <!-- Background card -->
+        <Rectangle
+            id="itemBg"
+            width="1800"
+            height="200"
+            color="#2a2a4a" />
+
+        <!-- Snapshot thumbnail -->
+        <Poster
+            id="snapshotPoster"
+            translation="[10, 10]"
+            width="320"
+            height="180"
+            loadingBitmapOpacity="0" />
+
+        <!-- Camera name -->
+        <Label
+            id="nameLabel"
+            translation="[350, 40]"
+            text=""
+            font="font:MediumBoldSystemFont"
+            color="#e0e0e0"
+            width="1400" />
+
+        <!-- Status label -->
+        <Label
+            id="statusLabel"
+            translation="[350, 90]"
+            text="Live"
+            font="font:SmallSystemFont"
+            color="#10b981"
+            width="1400" />
+    </children>
+</component>

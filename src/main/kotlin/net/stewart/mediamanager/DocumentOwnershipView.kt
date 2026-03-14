@@ -58,7 +58,34 @@ class DocumentOwnershipView : VerticalLayout() {
         currentItem = null
         currentUpc = null
 
-        val scanBtn = Button("Scan Barcode", VaadinIcon.BARCODE.create()) {
+        // UPC text input (works with Bluetooth barcode scanners and manual entry)
+        val upcField = TextField().apply {
+            placeholder = "Scan or type UPC barcode..."
+            width = "100%"
+            isClearButtonVisible = true
+            style.set("font-size", "var(--lumo-font-size-l)")
+            element.setAttribute("inputmode", "numeric")
+            element.setAttribute("autocomplete", "off")
+        }
+
+        upcField.addValueChangeListener { event ->
+            val upc = event.value?.trim() ?: ""
+            if (upc.length < 8 || !upc.all { it.isDigit() }) return@addValueChangeListener
+            lookupUpc(upc)
+            upcField.clear()
+        }
+
+        // Also handle Enter key for partial typing
+        upcField.element.addEventListener("keypress") {
+            upcField.value?.trim()?.let { upc ->
+                if (upc.length >= 8 && upc.all { it.isDigit() }) {
+                    lookupUpc(upc)
+                    upcField.clear()
+                }
+            }
+        }.filter = "event.key === 'Enter'"
+
+        val scanBtn = Button("Scan with Camera", VaadinIcon.CAMERA.create()) {
             OwnershipScannerDialog(
                 onItemFound = { item ->
                     currentItem = item
@@ -72,10 +99,8 @@ class DocumentOwnershipView : VerticalLayout() {
                 }
             ).open()
         }.apply {
-            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            addThemeVariants(ButtonVariant.LUMO_TERTIARY)
             width = "100%"
-            height = "60px"
-            style.set("font-size", "var(--lumo-font-size-l)")
         }
 
         val orLabel = Span("— or search by title —").apply {
@@ -168,7 +193,7 @@ class DocumentOwnershipView : VerticalLayout() {
             }
         }
 
-        contentArea.add(scanBtn, orLabel, searchField, searchResults)
+        contentArea.add(upcField, scanBtn, orLabel, searchField, searchResults)
     }
 
     private fun showCapturePhase() {
@@ -264,6 +289,36 @@ class DocumentOwnershipView : VerticalLayout() {
         }
 
         contentArea.add(scanAnotherBtn)
+    }
+
+    private fun lookupUpc(upc: String) {
+        if (upc.length < 8 || upc.length > 14 || !upc.all { it.isDigit() }) {
+            Notification.show("Invalid UPC format", 3000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            return
+        }
+
+        // Check if we already have this item
+        val item = MediaItem.findAll().firstOrNull { it.upc == upc }
+
+        if (item != null) {
+            currentItem = item
+            currentUpc = item.upc
+            showCapturePhase()
+        } else {
+            // Novel UPC — create a BarcodeScan for lookup
+            val existingScan = BarcodeScan.findAll().firstOrNull { it.upc == upc }
+            if (existingScan == null) {
+                BarcodeScan(
+                    upc = upc,
+                    scanned_at = LocalDateTime.now(),
+                    lookup_status = LookupStatus.NOT_LOOKED_UP.name
+                ).save()
+            }
+            currentUpc = upc
+            currentItem = null
+            showCapturePhase()
+        }
     }
 
     private fun buildTitleMap(): Map<Long, String> {

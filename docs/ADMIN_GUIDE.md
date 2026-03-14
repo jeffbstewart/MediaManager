@@ -306,6 +306,75 @@ Click the pencil icon next to "People in this Video" to add or remove family mem
 
 ---
 
+## Live Camera Streaming
+
+**Sidebar &rarr; Cameras (in Manage section)**
+
+Media Manager can relay live RTSP camera feeds to authenticated browsers and Roku devices via an embedded [go2rtc](https://github.com/AlexxIT/go2rtc) process. The server proxies all streams, so cameras don't need to be directly accessible to clients &mdash; they only need to be reachable from the server.
+
+### Architecture
+
+```
+Camera (RTSP) &rarr; go2rtc (relay, 127.0.0.1:1984) &rarr; HLS &rarr; MediaManager proxy &rarr; Roku
+                                                        &rarr; MJPEG &rarr; MediaManager proxy &rarr; Browser
+                                                        &rarr; JPEG snapshot &rarr; Browser thumbnails
+```
+
+### go2rtc Configuration
+
+The camera settings page includes a **go2rtc Settings** card at the bottom:
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| **go2rtc Binary Path** | `/usr/local/bin/go2rtc` | Path to the go2rtc executable. Pre-installed in the Docker image. |
+| **go2rtc API Port** | `1984` | Port go2rtc binds to on 127.0.0.1 (not externally accessible) |
+
+go2rtc is bundled in the Docker image automatically. For non-Docker installs, download the binary from [go2rtc releases](https://github.com/AlexxIT/go2rtc/releases) and set the path.
+
+### Adding Cameras
+
+1. Navigate to **Cameras** in the Manage section of the sidebar
+2. Click **Add Camera**
+3. Fill in the fields:
+   - **Name** &mdash; Display name (e.g., "Front Door", "Driveway")
+   - **RTSP URL** &mdash; Full RTSP URL including credentials (e.g., `rtsp://admin:password@192.168.1.100:554/stream`)
+   - **Snapshot URL** &mdash; Optional HTTP URL for JPEG snapshots (may also contain credentials)
+   - **Stream Name** &mdash; Auto-generated from the camera name (lowercase, underscores). Used internally by go2rtc.
+   - **Enabled** &mdash; Toggle camera on/off without deleting it
+4. Click **Save**
+
+go2rtc automatically restarts with the new camera configuration.
+
+### Credential Security
+
+Camera credentials (in RTSP and snapshot URLs) are handled with care:
+
+- **On initial add:** You type/paste the full RTSP URL with credentials in a plain text field
+- **On edit:** The URL is shown redacted (`rtsp://***:***@192.168.1.100:554/stream`). A "Change URL" button reveals an empty password field. Leave it empty to keep the existing URL, or enter a new URL to replace it. The raw credential never leaves the server after initial entry.
+- **In the grid:** The URL column always shows the redacted form
+- **In logs:** All go2rtc process output is filtered to redact credentials before logging
+- **In API responses:** RTSP URLs are never included in Roku or browser API responses
+
+### Managing Cameras
+
+- **Reorder** &mdash; Use the up/down arrow buttons to change display order
+- **Test** &mdash; Click to fetch a live snapshot and display it in a dialog (verifies connectivity)
+- **Edit** &mdash; Modify name, URL (via blind update), snapshot URL, stream name, or enabled status
+- **Delete** &mdash; Remove the camera. go2rtc reconfigures automatically.
+
+### Feature Gating
+
+- The **Cameras** viewer link (Content section) only appears when at least one enabled camera exists
+- The **Cameras** admin link (Manage section) is always visible to admins
+- The Roku home screen's Cameras button only appears when cameras are configured
+- No camera-related UI is shown anywhere when zero cameras exist
+
+### Docker Notes
+
+The go2rtc binary is included in the Docker image. go2rtc binds to `127.0.0.1:1984` inside the container &mdash; **do not** map port 1984 in your docker-compose file. All client access goes through MediaManager's authenticated proxy on port 8080.
+
+---
+
 ## Settings
 
 **Sidebar &rarr; Settings**

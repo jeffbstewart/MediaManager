@@ -18,6 +18,10 @@ sub init()
 
     m.searchPlaceholder = m.top.findNode("searchPlaceholder")
 
+    ' Camera button
+    m.cameraButton = m.top.findNode("cameraButton")
+    m.cameraFocusRing = m.top.findNode("cameraFocusRing")
+
     ' Delegate focus when the Group itself receives it (e.g. returning from another screen)
     m.top.observeField("focusedChild", "onFocusChanged")
 
@@ -127,6 +131,14 @@ sub onFeedResult()
     m.feedCarousels = feedData.carousels
 
     buildCarouselsFromFeed(feedData.carousels)
+
+    ' Show camera button if cameras are available (server sends hasCameras flag)
+    if feedData.hasCameras <> invalid and feedData.hasCameras = true
+        print "[MM] HomeScreen: cameras available, showing button"
+        m.cameraButton.visible = true
+    else
+        m.cameraButton.visible = false
+    end if
 end sub
 
 sub onFeedError()
@@ -294,6 +306,7 @@ sub setFocusTarget(target as string)
 
     ' Clear all focus indicators
     m.searchFocusRing.visible = false
+    m.cameraFocusRing.visible = false
     m.profileFocusRing.visible = false
 
     if target = "rowList"
@@ -301,6 +314,9 @@ sub setFocusTarget(target as string)
     else if target = "search"
         m.searchBox.setFocus(true)
         m.searchFocusRing.visible = true
+    else if target = "camera"
+        m.cameraButton.setFocus(true)
+        m.cameraFocusRing.visible = true
     else if target = "profile"
         m.profileWidget.setFocus(true)
         m.profileFocusRing.visible = true
@@ -366,7 +382,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setFocusTarget("rowList")
             return true
         else if key = "right"
-            setFocusTarget("profile")
+            if m.cameraButton.visible
+                setFocusTarget("camera")
+            else
+                setFocusTarget("profile")
+            end if
             return true
         else if key = "OK"
             showSearchKeyboard()
@@ -378,12 +398,31 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 return true
             end if
         end if
-    else if m.focusTarget = "profile"
+    else if m.focusTarget = "camera"
         if key = "down"
             setFocusTarget("rowList")
             return true
         else if key = "left"
             setFocusTarget("search")
+            return true
+        else if key = "right"
+            setFocusTarget("profile")
+            return true
+        else if key = "OK"
+            print "[MM] HomeScreen: cameras button pressed"
+            m.top.camerasRequested = true
+            return true
+        end if
+    else if m.focusTarget = "profile"
+        if key = "down"
+            setFocusTarget("rowList")
+            return true
+        else if key = "left"
+            if m.cameraButton.visible
+                setFocusTarget("camera")
+            else
+                setFocusTarget("search")
+            end if
             return true
         else if key = "OK"
             openPanel()

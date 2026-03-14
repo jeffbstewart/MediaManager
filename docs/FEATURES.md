@@ -76,6 +76,7 @@ see git history for full specifications.
 | Feature Tracker Migration | Migrated all open items from FEATURES.md to GitHub Issues with project-specific labels |
 | Camera Barcode Scanning | Mobile camera scanning via html5-qrcode with continuous scan, audio/visual feedback, duplicate detection |
 | Roku Search & Landing Pages | Full-text search on Roku with categorized results, collection/tag/genre/actor landing pages, wishlist from actor page, wish-fulfilled badges |
+| Live Camera Streaming | RTSP camera relay via go2rtc, browser MJPEG grid, Roku HLS playback, credential redaction, admin CRUD with blind credential updates |
 
 ---
 

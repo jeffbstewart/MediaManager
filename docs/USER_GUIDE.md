@@ -203,6 +203,26 @@ Click any actor's headshot (from a title detail page or search results) to see t
 
 ---
 
+## Live Cameras
+
+If your admin has configured security cameras, a **Cameras** link appears in the Content section of the sidebar.
+
+### Browser Grid
+
+The camera grid shows live feeds from all enabled cameras in a responsive layout (2&times;2 for up to 4 cameras, 3&times;3 for more). Each cell displays the camera name and a live MJPEG stream.
+
+**Controls:**
+- **Click any camera** to open it fullscreen in a dialog overlay
+- **Live / Snapshot toggle** &mdash; Switch between continuous MJPEG streaming (higher bandwidth) and periodic snapshot polling (lower bandwidth, refreshes every 2&ndash;3 seconds)
+
+Live camera feeds require no special setup &mdash; if cameras are configured and you can see the Cameras link, they're ready to watch.
+
+### Roku Cameras
+
+The Roku channel includes a camera list accessible from the **Cameras** button on the home screen (only visible when cameras are configured). Select a camera to watch its live HLS stream. The live player has no seeking or progress tracking &mdash; it's a continuous live view. Press **Back** to return to the camera list.
+
+---
+
 ## Roku Playback
 
 Media Manager includes a custom Roku channel for TV playback. See the [Roku Setup Guide](ROKU_GUIDE.md) for installation. Once paired, your library appears on the Roku with poster art, episode grids, and playback progress synced with the browser. The Roku channel also supports full-text search with landing pages for collections, tags, genres, and actors, plus wishlist integration from actor pages.

@@ -120,6 +120,8 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `ExpandView.kt` — Multi-pack title expansion (route `/expand`)
 - `MainLayout.kt` — Shared AppLayout with nav bar
 - `VideoPlayerDialog.kt` — In-browser video player dialog (HTML5 `<video>`)
+- `CameraGridView.kt` — Live camera MJPEG grid for browser (route `/cameras`, viewer-accessible)
+- `CameraSettingsView.kt` — Camera CRUD admin UI (route `/cameras/settings`, admin-only)
 - `LoginView.kt` — Login page (route `/login`, no MainLayout)
 - `SetupView.kt` — First-user setup wizard (route `/setup`, no MainLayout)
 - `UserManagementView.kt` — Admin user management (route `/users`)
@@ -132,6 +134,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `DiscoveredFile.kt` — Staging table for NAS files not yet matched to a Title
 - `Genre.kt`, `TitleGenre.kt` — Genre tagging
 - `EnrichmentAttempt.kt` — TMDB retry tracking
+- `Camera.kt` — Camera definitions (RTSP URL, go2rtc stream name, display order, enabled flag)
 - `AppConfig.kt` — Key/value app settings (NAS path, FFmpeg path, quota tracking)
 - `Enums.kt` — MediaFormat, MediaType, TranscodeStatus, DiscoveredFileStatus, MatchMethod, etc.
 - `AppUser.kt` — User accounts with access levels (1=viewer, 2=admin)
@@ -160,6 +163,8 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `PopularityRefreshAgent.kt` — Background daemon: gradually refreshes TMDB popularity for titles and cast members (~1%/day, full cycle ~100 days)
 - `CollectionRefreshAgent.kt` — Background daemon: gradually re-fetches TMDB collection data (parts, poster paths, new entries) (~1%/day, full cycle ~100 days)
 - `ManagedDirectoryService.kt` — Ensures managed NAS directories (ForBrowser/) exist with `.mm-ignore` markers
+- `Go2rtcAgent.kt` — Background daemon: manages go2rtc child process for RTSP→HLS/MJPEG camera relay, configures streams via HTTP API
+- `UriCredentialRedactor.kt` — Stateless singleton: redacts credentials from RTSP/HTTP URLs in logs, UI, errors
 - `FormatProbeService.kt` — Background FFprobe-based media format detection (resolution → DVD/Blu-ray/UHD)
 - `Clock.kt` — Clock interface for testable time
 - `PasswordService.kt` — BCrypt password hashing and verification
@@ -176,6 +181,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `AuthFilter.kt` — Servlet filter protecting `/posters/*`, `/headshots/*`, `/stream/*` endpoints
 
 **Servlets:**
+- `CameraStreamServlet.kt` — `/cameras/{id}/*` — proxies go2rtc HLS/MJPEG/snapshot streams to authenticated clients
 - `PosterServlet.kt` — `/posters/{size}/{titleId}` — serves cached TMDB poster images
 - `VideoStreamServlet.kt` — `/stream/{id}` — video streaming with HTTP Range support; serves MP4/M4V directly, MKV/AVI from ForBrowser mirror
 - `RokuFeedServlet.kt` — `/roku/feed.json?key={apiKey}` — Roku channel JSON feed (device token auth, 5-minute cache)
@@ -193,7 +199,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `secrets/example.env` — Template for required environment variables (TMDB API key)
 - `src/main/resources/webapp/ROOT` — Marker file required by vaadin-boot
 - `src/main/resources/webapp/html5-qrcode.min.js` — html5-qrcode v2.3.8 (Apache 2.0 license), client-side barcode detection for mobile camera scanning. Bundled locally to avoid CDN dependency. Source: https://github.com/mebjas/html5-qrcode
-- `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V018)
+- `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V058)
 - `build.gradle.kts` — Build config
 - `gradle/libs.versions.toml` — Dependency version catalog
 
@@ -275,6 +281,26 @@ A JSON feed endpoint at `/roku/feed.json?key={apiKey}` serves the media catalog 
 **Authentication:** The API key (auto-generated UUID, stored as `roku_api_key` in `app_config`) authenticates all Roku requests. `AuthFilter` accepts `?key=` as a fallback when no cookie is present, so Roku devices can access `/stream/*` and `/posters/*` endpoints. The key can be regenerated from Transcodes > Settings.
 
 **Architecture note:** Roku Direct Publisher was sunset in January 2024. The feed format follows the original Roku DP JSON spec (https://developer.roku.com/docs/specs/direct-publisher-feed-specs/json-dp-spec.md) because it's a well-structured media catalog format, but the feed is consumed by a custom sideloaded BrightScript channel, not by the defunct Direct Publisher service. For personal use, sideloading via Developer Mode has no expiration and requires no Roku certification review.
+
+### Live Camera Streaming
+
+Camera streams are relayed via go2rtc (lightweight Go binary) managed as a child process by `Go2rtcAgent`. Cameras are configured in the `camera` DB table and administered via `/cameras/settings`.
+
+**Architecture:** `Camera (RTSP) → go2rtc (127.0.0.1:1984) → HLS/MJPEG → MediaManager proxy → clients`
+
+**Stream proxy:** `CameraStreamServlet` at `/cameras/{id}/*` proxies go2rtc streams through MediaManager's auth layer:
+- `/cameras/{id}/stream.m3u8` — HLS playlist (Roku)
+- `/cameras/{id}/snapshot.jpg` — JPEG snapshot
+- `/cameras/{id}/mjpeg` — MJPEG stream (browser grid)
+- `/cameras/{id}/segment/{file}` — HLS .ts segments
+
+**Roku cameras:** `/roku/cameras.json` returns enabled cameras with proxy stream/snapshot URLs. `CameraListScreen` shows thumbnails; `CameraPlayerScreen` plays HLS live streams. Home feed includes `hasCameras` flag.
+
+**Browser:** `CameraGridView` at `/cameras` shows responsive MJPEG grid with fullscreen click. Toggle between live MJPEG and snapshot polling modes.
+
+**Credential security:** RTSP URLs stored in DB (encrypted at rest via H2). `UriCredentialRedactor` redacts credentials everywhere: logs, UI, error messages. Admin UI uses blind credential updates (PasswordField for changes, never shows raw URL after initial entry). go2rtc configured via HTTP API (no credential-bearing YAML on disk).
+
+**go2rtc config:** Binary path via `app_config` key `go2rtc_path`. API port via `go2rtc_api_port` (default 1984). Never port-map 1984 in docker-compose. Dockerfile downloads go2rtc binary.
 
 ### Schema Updater Framework
 

@@ -201,6 +201,17 @@ During video playback:
 
 **Subtitles:** If an SRT subtitle file exists alongside the media file on the NAS, subtitles are available. They're enabled by default; press **Options (\*)** during playback to toggle. The current CC state (On/Off) is shown on the pause overlay.
 
+### Live Cameras
+
+If cameras are configured on your Media Manager server, a **Cameras** button appears on the home screen (below the search box area).
+
+1. Select **Cameras** on the home screen
+2. A list of cameras appears with snapshot thumbnails (refreshed every 10 seconds)
+3. Select a camera to start watching its live HLS stream
+4. Press **Back** to return to the camera list
+
+The live camera player is a simplified video player &mdash; no seeking, no progress bar, no resume tracking. A "LIVE" indicator appears in the upper-right corner. If no cameras are configured, the Cameras button does not appear.
+
 ### Audio Setup
 
 The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to **Stereo**. When set to "Auto", the Roku may negotiate audio formats that cause video to play without sound.
@@ -220,6 +231,8 @@ The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to
 | Subtitles don't appear | Verify the SRT file exists on the NAS (named `{filename}.en.srt`). Check that subtitles display in the web app first. Press Options (\*) to toggle CC on. |
 | TV series appears but has no episodes | The title needs episode-linked transcodes. Check Transcodes > Linked in the web app. |
 | Search returns no results | Verify the server is reachable and the query matches title names, actor names, collection names, or tag names. Results only include playable titles. |
+| Cameras button not visible | No cameras are configured or enabled on the server. An admin must add cameras in the web app under Manage &rarr; Cameras. |
+| Camera stream won't play | Check that go2rtc is running (admin can test snapshot from camera settings). Verify the camera's RTSP URL is correct. |
 
 ---
 

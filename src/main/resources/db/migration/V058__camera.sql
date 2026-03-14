@@ -1,0 +1,10 @@
+CREATE TABLE camera (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    rtsp_url VARCHAR(512) NOT NULL,
+    snapshot_url VARCHAR(512) DEFAULT '',
+    go2rtc_name VARCHAR(64) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

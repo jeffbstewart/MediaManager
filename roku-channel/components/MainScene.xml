@@ -65,6 +65,16 @@
             visible="false"
             translation="[0, 0]" />
 
+        <CameraListScreen
+            id="cameraListScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <CameraPlayerScreen
+            id="cameraPlayerScreen"
+            visible="false"
+            translation="[0, 0]" />
+
         <!-- Shared background tasks -->
         <PairTask id="pairTask" />
         <WishlistTask id="wishlistTask" />

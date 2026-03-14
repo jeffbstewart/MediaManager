@@ -10,6 +10,8 @@ sub init()
     m.collectionScreen = m.top.findNode("collectionScreen")
     m.tagScreen = m.top.findNode("tagScreen")
     m.actorScreen = m.top.findNode("actorScreen")
+    m.cameraListScreen = m.top.findNode("cameraListScreen")
+    m.cameraPlayerScreen = m.top.findNode("cameraPlayerScreen")
     m.pairTask = m.top.findNode("pairTask")
     m.wishlistTask = m.top.findNode("wishlistTask")
 
@@ -60,6 +62,11 @@ sub init()
     m.actorScreen.observeField("playRequested", "onActorPlayRequested")
     m.actorScreen.observeField("episodePickerRequested", "onActorEpisodePickerRequested")
     m.actorScreen.observeField("wishRequested", "onWishRequested")
+
+    ' Camera screen signals
+    m.homeScreen.observeField("camerasRequested", "onCamerasRequested")
+    m.cameraListScreen.observeField("cameraSelected", "onCameraSelected")
+    m.cameraPlayerScreen.observeField("playbackFinished", "onCameraPlaybackFinished")
 
     ' Wishlist task signals
     m.wishlistTask.observeField("wishResult", "onWishResult")
@@ -741,6 +748,35 @@ sub onWishError()
     errorMsg = m.wishlistTask.wishError
     if errorMsg = invalid then return
     print "[MM] MainScene: wish error — " ; errorMsg
+end sub
+
+' ---- Camera Screens ----
+
+sub onCamerasRequested()
+    print "[MM] MainScene: cameras requested"
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    m.cameraListScreen.serverUrl = serverUrl
+    m.cameraListScreen.apiKey = apiKey
+    m.cameraListScreen.camerasData = { trigger: true }
+    showScreen(m.cameraListScreen)
+end sub
+
+sub onCameraSelected()
+    camera = m.cameraListScreen.cameraSelected
+    if camera = invalid then return
+
+    print "[MM] MainScene: camera selected for playback — " ; camera.name
+
+    m.cameraPlayerScreen.playContent = camera
+    showScreen(m.cameraPlayerScreen)
+end sub
+
+sub onCameraPlaybackFinished()
+    print "[MM] MainScene: camera playback finished, returning to camera list"
+    hideTopScreen()
 end sub
 
 ' ---- Voice Search ----

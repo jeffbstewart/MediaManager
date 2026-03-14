@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CameraListTask" extends="Task">
+    <interface>
+        <!-- Inputs -->
+        <field id="camerasUrl" type="string" />
+
+        <!-- Outputs -->
+        <field id="camerasResult" type="assocarray" alwaysNotify="true" />
+        <field id="camerasError" type="string" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="CameraListTask.brs" />
+</component>

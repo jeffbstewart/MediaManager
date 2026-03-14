@@ -7,6 +7,7 @@
         <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="searchQuery" type="string" alwaysNotify="true" onChange="onSearchQueryChanged" />
         <field id="searchRequested" type="string" alwaysNotify="true" />
+        <field id="camerasRequested" type="boolean" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
@@ -60,6 +61,28 @@
                 text="Search"
                 font="font:SmallSystemFont"
                 color="#666666" />
+        </Group>
+
+        <!-- Focusable camera button -->
+        <Group id="cameraButton" translation="[1640, 38]" visible="false">
+            <!-- Focus outline -->
+            <Rectangle
+                id="cameraFocusRing"
+                translation="[-3, -3]"
+                width="78"
+                height="54"
+                color="#ffffff"
+                visible="false" />
+            <!-- Button background -->
+            <Rectangle
+                width="72"
+                height="48"
+                color="#2a2a4a" />
+            <Label
+                translation="[8, 10]"
+                text="CAM"
+                font="font:SmallBoldSystemFont"
+                color="#e0e0e0" />
         </Group>
 
         <!-- Focusable profile widget (header right side) -->

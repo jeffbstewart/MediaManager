@@ -3030,3 +3030,34 @@ Navigation flow:
 - Files modified: RokuFeedServlet.kt, RokuHomeService.kt, AuthFilter.kt,
   CarouselItem.xml/.brs, HomeScreen.xml/.brs, MainScene.xml/.brs
 ===
+
+=== 2026-03-13 — Live Camera Streaming (Issue #27) Phases 1-4 ===
+- Implemented live camera streaming support across server and Roku channel
+- Phase 1 (Server Foundation):
+  - V058__camera.sql migration: camera table with name, RTSP URL, display order, go2rtc stream name
+  - entity/Camera.kt: KEntity with toString() credential redaction
+  - service/UriCredentialRedactor.kt: stateless URL credential redaction (rtsp://, http(s)://)
+  - service/Go2rtcAgent.kt: daemon managing go2rtc child process, HTTP API stream config
+  - CameraStreamServlet.kt: proxies go2rtc HLS/MJPEG/snapshot to authenticated clients
+  - RokuFeedServlet.kt: added /roku/cameras.json endpoint
+  - AuthFilter.kt: added /cameras/* to protected URL patterns
+  - Main.kt: Go2rtcAgent startup with shutdown hook
+  - Dockerfile: downloads go2rtc binary into runtime image
+- Phase 2 (Admin UI):
+  - CameraSettingsView.kt: camera CRUD (add/edit/delete/reorder/test), go2rtc settings
+  - Blind credential updates (PasswordField for edits, never shows raw URL)
+  - SecurityServiceInitListener.kt: cameras/settings as admin route
+  - MainLayout.kt: Cameras link in admin drawer section
+- Phase 3 (Roku Camera Screen):
+  - CameraListTask.xml/.brs: background task fetching cameras.json
+  - CameraListScreen.xml/.brs + CameraListItem.xml/.brs: camera list with snapshot thumbnails
+  - CameraPlayerScreen.xml/.brs: lightweight live HLS player (no seeking, no progress)
+  - MainScene.xml/.brs: wired camera screens, event handlers
+  - HomeScreen.xml/.brs: CAM button (visible when hasCameras in home feed)
+  - RokuHomeService.kt: added hasCameras flag to HomeFeed
+- Phase 4 (Browser Camera Grid):
+  - CameraGridView.kt: responsive MJPEG grid, fullscreen click, snapshot toggle
+  - MainLayout.kt: Cameras link under Content for all users
+- Tests: UriCredentialRedactorTest.kt (13 tests, all passing)
+- CLAUDE.md: updated with camera entities, services, servlets, architecture section
+===

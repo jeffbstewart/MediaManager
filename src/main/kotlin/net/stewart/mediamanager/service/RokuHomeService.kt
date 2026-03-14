@@ -42,7 +42,8 @@ object RokuHomeService {
     )
 
     data class HomeFeed(
-        val carousels: List<Carousel>
+        val carousels: List<Carousel>,
+        val hasCameras: Boolean = false
     )
 
     fun generateHomeFeed(baseUrl: String, apiKey: String, user: AppUser): HomeFeed {
@@ -103,7 +104,8 @@ object RokuHomeService {
         log.info("Roku home feed: {} carousels, {} total items",
             carousels.size, carousels.sumOf { it.items.size })
 
-        return HomeFeed(carousels)
+        val hasCameras = Camera.findAll().any { it.enabled }
+        return HomeFeed(carousels, hasCameras)
     }
 
     private fun buildResumeCarousel(

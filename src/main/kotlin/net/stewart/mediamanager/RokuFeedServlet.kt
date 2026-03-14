@@ -11,6 +11,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.service.RokuFeedService
 import net.stewart.mediamanager.service.RokuHomeService
 import net.stewart.mediamanager.service.RokuSearchService
@@ -93,6 +94,7 @@ class RokuFeedServlet : HttpServlet() {
                 path.matches(Regex("tag/(\\d+)\\.json")) -> handleTag(req, resp, path)
                 path.matches(Regex("genre/(\\d+)\\.json")) -> handleGenre(req, resp, path)
                 path.matches(Regex("actor/(\\d+)\\.json")) -> handleActor(req, resp, path)
+                path == "cameras.json" -> handleCameras(req, resp)
                 else -> {
                     log.info("Roku request for unknown path: {}", path)
                     resp.sendError(HttpServletResponse.SC_NOT_FOUND)
@@ -310,6 +312,32 @@ class RokuFeedServlet : HttpServlet() {
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku actor detail served for personId={} (status 200)", personId)
+    }
+
+    private fun handleCameras(req: HttpServletRequest, resp: HttpServletResponse) {
+        val (apiKey, _) = authenticateDevice(req, resp, "cameras") ?: return
+        val baseUrl = getConfiguredBaseUrl(req)
+
+        val cameras = Camera.findAll()
+            .filter { it.enabled }
+            .sortedBy { it.display_order }
+            .map { cam ->
+                val keyParam = if (apiKey.isNotEmpty()) "?key=$apiKey" else ""
+                mapOf(
+                    "id" to cam.id,
+                    "name" to cam.name,
+                    "streamUrl" to "$baseUrl/cameras/${cam.id}/stream.m3u8$keyParam",
+                    "snapshotUrl" to "$baseUrl/cameras/${cam.id}/snapshot.jpg$keyParam"
+                )
+            }
+
+        val json = mapper.writeValueAsString(mapOf("cameras" to cameras))
+        resp.contentType = "application/json"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "private, max-age=60")
+        resp.writer.write(json)
+        MetricsRegistry.countHttpResponse("roku", 200)
+        log.info("Roku cameras served ({} cameras, status 200)", cameras.size)
     }
 
     private fun handleWishlistAdd(req: HttpServletRequest, resp: HttpServletResponse) {
