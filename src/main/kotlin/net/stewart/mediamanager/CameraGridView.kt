@@ -28,7 +28,7 @@ import net.stewart.mediamanager.entity.Camera
 class CameraGridView : KComposite() {
 
     private lateinit var gridContainer: Div
-    private var useMjpeg = true
+    private var useMjpeg = false
 
     private val root = ui {
         verticalLayout {
@@ -43,7 +43,7 @@ class CameraGridView : KComposite() {
                 style.set("font-weight", "700")
                 style.set("flex-grow", "1")
             }
-            val toggleBtn = Button("Snapshots") {
+            val toggleBtn = Button("Live") {
                 useMjpeg = !useMjpeg
                 (it.source as Button).text = if (useMjpeg) "Snapshots" else "Live"
                 buildGrid()

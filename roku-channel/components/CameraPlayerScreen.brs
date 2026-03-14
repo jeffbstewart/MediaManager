@@ -4,6 +4,18 @@ sub init()
     m.cameraNameLabel = m.top.findNode("cameraNameLabel")
 
     m.cameraPlayer.observeField("state", "onPlayerStateChanged")
+
+    ' Track retry attempts for transient HLS errors
+    m.retryCount = 0
+    m.maxRetries = 3
+    m.currentContent = invalid
+
+    ' Retry timer
+    m.retryTimer = CreateObject("roSGNode", "Timer")
+    m.retryTimer.duration = 2
+    m.retryTimer.repeat = false
+    m.retryTimer.observeField("fire", "onRetryTimer")
+    m.top.appendChild(m.retryTimer)
 end sub
 
 sub onPlayContent()
@@ -18,7 +30,13 @@ sub onPlayContent()
     print "[MM] CameraPlayerScreen: playing " ; cameraName ; " — " ; streamUrl
 
     m.cameraNameLabel.text = cameraName
+    m.currentContent = content
+    m.retryCount = 0
 
+    startStream(streamUrl, cameraName)
+end sub
+
+sub startStream(streamUrl as string, cameraName as string)
     ' Build content node for the Video player
     videoContent = CreateObject("roSGNode", "ContentNode")
     videoContent.url = streamUrl
@@ -36,20 +54,53 @@ sub onPlayerStateChanged()
     print "[MM] CameraPlayerScreen: player state = " ; state
 
     if state = "error"
-        errorInfo = m.cameraPlayer.errorMsg
-        if errorInfo <> invalid
-            print "[MM] CameraPlayerScreen: error — " ; errorInfo
+        errorCode = ""
+        errorMsg = ""
+        if m.cameraPlayer.errorCode <> invalid then errorCode = str(m.cameraPlayer.errorCode).trim()
+        if m.cameraPlayer.errorMsg <> invalid then errorMsg = m.cameraPlayer.errorMsg
+        print "[MM] CameraPlayerScreen: error code=" ; errorCode ; " msg=" ; errorMsg
+
+        ' Retry on transient errors (HLS may need time to start)
+        if m.retryCount < m.maxRetries
+            m.retryCount = m.retryCount + 1
+            print "[MM] CameraPlayerScreen: retrying (" ; str(m.retryCount).trim() ; "/" ; str(m.maxRetries).trim() ; ")..."
+            m.cameraPlayer.control = "stop"
+            m.retryTimer.control = "start"
+        else
+            print "[MM] CameraPlayerScreen: max retries exceeded, giving up"
+            stopPlayback()
         end if
-        ' Return to camera list on error
-        stopPlayback()
     else if state = "finished"
-        ' Live streams shouldn't "finish" but handle it
-        stopPlayback()
+        ' Live streams shouldn't "finish" but handle it — retry
+        if m.retryCount < m.maxRetries
+            m.retryCount = m.retryCount + 1
+            print "[MM] CameraPlayerScreen: stream finished, retrying..."
+            m.cameraPlayer.control = "stop"
+            m.retryTimer.control = "start"
+        else
+            stopPlayback()
+        end if
+    else if state = "playing"
+        ' Reset retry count on successful playback
+        m.retryCount = 0
     end if
+end sub
+
+sub onRetryTimer()
+    if m.currentContent = invalid then return
+
+    streamUrl = ""
+    cameraName = ""
+    if m.currentContent.streamUrl <> invalid then streamUrl = m.currentContent.streamUrl
+    if m.currentContent.name <> invalid then cameraName = m.currentContent.name
+
+    print "[MM] CameraPlayerScreen: retry timer fired, restarting stream"
+    startStream(streamUrl, cameraName)
 end sub
 
 sub stopPlayback()
     m.cameraPlayer.control = "stop"
+    m.retryTimer.control = "stop"
     m.top.playbackFinished = true
 end sub
 

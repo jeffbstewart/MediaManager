@@ -194,6 +194,7 @@ class DocumentOwnershipView : VerticalLayout() {
         }
 
         contentArea.add(upcField, scanBtn, orLabel, searchField, searchResults)
+        upcField.focus()
     }
 
     private fun showCapturePhase() {

@@ -64,23 +64,23 @@
         </Group>
 
         <!-- Focusable camera button -->
-        <Group id="cameraButton" translation="[1640, 38]" visible="false">
+        <Group id="cameraButton" translation="[1580, 38]" visible="false">
             <!-- Focus outline -->
             <Rectangle
                 id="cameraFocusRing"
                 translation="[-3, -3]"
-                width="78"
+                width="138"
                 height="54"
                 color="#ffffff"
                 visible="false" />
             <!-- Button background -->
             <Rectangle
-                width="72"
+                width="132"
                 height="48"
                 color="#2a2a4a" />
             <Label
                 translation="[8, 10]"
-                text="CAM"
+                text="Cameras"
                 font="font:SmallBoldSystemFont"
                 color="#e0e0e0" />
         </Group>
