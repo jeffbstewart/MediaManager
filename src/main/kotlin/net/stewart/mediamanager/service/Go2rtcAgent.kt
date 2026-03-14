@@ -69,6 +69,7 @@ class Go2rtcAgent(
                     log.error("Go2rtc agent error: {}", UriCredentialRedactor.redactAll(e.message ?: ""), e)
                 }
                 if (running.get()) {
+                    MetricsRegistry.countGo2rtcRestart()
                     log.info("go2rtc exited, restarting in 10 seconds...")
                     try {
                         clock.sleep(10.seconds)

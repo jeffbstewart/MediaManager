@@ -85,6 +85,7 @@ class CameraStreamServlet : HttpServlet() {
             return
         }
 
+        MetricsRegistry.hlsStreamStarted()
         try {
             val body = conn.inputStream.bufferedReader().readText()
 
@@ -100,8 +101,10 @@ class CameraStreamServlet : HttpServlet() {
             resp.characterEncoding = "UTF-8"
             resp.setHeader("Cache-Control", "no-cache")
             resp.writer.write(rewritten)
+            MetricsRegistry.countCameraStreamBytes("hls", rewritten.length.toLong())
             MetricsRegistry.countHttpResponse("camera", 200)
         } finally {
+            MetricsRegistry.hlsStreamStopped()
             conn.disconnect()
         }
     }
@@ -119,9 +122,11 @@ class CameraStreamServlet : HttpServlet() {
 
         try {
             resp.contentType = conn.contentType ?: "video/mp2t"
-            conn.getHeaderField("Content-Length")?.let { resp.setContentLengthLong(it.toLong()) }
+            val contentLength = conn.getHeaderField("Content-Length")?.toLongOrNull()
+            contentLength?.let { resp.setContentLengthLong(it) }
             resp.setHeader("Cache-Control", "no-cache")
             conn.inputStream.copyTo(resp.outputStream)
+            if (contentLength != null) MetricsRegistry.countCameraStreamBytes("hls", contentLength)
             MetricsRegistry.countHttpResponse("camera", 200)
         } finally {
             conn.disconnect()
@@ -140,9 +145,11 @@ class CameraStreamServlet : HttpServlet() {
 
         try {
             resp.contentType = "image/jpeg"
-            conn.getHeaderField("Content-Length")?.let { resp.setContentLengthLong(it.toLong()) }
+            val contentLength = conn.getHeaderField("Content-Length")?.toLongOrNull()
+            contentLength?.let { resp.setContentLengthLong(it) }
             resp.setHeader("Cache-Control", "no-cache")
             conn.inputStream.copyTo(resp.outputStream)
+            if (contentLength != null) MetricsRegistry.countCameraStreamBytes("snapshot", contentLength)
             MetricsRegistry.countHttpResponse("camera", 200)
         } finally {
             conn.disconnect()
@@ -159,6 +166,7 @@ class CameraStreamServlet : HttpServlet() {
             return
         }
 
+        MetricsRegistry.mjpegStreamStarted()
         try {
             // Pass through the multipart content type from go2rtc
             resp.contentType = conn.contentType ?: "multipart/x-mixed-replace; boundary=frame"
@@ -170,14 +178,23 @@ class CameraStreamServlet : HttpServlet() {
             val output = resp.outputStream
             val buffer = ByteArray(8192)
             var bytesRead: Int
+            var totalBytes = 0L
             while (input.read(buffer).also { bytesRead = it } != -1) {
                 output.write(buffer, 0, bytesRead)
                 output.flush()
+                totalBytes += bytesRead
+                // Report bytes in chunks to avoid per-byte counter overhead
+                if (totalBytes >= 1_048_576) { // every ~1 MB
+                    MetricsRegistry.countCameraStreamBytes("mjpeg", totalBytes)
+                    totalBytes = 0
+                }
             }
+            if (totalBytes > 0) MetricsRegistry.countCameraStreamBytes("mjpeg", totalBytes)
             MetricsRegistry.countHttpResponse("camera", 200)
         } catch (_: java.io.IOException) {
             // Client disconnected — normal for MJPEG streams
         } finally {
+            MetricsRegistry.mjpegStreamStopped()
             conn.disconnect()
         }
     }
