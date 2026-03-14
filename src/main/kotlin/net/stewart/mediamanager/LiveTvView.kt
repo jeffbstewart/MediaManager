@@ -42,6 +42,7 @@ class LiveTvView : KComposite(), HasUrlParameter<String> {
     private lateinit var channelLabel: Span
     private lateinit var qualityContainer: Div
     private lateinit var statusLabel: Span
+    private lateinit var fullscreenBtn: Button
 
     private var channels: List<LiveTvChannel> = emptyList()
     private var currentIndex: Int = -1
@@ -156,9 +157,15 @@ class LiveTvView : KComposite(), HasUrlParameter<String> {
                 isVisible = currentUser?.isAdmin() == true
             }
 
+            // Fullscreen toggle
+            fullscreenBtn = Button(VaadinIcon.EXPAND_SQUARE.create()).apply {
+                addThemeVariants(ButtonVariant.LUMO_TERTIARY)
+                element.setAttribute("title", "Full screen")
+            }
+
             val spacer = Span().apply { style.set("flex-grow", "1") }
 
-            controlBar.add(prevBtn, channelLabel, nextBtn, spacer, channelPicker, qualityContainer, statusLabel)
+            controlBar.add(prevBtn, channelLabel, nextBtn, spacer, channelPicker, qualityContainer, statusLabel, fullscreenBtn)
             add(controlBar)
 
             // Video container (fills remaining space)
@@ -358,5 +365,32 @@ class LiveTvView : KComposite(), HasUrlParameter<String> {
         // Register keyboard shortcuts for channel stepping
         attachEvent.ui.addShortcutListener(ShortcutEventListener { stepChannel(1) }, Key.ARROW_RIGHT)
         attachEvent.ui.addShortcutListener(ShortcutEventListener { stepChannel(-1) }, Key.ARROW_LEFT)
+
+        // Wire fullscreen button via client-side JS (Fullscreen API requires user gesture)
+        fullscreenBtn.element.executeJs("""
+            var btn = this;
+            var container = $0;
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                } else {
+                    var el = container;
+                    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+                }
+            });
+            document.addEventListener('fullscreenchange', function() {
+                var fs = !!document.fullscreenElement;
+                btn.querySelector('vaadin-icon').setAttribute('icon',
+                    fs ? 'vaadin:compress-square' : 'vaadin:expand-square');
+                btn.title = fs ? 'Exit full screen' : 'Full screen';
+            });
+            document.addEventListener('webkitfullscreenchange', function() {
+                var fs = !!document.webkitFullscreenElement;
+                btn.querySelector('vaadin-icon').setAttribute('icon',
+                    fs ? 'vaadin:compress-square' : 'vaadin:expand-square');
+                btn.title = fs ? 'Exit full screen' : 'Full screen';
+            });
+        """, videoContainer.element)
     }
 }

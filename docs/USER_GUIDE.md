@@ -223,6 +223,35 @@ The Roku channel includes a camera list accessible from the **Cameras** button o
 
 ---
 
+## Live TV
+
+If your admin has configured an OTA tuner (e.g., HDHomeRun), a **Live TV** link appears in the Content section of the sidebar.
+
+### Watching
+
+The Live TV viewer shows a full-screen video player with a channel control bar at the top:
+
+- **Left/Right arrows** or **channel buttons** &mdash; Step through channels one at a time
+- **Channel picker** &mdash; Jump to any channel by name or number
+- **Full screen** &mdash; Click the expand button (or press F11) to fill the screen
+- **Arrow keys** &mdash; Left and right arrow keys also step channels
+
+When you tune to a channel, a loading spinner appears while the server starts the stream (typically 10&ndash;15 seconds). The status indicator in the upper right shows the current state: Tuning, Buffering, Playing, or error conditions.
+
+### Channel Quality Filter
+
+Channels are filtered by a quality threshold you can set in your **Profile** page. The default is 4 (out of 5), meaning you only see channels your admin has rated as high quality reception. Lower the threshold to see more channels, or raise it to hide channels with marginal signal.
+
+### Channel Unavailable
+
+If a channel has no signal (poor antenna reception), you'll see a "No signal on this channel" message. Try another channel using the arrow keys or the channel picker.
+
+### URL Persistence
+
+The current channel is saved in the URL (e.g., `/live-tv/4.1`). Bookmarking or reloading the page returns you to the same channel.
+
+---
+
 ## Roku Playback
 
 Media Manager includes a custom Roku channel for TV playback. See the [Roku Setup Guide](ROKU_GUIDE.md) for installation. Once paired, your library appears on the Roku with poster art, episode grids, and playback progress synced with the browser. The Roku channel also supports full-text search with landing pages for collections, tags, genres, and actors, plus wishlist integration from actor pages.

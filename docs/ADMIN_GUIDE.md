@@ -377,6 +377,63 @@ The go2rtc binary is included in the Docker image. go2rtc binds to `127.0.0.1:19
 
 ---
 
+## Live TV (OTA Tuner)
+
+**Sidebar &rarr; Live TV (in Manage section)**
+
+Media Manager can stream over-the-air (OTA) television via a networked HDHomeRun tuner. The server transcodes live MPEG-2 broadcasts to H.264/AAC HLS for playback in any browser.
+
+### Architecture
+
+```
+HDHomeRun (MPEG-TS/MPEG-2/AC-3)
+  &rarr; FFmpeg (H.264/AAC HLS transcode, -preset veryfast -tune zerolatency)
+    &rarr; LiveTvStreamManager (manages FFmpeg processes, temp dirs)
+      &rarr; LiveTvStreamServlet (serves HLS playlist + segments)
+        &rarr; Browser (auth via cookie or device token)
+```
+
+### Adding a Tuner
+
+1. Navigate to **Live TV** in the Manage section of the sidebar
+2. Click **Add Tuner**
+3. Enter the tuner's IP address and click **Validate**
+4. The app connects to `http://{ip}/discover.json` and auto-fills the device name, model, tuner count, and firmware
+5. Click **Save**
+
+After adding a tuner, click **Refresh Channels** to import the channel lineup from `http://{ip}/lineup.json`. Channels that have been removed from the lineup are automatically deleted on refresh.
+
+### Channel Management
+
+The channel grid shows all imported channels with:
+
+- **Guide #** and **Name** &mdash; from the tuner's lineup
+- **Reception Quality** &mdash; 1&ndash;5 stars (admin-rated). Default 3. Users can filter channels by quality threshold.
+- **Enabled** &mdash; Toggle individual channels on/off
+
+Quality ratings can also be set inline while watching in the browser viewer (admin only).
+
+### Content Rating Gate
+
+Live TV access can be restricted by content rating. Set the **Content Rating Minimum** in the Live TV settings card (default: TV-14 / PG-13). Users whose content rating ceiling is below this threshold cannot access live TV streams. Admins and unrestricted users (no rating ceiling) always have access.
+
+### Concurrency Settings
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| **Max Concurrent Streams** | 2 | Global cap on simultaneous FFmpeg transcode processes. Prevents CPU overload. |
+| **Idle Timeout (seconds)** | 60 | How long a stream runs with no client requests before FFmpeg is stopped. |
+
+Each user holds at most one active stream. Switching channels automatically stops the previous stream. Multiple users watching the same channel share a single FFmpeg process.
+
+### Docker Notes
+
+FFmpeg is included in the Docker image. The FFmpeg path and NAS root path are locked in Docker mode &mdash; they cannot be changed from the settings UI.
+
+Temporary stream files are written to `data/live-tv-streams/` inside the container. These are automatically cleaned up when streams stop and on server startup.
+
+---
+
 ## Settings
 
 **Sidebar &rarr; Settings**

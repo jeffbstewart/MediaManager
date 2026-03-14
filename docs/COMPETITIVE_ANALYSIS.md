@@ -37,7 +37,7 @@ This is both the product's greatest strength and its strategic challenge: it com
 | **Library scanning** | Automatic file detection + rich metadata | Automatic file detection + metadata | Automatic file detection + metadata | Automatic NAS scanning + TMDB enrichment + TMDB collection tracking |
 | **User management** | Multi-user with managed/shared accounts | Multi-user with parental controls | Multi-user with parental controls | Multi-user with access levels and content rating ceilings; Roku multi-user picker ([#30](https://github.com/jeffbstewart/MediaManager/issues/30) Done) |
 | **Remote access** | Cloud relay (requires Plex Pass or Remote Watch Pass for TV apps) | Manual (reverse proxy) | Built-in option | Manual (reverse proxy) |
-| **Live TV/DVR** | Yes (premium) | Yes (via plugins) | Yes (premium) | No -- [#27](https://github.com/jeffbstewart/MediaManager/issues/27) security cameras, [#41](https://github.com/jeffbstewart/MediaManager/issues/41) TV tuner |
+| **Live TV/DVR** | Yes (premium) | Yes (via plugins) | Yes (premium) | Live TV via HDHomeRun ([#27](https://github.com/jeffbstewart/MediaManager/issues/27) cameras Done, [#41](https://github.com/jeffbstewart/MediaManager/issues/41) tuner Done); no DVR yet |
 | **Mobile apps** | Yes (iOS, Android -- no longer requires Plex Pass) | Yes (community) | Yes | No -- [#1](https://github.com/jeffbstewart/MediaManager/issues/1) iOS app |
 | **Smart TV apps** | Yes (all major platforms) | Yes (expanding; Roku app v3.1.7 with Dolby Vision/HDR10+/HLG) | Yes | Roku only (custom sideloaded) |
 | **Seek thumbnails** | Yes (premium) | Yes (trickplay, free -- 100x faster in 10.11) | Yes (premium) | **Yes** (BIF trick play -- [#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done) |
@@ -128,8 +128,8 @@ Plex's cloud relay provides zero-config remote streaming (though now paywalled f
 ### 3. Single-Household Scale
 The architecture assumes a single household with one admin managing a physical collection. There's no concept of shared servers, friend access, or federated libraries -- features that Plex and Jellyfin users rely on.
 
-### 4. No Live TV / DVR
-Plex, Jellyfin, and Emby all support live TV tuners and DVR recording. MediaManager has no support for live content. See [#27](https://github.com/jeffbstewart/MediaManager/issues/27) (security cameras) and [#41](https://github.com/jeffbstewart/MediaManager/issues/41) (TV tuner).
+### 4. No DVR
+Live TV streaming is supported via HDHomeRun tuners ([#41](https://github.com/jeffbstewart/MediaManager/issues/41) Done) and security cameras via go2rtc ([#27](https://github.com/jeffbstewart/MediaManager/issues/27) Done). However, DVR recording is not yet implemented -- competitors offer scheduled recording, time-shifting, and commercial skip.
 
 ### 5. Manual Transcoding Pipeline
 Plex and Jellyfin transcode on-the-fly at playback time, adapting quality to the client's bandwidth and capabilities. MediaManager pre-transcodes everything to a single MP4 format in the background. This means:
@@ -170,7 +170,7 @@ These features lean into what competitors *don't* do, rather than chasing parity
 | **Physical-to-digital gap analysis** | "You own 400 Blu-rays but only 250 are ripped" -- surface the backlog with priority recommendations. Already partially implemented via the Transcode Backlog page. | -- |
 | **Family wish list with seasonal events** | The wish list + admin fulfillment flow maps perfectly to birthdays and holidays. Season lifecycle tracking ([#25](https://github.com/jeffbstewart/MediaManager/issues/25) Done) adds structured multi-season management. Lean into this -- "What does Dad want for his birthday? Check the wish list." No media server does this. | [#43](https://github.com/jeffbstewart/MediaManager/issues/43) |
 | **Disc lending tracker** | "Who has my copy of Inception?" -- physical media lending is a real problem for collectors. No competitor addresses it. | -- |
-| **Live content** (cameras + TV tuner) | Consolidates home AV into one app -- security cameras and live TV alongside the media library. No single competitor covers all three. | [#27](https://github.com/jeffbstewart/MediaManager/issues/27), [#41](https://github.com/jeffbstewart/MediaManager/issues/41) |
+| **Live content** (cameras + TV tuner) | Consolidates home AV into one app -- security cameras and live TV alongside the media library. No single competitor covers all three. | [#27](https://github.com/jeffbstewart/MediaManager/issues/27) Done, [#41](https://github.com/jeffbstewart/MediaManager/issues/41) Done |
 
 ---
 
