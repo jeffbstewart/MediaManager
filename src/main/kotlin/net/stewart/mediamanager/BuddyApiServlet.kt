@@ -144,7 +144,13 @@ class BuddyApiServlet : HttpServlet() {
         val probeObj = body.getAsJsonObject("probe")
         if (probeObj != null) {
             try {
-                val streams = probeObj.getAsJsonArray("streams")?.map { streamEl ->
+                val rawStreams = probeObj.getAsJsonArray("streams")
+                if (rawStreams != null && rawStreams.size() > 100) {
+                    log.warn("Probe data rejected: stream array too large ({} items, max 100)", rawStreams.size())
+                    sendJson(resp, HttpServletResponse.SC_OK, mapOf("ok" to true))
+                    return
+                }
+                val streams = rawStreams?.map { streamEl ->
                     val s = streamEl.asJsonObject
                     StreamInfo(
                         index = s.get("index")?.asInt ?: 0,

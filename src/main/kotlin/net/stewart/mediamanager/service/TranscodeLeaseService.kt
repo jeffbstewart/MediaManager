@@ -20,11 +20,16 @@ object TranscodeLeaseService {
     private val log = LoggerFactory.getLogger(TranscodeLeaseService::class.java)
     private val claimLock = Any()
 
-    /** Default lease duration if not configured. */
-    private const val DEFAULT_LEASE_MINUTES = 90L
+    /** Default lease duration if not configured. Kept short since buddies send
+     *  heartbeats every ~15s which renew the lease. Short leases mean stranded
+     *  leases from crashed buddies expire quickly instead of blocking for hours. */
+    private const val DEFAULT_LEASE_MINUTES = 10L
 
     /** Number of failed/expired leases before a transcode is considered a poison pill. */
     private const val DEFAULT_MAX_FAILURES = 3
+
+    /** Max simultaneous active leases per buddy to prevent a compromised key from starving others. */
+    private const val MAX_LEASES_PER_BUDDY = 3
 
     /**
      * Work item representing a single piece of work (transcode, thumbnail, or subtitle)
@@ -54,6 +59,16 @@ object TranscodeLeaseService {
      */
     fun claimWork(buddyName: String, skipTypes: Set<String> = emptySet()): TranscodeLease? = synchronized(claimLock) {
         expireStaleLeases()
+
+        // Per-buddy lease limit: prevent a single buddy from hoarding all work
+        val activeBuddyLeases = TranscodeLease.findAll().count {
+            it.buddy_name == buddyName &&
+                (it.status == LeaseStatus.CLAIMED.name || it.status == LeaseStatus.IN_PROGRESS.name)
+        }
+        if (activeBuddyLeases >= MAX_LEASES_PER_BUDDY) {
+            log.info("Buddy '{}' at lease limit ({}/{}), rejecting claim", buddyName, activeBuddyLeases, MAX_LEASES_PER_BUDDY)
+            return null
+        }
 
         val nasRoot = TranscoderAgent.getNasRoot() ?: return null
 
@@ -266,6 +281,8 @@ object TranscodeLeaseService {
         lease.expires_at = LocalDateTime.now().plusMinutes(getLeaseDurationMinutes())
         lease.last_progress_at = LocalDateTime.now()
         lease.save()
+
+        log.debug("Heartbeat for lease {} (buddy='{}', file={})", leaseId, lease.buddy_name, lease.relative_path)
 
         return lease
     }
