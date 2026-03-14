@@ -108,6 +108,8 @@ Two input methods are available:
 
 The camera scanner works on **iOS Safari**, **iOS Chrome**, and other mobile browsers with camera access. It supports UPC-A, UPC-E, EAN-8, and EAN-13 barcode formats. On desktop browsers without a camera, the dialog shows an appropriate error message.
 
+> **Bluetooth barcode scanner tip (iOS):** When a Bluetooth barcode scanner is paired, iOS treats it as an external keyboard and hides the on-screen keyboard. This prevents typing in the search field. To keep the software keyboard available alongside the scanner, go to **Settings &rarr; Accessibility &rarr; Keyboards &rarr; Full Keyboard Access** and turn it off, or enable **Settings &rarr; Accessibility &rarr; Touch &rarr; AssistiveTouch** which forces the on-screen keyboard to remain available. The most reliable method is **Settings &rarr; General &rarr; Keyboard &rarr; Show Keyboard** (iPadOS) or tapping the small keyboard icon in the bottom-right corner of the screen when a text field is focused.
+
 If you scan a barcode that's already in the database, a notification tells you so (with the title name if known) instead of silently ignoring it.
 
 After scanning, the system:

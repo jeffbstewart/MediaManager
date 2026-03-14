@@ -13,7 +13,7 @@ import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.MetricsRegistry
 import org.slf4j.LoggerFactory
 
-@WebServlet(urlPatterns = ["/live-tv/*"])
+@WebServlet(urlPatterns = ["/live-tv-stream/*"])
 class LiveTvStreamServlet : HttpServlet() {
     private val log = LoggerFactory.getLogger(LiveTvStreamServlet::class.java)
 
@@ -89,9 +89,11 @@ class LiveTvStreamServlet : HttpServlet() {
     }
 
     private fun handlePlaylist(req: HttpServletRequest, resp: HttpServletResponse, channel: LiveTvChannel, user: AppUser) {
-        // Stop any existing stream for this user (channel switch)
-        LiveTvStreamManager.stopUserStream(user.id!!)
-
+        // getOrCreateStream handles both cases:
+        // - Same channel: returns existing stream (touch only)
+        // - Different channel: stops old stream internally before creating new one
+        // Do NOT call stopUserStream here — HLS clients re-poll the playlist every few seconds,
+        // which would kill and restart FFmpeg on every poll, causing segment 404s.
         val (stream, error) = LiveTvStreamManager.getOrCreateStream(channel, user.id!!)
         if (stream == null) {
             resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, error ?: "Cannot start stream")
@@ -99,10 +101,12 @@ class LiveTvStreamServlet : HttpServlet() {
             return
         }
 
-        // Poll up to 10 seconds for playlist file to appear (FFmpeg startup delay)
+        // Poll up to 30 seconds for playlist file to appear.
+        // FFmpeg must: connect to HDHomeRun, receive MPEG-TS, decode MPEG-2, re-encode to H.264,
+        // and accumulate a full hls_time segment (4s of video) before writing the first playlist.
         val playlistFile = stream.getPlaylistFile()
         var waited = 0
-        while (!playlistFile.exists() && waited < 10000 && stream.isHealthy()) {
+        while (!playlistFile.exists() && waited < 30000 && stream.isHealthy()) {
             Thread.sleep(500)
             waited += 500
         }
@@ -124,7 +128,7 @@ class LiveTvStreamServlet : HttpServlet() {
         val rewritten = content.lines().joinToString("\n") { line ->
             if (line.endsWith(".ts")) {
                 val segName = line.trim()
-                "/live-tv/${channel.id}/segment/$segName$keyParam"
+                "/live-tv-stream/${channel.id}/segment/$segName$keyParam"
             } else {
                 line
             }

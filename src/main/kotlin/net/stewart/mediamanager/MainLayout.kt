@@ -26,6 +26,7 @@ import com.vaadin.flow.router.AfterNavigationEvent
 import com.vaadin.flow.router.AfterNavigationObserver
 import com.vaadin.flow.router.RouterLink
 import net.stewart.mediamanager.entity.Camera
+import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
@@ -108,11 +109,8 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             val userIcon = VaadinIcon.USER.create().apply { setSize("14px") }
             val profileLabel = Span(userIcon, Span(" "), profileDisplayName)
             val profile = addItem(profileLabel)
-            profile.subMenu.addItem("Change Password") {
-                ui.ifPresent { it.navigate("change-password") }
-            }
-            profile.subMenu.addItem("Active Sessions") {
-                ui.ifPresent { it.navigate("sessions") }
+            profile.subMenu.addItem("Profile") {
+                ui.ifPresent { it.navigate("profile") }
             }
             profile.subMenu.addItem("Logout") {
                 AuthService.logout()
@@ -277,6 +275,9 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         val hasCameras = Camera.findAll().any { it.enabled }
         val cCamerasItem = createDrawerItem(null, "Cameras", "cameras", indent = true)
         cCamerasItem.first.isVisible = hasCameras
+        val hasLiveTv = LiveTvTuner.findAll().any { it.enabled }
+        val cLiveTvItem = createDrawerItem(null, "Live TV", "live-tv", indent = true)
+        cLiveTvItem.first.isVisible = hasLiveTv
 
         contentChevron = VaadinIcon.CHEVRON_DOWN.create().apply {
             setSize("14px")
@@ -317,7 +318,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
             isSpacing = false
             width = "100%"
             isVisible = false
-            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first, cFamilyItem.first, cCamerasItem.first)
+            add(cMoviesItem.first, cTvItem.first, cCollectionsItem.first, cTagsItem.first, cFamilyItem.first, cCamerasItem.first, cLiveTvItem.first)
         }
 
         items.add(homeItem)
@@ -327,6 +328,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         items.add(cTagsItem)
         items.add(cFamilyItem)
         items.add(cCamerasItem)
+        items.add(cLiveTvItem)
         items.add(wishListItem)
 
         val mainSection = VerticalLayout().apply {
@@ -982,8 +984,8 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
         }
 
         // Content group: auto-expand and highlight parent when on any sub-route
-        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags", "content/family", "cameras")
-        val onContent = path in contentRoutes || path.startsWith("content/collection/")
+        val contentRoutes = setOf("content/movies", "content/tv", "content/collections", "content/tags", "content/family", "cameras", "live-tv")
+        val onContent = path in contentRoutes || path.startsWith("content/collection/") || path.startsWith("live-tv/") && !path.startsWith("live-tv/settings")
         if (onContent) {
             contentChildren.isVisible = true
             contentChevron.style.set("transform", "rotate(180deg)")

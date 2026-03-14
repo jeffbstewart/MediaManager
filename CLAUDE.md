@@ -124,8 +124,10 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - `VideoPlayerDialog.kt` — In-browser video player dialog (HTML5 `<video>`)
 - `CameraGridView.kt` — Live camera MJPEG grid for browser (route `/cameras`, viewer-accessible)
 - `CameraSettingsView.kt` — Camera CRUD admin UI (route `/cameras/settings`, admin-only)
+- `LiveTvView.kt` — Live TV viewer with HLS player, channel stepping, picker, admin quality rating (route `/live-tv`, viewer-accessible)
 - `LiveTvSettingsView.kt` — Live TV tuner/channel admin UI (route `/live-tv/settings`, admin-only)
 - `LoginView.kt` — Login page (route `/login`, no MainLayout)
+- `ProfileView.kt` — User profile: account info, content rating (read-only), Live TV quality filter, change password, active sessions (route `/profile`)
 - `SetupView.kt` — First-user setup wizard (route `/setup`, no MainLayout)
 - `UserManagementView.kt` — Admin user management (route `/users`)
 
@@ -189,7 +191,7 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 
 **Servlets:**
 - `CameraStreamServlet.kt` — `/cameras/{id}/*` — proxies go2rtc HLS/MJPEG/snapshot streams to authenticated clients
-- `LiveTvStreamServlet.kt` — `/live-tv/{channelId}/*` — HLS live TV streaming (FFmpeg transcode from HDHomeRun, auth + content rating gate)
+- `LiveTvStreamServlet.kt` — `/live-tv-stream/{channelId}/*` — HLS live TV streaming (FFmpeg transcode from HDHomeRun, auth + content rating gate)
 - `PosterServlet.kt` — `/posters/{size}/{titleId}` — serves cached TMDB poster images
 - `VideoStreamServlet.kt` — `/stream/{id}` — video streaming with HTTP Range support; serves MP4/M4V directly, MKV/AVI from ForBrowser mirror
 - `RokuFeedServlet.kt` — `/roku/feed.json?key={apiKey}` — Roku channel JSON feed (device token auth, 5-minute cache)
@@ -328,9 +330,11 @@ Live OTA broadcasts from an HDHomeRun networked tuner, transcoded via FFmpeg to 
 
 **Content rating gate:** `live_tv_min_rating` app_config (ordinal level, default 4 = TV-14). Users with `rating_ceiling >= live_tv_min_rating` can access. Admins and unrestricted users always have access.
 
-**Per-user quality filter:** Each channel has `reception_quality` (1-5). Each user has `live_tv_min_quality` (default 4). Used for UI filtering (deferred: browser/Roku views).
+**Per-user quality filter:** Each channel has `reception_quality` (1-5). Each user has `live_tv_min_quality` (default 4). Viewer shows only channels meeting user's quality threshold.
 
-**Stream servlet:** `LiveTvStreamServlet` at `/live-tv/{channelId}/stream.m3u8` and `/live-tv/{channelId}/segment/{file}`. Auth via cookie or device token. Segment filenames validated against `seg_\d+\.ts` to prevent path traversal.
+**Stream servlet:** `LiveTvStreamServlet` at `/live-tv-stream/{channelId}/stream.m3u8` and `/live-tv-stream/{channelId}/segment/{file}`. URL uses `/live-tv-stream/` (not `/live-tv/`) to avoid conflicts with the Vaadin view route. Auth via cookie or device token. Segment filenames validated against `seg_\d+\.ts` to prevent path traversal.
+
+**Browser viewer:** `LiveTvView` at `/live-tv` — viewer-accessible. HTML5 video with HLS source, prev/next channel buttons (also arrow keys), channel picker ComboBox, admin-only inline quality rating (1-5 stars). Channels filtered by user's `live_tv_min_quality`.
 
 **Admin UI:** `LiveTvSettingsView` at `/live-tv/settings` — tuner management (add/edit/delete/refresh), channel grid (quality rating, enable/disable), settings (content rating, max streams, idle timeout).
 

@@ -18,3 +18,6 @@
 
 # Example IP in Roku PairScreen placeholder text
 192.168.1.100
+
+# Third-party minified libraries (skip entire file)
+file:hls.min.js

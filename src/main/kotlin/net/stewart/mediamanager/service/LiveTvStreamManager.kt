@@ -106,6 +106,12 @@ object LiveTvStreamManager {
         // If stream already exists and is healthy, just touch and return it
         val existing = streams[chId]
         if (existing != null && existing.isHealthy()) {
+            // Stop any OTHER stream this user had (channel switch to shared stream)
+            val prevChannel = userStreams[userId]
+            if (prevChannel != null && prevChannel != chId) {
+                stopUserStream(userId)
+            }
+            userStreams[userId] = chId
             existing.touch()
             return existing to null
         }
@@ -146,8 +152,8 @@ object LiveTvStreamManager {
         val outputDir = File(STREAMS_DIR, "ch-$chId")
         outputDir.mkdirs()
 
-        // Build FFmpeg command
-        val ffmpegPath = getConfigString("ffmpeg_path", "ffmpeg")
+        // Build FFmpeg command (reuse TranscoderAgent's path logic for OS-aware fallback)
+        val ffmpegPath = TranscoderAgent.getFfmpegPath()
         val cmd = listOf(
             ffmpegPath, "-i", channel.stream_url,
             "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-crf", "23",
@@ -161,7 +167,7 @@ object LiveTvStreamManager {
         )
 
         return try {
-            log.info("Starting live TV stream for channel {} ({}): {}", chId, channel.guide_name, channel.guide_number)
+            log.info("Starting live TV stream for channel {} ({}) guide={}, cmd: {}", chId, channel.guide_name, channel.guide_number, cmd.joinToString(" "))
             val process = ProcessBuilder(cmd)
                 .redirectErrorStream(false)
                 .directory(outputDir)
@@ -176,7 +182,7 @@ object LiveTvStreamManager {
                     process.errorStream.bufferedReader().forEachLine { line ->
                         val sanitized = sanitizeFfmpegOutput(line)
                         if (sanitized.isNotBlank()) {
-                            log.debug("FFmpeg [ch-{}]: {}", chId, sanitized)
+                            log.info("FFmpeg [ch-{}]: {}", chId, sanitized)
                         }
                     }
                 } catch (_: Exception) {}
@@ -202,7 +208,7 @@ object LiveTvStreamManager {
     fun isValidSegmentName(name: String): Boolean = SEGMENT_PATTERN.matches(name)
 
     private fun cleanupIdleStreams() {
-        val timeoutMs = getConfigInt("live_tv_idle_timeout_seconds", 15) * 1000L
+        val timeoutMs = getConfigInt("live_tv_idle_timeout_seconds", 60) * 1000L
         val toRemove = mutableListOf<Long>()
 
         for ((channelId, stream) in streams) {

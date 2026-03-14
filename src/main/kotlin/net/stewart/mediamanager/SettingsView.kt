@@ -45,16 +45,26 @@ class SettingsView : KComposite() {
                 style.set("border-radius", "var(--lumo-border-radius-l)")
                 style.set("max-width", "600px")
 
+                val isDocker = java.io.File("/.dockerenv").exists()
+
                 val nasPathField = textField("NAS Root Path") {
                     width = "100%"
                     value = configs.firstOrNull { it.config_key == "nas_root_path" }?.config_val ?: ""
                     placeholder = """/path/to/media/root"""
+                    if (isDocker) {
+                        isReadOnly = true
+                        helperText = "Locked to Docker volume mount"
+                    }
                 }
 
                 val ffmpegPathField = textField("FFmpeg Path") {
                     width = "100%"
                     value = configs.firstOrNull { it.config_key == "ffmpeg_path" }?.config_val ?: ""
                     placeholder = TranscoderAgent.getDefaultFfmpegPath()
+                    if (isDocker) {
+                        isReadOnly = true
+                        helperText = "Locked to container path"
+                    }
                 }
 
                 val rokuBaseUrlField = textField("Roku Base URL") {
@@ -172,8 +182,10 @@ class SettingsView : KComposite() {
                 button("Save") {
                     addThemeVariants(ButtonVariant.LUMO_PRIMARY)
                     addClickListener {
-                        saveConfig("nas_root_path", nasPathField.value.trim())
-                        saveConfig("ffmpeg_path", ffmpegPathField.value.trim())
+                        if (!isDocker) {
+                            saveConfig("nas_root_path", nasPathField.value.trim())
+                            saveConfig("ffmpeg_path", ffmpegPathField.value.trim())
+                        }
                         saveConfig("roku_base_url", rokuBaseUrlField.value.trim())
                         saveConfig("personal_video_enabled", if (personalEnabledCheck.value) "true" else "false")
                         saveConfig("personal_video_nas_dir", personalDirField.value.trim())

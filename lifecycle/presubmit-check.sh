@@ -12,7 +12,9 @@
 #   #!/bin/sh
 #   git diff --cached | ./lifecycle/presubmit-check.sh
 #
-# Allowlist: lifecycle/presubmit-allowlist.txt (one pattern per line, comments with #)
+# Allowlist: lifecycle/presubmit-allowlist.txt
+#   - Substring match:  172.16.4.12      (lines containing this string are skipped)
+#   - File-level skip:  file:hls.min.js  (all changes in matching files are skipped)
 
 set -euo pipefail
 
@@ -99,8 +101,45 @@ if [[ -z "$DIFF_INPUT" ]]; then
     exit 0
 fi
 
-# Extract only added lines (+ prefix), excluding +++ file headers
-DIFF_ADDED=$(echo "$DIFF_INPUT" | grep '^+' | grep -v '^+++' || true)
+# Build list of file-level allowlist patterns (file:xxx entries)
+ALLOWED_FILES=()
+if [[ -f "$ALLOWLIST" ]]; then
+    while IFS= read -r pat; do
+        pat="${pat%$'\r'}"
+        [[ -z "$pat" || "$pat" == \#* ]] && continue
+        if [[ "$pat" == file:* ]]; then
+            ALLOWED_FILES+=("${pat#file:}")
+        fi
+    done < "$ALLOWLIST"
+fi
+
+# Extract added lines with file context, skipping allowlisted files.
+# Output format: each line is the raw "+..." content from the diff.
+DIFF_ADDED=""
+current_file=""
+skip_file=false
+while IFS= read -r line; do
+    # Track which file we're in via "diff --git a/... b/..." headers
+    if [[ "$line" == "diff --git "* ]]; then
+        # Extract b/path (the destination file)
+        current_file="${line##* b/}"
+        skip_file=false
+        for fpat in "${ALLOWED_FILES[@]+"${ALLOWED_FILES[@]}"}"; do
+            if [[ "$current_file" == *"$fpat"* ]]; then
+                skip_file=true
+                break
+            fi
+        done
+        continue
+    fi
+    # Only look at added lines, skip +++ headers
+    if $skip_file; then
+        continue
+    fi
+    if [[ "$line" == +* && "$line" != "+++"* ]]; then
+        DIFF_ADDED+="$line"$'\n'
+    fi
+done <<< "$DIFF_INPUT"
 
 if [[ -z "$DIFF_ADDED" ]]; then
     echo "presubmit: no added lines to check"
