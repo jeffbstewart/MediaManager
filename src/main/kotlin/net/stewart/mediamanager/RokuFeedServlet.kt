@@ -83,33 +83,47 @@ class RokuFeedServlet : HttpServlet() {
 
     override fun doGet(req: HttpServletRequest, resp: HttpServletResponse) {
         val path = req.pathInfo?.removePrefix("/") ?: ""
-
-        when {
-            path == "feed.json" -> handleFeed(req, resp)
-            path == "home.json" -> handleHome(req, resp)
-            path == "search.json" -> handleSearch(req, resp)
-            path.matches(Regex("title/(\\d+)\\.json")) -> handleTitleDetail(req, resp, path)
-            path.matches(Regex("collection/(\\d+)\\.json")) -> handleCollection(req, resp, path)
-            path.matches(Regex("tag/(\\d+)\\.json")) -> handleTag(req, resp, path)
-            path.matches(Regex("genre/(\\d+)\\.json")) -> handleGenre(req, resp, path)
-            path.matches(Regex("actor/(\\d+)\\.json")) -> handleActor(req, resp, path)
-            else -> {
-                log.info("Roku request for unknown path: {}", path)
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND)
-                MetricsRegistry.countHttpResponse("roku", 404)
+        try {
+            when {
+                path == "feed.json" -> handleFeed(req, resp)
+                path == "home.json" -> handleHome(req, resp)
+                path == "search.json" -> handleSearch(req, resp)
+                path.matches(Regex("title/(\\d+)\\.json")) -> handleTitleDetail(req, resp, path)
+                path.matches(Regex("collection/(\\d+)\\.json")) -> handleCollection(req, resp, path)
+                path.matches(Regex("tag/(\\d+)\\.json")) -> handleTag(req, resp, path)
+                path.matches(Regex("genre/(\\d+)\\.json")) -> handleGenre(req, resp, path)
+                path.matches(Regex("actor/(\\d+)\\.json")) -> handleActor(req, resp, path)
+                else -> {
+                    log.info("Roku request for unknown path: {}", path)
+                    resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+                    MetricsRegistry.countHttpResponse("roku", 404)
+                }
             }
+        } catch (e: Exception) {
+            log.error("Roku API error on GET /{}: {}", path, e.message, e)
+            if (!resp.isCommitted) {
+                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error")
+            }
+            MetricsRegistry.countHttpResponse("roku", 500)
         }
     }
 
     override fun doPost(req: HttpServletRequest, resp: HttpServletResponse) {
         val path = req.pathInfo?.removePrefix("/") ?: ""
-
-        when {
-            path == "wishlist/add" -> handleWishlistAdd(req, resp)
-            else -> {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND)
-                MetricsRegistry.countHttpResponse("roku", 404)
+        try {
+            when {
+                path == "wishlist/add" -> handleWishlistAdd(req, resp)
+                else -> {
+                    resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+                    MetricsRegistry.countHttpResponse("roku", 404)
+                }
             }
+        } catch (e: Exception) {
+            log.error("Roku API error on POST /{}: {}", path, e.message, e)
+            if (!resp.isCommitted) {
+                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error")
+            }
+            MetricsRegistry.countHttpResponse("roku", 500)
         }
     }
 
@@ -121,7 +135,7 @@ class RokuFeedServlet : HttpServlet() {
 
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=300")
+        resp.setHeader("Cache-Control", "private, max-age=300")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku feed served (status 200)")
@@ -148,7 +162,7 @@ class RokuFeedServlet : HttpServlet() {
         val json = mapper.writeValueAsString(detail)
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku title detail served for titleId={} (status 200)", titleId)
@@ -163,7 +177,7 @@ class RokuFeedServlet : HttpServlet() {
 
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku home feed served (status 200, {} carousels)", homeFeed.carousels.size)
@@ -211,7 +225,7 @@ class RokuFeedServlet : HttpServlet() {
         val json = mapper.writeValueAsString(detail)
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku collection detail served for collectionId={} (status 200)", collId)
@@ -238,7 +252,7 @@ class RokuFeedServlet : HttpServlet() {
         val json = mapper.writeValueAsString(detail)
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku tag detail served for tagId={} (status 200)", tagId)
@@ -265,7 +279,7 @@ class RokuFeedServlet : HttpServlet() {
         val json = mapper.writeValueAsString(detail)
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku genre detail served for genreId={} (status 200)", genreId)
@@ -292,7 +306,7 @@ class RokuFeedServlet : HttpServlet() {
         val json = mapper.writeValueAsString(detail)
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
-        resp.setHeader("Cache-Control", "public, max-age=60")
+        resp.setHeader("Cache-Control", "private, max-age=60")
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku actor detail served for personId={} (status 200)", personId)
@@ -302,7 +316,7 @@ class RokuFeedServlet : HttpServlet() {
         val (_, user) = authenticateDevice(req, resp, "wishlist-add") ?: return
 
         val body = try {
-            val text = req.reader.readText()
+            val text = req.inputStream.readNBytes(4096).toString(Charsets.UTF_8)
             mapper.readTree(text)
         } catch (e: Exception) {
             resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid JSON body")

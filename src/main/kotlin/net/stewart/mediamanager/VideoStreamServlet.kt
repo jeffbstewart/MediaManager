@@ -57,6 +57,9 @@ class VideoStreamServlet : HttpServlet() {
 
         // Route: /stream/{id}/thumbs.vtt or /stream/{id}/thumbs_{n}.jpg
         if (parts.size >= 2) {
+            // Rating enforcement for sub-resources (thumbs, BIF, subtitles)
+            if (!checkRatingForTranscode(transcodeId, req, resp)) return
+
             val subPath = parts[1]
             when {
                 subPath == "thumbs.vtt" -> serveThumbFile(transcodeId, subPath, "text/vtt", resp)
@@ -74,6 +77,24 @@ class VideoStreamServlet : HttpServlet() {
 
         // Route: /stream/{id}
         serveVideo(transcodeId, req, resp)
+    }
+
+    /**
+     * Checks whether the authenticated user is allowed to see content at this transcode's
+     * rating. Returns true if allowed (or no user/title found), false after sending 403.
+     */
+    private fun checkRatingForTranscode(transcodeId: Long, req: HttpServletRequest, resp: HttpServletResponse): Boolean {
+        val user = req.getAttribute(AuthFilter.USER_ATTRIBUTE) as? AppUser ?: return true
+        val transcode = Transcode.findById(transcodeId) ?: return true
+        val title = Title.findById(transcode.title_id) ?: return true
+        if (!user.canSeeRating(title.content_rating)) {
+            log.warn("Rating restricted on sub-resource: user='{}' ceiling={} title='{}' rating={}",
+                user.username, user.rating_ceiling, title.name, title.content_rating)
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Content restricted by parental controls")
+            MetricsRegistry.countHttpResponse("stream", 403)
+            return false
+        }
+        return true
     }
 
     private fun serveVideo(transcodeId: Long, req: HttpServletRequest, resp: HttpServletResponse) {

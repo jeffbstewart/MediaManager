@@ -47,8 +47,10 @@ class PairingServlet : HttpServlet() {
     }
 
     private fun getClientIp(req: HttpServletRequest): String {
-        return req.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
-            ?: req.remoteAddr
+        // Use remoteAddr directly — X-Forwarded-For is trivially spoofable and would
+        // let an attacker bypass rate limits by rotating the header value.
+        // If behind a trusted reverse proxy, the proxy should set remoteAddr correctly.
+        return req.remoteAddr
     }
 
     /**
@@ -122,7 +124,10 @@ class PairingServlet : HttpServlet() {
             if (raw.isNotBlank()) JsonParser.parseString(raw).asJsonObject else null
         } catch (e: Exception) { null }
 
-        val deviceName = body?.get("device_name")?.asString ?: ""
+        val deviceName = body?.get("device_name")?.asString
+            ?.replace(Regex("[\\x00-\\x1f\\x7f]"), "")  // strip control chars for log safety
+            ?.take(100)  // cap length
+            ?: ""
 
         val pairCode = PairingService.createPairCode(deviceName)
         val result = mutableMapOf<String, Any>(

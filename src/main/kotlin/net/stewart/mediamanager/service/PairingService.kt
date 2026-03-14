@@ -54,10 +54,16 @@ object PairingService {
 
         return when (pairCode.status) {
             PairStatus.PAIRED.name -> {
-                // Look up the raw token — it was stored temporarily in server_url field
-                // after pairing (we reuse server_url since it's not needed post-pair)
                 val user = pairCode.user_id?.let { AppUser.findById(it) }
-                PairCodeStatus("paired", pairCode.server_url, user?.username)
+                val rawToken = pairCode.server_url
+                // Single-use: clear the raw token after first retrieval so it can't be
+                // polled again by an attacker who guesses/brute-forces the pair code
+                if (rawToken.isNotEmpty()) {
+                    pairCode.server_url = ""
+                    pairCode.save()
+                    log.info("Pairing token delivered and cleared for code={}", pairCode.code)
+                }
+                PairCodeStatus("paired", rawToken.ifEmpty { null }, user?.username)
             }
             else -> PairCodeStatus("pending", null, null)
         }
