@@ -16,14 +16,14 @@ import java.net.URI
  * Proxies camera streams from go2rtc to authenticated clients.
  *
  * Routes:
- * - GET /cameras/{id}/stream.m3u8  → HLS playlist (for Roku)
- * - GET /cameras/{id}/segment/{file} → HLS .ts segments
- * - GET /cameras/{id}/snapshot.jpg  → JPEG snapshot
- * - GET /cameras/{id}/mjpeg        → MJPEG stream (for browser grid)
+ * - GET /cam/{id}/stream.m3u8  → HLS playlist (for Roku)
+ * - GET /cam/{id}/segment/{file} → HLS .ts segments
+ * - GET /cam/{id}/snapshot.jpg  → JPEG snapshot
+ * - GET /cam/{id}/mjpeg        → MJPEG stream (for browser grid)
  *
- * Authentication is handled by [AuthFilter] which covers `/cameras/`.
+ * Authentication is handled by [AuthFilter] which covers `/cam/`.
  */
-@WebServlet(urlPatterns = ["/cameras/*"])
+@WebServlet(urlPatterns = ["/cam/*"])
 class CameraStreamServlet : HttpServlet() {
 
     private val log = LoggerFactory.getLogger(CameraStreamServlet::class.java)
@@ -34,21 +34,21 @@ class CameraStreamServlet : HttpServlet() {
 
         if (parts.isEmpty() || parts[0].isBlank()) {
             resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Missing camera ID")
-            MetricsRegistry.countHttpResponse("camera", 400)
+            MetricsRegistry.countHttpResponse("camera-stream", 400)
             return
         }
 
         val cameraId = parts[0].toLongOrNull()
         if (cameraId == null) {
             resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid camera ID")
-            MetricsRegistry.countHttpResponse("camera", 400)
+            MetricsRegistry.countHttpResponse("camera-stream", 400)
             return
         }
 
         val camera = Camera.findById(cameraId)
         if (camera == null || !camera.enabled) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Camera not found")
-            MetricsRegistry.countHttpResponse("camera", 404)
+            MetricsRegistry.countHttpResponse("camera-stream", 404)
             return
         }
 
@@ -62,7 +62,7 @@ class CameraStreamServlet : HttpServlet() {
                 subPath == "mjpeg" -> proxyMjpeg(camera, resp)
                 else -> {
                     resp.sendError(HttpServletResponse.SC_NOT_FOUND)
-                    MetricsRegistry.countHttpResponse("camera", 404)
+                    MetricsRegistry.countHttpResponse("camera-stream", 404)
                 }
             }
         } catch (e: Exception) {
@@ -71,7 +71,7 @@ class CameraStreamServlet : HttpServlet() {
             if (!resp.isCommitted) {
                 resp.sendError(HttpServletResponse.SC_BAD_GATEWAY, "Stream proxy error")
             }
-            MetricsRegistry.countHttpResponse("camera", 502)
+            MetricsRegistry.countHttpResponse("camera-stream", 502)
         }
     }
 
@@ -81,7 +81,7 @@ class CameraStreamServlet : HttpServlet() {
 
         val conn = openGo2rtcConnection(go2rtcUrl) ?: run {
             resp.sendError(HttpServletResponse.SC_BAD_GATEWAY, "go2rtc not available")
-            MetricsRegistry.countHttpResponse("camera", 502)
+            MetricsRegistry.countHttpResponse("camera-stream", 502)
             return
         }
 
@@ -94,7 +94,7 @@ class CameraStreamServlet : HttpServlet() {
                 val originalUrl = match.value
                 // Extract the segment params and route through our servlet
                 val segFile = java.net.URLEncoder.encode(originalUrl, "UTF-8")
-                "/cameras/${camera.id}/segment/$segFile${keyParam(req)}"
+                "/cam/${camera.id}/segment/$segFile${keyParam(req)}"
             }
 
             resp.contentType = "application/vnd.apple.mpegurl"
@@ -102,7 +102,7 @@ class CameraStreamServlet : HttpServlet() {
             resp.setHeader("Cache-Control", "no-cache")
             resp.writer.write(rewritten)
             MetricsRegistry.countCameraStreamBytes("hls", rewritten.length.toLong())
-            MetricsRegistry.countHttpResponse("camera", 200)
+            MetricsRegistry.countHttpResponse("camera-stream", 200)
         } finally {
             MetricsRegistry.hlsStreamStopped()
             conn.disconnect()
@@ -116,7 +116,7 @@ class CameraStreamServlet : HttpServlet() {
 
         val conn = openGo2rtcConnection(go2rtcUrl) ?: run {
             resp.sendError(HttpServletResponse.SC_BAD_GATEWAY, "go2rtc not available")
-            MetricsRegistry.countHttpResponse("camera", 502)
+            MetricsRegistry.countHttpResponse("camera-stream", 502)
             return
         }
 
@@ -127,7 +127,7 @@ class CameraStreamServlet : HttpServlet() {
             resp.setHeader("Cache-Control", "no-cache")
             conn.inputStream.copyTo(resp.outputStream)
             if (contentLength != null) MetricsRegistry.countCameraStreamBytes("hls", contentLength)
-            MetricsRegistry.countHttpResponse("camera", 200)
+            MetricsRegistry.countHttpResponse("camera-stream", 200)
         } finally {
             conn.disconnect()
         }
@@ -139,7 +139,7 @@ class CameraStreamServlet : HttpServlet() {
 
         val conn = openGo2rtcConnection(go2rtcUrl) ?: run {
             resp.sendError(HttpServletResponse.SC_BAD_GATEWAY, "go2rtc not available")
-            MetricsRegistry.countHttpResponse("camera", 502)
+            MetricsRegistry.countHttpResponse("camera-stream", 502)
             return
         }
 
@@ -150,7 +150,7 @@ class CameraStreamServlet : HttpServlet() {
             resp.setHeader("Cache-Control", "no-cache")
             conn.inputStream.copyTo(resp.outputStream)
             if (contentLength != null) MetricsRegistry.countCameraStreamBytes("snapshot", contentLength)
-            MetricsRegistry.countHttpResponse("camera", 200)
+            MetricsRegistry.countHttpResponse("camera-stream", 200)
         } finally {
             conn.disconnect()
         }
@@ -162,7 +162,7 @@ class CameraStreamServlet : HttpServlet() {
 
         val conn = openGo2rtcConnection(go2rtcUrl) ?: run {
             resp.sendError(HttpServletResponse.SC_BAD_GATEWAY, "go2rtc not available")
-            MetricsRegistry.countHttpResponse("camera", 502)
+            MetricsRegistry.countHttpResponse("camera-stream", 502)
             return
         }
 
@@ -190,7 +190,7 @@ class CameraStreamServlet : HttpServlet() {
                 }
             }
             if (totalBytes > 0) MetricsRegistry.countCameraStreamBytes("mjpeg", totalBytes)
-            MetricsRegistry.countHttpResponse("camera", 200)
+            MetricsRegistry.countHttpResponse("camera-stream", 200)
         } catch (_: java.io.IOException) {
             // Client disconnected — normal for MJPEG streams
         } finally {

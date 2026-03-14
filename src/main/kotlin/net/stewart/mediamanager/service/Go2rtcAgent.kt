@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
  * Manages the go2rtc child process for camera stream relay.
  *
  * go2rtc provides RTSP→HLS and RTSP→MJPEG conversion, binding to 127.0.0.1:1984.
- * Streams are configured via HTTP API after process startup (no credential-bearing YAML on disk).
+ * Streams are configured via a temp YAML config file written at startup and deleted on shutdown.
  * All process stdout/stderr is filtered through [UriCredentialRedactor.redactAll] before logging.
  */
 class Go2rtcAgent(
@@ -31,7 +31,6 @@ class Go2rtcAgent(
 
     companion object {
         private const val DEFAULT_API_PORT = 1984
-        private const val STARTUP_WAIT_MS = 3000L
         private const val HEALTH_CHECK_INTERVAL_MS = 30_000L
         private const val DEFAULT_GO2RTC_PATH = "/usr/local/bin/go2rtc"
 
@@ -51,7 +50,7 @@ class Go2rtcAgent(
 
         val go2rtcPath = getGo2rtcPath()
         if (go2rtcPath.isNullOrBlank()) {
-            log.warn("go2rtc binary path not configured (app_config key 'go2rtc_path'), agent not starting")
+            log.warn("go2rtc binary not found, agent not starting. Set app_config key 'go2rtc_path' or install at {}", DEFAULT_GO2RTC_PATH)
             running.set(false)
             return
         }
@@ -93,7 +92,7 @@ class Go2rtcAgent(
         thread = null
     }
 
-    /** Reconfigure streams after camera CRUD. Restarts the process if running. */
+    /** Reconfigure streams after camera CRUD. Restarts the process with a new config file. */
     fun reconfigure() {
         val cameras = Camera.findAll().filter { it.enabled }
         if (cameras.isEmpty()) {
@@ -102,101 +101,84 @@ class Go2rtcAgent(
             return
         }
 
-        // Try to configure via API first (avoids restart)
-        if (currentProcess?.isAlive == true && configureStreamsViaApi(cameras)) {
-            log.info("go2rtc streams reconfigured via API ({} cameras)", cameras.size)
-            return
-        }
-
-        // Restart process if API config failed or process not running
-        val wasRunning = running.get()
+        log.info("Reconfiguring go2rtc ({} cameras), restarting process", cameras.size)
         stop()
-        if (wasRunning || cameras.isNotEmpty()) {
-            start()
-        }
+        start()
     }
 
     private fun runProcess(go2rtcPath: String, cameras: List<Camera>) {
-        val command = mutableListOf(go2rtcPath)
-        // Disable all listeners except API (no external RTSP/WebRTC)
-        command.addAll(listOf(
-            "-listen", "127.0.0.1:$apiPort",
-            "-rtsp", "",      // disable RTSP listener
-            "-webrtc", ""     // disable WebRTC listener
-        ))
-
-        log.info("Starting go2rtc: {} ({} cameras)", go2rtcPath, cameras.size)
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(true)
-            .start()
-        currentProcess = process
-
-        // Read stdout/stderr in a separate thread, filtering credentials
-        val outputThread = Thread({
-            try {
-                BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-                    reader.forEachLine { line ->
-                        val redacted = UriCredentialRedactor.redactAll(line)
-                        log.debug("go2rtc: {}", redacted)
+        // Write a temp YAML config with API settings + stream definitions.
+        // go2rtc's inline JSON config (-c '{...}') disables the config file endpoint,
+        // so we must use a file for streams to be recognized.
+        val configFile = File.createTempFile("go2rtc-", ".yaml")
+        try {
+            // Locate FFmpeg for H.264→MJPEG transcoding (required for MJPEG/snapshot endpoints)
+            val ffmpegPath = findFfmpegPath()
+            configFile.writeText(buildString {
+                appendLine("api:")
+                appendLine("  listen: \"127.0.0.1:$apiPort\"")
+                if (ffmpegPath != null) {
+                    appendLine("ffmpeg:")
+                    appendLine("  bin: \"$ffmpegPath\"")
+                }
+                appendLine("streams:")
+                for (cam in cameras) {
+                    appendLine("  ${cam.go2rtc_name}:")
+                    appendLine("    - ${cam.rtsp_url}")
+                    if (ffmpegPath != null) {
+                        // Add FFmpeg source to decode H.264→MJPEG for browser/snapshot use
+                        appendLine("    - \"ffmpeg:${cam.go2rtc_name}#video=mjpeg\"")
                     }
                 }
-            } catch (_: Exception) {
-                // Process destroyed
-            }
-        }, "go2rtc-output").apply {
-            isDaemon = true
-            start()
-        }
+            })
+            log.info("Wrote go2rtc config to {} ({} streams): {}", configFile.absolutePath, cameras.size,
+                UriCredentialRedactor.redactAll(configFile.readText().replace("\n", " | ")))
 
-        // Wait for API to become available
-        clock.sleep(STARTUP_WAIT_MS.milliseconds)
+            val command = listOf(go2rtcPath, "-c", configFile.absolutePath)
 
-        // Configure streams via HTTP API
-        if (!configureStreamsViaApi(cameras)) {
-            log.error("Failed to configure go2rtc streams via API")
-        }
+            log.info("Starting go2rtc: {} ({} cameras)", go2rtcPath, cameras.size)
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+            currentProcess = process
 
-        // Monitor process health
-        while (running.get() && process.isAlive) {
-            try {
-                clock.sleep(HEALTH_CHECK_INTERVAL_MS.milliseconds)
-            } catch (_: InterruptedException) {
-                break
-            }
-        }
-
-        if (process.isAlive) {
-            process.destroyForcibly()
-        }
-        currentProcess = null
-        outputThread.interrupt()
-    }
-
-    /** Configure go2rtc streams via its HTTP API. Returns true on success. */
-    private fun configureStreamsViaApi(cameras: List<Camera>): Boolean {
-        return try {
-            for (camera in cameras) {
-                val url = URI("http://127.0.0.1:$apiPort/api/streams?dst=${camera.go2rtc_name}&src=${java.net.URLEncoder.encode(camera.rtsp_url, "UTF-8")}").toURL()
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "PUT"
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
+            // Read stdout/stderr in a separate thread, filtering credentials
+            val outputThread = Thread({
                 try {
-                    val code = conn.responseCode
-                    if (code !in 200..299) {
-                        log.warn("go2rtc API returned {} for camera '{}': {}", code, camera.name,
-                            UriCredentialRedactor.redactAll(conn.errorStream?.bufferedReader()?.readText() ?: ""))
-                        return false
+                    BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
+                        reader.forEachLine { line ->
+                            val redacted = UriCredentialRedactor.redactAll(line)
+                            log.info("go2rtc: {}", redacted)
+                        }
                     }
-                    log.info("Configured go2rtc stream '{}' for camera '{}'", camera.go2rtc_name, camera.name)
-                } finally {
-                    conn.disconnect()
+                } catch (_: Exception) {
+                    // Process destroyed
+                }
+            }, "go2rtc-output").apply {
+                isDaemon = true
+                start()
+            }
+
+            // Monitor process health
+            while (running.get() && process.isAlive) {
+                try {
+                    clock.sleep(HEALTH_CHECK_INTERVAL_MS.milliseconds)
+                } catch (_: InterruptedException) {
+                    break
                 }
             }
-            true
-        } catch (e: Exception) {
-            log.warn("Failed to configure go2rtc via API: {}", UriCredentialRedactor.redactAll(e.message ?: ""))
-            false
+
+            if (process.isAlive) {
+                process.destroyForcibly()
+            }
+            currentProcess = null
+            outputThread.interrupt()
+        } finally {
+            // Always delete the credential-bearing config file
+            if (configFile.exists()) {
+                configFile.delete()
+                log.info("Deleted go2rtc config file {}", configFile.absolutePath)
+            }
         }
     }
 
@@ -220,14 +202,42 @@ class Go2rtcAgent(
 
     private fun getGo2rtcPath(): String? {
         val configured = AppConfig.findAll().firstOrNull { it.config_key == "go2rtc_path" }?.config_val
-        if (configured != null && File(configured).exists()) return configured
-        if (File(DEFAULT_GO2RTC_PATH).exists()) return DEFAULT_GO2RTC_PATH
-        return configured // return configured even if not found, so error message is useful
+        if (!configured.isNullOrBlank()) {
+            if (File(configured).exists()) {
+                log.info("Using configured go2rtc path: {}", configured)
+                return configured
+            }
+            log.warn("Configured go2rtc path '{}' does not exist on disk", configured)
+        }
+        val defaultFile = File(DEFAULT_GO2RTC_PATH)
+        if (defaultFile.exists()) {
+            log.info("Using default go2rtc path: {} (executable={})", DEFAULT_GO2RTC_PATH, defaultFile.canExecute())
+            return DEFAULT_GO2RTC_PATH
+        }
+        log.warn("go2rtc binary not found at default path '{}' and no app_config key 'go2rtc_path' set", DEFAULT_GO2RTC_PATH)
+        return null
     }
 
     private fun readApiPort(): Int {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "go2rtc_api_port" }
             ?.config_val?.toIntOrNull() ?: DEFAULT_API_PORT
+    }
+
+    /** Find FFmpeg binary — check app_config, then common paths. */
+    private fun findFfmpegPath(): String? {
+        val configured = AppConfig.findAll().firstOrNull { it.config_key == "ffmpeg_path" }?.config_val
+        if (!configured.isNullOrBlank() && File(configured).exists()) {
+            log.info("Using configured FFmpeg path for go2rtc: {}", configured)
+            return configured
+        }
+        for (path in listOf("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg")) {
+            if (File(path).exists()) {
+                log.info("Found FFmpeg for go2rtc at: {}", path)
+                return path
+            }
+        }
+        log.warn("FFmpeg not found — go2rtc MJPEG/snapshot will not work for H.264 streams")
+        return null
     }
 }

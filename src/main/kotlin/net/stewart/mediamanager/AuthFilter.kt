@@ -12,7 +12,7 @@ import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
 
-@WebFilter(urlPatterns = ["/posters/*", "/headshots/*", "/stream/*", "/backdrops/*", "/playback-progress/*", "/local-images/*", "/ownership-photos/*", "/collection-posters/*", "/cameras/*"])
+@WebFilter(urlPatterns = ["/posters/*", "/headshots/*", "/stream/*", "/backdrops/*", "/playback-progress/*", "/local-images/*", "/ownership-photos/*", "/collection-posters/*", "/cam/*"])
 class AuthFilter : Filter {
 
     companion object {

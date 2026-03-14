@@ -54,7 +54,7 @@ class CameraGridView : KComposite() {
             add(headerRow)
 
             gridContainer = Div().apply {
-                setSizeFull()
+                width = "100%"
                 style.set("display", "grid")
                 style.set("gap", "var(--lumo-space-s)")
                 style.set("padding", "var(--lumo-space-s)")
@@ -77,13 +77,8 @@ class CameraGridView : KComposite() {
             return
         }
 
-        // Responsive grid columns based on camera count
-        val cols = when {
-            cameras.size <= 1 -> "1fr"
-            cameras.size <= 4 -> "repeat(2, 1fr)"
-            else -> "repeat(3, 1fr)"
-        }
-        gridContainer.style.set("grid-template-columns", cols)
+        // Responsive grid: auto-fill columns with a max cell width so cameras stay compact
+        gridContainer.style.set("grid-template-columns", "repeat(auto-fill, minmax(280px, 1fr))")
 
         for (camera in cameras) {
             val cell = Div().apply {
@@ -94,29 +89,18 @@ class CameraGridView : KComposite() {
                 style.set("cursor", "pointer")
 
                 val imgSrc = if (useMjpeg) {
-                    "/cameras/${camera.id}/mjpeg"
+                    "/cam/${camera.id}/mjpeg"
                 } else {
-                    "/cameras/${camera.id}/snapshot.jpg?t=${System.currentTimeMillis()}"
+                    "/cam/${camera.id}/snapshot.jpg?t=${System.currentTimeMillis()}"
                 }
 
+                val escapedName = camera.name.replace("\"", "&quot;").replace("<", "&lt;")
                 element.setProperty("innerHTML", """
-                    <img src="$imgSrc" alt="${camera.name}"
+                    <img src="$imgSrc" alt="$escapedName"
                          style="width:100%;height:auto;display:block;aspect-ratio:16/9;object-fit:cover;"
                          onerror="this.style.display='none'" />
+                    <span style="position:absolute;bottom:0;left:0;right:0;padding:4px 8px;background:linear-gradient(transparent,rgba(0,0,0,0.7));color:white;font-size:var(--lumo-font-size-s);font-weight:600;">$escapedName</span>
                 """.trimIndent())
-
-                // Name overlay
-                add(Span(camera.name).apply {
-                    style.set("position", "absolute")
-                    style.set("bottom", "0")
-                    style.set("left", "0")
-                    style.set("right", "0")
-                    style.set("padding", "var(--lumo-space-xs) var(--lumo-space-s)")
-                    style.set("background", "linear-gradient(transparent, rgba(0,0,0,0.7))")
-                    style.set("color", "white")
-                    style.set("font-size", "var(--lumo-font-size-s)")
-                    style.set("font-weight", "600")
-                })
 
                 // Click to fullscreen
                 element.addEventListener("click") {
@@ -138,7 +122,7 @@ class CameraGridView : KComposite() {
         dialog.width = "90vw"
         dialog.height = "90vh"
 
-        val imgSrc = "/cameras/${camera.id}/mjpeg"
+        val imgSrc = "/cam/${camera.id}/mjpeg"
         val container = Div().apply {
             setSizeFull()
             element.setProperty("innerHTML", """
@@ -156,8 +140,8 @@ class CameraGridView : KComposite() {
         val js = cameras.joinToString(";") { camera ->
             """
             setInterval(function(){
-                var imgs = document.querySelectorAll('img[src*="/cameras/${camera.id}/snapshot"]');
-                imgs.forEach(function(img){img.src='/cameras/${camera.id}/snapshot.jpg?t='+Date.now()});
+                var imgs = document.querySelectorAll('img[src*="/cam/${camera.id}/snapshot"]');
+                imgs.forEach(function(img){img.src='/cam/${camera.id}/snapshot.jpg?t='+Date.now()});
             }, 3000)
             """.trimIndent()
         }

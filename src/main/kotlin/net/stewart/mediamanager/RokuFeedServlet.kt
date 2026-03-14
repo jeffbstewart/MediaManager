@@ -326,8 +326,8 @@ class RokuFeedServlet : HttpServlet() {
                 mapOf(
                     "id" to cam.id,
                     "name" to cam.name,
-                    "streamUrl" to "$baseUrl/cameras/${cam.id}/stream.m3u8$keyParam",
-                    "snapshotUrl" to "$baseUrl/cameras/${cam.id}/snapshot.jpg$keyParam"
+                    "streamUrl" to "$baseUrl/cam/${cam.id}/stream.m3u8$keyParam",
+                    "snapshotUrl" to "$baseUrl/cam/${cam.id}/snapshot.jpg$keyParam"
                 )
             }
 

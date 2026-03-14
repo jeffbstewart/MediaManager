@@ -82,4 +82,41 @@ class UriCredentialRedactorTest {
             UriCredentialRedactor.redact("rtsp://admin:pass@camera.local/stream1")
         )
     }
+
+    @Test fun redactsPasswordWithSpecialChars() {
+        // Hash (#), caret (^), and other special chars break java.net.URI parsing
+        val url = "rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
+        val redacted = UriCredentialRedactor.redact(url)
+        assertEquals("rtsp://***:***@192.168.1.100/cam/realmonitor?channel=1&subtype=0", redacted)
+        assertFalse(redacted.contains("ab3"))
+        assertFalse(redacted.contains("camuser:"))
+    }
+
+    @Test fun redactAllHandlesSpecialCharsInPassword() {
+        val text = "Connecting to rtsp://user:p@ss#word@192.168.1.100:554/stream1 failed"
+        val redacted = UriCredentialRedactor.redactAll(text)
+        assertFalse(redacted.contains("p@ss#word"))
+        assertContains(redacted, "***:***@")
+    }
+
+    @Test fun restoreCredentialsWithSpecialChars() {
+        val source = "rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
+        val edited = "rtsp://***:***@192.168.1.100/cam/realmonitor?channel=1&subtype=1"
+        val restored = UriCredentialRedactor.restoreCredentials(edited, source)
+        assertEquals("rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=1", restored)
+    }
+
+    @Test fun restoreCredentialsBlocksDifferentHost() {
+        val source = "rtsp://admin:secret@192.168.1.100/stream"
+        val edited = "rtsp://***:***@evil.com/stream"
+        val restored = UriCredentialRedactor.restoreCredentials(edited, source)
+        assertContains(restored, "***:***")  // credentials NOT restored
+    }
+
+    @Test fun restoreCredentialsAllowsSameHost() {
+        val source = "rtsp://admin:secret@192.168.1.100:554/stream1"
+        val edited = "rtsp://***:***@192.168.1.100:554/stream2"
+        val restored = UriCredentialRedactor.restoreCredentials(edited, source)
+        assertEquals("rtsp://admin:secret@192.168.1.100:554/stream2", restored)
+    }
 }

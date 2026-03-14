@@ -15,7 +15,6 @@ import com.vaadin.flow.component.notification.NotificationVariant
 import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
-import com.vaadin.flow.component.textfield.PasswordField
 import com.vaadin.flow.component.textfield.TextField
 import com.vaadin.flow.data.renderer.ComponentRenderer
 import com.vaadin.flow.router.PageTitle
@@ -24,6 +23,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.service.Go2rtcAgent
 import net.stewart.mediamanager.service.UriCredentialRedactor
+import java.io.File
 
 @Route(value = "cameras/settings", layout = MainLayout::class)
 @PageTitle("Camera Settings")
@@ -35,7 +35,7 @@ class CameraSettingsView : KComposite() {
         verticalLayout {
             h2("Camera Settings")
 
-            // go2rtc settings card
+            // go2rtc status (always shown) + config fields (non-Docker only)
             verticalLayout {
                 isPadding = true
                 isSpacing = true
@@ -43,41 +43,51 @@ class CameraSettingsView : KComposite() {
                 style.set("border-radius", "var(--lumo-border-radius-l)")
                 style.set("max-width", "600px")
 
-                add(Span("go2rtc Configuration").apply {
-                    style.set("font-weight", "bold")
-                    style.set("font-size", "var(--lumo-font-size-l)")
-                })
-
-                val configs = AppConfig.findAll()
-
-                val go2rtcPathField = textField("go2rtc Binary Path") {
-                    width = "100%"
-                    value = configs.firstOrNull { it.config_key == "go2rtc_path" }?.config_val ?: ""
-                    placeholder = "/usr/local/bin/go2rtc"
-                    helperText = "Path to go2rtc binary. In Docker: /usr/local/bin/go2rtc"
-                }
-
-                val apiPortField = textField("go2rtc API Port") {
-                    width = "100%"
-                    value = configs.firstOrNull { it.config_key == "go2rtc_api_port" }?.config_val ?: "1984"
-                    helperText = "Port for go2rtc HTTP API (default: 1984). Never expose externally."
-                }
-
                 val statusSpan = Span().apply {
-                    val healthy = Go2rtcAgent.instance?.isHealthy() == true
-                    text = if (healthy) "go2rtc: Running" else "go2rtc: Not running"
+                    val agent = Go2rtcAgent.instance
+                    val processAlive = agent?.currentProcess?.isAlive == true
+                    val healthy = agent?.isHealthy() == true
+                    text = when {
+                        agent == null -> "go2rtc: No agent instance"
+                        healthy -> "go2rtc: Running (port ${agent.apiPort})"
+                        processAlive -> "go2rtc: Process alive but API not responding (port ${agent.apiPort})"
+                        else -> "go2rtc: Not running"
+                    }
                     style.set("color", if (healthy) "var(--lumo-success-color)" else "var(--lumo-error-color)")
                     style.set("font-weight", "bold")
                 }
                 add(statusSpan)
 
-                button("Save go2rtc Settings") {
-                    addThemeVariants(ButtonVariant.LUMO_PRIMARY)
-                    addClickListener {
-                        saveConfig("go2rtc_path", go2rtcPathField.value, "Path to go2rtc binary")
-                        saveConfig("go2rtc_api_port", apiPortField.value, "go2rtc API port")
-                        Notification.show("go2rtc settings saved", 3000, Notification.Position.BOTTOM_START)
-                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                val inDocker = File("/.dockerenv").exists()
+                if (!inDocker) {
+                    add(Span("go2rtc Configuration").apply {
+                        style.set("font-weight", "bold")
+                        style.set("font-size", "var(--lumo-font-size-l)")
+                        style.set("margin-top", "var(--lumo-space-m)")
+                    })
+
+                    val configs = AppConfig.findAll()
+
+                    val go2rtcPathField = textField("go2rtc Binary Path") {
+                        width = "100%"
+                        value = configs.firstOrNull { it.config_key == "go2rtc_path" }?.config_val ?: ""
+                        placeholder = "/usr/local/bin/go2rtc"
+                    }
+
+                    val apiPortField = textField("go2rtc API Port") {
+                        width = "100%"
+                        value = configs.firstOrNull { it.config_key == "go2rtc_api_port" }?.config_val ?: "1984"
+                        helperText = "Port for go2rtc HTTP API (default: 1984). Never expose externally."
+                    }
+
+                    button("Save go2rtc Settings") {
+                        addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+                        addClickListener {
+                            saveConfig("go2rtc_path", go2rtcPathField.value, "Path to go2rtc binary")
+                            saveConfig("go2rtc_api_port", apiPortField.value, "go2rtc API port")
+                            Notification.show("go2rtc settings saved", 3000, Notification.Position.BOTTOM_START)
+                                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                        }
                     }
                 }
             }
@@ -145,11 +155,15 @@ class CameraSettingsView : KComposite() {
         downBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE)
         downBtn.element.setAttribute("title", "Move down")
 
+        val copyBtn = Button(VaadinIcon.COPY.create()) { showDuplicateCameraDialog(camera) }
+        copyBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE)
+        copyBtn.element.setAttribute("title", "Duplicate")
+
         val deleteBtn = Button(VaadinIcon.TRASH.create()) { confirmDelete(camera) }
         deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_ERROR)
         deleteBtn.element.setAttribute("title", "Delete")
 
-        layout.add(editBtn, testBtn, upBtn, downBtn, deleteBtn)
+        layout.add(editBtn, testBtn, copyBtn, upBtn, downBtn, deleteBtn)
         return layout
     }
 
@@ -226,43 +240,100 @@ class CameraSettingsView : KComposite() {
     }
 
     private fun showEditCameraDialog(camera: Camera) {
+        showCameraUrlDialog(
+            title = "Edit Camera: ${camera.name}",
+            sourceCamera = camera,
+            initialName = camera.name,
+            initialStreamName = camera.go2rtc_name,
+            initialEnabled = camera.enabled,
+        ) { name, rtspUrl, snapshotUrl, streamName, enabled ->
+            val fresh = Camera.findById(camera.id!!) ?: return@showCameraUrlDialog
+            fresh.name = name
+            fresh.rtsp_url = rtspUrl
+            fresh.snapshot_url = snapshotUrl
+            fresh.go2rtc_name = streamName
+            fresh.enabled = enabled
+            fresh.save()
+            Go2rtcAgent.instance?.reconfigure()
+            refreshGrid()
+            Notification.show("Camera '${fresh.name}' updated", 3000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+        }
+    }
+
+    private fun showDuplicateCameraDialog(camera: Camera) {
+        showCameraUrlDialog(
+            title = "Duplicate Camera: ${camera.name}",
+            sourceCamera = camera,
+            initialName = "${camera.name} (copy)",
+            initialStreamName = generateStreamName("${camera.name} (copy)"),
+            initialEnabled = camera.enabled,
+        ) { name, rtspUrl, snapshotUrl, streamName, enabled ->
+            val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
+            val newCamera = Camera(
+                name = name,
+                rtsp_url = rtspUrl,
+                snapshot_url = snapshotUrl,
+                go2rtc_name = streamName.ifBlank { generateStreamName(name) },
+                enabled = enabled,
+                display_order = maxOrder + 1
+            )
+            newCamera.save()
+            Go2rtcAgent.instance?.reconfigure()
+            refreshGrid()
+            Notification.show("Camera '${newCamera.name}' created", 3000, Notification.Position.BOTTOM_START)
+                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+        }
+    }
+
+    /**
+     * Shared dialog for editing/duplicating a camera with redacted URLs.
+     * Shows credentials as `***:***` — on save, restores them from [sourceCamera]
+     * only if the host matches (prevents credential exfiltration).
+     */
+    private fun showCameraUrlDialog(
+        title: String,
+        sourceCamera: Camera,
+        initialName: String,
+        initialStreamName: String,
+        initialEnabled: Boolean,
+        onSave: (name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Boolean) -> Unit
+    ) {
         val dialog = Dialog()
-        dialog.headerTitle = "Edit Camera: ${camera.name}"
+        dialog.headerTitle = title
         dialog.width = "500px"
 
         val nameField = TextField("Name").apply {
             width = "100%"
-            value = camera.name
+            value = initialName
         }
-
-        val currentUrlLabel = Span("Current URL: ${UriCredentialRedactor.redact(camera.rtsp_url)}").apply {
-            style.set("font-size", "var(--lumo-font-size-s)")
-            style.set("color", "var(--lumo-secondary-text-color)")
-        }
-        val changeUrlField = PasswordField("New RTSP URL (leave blank to keep current)").apply {
-            width = "100%"
-            placeholder = "rtsp://user:pass@host:554/stream"
-        }
-
-        val currentSnapshotLabel = Span("Current Snapshot URL: ${UriCredentialRedactor.redact(camera.snapshot_url)}").apply {
-            style.set("font-size", "var(--lumo-font-size-s)")
-            style.set("color", "var(--lumo-secondary-text-color)")
-        }
-        val changeSnapshotField = PasswordField("New Snapshot URL (leave blank to keep current)").apply {
-            width = "100%"
-        }
-
         val streamNameField = TextField("Stream Name").apply {
             width = "100%"
-            value = camera.go2rtc_name
+            value = initialStreamName
+            helperText = "go2rtc stream identifier"
         }
-        val enabledCheck = Checkbox("Enabled").apply { value = camera.enabled }
 
-        val content = VerticalLayout(
-            nameField, currentUrlLabel, changeUrlField,
-            currentSnapshotLabel, changeSnapshotField,
-            streamNameField, enabledCheck
-        ).apply { isPadding = false }
+        // Show redacted URLs in plain TextFields — editable path/query, credentials hidden
+        val rtspUrlField = TextField("RTSP URL").apply {
+            width = "100%"
+            value = UriCredentialRedactor.redact(sourceCamera.rtsp_url)
+            helperText = "Credentials shown as ***:*** — preserved on save if host unchanged"
+        }
+        val snapshotUrlField = TextField("Snapshot URL").apply {
+            width = "100%"
+            value = UriCredentialRedactor.redact(sourceCamera.snapshot_url)
+        }
+        val enabledCheck = Checkbox("Enabled").apply { value = initialEnabled }
+
+        nameField.addValueChangeListener { event ->
+            if (streamNameField.value == generateStreamName(event.oldValue)) {
+                streamNameField.value = generateStreamName(event.value)
+            }
+        }
+
+        val content = VerticalLayout(nameField, rtspUrlField, snapshotUrlField, streamNameField, enabledCheck).apply {
+            isPadding = false
+        }
         dialog.add(content)
 
         dialog.footer.add(
@@ -273,26 +344,44 @@ class CameraSettingsView : KComposite() {
                         .addThemeVariants(NotificationVariant.LUMO_ERROR)
                     return@Button
                 }
-                val newUrl = changeUrlField.value.trim()
-                if (newUrl.isNotBlank() && !validateUrlScheme(newUrl)) {
+                val editedRtsp = rtspUrlField.value.trim()
+                if (editedRtsp.isBlank()) {
+                    Notification.show("RTSP URL is required", 3000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    return@Button
+                }
+                if (!validateUrlScheme(editedRtsp)) {
                     Notification.show("RTSP URL must start with rtsp://", 3000, Notification.Position.BOTTOM_START)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR)
                     return@Button
                 }
 
-                val fresh = Camera.findById(camera.id!!) ?: return@Button
-                fresh.name = nameField.value.trim()
-                if (newUrl.isNotBlank()) fresh.rtsp_url = newUrl
-                val newSnapshot = changeSnapshotField.value.trim()
-                if (newSnapshot.isNotBlank()) fresh.snapshot_url = newSnapshot
-                fresh.go2rtc_name = streamNameField.value.trim()
-                fresh.enabled = enabledCheck.value
-                fresh.save()
-                Go2rtcAgent.instance?.reconfigure()
-                refreshGrid()
+                // Restore credentials from source if ***:*** placeholder present and host matches
+                val resolvedRtsp = UriCredentialRedactor.restoreCredentials(editedRtsp, sourceCamera.rtsp_url)
+                if (resolvedRtsp.contains("***:***")) {
+                    Notification.show("Cannot restore credentials — host/port changed. Enter full URL with credentials.", 5000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    return@Button
+                }
+
+                val editedSnapshot = snapshotUrlField.value.trim()
+                val resolvedSnapshot = if (editedSnapshot.isNotBlank()) {
+                    UriCredentialRedactor.restoreCredentials(editedSnapshot, sourceCamera.snapshot_url)
+                } else ""
+                if (resolvedSnapshot.contains("***:***")) {
+                    Notification.show("Cannot restore snapshot credentials — host/port changed. Enter full URL with credentials.", 5000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                    return@Button
+                }
+
+                onSave(
+                    nameField.value.trim(),
+                    resolvedRtsp,
+                    resolvedSnapshot,
+                    streamNameField.value.trim(),
+                    enabledCheck.value
+                )
                 dialog.close()
-                Notification.show("Camera '${fresh.name}' updated", 3000, Notification.Position.BOTTOM_START)
-                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY) }
         )
 
@@ -304,13 +393,13 @@ class CameraSettingsView : KComposite() {
         dialog.headerTitle = "Snapshot: ${camera.name}"
         dialog.width = "640px"
 
-        val img = Image("/cameras/${camera.id}/snapshot.jpg", "Snapshot of ${camera.name}")
+        val img = Image("/cam/${camera.id}/snapshot.jpg", "Snapshot of ${camera.name}")
         img.width = "100%"
         img.style.set("border-radius", "var(--lumo-border-radius-m)")
 
         val refreshBtn = Button("Refresh", VaadinIcon.REFRESH.create()) {
             // Force browser to refetch by adding cache-buster
-            img.src = "/cameras/${camera.id}/snapshot.jpg?t=${System.currentTimeMillis()}"
+            img.src = "/cam/${camera.id}/snapshot.jpg?t=${System.currentTimeMillis()}"
         }
 
         dialog.add(img, refreshBtn)
@@ -362,13 +451,17 @@ class CameraSettingsView : KComposite() {
     }
 
     private fun saveConfig(key: String, value: String, description: String) {
+        val trimmed = value.trim()
         val configs = AppConfig.findAll()
         val existing = configs.firstOrNull { it.config_key == key }
-        if (existing != null) {
-            existing.config_val = value
+        if (trimmed.isBlank()) {
+            // Remove the key so default fallback logic applies
+            existing?.delete()
+        } else if (existing != null) {
+            existing.config_val = trimmed
             existing.save()
         } else {
-            AppConfig(config_key = key, config_val = value, description = description).save()
+            AppConfig(config_key = key, config_val = trimmed, description = description).save()
         }
     }
 }

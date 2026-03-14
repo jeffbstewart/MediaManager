@@ -196,9 +196,13 @@ class PriceLookupAgent(
                 val result = results.firstOrNull()
                 if (result != null) {
                     if (processResult(item, result, "SEARCH", titleName)) pricedCount++
+                } else {
+                    log.info("No Keepa ASIN lookup result for item #{} '{}' (ASIN: {})", item.id, item.product_name?.take(40), asin)
+                    markChecked(item)
                 }
             } else {
                 log.info("No Keepa result for title search: '{}' (item #{})", titleName, item.id)
+                markChecked(item)
             }
         }
 
@@ -213,11 +217,19 @@ class PriceLookupAgent(
             pricedCount, batch.size, eligible.size - batch.size)
     }
 
+    /** Mark an item as checked so it won't be retried for 30 days. */
+    private fun markChecked(item: MediaItem) {
+        val fresh = MediaItem.findById(item.id!!) ?: return
+        fresh.replacement_value_updated_at = LocalDateTime.now()
+        fresh.save()
+    }
+
     /** Process a Keepa result for an item. Returns true if a price was set. */
     private fun processResult(item: MediaItem, result: KeepaProductResult, keyType: String, keyValue: String): Boolean {
         if (!result.found) {
             log.info("No Keepa match for item #{} '{}' via {} '{}'",
                 item.id, item.product_name?.take(40), keyType, keyValue)
+            markChecked(item)
             return false
         }
 

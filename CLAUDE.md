@@ -80,7 +80,9 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - **NAS LAN port**: 16002 (mapped in docker-compose as `16002:8081`)
 - **Docker healthcheck**: `curl -f http://localhost:8081/health` (inside container)
 - **Prometheus target**: `172.16.4.12:16002` (update `prometheus.yml` to scrape this instead of `:16000/metrics`)
+- **Prometheus config**: `\\NAS\Prometheus\prometheus\prometheus.yml` (alert rules in `alert.rules.yml` beside it)
 - **Endpoints served**: `/health`, `/metrics`, `/admin/logs`, `/admin/requests`
+- **Updating Prometheus rules**: After editing `alert.rules.yml` via SMB, you must **restart the Prometheus container** (`docker restart prometheus`). The `POST /-/reload` endpoint returns 200 but reads a stale cached copy of the file from the Docker volume mount — the new rules won't load until the container restarts.
 
 ## Architecture
 
