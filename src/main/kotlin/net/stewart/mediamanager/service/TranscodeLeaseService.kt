@@ -32,14 +32,14 @@ object TranscodeLeaseService {
     private const val MAX_LEASES_PER_BUDDY = 3
 
     /**
-     * Work item representing a single piece of work (transcode, thumbnail, or subtitle)
+     * Work item representing a single piece of work (transcode, thumbnail, subtitle, or chapter)
      * for unified priority sorting.
      */
     private data class WorkItem(
         val transcode: Transcode,
         val leaseType: LeaseType,
         val titleId: Long,
-        /** 0 = TRANSCODE, 1 = THUMBNAILS, 2 = SUBTITLES — order within a title */
+        /** 0 = TRANSCODE, 1 = THUMBNAILS, 2 = SUBTITLES, 3 = CHAPTERS — order within a title */
         val typeOrder: Int
     )
 
@@ -75,10 +75,15 @@ object TranscodeLeaseService {
         val activeLeasedIds = getActiveLeasedTranscodeIds()
         val activeThumbnailIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
         val activeSubtitleIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
+        val activeChapterIds = getActiveLeasedTranscodeIds(LeaseType.CHAPTERS)
 
         val poisonPillIds = getPoisonPillTranscodeIds()
         val thumbnailPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
         val subtitlePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
+        val chapterPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.CHAPTERS)
+
+        // Pre-load chapter extraction state: transcode IDs that already have chapters or completed CHAPTERS leases
+        val chapterExtractedIds = getChapterExtractedTranscodeIds()
 
         val titles = Title.findAll().associateBy { it.id }
         val hiddenTitleIds = titles.values.filter { it.hidden }.map { it.id }.toSet()
@@ -129,6 +134,16 @@ object TranscodeLeaseService {
                 if (mp4File.exists() && !hasSubtitleFile(mp4File) && !hasSubtitleSentinel(mp4File)) {
                     workItems.add(WorkItem(tc, LeaseType.SUBTITLES, tc.title_id, 2))
                 }
+            }
+
+            // --- Check CHAPTERS eligibility ---
+            if (LeaseType.CHAPTERS.name !in skipTypes &&
+                tc.id !in activeChapterIds &&
+                tc.id !in chapterPoisonPillIds &&
+                tc.id !in chapterExtractedIds &&
+                File(filePath).exists()
+            ) {
+                workItems.add(WorkItem(tc, LeaseType.CHAPTERS, tc.title_id, 3))
             }
         }
 
@@ -469,6 +484,7 @@ object TranscodeLeaseService {
         val transcodeRate = rateForType(LeaseType.TRANSCODE)
         val thumbnailRate = rateForType(LeaseType.THUMBNAILS)
         val subtitleRate = rateForType(LeaseType.SUBTITLES)
+        val chapterRate = rateForType(LeaseType.CHAPTERS)
 
         val totalCompleted = completedAll.size
         val totalBytes = completedAll.sumOf { it.file_size_bytes ?: 0L }
@@ -497,6 +513,7 @@ object TranscodeLeaseService {
             transcodeRate = transcodeRate,
             thumbnailRate = thumbnailRate,
             subtitleRate = subtitleRate,
+            chapterRate = chapterRate,
             bytesPerHour = bytesPerHour,
             activeWorkers = activeWorkers,
             failedCount = failedCount
@@ -508,20 +525,24 @@ object TranscodeLeaseService {
      * Expensive — checks NAS file existence. Callers should cache the result.
      */
     fun countPendingWork(): PendingWork {
-        val nasRoot = TranscoderAgent.getNasRoot() ?: return PendingWork(0, 0, 0)
+        val nasRoot = TranscoderAgent.getNasRoot() ?: return PendingWork(0, 0, 0, 0)
         val hiddenTitleIds = Title.findAll()
             .filter { it.hidden }.mapNotNull { it.id }.toSet()
 
         val transcodePoisonIds = getPoisonPillTranscodeIds()
         val thumbPoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
         val subtitlePoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
+        val chapterPoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.CHAPTERS)
         val activeTranscodeIds = getActiveLeasedTranscodeIds()
         val activeThumbIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
         val activeSubIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
+        val activeChapterIds = getActiveLeasedTranscodeIds(LeaseType.CHAPTERS)
+        val chapterExtractedIds = getChapterExtractedTranscodeIds()
 
         var pendingTranscodes = 0
         var pendingThumbnails = 0
         var pendingSubtitles = 0
+        var pendingChapters = 0
 
         for (tc in Transcode.findAll()) {
             if (tc.file_path == null || tc.title_id in hiddenTitleIds) continue
@@ -561,9 +582,15 @@ object TranscodeLeaseService {
                     }
                 }
             }
+
+            // Chapters are probed on the source file regardless of transcode status
+            if (tc.id !in activeChapterIds && tc.id !in chapterPoisonIds &&
+                tc.id !in chapterExtractedIds && File(filePath).exists()) {
+                pendingChapters++
+            }
         }
 
-        return PendingWork(pendingTranscodes, pendingThumbnails, pendingSubtitles)
+        return PendingWork(pendingTranscodes, pendingThumbnails, pendingSubtitles, pendingChapters)
     }
 
     /**
@@ -626,6 +653,34 @@ object TranscodeLeaseService {
     }
 
     /**
+     * Returns transcode IDs that have already had chapters extracted
+     * (either chapters exist in DB, or a CHAPTERS lease completed).
+     */
+    fun getChapterExtractedTranscodeIds(): Set<Long> {
+        val withChapters = Chapter.findAll().map { it.transcode_id }.toSet()
+        val completedLeases = TranscodeLease.findAll()
+            .filter { it.lease_type == LeaseType.CHAPTERS.name && it.status == LeaseStatus.COMPLETED.name }
+            .map { it.transcode_id }
+            .toSet()
+        return withChapters + completedLeases
+    }
+
+    /**
+     * Returns counts of completed chapter leases (total and today).
+     */
+    fun getChapterStats(): Pair<Int, Int> {
+        val allLeases = TranscodeLease.findAll()
+            .filter { it.lease_type == LeaseType.CHAPTERS.name }
+        val today = LocalDateTime.now().toLocalDate()
+        val total = allLeases.count { it.status == LeaseStatus.COMPLETED.name }
+        val todayCount = allLeases.count {
+            it.status == LeaseStatus.COMPLETED.name &&
+                it.completed_at?.toLocalDate() == today
+        }
+        return total to todayCount
+    }
+
+    /**
      * Checks whether an SRT subtitle file exists alongside the given MP4 file.
      * E.g., for `Movie.mp4`, checks for `Movie.en.srt`.
      */
@@ -660,9 +715,10 @@ data class BuddyStatusSummary(
 data class PendingWork(
     val transcodes: Int,
     val thumbnails: Int,
-    val subtitles: Int
+    val subtitles: Int,
+    val chapters: Int = 0
 ) {
-    val total get() = transcodes + thumbnails + subtitles
+    val total get() = transcodes + thumbnails + subtitles + chapters
 }
 
 data class ThroughputStats(
@@ -671,12 +727,13 @@ data class ThroughputStats(
     val transcodeRate: Double,
     val thumbnailRate: Double,
     val subtitleRate: Double,
+    val chapterRate: Double = 0.0,
     val bytesPerHour: Double,
     val activeWorkers: Int,
     val failedCount: Int
 ) {
     /** Combined files/hour across all task types. */
-    val filesPerHour: Double get() = transcodeRate + thumbnailRate + subtitleRate
+    val filesPerHour: Double get() = transcodeRate + thumbnailRate + subtitleRate + chapterRate
 
     /** Estimated seconds to complete given pending work, accounting for per-type rates. */
     fun estimateSecondsLeft(pending: PendingWork): Long? {
@@ -692,6 +749,10 @@ data class ThroughputStats(
         }
         if (pending.subtitles > 0 && subtitleRate > 0) {
             totalSeconds += pending.subtitles / subtitleRate * 3600
+            hasRate = true
+        }
+        if (pending.chapters > 0 && chapterRate > 0) {
+            totalSeconds += pending.chapters / chapterRate * 3600
             hasRate = true
         }
         return if (hasRate && totalSeconds > 0) totalSeconds.toLong() else null

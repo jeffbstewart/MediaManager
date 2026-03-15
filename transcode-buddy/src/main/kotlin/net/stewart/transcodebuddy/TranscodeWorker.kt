@@ -3,6 +3,7 @@ package net.stewart.transcodebuddy
 import net.stewart.transcode.EncoderProfile
 import net.stewart.transcode.ThumbnailSpriteGenerator
 import net.stewart.transcode.TranscodeCommand
+import net.stewart.transcode.probeChapters
 import net.stewart.transcode.probeForBrowser
 import net.stewart.transcode.probeVideo
 import net.stewart.transcode.sanitizeFfmpegOutput
@@ -92,6 +93,9 @@ class TranscodeWorker(
         }
         if (claim.leaseType == "SUBTITLES") {
             return processSubtitles(leaseId, relativePath)
+        }
+        if (claim.leaseType == "CHAPTERS") {
+            return processChapters(leaseId, relativePath)
         }
 
         val sourceFile = pathTranslator.sourceFile(relativePath)
@@ -433,6 +437,33 @@ class TranscodeWorker(
             apiClient.reportFailure(leaseId, e.message ?: "Unknown error")
             return true
         }
+    }
+
+    /**
+     * Processes a CHAPTERS lease: extracts chapter markers from the source file via FFprobe.
+     */
+    private fun processChapters(leaseId: Long, relativePath: String): Boolean {
+        val sourceFile = pathTranslator.sourceFile(relativePath)
+        if (!sourceFile.exists()) {
+            log.error("Source file not found for chapters: {}", sourceFile.absolutePath)
+            apiClient.reportFailure(leaseId, "Source file not found: ${sourceFile.absolutePath}")
+            return true
+        }
+
+        log.info("Extracting chapters from: {}", sourceFile.name)
+        apiClient.reportProgress(leaseId, 10, null)
+
+        val chapters = probeChapters(config.ffmpegPath, sourceFile)
+
+        if (chapters.isEmpty()) {
+            log.info("No chapters found in: {}", sourceFile.name)
+        } else {
+            log.info("Found {} chapters in: {}", chapters.size, sourceFile.name)
+        }
+
+        // Report complete with chapter data (even if empty — server records the attempt)
+        apiClient.reportCompleteWithChapters(leaseId, chapters)
+        return true
     }
 
     private fun writeSentinel(sentinelFile: File, message: String) {

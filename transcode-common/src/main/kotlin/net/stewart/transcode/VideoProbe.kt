@@ -99,6 +99,149 @@ fun probeDuration(ffmpegPath: String, sourceFile: File): Double? =
 fun isBrowserSafeCodec(codec: String?): Boolean =
     codec != null && codec in BROWSER_SAFE_CODECS
 
+// --- Chapter extraction via FFprobe ---
+
+/**
+ * A chapter marker extracted from a media file.
+ */
+data class ChapterInfo(
+    val number: Int,
+    val startSeconds: Double,
+    val endSeconds: Double,
+    val title: String?
+)
+
+/**
+ * Derives the FFprobe path from the FFmpeg path.
+ * Replaces "ffmpeg" with "ffprobe" in the filename.
+ */
+fun ffprobePath(ffmpegPath: String): String {
+    val file = File(ffmpegPath)
+    val name = file.name
+    val probeName = when {
+        name.equals("ffmpeg.exe", ignoreCase = true) -> name.replace("ffmpeg", "ffprobe")
+        name == "ffmpeg" -> "ffprobe"
+        else -> "ffprobe"
+    }
+    return if (file.parent != null) "${file.parent}${File.separator}$probeName" else probeName
+}
+
+/**
+ * Probes a media file for chapter markers using FFprobe JSON output.
+ * Returns a list of chapters, or empty list if none found or on error.
+ */
+fun probeChapters(ffmpegPath: String, sourceFile: File): List<ChapterInfo> {
+    return try {
+        val probe = ffprobePath(ffmpegPath)
+        val process = ProcessBuilder(
+            probe, "-show_chapters", "-print_format", "json", "-v", "quiet",
+            sourceFile.absolutePath
+        )
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+
+        if (process.exitValue() != 0) {
+            log.warn("FFprobe chapters failed for {} (exit {})", sourceFile.name, process.exitValue())
+            return emptyList()
+        }
+
+        parseChaptersJson(output)
+    } catch (e: Exception) {
+        log.warn("Failed to probe chapters for {}: {}", sourceFile.name, e.message)
+        emptyList()
+    }
+}
+
+/**
+ * Parses FFprobe JSON chapter output into ChapterInfo list.
+ */
+internal fun parseChaptersJson(json: String): List<ChapterInfo> {
+    // Minimal JSON parsing — avoid adding a dependency
+    // FFprobe outputs: {"chapters": [{...}, ...]}
+    val chapters = mutableListOf<ChapterInfo>()
+
+    // Find the "chapters" array
+    val chaptersIdx = json.indexOf("\"chapters\"")
+    if (chaptersIdx < 0) return emptyList()
+
+    val arrayStart = json.indexOf('[', chaptersIdx)
+    if (arrayStart < 0) return emptyList()
+
+    // Find matching closing bracket
+    var depth = 0
+    var arrayEnd = -1
+    for (i in arrayStart until json.length) {
+        when (json[i]) {
+            '[' -> depth++
+            ']' -> { depth--; if (depth == 0) { arrayEnd = i; break } }
+        }
+    }
+    if (arrayEnd < 0) return emptyList()
+
+    val arrayContent = json.substring(arrayStart + 1, arrayEnd)
+    if (arrayContent.isBlank()) return emptyList()
+
+    // Split into individual chapter objects by finding top-level { } pairs
+    var objDepth = 0
+    var objStart = -1
+    val objects = mutableListOf<String>()
+    for (i in arrayContent.indices) {
+        when (arrayContent[i]) {
+            '{' -> { if (objDepth == 0) objStart = i; objDepth++ }
+            '}' -> {
+                objDepth--
+                if (objDepth == 0 && objStart >= 0) {
+                    objects.add(arrayContent.substring(objStart, i + 1))
+                    objStart = -1
+                }
+            }
+        }
+    }
+
+    for ((idx, obj) in objects.withIndex()) {
+        val startTime = extractJsonDouble(obj, "start_time")
+        val endTime = extractJsonDouble(obj, "end_time")
+        val id = extractJsonInt(obj, "id") ?: idx
+        val title = extractJsonString(obj, "title")
+
+        if (startTime != null && endTime != null) {
+            chapters.add(ChapterInfo(
+                number = id + 1,
+                startSeconds = startTime,
+                endSeconds = endTime,
+                title = title
+            ))
+        }
+    }
+
+    return chapters
+}
+
+private fun extractJsonDouble(json: String, key: String): Double? {
+    val pattern = Regex(""""$key"\s*:\s*"([^"]+)"""")
+    return pattern.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
+}
+
+private fun extractJsonInt(json: String, key: String): Int? {
+    val pattern = Regex(""""$key"\s*:\s*(\d+)""")
+    return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
+}
+
+private fun extractJsonString(json: String, key: String): String? {
+    // Look inside "tags" object for title
+    val tagsIdx = json.indexOf("\"tags\"")
+    val searchIn = if (key == "title" && tagsIdx >= 0) {
+        val tagsStart = json.indexOf('{', tagsIdx)
+        val tagsEnd = json.indexOf('}', tagsStart + 1)
+        if (tagsStart >= 0 && tagsEnd >= 0) json.substring(tagsStart, tagsEnd + 1) else json
+    } else json
+    val pattern = Regex(""""$key"\s*:\s*"([^"]*?)"""")
+    val value = pattern.find(searchIn)?.groupValues?.get(1)
+    return if (value.isNullOrBlank()) null else value
+}
+
 /**
  * Infers media format from probe resolution.
  * Returns "UHD_BLURAY", "BLURAY", "DVD", or "OTHER" if resolution is present but

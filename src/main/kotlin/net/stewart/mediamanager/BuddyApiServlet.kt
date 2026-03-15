@@ -8,7 +8,12 @@ import jakarta.servlet.annotation.WebServlet
 import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.entity.Chapter
 import net.stewart.mediamanager.entity.MediaFormat
+import net.stewart.mediamanager.entity.MediaType
+import net.stewart.mediamanager.entity.SkipSegment
+import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.BuddyKeyService
 import net.stewart.mediamanager.service.ForBrowserProbeService
 import net.stewart.mediamanager.service.ReclassifyService
@@ -138,6 +143,40 @@ class BuddyApiServlet : HttpServlet() {
             sendJson(resp, HttpServletResponse.SC_NOT_FOUND,
                 mapOf("error" to "Lease not found or not active"))
             return
+        }
+
+        // Parse optional chapter data from CHAPTERS lease completion
+        val chaptersArray = body.getAsJsonArray("chapters")
+        if (chaptersArray != null) {
+            try {
+                val chapters = chaptersArray.map { chEl ->
+                    val ch = chEl.asJsonObject
+                    Chapter(
+                        transcode_id = lease.transcode_id,
+                        chapter_number = ch.get("number")?.asInt ?: 0,
+                        start_seconds = ch.get("start_seconds")?.asDouble ?: 0.0,
+                        end_seconds = ch.get("end_seconds")?.asDouble ?: 0.0,
+                        title = ch.get("title")?.asString?.takeIf { it.isNotBlank() }
+                    )
+                }
+
+                if (chapters.isNotEmpty()) {
+                    // Delete any existing chapters for this transcode (idempotent)
+                    Chapter.findAll()
+                        .filter { it.transcode_id == lease.transcode_id }
+                        .forEach { it.delete() }
+
+                    for (chapter in chapters) {
+                        chapter.create()
+                    }
+                    log.info("Stored {} chapters for transcode_id={}", chapters.size, lease.transcode_id)
+
+                    // Auto-create INTRO skip segment for movies when Chapter 1 < 5 minutes
+                    autoCreateIntroSkipSegment(lease.transcode_id, chapters)
+                }
+            } catch (e: Exception) {
+                log.warn("Failed to parse chapter data from buddy complete: {}", e.message)
+            }
         }
 
         // Parse optional probe data from the complete request
@@ -368,6 +407,44 @@ class BuddyApiServlet : HttpServlet() {
         } catch (e: IllegalStateException) {
             log.warn("Reclassify state error: {}", e.message)
             sendJson(resp, HttpServletResponse.SC_CONFLICT, mapOf("error" to "Reclassify precondition failed"))
+        }
+    }
+
+    /**
+     * Auto-creates an INTRO skip segment for movies when Chapter 1 is short (< 5 minutes).
+     * Chapter 1 typically contains studio logos and production company intros.
+     */
+    private fun autoCreateIntroSkipSegment(transcodeId: Long, chapters: List<Chapter>) {
+        try {
+            val transcode = Transcode.findById(transcodeId) ?: return
+            val title = Title.findById(transcode.title_id) ?: return
+
+            // Only auto-create for movies
+            if (title.media_type != MediaType.MOVIE.name) return
+
+            val chapter1 = chapters.firstOrNull { it.chapter_number == 1 } ?: return
+            val durationSecs = chapter1.end_seconds - chapter1.start_seconds
+
+            // Only create if Chapter 1 is under 5 minutes (likely logos/intros)
+            if (durationSecs > 300) return
+
+            // Don't create if an INTRO segment already exists
+            val existing = SkipSegment.findAll()
+                .any { it.transcode_id == transcodeId && it.segment_type == "INTRO" }
+            if (existing) return
+
+            SkipSegment(
+                transcode_id = transcodeId,
+                segment_type = "INTRO",
+                start_seconds = chapter1.start_seconds,
+                end_seconds = chapter1.end_seconds,
+                detection_method = "CHAPTER"
+            ).create()
+
+            log.info("Auto-created INTRO skip segment for transcode_id={} (chapter 1: {}s)",
+                transcodeId, "%.1f".format(durationSecs))
+        } catch (e: Exception) {
+            log.warn("Failed to auto-create intro skip segment for transcode_id={}: {}", transcodeId, e.message)
         }
     }
 

@@ -182,14 +182,23 @@ object NasScannerService {
         // Phase 4: Cleanup deleted files
         val deletedCount = cleanupDeletedFiles()
 
-        // Phase 5: Refresh TV season ownership based on transcode+episode data
+        // Phase 5: Import .skip.json files from external skip detection agents
+        Broadcaster.broadcastNasScan(NasScanProgress(
+            phase = "SKIP_IMPORT", message = "Importing skip detection data..."
+        ))
+        val skipImported = importSkipFiles()
+        if (skipImported > 0) {
+            log.info("Imported {} skip segment(s) from external agents", skipImported)
+        }
+
+        // Phase 6: Refresh TV season ownership based on transcode+episode data
         try {
             MissingSeasonService.refreshOwnership()
         } catch (e: Exception) {
             log.warn("Season ownership refresh failed: {}", e.message)
         }
 
-        // Phase 6: Promote ForBrowser sprites to source directories
+        // Phase 7: Promote ForBrowser sprites to source directories
         Broadcaster.broadcastNasScan(NasScanProgress(
             phase = "SPRITES", message = "Promoting thumbnail sprites to source directories..."
         ))
@@ -198,7 +207,7 @@ object NasScannerService {
             log.info("Promoted {} sprite set(s) to source directories", spritesPromoted)
         }
 
-        // Phase 7: Probe unknown media formats in background
+        // Phase 8: Probe unknown media formats in background
         Broadcaster.broadcastNasScan(NasScanProgress(
             phase = "PROBING", message = "Probing unknown media formats..."
         ))
@@ -484,6 +493,106 @@ object NasScannerService {
         }
 
         return missing.size
+    }
+
+    /**
+     * Scans for .skip.json files alongside source media files and imports
+     * them as SkipSegment rows. These files are produced by external skip
+     * detection agents (e.g., MediaSkipDetector).
+     *
+     * File naming: {video_basename}.{agentname}.skip.json
+     * Each file contains a JSON array of {start, end, region_type, ...}.
+     */
+    private fun importSkipFiles(): Int {
+        val transcodes = Transcode.findAll().filter { it.file_path != null }
+        val existingSegments = SkipSegment.findAll()
+        var imported = 0
+
+        for (tc in transcodes) {
+            try {
+                val sourceFile = File(tc.file_path!!)
+                if (!sourceFile.exists()) continue
+                val parentDir = sourceFile.parentFile ?: continue
+                val baseName = sourceFile.nameWithoutExtension
+
+                // Find all *.skip.json files matching this source file
+                val skipFiles = parentDir.listFiles { _, name ->
+                    name.startsWith("$baseName.") && name.endsWith(".skip.json")
+                } ?: continue
+
+                for (skipFile in skipFiles) {
+                    try {
+                        // Extract agent name from filename: baseName.AGENT.skip.json
+                        val middlePart = skipFile.name
+                            .removePrefix("$baseName.")
+                            .removeSuffix(".skip.json")
+                        if (middlePart.isEmpty()) continue
+
+                        val agentName = middlePart
+
+                        // Delete existing segments from this agent before re-importing
+                        val existingForAgent = existingSegments.filter {
+                            it.transcode_id == tc.id && it.detection_method == agentName
+                        }
+
+                        val text = skipFile.readText().trim()
+                        if (text.isEmpty()) continue
+
+                        val segments = parseSkipJson(text)
+                        if (segments.isEmpty()) continue
+
+                        existingForAgent.forEach { it.delete() }
+
+                        // Create new segments
+                        for (seg in segments) {
+                            SkipSegment(
+                                transcode_id = tc.id!!,
+                                segment_type = seg.regionType,
+                                start_seconds = seg.start,
+                                end_seconds = seg.end,
+                                detection_method = agentName
+                            ).save()
+                            imported++
+                        }
+                    } catch (e: Exception) {
+                        log.warn("Failed to parse skip file {}: {}", skipFile.name, e.message)
+                    }
+                }
+            } catch (e: Exception) {
+                log.warn("Failed to scan skip files for {}: {}", tc.file_path, e.message)
+            }
+        }
+        return imported
+    }
+
+    private data class SkipEntry(val start: Double, val end: Double, val regionType: String)
+
+    /**
+     * Parses a .skip.json file. Expects a JSON array of objects with
+     * at minimum "start", "end", and "region_type" fields.
+     */
+    private fun parseSkipJson(text: String): List<SkipEntry> {
+        val results = mutableListOf<SkipEntry>()
+        try {
+            // Simple regex-based JSON array parser — no external JSON dependency needed
+            // Matches each {...} object in the array
+            val objectPattern = Regex("""\{[^}]+\}""")
+            for (match in objectPattern.findAll(text)) {
+                val obj = match.value
+                val start = Regex(""""start"\s*:\s*([\d.]+)""").find(obj)
+                    ?.groupValues?.get(1)?.toDoubleOrNull() ?: continue
+                val end = Regex(""""end"\s*:\s*([\d.]+)""").find(obj)
+                    ?.groupValues?.get(1)?.toDoubleOrNull() ?: continue
+                val regionType = Regex(""""region_type"\s*:\s*"(\w+)"""").find(obj)
+                    ?.groupValues?.get(1) ?: continue
+                if (end > start) {
+                    results.add(SkipEntry(start, end, regionType))
+                }
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to parse skip JSON: {}", e.message)
+        }
+        return results
     }
 
     /**

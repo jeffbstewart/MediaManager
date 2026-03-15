@@ -4,7 +4,11 @@ import jakarta.servlet.annotation.WebServlet
 import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import com.github.vokorm.findAll
+import com.google.gson.Gson
 import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.entity.Chapter
+import net.stewart.mediamanager.entity.SkipSegment
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.MetricsRegistry
@@ -67,6 +71,7 @@ class VideoStreamServlet : HttpServlet() {
                 subPath == "trickplay.bif" -> serveBifFile(transcodeId, resp)
                 subPath == "subs.vtt" -> serveSubtitleFile(transcodeId, resp)
                 subPath == "subs.srt" -> serveSubtitleFile(transcodeId, resp, asVtt = false)
+                subPath == "chapters.json" -> serveChapters(transcodeId, resp)
                 else -> {
                     resp.sendError(HttpServletResponse.SC_NOT_FOUND)
                     MetricsRegistry.countHttpResponse("stream", 404)
@@ -324,6 +329,43 @@ class VideoStreamServlet : HttpServlet() {
             resp.setHeader("Cache-Control", "public, max-age=86400")
             srtFile.inputStream().use { it.copyTo(resp.outputStream) }
         }
+        MetricsRegistry.countHttpResponse("stream", 200)
+    }
+
+    /**
+     * Serves chapter markers and skip segments as JSON for the player UI.
+     */
+    private fun serveChapters(transcodeId: Long, resp: HttpServletResponse) {
+        val chapters = Chapter.findAll()
+            .filter { it.transcode_id == transcodeId }
+            .sortedBy { it.chapter_number }
+
+        val skipSegments = SkipSegment.findAll()
+            .filter { it.transcode_id == transcodeId }
+
+        val data = mapOf(
+            "chapters" to chapters.map { ch ->
+                mapOf(
+                    "number" to ch.chapter_number,
+                    "start" to ch.start_seconds,
+                    "end" to ch.end_seconds,
+                    "title" to ch.title
+                )
+            },
+            "skipSegments" to skipSegments.map { seg ->
+                mapOf(
+                    "type" to seg.segment_type,
+                    "start" to seg.start_seconds,
+                    "end" to seg.end_seconds,
+                    "method" to seg.detection_method
+                )
+            }
+        )
+
+        resp.contentType = "application/json"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "public, max-age=300")
+        resp.writer.write(Gson().toJson(data))
         MetricsRegistry.countHttpResponse("stream", 200)
     }
 

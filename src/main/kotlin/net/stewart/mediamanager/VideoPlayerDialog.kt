@@ -228,7 +228,10 @@ class VideoPlayerDialog(
                 $upNextOverlay
                 <style>@keyframes vpd-spin{to{transform:rotate(360deg)}}
                 .vpd-ch-tick{position:absolute;top:0;width:2px;height:4px;background:rgba(255,220,0,0.9);
-                pointer-events:none;}</style>
+                pointer-events:none;}
+                .vpd-chromaprint-region{position:absolute;top:0;height:100%;
+                background:rgba(0,220,255,0.6);pointer-events:none;
+                border-left:1px solid rgba(0,180,255,0.8);border-right:1px solid rgba(0,180,255,0.8);}</style>
             </div>
         """.trimIndent()
 
@@ -389,6 +392,23 @@ class VideoPlayerDialog(
             "chBar.appendChild(tick);}}" +
             "if(v.duration>0){renderMarkers();}else{" +
             "v.addEventListener('loadedmetadata',renderMarkers);}}" +
+            // Cyan overlay regions for externally-detected skip segments
+            "if(skipData){" +
+            "function renderSkipRegions(){" +
+            "if(!v.duration||v.duration<=0)return;" +
+            "for(var si=0;si<skipData.length;si++){" +
+            "var seg=skipData[si];" +
+            "if(seg.method&&seg.method!=='CHAPTER'){" +
+            "chBar.style.display='block';chBarHasMarkers=true;" +
+            "var leftPct=(seg.start/v.duration)*100;" +
+            "var widthPct=((seg.end-seg.start)/v.duration)*100;" +
+            "var region=document.createElement('div');" +
+            "region.className='vpd-chromaprint-region';" +
+            "region.style.left=leftPct+'%';" +
+            "region.style.width=widthPct+'%';" +
+            "chBar.appendChild(region);}}}" +
+            "if(v.duration>0){renderSkipRegions();}else{" +
+            "v.addEventListener('loadedmetadata',renderSkipRegions);}}" +
             // Skip Intro button logic
             "if(skipData&&skipData.length>0){" +
             "var introSeg=null;" +

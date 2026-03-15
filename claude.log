@@ -3173,3 +3173,45 @@ Navigation flow:
 - User confirmed resume IS working for partially-watched content (false alarm)
 - Closed GitHub issue #41 (Live TV viewing via networked TV tuner) as implemented
 ===
+
+=== 2026-03-15 00:43 — Fix chapter marker alignment ===
+- User reported chapter progress markers were 2 pixels too low in VideoPlayerDialog
+- Fixed by adjusting vpd-chapter-bar bottom offset from 18px to 20px
+- Built and pushed Docker image (tag 202603150043), Watchtower triggered redeploy
+- Committed locally (7fa33c2), not pushed to GitHub
+===
+
+=== 2026-03-15 01:00 — Chromaprint intro detection prototype (built, tested, removed) ===
+- Researched skip intro detection: Netflix (hybrid perceptual hashing + editorial),
+  Plex/Jellyfin/Emby (Chromaprint audio fingerprinting), FFmpeg blackdetect/silencedetect
+- Jellyfin intro-skipper is GPL-3.0, Chromaprint is MIT/LGPL-2.1
+- Built prototype IntroFingerprintService: fpcalc integration, inverted index + shift
+  voting + XOR matching, .chromaprint cache + .intro.json results alongside ForBrowser
+- Added cyan overlay regions in VideoPlayerDialog for detected skip segments
+- Added "Detect Intros" button on TitleDetailView (admin, per season)
+- Added fpcalc_path setting, IntroDetectionProgress broadcaster, chromaprint in Dockerfile
+- Tested on Star Trek Voyager S1: algorithm failed to find actual intro (4:35-6:20),
+  instead locked onto ambient warp core hum (~42s segments at wrong positions)
+- Tried fixes: tighter hamming threshold (10->4), top-5 shifts, IDF-weighted voting
+- Conclusion: inverted index approach too susceptible to ambient noise for this use case;
+  needs the GPL Chromaprint/Jellyfin libraries to work properly
+
+=== 2026-03-15 09:30 — Architecture pivot: external skip detector + cleanup ===
+- Decided to separate skip detection into its own GPL-licensed project (MediaSkipDetector)
+  that can use Jellyfin intro-skipper and Chromaprint directly
+- Filesystem contract: {basename}.{agentname}.skip.json alongside source MKVs
+  containing JSON array of {start, end, region_type} entries
+- Created MediaSkipDetector repo, filed issue #1 (filesystem contract)
+- Filed MediaManager issues:
+  - #54: Import .skip.json files during NAS scan (implemented this session)
+  - #55: Add chapter seeking support in video player
+  - #56: Relocate thumbnails and subtitles alongside source MKV files
+- Removed prototype code: IntroFingerprintService, IntroDetectionProgress broadcaster,
+  "Detect Intros" UI, fpcalc_path setting, .intro.json reading, chromaprint from Dockerfile
+- Kept: cyan overlay CSS/JS (now renders for any non-CHAPTER skip segment),
+  Skip Intro button, SkipSegment entity, chapters.json endpoint
+- Added NasScannerService Phase 5 "SKIP_IMPORT": scans all transcodes for sibling
+  *.skip.json files, parses them, creates/updates SkipSegment rows with
+  detection_method = agent name from filename. Idempotent re-import on every scan.
+- NAS crashed at ~4 AM, restarted. Buddy restarted and resumed work.
+===

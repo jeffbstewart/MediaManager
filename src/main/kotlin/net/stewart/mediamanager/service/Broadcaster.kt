@@ -71,6 +71,7 @@ object Broadcaster {
     fun registerBuddyListener(listener: (BuddyProgressEvent) -> Unit) { buddyListeners.add(listener) }
     fun unregisterBuddyListener(listener: (BuddyProgressEvent) -> Unit) { buddyListeners.remove(listener) }
     fun broadcastBuddyProgress(event: BuddyProgressEvent) { safeForEach(buddyListeners, event) }
+
 }
 
 data class BuddyProgressEvent(

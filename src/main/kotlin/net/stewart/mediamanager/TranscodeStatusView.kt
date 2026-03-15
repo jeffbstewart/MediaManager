@@ -314,6 +314,7 @@ class TranscodeStatusView : KComposite() {
                 val typeTag = when (lease.lease_type) {
                     LeaseType.THUMBNAILS.name -> " [thumbs]"
                     LeaseType.SUBTITLES.name -> " [subs]"
+                    LeaseType.CHAPTERS.name -> " [chapters]"
                     else -> ""
                 }
                 buddyActiveList.add(Span("${lease.buddy_name}: $fileName — $status$encoderInfo$typeTag").apply {
@@ -349,6 +350,7 @@ class TranscodeStatusView : KComposite() {
                 val typeTag = when (lease.lease_type) {
                     LeaseType.THUMBNAILS.name -> " [thumbs]"
                     LeaseType.SUBTITLES.name -> " [subs]"
+                    LeaseType.CHAPTERS.name -> " [chapters]"
                     else -> ""
                 }
                 buddyRecentList.add(Span("  $icon ${lease.buddy_name}: $fileName$encoderInfo$typeTag").apply {
@@ -380,6 +382,7 @@ class TranscodeStatusView : KComposite() {
                 if (pending.transcodes > 0) parts.add("${pending.transcodes} transcodes")
                 if (pending.thumbnails > 0) parts.add("${pending.thumbnails} thumbnails")
                 if (pending.subtitles > 0) parts.add("${pending.subtitles} subtitles")
+                if (pending.chapters > 0) parts.add("${pending.chapters} chapters")
                 overallPendingLabel.text = "Pending: ${parts.joinToString(", ")}"
                 overallPendingLabel.isVisible = true
             } else {

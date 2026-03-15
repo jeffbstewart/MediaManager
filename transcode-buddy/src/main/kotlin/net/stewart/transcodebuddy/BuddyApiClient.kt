@@ -3,6 +3,7 @@ package net.stewart.transcodebuddy
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import net.stewart.transcode.ChapterInfo
 import net.stewart.transcode.ForBrowserProbeResult
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -83,6 +84,21 @@ class BuddyApiClient(private val config: BuddyConfig) {
             )
             data["probe"] = probeMap
         }
+        return post("complete", gson.toJson(data)) != null
+    }
+
+    fun reportCompleteWithChapters(leaseId: Long, chapters: List<ChapterInfo>): Boolean {
+        val data = mutableMapOf<String, Any>(
+            "lease_id" to leaseId,
+            "chapters" to chapters.map { ch ->
+                mapOf(
+                    "number" to ch.number,
+                    "start_seconds" to ch.startSeconds,
+                    "end_seconds" to ch.endSeconds,
+                    "title" to (ch.title ?: "")
+                )
+            }
+        )
         return post("complete", gson.toJson(data)) != null
     }
 
