@@ -176,7 +176,7 @@ class VideoStreamServlet : HttpServlet() {
 
     /**
      * Serves a thumbnail sprite file (VTT or sprite sheet JPG) for a given transcode.
-     * Files live alongside the playable MP4 (source or ForBrowser).
+     * Looks alongside the source file first, falls back to ForBrowser.
      */
     private fun serveThumbFile(transcodeId: Long, fileName: String, contentType: String, resp: HttpServletResponse) {
         val transcode = Transcode.findById(transcodeId)
@@ -188,28 +188,14 @@ class VideoStreamServlet : HttpServlet() {
 
         val nasRoot = TranscoderAgent.getNasRoot()
         val filePath = transcode.file_path!!
-        val ext = File(filePath).extension.lowercase()
 
-        // Find the MP4 directory where thumbnails live
-        val mp4File = when {
-            ext in setOf("mp4", "m4v") -> File(filePath)
-            ext in setOf("mkv", "avi") && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-            else -> null
-        }
+        // Map generic request name to file suffix:
+        // thumbs.vtt -> .thumbs.vtt, thumbs_1.jpg -> .thumbs_1.jpg
+        val auxSuffix = "." + fileName
 
-        if (mp4File == null || !mp4File.exists()) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
-            MetricsRegistry.countHttpResponse("stream", 404)
-            return
-        }
-
-        // The VTT references sprite files by baseName, but the request uses a generic name.
-        // Map: thumbs.vtt -> {baseName}.thumbs.vtt, thumbs_1.jpg -> {baseName}.thumbs_1.jpg
-        val baseName = mp4File.nameWithoutExtension
-        val actualFileName = fileName.replaceFirst("thumbs", "$baseName.thumbs")
-        val thumbFile = File(mp4File.parentFile, actualFileName)
-
-        if (!thumbFile.exists()) {
+        // Look alongside source first, ForBrowser as fallback
+        val thumbFile = TranscoderAgent.findAuxFile(nasRoot, filePath, auxSuffix)
+        if (thumbFile == null) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND)
             MetricsRegistry.countHttpResponse("stream", 404)
             return
@@ -243,22 +229,18 @@ class VideoStreamServlet : HttpServlet() {
 
         val nasRoot = TranscoderAgent.getNasRoot()
         val filePath = transcode.file_path!!
-        val ext = File(filePath).extension.lowercase()
 
-        val mp4File = when {
-            ext in directExtensions -> File(filePath)
-            ext in transcodeExtensions && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-            else -> null
-        }
-
-        if (mp4File == null || !mp4File.exists()) {
+        // Find the VTT file (source dir first, ForBrowser fallback) to locate sprite sheets
+        val vttFile = TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt")
+        if (vttFile == null) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND)
             MetricsRegistry.countHttpResponse("stream", 404)
             return
         }
 
-        // Generate BIF on-the-fly from sprite sheets
-        val bifBytes = BifGenerator.generateBytes(mp4File)
+        // Generate BIF on-the-fly from sprite sheets in the same directory as the VTT
+        val baseName = File(filePath).nameWithoutExtension
+        val bifBytes = BifGenerator.generateBytes(baseName, vttFile.parentFile)
         if (bifBytes == null) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND)
             MetricsRegistry.countHttpResponse("stream", 404)
@@ -274,7 +256,7 @@ class VideoStreamServlet : HttpServlet() {
 
     /**
      * Serves an SRT subtitle file for a given transcode, optionally converting to WebVTT.
-     * Looks for {baseName}.en.srt alongside the playable MP4 (source or ForBrowser).
+     * Looks alongside the source file first, falls back to ForBrowser.
      */
     private fun serveSubtitleFile(transcodeId: Long, resp: HttpServletResponse, asVtt: Boolean = true) {
         val transcode = Transcode.findById(transcodeId)
@@ -286,22 +268,9 @@ class VideoStreamServlet : HttpServlet() {
 
         val nasRoot = TranscoderAgent.getNasRoot()
         val filePath = transcode.file_path!!
-        val ext = File(filePath).extension.lowercase()
 
-        val mp4File = when {
-            ext in directExtensions -> File(filePath)
-            ext in transcodeExtensions && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-            else -> null
-        }
-
-        if (mp4File == null || !mp4File.exists()) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
-            MetricsRegistry.countHttpResponse("stream", 404)
-            return
-        }
-
-        val srtFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".en.srt")
-        if (!srtFile.exists()) {
+        val srtFile = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt")
+        if (srtFile == null) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND)
             MetricsRegistry.countHttpResponse("stream", 404)
             return

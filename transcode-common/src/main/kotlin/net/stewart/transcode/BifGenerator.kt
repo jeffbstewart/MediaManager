@@ -39,10 +39,15 @@ object BifGenerator {
      * Generates BIF bytes in memory from existing sprite sheets for [mp4File].
      * Returns null if no sprite sheets exist (thumbnails must be generated first).
      */
-    fun generateBytes(mp4File: File): ByteArray? {
-        val baseName = mp4File.nameWithoutExtension
-        val parentDir = mp4File.parentFile
-        val vttFile = File(parentDir, "$baseName.thumbs.vtt")
+    fun generateBytes(mp4File: File): ByteArray? =
+        generateBytes(mp4File.nameWithoutExtension, mp4File.parentFile)
+
+    /**
+     * Generates BIF bytes from sprite sheets with the given [baseName] in [spriteDir].
+     * Returns null if no sprite sheets exist.
+     */
+    fun generateBytes(baseName: String, spriteDir: File): ByteArray? {
+        val vttFile = File(spriteDir, "$baseName.thumbs.vtt")
 
         if (!vttFile.exists()) return null
 
@@ -50,7 +55,7 @@ object BifGenerator {
         val spriteSheets = mutableListOf<File>()
         var sheetIndex = 1
         while (true) {
-            val sheet = File(parentDir, "$baseName.thumbs_$sheetIndex.jpg")
+            val sheet = File(spriteDir, "$baseName.thumbs_$sheetIndex.jpg")
             if (!sheet.exists()) break
             spriteSheets.add(sheet)
             sheetIndex++
@@ -95,7 +100,7 @@ object BifGenerator {
 
             return packBif(frameJpegs)
         } catch (e: Exception) {
-            log.error("BIF generation failed for {}: {}", mp4File.name, e.message)
+            log.error("BIF generation failed for {}: {}", baseName, e.message)
             return null
         }
     }

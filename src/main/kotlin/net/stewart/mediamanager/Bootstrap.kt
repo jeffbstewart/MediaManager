@@ -25,7 +25,7 @@ import net.stewart.mediamanager.service.MigrateOwnershipPhotosUpdater
 import net.stewart.mediamanager.service.MigrateSeasonDataUpdater
 import net.stewart.mediamanager.service.RepairFulfilledWishesUpdater
 import net.stewart.mediamanager.service.PopulateSeasonsUpdater
-import net.stewart.mediamanager.service.PromoteSpritesUpdater
+import net.stewart.mediamanager.service.MigrateAuxFilesUpdater
 import net.stewart.mediamanager.service.SchemaUpdaterRunner
 import net.stewart.mediamanager.service.UnlinkMovieEpisodesUpdater
 import org.flywaydb.core.Flyway
@@ -116,7 +116,7 @@ object Bootstrap {
         SchemaUpdaterRunner.register(UnlinkMovieEpisodesUpdater())
         SchemaUpdaterRunner.register(PopulateSeasonsUpdater())
         SchemaUpdaterRunner.register(BulkTagUpdater())
-        SchemaUpdaterRunner.register(PromoteSpritesUpdater())
+        SchemaUpdaterRunner.register(MigrateAuxFilesUpdater())
         SchemaUpdaterRunner.register(PopulateCollectionUpdater())
         SchemaUpdaterRunner.register(MigrateSeasonDataUpdater())
         SchemaUpdaterRunner.register(RepairFulfilledWishesUpdater())

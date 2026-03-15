@@ -198,14 +198,8 @@ object NasScannerService {
             log.warn("Season ownership refresh failed: {}", e.message)
         }
 
-        // Phase 7: Promote ForBrowser sprites to source directories
-        Broadcaster.broadcastNasScan(NasScanProgress(
-            phase = "SPRITES", message = "Promoting thumbnail sprites to source directories..."
-        ))
-        val spritesPromoted = promoteSpritesToSource(rootPath)
-        if (spritesPromoted > 0) {
-            log.info("Promoted {} sprite set(s) to source directories", spritesPromoted)
-        }
+        // Phase 7 (removed): Sprite promotion no longer needed — thumbnails/subtitles
+        // now generated directly alongside source files. See MigrateAuxFilesUpdater.
 
         // Phase 8: Probe unknown media formats in background
         Broadcaster.broadcastNasScan(NasScanProgress(
@@ -664,39 +658,6 @@ object NasScannerService {
      * Copies ForBrowser sprite files (VTT + JPGs) to source directories for all
      * transcodes where ForBrowser sprites exist but source sprites don't.
      */
-    private fun promoteSpritesToSource(rootPath: Path): Int {
-        val nasRoot = rootPath.toString()
-        val transcodes = Transcode.findAll().filter { it.file_path != null }
-        var promoted = 0
-
-        for (tc in transcodes) {
-            try {
-                val sourceFile = File(tc.file_path!!)
-                if (!sourceFile.exists()) continue
-
-                val forBrowserMp4 = TranscoderAgent.getForBrowserPath(nasRoot, tc.file_path!!)
-                if (!forBrowserMp4.exists()) continue
-
-                val baseName = forBrowserMp4.nameWithoutExtension
-                val vttFile = File(forBrowserMp4.parentFile, "$baseName.thumbs.vtt")
-                if (!vttFile.exists()) continue
-
-                // Skip if source already has the VTT
-                if (sourceFile.parentFile == forBrowserMp4.parentFile) continue
-                val sourceVtt = File(sourceFile.parentFile, "$baseName.thumbs.vtt")
-                if (sourceVtt.exists() && sourceVtt.lastModified() >= vttFile.lastModified()) continue
-
-                val copied = net.stewart.transcode.ThumbnailSpriteGenerator.copySpritesToDirectory(
-                    baseName, forBrowserMp4.parentFile, sourceFile.parentFile
-                )
-                if (copied > 0) promoted++
-            } catch (e: Exception) {
-                log.warn("Failed to promote sprites for {}: {}", tc.file_path, e.message)
-            }
-        }
-        return promoted
-    }
-
     private fun getNasRootPath(): String? {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "nas_root_path" }

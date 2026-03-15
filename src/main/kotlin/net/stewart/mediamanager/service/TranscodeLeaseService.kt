@@ -107,31 +107,37 @@ object TranscodeLeaseService {
             }
 
             // --- Check THUMBNAILS eligibility ---
+            // Sprites should exist alongside the source file (or ForBrowser as legacy fallback).
+            // A playable MP4 must exist (source for MP4/M4V, ForBrowser for MKV/AVI) to generate from.
             if (LeaseType.THUMBNAILS.name !in skipTypes &&
                 tc.id !in activeThumbnailIds &&
                 tc.id !in thumbnailPoisonPillIds
             ) {
-                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
+                val playableMp4 = if (TranscoderAgent.needsTranscoding(filePath)) {
                     TranscoderAgent.getForBrowserPath(nasRoot, filePath)
                 } else {
                     File(filePath)
                 }
-                if (mp4File.exists() && !net.stewart.transcode.ThumbnailSpriteGenerator.hasSprites(mp4File)) {
+                val hasSprites = TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt") != null
+                if (playableMp4.exists() && !hasSprites) {
                     workItems.add(WorkItem(tc, LeaseType.THUMBNAILS, tc.title_id, 1))
                 }
             }
 
             // --- Check SUBTITLES eligibility ---
+            // SRT files should exist alongside the source file (or ForBrowser as legacy fallback).
             if (LeaseType.SUBTITLES.name !in skipTypes &&
                 tc.id !in activeSubtitleIds &&
                 tc.id !in subtitlePoisonPillIds
             ) {
-                val mp4File = if (TranscoderAgent.needsTranscoding(filePath)) {
+                val playableMp4 = if (TranscoderAgent.needsTranscoding(filePath)) {
                     TranscoderAgent.getForBrowserPath(nasRoot, filePath)
                 } else {
                     File(filePath)
                 }
-                if (mp4File.exists() && !hasSubtitleFile(mp4File) && !hasSubtitleSentinel(mp4File)) {
+                val hasSubs = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt") != null
+                val hasSentinel = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt.failed") != null
+                if (playableMp4.exists() && !hasSubs && !hasSentinel) {
                     workItems.add(WorkItem(tc, LeaseType.SUBTITLES, tc.title_id, 2))
                 }
             }

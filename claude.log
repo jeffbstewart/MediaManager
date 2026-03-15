@@ -3215,3 +3215,153 @@ Navigation flow:
   detection_method = agent name from filename. Idempotent re-import on every scan.
 - NAS crashed at ~4 AM, restarted. Buddy restarted and resumed work.
 ===
+
+=== 2026-03-15 — MediaSkipDetector: DbUp schema migrations + skip_segment table ===
+- Integrated DbUp (dbup-sqlite 6.0.4) for versioned schema migrations
+- Created src/Migrations/001_CreateFingerprintCache.sql (existing table DDL)
+- Created src/Migrations/002_CreateSkipSegment.sql (new table + index)
+- Created src/DatabaseInitializer.cs — runs DbUp on startup, owns SQLite connection,
+  sets WAL mode, includes MsLogAdapter bridging IUpgradeLog → ILogger
+- Refactored FingerprintCache: removed IDisposable, removed all DB setup code
+  (directory creation, connection, WAL pragma, CREATE TABLE). Now accepts
+  SqliteConnection from DatabaseInitializer instead of dataDir
+- Updated Program.cs to register DatabaseInitializer singleton, pass its
+  connection to FingerprintCache
+- Renamed database: fingerprints.db → skipdetector.db (no migration concern,
+  no production instances)
+- skip_segment schema: episode_path, region_type (INTRO/END_CREDITS/future),
+  start/end seconds, confidence, computed_at. Auto-increment PK allows multiple
+  segments per episode. Index on (episode_path, region_type).
+===
+
+=== 2026-03-15 15:30 — MediaSkipDetector: DB-driven fingerprint pipeline tables + service ===
+- Created src/Migrations/003_CreateFingerprintPipeline.sql:
+  fingerprint_bundle (id, directory_path UNIQUE, total_files, status, created_at, completed_at)
+  fingerprint_work_item (id, bundle_id FK CASCADE, file_name, relative_path, status,
+  attempt_count, error_message, created_at, completed_at) + composite index
+- Bundle statuses: FINGERPRINTING → READY → COMPLETE
+- Work item statuses: PENDING → COMPLETE | FAILED (max 3 attempts)
+- Created src/FingerprintPipelineService.cs:
+  IFingerprintPipelineService interface + FingerprintPipelineService implementation
+  PrepareBundle checks fingerprint_cache for freshness, creates PENDING work items
+  for cache misses, resets stale READY/COMPLETE bundles to FINGERPRINTING
+  Retry logic: attempt_count < 3 stays PENDING, >= 3 becomes permanently FAILED
+- Added ScanMetrics: FingerprintCacheHits, FingerprintCacheMisses, BundlesCreated, BundlesReady
+- Wired Worker.cs: replaced placeholder sleep with pipeline calls
+  (PrepareBundle → GetNextPendingItem loop → FailWorkItem "fpcalc not yet implemented")
+- Removed unused appConfig/fingerprintCache params from Worker constructor
+  (pipeline service owns those dependencies now)
+- Registered IFingerprintPipelineService in Program.cs
+===
+
+=== 2026-03-15 16:00 — MediaSkipDetector: Wire fpcalc invocation for fingerprinting ===
+- Created src/FpcalcService.cs:
+  IFpcalcService interface + FpcalcService implementation
+  Invokes fpcalc CLI with -raw -json -length 120 flags
+  Parses JSON output (duration + raw int32 fingerprint array → uint32)
+  5-minute timeout per file, PATH fallback if FPCALC_PATH not set
+- Added FpcalcPath to AppConfig (from FPCALC_PATH env var or --fpcalc-path= CLI)
+- Wired Worker.cs: FingerprintWorkItem method runs fpcalc, stores result in
+  fingerprint_cache, marks work item COMPLETE on success or FAILED on error
+  Graceful shutdown: cancellation token threaded through fpcalc loop
+- Added ScanMetrics: FilesFingerprinted, FingerprintErrors counters
+- Registered IFpcalcService in Program.cs
+===
+
+=== 2026-03-15 16:15 — MediaSkipDetector: Docker fpcalc + status page update ===
+- Dockerfile: added `chromaprint` package (apk add) — installs fpcalc to /usr/bin/fpcalc,
+  found automatically via PATH lookup in FpcalcService.ResolvePath
+- Status page (/status): added Fingerprinting section showing fpcalc availability
+  (green/red), cache entry count, files fingerprinted/errors this run, cache hit/miss stats
+- Injected IFpcalcService + IFingerprintCache into HandleStatus for live data
+===
+
+=== 2026-03-15 17:00 — MediaSkipDetector: Vendor intro-skipper via git subtree ===
+- Vendored intro-skipper (Jellyfin plugin, GPL-3.0) from branch 10.12 via git subtree:
+  `git subtree add --prefix=vendor/intro-skipper ... 10.12 --squash`
+- Selectively compile 13 files from vendor via .csproj <Compile Include="..."/> entries:
+  ChromaprintAnalyzer (core algorithm), TimeAdjustmentHelper, PluginConfiguration,
+  plus 10 data types (TimeRange, Segment, QueuedEpisode, AnalysisMode, etc.)
+- Created src/VendorShims.cs: minimal stubs for Jellyfin SDK types that vendored code
+  references but we don't use at runtime (BasePluginConfiguration, IMediaFileAnalyzer,
+  Plugin singleton, FFmpegWrapper, ChapterInfo). Shim strategy avoids modifying vendored
+  files, keeping future subtree pulls conflict-free.
+- Created docs/REBASING.md: documents subtree creation, file selection, shim strategy,
+  rebase workflow (`git subtree pull`), algorithm parameters, and license compatibility.
+- Build compiles clean: 0 warnings, 0 errors
+===
+
+=== 2026-03-15 17:30 — MediaSkipDetector: Wire intro analysis when bundle is fully fingerprinted ===
+- Created src/IntroAnalysisService.cs:
+  IIntroAnalysisService interface + implementation
+  Loads cached fingerprints for all MKVs in a bundle, runs pairwise
+  CompareEpisodes via vendored ChromaprintAnalyzer, keeps longest intro
+  per episode. Writes results to skip_segment table (DELETE+INSERT per
+  episode) and outputs .introskip.skip.json alongside source MKVs.
+  Deterministic GUIDs via MD5 of relative path for analyzer's index cache.
+  Initializes Plugin shim singleton with default PluginConfiguration.
+- Worker.AnalyzeBundle: called when bundle transitions to READY or when
+  all fingerprints were already cached (re-analysis for stale .skip.json)
+- Added ScanMetrics: BundlesAnalyzed, IntrosDetected, AnalysisErrors
+- Status page: added Intro Detection section
+- Registered IIntroAnalysisService in Program.cs
+===
+
+=== 2026-03-15 18:00 — MediaSkipDetector: Tuning, capped comparisons, analysis history ===
+- Replaced O(n^2) pairwise comparisons with capped hash-spread strategy:
+  each episode compared against at most MaxComparisonCandidates (default 7)
+  other episodes, spread across the season via FNV-1a hashing.
+  Early exit on first valid match + skip already-matched episodes.
+  20-episode season: worst case 140 comparisons instead of 190.
+- All analysis tuning parameters now configurable via environment variables:
+  MAX_FINGERPRINT_POINT_DIFFERENCES (6), MAX_TIME_SKIP (3.5),
+  INVERTED_INDEX_SHIFT (2), MIN_INTRO_DURATION (15), MAX_INTRO_DURATION (120),
+  MAX_COMPARISON_CANDIDATES (7), FINGERPRINT_LENGTH_SECONDS (120)
+- AppConfig extended with init-only tuning properties, Program.cs reads env vars
+- Plugin shim now initialized from AppConfig instead of bare defaults
+- FpcalcService uses configurable FingerprintLengthSeconds
+- Created docs/TUNING.md: documents all parameters, when to adjust, troubleshooting
+- Updated secrets/example.env with commented-out tuning variables
+- Added analysis history ring buffer (last 20) to ServerStatus
+- Status page: color-coded analysis history table (green=found, gray=none, red=error)
+  with time, directory, episodes, comparisons, outcome, elapsed columns
+===
+
+=== 2026-03-15 19:15 — MediaSkipDetector: Fix fpcalc parsing, bump fingerprint length, UX ===
+- Fixed FpcalcService.ParseJson: GetInt32() → GetUInt32(). fpcalc -raw outputs
+  unsigned 32-bit integers; values like 3896246826 exceed Int32.MaxValue and threw
+  FormatException. The uint32 type flows correctly through the entire pipeline:
+  fpcalc → FpcalcResult → FingerprintCache (blob) → ChromaprintAnalyzer (XOR + PopCount).
+- Bumped default FINGERPRINT_LENGTH_SECONDS from 120 to 600 (10 minutes, matching
+  Jellyfin's AnalysisLengthLimit). 120s missed all Xena intros because they start
+  at 3.5-6.7 minutes in (variable cold open lengths). 600s produces ~4825 points
+  per file at ~6s/file vs ~948 points at ~1.2s/file.
+- First successful detection: Xena S06, 21/22 intros found in 24 comparisons (0.4s).
+  Intro segments ~60 seconds each, correctly varying start times per episode.
+- Worker.FormatDirectoryDisplay: shows "Show / Season" in status page instead of
+  bare season directory name.
+- lifecycle/run-dev.sh: prints DB path and existence status on startup. Helped
+  diagnose that DATA_DIR pointed to NAS, not local ./data.
+===
+
+=== 2026-03-15 20:00 — Relocate thumbnails and subtitles alongside source MKVs (issue #56) ===
+- Thumbnails/subtitles now live alongside source MKV files (canonical location),
+  not in ForBrowser. ForBrowser is a derived cache; source directory is permanent.
+- TranscoderAgent: added findAuxFile(nasRoot, filePath, suffix) — checks source
+  directory first, ForBrowser as fallback (transition period support).
+  Added getAuxOutputDir(filePath) for write target.
+- VideoStreamServlet: serveThumbFile, serveSubtitleFile, serveBifFile all use
+  findAuxFile() instead of resolving to ForBrowser.
+- 4 Roku services: hasSubtitleFile/hasSpriteSheets simplified to findAuxFile() calls.
+- TranscodeLeaseService: eligibility checks use findAuxFile() for both locations.
+- NasScannerService: removed promoteSpritesToSource phase (no longer needed).
+- ThumbnailSpriteGenerator: added outputDir parameter to generate().
+- BifGenerator: added generateBytes(baseName, spriteDir) overload.
+- TranscoderAgent.processThumbnails: writes to source dir via getAuxOutputDir().
+- TranscodeWorker (buddy): thumbnails write to source dir; subtitles write directly
+  to source dir (no copy step). Sentinels also alongside source.
+- Replaced PromoteSpritesUpdater with MigrateAuxFilesUpdater (version bumped to 2):
+  moves thumbs/subs/sentinels from ForBrowser to source on startup.
+  Idempotent: skips if already at source, deletes ForBrowser copies after confirming
+  source copy exists. Safe for dev-then-prod migration sequence.
+===

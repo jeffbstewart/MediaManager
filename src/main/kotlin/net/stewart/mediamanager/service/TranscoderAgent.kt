@@ -132,6 +132,42 @@ class TranscoderAgent(
             return File(filePath).extension.lowercase() in TRANSCODE_EXTENSIONS
         }
 
+        /**
+         * Finds an auxiliary file (thumbnail, subtitle) by checking the source directory
+         * first, then falling back to ForBrowser. Returns null if not found in either.
+         *
+         * Use this for READING existing auxiliary files during the transition from
+         * ForBrowser-primary to source-primary storage.
+         *
+         * @param nasRoot NAS root path (for ForBrowser fallback)
+         * @param sourceFilePath absolute path to the source media file
+         * @param suffix file suffix including dot, e.g. ".thumbs.vtt", ".en.srt"
+         */
+        fun findAuxFile(nasRoot: String?, sourceFilePath: String, suffix: String): File? {
+            val sourceFile = File(sourceFilePath)
+            val baseName = sourceFile.nameWithoutExtension
+
+            // Check alongside source first (canonical location)
+            val sourceCandidate = File(sourceFile.parentFile, baseName + suffix)
+            if (sourceCandidate.exists()) return sourceCandidate
+
+            // Fall back to ForBrowser for MKV/AVI (legacy location)
+            if (nasRoot != null && needsTranscoding(sourceFilePath)) {
+                val forBrowserMp4 = getForBrowserPath(nasRoot, sourceFilePath)
+                val fbCandidate = File(forBrowserMp4.parentFile, forBrowserMp4.nameWithoutExtension + suffix)
+                if (fbCandidate.exists()) return fbCandidate
+            }
+
+            return null
+        }
+
+        /**
+         * Returns the directory where auxiliary files (thumbnails, subtitles) should be
+         * WRITTEN for a given source file. This is always the source file's directory.
+         */
+        fun getAuxOutputDir(sourceFilePath: String): File {
+            return File(sourceFilePath).parentFile
+        }
 
         /**
          * Returns the OS-specific default FFmpeg path (used as placeholder in settings).
@@ -522,29 +558,15 @@ class TranscoderAgent(
             return
         }
 
-        log.info("Generating thumbnails for: {}", mp4File.name)
+        // Write sprites alongside the source file, not in ForBrowser
+        val outputDir = getAuxOutputDir(filePath)
+        log.info("Generating thumbnails for {} -> {}", mp4File.name, outputDir)
         TranscodeLeaseService.reportProgress(lease.id!!, 10, null)
 
-        val success = ThumbnailSpriteGenerator.generate(ffmpegPath, mp4File)
+        val success = ThumbnailSpriteGenerator.generate(ffmpegPath, mp4File, outputDir)
 
         if (success) {
             log.info("Thumbnails complete for: {}", mp4File.name)
-
-            // Copy sprites to source directory alongside the original file
-            try {
-                val sourceFile = File(filePath)
-                if (sourceFile.exists() && sourceFile.parentFile != mp4File.parentFile) {
-                    val copied = ThumbnailSpriteGenerator.copySpritesToDirectory(
-                        mp4File.nameWithoutExtension, mp4File.parentFile, sourceFile.parentFile
-                    )
-                    if (copied > 0) {
-                        log.info("Copied {} sprite files to source: {}", copied, sourceFile.parentFile)
-                    }
-                }
-            } catch (e: Exception) {
-                log.warn("Failed to copy sprites to source directory: {}", e.message)
-            }
-
             TranscodeLeaseService.reportComplete(lease.id!!, null)
         } else {
             log.warn("Thumbnail generation failed for: {}", mp4File.name)

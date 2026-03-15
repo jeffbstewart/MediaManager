@@ -259,27 +259,12 @@ object RokuHomeService {
 
     private fun hasSubtitleFile(transcode: Transcode, nasRoot: String?): Boolean {
         val filePath = transcode.file_path ?: return false
-        val ext = File(filePath).extension.lowercase()
-        val mp4File = when {
-            ext in DIRECT_EXTENSIONS -> File(filePath)
-            ext in TRANSCODE_EXTENSIONS && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-            else -> return false
-        }
-        if (!mp4File.exists()) return false
-        val srtFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".en.srt")
-        return srtFile.exists()
+        return TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt") != null
     }
 
     private fun hasSpriteSheets(transcode: Transcode, nasRoot: String?): Boolean {
         val filePath = transcode.file_path ?: return false
-        val ext = File(filePath).extension.lowercase()
-        val mp4File = when {
-            ext in DIRECT_EXTENSIONS -> File(filePath)
-            ext in TRANSCODE_EXTENSIONS && nasRoot != null -> TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-            else -> return false
-        }
-        if (!mp4File.exists()) return false
-        return File(mp4File.parentFile, mp4File.nameWithoutExtension + ".thumbs.vtt").exists()
+        return TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt") != null
     }
 
     private fun buildLiveTvCarousel(baseUrl: String, apiKey: String, user: AppUser): Carousel {

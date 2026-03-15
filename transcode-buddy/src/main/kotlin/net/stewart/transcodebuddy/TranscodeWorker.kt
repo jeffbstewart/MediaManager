@@ -237,58 +237,44 @@ class TranscodeWorker(
     }
 
     /**
-     * Processes a THUMBNAILS lease: generates sprite sheets + VTT for a ForBrowser MP4.
+     * Processes a THUMBNAILS lease: generates sprite sheets + VTT alongside the source file.
+     * The video input comes from ForBrowser MP4 (or source for direct MP4/M4V).
      */
     private fun processThumbnails(leaseId: Long, relativePath: String): Boolean {
+        val sourceFile = pathTranslator.sourceFile(relativePath)
         val mp4File = pathTranslator.forBrowserPath(relativePath)
-        if (!mp4File.exists()) {
-            // Maybe it's a direct MP4 (not a transcode)
-            val sourceFile = pathTranslator.sourceFile(relativePath)
-            if (sourceFile.exists() && sourceFile.extension.lowercase() in setOf("mp4", "m4v")) {
-                return doThumbnailGeneration(leaseId, sourceFile, relativePath)
-            }
-            log.error("MP4 file not found for thumbnails: {}", mp4File.absolutePath)
-            apiClient.reportFailure(leaseId, "MP4 file not found: ${mp4File.name}")
-            return true
-        }
-        return doThumbnailGeneration(leaseId, mp4File, relativePath)
-    }
 
-    private fun doThumbnailGeneration(leaseId: Long, mp4File: File, relativePath: String): Boolean {
-        log.info("Generating thumbnails for: {}", mp4File.name)
+        // Find the playable video to extract frames from
+        val videoFile = when {
+            mp4File.exists() -> mp4File
+            sourceFile.exists() && sourceFile.extension.lowercase() in setOf("mp4", "m4v") -> sourceFile
+            else -> {
+                log.error("No playable video found for thumbnails: {}", relativePath)
+                apiClient.reportFailure(leaseId, "No playable video found for thumbnails")
+                return true
+            }
+        }
+
+        // Write sprites alongside the source file
+        val outputDir = sourceFile.parentFile
+        log.info("Generating thumbnails for {} -> {}", videoFile.name, outputDir)
         apiClient.reportProgress(leaseId, 10, null)
 
-        val success = ThumbnailSpriteGenerator.generate(config.ffmpegPath, mp4File)
+        val success = ThumbnailSpriteGenerator.generate(config.ffmpegPath, videoFile, outputDir)
 
         if (success) {
-            log.info("Thumbnails complete for: {}", mp4File.name)
-
-            // Copy sprites to source directory alongside the original MKV
-            try {
-                val sourceFile = pathTranslator.sourceFile(relativePath)
-                if (sourceFile.exists() && sourceFile.parentFile != mp4File.parentFile) {
-                    val copied = ThumbnailSpriteGenerator.copySpritesToDirectory(
-                        mp4File.nameWithoutExtension, mp4File.parentFile, sourceFile.parentFile
-                    )
-                    if (copied > 0) {
-                        log.info("Copied {} sprite files to source: {}", copied, sourceFile.parentFile)
-                    }
-                }
-            } catch (e: Exception) {
-                log.warn("Failed to copy sprites to source directory: {}", e.message)
-            }
-
+            log.info("Thumbnails complete for: {}", videoFile.name)
             apiClient.reportComplete(leaseId, null)
         } else {
-            log.warn("Thumbnail generation failed for: {}", mp4File.name)
+            log.warn("Thumbnail generation failed for: {}", videoFile.name)
             apiClient.reportFailure(leaseId, "FFmpeg thumbnail generation failed")
         }
         return true
     }
 
     /**
-     * Processes a SUBTITLES lease: generates SRT subtitles via Whisper CLI.
-     * Writes to ForBrowser as .tmp, renames on success, then copies to source directory.
+     * Processes a SUBTITLES lease: generates SRT subtitles via Whisper CLI
+     * alongside the source file.
      */
     private fun processSubtitles(leaseId: Long, relativePath: String): Boolean {
         val whisperPath = config.whisperPath
@@ -306,15 +292,11 @@ class TranscodeWorker(
             return true
         }
 
-        // Determine the MP4 file location (where the SRT will live)
-        val mp4File = pathTranslator.forBrowserPath(relativePath)
-        val srtBaseName = mp4File.nameWithoutExtension + ".${config.whisperLanguage}.srt"
-        val srtFile = File(mp4File.parentFile, srtBaseName)
-        val sentinelFile = File(mp4File.parentFile, "$srtBaseName.failed")
-        val tmpDir = mp4File.parentFile
-
-        // Ensure output directory exists
-        tmpDir?.mkdirs()
+        // Write subtitles alongside the source file (canonical location)
+        val outputDir = sourceFile.parentFile
+        val srtBaseName = sourceFile.nameWithoutExtension + ".${config.whisperLanguage}.srt"
+        val srtFile = File(outputDir, srtBaseName)
+        val sentinelFile = File(outputDir, "$srtBaseName.failed")
 
         log.info("Generating subtitles for: {} -> {}", sourceFile.name, srtFile.name)
         apiClient.reportProgress(leaseId, 5, null)
@@ -327,7 +309,7 @@ class TranscodeWorker(
                 "--model", config.whisperModel,
                 "--language", config.whisperLanguage,
                 "--output_format", "srt",
-                "--output_dir", tmpDir.absolutePath,
+                "--output_dir", outputDir.absolutePath,
                 "--device", "cuda",
                 "--compute_type", "float16"
             )
@@ -370,9 +352,9 @@ class TranscodeWorker(
 
             if (!running.get()) return true
 
-            // Whisper outputs the SRT with the source filename base, not the MP4 base.
+            // Whisper outputs the SRT with the source filename base.
             // E.g., for source "Movie.mkv" it creates "Movie.srt" in the output dir.
-            val whisperOutputFile = File(tmpDir, sourceFile.nameWithoutExtension + ".srt")
+            val whisperOutputFile = File(outputDir, sourceFile.nameWithoutExtension + ".srt")
 
             val exitCode = process.exitValue()
             if (exitCode != 0) {
@@ -411,22 +393,12 @@ class TranscodeWorker(
                 return true
             }
 
-            // Rename Whisper output to our naming convention in ForBrowser
+            // Rename Whisper output to our naming convention (adds language code)
             if (whisperOutputFile.absolutePath != srtFile.absolutePath) {
                 whisperOutputFile.renameTo(srtFile)
             }
 
             log.info("Subtitles complete: {} ({} cues)", srtFile.name, cueCount)
-
-            // Copy to source directory alongside the original MKV
-            try {
-                val sourceSrtFile = File(sourceFile.parentFile, sourceFile.nameWithoutExtension + ".${config.whisperLanguage}.srt")
-                srtFile.copyTo(sourceSrtFile, overwrite = true)
-                log.info("Copied subtitles to source: {}", sourceSrtFile.absolutePath)
-            } catch (e: Exception) {
-                log.warn("Failed to copy subtitles to source directory: {}", e.message)
-                // Non-fatal — ForBrowser copy is the primary
-            }
 
             apiClient.reportComplete(leaseId, null)
             return true
