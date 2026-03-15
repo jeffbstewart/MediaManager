@@ -75,6 +75,16 @@
             visible="false"
             translation="[0, 0]" />
 
+        <LiveTvListScreen
+            id="liveTvListScreen"
+            visible="false"
+            translation="[0, 0]" />
+
+        <LiveTvPlayerScreen
+            id="liveTvPlayerScreen"
+            visible="false"
+            translation="[0, 0]" />
+
         <!-- Shared background tasks -->
         <PairTask id="pairTask" />
         <WishlistTask id="wishlistTask" />

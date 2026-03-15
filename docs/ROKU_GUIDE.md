@@ -128,6 +128,7 @@ The home screen displays horizontal rows of poster art, organized into carousels
 | **Recently Added** | Most recently added playable titles, newest first. |
 | **Movies** | All playable movies, sorted by popularity. |
 | **TV Series** | All playable TV series (with episode-linked transcodes), sorted by popularity. |
+| **Live TV** | OTA television channels from your HDHomeRun tuner, filtered by your quality threshold. Only appears if a tuner is configured with enabled channels. |
 
 Each carousel only shows titles that have playable transcodes (MP4/M4V, or MKV/AVI with a completed ForBrowser transcode).
 
@@ -212,6 +213,26 @@ If cameras are configured on your Media Manager server, a **Cameras** button app
 
 The live camera player is a simplified video player &mdash; no seeking, no progress bar, no resume tracking. A "LIVE" indicator appears in the upper-right corner. If no cameras are configured, the Cameras button does not appear.
 
+### Live TV
+
+If an OTA tuner (HDHomeRun) is configured on your Media Manager server, Live TV channels appear in two places:
+
+**Home screen carousel:** A **"Live TV"** row appears on the home screen showing channels that meet your reception quality threshold. Select any channel to tune directly &mdash; the stream starts after a brief loading delay (10&ndash;15 seconds while the server transcodes the OTA broadcast).
+
+**Live TV button:** A **Live TV** button also appears in the header bar. Select it to open a dedicated channel list screen with guide numbers, channel names, and reception quality star ratings. Select any channel from the list to start watching.
+
+**During playback:**
+
+| Button | Action |
+|--------|--------|
+| **Left / Right** | Step to previous / next channel (wraps around) |
+| **OK (Select)** | Show channel info overlay (auto-hides after 4 seconds) |
+| **Back** | Stop playback and return to the previous screen |
+
+A loading overlay with "Tuning to..." text appears while the server starts the stream. If the stream fails after multiple retries, a "Channel unavailable" message is shown. A red **LIVE** badge is always visible during playback.
+
+**Channel quality filter:** Channels are filtered by your quality threshold (set in Profile on the web app, default 4 out of 5). Only channels your admin has rated at or above your threshold appear in both the carousel and the channel list. Lower your threshold to see more channels.
+
 ### Audio Setup
 
 The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to **Stereo**. When set to "Auto", the Roku may negotiate audio formats that cause video to play without sound.
@@ -233,6 +254,9 @@ The Roku's **Settings &rarr; Audio &rarr; Digital Output Format** must be set to
 | Search returns no results | Verify the server is reachable and the query matches title names, actor names, collection names, or tag names. Results only include playable titles. |
 | Cameras button not visible | No cameras are configured or enabled on the server. An admin must add cameras in the web app under Manage &rarr; Cameras. |
 | Camera stream won't play | Check that go2rtc is running (admin can test snapshot from camera settings). Verify the camera's RTSP URL is correct. |
+| Live TV carousel not visible | No tuner is configured or enabled, or no channels meet your quality threshold. An admin must add a tuner and refresh channels in the web app under Manage &rarr; Live TV. |
+| Live TV channel won't tune | The server needs 10&ndash;15 seconds to start the stream. Wait for the loading overlay to clear. If it shows "Channel unavailable", the channel may have no signal or all tuners may be busy. |
+| Live TV shows "Channel unavailable" | Poor antenna reception on that channel, or all tuners are in use by other viewers. Try a different channel or wait for a tuner to free up. |
 
 ---
 

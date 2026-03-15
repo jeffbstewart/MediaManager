@@ -12,6 +12,8 @@ sub init()
     m.actorScreen = m.top.findNode("actorScreen")
     m.cameraListScreen = m.top.findNode("cameraListScreen")
     m.cameraPlayerScreen = m.top.findNode("cameraPlayerScreen")
+    m.liveTvListScreen = m.top.findNode("liveTvListScreen")
+    m.liveTvPlayerScreen = m.top.findNode("liveTvPlayerScreen")
     m.pairTask = m.top.findNode("pairTask")
     m.wishlistTask = m.top.findNode("wishlistTask")
 
@@ -67,6 +69,16 @@ sub init()
     m.homeScreen.observeField("camerasRequested", "onCamerasRequested")
     m.cameraListScreen.observeField("cameraSelected", "onCameraSelected")
     m.cameraPlayerScreen.observeField("playbackFinished", "onCameraPlaybackFinished")
+
+    ' Live TV screen signals
+    m.homeScreen.observeField("liveTvRequested", "onLiveTvRequested")
+    m.liveTvListScreen.observeField("channelSelected", "onLiveTvChannelSelected")
+    m.liveTvPlayerScreen.observeField("playbackFinished", "onLiveTvPlaybackFinished")
+    m.liveTvPlayerScreen.observeField("channelStepRequested", "onChannelStepRequested")
+
+    ' Live TV channel list for channel stepping
+    m.liveTvChannels = []
+    m.liveTvChannelIndex = 0
 
     ' Wishlist task signals
     m.wishlistTask.observeField("wishResult", "onWishResult")
@@ -401,7 +413,48 @@ sub onPlayRequested()
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
 
-    if playData.mediaType = "TV"
+    if playData.mediaType = "LIVETV"
+        ' Live TV channel: go directly to player
+        print "[MM] MainScene: routing to live TV player"
+        channel = {
+            id: 0,
+            guideNumber: "",
+            guideName: "",
+            streamUrl: "",
+            receptionQuality: 0
+        }
+        if playData.channelId <> invalid then channel.id = playData.channelId
+        if playData.guideNumber <> invalid then channel.guideNumber = playData.guideNumber
+        if playData.guideName <> invalid then channel.guideName = playData.guideName
+        if playData.streamUrl <> invalid then channel.streamUrl = playData.streamUrl
+        if playData.receptionQuality <> invalid then channel.receptionQuality = playData.receptionQuality
+
+        ' Build channel list from home screen data for channel stepping
+        m.liveTvChannels = []
+        m.liveTvChannelIndex = 0
+        liveTvItems = m.homeScreen.liveTvChannels
+        if liveTvItems <> invalid
+            for each item in liveTvItems
+                ch = {
+                    id: 0,
+                    guideNumber: "",
+                    guideName: "",
+                    streamUrl: "",
+                    receptionQuality: 0
+                }
+                if item.channelId <> invalid then ch.id = item.channelId
+                if item.guideNumber <> invalid then ch.guideNumber = item.guideNumber
+                if item.guideName <> invalid then ch.guideName = item.guideName
+                if item.streamUrl <> invalid then ch.streamUrl = item.streamUrl
+                if item.receptionQuality <> invalid then ch.receptionQuality = item.receptionQuality
+                if ch.id = channel.id then m.liveTvChannelIndex = m.liveTvChannels.count()
+                m.liveTvChannels.push(ch)
+            end for
+        end if
+
+        m.liveTvPlayerScreen.playContent = channel
+        showScreen(m.liveTvPlayerScreen)
+    else if playData.mediaType = "TV"
         ' TV series: show episode picker
         print "[MM] MainScene: routing to episode picker for TV title"
         m.episodePickerScreen.serverUrl = serverUrl
@@ -777,6 +830,77 @@ end sub
 sub onCameraPlaybackFinished()
     print "[MM] MainScene: camera playback finished, returning to camera list"
     hideTopScreen()
+end sub
+
+' ---- Live TV Screens ----
+
+sub onLiveTvRequested()
+    print "[MM] MainScene: live TV requested"
+
+    serverUrl = m.homeScreen.profileContent.serverUrl
+    apiKey = m.homeScreen.profileContent.apiKey
+
+    m.liveTvListScreen.serverUrl = serverUrl
+    m.liveTvListScreen.apiKey = apiKey
+    m.liveTvListScreen.channelsData = { trigger: true }
+    showScreen(m.liveTvListScreen)
+end sub
+
+sub onLiveTvChannelSelected()
+    channel = m.liveTvListScreen.channelSelected
+    if channel = invalid then return
+
+    guideName = ""
+    guideNumber = ""
+    if channel.guideName <> invalid then guideName = channel.guideName
+    if channel.guideNumber <> invalid then guideNumber = channel.guideNumber
+    print "[MM] MainScene: live TV channel selected — " ; guideNumber ; " " ; guideName
+
+    ' Store channel list and find current index for channel stepping
+    m.liveTvChannels = m.liveTvListScreen.channels
+    channelId = 0
+    if channel.id <> invalid then channelId = channel.id
+    for i = 0 to m.liveTvChannels.count() - 1
+        ch = m.liveTvChannels[i]
+        chId = 0
+        if ch.id <> invalid then chId = ch.id
+        if chId = channelId
+            m.liveTvChannelIndex = i
+            exit for
+        end if
+    end for
+
+    m.liveTvPlayerScreen.playContent = channel
+    showScreen(m.liveTvPlayerScreen)
+end sub
+
+sub onLiveTvPlaybackFinished()
+    print "[MM] MainScene: live TV playback finished, returning to channel list"
+    hideTopScreen()
+end sub
+
+sub onChannelStepRequested()
+    stepDir = m.liveTvPlayerScreen.channelStepRequested
+    if stepDir = 0 then return
+
+    count = m.liveTvChannels.count()
+    if count = 0 then return
+
+    ' Calculate new index with wrap-around
+    newIndex = m.liveTvChannelIndex + stepDir
+    if newIndex < 0 then newIndex = count - 1
+    if newIndex >= count then newIndex = 0
+
+    m.liveTvChannelIndex = newIndex
+    channel = m.liveTvChannels[newIndex]
+
+    guideName = ""
+    guideNumber = ""
+    if channel.guideName <> invalid then guideName = channel.guideName
+    if channel.guideNumber <> invalid then guideNumber = channel.guideNumber
+    print "[MM] MainScene: channel step to " ; guideNumber ; " " ; guideName
+
+    m.liveTvPlayerScreen.playContent = channel
 end sub
 
 ' ---- Voice Search ----

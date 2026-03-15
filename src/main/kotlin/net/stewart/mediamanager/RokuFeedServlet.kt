@@ -12,6 +12,8 @@ import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.entity.Camera
+import net.stewart.mediamanager.entity.LiveTvChannel
+import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.service.RokuFeedService
 import net.stewart.mediamanager.service.RokuHomeService
 import net.stewart.mediamanager.service.RokuSearchService
@@ -95,6 +97,7 @@ class RokuFeedServlet : HttpServlet() {
                 path.matches(Regex("genre/(\\d+)\\.json")) -> handleGenre(req, resp, path)
                 path.matches(Regex("actor/(\\d+)\\.json")) -> handleActor(req, resp, path)
                 path == "cameras.json" -> handleCameras(req, resp)
+                path == "livetv/channels.json" -> handleLiveTvChannels(req, resp)
                 else -> {
                     log.info("Roku request for unknown path: {}", path)
                     resp.sendError(HttpServletResponse.SC_NOT_FOUND)
@@ -338,6 +341,46 @@ class RokuFeedServlet : HttpServlet() {
         resp.writer.write(json)
         MetricsRegistry.countHttpResponse("roku", 200)
         log.info("Roku cameras served ({} cameras, status 200)", cameras.size)
+    }
+
+    private fun handleLiveTvChannels(req: HttpServletRequest, resp: HttpServletResponse) {
+        val (apiKey, user) = authenticateDevice(req, resp, "livetv-channels") ?: return
+        val baseUrl = getConfiguredBaseUrl(req)
+
+        // Content rating gate
+        if (!LiveTvStreamServlet.canAccessLiveTv(user)) {
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Live TV access restricted")
+            MetricsRegistry.countHttpResponse("roku", 403)
+            return
+        }
+
+        val minQuality = user.live_tv_min_quality
+        val channels = LiveTvChannel.findAll()
+            .filter { it.enabled }
+            .filter { ch ->
+                val tuner = LiveTvTuner.findById(ch.tuner_id)
+                tuner != null && tuner.enabled
+            }
+            .filter { it.reception_quality >= minQuality }
+            .sortedWith(compareBy({ it.display_order }, { it.guide_number.toDoubleOrNull() ?: 9999.0 }))
+            .map { ch ->
+                val keyParam = if (apiKey.isNotEmpty()) "?key=$apiKey" else ""
+                mapOf(
+                    "id" to ch.id,
+                    "guideNumber" to ch.guide_number,
+                    "guideName" to ch.guide_name,
+                    "receptionQuality" to ch.reception_quality,
+                    "streamUrl" to "$baseUrl/live-tv-stream/${ch.id}/stream.m3u8$keyParam"
+                )
+            }
+
+        val json = mapper.writeValueAsString(mapOf("channels" to channels))
+        resp.contentType = "application/json"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "private, max-age=60")
+        resp.writer.write(json)
+        MetricsRegistry.countHttpResponse("roku", 200)
+        log.info("Roku live TV channels served ({} channels, status 200)", channels.size)
     }
 
     private fun handleWishlistAdd(req: HttpServletRequest, resp: HttpServletResponse) {

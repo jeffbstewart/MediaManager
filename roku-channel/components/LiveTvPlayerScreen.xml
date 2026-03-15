@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LiveTvPlayerScreen" extends="Group">
+    <interface>
+        <field id="playContent" type="assocarray" alwaysNotify="true" onChange="onPlayContent" />
+        <field id="playbackFinished" type="boolean" alwaysNotify="true" />
+        <field id="channelStepRequested" type="integer" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="LiveTvPlayerScreen.brs" />
+
+    <children>
+        <!-- Fullscreen video player for live HLS streams -->
+        <Video
+            id="liveTvPlayer"
+            width="1920"
+            height="1080"
+            enableUI="false" />
+
+        <!-- Channel info overlay (top-left, auto-hides) -->
+        <Group id="channelOverlay" translation="[60, 40]" visible="false">
+            <Rectangle
+                width="400"
+                height="80"
+                color="#000000"
+                opacity="0.7" />
+            <Label
+                id="channelNumberLabel"
+                translation="[15, 8]"
+                text=""
+                font="font:LargeBoldSystemFont"
+                color="#ffffff" />
+            <Label
+                id="channelNameLabel"
+                translation="[15, 45]"
+                text=""
+                font="font:SmallSystemFont"
+                color="#cccccc" />
+        </Group>
+
+        <!-- Live indicator -->
+        <Group id="liveIndicator" translation="[60, 130]">
+            <Rectangle
+                width="84"
+                height="36"
+                color="#ef4444" />
+            <Label
+                translation="[0, 4]"
+                text="LIVE"
+                font="font:SmallBoldSystemFont"
+                color="#ffffff"
+                width="84"
+                horizAlign="center" />
+        </Group>
+
+        <!-- Loading overlay (shown while stream starts) -->
+        <Group id="loadingOverlay" translation="[0, 0]" visible="false">
+            <Rectangle
+                width="1920"
+                height="1080"
+                color="#000000"
+                opacity="0.85" />
+            <Label
+                id="loadingLabel"
+                translation="[0, 480]"
+                text="Tuning..."
+                font="font:LargeBoldSystemFont"
+                color="#cccccc"
+                width="1920"
+                horizAlign="center" />
+            <Label
+                id="loadingSubLabel"
+                translation="[0, 540]"
+                text=""
+                font="font:SmallSystemFont"
+                color="#888888"
+                width="1920"
+                horizAlign="center" />
+        </Group>
+    </children>
+</component>

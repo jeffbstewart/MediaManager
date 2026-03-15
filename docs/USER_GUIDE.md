@@ -250,6 +250,10 @@ If a channel has no signal (poor antenna reception), you'll see a "No signal on 
 
 The current channel is saved in the URL (e.g., `/live-tv/4.1`). Bookmarking or reloading the page returns you to the same channel.
 
+### Roku Live TV
+
+On the Roku channel, Live TV channels appear as a carousel row on the home screen and via a **Live TV** button in the header. Select any channel to tune directly. Use **Left/Right** during playback to step through channels, and **OK** to show the channel info overlay. See the [Roku Guide](ROKU_GUIDE.md#live-tv) for full details.
+
 ---
 
 ## Roku Playback

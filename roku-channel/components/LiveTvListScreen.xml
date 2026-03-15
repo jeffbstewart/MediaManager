@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LiveTvListScreen" extends="Group">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="channelsData" type="assocarray" alwaysNotify="true" onChange="onChannelsDataChanged" />
+
+        <!-- Outputs -->
+        <field id="channelSelected" type="assocarray" alwaysNotify="true" />
+        <field id="channels" type="array" />
+    </interface>
+
+    <script type="text/brightscript" uri="LiveTvListScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Title -->
+        <Label
+            id="titleLabel"
+            translation="[60, 40]"
+            text="Live TV"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0" />
+
+        <!-- Channel list (vertical) -->
+        <MarkupList
+            id="channelList"
+            translation="[60, 120]"
+            itemComponentName="LiveTvListItem"
+            drawFocusFeedback="true"
+            itemSize="[1800, 120]"
+            itemSpacing="[0, 10]"
+            numRows="6" />
+
+        <!-- Loading label -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading channels..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="true" />
+
+        <!-- No channels message -->
+        <Label
+            id="noChannelsLabel"
+            translation="[0, 500]"
+            text="No channels available"
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Background task -->
+        <LiveTvListTask id="liveTvListTask" />
+    </children>
+</component>

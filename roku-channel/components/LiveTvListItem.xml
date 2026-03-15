@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LiveTvListItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onItemContentChanged" />
+    </interface>
+
+    <script type="text/brightscript" uri="LiveTvListItem.brs" />
+
+    <children>
+        <!-- Background card -->
+        <Rectangle
+            id="itemBg"
+            width="1800"
+            height="120"
+            color="#2a2a4a" />
+
+        <!-- Guide number -->
+        <Label
+            id="guideNumberLabel"
+            translation="[30, 20]"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            width="120"
+            horizAlign="center" />
+
+        <!-- Channel name -->
+        <Label
+            id="nameLabel"
+            translation="[170, 25]"
+            text=""
+            font="font:MediumBoldSystemFont"
+            color="#e0e0e0"
+            width="1200" />
+
+        <!-- Reception quality stars -->
+        <Label
+            id="qualityLabel"
+            translation="[170, 70]"
+            text=""
+            font="font:SmallSystemFont"
+            color="#eab308"
+            width="400" />
+    </children>
+</component>

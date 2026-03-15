@@ -33,7 +33,13 @@ object RokuHomeService {
         val subtitleUrl: String? = null,
         val bifUrl: String? = null,
         val resumePosition: Int? = null,
-        val wishFulfilled: Boolean = false
+        val wishFulfilled: Boolean = false,
+        // Live TV channel fields (only set when mediaType = "LIVETV")
+        val channelId: Long? = null,
+        val streamUrl: String? = null,
+        val guideNumber: String? = null,
+        val guideName: String? = null,
+        val receptionQuality: Int? = null
     )
 
     data class Carousel(
@@ -43,7 +49,8 @@ object RokuHomeService {
 
     data class HomeFeed(
         val carousels: List<Carousel>,
-        val hasCameras: Boolean = false
+        val hasCameras: Boolean = false,
+        val hasLiveTv: Boolean = false
     )
 
     fun generateHomeFeed(baseUrl: String, apiKey: String, user: AppUser): HomeFeed {
@@ -101,11 +108,18 @@ object RokuHomeService {
             carousels.add(tvCarousel)
         }
 
+        // 5. Live TV — channels above user's quality cutoff
+        val liveTvCarousel = buildLiveTvCarousel(baseUrl, apiKey, user)
+        if (liveTvCarousel.items.isNotEmpty()) {
+            carousels.add(liveTvCarousel)
+        }
+
         log.info("Roku home feed: {} carousels, {} total items",
             carousels.size, carousels.sumOf { it.items.size })
 
         val hasCameras = Camera.findAll().any { it.enabled }
-        return HomeFeed(carousels, hasCameras)
+        val hasLiveTv = LiveTvTuner.findAll().any { it.enabled }
+        return HomeFeed(carousels, hasCameras, hasLiveTv)
     }
 
     private fun buildResumeCarousel(
@@ -265,6 +279,42 @@ object RokuHomeService {
         }
         if (!mp4File.exists()) return false
         return File(mp4File.parentFile, mp4File.nameWithoutExtension + ".thumbs.vtt").exists()
+    }
+
+    private fun buildLiveTvCarousel(baseUrl: String, apiKey: String, user: AppUser): Carousel {
+        val enabledTunerIds = LiveTvTuner.findAll()
+            .filter { it.enabled }
+            .mapNotNull { it.id }
+            .toSet()
+
+        if (enabledTunerIds.isEmpty()) return Carousel("Live TV", emptyList())
+
+        val keyParam = if (apiKey.isNotEmpty()) "?key=$apiKey" else ""
+        val channels = LiveTvChannel.findAll()
+            .filter { it.enabled && it.tuner_id in enabledTunerIds }
+            .filter { it.reception_quality >= user.live_tv_min_quality }
+            .sortedWith(compareBy({ it.display_order }, { it.guide_number.toDoubleOrNull() ?: 9999.0 }))
+            .take(MAX_CAROUSEL_ITEMS)
+
+        val items = channels.map { ch ->
+            CarouselItem(
+                titleId = 0,
+                name = "${ch.guide_number} ${ch.guide_name}",
+                posterUrl = null,
+                year = null,
+                mediaType = "LIVETV",
+                quality = "",
+                contentRating = null,
+                transcodeId = null,
+                channelId = ch.id,
+                streamUrl = "$baseUrl/live-tv-stream/${ch.id}/stream.m3u8$keyParam",
+                guideNumber = ch.guide_number,
+                guideName = ch.guide_name,
+                receptionQuality = ch.reception_quality
+            )
+        }
+
+        return Carousel("Live TV", items)
     }
 
     private fun isPlayable(transcode: Transcode, nasRoot: String?): Boolean {

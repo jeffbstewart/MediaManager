@@ -390,7 +390,7 @@ HDHomeRun (MPEG-TS/MPEG-2/AC-3)
   &rarr; FFmpeg (H.264/AAC HLS transcode, -preset veryfast -tune zerolatency)
     &rarr; LiveTvStreamManager (manages FFmpeg processes, temp dirs)
       &rarr; LiveTvStreamServlet (serves HLS playlist + segments)
-        &rarr; Browser (auth via cookie or device token)
+        &rarr; Browser (auth via cookie) / Roku (auth via device token)
 ```
 
 ### Adding a Tuner
@@ -425,6 +425,10 @@ Live TV access can be restricted by content rating. Set the **Content Rating Min
 | **Idle Timeout (seconds)** | 60 | How long a stream runs with no client requests before FFmpeg is stopped. |
 
 Each user holds at most one active stream. Switching channels automatically stops the previous stream. Multiple users watching the same channel share a single FFmpeg process.
+
+### Roku Integration
+
+Live TV channels appear on the Roku home screen as a carousel row (filtered by each user's quality threshold) and via a dedicated Live TV button. The Roku Video node plays the same HLS streams served by LiveTvStreamServlet. Channel stepping (left/right on the remote) is supported during playback, with a loading overlay shown during the 10&ndash;15 second stream startup.
 
 ### Docker Notes
 

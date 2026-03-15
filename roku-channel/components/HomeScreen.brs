@@ -22,6 +22,10 @@ sub init()
     m.cameraButton = m.top.findNode("cameraButton")
     m.cameraFocusRing = m.top.findNode("cameraFocusRing")
 
+    ' Live TV button
+    m.liveTvButton = m.top.findNode("liveTvButton")
+    m.liveTvFocusRing = m.top.findNode("liveTvFocusRing")
+
     ' Delegate focus when the Group itself receives it (e.g. returning from another screen)
     m.top.observeField("focusedChild", "onFocusChanged")
 
@@ -139,6 +143,27 @@ sub onFeedResult()
     else
         m.cameraButton.visible = false
     end if
+
+    ' Show Live TV button if tuners are configured
+    if feedData.hasLiveTv <> invalid and feedData.hasLiveTv = true
+        print "[MM] HomeScreen: live TV available, showing button"
+        m.liveTvButton.visible = true
+    else
+        m.liveTvButton.visible = false
+    end if
+
+    ' Extract Live TV channels from carousels for channel stepping
+    liveTvItems = []
+    for each carousel in feedData.carousels
+        if carousel.items <> invalid
+            for each item in carousel.items
+                if item.mediaType <> invalid and item.mediaType = "LIVETV"
+                    liveTvItems.push(item)
+                end if
+            end for
+        end if
+    end for
+    m.top.liveTvChannels = liveTvItems
 end sub
 
 sub onFeedError()
@@ -222,7 +247,10 @@ sub onRowItemSelected()
             item = carousel.items[itemIndex]
             print "[MM] HomeScreen: playing " ; item.name ; " (titleId=" ; str(item.titleId).trim() ; ")"
 
-            if item.mediaType <> invalid and item.mediaType = "TV"
+            if item.mediaType <> invalid and item.mediaType = "LIVETV"
+                ' Live TV channel — play directly
+                m.top.playRequested = item
+            else if item.mediaType <> invalid and item.mediaType = "TV"
                 ' TV series — always route to episode picker
                 m.top.playRequested = item
             else if item.transcodeId <> invalid and item.transcodeId > 0
@@ -306,6 +334,7 @@ sub setFocusTarget(target as string)
 
     ' Clear all focus indicators
     m.searchFocusRing.visible = false
+    m.liveTvFocusRing.visible = false
     m.cameraFocusRing.visible = false
     m.profileFocusRing.visible = false
 
@@ -314,6 +343,9 @@ sub setFocusTarget(target as string)
     else if target = "search"
         m.searchBox.setFocus(true)
         m.searchFocusRing.visible = true
+    else if target = "liveTv"
+        m.liveTvButton.setFocus(true)
+        m.liveTvFocusRing.visible = true
     else if target = "camera"
         m.cameraButton.setFocus(true)
         m.cameraFocusRing.visible = true
@@ -382,7 +414,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setFocusTarget("rowList")
             return true
         else if key = "right"
-            if m.cameraButton.visible
+            if m.liveTvButton.visible
+                setFocusTarget("liveTv")
+            else if m.cameraButton.visible
                 setFocusTarget("camera")
             else
                 setFocusTarget("profile")
@@ -398,12 +432,35 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 return true
             end if
         end if
-    else if m.focusTarget = "camera"
+    else if m.focusTarget = "liveTv"
         if key = "down"
             setFocusTarget("rowList")
             return true
         else if key = "left"
             setFocusTarget("search")
+            return true
+        else if key = "right"
+            if m.cameraButton.visible
+                setFocusTarget("camera")
+            else
+                setFocusTarget("profile")
+            end if
+            return true
+        else if key = "OK"
+            print "[MM] HomeScreen: live TV button pressed"
+            m.top.liveTvRequested = true
+            return true
+        end if
+    else if m.focusTarget = "camera"
+        if key = "down"
+            setFocusTarget("rowList")
+            return true
+        else if key = "left"
+            if m.liveTvButton.visible
+                setFocusTarget("liveTv")
+            else
+                setFocusTarget("search")
+            end if
             return true
         else if key = "right"
             setFocusTarget("profile")
@@ -420,6 +477,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if key = "left"
             if m.cameraButton.visible
                 setFocusTarget("camera")
+            else if m.liveTvButton.visible
+                setFocusTarget("liveTv")
             else
                 setFocusTarget("search")
             end if
