@@ -3116,3 +3116,60 @@ Navigation flow:
 - Updated CLAUDE.md with new views, entities, services, servlets, architecture section
 - Build + tests pass
 ===
+
+=== 2026-03-14 14:00 — Roku Live TV, Network Affiliations, UX Fixes ===
+- Wired Roku MainScene.brs for Live TV navigation:
+  - Added observers for liveTvRequested, channelSelected, playbackFinished,
+    channelStepRequested
+  - Added LIVETV routing in onPlayRequested (plays directly from carousel)
+  - Built channel list from home screen data for channel stepping
+  - Fixed BrightScript reserved word: renamed `step` to `stepDir` in
+    onChannelStepRequested
+- Added Live TV carousel to Roku home screen:
+  - RokuHomeService.kt: added Live TV fields to CarouselItem, buildLiveTvCarousel()
+  - HomeScreen.brs: extracts LIVETV items from feed, sets liveTvChannels interface field
+  - HomeScreen.xml: added liveTvChannels output field
+  - Channels appear in home feed carousel filtered by user quality threshold
+- Added Live TV button to Roku HomeScreen header bar (alongside camera button)
+  - Full focus navigation chain: search → liveTv → camera → profile
+- Fixed LIVE badge sizing in LiveTvPlayerScreen.xml: 60x28 → 84x36, centered text
+- Added loading overlay to Roku LiveTvPlayerScreen:
+  - Shows "Tuning to X.X NAME..." during FFmpeg startup (10-15s)
+  - Shows retry progress ("Connecting... 2/5") on transient errors
+  - Shows "Channel unavailable / Press Back to return" on max retries
+  - Hides overlay when state = "playing"
+- Added network affiliation display:
+  - LiveTvPlayerScreen: shows network in channel overlay
+  - LiveTvListItem: shows network between name and quality stars
+  - RokuFeedServlet: includes networkAffiliation in channels response
+- Added network affiliation admin editing:
+  - LiveTvSettingsView.kt: added Network column with inline TextField
+  - createNetworkField(): saves to network_affiliation on change
+- Updated LiveTvView.kt (browser): shows network affiliation in channel label
+  and channel picker
+- Updated documentation:
+  - docs/ROKU_GUIDE.md: Live TV carousel, full Live TV section, troubleshooting
+  - docs/USER_GUIDE.md: Roku Live TV paragraph with cross-link
+  - docs/ADMIN_GUIDE.md: architecture diagram, Roku Integration subsection
+- Multiple Docker and Roku deploys (dev + prod)
+- Committed and pushed to GitHub
+===
+
+=== 2026-03-14 18:00 — Resume Playback Investigation ===
+- Investigated why "Resume Playing" carousel doesn't appear on Roku and why
+  no "resume at X" prompt when re-selecting previously-watched episodes
+- Traced full data flow:
+  - Roku ProgressTask POSTs to /playback-progress/{transcodeId}?key={token}
+    every 60s and on stop/finish — confirmed reaching server via access logs
+  - AuthFilter resolves device token to real user (not synthetic roku user)
+  - Progress stored under real user's ID in playback_progress table
+  - RokuHomeService.buildResumeCarousel() queries by user's ID — correct
+  - RokuTitleService.getTitleDetail() includes resumePosition per episode — correct
+  - VideoPlayerScreen.brs checks resumePosition > 30 for resume dialog — correct
+- Root cause identified: PlaybackProgressService auto-clears (deletes) progress
+  records when ≥95% watched or within 120s of end. Completed episodes have no
+  record → resumePosition=0, watchedPercent=0, no "(watched)" label
+- User confirmed progress POSTs are reaching server (verified in access logs)
+- User confirmed resume IS working for partially-watched content (false alarm)
+- Closed GitHub issue #41 (Live TV viewing via networked TV tuner) as implemented
+===
