@@ -1,0 +1,1 @@
+ALTER TABLE ownership_photo ADD COLUMN IF NOT EXISTS disk_path VARCHAR(512);

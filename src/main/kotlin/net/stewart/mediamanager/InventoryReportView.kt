@@ -699,21 +699,16 @@ class InventoryReportView : KComposite() {
     }
 
     /**
-     * Load an image, downscale to thumbnail size, then apply EXIF orientation
-     * correction for PDF embedding. Downscaling first avoids loading full-resolution
-     * phone photos (4000x3000 = ~36MB BufferedImage) into memory — a 300px thumbnail
-     * uses ~360KB instead.
+     * Load an image at reduced resolution via subsampled decoding, then apply
+     * EXIF orientation correction for PDF embedding.
      *
-     * EXIF orientation values:
-     *   1 = normal, 2 = flip H, 3 = 180°, 4 = flip V,
-     *   5 = transpose, 6 = 90° CW, 7 = transverse, 8 = 90° CCW
+     * Uses ImageReader.setSourceSubsampling() so the JPEG decoder reads directly
+     * at thumbnail resolution — a 4000x3000 photo is decoded as ~300x225 without
+     * ever allocating the full 36MB BufferedImage.
      */
     private fun applyOrientation(file: java.io.File, orientation: Int): com.lowagie.text.Image {
-        val original = ImageIO.read(file)
+        val thumb = readSubsampled(file, 300)
             ?: return com.lowagie.text.Image.getInstance(file.absolutePath)
-
-        // Downscale to thumbnail size first (max 300px on longest side)
-        val thumb = downscale(original, 300)
 
         if (orientation == 1 || orientation == 0) {
             val baos = ByteArrayOutputStream()
@@ -725,7 +720,7 @@ class InventoryReportView : KComposite() {
         val h = thumb.height
 
         val (newW, newH) = when (orientation) {
-            6, 8, 5, 7 -> h to w  // 90° rotations swap dimensions
+            6, 8, 5, 7 -> h to w
             else -> w to h
         }
 
@@ -752,20 +747,32 @@ class InventoryReportView : KComposite() {
         return com.lowagie.text.Image.getInstance(baos.toByteArray())
     }
 
-    /** Downscale a BufferedImage so its longest side is at most [maxPx] pixels. */
-    private fun downscale(img: BufferedImage, maxPx: Int): BufferedImage {
-        val longest = maxOf(img.width, img.height)
-        if (longest <= maxPx) return img
+    /**
+     * Read an image file at reduced resolution using JPEG subsampled decoding.
+     * Never allocates a full-resolution BufferedImage.
+     */
+    private fun readSubsampled(file: java.io.File, maxPx: Int): BufferedImage? {
+        val stream = ImageIO.createImageInputStream(file) ?: return null
+        val readers = ImageIO.getImageReaders(stream)
+        if (!readers.hasNext()) { stream.close(); return null }
+        val reader = readers.next()
+        try {
+            reader.input = stream
+            val width = reader.getWidth(0)
+            val height = reader.getHeight(0)
+            val longest = maxOf(width, height)
 
-        val scale = maxPx.toDouble() / longest
-        val newW = (img.width * scale).toInt().coerceAtLeast(1)
-        val newH = (img.height * scale).toInt().coerceAtLeast(1)
+            if (longest <= maxPx) {
+                return reader.read(0)
+            }
 
-        val scaled = BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB)
-        val g = scaled.createGraphics()
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
-        g.drawImage(img, 0, 0, newW, newH, null)
-        g.dispose()
-        return scaled
+            val subsample = longest / maxPx
+            val param = reader.defaultReadParam
+            param.setSourceSubsampling(subsample, subsample, 0, 0)
+            return reader.read(0, param)
+        } finally {
+            reader.dispose()
+            stream.close()
+        }
     }
 }

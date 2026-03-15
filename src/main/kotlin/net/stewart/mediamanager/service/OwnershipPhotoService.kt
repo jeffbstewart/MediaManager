@@ -2,7 +2,9 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.OwnershipPhoto
+import net.stewart.mediamanager.entity.Title
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -11,9 +13,12 @@ import java.util.UUID
 import javax.imageio.ImageIO
 import javax.imageio.metadata.IIOMetadataFormatImpl
 
+/**
+ * Media-specific wrapper around [OwnershipPhotoStorage].
+ * Knows about MediaItem, UPC, and title resolution.
+ */
 object OwnershipPhotoService {
     private val log = LoggerFactory.getLogger(OwnershipPhotoService::class.java)
-    private const val CACHE_DIR = "data/ownership-photos"
 
     /** Store a photo linked to an existing media item. */
     fun store(bytes: ByteArray, contentType: String, mediaItemId: Long): String {
@@ -28,13 +33,19 @@ object OwnershipPhotoService {
 
     private fun storeInternal(bytes: ByteArray, contentType: String, mediaItemId: Long?, upc: String?): String {
         val uuid = UUID.randomUUID().toString()
-        val ext = extensionFor(contentType)
-
-        val file = fileForId(uuid, ext)
-        file.parentFile.mkdirs()
-        file.writeBytes(bytes)
-
         val orientation = readExifOrientation(bytes)
+
+        // Compute semantic disk path via storage layer
+        val diskPath = if (upc != null && upc.length >= 10) {
+            val uniqueId = UpcUniqueId(upc)
+            val title = resolveTitleName(mediaItemId)
+            OwnershipPhotoStorage.computePath(uniqueId, title, contentType)
+        } else {
+            // Fallback to legacy UUID-based path for items without a valid UPC
+            OwnershipPhotoStorage.legacyPath(uuid, contentType)
+        }
+
+        OwnershipPhotoStorage.writeFile(diskPath, bytes)
 
         OwnershipPhoto(
             id = uuid,
@@ -42,17 +53,22 @@ object OwnershipPhotoService {
             upc = upc,
             content_type = contentType,
             orientation = orientation,
+            disk_path = diskPath,
             captured_at = LocalDateTime.now()
         ).create()
 
-        log.info("Ownership photo stored: id={} mediaItemId={} upc={} size={} bytes orientation={}", uuid, mediaItemId, upc, bytes.size, orientation)
+        log.info("Ownership photo stored: id={} diskPath={} mediaItemId={} upc={} size={} bytes", uuid, diskPath, mediaItemId, upc, bytes.size)
         return uuid
     }
 
     fun getFile(uuid: String): File? {
         val record = OwnershipPhoto.findById(uuid) ?: return null
-        val file = fileForId(uuid, extensionFor(record.content_type))
-        return if (file.exists()) file else null
+        if (record.disk_path != null) {
+            return OwnershipPhotoStorage.getFile(record.disk_path!!)
+        }
+        // Legacy fallback for records without disk_path (pre-migration)
+        val legacyPath = OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
+        return OwnershipPhotoStorage.getFile(legacyPath)
     }
 
     fun getContentType(uuid: String): String? {
@@ -81,7 +97,11 @@ object OwnershipPhotoService {
         return (byItem + byUpc).distinctBy { it.id }.sortedBy { it.captured_at }
     }
 
-    /** Link orphaned UPC-only photos to their media item. Called after UPC lookup creates a MediaItem. */
+    /**
+     * Link orphaned UPC-only photos to their media item.
+     * Called after UPC lookup creates a MediaItem.
+     * Also moves files to slug-based directories if a title is now available.
+     */
     fun resolveOrphans(upc: String, mediaItemId: Long): Int {
         val orphans = OwnershipPhoto.findAll()
             .filter { it.upc == upc && it.media_item_id == null }
@@ -90,16 +110,33 @@ object OwnershipPhotoService {
             photo.save()
         }
         if (orphans.isNotEmpty()) {
-            log.info("Resolved {} orphan ownership photos for UPC {} → mediaItemId {}", orphans.size, upc, mediaItemId)
+            log.info("Resolved {} orphan ownership photos for UPC {} -> mediaItemId {}", orphans.size, upc, mediaItemId)
         }
+
+        // Try to move files to slug-based dirs if we now have a title
+        if (upc.length >= 10) {
+            val title = resolveTitleName(mediaItemId)
+            if (title != null) {
+                val moved = OwnershipPhotoStorage.moveToSlug(UpcUniqueId(upc), title)
+                if (moved > 0) {
+                    log.info("Moved {} ownership photos to slug dirs for UPC {}", moved, upc)
+                }
+            }
+        }
+
         return orphans.size
     }
 
     fun delete(uuid: String) {
         val record = OwnershipPhoto.findById(uuid)
         if (record != null) {
-            val file = fileForId(uuid, extensionFor(record.content_type))
-            if (file.exists()) file.delete()
+            if (record.disk_path != null) {
+                OwnershipPhotoStorage.deleteFile(record.disk_path!!)
+            } else {
+                // Legacy fallback
+                val legacyPath = OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
+                OwnershipPhotoStorage.deleteFile(legacyPath)
+            }
             record.delete()
             log.info("Ownership photo deleted: id={}", uuid)
         }
@@ -124,24 +161,23 @@ object OwnershipPhotoService {
         return OwnershipPhoto.findAll().count { it.media_item_id == null }
     }
 
-    private fun extensionFor(contentType: String): String = when {
-        contentType.contains("png") -> "png"
-        contentType.contains("webp") -> "webp"
-        contentType.contains("heic") -> "heic"
-        contentType.contains("heif") -> "heif"
-        else -> "jpg"
-    }
-
-    private fun fileForId(uuid: String, ext: String): File {
-        val ab = uuid.substring(0, 2)
-        val cd = uuid.substring(2, 4)
-        return File("$CACHE_DIR/$ab/$cd/$uuid.$ext")
+    /**
+     * Find the best available title name for a media item.
+     * Prefers TMDB-enriched title name, falls back to product_name.
+     */
+    internal fun resolveTitleName(mediaItemId: Long?): String? {
+        if (mediaItemId == null) return null
+        val link = MediaItemTitle.findAll().firstOrNull { it.media_item_id == mediaItemId }
+        if (link != null) {
+            val title = Title.findById(link.title_id)
+            if (title?.name != null) return title.name
+        }
+        return MediaItem.findById(mediaItemId)?.product_name
     }
 
     /**
      * Read EXIF orientation tag from JPEG image bytes.
      * Returns EXIF orientation value (1-8), default 1 (normal).
-     * Values: 1=normal, 3=180°, 6=90°CW (portrait right), 8=90°CCW (portrait left)
      */
     internal fun readExifOrientation(bytes: ByteArray): Int {
         try {
@@ -153,7 +189,6 @@ object OwnershipPhotoService {
             val metadata = reader.getImageMetadata(0) ?: return 1
 
             val standardTree = metadata.getAsTree(IIOMetadataFormatImpl.standardMetadataFormatName)
-            // Walk the standard metadata tree looking for Orientation
             val nodes = mutableListOf(standardTree)
             while (nodes.isNotEmpty()) {
                 val node = nodes.removeFirst()
@@ -167,15 +202,12 @@ object OwnershipPhotoService {
                 }
             }
 
-            // Try native JPEG metadata tree for EXIF orientation
             val nativeFormats = metadata.nativeMetadataFormatName
             if (nativeFormats != null) {
                 val nativeTree = metadata.getAsTree(nativeFormats)
                 val nativeNodes = mutableListOf(nativeTree)
                 while (nativeNodes.isNotEmpty()) {
                     val node = nativeNodes.removeFirst()
-                    // JPEG native metadata: markerSequence > unknown (APP1/EXIF)
-                    // This is hard to parse generically, so we fall back to raw EXIF parsing
                     val children = node.childNodes
                     for (i in 0 until children.length) {
                         nativeNodes.add(children.item(i))
@@ -183,7 +215,6 @@ object OwnershipPhotoService {
                 }
             }
 
-            // Direct EXIF byte scanning as fallback for JPEG
             return readExifOrientationFromBytes(bytes)
         } catch (e: Exception) {
             log.debug("Could not read EXIF orientation: {}", e.message)
@@ -191,12 +222,7 @@ object OwnershipPhotoService {
         }
     }
 
-    /**
-     * Parse EXIF orientation directly from JPEG bytes.
-     * Scans for the APP1/EXIF marker and reads the orientation tag (0x0112).
-     */
     private fun readExifOrientationFromBytes(bytes: ByteArray): Int {
-        // Find EXIF APP1 marker (FF E1)
         var i = 0
         while (i < bytes.size - 1) {
             if (bytes[i] == 0xFF.toByte() && bytes[i + 1] == 0xE1.toByte()) {
@@ -206,18 +232,15 @@ object OwnershipPhotoService {
         }
         if (i >= bytes.size - 1) return 1
 
-        // Skip marker (2 bytes) + length (2 bytes)
         val exifStart = i + 4
         if (exifStart + 6 > bytes.size) return 1
 
-        // Check "Exif\0\0" header
         val exifHeader = String(bytes, exifStart, 6, Charsets.US_ASCII)
         if (!exifHeader.startsWith("Exif")) return 1
 
         val tiffStart = exifStart + 6
         if (tiffStart + 8 > bytes.size) return 1
 
-        // Determine byte order
         val bigEndian = bytes[tiffStart] == 0x4D.toByte() && bytes[tiffStart + 1] == 0x4D.toByte()
 
         fun readShort(offset: Int): Int {
@@ -228,7 +251,6 @@ object OwnershipPhotoService {
             }
         }
 
-        // Read IFD0 offset
         val ifdOffset = tiffStart + if (bigEndian) {
             ((bytes[tiffStart + 4].toInt() and 0xFF) shl 24) or
             ((bytes[tiffStart + 5].toInt() and 0xFF) shl 16) or
@@ -248,7 +270,7 @@ object OwnershipPhotoService {
             val entryOffset = ifdOffset + 2 + (e * 12)
             if (entryOffset + 12 > bytes.size) return 1
             val tag = readShort(entryOffset)
-            if (tag == 0x0112) { // Orientation tag
+            if (tag == 0x0112) {
                 return readShort(entryOffset + 8)
             }
         }

@@ -21,6 +21,7 @@ import net.stewart.mediamanager.service.PopulateCollectionUpdater
 import net.stewart.mediamanager.service.PopulateProductNameUpdater
 import net.stewart.mediamanager.service.BulkTagUpdater
 import net.stewart.mediamanager.service.ManagedDirectoryService
+import net.stewart.mediamanager.service.MigrateOwnershipPhotosUpdater
 import net.stewart.mediamanager.service.MigrateSeasonDataUpdater
 import net.stewart.mediamanager.service.RepairFulfilledWishesUpdater
 import net.stewart.mediamanager.service.PopulateSeasonsUpdater
@@ -119,6 +120,7 @@ object Bootstrap {
         SchemaUpdaterRunner.register(PopulateCollectionUpdater())
         SchemaUpdaterRunner.register(MigrateSeasonDataUpdater())
         SchemaUpdaterRunner.register(RepairFulfilledWishesUpdater())
+        SchemaUpdaterRunner.register(MigrateOwnershipPhotosUpdater())
         SchemaUpdaterRunner.runAll()
 
         ManagedDirectoryService.ensureManagedDirectories()

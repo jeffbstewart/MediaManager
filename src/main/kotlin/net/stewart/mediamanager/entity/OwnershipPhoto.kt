@@ -12,6 +12,7 @@ data class OwnershipPhoto(
     var upc: String? = null,
     var content_type: String = "image/jpeg",
     var orientation: Int = 1,
+    var disk_path: String? = null,
     var captured_at: LocalDateTime? = null
 ) : KEntity<String> {
     companion object : Dao<OwnershipPhoto, String>(OwnershipPhoto::class.java)
