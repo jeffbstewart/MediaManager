@@ -6,6 +6,7 @@ import com.lowagie.text.*
 import com.lowagie.text.pdf.PdfPCell
 import com.lowagie.text.pdf.PdfPTable
 import com.lowagie.text.pdf.PdfWriter
+import com.vaadin.flow.component.UI
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.html.Anchor
@@ -14,6 +15,7 @@ import com.vaadin.flow.component.icon.VaadinIcon
 import com.vaadin.flow.component.orderedlayout.FlexComponent
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout
 import com.vaadin.flow.component.orderedlayout.VerticalLayout
+import com.vaadin.flow.component.progressbar.ProgressBar
 import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
 import com.vaadin.flow.server.StreamResource
@@ -38,6 +40,12 @@ import java.time.format.DateTimeFormatter
 class InventoryReportView : KComposite() {
 
     private var includePhotos = false
+    private lateinit var generateBtn: Button
+    private lateinit var photosCheckbox: com.vaadin.flow.component.checkbox.Checkbox
+    private lateinit var progressBar: ProgressBar
+    private lateinit var progressLabel: Span
+    private lateinit var progressContainer: VerticalLayout
+    private lateinit var downloadContainer: HorizontalLayout
 
     private val root = ui {
         verticalLayout {
@@ -51,7 +59,7 @@ class InventoryReportView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
 
-            val photosCheckbox = com.vaadin.flow.component.checkbox.Checkbox("Include ownership photos in PDF").apply {
+            photosCheckbox = com.vaadin.flow.component.checkbox.Checkbox("Include ownership photos in PDF").apply {
                 value = false
                 addValueChangeListener { includePhotos = it.value }
                 val photoCount = OwnershipPhotoService.totalCount()
@@ -65,28 +73,46 @@ class InventoryReportView : KComposite() {
             }
             add(photosCheckbox)
 
-            val timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-
-            val pdfResource = StreamResource("inventory-report-$timestamp.pdf") {
-                val tempFile = java.io.File.createTempFile("inventory-report-", ".pdf")
-                tempFile.deleteOnExit()
-                generatePdf(includePhotos, tempFile)
-                FileInputStream(tempFile)
+            // Progress bar (hidden until generation starts)
+            progressContainer = VerticalLayout().apply {
+                isPadding = false
+                isSpacing = true
+                width = "400px"
+                isVisible = false
+                defaultHorizontalComponentAlignment = FlexComponent.Alignment.CENTER
             }
-            pdfResource.setContentType("application/pdf")
+            progressBar = ProgressBar().apply {
+                width = "100%"
+                min = 0.0
+                max = 1.0
+                value = 0.0
+            }
+            progressLabel = Span("Preparing...").apply {
+                style.set("color", "var(--lumo-secondary-text-color)")
+                style.set("font-size", "var(--lumo-font-size-s)")
+            }
+            progressContainer.add(progressBar, progressLabel)
+            add(progressContainer)
 
+            // Download links (hidden until generation completes)
+            downloadContainer = HorizontalLayout().apply {
+                isSpacing = true
+                isVisible = false
+            }
+            add(downloadContainer)
+
+            // Generate / CSV buttons
+            generateBtn = Button("Generate PDF", VaadinIcon.COG.create()) {
+                startPdfGeneration()
+            }.apply {
+                addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+            }
+
+            val timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
             val csvResource = StreamResource("inventory-report-$timestamp.csv") {
                 ByteArrayInputStream(generateCsv())
             }
             csvResource.setContentType("text/csv")
-
-            val pdfButton = Button("Download PDF", VaadinIcon.DOWNLOAD.create()).apply {
-                addThemeVariants(ButtonVariant.LUMO_PRIMARY)
-            }
-            val pdfAnchor = Anchor(pdfResource, "").apply {
-                element.setAttribute("download", true)
-                add(pdfButton)
-            }
 
             val csvButton = Button("Download CSV", VaadinIcon.TABLE.create()).apply {
                 addThemeVariants(ButtonVariant.LUMO_PRIMARY)
@@ -96,10 +122,88 @@ class InventoryReportView : KComposite() {
                 add(csvButton)
             }
 
-            add(HorizontalLayout(pdfAnchor, csvAnchor).apply {
+            add(HorizontalLayout(generateBtn, csvAnchor).apply {
                 isSpacing = true
             })
         }
+    }
+
+    private fun startPdfGeneration() {
+        val ui = UI.getCurrent() ?: return
+        val withPhotos = includePhotos
+
+        generateBtn.isEnabled = false
+        photosCheckbox.isEnabled = false
+        progressContainer.isVisible = true
+        progressBar.value = 0.0
+        progressLabel.text = "Preparing..."
+        downloadContainer.isVisible = false
+        downloadContainer.removeAll()
+
+        val tempFile = java.io.File.createTempFile("inventory-report-", ".pdf")
+        tempFile.deleteOnExit()
+
+        Thread {
+            try {
+                var lastPushTime = 0L
+                generatePdf(withPhotos, tempFile) { current, total, phase ->
+                    val now = System.currentTimeMillis()
+                    if (total <= 1) {
+                        // Status-only update (preamble phases) — block until push completes
+                        // so the browser renders each phase before the next DB query starts
+                        ui.access {
+                            progressBar.isIndeterminate = true
+                            progressLabel.text = phase
+                        }.get()
+                    } else if (now - lastPushTime >= 250 || current == total) {
+                        // Item progress — throttle to every 250ms
+                        lastPushTime = now
+                        ui.access {
+                            progressBar.isIndeterminate = false
+                            progressBar.value = current.toDouble() / total.toDouble()
+                            progressLabel.text = "$phase ($current / $total)"
+                            ui.push()
+                        }
+                    }
+                }
+                ui.access {
+                    progressBar.value = 1.0
+                    progressLabel.text = "Complete"
+                    showDownloadLink(tempFile)
+                    generateBtn.isEnabled = true
+                    photosCheckbox.isEnabled = true
+                    ui.push()
+                }
+            } catch (e: Exception) {
+                ui.access {
+                    progressLabel.text = "Error: ${e.message}"
+                    progressBar.value = 0.0
+                    generateBtn.isEnabled = true
+                    photosCheckbox.isEnabled = true
+                    ui.push()
+                }
+            }
+        }.start()
+    }
+
+    private fun showDownloadLink(tempFile: java.io.File) {
+        val timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val pdfResource = StreamResource("inventory-report-$timestamp.pdf") {
+            FileInputStream(tempFile)
+        }
+        pdfResource.setContentType("application/pdf")
+
+        val pdfButton = Button("Download PDF", VaadinIcon.DOWNLOAD.create()).apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS)
+        }
+        val pdfAnchor = Anchor(pdfResource, "").apply {
+            element.setAttribute("download", true)
+            add(pdfButton)
+        }
+
+        downloadContainer.removeAll()
+        downloadContainer.add(pdfAnchor)
+        downloadContainer.isVisible = true
     }
 
     private data class ReportData(
@@ -186,11 +290,35 @@ class InventoryReportView : KComposite() {
 
     // ---- PDF ----
 
-    private fun generatePdf(withPhotos: Boolean = false, outputFile: java.io.File) {
+    private fun generatePdf(
+        withPhotos: Boolean = false,
+        outputFile: java.io.File,
+        onProgress: (current: Int, total: Int, phase: String) -> Unit = { _, _, _ -> }
+    ) {
+        // Load all data upfront (avoids duplicate queries and allows proper status reporting)
+        onProgress(0, 1, "Loading catalog data...")
         val data = loadData()
         val valued = data.allItems.filter { it.purchase_price != null }
         val unvalued = data.allItems.filter { it.purchase_price == null }
-        val photoCounts = if (withPhotos) OwnershipPhotoService.countByMediaItem() else emptyMap()
+
+        onProgress(0, 1, "Loading ownership photos...")
+        val allPhotoCounts = OwnershipPhotoService.countByMediaItem()
+        val photoCounts = if (withPhotos) allPhotoCounts else emptyMap()
+
+        onProgress(0, 1, "Loading pricing data...")
+        val allLookups = net.stewart.mediamanager.entity.PriceLookup.findAll()
+        val latestLookupByItem = allLookups
+            .groupBy { it.media_item_id }
+            .mapValues { (_, lookups) -> lookups.maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }!! }
+        val amazonOrders = net.stewart.mediamanager.entity.AmazonOrder.findAll()
+        val itemIdsWithLookup = allLookups.map { it.media_item_id }.toSet()
+        val asinByItem = data.allItems.associate { item ->
+            item.id!! to (item.override_asin
+                ?: amazonOrders.firstOrNull { it.linked_media_item_id == item.id && it.asin.isNotBlank() }?.asin
+                ?: latestLookupByItem[item.id]?.keepa_asin)
+        }
+
+        onProgress(0, 1, "Building summary...")
 
         val out = java.io.FileOutputStream(outputFile)
         val document = Document(PageSize.LETTER.rotate(), 36f, 36f, 36f, 36f)
@@ -227,6 +355,8 @@ class InventoryReportView : KComposite() {
         document.add(summarySection)
 
         val totalItems = data.allItems.size
+        var processedItems = 0
+        onProgress(0, totalItems, "Building PDF")
         val grandTotal = valued.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
         val replacementTotal = data.allItems.mapNotNull { it.replacement_value }.fold(BigDecimal.ZERO, BigDecimal::add)
         val itemsWithReplacement = data.allItems.count { it.replacement_value != null }
@@ -271,9 +401,7 @@ class InventoryReportView : KComposite() {
         if (itemsWithReplacement > 0) {
             addSummaryRow("Replacement value:", "\$${replacementTotal.setScale(2)} ($itemsWithReplacement items)")
 
-            // Pricing source breakdown
-            val allLookups = net.stewart.mediamanager.entity.PriceLookup.findAll()
-            val itemIdsWithLookup = allLookups.map { it.media_item_id }.toSet()
+            // Pricing source breakdown (uses pre-loaded allLookups)
             val autoPriced = data.allItems.count { it.replacement_value != null && it.id in itemIdsWithLookup }
             val manualPriced = itemsWithReplacement - autoPriced
             val unpriced = totalItems - itemsWithReplacement
@@ -284,8 +412,7 @@ class InventoryReportView : KComposite() {
             addSummaryRow("Pricing breakdown:", pricingBreakdown.joinToString(", "))
         }
 
-        // Evidence coverage
-        val allPhotoCounts = OwnershipPhotoService.countByMediaItem()
+        // Evidence coverage (uses pre-loaded allPhotoCounts)
         val itemsWithEvidence = allPhotoCounts.keys.intersect(data.allItems.mapNotNull { it.id }.toSet()).size
         val totalPhotos = allPhotoCounts.values.sum()
         if (totalPhotos > 0) {
@@ -418,18 +545,6 @@ class InventoryReportView : KComposite() {
             }
         }
 
-        // Build ASIN map for Amazon links in replacement value column
-        val allLookups2 = net.stewart.mediamanager.entity.PriceLookup.findAll()
-        val latestLookupByItem2 = allLookups2
-            .groupBy { it.media_item_id }
-            .mapValues { (_, lookups) -> lookups.maxByOrNull { it.looked_up_at ?: java.time.LocalDateTime.MIN }!! }
-        val amazonOrders2 = net.stewart.mediamanager.entity.AmazonOrder.findAll()
-        val asinByItem = data.allItems.associate { item ->
-            item.id!! to (item.override_asin
-                ?: amazonOrders2.firstOrNull { it.linked_media_item_id == item.id && it.asin.isNotBlank() }?.asin
-                ?: latestLookupByItem2[item.id]?.keepa_asin)
-        }
-
         // Page break before detail sections
         document.newPage()
 
@@ -456,7 +571,10 @@ class InventoryReportView : KComposite() {
 
                 val hasOrders = sorted.any { it.amazon_order_id != null }
                 val hasReplacement = sorted.any { it.replacement_value != null }
-                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement, photoCounts, asinByItem)
+                val table = createValuedTable(sorted, data, headerFont, normalFont, boldFont, hasOrders, hasReplacement, photoCounts, asinByItem) {
+                    processedItems++
+                    onProgress(processedItems, totalItems, "Building PDF")
+                }
                 document.add(table)
 
                 val subtotal = sorted.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
@@ -498,7 +616,10 @@ class InventoryReportView : KComposite() {
             document.add(Paragraph("All purchases have valuations.", normalFont))
         } else {
             val sorted = unvalued.sortedBy { sortKey(data.titleNames(it)) }
-            val table = createUnvaluedTable(sorted, data, headerFont, normalFont, boldFont, photoCounts)
+            val table = createUnvaluedTable(sorted, data, headerFont, normalFont, boldFont, photoCounts) {
+                processedItems++
+                onProgress(processedItems, totalItems, "Building PDF")
+            }
             document.add(table)
         }
 
@@ -515,7 +636,8 @@ class InventoryReportView : KComposite() {
         includeOrderNumber: Boolean,
         includeReplacement: Boolean = false,
         photoCounts: Map<Long, Int> = emptyMap(),
-        asinByItem: Map<Long, String?> = emptyMap()
+        asinByItem: Map<Long, String?> = emptyMap(),
+        onItemProcessed: () -> Unit = {}
     ): PdfPTable {
         var colCount = 5
         if (includeOrderNumber) colCount++
@@ -591,6 +713,8 @@ class InventoryReportView : KComposite() {
             if (photoCounts.containsKey(item.id)) {
                 addPhotoRow(table, colCount, item.id!!, bg)
             }
+
+            onItemProcessed()
         }
 
         return table
@@ -602,7 +726,8 @@ class InventoryReportView : KComposite() {
         headerFont: Font,
         normalFont: Font,
         boldFont: Font,
-        photoCounts: Map<Long, Int> = emptyMap()
+        photoCounts: Map<Long, Int> = emptyMap(),
+        onItemProcessed: () -> Unit = {}
     ): PdfPTable {
         val table = PdfPTable(4)
         table.widthPercentage = 100f
@@ -641,6 +766,8 @@ class InventoryReportView : KComposite() {
             if (photoCounts.containsKey(item.id)) {
                 addPhotoRow(table, 4, item.id!!, bg)
             }
+
+            onItemProcessed()
         }
 
         return table
