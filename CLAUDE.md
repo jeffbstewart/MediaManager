@@ -29,60 +29,17 @@ At the start of every session, `cd` to the project root (`/c/Programming/github/
 ./lifecycle/docker-build.sh       # Build image, tag, push to registry, trigger Watchtower redeploy
 ```
 
-Use `deploy-all.sh` for changes that affect both the server and the transcode buddy (shared code in transcode-common, buddy code, or server code). It stops the buddy, builds and pushes the Docker image (which triggers Watchtower), then restarts the buddy in the background. Use `docker-build.sh` alone for server-only changes.
+Use `deploy-all.sh` for changes that affect both the server and the transcode buddy (shared code in transcode-common, buddy code, or server code). Use `docker-build.sh` alone for server-only changes.
 
-### Transcode Buddy Logs
-
-The buddy's stdout/stderr is redirected to `data/buddy.log` (gitignored) to prevent ffmpeg control characters from triggering Windows console beeps. All ffmpeg/whisper process output is also sanitized via `sanitizeFfmpegOutput()` in transcode-common before logging.
-
+**Buddy commands:**
 ```bash
 ./lifecycle/run-buddy.sh             # Start buddy (output to data/buddy.log)
 ./lifecycle/stop-buddy.sh            # Stop buddy
 ./lifecycle/buddy-log.sh             # Last 50 lines of buddy log
 ./lifecycle/buddy-log.sh -f          # Live follow
-./lifecycle/buddy-log.sh 100         # Last 100 lines
 ```
 
-The `docker-build.sh` script builds the Docker image, tags the previous `latest` as `rollback`,
-pushes both the timestamped and `latest` tags to an in-house private docker registry,
-and triggers a Watchtower redeploy via HTTP API.
-
-### Watchtower Auto-Deploy
-
-A [Watchtower](https://containrrr.dev/watchtower/) container runs alongside mediamanager on the NAS. It polls for new `:latest` images every 60 seconds and automatically restarts the container when a new image is detected. The HTTP API is also enabled so `docker-build.sh` can trigger an immediate update after pushing (no 60-second wait).
-
-- **Docker socket** (Synology DSM): `/volume1/docker/docker.sock` (mounted to `/var/run/docker.sock` inside Watchtower)
-- **HTTP API port**: 16001 on the NAS
-- **API token**: stored in `secrets/deploy.agent_visible_env` as `WATCHTOWER_TOKEN`, must match `WATCHTOWER_HTTP_API_TOKEN` in docker-compose on the NAS
-- **Trigger endpoint**: `POST http://[IP redacted]:16001/v1/update` with `Authorization: Bearer <token>`
-- **Metrics endpoint**: `GET http://[IP redacted]:16001/v1/metrics` (Prometheus format)
-
-The docker-compose Watchtower service on the NAS:
-```yaml
-watchtower:
-  image: containrrr/watchtower
-  volumes:
-    - /volume1/docker/docker.sock:/var/run/docker.sock
-  ports:
-    - "16001:8080"
-  environment:
-    - WATCHTOWER_HTTP_API_UPDATE=true
-    - WATCHTOWER_HTTP_API_METRICS=true
-    - WATCHTOWER_HTTP_API_TOKEN=<same value as WATCHTOWER_TOKEN in deploy.agent_visible_env>
-  command: --interval 60 --cleanup mediamanager
-```
-
-### Internal Health/Metrics Server
-
-A separate lightweight Jetty server runs on port 8081 (inside the container) serving only `/health` and `/metrics`. These endpoints are **not** on the main app port (8080), so they are not internet-accessible.
-
-- **Container port**: 8081 (configurable via `--internal_port`)
-- **NAS LAN port**: 16002 (mapped in docker-compose as `16002:8081`)
-- **Docker healthcheck**: `curl -f http://localhost:8081/health` (inside container)
-- **Prometheus target**: `172.16.4.12:16002` (update `prometheus.yml` to scrape this instead of `:16000/metrics`)
-- **Prometheus config**: `\\NAS\Prometheus\prometheus\prometheus.yml` (alert rules in `alert.rules.yml` beside it)
-- **Endpoints served**: `/health`, `/metrics`, `/admin/logs`, `/admin/requests`
-- **Updating Prometheus rules**: After editing `alert.rules.yml` via SMB, you must **restart the Prometheus container** (`docker restart prometheus`). The `POST /-/reload` endpoint returns 200 but reads a stale cached copy of the file from the Docker volume mount — the new rules won't load until the container restarts.
+For Watchtower config, health/metrics server, and Prometheus setup, see `docs/ADMIN_GUIDE.md`. For transcode buddy architecture, see `docs/TRANSCODE_BUDDY.md`.
 
 ## Architecture
 
@@ -98,262 +55,42 @@ A separate lightweight Jetty server runs on port 8081 (inside the container) ser
 - **JDK:** Corretto 25 (Java 21+ required by Vaadin 25.x)
 - **Package:** net.stewart.mediamanager
 
-### Key Files
-
-**Core:**
-- `Main.kt` — Entry point: parses CLI flags, initializes DB, starts agents, launches VaadinBoot
-- `Bootstrap.kt` — Database initialization (HikariCP + Flyway), `secrets/.env` loader
-- `AppShell.kt` — Vaadin app shell configuration (@Push for server push)
-
-**Views (routes):**
-- `MainView.kt` — Root UI (route `/`)
-- `AddItemView.kt` — Unified add-item flow: barcode scan, TMDB search, NAS linking, purchase details, photos (route `/add`)
-- `ScanView.kt` — Redirects to `/add`
-- `ManualEntryView.kt` — Redirects to `/add`
-- `CatalogView.kt` — Title catalog with search, filters, enrichment status (route `/catalog`)
-- `TranscodeStatusView.kt` — Transcoder status panel, NAS scan (route `/transcodes/status`)
-- `TranscodeUnmatchedView.kt` — Unmatched NAS files, linking, suggestions (route `/transcodes/unmatched`)
-- `TranscodeLinkedView.kt` — Linked transcodes grid, playback, re-transcode (route `/transcodes/linked`)
-- `TranscodeBacklogView.kt` — Catalog titles with no transcodes (route `/transcodes/backlog`)
-- `TranscodeRedirectView.kt` — Redirects `/transcodes` to `/transcodes/status`
-- `TitleDetailView.kt` — Title detail with transcode/episode grids (route `/title/{titleId}`)
-- `PurchaseView.kt` — Media item valuation tracking (route `/valuation`)
-- `DocumentOwnershipView.kt` — Mobile photo capture for proof of ownership (route `/document-ownership`)
-- `ExpandView.kt` — Multi-pack title expansion (route `/expand`)
-- `MainLayout.kt` — Shared AppLayout with nav bar
-- `VideoPlayerDialog.kt` — In-browser video player dialog (HTML5 `<video>`)
-- `CameraGridView.kt` — Live camera MJPEG grid for browser (route `/cameras`, viewer-accessible)
-- `CameraSettingsView.kt` — Camera CRUD admin UI (route `/cameras/settings`, admin-only)
-- `LiveTvView.kt` — Live TV viewer with HLS player, channel stepping, picker, admin quality rating (route `/live-tv`, viewer-accessible)
-- `LiveTvSettingsView.kt` — Live TV tuner/channel admin UI (route `/live-tv/settings`, admin-only)
-- `LoginView.kt` — Login page (route `/login`, no MainLayout)
-- `ProfileView.kt` — User profile: account info, content rating (read-only), Live TV quality filter, change password, active sessions (route `/profile`)
-- `SetupView.kt` — First-user setup wizard (route `/setup`, no MainLayout)
-- `UserManagementView.kt` — Admin user management (route `/users`)
-
-**Entities (`entity/`):**
-- `Title.kt`, `MediaItem.kt`, `MediaItemTitle.kt` — Core catalog domain
-- `BarcodeScan.kt` — UPC scan queue
-- `Episode.kt` — TV episodes (created from NAS filenames during scan)
-- `Transcode.kt` — Links a Title (and optionally Episode) to a file on disk
-- `DiscoveredFile.kt` — Staging table for NAS files not yet matched to a Title
-- `Genre.kt`, `TitleGenre.kt` — Genre tagging
-- `EnrichmentAttempt.kt` — TMDB retry tracking
-- `Camera.kt` — Camera definitions (RTSP URL, go2rtc stream name, display order, enabled flag)
-- `LiveTvTuner.kt` — HDHomeRun tuner devices (IP, model, tuner count, enabled flag)
-- `LiveTvChannel.kt` — OTA channels from tuner lineup (guide number/name, stream URL, reception quality 1-5)
-- `AppConfig.kt` — Key/value app settings (NAS path, FFmpeg path, quota tracking)
-- `Enums.kt` — MediaFormat, MediaType, TranscodeStatus, DiscoveredFileStatus, MatchMethod, etc.
-- `AppUser.kt` — User accounts with access levels (1=viewer, 2=admin)
-- `SessionToken.kt` — Persistent login tokens (30-day cookie sessions)
-- `BuddyApiKey.kt` — Bcrypt-hashed API keys for transcode buddy workers (multiple keys, show-once)
-- `OwnershipPhoto.kt` — Proof-of-ownership photos linked to media items (stored on disk, metadata in DB)
-- `PriceLookup.kt` — Price observations from Keepa API (new/used/Amazon prices, ASIN, raw JSON)
-
-**Services (`service/`):**
-- `UpcLookupAgent.kt` — Background daemon: polls for unprocessed scans, calls UPCitemdb API
-- `TmdbEnrichmentAgent.kt` — Background daemon: enriches titles via TMDB (search, retry with backoff)
-- `NasScannerService.kt` — NAS file discovery, parsing, auto-matching, cleanup orchestration
-- `TranscodeFileParser.kt` — Stateless filename parser for movie/TV files (MakeMKV suffixes, year extraction, SxxExx)
-- `TranscodeMatcherService.kt` — Stateless title matching (exact + normalized with article/punctuation stripping)
-- `TitleCleanerService.kt` — Strips UPC marketing text, normalizes trailing articles, generates sort names
-- `MultiPackDetector.kt` — Detects multi-title products (Double Feature, Trilogy, slash-separated)
-- `SeasonDetector.kt` — Extracts season info from product names
-- `TranscoderAgent.kt` — Background daemon: pre-transcodes MKV/AVI to MP4 under ForBrowser/ mirror, prioritized by TMDB popularity
-- `Broadcaster.kt` — Thread-safe event bus for server-push UI updates (scan, title, NAS progress, transcoder events)
-- `QuotaTracker.kt` — Daily UPC API quota tracking (100/day)
-- `PosterCacheService.kt` — Local disk cache for TMDB poster images
-- `TmdbService.kt` — TMDB API client (search, multi-result, detail fetch)
-- `UpcLookupService.kt` — UPCitemdb API client + mock implementation
-- `SchemaUpdater.kt` — Framework for programmatic data updates (interface + runner); runs after Flyway migrations
-- `PopulatePopularityUpdater.kt` — Backfills TMDB popularity scores for existing enriched titles
-- `PopularityRefreshAgent.kt` — Background daemon: gradually refreshes TMDB popularity for titles and cast members (~1%/day, full cycle ~100 days)
-- `CollectionRefreshAgent.kt` — Background daemon: gradually re-fetches TMDB collection data (parts, poster paths, new entries) (~1%/day, full cycle ~100 days)
-- `ManagedDirectoryService.kt` — Ensures managed NAS directories (ForBrowser/) exist with `.mm-ignore` markers
-- `Go2rtcAgent.kt` — Background daemon: manages go2rtc child process for RTSP→HLS/MJPEG camera relay, configures streams via HTTP API
-- `HdHomeRunService.kt` — Stateless HDHomeRun device discovery and channel lineup sync (HTTP/JSON)
-- `LiveTvStreamManager.kt` — Manages FFmpeg HLS transcoding processes for live OTA TV (concurrency limits, idle cleanup, per-user stream replacement)
-- `UriCredentialRedactor.kt` — Stateless singleton: redacts credentials from RTSP/HTTP URLs in logs, UI, errors
-- `FormatProbeService.kt` — Background FFprobe-based media format detection (resolution → DVD/Blu-ray/UHD)
-- `Clock.kt` — Clock interface for testable time
-- `PasswordService.kt` — BCrypt password hashing and verification
-- `AuthService.kt` — Central auth coordinator (login, session management, cookie validation, token cleanup)
-- `BuddyKeyService.kt` — Buddy API key management (create with bcrypt hash, validate, delete)
-- `RokuFeedService.kt` — Builds Roku-compatible JSON feed from enriched titles with playable transcodes
-- `OwnershipPhotoService.kt` — Store/retrieve/delete proof-of-ownership photos (disk files at `data/ownership-photos/`)
-- `KeepaService.kt` — Keepa API client (batch ASIN lookup, UPC lookup, title search) + MockKeepaService + PriceSelectionService
-- `PriceLookupAgent.kt` — Background daemon: prices media items via Keepa (Amazon.com US), configurable token rate
-- `MediaItemDeleteService.kt` — Cascade delete for MediaItem and orphaned Titles
-
-**Security:**
-- `SecurityServiceInitListener.kt` — VaadinServiceInitListener enforcing route-level authentication and authorization
-- `AuthFilter.kt` — Servlet filter protecting `/posters/*`, `/headshots/*`, `/stream/*` endpoints
-
-**Servlets:**
-- `CameraStreamServlet.kt` — `/cameras/{id}/*` — proxies go2rtc HLS/MJPEG/snapshot streams to authenticated clients
-- `LiveTvStreamServlet.kt` — `/live-tv-stream/{channelId}/*` — HLS live TV streaming (FFmpeg transcode from HDHomeRun, auth + content rating gate)
-- `PosterServlet.kt` — `/posters/{size}/{titleId}` — serves cached TMDB poster images
-- `VideoStreamServlet.kt` — `/stream/{id}` — video streaming with HTTP Range support; serves MP4/M4V directly, MKV/AVI from ForBrowser mirror
-- `RokuFeedServlet.kt` — `/roku/feed.json?key={apiKey}` — Roku channel JSON feed (device token auth, 5-minute cache)
-- `BuddyApiServlet.kt` — `/buddy/*` — REST API for transcode buddy workers (bcrypt API key auth)
-- `OwnershipPhotoServlet.kt` — `/ownership-photos/{uuid}` — serves proof-of-ownership photos (supports `?download=1` for attachment)
-- `HealthServlet.kt` — `/health` — health check (internal port only)
-- `MetricsServlet.kt` — `/metrics` — Prometheus metrics (internal port only)
-- `AppLogServlet.kt` — `/admin/logs` — in-memory application log viewer (internal port only)
-- `RequestLogServlet.kt` — `/admin/requests` — HTTP request log viewer (internal port only)
-
-**Shared Components:**
-- `OwnershipPhotoPanel.kt` — Reusable panel for camera capture + photo strip with delete. Used by AddItemView and DocumentOwnershipView.
-
-**Other:**
-- `secrets/example.env` — Template for required environment variables (TMDB API key)
-- `src/main/resources/webapp/ROOT` — Marker file required by vaadin-boot
-- `src/main/resources/webapp/html5-qrcode.min.js` — html5-qrcode v2.3.8 (Apache 2.0 license), client-side barcode detection for mobile camera scanning. Bundled locally to avoid CDN dependency. Source: https://github.com/mebjas/html5-qrcode
-- `src/main/resources/db/migration/` — Flyway SQL migration files (V001–V061)
-- `build.gradle.kts` — Build config
-- `gradle/libs.versions.toml` — Dependency version catalog
+For the full file listing (views, entities, services, servlets), see `docs/index.md`.
 
 ### Database
 
-H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, which is gitignored). Flyway manages schema migrations via SQL files in `src/main/resources/db/migration/`, applied in lexicographic order on startup. Flyway tracks applied migrations in its `flyway_schema_history` table and checksums each file to detect tampering.
+H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, which is gitignored). Flyway manages schema migrations via SQL files in `src/main/resources/db/migration/`, applied in lexicographic order on startup.
 
-**Encryption at rest:** When `H2_FILE_PASSWORD` is set, the database uses AES encryption (`CIPHER=AES`). On first startup with the env var, Bootstrap automatically exports the unencrypted DB to SQL, backs up the original file (`.mv.db.pre-encryption`), creates a new encrypted DB, and reimports. The JDBC URL becomes `jdbc:h2:file:./data/mediamanager;CIPHER=AES` and the HikariCP password is the compound `"filePassword userPassword"` format. Once encrypted, `H2_FILE_PASSWORD` is required on every startup.
+**Encryption at rest:** When `H2_FILE_PASSWORD` is set, the database uses AES encryption (`CIPHER=AES`). On first startup with the env var, Bootstrap automatically exports, backs up, encrypts, and reimports. Once encrypted, `H2_FILE_PASSWORD` is required on every startup.
 
 ### External APIs
 
 - **UPCitemdb** — Free trial tier, no API key required. Per-IP throttling: 6 requests/minute, 100/day. Used for barcode-to-product lookup.
 - **TMDB (The Movie Database)** — Requires API key via `secrets/.env` file (`TMDB_API_KEY`). Used for canonical title names, poster images, release years, and descriptions. A TMDB API key is required for a functional catalog — without it, there are no poster images, cast data, descriptions, or popularity sorting.
   - **IMPORTANT: TMDB ID namespaces are separate for movies and TV shows.** A movie and a TV show can share the same integer ID (e.g., movie 253 = "Live and Let Die", TV 253 = "Star Trek"). Any lookup, dedup, or comparison involving `tmdb_id` **must also consider `media_type`**. Failing to do so causes cross-type collisions — titles silently reused, wishes fulfilled for the wrong type, etc. Always pair `tmdb_id` with `media_type` in all queries and set operations.
-- **Keepa** — Amazon price tracking API. Requires paid subscription (minimum 19 EUR/month for basic API access, 49 EUR/month for practical throughput). API key stored in `app_config` (`keepa_api_key`). Used for automated replacement value estimation. **Amazon.com (US, domain=1) only** — other Amazon marketplaces not currently supported. Token-based rate limiting configured via `keepa_tokens_per_minute` in Settings.
-
-### NAS Integration
-
-Transcoded media files live on a NAS or local storage. The root path is configured via `app_config` key `nas_root_path` (set in Settings, or via `MM_NAS_ROOT` environment variable). In Docker, this maps to the media volume mount.
-
-**Directory auto-classification:** The NAS scanner classifies each top-level subdirectory by structure, not by name:
-- **Flat** (media files directly in the folder) → Movies
-- **Nested** (media files inside subdirectories) → TV shows
-- `SxxExx` patterns in filenames override to TV regardless of depth
-
-**Directory exclusion:** Drop a `.mm-ignore` marker file in any directory to exclude it from scanning. MediaManager auto-creates `.mm-ignore` in managed directories (`ForBrowser/`) on startup.
-
-**Media format detection:** Format (DVD, Blu-ray, UHD) is determined by FFprobe resolution analysis during a background probe phase, not by directory name. Files show as `UNKNOWN` until probed.
-
-A mass-deletion guard (`--max_transcode_deletes`, default 25) prevents cleanup from false positives during NAS outages.
+- **Keepa** — Amazon price tracking API. Requires paid subscription. API key stored in `app_config` (`keepa_api_key`). **Amazon.com (US, domain=1) only.** Token-based rate limiting configured via `keepa_tokens_per_minute` in Settings.
 
 ### Video Playback
 
-Two playback modes, both accessible from play buttons in TranscodeView and TitleDetailView:
+Two modes: **In-Browser** (HTML5 `<video>` via `VideoStreamServlet`) and **Roku** (custom sideloaded BrightScript channel consuming `/roku/feed.json`). MP4/M4V stream directly; MKV/AVI served from pre-transcoded ForBrowser mirror. Background `TranscoderAgent` batch-transcodes to browser/Roku-compatible MP4, prioritized by TMDB popularity.
 
-**In-Browser (all clients):** HTML5 `<video>` element in a `VideoPlayerDialog`. The `VideoStreamServlet` (`/stream/{id}`) handles streaming:
-- **MP4/M4V** — streamed directly from source with full HTTP Range support (seeking)
-- **MKV/AVI** — served from pre-transcoded ForBrowser mirror (`{nas_root}/ForBrowser/`); play button only appears when the transcoded file exists. Returns 404 if not yet transcoded.
-- **Background Transcoder** (`TranscoderAgent`) — daemon that batch-transcodes MKV/AVI files to browser-compatible MP4, one at a time, prioritized by TMDB popularity (most popular first)
-  - Codec-aware: probes source video codec before transcoding
-  - H.264 sources: `ffmpeg -c:v copy` (fast, copies video as-is)
-  - HEVC/MPEG-2/other sources: `ffmpeg -c:v libx264 -preset medium -crf 18` (re-encodes to H.264 for browser compatibility — slower but necessary)
-  - Audio always transcoded: `-c:a aac -b:a 192k`
-  - On startup, validates existing ForBrowser files and deletes any with non-browser-safe codecs for re-transcoding
-  - Writes to `.tmp`, renamed to `.mp4` on completion (atomic swap)
-  - Path mirroring: `{nas_root}/BLURAY/Movie.mkv` → `{nas_root}/ForBrowser/BLURAY/Movie.mp4`
-  - Status panel in TranscodeView shows live progress, completion counts, recent transcodes
-  - **Roku-compatible output requirements** (verified working on Roku):
-    - Video: H.264 High or Constrained Baseline profile, yuv420p, progressive scan, SAR 1:1
-    - Audio: AAC-LC stereo, 44100 or 48000 Hz, 128–192 kbps
-    - Container: MP4 with `+faststart` (moov atom at start for streaming)
-    - Stream selection: `-map 0:v:0 -map 0:a:0 -dn -map_chapters -1` (single video + single audio, no data/chapter streams)
-    - Re-encode flags: `-c:v libx264 -preset medium -crf 18 -profile:v high -level 4.1 -pix_fmt yuv420p -vf setsar=1 -r <source_fps>`
-    - NVENC flags: `-c:v h264_nvenc -preset p7 -rc vbr -cq 19 -b:v 0 -profile:v high -level:v 4.1 -pix_fmt yuv420p -vf setsar=1 -r <source_fps> -rc-lookahead 32 -bsf:v "filter_units=remove_types=6"`
-    - Copy flags (H.264 sources): `-c:v copy` (video passed through as-is)
-    - Audio flags: `-c:a aac -b:a 192k -ar 48000 -ac 2`
-    - **SEI NAL stripping** (`-bsf:v "filter_units=remove_types=6"`): Required for NVENC/QSV output. These GPU encoders emit extra SEI NAL units (type 6) that Roku's strict H.264 decoder rejects. Harmless for libx264 (just removes optional info). Applied whenever re-encoding (not copy).
-    - **Interlace handling**: DVD sources may be interlaced. Detected via FFprobe ("top first"/"bottom first"). Deinterlaced with `-vf yadif` (placed before any scale filters).
-    - **Anamorphic SAR**: DVD sources may have non-square pixels (e.g., 720x480 SAR 32:27). Scaled to square pixels with `-vf scale=iw*sar:ih,setsar=1:1`.
-  - **Verified working FFmpeg commands** (tested on Roku with Star Trek TOS S02E10, MPEG-2 DVD source 720x480 SAR 32:27):
-    - CPU (libx264): `ffmpeg -i input.mkv -map 0:v:0 -map 0:a:0 -dn -pix_fmt yuv420p -c:v libx264 -preset medium -crf 18 -level:v 4.1 -vf scale=iw*sar:ih,setsar=1:1 -r 29.970 -bsf:v "filter_units=remove_types=6" -c:a aac -ac 2 -ar 48000 -b:a 192k -map_chapters -1 -movflags +faststart -threads 0 -f mp4 -y output.mp4`
-    - GPU (h264_nvenc): `ffmpeg -i input.mkv -map 0:v:0 -map 0:a:0 -dn -pix_fmt yuv420p -c:v h264_nvenc -preset p7 -rc vbr -cq 19 -b:v 0 -profile:v high -rc-lookahead 32 -level:v 4.1 -vf scale=iw*sar:ih,setsar=1:1 -r 29.970 -bsf:v "filter_units=remove_types=6" -c:a aac -ac 2 -ar 48000 -b:a 192k -map_chapters -1 -movflags +faststart -threads 0 -f mp4 -y output.mp4`
-- FFmpeg path configurable via `app_config` key `ffmpeg_path` (default `C:\ffmpeg\bin\ffmpeg.exe`, set in Transcodes > Settings)
-
-### Roku Integration
-
-A JSON feed endpoint at `/roku/feed.json?key={apiKey}` serves the media catalog for consumption by a Roku channel. This is the server-side component; a custom BrightScript/SceneGraph channel (Phase 2) fetches this feed and renders the UI on the Roku device.
-
-**Feed endpoint:** `RokuFeedServlet` at `/roku/feed.json` — validates the `key` query parameter against `roku_api_key` in `app_config`, returns 401 if invalid. Responds with `Cache-Control: public, max-age=300` (5-minute cache).
-
-**Feed content:** `RokuFeedService` builds a JSON feed containing:
-- `movies[]` — enriched, non-hidden titles with `media_type=MOVIE` and at least one playable transcode
-- `series[]` — enriched, non-hidden TV titles grouped by season/episode, each episode with a playable transcode
-- Each entry includes: poster URL, stream URL, description, release year, genres, top 5 cast credits
-- Poster/stream URLs embed the API key for auth: `/posters/w500/{id}?key=xxx`, `/stream/{id}?key=xxx`
-- Playability: MP4/M4V are always playable; MKV/AVI only if a ForBrowser transcoded copy exists on disk
-- Quality tier: UHD_BLURAY → "UHD", DVD → "SD", all others → "FHD"
-
-**Authentication:** The API key (auto-generated UUID, stored as `roku_api_key` in `app_config`) authenticates all Roku requests. `AuthFilter` accepts `?key=` as a fallback when no cookie is present, so Roku devices can access `/stream/*` and `/posters/*` endpoints. The key can be regenerated from Transcodes > Settings.
-
-**Architecture note:** Roku Direct Publisher was sunset in January 2024. The feed format follows the original Roku DP JSON spec (https://developer.roku.com/docs/specs/direct-publisher-feed-specs/json-dp-spec.md) because it's a well-structured media catalog format, but the feed is consumed by a custom sideloaded BrightScript channel, not by the defunct Direct Publisher service. For personal use, sideloading via Developer Mode has no expiration and requires no Roku certification review.
+For FFmpeg command details, codec requirements, and Roku-specific output flags, see `docs/TRANSCODE_BUDDY.md`.
 
 ### Live Camera Streaming
 
-Camera streams are relayed via go2rtc (lightweight Go binary) managed as a child process by `Go2rtcAgent`. Cameras are configured in the `camera` DB table and administered via `/cameras/settings`.
-
-**Architecture:** `Camera (RTSP) → go2rtc (127.0.0.1:1984) → HLS/MJPEG → MediaManager proxy → clients`
-
-**Stream proxy:** `CameraStreamServlet` at `/cameras/{id}/*` proxies go2rtc streams through MediaManager's auth layer:
-- `/cameras/{id}/stream.m3u8` — HLS playlist (Roku)
-- `/cameras/{id}/snapshot.jpg` — JPEG snapshot
-- `/cameras/{id}/mjpeg` — MJPEG stream (browser grid)
-- `/cameras/{id}/segment/{file}` — HLS .ts segments
-
-**Roku cameras:** `/roku/cameras.json` returns enabled cameras with proxy stream/snapshot URLs. `CameraListScreen` shows thumbnails; `CameraPlayerScreen` plays HLS live streams. Home feed includes `hasCameras` flag.
-
-**Browser:** `CameraGridView` at `/cameras` shows responsive MJPEG grid with fullscreen click. Toggle between live MJPEG and snapshot polling modes.
-
-**Credential security:** RTSP URLs stored in DB (encrypted at rest via H2). `UriCredentialRedactor` redacts credentials everywhere: logs, UI, error messages. Admin UI uses blind credential updates (PasswordField for changes, never shows raw URL after initial entry). go2rtc configured via HTTP API (no credential-bearing YAML on disk).
-
-**go2rtc config:** Binary path via `app_config` key `go2rtc_path`. API port via `go2rtc_api_port` (default 1984). Never port-map 1984 in docker-compose. Dockerfile downloads go2rtc binary.
+Architecture: `Camera (RTSP) → go2rtc → HLS/MJPEG → MediaManager proxy → clients`. Cameras configured in DB, administered via `/cameras/settings`. `UriCredentialRedactor` redacts RTSP credentials everywhere. go2rtc binary path via `app_config` key `go2rtc_path`. Never port-map go2rtc's API port (1984) in docker-compose.
 
 ### Live TV Streaming
 
-Live OTA broadcasts from an HDHomeRun networked tuner, transcoded via FFmpeg to HLS for browser/Roku playback.
-
-**Architecture:** `HDHomeRun (MPEG-TS/MPEG-2/AC-3) → FFmpeg (H.264/AAC HLS) → LiveTvStreamManager → LiveTvStreamServlet → Browser/Roku`
-
-**Tuner discovery:** Admin enters HDHomeRun IP, app validates via `http://{ip}/discover.json`. No cloud/mDNS/SSDP auto-discover. IP validated as IPv4-only to prevent SSRF.
-
-**Channel sync:** `HdHomeRunService.syncChannels()` fetches `http://{ip}/lineup.json`, updates existing channels, inserts new ones, deletes absent ones.
-
-**Stream management:** `LiveTvStreamManager` spawns FFmpeg per channel, writing HLS to `data/live-tv-streams/ch-{id}/`. Concurrency controls:
-- Global max concurrent streams (`live_tv_max_streams` app_config, default 2)
-- Per-tuner limit (active streams < `tuner_count`)
-- Per-user replacement (switching channels kills old stream — each user holds at most 1 stream)
-- Idle timeout (`live_tv_idle_timeout_seconds` app_config, default 15s)
-
-**Content rating gate:** `live_tv_min_rating` app_config (ordinal level, default 4 = TV-14). Users with `rating_ceiling >= live_tv_min_rating` can access. Admins and unrestricted users always have access.
-
-**Per-user quality filter:** Each channel has `reception_quality` (1-5). Each user has `live_tv_min_quality` (default 4). Viewer shows only channels meeting user's quality threshold.
-
-**Stream servlet:** `LiveTvStreamServlet` at `/live-tv-stream/{channelId}/stream.m3u8` and `/live-tv-stream/{channelId}/segment/{file}`. URL uses `/live-tv-stream/` (not `/live-tv/`) to avoid conflicts with the Vaadin view route. Auth via cookie or device token. Segment filenames validated against `seg_\d+\.ts` to prevent path traversal.
-
-**Browser viewer:** `LiveTvView` at `/live-tv` — viewer-accessible. HTML5 video with HLS source, prev/next channel buttons (also arrow keys), channel picker ComboBox, admin-only inline quality rating (1-5 stars). Channels filtered by user's `live_tv_min_quality`.
-
-**Admin UI:** `LiveTvSettingsView` at `/live-tv/settings` — tuner management (add/edit/delete/refresh), channel grid (quality rating, enable/disable), settings (content rating, max streams, idle timeout).
+Architecture: `HDHomeRun (MPEG-TS) → FFmpeg (HLS) → LiveTvStreamManager → LiveTvStreamServlet → Browser/Roku`. Admin enters HDHomeRun IP (IPv4-only, no SSRF). Concurrency controls: global max streams, per-tuner limits, per-user stream replacement, idle timeout. Content rating gate and per-user quality filter on channels.
 
 ### Schema Updater Framework
 
-Programmatic data updates that need Kotlin code (API calls, computation). Flyway handles DDL; SchemaUpdaters handle data population. Tracked in `schema_updater` table (name PK, version, applied_at). Bumping an updater's version re-triggers it on next startup. Runner called from Bootstrap.init() after Flyway migrations. Current updaters:
-- `populate_popularity` (v1) — backfills TMDB popularity scores for existing enriched titles
+Programmatic data updates that need Kotlin code (API calls, computation). Flyway handles DDL; SchemaUpdaters handle data population. Tracked in `schema_updater` table (name PK, version, applied_at). Bumping an updater's version re-triggers it on next startup. Runner called from Bootstrap.init() after Flyway migrations.
 
 ### CLI Flags
 
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `--developer_mode` | off | Enables H2 web console |
-| `--port N` | 8080 | HTTP listen port |
-| `--h2_console_port N` | 8082 | H2 web console port (developer mode) |
-| `--listen_on_all_interfaces` | off | Bind to 0.0.0.0 instead of 127.0.0.1 |
-| `--max_transcode_deletes N` | 25 | Mass-deletion guard threshold for NAS cleanup |
-| `--disable_local_transcoding` | off | Skip starting the local TranscoderAgent |
-| `--internal_port N` | 8081 | Port for internal-only health/metrics server |
+See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N`, `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N`.
 
 ### Decisions Made
 
@@ -366,11 +103,10 @@ Programmatic data updates that need Kotlin code (API calls, computation). Flyway
 - **Stateless parser/matcher** — `TranscodeFileParser` and `TranscodeMatcherService` are pure-logic objects with no DB or I/O dependencies, fully unit-testable.
 - **In-browser playback** — HTML5 `<video>` allows any network client to watch. MKV files are pre-transcoded to ForBrowser mirror; MP4 files stream directly.
 - **Background transcoder over on-the-fly remux** — Pre-transcoding in the background avoids interactive wait times. Files are transcoded in TMDB popularity order (most popular first). Play button only appears when the ForBrowser MP4 exists.
-- **FFmpeg remux (copy video, transcode audio)** — `-c:v copy` avoids slow video re-encoding; `-c:a aac` converts AC3/DTS to browser-compatible audio. `-movflags +faststart` places the moov atom at the start for immediate seeking.
 - **Path-mirrored ForBrowser cache** — `{nas_root}/ForBrowser/` mirrors the source directory structure.
 - **Schema updater framework** — Flyway handles DDL only; SchemaUpdater interface + runner handles programmatic data updates (API calls, computation) with version tracking for re-runnability.
-- **Roku JSON feed over Direct Publisher** — Direct Publisher was sunset January 2024. Server provides a JSON feed at `/roku/feed.json` consumed by a custom sideloaded BrightScript channel. Feed format follows the original Roku DP JSON spec for structure, but is served to our own channel code. API key auth (UUID in `app_config`) for stateless device authentication.
-- **Sideloaded Roku channel over beta channel** — Beta channels expire after 120 days. Sideloading via Developer Mode has no expiration and requires no certification review. Only one sideloaded channel per device, but that's fine for personal use.
+- **Roku JSON feed over Direct Publisher** — Direct Publisher was sunset January 2024. Custom sideloaded BrightScript channel consumes `/roku/feed.json`. API key auth (UUID in `app_config`) for stateless device authentication.
+- **Sideloaded Roku channel over beta channel** — Beta channels expire after 120 days. Sideloading via Developer Mode has no expiration and requires no certification review.
 
 ## Coding Rules
 
