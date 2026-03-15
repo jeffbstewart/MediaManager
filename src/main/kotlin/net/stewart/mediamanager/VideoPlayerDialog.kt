@@ -217,8 +217,18 @@ class VideoPlayerDialog(
                      background:#000;border:2px solid rgba(255,255,255,0.3);border-radius:4px;
                      width:160px;height:90px;overflow:hidden;pointer-events:none;z-index:15;
                      box-shadow:0 2px 8px rgba(0,0,0,0.6);"></div>
+                <div id="vpd-chapter-bar" style="display:none;position:absolute;bottom:20px;left:0;right:0;
+                     height:4px;z-index:16;pointer-events:none;"></div>
+                <button id="vpd-skip-intro" style="display:none;position:absolute;bottom:80px;right:20px;
+                     background:rgba(0,0,0,0.85);color:white;border:1px solid rgba(255,255,255,0.4);
+                     padding:10px 24px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:500;
+                     z-index:18;transition:background 0.2s;"
+                     onmouseover="this.style.background='rgba(255,255,255,0.2)'"
+                     onmouseout="this.style.background='rgba(0,0,0,0.85)'">Skip Intro</button>
                 $upNextOverlay
-                <style>@keyframes vpd-spin{to{transform:rotate(360deg)}}</style>
+                <style>@keyframes vpd-spin{to{transform:rotate(360deg)}}
+                .vpd-ch-tick{position:absolute;top:0;width:2px;height:4px;background:rgba(255,220,0,0.9);
+                pointer-events:none;}</style>
             </div>
         """.trimIndent()
 
@@ -232,6 +242,8 @@ class VideoPlayerDialog(
         } else ""
 
         // Build "Up Next" JS — countdown overlay + auto-advance via @ClientCallable
+        // The time-based trigger (120s before end) is removed; chapter data drives the trigger.
+        // Fallback: 'ended' event fires if no chapter data is available.
         val upNextJs = if (nextEpisode != null) {
             "var upnext=document.getElementById('vpd-upnext');" +
             "if(upnext){" +
@@ -239,6 +251,7 @@ class VideoPlayerDialog(
             "var cntEl=document.getElementById('vpd-upnext-countdown');" +
             "var dialogEl=\$0;" +
             "function startCountdown(){" +
+            "if(upDismissed||upShown)return;" +
             "upShown=true;upSecs=10;upnext.style.display='block';" +
             "cntEl.textContent='Playing in 10s';" +
             "upTimer=setInterval(function(){upSecs--;" +
@@ -252,11 +265,7 @@ class VideoPlayerDialog(
             "document.getElementById('vpd-upnext-play').onclick=doAdvance;" +
             "document.getElementById('vpd-upnext-cancel').onclick=function(){" +
             "upDismissed=true;if(upTimer)clearInterval(upTimer);upnext.style.display='none';};" +
-            "v.addEventListener('timeupdate',function(){" +
-            "if(upDismissed||upShown||!v.duration||v.duration<180)return;" +
-            "if(v.duration-v.currentTime<=120)startCountdown();});" +
-            "v.addEventListener('ended',function(){" +
-            "if(upDismissed||upShown)return;startCountdown();});}"
+            "v.addEventListener('ended',function(){startCountdown();});}"
         } else ""
 
         // Wire up video event listeners + progress tracking via executeJs
@@ -343,7 +352,62 @@ class VideoPlayerDialog(
             "thumbPreview.style.left=left+'px';" +
             "});" +
             "container.addEventListener('mouseleave',function(){" +
-            "if(thumbPreview)thumbPreview.style.display='none';});",
+            "if(thumbPreview)thumbPreview.style.display='none';});" +
+            // Chapter markers + skip segments
+            "var chBar=document.getElementById('vpd-chapter-bar');" +
+            "var skipBtn=document.getElementById('vpd-skip-intro');" +
+            // Sync chapter bar visibility with native controls (fade with mouse idle)
+            "var chBarHideTimer=null;var chBarHasMarkers=false;" +
+            "function showChBar(){if(!chBarHasMarkers)return;chBar.style.opacity='1';chBar.style.transition='opacity 0.3s';}" +
+            "function hideChBar(){if(!chBarHasMarkers)return;chBar.style.opacity='0';chBar.style.transition='opacity 0.3s';}" +
+            "container.addEventListener('mousemove',function(){showChBar();" +
+            "if(chBarHideTimer)clearTimeout(chBarHideTimer);" +
+            "chBarHideTimer=setTimeout(hideChBar,3000);});" +
+            "container.addEventListener('mouseleave',function(){hideChBar();});" +
+            "v.addEventListener('pause',function(){showChBar();if(chBarHideTimer)clearTimeout(chBarHideTimer);});" +
+            "v.addEventListener('play',function(){if(chBarHideTimer)clearTimeout(chBarHideTimer);chBarHideTimer=setTimeout(hideChBar,3000);});" +
+            "var chapData=null,skipData=null;" +
+            "fetch('/stream/'+tid+'/chapters.json').then(function(r){" +
+            "if(!r.ok)return null;return r.json();}).then(function(d){" +
+            "if(!d)return;" +
+            "chapData=d.chapters||[];skipData=d.skipSegments||[];" +
+            "if(chapData.length>0){" +
+            // Wait for duration to be known before rendering markers
+            "function renderMarkers(){" +
+            "if(!v.duration||v.duration<=0)return;" +
+            "chBar.style.display='block';chBar.style.opacity='0';chBarHasMarkers=true;" +
+            "chBar.innerHTML='';" +
+            "for(var i=0;i<chapData.length;i++){" +
+            "var ch=chapData[i];" +
+            "var pct=(ch.start/v.duration)*100;" +
+            "if(pct<0||pct>100)continue;" +
+            "var tick=document.createElement('div');" +
+            "tick.className='vpd-ch-tick';" +
+            "tick.style.left=pct+'%';" +
+            "tick.dataset.idx=i;" +
+            "tick.dataset.start=ch.start;" +
+            "chBar.appendChild(tick);}}" +
+            "if(v.duration>0){renderMarkers();}else{" +
+            "v.addEventListener('loadedmetadata',renderMarkers);}}" +
+            // Skip Intro button logic
+            "if(skipData&&skipData.length>0){" +
+            "var introSeg=null;" +
+            "for(var si=0;si<skipData.length;si++){" +
+            "if(skipData[si].type==='INTRO')introSeg=skipData[si];}" +
+            "if(introSeg){" +
+            "skipBtn.onclick=function(){v.currentTime=introSeg.end;};" +
+            "v.addEventListener('timeupdate',function(){" +
+            "if(introSeg&&v.currentTime>=introSeg.start&&v.currentTime<introSeg.end){" +
+            "skipBtn.style.display='block';}else{skipBtn.style.display='none';}});}}" +
+            // Last chapter boundary triggers Up Next if within last 15% of duration
+            "if(chapData&&chapData.length>0&&typeof startCountdown==='function'){" +
+            "var lastCh=chapData[chapData.length-1];" +
+            "var upNextBound=lastCh.start;" +
+            "v.addEventListener('timeupdate',function(){" +
+            "if(!v.duration||v.duration<=0)return;" +
+            "if(upNextBound/v.duration<0.85)return;" +
+            "if(v.currentTime>=upNextBound){startCountdown();}});}" +
+            "}).catch(function(){});",
             this@VideoPlayerDialog.element // $0 for @ClientCallable access
         )
     }
