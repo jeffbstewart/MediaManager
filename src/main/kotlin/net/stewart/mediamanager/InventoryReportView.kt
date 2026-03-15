@@ -22,10 +22,12 @@ import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import java.awt.Color
+import java.awt.RenderingHints
 import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.FileInputStream
 import javax.imageio.ImageIO
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -66,7 +68,10 @@ class InventoryReportView : KComposite() {
             val timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
             val pdfResource = StreamResource("inventory-report-$timestamp.pdf") {
-                ByteArrayInputStream(generatePdf(includePhotos))
+                val tempFile = java.io.File.createTempFile("inventory-report-", ".pdf")
+                tempFile.deleteOnExit()
+                generatePdf(includePhotos, tempFile)
+                FileInputStream(tempFile)
             }
             pdfResource.setContentType("application/pdf")
 
@@ -181,13 +186,13 @@ class InventoryReportView : KComposite() {
 
     // ---- PDF ----
 
-    private fun generatePdf(withPhotos: Boolean = false): ByteArray {
+    private fun generatePdf(withPhotos: Boolean = false, outputFile: java.io.File) {
         val data = loadData()
         val valued = data.allItems.filter { it.purchase_price != null }
         val unvalued = data.allItems.filter { it.purchase_price == null }
         val photoCounts = if (withPhotos) OwnershipPhotoService.countByMediaItem() else emptyMap()
 
-        val out = ByteArrayOutputStream()
+        val out = java.io.FileOutputStream(outputFile)
         val document = Document(PageSize.LETTER.rotate(), 36f, 36f, 36f, 36f)
         PdfWriter.getInstance(document, out)
         document.open()
@@ -498,7 +503,7 @@ class InventoryReportView : KComposite() {
         }
 
         document.close()
-        return out.toByteArray()
+        out.close()
     }
 
     private fun createValuedTable(
@@ -694,20 +699,30 @@ class InventoryReportView : KComposite() {
     }
 
     /**
-     * Load an image and apply EXIF orientation correction for PDF embedding.
-     * Browsers handle EXIF orientation automatically, but PDF libraries don't.
+     * Load an image, downscale to thumbnail size, then apply EXIF orientation
+     * correction for PDF embedding. Downscaling first avoids loading full-resolution
+     * phone photos (4000x3000 = ~36MB BufferedImage) into memory — a 300px thumbnail
+     * uses ~360KB instead.
+     *
      * EXIF orientation values:
      *   1 = normal, 2 = flip H, 3 = 180°, 4 = flip V,
      *   5 = transpose, 6 = 90° CW, 7 = transverse, 8 = 90° CCW
      */
     private fun applyOrientation(file: java.io.File, orientation: Int): com.lowagie.text.Image {
+        val original = ImageIO.read(file)
+            ?: return com.lowagie.text.Image.getInstance(file.absolutePath)
+
+        // Downscale to thumbnail size first (max 300px on longest side)
+        val thumb = downscale(original, 300)
+
         if (orientation == 1 || orientation == 0) {
-            return com.lowagie.text.Image.getInstance(file.absolutePath)
+            val baos = ByteArrayOutputStream()
+            ImageIO.write(thumb, "jpg", baos)
+            return com.lowagie.text.Image.getInstance(baos.toByteArray())
         }
 
-        val original = ImageIO.read(file) ?: return com.lowagie.text.Image.getInstance(file.absolutePath)
-        val w = original.width
-        val h = original.height
+        val w = thumb.width
+        val h = thumb.height
 
         val (newW, newH) = when (orientation) {
             6, 8, 5, 7 -> h to w  // 90° rotations swap dimensions
@@ -716,23 +731,41 @@ class InventoryReportView : KComposite() {
 
         val rotated = BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB)
         val g = rotated.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
         val tx = AffineTransform()
 
         when (orientation) {
-            2 -> { tx.scale(-1.0, 1.0); tx.translate(-w.toDouble(), 0.0) }           // flip H
-            3 -> { tx.translate(w.toDouble(), h.toDouble()); tx.rotate(Math.PI) }     // 180°
-            4 -> { tx.scale(1.0, -1.0); tx.translate(0.0, -h.toDouble()) }           // flip V
-            5 -> { tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0) }                     // transpose
-            6 -> { tx.translate(h.toDouble(), 0.0); tx.rotate(Math.PI / 2) }         // 90° CW
-            7 -> { tx.translate(h.toDouble(), w.toDouble()); tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0); tx.translate(0.0, -w.toDouble()) }  // transverse
-            8 -> { tx.translate(0.0, w.toDouble()); tx.rotate(-Math.PI / 2) }        // 90° CCW
+            2 -> { tx.scale(-1.0, 1.0); tx.translate(-w.toDouble(), 0.0) }
+            3 -> { tx.translate(w.toDouble(), h.toDouble()); tx.rotate(Math.PI) }
+            4 -> { tx.scale(1.0, -1.0); tx.translate(0.0, -h.toDouble()) }
+            5 -> { tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0) }
+            6 -> { tx.translate(h.toDouble(), 0.0); tx.rotate(Math.PI / 2) }
+            7 -> { tx.translate(h.toDouble(), w.toDouble()); tx.rotate(Math.PI / 2); tx.scale(1.0, -1.0); tx.translate(0.0, -w.toDouble()) }
+            8 -> { tx.translate(0.0, w.toDouble()); tx.rotate(-Math.PI / 2) }
         }
 
-        g.drawImage(original, tx, null)
+        g.drawImage(thumb, tx, null)
         g.dispose()
 
-        val baos = java.io.ByteArrayOutputStream()
+        val baos = ByteArrayOutputStream()
         ImageIO.write(rotated, "jpg", baos)
         return com.lowagie.text.Image.getInstance(baos.toByteArray())
+    }
+
+    /** Downscale a BufferedImage so its longest side is at most [maxPx] pixels. */
+    private fun downscale(img: BufferedImage, maxPx: Int): BufferedImage {
+        val longest = maxOf(img.width, img.height)
+        if (longest <= maxPx) return img
+
+        val scale = maxPx.toDouble() / longest
+        val newW = (img.width * scale).toInt().coerceAtLeast(1)
+        val newH = (img.height * scale).toInt().coerceAtLeast(1)
+
+        val scaled = BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB)
+        val g = scaled.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        g.drawImage(img, 0, 0, newW, newH, null)
+        g.dispose()
+        return scaled
     }
 }
