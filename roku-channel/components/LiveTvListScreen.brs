@@ -54,9 +54,12 @@ sub onChannelsResult()
     content = CreateObject("roSGNode", "ContentNode")
     for each channel in channels
         item = content.createChild("ContentNode")
+        networkAff = ""
+        if channel.networkAffiliation <> invalid then networkAff = channel.networkAffiliation
         item.addFields({
             guideNumber: channel.guideNumber,
             guideName: channel.guideName,
+            networkAffiliation: networkAff,
             streamUrl: channel.streamUrl,
             receptionQuality: channel.receptionQuality,
             channelId: channel.id

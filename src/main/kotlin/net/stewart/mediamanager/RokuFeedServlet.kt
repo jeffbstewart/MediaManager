@@ -369,6 +369,7 @@ class RokuFeedServlet : HttpServlet() {
                     "id" to ch.id,
                     "guideNumber" to ch.guide_number,
                     "guideName" to ch.guide_name,
+                    "networkAffiliation" to (ch.network_affiliation ?: ""),
                     "receptionQuality" to ch.reception_quality,
                     "streamUrl" to "$baseUrl/live-tv-stream/${ch.id}/stream.m3u8$keyParam"
                 )

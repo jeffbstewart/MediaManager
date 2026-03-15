@@ -19,6 +19,7 @@
         <!-- Channel info overlay (top-left, auto-hides) -->
         <Group id="channelOverlay" translation="[60, 40]" visible="false">
             <Rectangle
+                id="overlayBg"
                 width="400"
                 height="80"
                 color="#000000"
@@ -35,6 +36,14 @@
                 text=""
                 font="font:SmallSystemFont"
                 color="#cccccc" />
+            <Label
+                id="channelNetworkLabel"
+                translation="[200, 14]"
+                text=""
+                font="font:SmallSystemFont"
+                color="#999999"
+                horizAlign="right"
+                width="185" />
         </Group>
 
         <!-- Live indicator -->

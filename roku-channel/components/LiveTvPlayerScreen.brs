@@ -4,6 +4,7 @@ sub init()
     m.channelOverlay = m.top.findNode("channelOverlay")
     m.channelNumberLabel = m.top.findNode("channelNumberLabel")
     m.channelNameLabel = m.top.findNode("channelNameLabel")
+    m.channelNetworkLabel = m.top.findNode("channelNetworkLabel")
 
     m.loadingOverlay = m.top.findNode("loadingOverlay")
     m.loadingLabel = m.top.findNode("loadingLabel")
@@ -44,8 +45,12 @@ sub onPlayContent()
 
     print "[MM] LiveTvPlayerScreen: playing " ; guideNumber ; " " ; guideName ; " - " ; streamUrl
 
+    networkAff = ""
+    if content.networkAffiliation <> invalid then networkAff = content.networkAffiliation
+
     m.channelNumberLabel.text = guideNumber
     m.channelNameLabel.text = guideName
+    m.channelNetworkLabel.text = networkAff
     m.currentContent = content
     m.retryCount = 0
 

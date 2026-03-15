@@ -39,6 +39,7 @@ object RokuHomeService {
         val streamUrl: String? = null,
         val guideNumber: String? = null,
         val guideName: String? = null,
+        val networkAffiliation: String? = null,
         val receptionQuality: Int? = null
     )
 
@@ -310,6 +311,7 @@ object RokuHomeService {
                 streamUrl = "$baseUrl/live-tv-stream/${ch.id}/stream.m3u8$keyParam",
                 guideNumber = ch.guide_number,
                 guideName = ch.guide_name,
+                networkAffiliation = ch.network_affiliation,
                 receptionQuality = ch.reception_quality
             )
         }

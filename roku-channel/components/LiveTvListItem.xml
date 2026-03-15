@@ -33,10 +33,19 @@
             color="#e0e0e0"
             width="1200" />
 
+        <!-- Network affiliation -->
+        <Label
+            id="networkLabel"
+            translation="[170, 70]"
+            text=""
+            font="font:SmallSystemFont"
+            color="#888888"
+            width="300" />
+
         <!-- Reception quality stars -->
         <Label
             id="qualityLabel"
-            translation="[170, 70]"
+            translation="[480, 70]"
             text=""
             font="font:SmallSystemFont"
             color="#eab308"

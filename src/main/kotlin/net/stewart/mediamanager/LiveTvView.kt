@@ -129,7 +129,10 @@ class LiveTvView : KComposite(), HasUrlParameter<String> {
                 isClearButtonVisible = true
                 width = "220px"
                 style.set("flex-shrink", "0")
-                setItemLabelGenerator { "${it.guide_number} ${it.guide_name}" }
+                setItemLabelGenerator { ch ->
+                    val net = if (!ch.network_affiliation.isNullOrBlank()) " (${ch.network_affiliation})" else ""
+                    "${ch.guide_number} ${ch.guide_name}$net"
+                }
                 setItems(channels)
                 addValueChangeListener { event ->
                     val selected = event.value ?: return@addValueChangeListener
@@ -198,7 +201,8 @@ class LiveTvView : KComposite(), HasUrlParameter<String> {
         val channel = channels[index]
 
         // Update channel label
-        channelLabel.text = "${channel.guide_number} ${channel.guide_name}"
+        val networkSuffix = if (!channel.network_affiliation.isNullOrBlank()) " (${channel.network_affiliation})" else ""
+        channelLabel.text = "${channel.guide_number} ${channel.guide_name}$networkSuffix"
 
         // Update URL to persist channel across reloads (replaceState, no navigation)
         UI.getCurrent()?.page?.history?.replaceState(null, "live-tv/${channel.guide_number}")

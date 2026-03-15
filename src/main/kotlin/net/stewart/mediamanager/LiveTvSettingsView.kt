@@ -169,6 +169,7 @@ class LiveTvSettingsView : KComposite() {
                 channelGrid.width = "100%"
                 channelGrid.addColumn { it.guide_number }.setHeader("Guide #").setAutoWidth(true).setSortable(true)
                 channelGrid.addColumn { it.guide_name }.setHeader("Name").setAutoWidth(true).setSortable(true)
+                channelGrid.addColumn(ComponentRenderer { ch -> createNetworkField(ch) }).setHeader("Network").setAutoWidth(true)
                 channelGrid.addColumn { tunerName(it.tuner_id) }.setHeader("Tuner").setAutoWidth(true)
                 channelGrid.addColumn(ComponentRenderer { ch -> createQualityCombo(ch) }).setHeader("Quality").setAutoWidth(true)
                 channelGrid.addColumn { it.tags }.setHeader("Tags").setAutoWidth(true)
@@ -201,6 +202,22 @@ class LiveTvSettingsView : KComposite() {
 
     private fun tunerName(tunerId: Long): String {
         return LiveTvTuner.findById(tunerId)?.name ?: "Unknown"
+    }
+
+    private fun createNetworkField(channel: LiveTvChannel): TextField {
+        return TextField().apply {
+            value = channel.network_affiliation ?: ""
+            placeholder = "e.g. NBC"
+            width = "120px"
+            isClearButtonVisible = true
+            addValueChangeListener { event ->
+                if (event.isFromClient) {
+                    val fresh = LiveTvChannel.findById(channel.id!!) ?: return@addValueChangeListener
+                    fresh.network_affiliation = event.value.trim().ifBlank { null }
+                    fresh.save()
+                }
+            }
+        }
     }
 
     private fun createQualityCombo(channel: LiveTvChannel): ComboBox<Int> {
