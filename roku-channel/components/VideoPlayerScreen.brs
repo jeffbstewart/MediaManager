@@ -1,10 +1,43 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] VideoPlayerScreen: init"
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: init"
     m.videoPlayer = m.top.findNode("videoPlayer")
     m.progressTask = m.top.findNode("progressTask")
+    m.skipSegmentTask = m.top.findNode("skipSegmentTask")
+
+    ' Create skip intro overlay as a child of the Video node
+    ' (children of Video render on top and receive key events through its focus chain)
+    m.skipIntroOverlay = createObject("roSGNode", "Group")
+    m.skipIntroOverlay.translation = [1400, 880]
+    m.skipIntroOverlay.visible = false
+    bg = createObject("roSGNode", "Rectangle")
+    bg.width = 440
+    bg.height = 70
+    bg.color = "#000000"
+    bg.opacity = 0.75
+    m.skipIntroOverlay.appendChild(bg)
+    accent = createObject("roSGNode", "Rectangle")
+    accent.width = 4
+    accent.height = 70
+    accent.color = "#00cccc"
+    m.skipIntroOverlay.appendChild(accent)
+    lbl = createObject("roSGNode", "Label")
+    lbl.translation = [24, 14]
+    lbl.text = "Press UP to Skip Intro"
+    lbl.font = "font:MediumBoldSystemFont"
+    lbl.color = "#00cccc"
+    lbl.width = 400
+    m.skipIntroOverlay.appendChild(lbl)
+    m.videoPlayer.appendChild(m.skipIntroOverlay)
 
     m.videoPlayer.observeField("state", "onVideoState")
     m.videoPlayer.observeField("position", "onVideoPosition")
+    m.skipSegmentTask.observeField("skipSegments", "onSkipSegmentsLoaded")
 
     m.serverUrl = ""
     m.apiKey = ""
@@ -18,6 +51,11 @@ sub init()
     m.currentDuration = 0
     m.resumePosition = 0
     m.exiting = false
+
+    ' Skip intro state
+    m.skipIntroStart = -1
+    m.skipIntroEnd = -1
+    m.skipIntroVisible = false
 
     ' Episode playlist context for auto-advance
     m.showName = ""
@@ -70,7 +108,7 @@ sub onPlayContent()
         m.playlistEpisodeIndex = content.episodeIndex
     end if
 
-    print "[MM] VideoPlayerScreen: play request — " ; m.contentTitle ; " (transcode " ; m.transcodeId ; ")"
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: play request — " ; m.contentTitle ; " (transcode " ; m.transcodeId ; ")"
 
     ' Reset state
     m.exiting = false
@@ -91,7 +129,7 @@ sub showResumeDialog()
     seconds = m.resumePosition mod 60
 
     timeStr = str(minutes).trim() + "m" + str(seconds).trim() + "s"
-    print "[MM] VideoPlayerScreen: resume available at " ; timeStr
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: resume available at " ; timeStr
 
     dialog = createObject("roSGNode", "StandardMessageDialog")
     dialog.title = "Resume Playback"
@@ -110,18 +148,18 @@ sub onResumeDialogButton()
 
     if buttonIndex = 0
         ' Resume
-        print "[MM] VideoPlayerScreen: resuming from " ; str(m.resumePosition).trim()
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: resuming from " ; str(m.resumePosition).trim()
         startPlayback(m.resumePosition)
     else
         ' Start over
-        print "[MM] VideoPlayerScreen: starting from beginning"
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: starting from beginning"
         startPlayback(0)
     end if
 end sub
 
 sub startPlayback(startPos as integer)
     streamUrl = m.serverUrl + "/stream/" + m.transcodeId + "?key=" + m.apiKey
-    print "[MM] VideoPlayerScreen: stream URL = " ; streamUrl
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: stream URL = " ; streamUrl
 
     videoContent = createObject("roSGNode", "ContentNode")
     videoContent.url = streamUrl
@@ -135,7 +173,7 @@ sub startPlayback(startPos as integer)
 
     ' Configure BIF trick play thumbnails if available
     if m.bifUrl <> ""
-        print "[MM] VideoPlayerScreen: BIF trick play — " ; m.bifUrl
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: BIF trick play — " ; m.bifUrl
         videoContent.hdBifUrl = m.bifUrl
         videoContent.sdBifUrl = m.bifUrl
     end if
@@ -157,13 +195,26 @@ sub startPlayback(startPos as integer)
     m.videoPlayer.control = "play"
     m.videoPlayer.setFocus(true)
 
-    print "[MM] VideoPlayerScreen: playback started"
+    ' Fetch skip segments in background
+    m.skipIntroStart = -1
+    m.skipIntroEnd = -1
+    m.skipIntroVisible = false
+    m.skipIntroOverlay.visible = false
+    chaptersUrl = m.serverUrl + "/stream/" + m.transcodeId + "/chapters.json?key=" + m.apiKey
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: fetching skip data from " ; chaptersUrl
+    m.skipSegmentTask.control = "stop"
+    m.skipSegmentTask.chaptersUrl = chaptersUrl
+    m.skipSegmentTask.functionName = "fetchSkipSegments"
+    m.skipSegmentTask.control = "run"
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: skip task started"
+
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: playback started"
 end sub
 
 ' ---- Subtitle Configuration ----
 
 sub configureSubtitles(videoContent as object, subtitleUrl as string)
-    print "[MM] VideoPlayerScreen: subtitles — " ; subtitleUrl
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: subtitles — " ; subtitleUrl
 
     ' TrackName IS the URL — it serves as both identifier and subtitle file location
     videoContent.SubtitleConfig = {
@@ -182,10 +233,54 @@ sub toggleCC()
     m.ccEnabled = not m.ccEnabled
     if m.ccEnabled
         m.videoPlayer.globalCaptionMode = "On"
-        print "[MM] VideoPlayerScreen: CC turned on"
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: CC turned on"
     else
         m.videoPlayer.globalCaptionMode = "Off"
-        print "[MM] VideoPlayerScreen: CC turned off"
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: CC turned off"
+    end if
+end sub
+
+' ---- Skip Intro (stubs) ----
+
+sub onSkipSegmentsLoaded()
+    seg = m.skipSegmentTask.skipSegments
+    if seg = invalid then return
+    m.skipIntroStart = seg.startSeconds
+    m.skipIntroEnd = seg.endSeconds
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: skip intro segment loaded"
+end sub
+
+sub checkSkipIntro()
+    if m.skipIntroStart < 0 then return
+    shouldShow = false
+    if m.currentPosition >= m.skipIntroStart
+        if m.currentPosition < m.skipIntroEnd
+            shouldShow = true
+        end if
+    end if
+    if shouldShow
+        if m.skipIntroVisible = false
+            m.skipIntroOverlay.visible = true
+            m.skipIntroVisible = true
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: showing Skip Intro button"
+        end if
+    else
+        if m.skipIntroVisible = true
+            m.skipIntroOverlay.visible = false
+            m.skipIntroVisible = false
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: hiding Skip Intro button"
+        end if
+    end if
+end sub
+
+sub doSkipIntro()
+    if m.skipIntroEnd > 0
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: skipping intro"
+        m.videoPlayer.seek = int(m.skipIntroEnd)
+        m.skipIntroOverlay.visible = false
+        m.skipIntroVisible = false
+        m.skipIntroStart = -1
+        m.skipIntroEnd = -1
     end if
 end sub
 
@@ -193,7 +288,10 @@ end sub
 
 sub onVideoState()
     state = m.videoPlayer.state
-    print "[MM] VideoPlayerScreen: video state → " ; state
+    ' Only log significant state changes (not buffering/playing churn)
+    if state <> "buffering" and state <> "playing" and state <> "paused"
+        print "[MM " ; mmts() ; "] VideoPlayerScreen: video state → " ; state
+    end if
 
     if state = "stopped" or state = "finished" or state = "error"
         ' Guard against double-fire (back key sets playbackFinished, then stop state fires again)
@@ -203,7 +301,7 @@ sub onVideoState()
         reportProgress()
 
         if state = "error"
-            print "[MM] VideoPlayerScreen: playback error — " ; m.videoPlayer.errorMsg
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: playback error — " ; m.videoPlayer.errorMsg
         end if
 
         if state = "finished"
@@ -214,7 +312,7 @@ sub onVideoState()
                 playNextEpisode(nextEp)
                 return
             end if
-            print "[MM] VideoPlayerScreen: playback finished (last episode)"
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: playback finished (last episode)"
         end if
 
         m.exiting = true
@@ -226,6 +324,9 @@ end sub
 sub onVideoPosition()
     m.currentPosition = m.videoPlayer.position
     m.currentDuration = m.videoPlayer.duration
+
+    ' Check skip intro visibility
+    checkSkipIntro()
 
     ' Report progress every 60 seconds
     now = createObject("roDateTime")
@@ -304,7 +405,7 @@ sub playNextEpisode(nextEp as object)
     epName = ep.name
     if epName = invalid or epName = "" then epName = "Episode " + str(ep.episodeNumber).trim()
 
-    print "[MM] VideoPlayerScreen: auto-advancing to " ; epLabel ; " " ; epName
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: auto-advancing to " ; epLabel ; " " ; epName
 
     ' Build new play content — setting this triggers onPlayContent()
     content = {
@@ -333,7 +434,7 @@ end sub
 ' ---- Stop Playback ----
 
 sub stopPlayback()
-    print "[MM] VideoPlayerScreen: stopping playback"
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: stopping playback"
     m.exiting = true
     reportProgress()
     m.videoPlayer.control = "stop"
@@ -348,6 +449,14 @@ function onKeyEvent(key as string, press as boolean) as boolean
         stopPlayback()
         m.top.playbackFinished = true
         return true
+    end if
+
+    if key = "up"
+        if m.skipIntroVisible
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: UP pressed — skipping intro"
+            doSkipIntro()
+            return true
+        end if
     end if
 
     if key = "options"

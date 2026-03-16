@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] CollectionScreen: init"
+    print "[MM " ; mmts() ; "] CollectionScreen: init"
     m.headerLabel = m.top.findNode("headerLabel")
     m.collectionPoster = m.top.findNode("collectionPoster")
     m.itemsGrid = m.top.findNode("itemsGrid")
@@ -73,7 +79,7 @@ end sub
 sub onDetailError()
     errorMsg = m.detailTask.detailError
     if errorMsg = invalid then return
-    print "[MM] CollectionScreen: error — " ; errorMsg
+    print "[MM " ; mmts() ; "] CollectionScreen: error — " ; errorMsg
     m.loadingLabel.text = "Failed to load collection"
 end sub
 
@@ -111,16 +117,16 @@ sub onItemSelected()
     if selectedIndex < 0 or selectedIndex >= m.items.count() then return
 
     item = m.items[selectedIndex]
-    print "[MM] CollectionScreen: selected — " ; item.name
+    print "[MM " ; mmts() ; "] CollectionScreen: selected — " ; item.name
 
     ' Only allow selection of owned items with a titleId
     if item.titleId = invalid or item.titleId = 0
-        print "[MM] CollectionScreen: item not owned, cannot select"
+        print "[MM " ; mmts() ; "] CollectionScreen: item not owned, cannot select"
         return
     end if
 
     if item.owned <> invalid and not item.owned
-        print "[MM] CollectionScreen: item not owned, cannot select"
+        print "[MM " ; mmts() ; "] CollectionScreen: item not owned, cannot select"
         return
     end if
 

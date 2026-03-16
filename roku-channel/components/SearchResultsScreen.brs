@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] SearchResultsScreen: init"
+    print "[MM " ; mmts() ; "] SearchResultsScreen: init"
     m.headerLabel = m.top.findNode("headerLabel")
     m.chipRow = m.top.findNode("chipRow")
     m.resultsRowList = m.top.findNode("resultsRowList")
@@ -36,7 +42,7 @@ sub onSearchQueryChanged()
     if serverUrl = invalid or serverUrl = "" then return
     if apiKey = invalid or apiKey = "" then return
 
-    print "[MM] SearchResultsScreen: searching for '" ; query ; "'"
+    print "[MM " ; mmts() ; "] SearchResultsScreen: searching for '" ; query ; "'"
 
     m.headerLabel.text = "Search: " + query
     m.loadingLabel.visible = true
@@ -101,7 +107,7 @@ sub onSearchError()
     errorMsg = m.searchTask.searchError
     if errorMsg = invalid or errorMsg = "" then return
 
-    print "[MM] SearchResultsScreen: search error — " ; errorMsg
+    print "[MM " ; mmts() ; "] SearchResultsScreen: search error — " ; errorMsg
     m.loadingLabel.visible = false
     m.noResultsLabel.text = "Search failed"
     m.noResultsLabel.visible = true
@@ -245,7 +251,7 @@ sub onResultSelected()
     if itemIndex < 0 or itemIndex >= m.filteredResults.count() then return
 
     result = m.filteredResults[itemIndex]
-    print "[MM] SearchResultsScreen: selected " ; result.resultType ; " — " ; result.name
+    print "[MM " ; mmts() ; "] SearchResultsScreen: selected " ; result.resultType ; " — " ; result.name
 
     if result.resultType = "movie"
         m.top.playRequested = result

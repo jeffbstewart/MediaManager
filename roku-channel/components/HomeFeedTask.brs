@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] HomeFeedTask: init"
+    print "[MM " ; mmts() ; "] HomeFeedTask: init"
 end sub
 
 sub doFetch()
@@ -9,7 +15,7 @@ sub doFetch()
         return
     end if
 
-    print "[MM] HomeFeedTask: fetching " ; url
+    print "[MM " ; mmts() ; "] HomeFeedTask: fetching " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -33,7 +39,7 @@ sub doFetch()
         response = ""
     end if
 
-    print "[MM] HomeFeedTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
+    print "[MM " ; mmts() ; "] HomeFeedTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
 
     if httpCode <> 200 or response = "" or response = invalid
         m.top.feedError = "Failed to fetch home feed (HTTP " + str(httpCode).trim() + ")"
@@ -51,11 +57,11 @@ sub doFetch()
         return
     end if
 
-    print "[MM] HomeFeedTask: parsed " ; str(json.carousels.count()).trim() ; " carousels"
+    print "[MM " ; mmts() ; "] HomeFeedTask: parsed " ; str(json.carousels.count()).trim() ; " carousels"
     for each carousel in json.carousels
         itemCount = 0
         if carousel.items <> invalid then itemCount = carousel.items.count()
-        print "[MM] HomeFeedTask:   " ; carousel.name ; " — " ; str(itemCount).trim() ; " items"
+        print "[MM " ; mmts() ; "] HomeFeedTask:   " ; carousel.name ; " — " ; str(itemCount).trim() ; " items"
     end for
 
     m.top.feedResult = json

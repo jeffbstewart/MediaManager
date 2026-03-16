@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] PairTask: init"
+    print "[MM " ; mmts() ; "] PairTask: init"
 end sub
 
 ' Entry point — dispatches based on m.top.action
@@ -16,15 +22,15 @@ end sub
 
 ' SSDP discovery: send M-SEARCH multicast and listen for mediaManager response
 sub doDiscover()
-    print "[MM] PairTask: SSDP discovery starting"
+    print "[MM " ; mmts() ; "] PairTask: SSDP discovery starting"
 
     udp = CreateObject("roDatagramSocket")
     if udp = invalid
-        print "[MM] PairTask: SSDP — failed to create UDP socket"
+        print "[MM " ; mmts() ; "] PairTask: SSDP — failed to create UDP socket"
         m.top.discoveredUrl = ""
         return
     end if
-    print "[MM] PairTask: SSDP — UDP socket created"
+    print "[MM " ; mmts() ; "] PairTask: SSDP — UDP socket created"
 
     port = CreateObject("roMessagePort")
     udp.SetMessagePort(port)
@@ -46,17 +52,17 @@ sub doDiscover()
             end if
         end for
     end if
-    print "[MM] PairTask: SSDP — Roku IP: " ; localIp
+    print "[MM " ; mmts() ; "] PairTask: SSDP — Roku IP: " ; localIp
 
     ' Bind to Roku's IP on an ephemeral port
     addr = CreateObject("roSocketAddress")
     addr.SetAddress(localIp + ":0")
     bindOk = udp.SetAddress(addr)
-    print "[MM] PairTask: SSDP — SetAddress(" ; localIp ; ":0) returned " ; bindOk
+    print "[MM " ; mmts() ; "] PairTask: SSDP — SetAddress(" ; localIp ; ":0) returned " ; bindOk
 
     ' Enable receive notifications — required for wait() to get events
     udp.notifyReadable(true)
-    print "[MM] PairTask: SSDP — notifyReadable(true) set"
+    print "[MM " ; mmts() ; "] PairTask: SSDP — notifyReadable(true) set"
 
     ' Build M-SEARCH request
     searchTarget = "urn:stewart:service:mediamanager:1"
@@ -67,20 +73,20 @@ sub doDiscover()
     msearch = msearch + "ST: " + searchTarget + chr(13) + chr(10)
     msearch = msearch + chr(13) + chr(10)
 
-    print "[MM] PairTask: SSDP M-SEARCH payload:" + chr(10) + msearch
+    print "[MM " ; mmts() ; "] PairTask: SSDP M-SEARCH payload:" + chr(10) + msearch
 
     ' Send to multicast group
     destAddr = CreateObject("roSocketAddress")
     destAddr.SetHostName("239.255.255.250")
     destAddr.SetPort(1900)
     udp.SetSendToAddress(destAddr)
-    print "[MM] PairTask: SSDP — dest address set to " ; destAddr.GetHostName() ; ":" ; str(destAddr.GetPort()).trim()
+    print "[MM " ; mmts() ; "] PairTask: SSDP — dest address set to " ; destAddr.GetHostName() ; ":" ; str(destAddr.GetPort()).trim()
 
     bytesSent = udp.SendStr(msearch)
-    print "[MM] PairTask: SSDP M-SEARCH sent (" ; str(bytesSent).trim() ; " bytes)"
+    print "[MM " ; mmts() ; "] PairTask: SSDP M-SEARCH sent (" ; str(bytesSent).trim() ; " bytes)"
 
     if bytesSent <= 0
-        print "[MM] PairTask: SSDP — SendStr FAILED, error: " ; str(udp.Status()).trim()
+        print "[MM " ; mmts() ; "] PairTask: SSDP — SendStr FAILED, error: " ; str(udp.Status()).trim()
         udp.Close()
         m.top.discoveredUrl = ""
         return
@@ -89,17 +95,17 @@ sub doDiscover()
     ' Listen for responses (try multiple times, 3 seconds each)
     found = false
     for attempt = 1 to 3
-        print "[MM] PairTask: SSDP — waiting for response (attempt " ; str(attempt).trim() ; "/3, 3s timeout)"
+        print "[MM " ; mmts() ; "] PairTask: SSDP — waiting for response (attempt " ; str(attempt).trim() ; "/3, 3s timeout)"
         msg = wait(3000, port)
         if msg = invalid
-            print "[MM] PairTask: SSDP — no response on attempt " ; str(attempt).trim()
+            print "[MM " ; mmts() ; "] PairTask: SSDP — no response on attempt " ; str(attempt).trim()
         else
             ' roSocketEvent received — read data from the socket itself
             msgType = type(msg)
-            print "[MM] PairTask: SSDP — got event type: " ; msgType
+            print "[MM " ; mmts() ; "] PairTask: SSDP — got event type: " ; msgType
 
             bufCount = udp.GetCountRcvBuf()
-            print "[MM] PairTask: SSDP — receive buffer has " ; str(bufCount).trim() ; " bytes"
+            print "[MM " ; mmts() ; "] PairTask: SSDP — receive buffer has " ; str(bufCount).trim() ; " bytes"
 
             if bufCount > 0
                 response = udp.ReceiveStr(bufCount)
@@ -107,32 +113,32 @@ sub doDiscover()
                 response = udp.ReceiveStr(1024)
             end if
 
-            print "[MM] PairTask: SSDP response (attempt " ; str(attempt).trim() ; ", " ; str(len(response)).trim() ; " bytes):"
-            print "[MM] PairTask: SSDP response body: " ; response
+            print "[MM " ; mmts() ; "] PairTask: SSDP response (attempt " ; str(attempt).trim() ; ", " ; str(len(response)).trim() ; " bytes):"
+            print "[MM " ; mmts() ; "] PairTask: SSDP response body: " ; response
 
             ' Parse LOCATION header from response
             location = ""
             lines = response.split(chr(10))
             for each line in lines
                 trimmed = line.trim()
-                print "[MM] PairTask: SSDP response line: [" ; trimmed ; "]"
+                print "[MM " ; mmts() ; "] PairTask: SSDP response line: [" ; trimmed ; "]"
                 if left(lcase(trimmed), 9) = "location:"
                     location = trimmed.mid(9).trim()
                     ' Remove trailing CR if present
                     if right(location, 1) = chr(13)
                         location = left(location, len(location) - 1)
                     end if
-                    print "[MM] PairTask: SSDP — parsed LOCATION: [" ; location ; "]"
+                    print "[MM " ; mmts() ; "] PairTask: SSDP — parsed LOCATION: [" ; location ; "]"
                 end if
             end for
 
             if location <> ""
-                print "[MM] PairTask: SSDP discovered server at " ; location
+                print "[MM " ; mmts() ; "] PairTask: SSDP discovered server at " ; location
                 m.top.discoveredUrl = location
                 found = true
                 exit for
             else
-                print "[MM] PairTask: SSDP — response had no LOCATION header, ignoring"
+                print "[MM " ; mmts() ; "] PairTask: SSDP — response had no LOCATION header, ignoring"
             end if
         end if
     end for
@@ -140,7 +146,7 @@ sub doDiscover()
     udp.Close()
 
     if not found
-        print "[MM] PairTask: SSDP — all attempts exhausted, no server found"
+        print "[MM " ; mmts() ; "] PairTask: SSDP — all attempts exhausted, no server found"
         m.top.discoveredUrl = ""
     end if
 end sub
@@ -154,7 +160,7 @@ sub doStartPairing()
     end if
 
     url = serverUrl + "/api/pair/start"
-    print "[MM] PairTask: requesting pair code from " ; url
+    print "[MM " ; mmts() ; "] PairTask: requesting pair code from " ; url
 
     ' Get device name for display on confirmation page
     di = CreateObject("roDeviceInfo")
@@ -190,7 +196,7 @@ sub doStartPairing()
         response = ""
     end if
 
-    print "[MM] PairTask: start response code=" ; str(code).trim() ; " body=" ; response
+    print "[MM " ; mmts() ; "] PairTask: start response code=" ; str(code).trim() ; " body=" ; response
 
     if code <> 200 or response = "" or response = invalid
         m.top.pairError = "Failed to start pairing (HTTP " + str(code).trim() + ")"
@@ -206,10 +212,10 @@ sub doStartPairing()
     ' Set base URL BEFORE pair code — pairCode observer fires immediately
     if json.base_url <> invalid and json.base_url <> ""
         m.top.pairBaseUrl = json.base_url
-        print "[MM] PairTask: canonical base URL from start: " ; json.base_url
+        print "[MM " ; mmts() ; "] PairTask: canonical base URL from start: " ; json.base_url
     end if
     m.top.pairCode = json.code
-    print "[MM] PairTask: pair code = " ; json.code
+    print "[MM " ; mmts() ; "] PairTask: pair code = " ; json.code
 end sub
 
 ' Poll the server for pairing completion
@@ -248,7 +254,7 @@ sub doPollStatus()
         end if
 
         if httpCode = 404
-            print "[MM] PairTask: pair code expired or not found"
+            print "[MM " ; mmts() ; "] PairTask: pair code expired or not found"
             m.top.pairStatus = "expired"
             return
         end if
@@ -257,18 +263,18 @@ sub doPollStatus()
             json = parseJSON(response)
             if json <> invalid
                 if json.status = "paired"
-                    print "[MM] PairTask: pairing complete! token received"
+                    print "[MM " ; mmts() ; "] PairTask: pairing complete! token received"
                     ' Set token/username/baseUrl BEFORE status — status observer fires immediately
                     m.top.pairToken = json.token
                     m.top.pairUsername = json.username
                     if json.base_url <> invalid and json.base_url <> ""
                         m.top.pairBaseUrl = json.base_url
-                        print "[MM] PairTask: canonical base URL: " ; json.base_url
+                        print "[MM " ; mmts() ; "] PairTask: canonical base URL: " ; json.base_url
                     end if
                     m.top.pairStatus = "paired"
                     return
                 else if json.status = "expired"
-                    print "[MM] PairTask: pair code expired"
+                    print "[MM " ; mmts() ; "] PairTask: pair code expired"
                     m.top.pairStatus = "expired"
                     return
                 end if
@@ -279,6 +285,6 @@ sub doPollStatus()
         sleep(3000)
     end for
 
-    print "[MM] PairTask: polling timed out"
+    print "[MM " ; mmts() ; "] PairTask: polling timed out"
     m.top.pairStatus = "expired"
 end sub

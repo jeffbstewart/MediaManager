@@ -1,3 +1,9 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
 end sub
 
@@ -17,7 +23,7 @@ sub onItemContentChanged()
         snapshotUrl = itemData.snapshotUrl
     end if
 
-    print "[MM] CameraListItem: name=" ; cameraName ; " snapshot=" ; snapshotUrl
+    print "[MM " ; mmts() ; "] CameraListItem: name=" ; cameraName ; " snapshot=" ; snapshotUrl
 
     m.top.findNode("nameLabel").text = cameraName
     if snapshotUrl <> ""

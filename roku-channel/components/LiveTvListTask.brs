@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] LiveTvListTask: init"
+    print "[MM " ; mmts() ; "] LiveTvListTask: init"
 end sub
 
 sub doFetch()
@@ -9,7 +15,7 @@ sub doFetch()
         return
     end if
 
-    print "[MM] LiveTvListTask: fetching " ; url
+    print "[MM " ; mmts() ; "] LiveTvListTask: fetching " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -33,7 +39,7 @@ sub doFetch()
         response = ""
     end if
 
-    print "[MM] LiveTvListTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
+    print "[MM " ; mmts() ; "] LiveTvListTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
 
     if httpCode <> 200 or response = "" or response = invalid
         m.top.channelsError = "Failed to fetch channels (HTTP " + str(httpCode).trim() + ")"
@@ -51,6 +57,6 @@ sub doFetch()
         return
     end if
 
-    print "[MM] LiveTvListTask: parsed " ; str(json.channels.count()).trim() ; " channels"
+    print "[MM " ; mmts() ; "] LiveTvListTask: parsed " ; str(json.channels.count()).trim() ; " channels"
     m.top.channelsResult = json
 end sub

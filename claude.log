@@ -3365,3 +3365,40 @@ Navigation flow:
   Idempotent: skips if already at source, deletes ForBrowser copies after confirming
   source copy exists. Safe for dev-then-prod migration sequence.
 ===
+
+=== 2026-03-15 21:00 — MediaSkipDetector: Fix per-episode skip.json output ===
+- Bug: WriteSkipJson wrote all episodes' intro data into one combined file
+  named after the first episode. The filesystem contract requires one file
+  per episode: {episode_basename}.introskip.skip.json
+- Fix: WriteSkipJson now writes one file per episode. Episodes with detected
+  intros get [{start, end, region_type}]. Episodes with no match get []
+  (empty array marker indicating analysis ran).
+- Cleanup: DirectoryScanner detects combined skip files (multiple distinct
+  "file" values in JSON array) and deletes them during scan. This makes the
+  directory show up as pending again for re-analysis with correct output.
+- IntroAnalysisService also runs the same cleanup before writing new files.
+- Removed ScanCandidate.OutputFileName (no single output file anymore).
+- Scanner up-to-date check: any *.introskip.skip.json newer than newest MKV.
+- Verified: 33 combined files deleted, re-analysis produced 22 per-episode
+  files for Xena S06 (21 with intros, 1 empty marker).
+===
+
+=== 2026-03-15 21:30 — Roku: Skip intro button + timestamped logging ===
+- Roku channel: "Press UP to Skip Intro" overlay during video playback
+  - SkipSegmentTask: fetches /stream/{id}/chapters.json, parses INTRO segments
+  - VideoPlayerScreen: overlay created as child of Video node (Jellyfin pattern),
+    renders on top of video during playback
+  - Shows when playback position is within intro segment range, hides after
+  - UP key triggers seek to intro end (OK key consumed by Video node's native UI)
+  - Verified working on Xena S06E01 — skip from 328s to 387s
+- Timestamped all [MM] log messages across all 27 BrightScript files
+  with mmts() helper (HH:MM:SS local time) for debug console readability
+- Reduced video state logging: suppressed buffering/playing/paused churn
+  that was flooding the 128-line debug console buffer
+- Added build timestamp to profile picker version label
+- Debug session learnings:
+  - roku-deploy.env was pointing at production .23 instead of dev .24
+  - Roku debug port 8085 buffer persists across reboots/uninstalls
+  - Video node enableUI=true consumes OK/arrows; only up/down/back pass through
+  - Overlay must be child of Video node, not sibling (Jellyfin approach)
+===

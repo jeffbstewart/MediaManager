@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] DetailTask: init"
+    print "[MM " ; mmts() ; "] DetailTask: init"
 end sub
 
 sub doFetch()
@@ -9,7 +15,7 @@ sub doFetch()
         return
     end if
 
-    print "[MM] DetailTask: fetching " ; url
+    print "[MM " ; mmts() ; "] DetailTask: fetching " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -33,7 +39,7 @@ sub doFetch()
         response = ""
     end if
 
-    print "[MM] DetailTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
+    print "[MM " ; mmts() ; "] DetailTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
 
     if httpCode <> 200 or response = "" or response = invalid
         m.top.detailError = "Detail fetch failed (HTTP " + str(httpCode).trim() + ")"

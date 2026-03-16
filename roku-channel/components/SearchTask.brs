@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] SearchTask: init"
+    print "[MM " ; mmts() ; "] SearchTask: init"
 end sub
 
 sub doFetch()
@@ -9,7 +15,7 @@ sub doFetch()
         return
     end if
 
-    print "[MM] SearchTask: fetching " ; url
+    print "[MM " ; mmts() ; "] SearchTask: fetching " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -33,7 +39,7 @@ sub doFetch()
         response = ""
     end if
 
-    print "[MM] SearchTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
+    print "[MM " ; mmts() ; "] SearchTask: response code=" ; str(httpCode).trim() ; " size=" ; str(len(response)).trim()
 
     if httpCode <> 200 or response = "" or response = invalid
         m.top.searchError = "Search failed (HTTP " + str(httpCode).trim() + ")"
@@ -51,6 +57,6 @@ sub doFetch()
         return
     end if
 
-    print "[MM] SearchTask: parsed " ; str(json.results.count()).trim() ; " results"
+    print "[MM " ; mmts() ; "] SearchTask: parsed " ; str(json.results.count()).trim() ; " results"
     m.top.searchResult = json
 end sub

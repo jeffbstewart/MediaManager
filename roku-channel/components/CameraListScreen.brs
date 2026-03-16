@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] CameraListScreen: init"
+    print "[MM " ; mmts() ; "] CameraListScreen: init"
     m.cameraList = m.top.findNode("cameraList")
     m.loadingLabel = m.top.findNode("loadingLabel")
     m.noCamerasLabel = m.top.findNode("noCamerasLabel")
@@ -24,7 +30,7 @@ sub onCamerasDataChanged()
     ' Build the cameras URL
     camerasUrl = serverUrl + "/roku/cameras.json?key=" + apiKey
 
-    print "[MM] CameraListScreen: fetching cameras from " ; serverUrl
+    print "[MM " ; mmts() ; "] CameraListScreen: fetching cameras from " ; serverUrl
 
     m.loadingLabel.visible = true
     m.noCamerasLabel.visible = false
@@ -43,13 +49,13 @@ sub onCamerasResult()
 
     cameras = result.cameras
     if cameras = invalid or cameras.count() = 0
-        print "[MM] CameraListScreen: no cameras"
+        print "[MM " ; mmts() ; "] CameraListScreen: no cameras"
         m.noCamerasLabel.visible = true
         return
     end if
 
     m.cameras = cameras
-    print "[MM] CameraListScreen: loaded " ; str(cameras.count()).trim() ; " cameras"
+    print "[MM " ; mmts() ; "] CameraListScreen: loaded " ; str(cameras.count()).trim() ; " cameras"
 
     ' Build content for MarkupList
     content = CreateObject("roSGNode", "ContentNode")
@@ -74,7 +80,7 @@ sub onCamerasError()
     errorMsg = m.cameraListTask.camerasError
     if errorMsg = invalid then return
 
-    print "[MM] CameraListScreen: error — " ; errorMsg
+    print "[MM " ; mmts() ; "] CameraListScreen: error — " ; errorMsg
     m.loadingLabel.visible = false
     m.noCamerasLabel.text = "Error: " + errorMsg
     m.noCamerasLabel.visible = true
@@ -85,7 +91,7 @@ sub onItemSelected()
     if index < 0 or index >= m.cameras.count() then return
 
     camera = m.cameras[index]
-    print "[MM] CameraListScreen: camera selected — " ; camera.name
+    print "[MM " ; mmts() ; "] CameraListScreen: camera selected — " ; camera.name
 
     m.top.cameraSelected = camera
 

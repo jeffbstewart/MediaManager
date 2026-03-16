@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] MovieDetailScreen: init"
+    print "[MM " ; mmts() ; "] MovieDetailScreen: init"
     m.backdropImage = m.top.findNode("backdropImage")
     m.posterImage = m.top.findNode("posterImage")
     m.posterFallback = m.top.findNode("posterFallback")
@@ -71,7 +77,7 @@ sub onTitleDataChanged()
     titleName = titleData.name
     if titleName = invalid then titleName = "Unknown"
 
-    print "[MM] MovieDetailScreen: loading detail for " ; titleName ; " (id=" ; str(titleId).trim() ; ")"
+    print "[MM " ; mmts() ; "] MovieDetailScreen: loading detail for " ; titleName ; " (id=" ; str(titleId).trim() ; ")"
 
     m.titleLabel.text = titleName
     m.loadingLabel.visible = true
@@ -106,7 +112,7 @@ sub onDetailResult()
     m.titleDetail = detail
     m.loadingLabel.visible = false
 
-    print "[MM] MovieDetailScreen: detail loaded — " ; detail.name
+    print "[MM " ; mmts() ; "] MovieDetailScreen: detail loaded — " ; detail.name
 
     ' Update metadata
     m.titleLabel.text = detail.name
@@ -239,7 +245,7 @@ end sub
 sub onDetailError()
     errorMsg = m.titleDetailTask.detailError
     if errorMsg = invalid then return
-    print "[MM] MovieDetailScreen: detail error — " ; errorMsg
+    print "[MM " ; mmts() ; "] MovieDetailScreen: detail error — " ; errorMsg
     m.loadingLabel.text = "Failed to load: " + errorMsg
 end sub
 
@@ -320,7 +326,7 @@ sub onTagChosen()
     if idx < 0 or idx >= m.tagData.count() then return
 
     tag = m.tagData[idx]
-    print "[MM] MovieDetailScreen: tag selected — " ; tag.name ; " (id=" ; str(tag.id).trim() ; ")"
+    print "[MM " ; mmts() ; "] MovieDetailScreen: tag selected — " ; tag.name ; " (id=" ; str(tag.id).trim() ; ")"
     m.top.tagSelected = { id: tag.id, name: tag.name }
 end sub
 
@@ -330,7 +336,7 @@ sub onCastChosen()
     if m.titleDetail.cast = invalid or idx >= m.titleDetail.cast.count() then return
 
     cm = m.titleDetail.cast[idx]
-    print "[MM] MovieDetailScreen: cast selected — " ; cm.name ; " (person " ; str(cm.tmdbPersonId).trim() ; ")"
+    print "[MM " ; mmts() ; "] MovieDetailScreen: cast selected — " ; cm.name ; " (person " ; str(cm.tmdbPersonId).trim() ; ")"
     m.top.actorSelected = {
         tmdbPersonId: cm.tmdbPersonId,
         name: cm.name
@@ -345,7 +351,7 @@ sub onSimilarSelected()
     if m.titleDetail.similarTitles = invalid or itemIndex >= m.titleDetail.similarTitles.count() then return
 
     st = m.titleDetail.similarTitles[itemIndex]
-    print "[MM] MovieDetailScreen: similar title selected — " ; st.name ; " (titleId=" ; str(st.titleId).trim() ; ")"
+    print "[MM " ; mmts() ; "] MovieDetailScreen: similar title selected — " ; st.name ; " (titleId=" ; str(st.titleId).trim() ; ")"
     m.top.titleSelected = st
 end sub
 
@@ -356,7 +362,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "OK"
         if m.focusSection = "play" and m.titleDetail <> invalid
-            print "[MM] MovieDetailScreen: play pressed"
+            print "[MM " ; mmts() ; "] MovieDetailScreen: play pressed"
             m.top.playRequested = m.titleDetail
             return true
         else if m.focusSection = "tags"

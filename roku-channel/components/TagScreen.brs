@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] TagScreen: init"
+    print "[MM " ; mmts() ; "] TagScreen: init"
     m.headerLabel = m.top.findNode("headerLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.loadingLabel = m.top.findNode("loadingLabel")
@@ -69,7 +75,7 @@ end sub
 sub onDetailError()
     errorMsg = m.detailTask.detailError
     if errorMsg = invalid then return
-    print "[MM] TagScreen: error — " ; errorMsg
+    print "[MM " ; mmts() ; "] TagScreen: error — " ; errorMsg
     m.loadingLabel.text = "Failed to load"
 end sub
 
@@ -107,7 +113,7 @@ sub onItemSelected()
     if selectedIndex < 0 or selectedIndex >= m.items.count() then return
 
     item = m.items[selectedIndex]
-    print "[MM] TagScreen: selected — " ; item.name
+    print "[MM " ; mmts() ; "] TagScreen: selected — " ; item.name
 
     if item.mediaType <> invalid and item.mediaType = "TV"
         m.top.episodePickerRequested = item

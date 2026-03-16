@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SkipSegmentTask" extends="Task">
+    <interface>
+        <field id="chaptersUrl" type="string" />
+        <field id="skipSegments" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="SkipSegmentTask.brs" />
+</component>

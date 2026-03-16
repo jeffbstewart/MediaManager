@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] LiveTvListScreen: init"
+    print "[MM " ; mmts() ; "] LiveTvListScreen: init"
     m.channelList = m.top.findNode("channelList")
     m.loadingLabel = m.top.findNode("loadingLabel")
     m.noChannelsLabel = m.top.findNode("noChannelsLabel")
@@ -22,7 +28,7 @@ sub onChannelsDataChanged()
     ' Build the channels URL
     channelsUrl = serverUrl + "/roku/livetv/channels.json?key=" + apiKey
 
-    print "[MM] LiveTvListScreen: fetching channels from " ; serverUrl
+    print "[MM " ; mmts() ; "] LiveTvListScreen: fetching channels from " ; serverUrl
 
     m.loadingLabel.visible = true
     m.noChannelsLabel.visible = false
@@ -41,14 +47,14 @@ sub onChannelsResult()
 
     channels = result.channels
     if channels = invalid or channels.count() = 0
-        print "[MM] LiveTvListScreen: no channels"
+        print "[MM " ; mmts() ; "] LiveTvListScreen: no channels"
         m.noChannelsLabel.visible = true
         return
     end if
 
     m.channels = channels
     m.top.channels = channels
-    print "[MM] LiveTvListScreen: loaded " ; str(channels.count()).trim() ; " channels"
+    print "[MM " ; mmts() ; "] LiveTvListScreen: loaded " ; str(channels.count()).trim() ; " channels"
 
     ' Build content for MarkupList
     content = CreateObject("roSGNode", "ContentNode")
@@ -74,7 +80,7 @@ sub onChannelsError()
     errorMsg = m.liveTvListTask.channelsError
     if errorMsg = invalid then return
 
-    print "[MM] LiveTvListScreen: error - " ; errorMsg
+    print "[MM " ; mmts() ; "] LiveTvListScreen: error - " ; errorMsg
     m.loadingLabel.visible = false
     m.noChannelsLabel.text = "Error: " + errorMsg
     m.noChannelsLabel.visible = true
@@ -85,7 +91,7 @@ sub onItemSelected()
     if index < 0 or index >= m.channels.count() then return
 
     channel = m.channels[index]
-    print "[MM] LiveTvListScreen: channel selected - " ; channel.guideNumber ; " " ; channel.guideName
+    print "[MM " ; mmts() ; "] LiveTvListScreen: channel selected - " ; channel.guideNumber ; " " ; channel.guideName
 
     m.top.channelSelected = channel
 end sub

@@ -1,11 +1,17 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] ProgressTask: init"
+    print "[MM " ; mmts() ; "] ProgressTask: init"
 end sub
 
 sub doReport()
     url = m.top.progressUrl
     if url = "" or url = invalid
-        print "[MM] ProgressTask: no URL set, skipping"
+        print "[MM " ; mmts() ; "] ProgressTask: no URL set, skipping"
         return
     end if
 
@@ -14,7 +20,7 @@ sub doReport()
 
     body = "{" + chr(34) + "position" + chr(34) + ":" + str(position).trim() + "," + chr(34) + "duration" + chr(34) + ":" + str(duration).trim() + "}"
 
-    print "[MM] ProgressTask: reporting position=" ; str(position).trim() ; " duration=" ; str(duration).trim() ; " to " ; url
+    print "[MM " ; mmts() ; "] ProgressTask: reporting position=" ; str(position).trim() ; " duration=" ; str(duration).trim() ; " to " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -29,11 +35,11 @@ sub doReport()
         msg = wait(10000, xferPort)
         if type(msg) = "roUrlEvent"
             code = msg.GetResponseCode()
-            print "[MM] ProgressTask: server responded " ; str(code).trim()
+            print "[MM " ; mmts() ; "] ProgressTask: server responded " ; str(code).trim()
         else
-            print "[MM] ProgressTask: request timed out"
+            print "[MM " ; mmts() ; "] ProgressTask: request timed out"
         end if
     else
-        print "[MM] ProgressTask: failed to start request"
+        print "[MM " ; mmts() ; "] ProgressTask: failed to start request"
     end if
 end sub

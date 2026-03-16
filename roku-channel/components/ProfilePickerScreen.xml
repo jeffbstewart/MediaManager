@@ -48,11 +48,11 @@
         <!-- Version label -->
         <Label
             id="versionLabel"
-            translation="[1780, 1040]"
+            translation="[1520, 1040]"
             text=""
             font="font:SmallestSystemFont"
             color="#444444"
             horizAlign="right"
-            width="120" />
+            width="380" />
     </children>
 </component>

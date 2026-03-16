@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] ProfilePickerScreen: init"
+    print "[MM " ; mmts() ; "] ProfilePickerScreen: init"
     m.profileGrid = m.top.findNode("profileGrid")
     m.hintLabel = m.top.findNode("hintLabel")
     m.versionLabel = m.top.findNode("versionLabel")
@@ -8,11 +14,16 @@ sub init()
     m.focusIndex = 0
     m.profileCount = 0
 
-    ' Set version label from manifest
+    ' Set version label from manifest (includes build timestamp if present)
     appInfo = CreateObject("roAppInfo")
     version = appInfo.GetValue("major_version") + "." + appInfo.GetValue("minor_version") + "." + appInfo.GetValue("build_version")
-    m.versionLabel.text = "v" + version
-    print "[MM] ProfilePickerScreen: version " ; version
+    buildTs = appInfo.GetValue("build_timestamp")
+    if buildTs <> "" and buildTs <> invalid
+        m.versionLabel.text = "v" + version + " (" + buildTs + ")"
+    else
+        m.versionLabel.text = "v" + version
+    end if
+    print "[MM " ; mmts() ; "] ProfilePickerScreen: version " ; version
 
     ' Observe profiles field for updates
     m.top.observeField("profiles", "onProfilesChanged")
@@ -22,7 +33,7 @@ sub onProfilesChanged()
     profiles = m.top.profiles
     if profiles = invalid then profiles = []
 
-    print "[MM] ProfilePickerScreen: onProfilesChanged — " ; str(profiles.count()).trim() ; " profile(s)"
+    print "[MM " ; mmts() ; "] ProfilePickerScreen: onProfilesChanged — " ; str(profiles.count()).trim() ; " profile(s)"
 
     ' Clear existing items
     m.profileGrid.removeChildrenIndex(m.profileGrid.getChildCount(), 0)
@@ -98,10 +109,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if m.focusIndex >= 0 and m.focusIndex < m.profileItems.count()
             item = m.profileItems[m.focusIndex]
             if item.isAddButton
-                print "[MM] ProfilePickerScreen: add profile requested"
+                print "[MM " ; mmts() ; "] ProfilePickerScreen: add profile requested"
                 m.top.addProfileRequested = true
             else
-                print "[MM] ProfilePickerScreen: profile selected — index " ; str(m.focusIndex).trim()
+                print "[MM " ; mmts() ; "] ProfilePickerScreen: profile selected — index " ; str(m.focusIndex).trim()
                 profiles = m.top.profiles
                 if profiles <> invalid and m.focusIndex < profiles.count()
                     m.top.selectedProfile = profiles[m.focusIndex]
@@ -115,7 +126,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             profiles = m.top.profiles
             if profiles <> invalid and m.focusIndex < profiles.count()
                 profile = profiles[m.focusIndex]
-                print "[MM] ProfilePickerScreen: remove requested for " ; profile.username
+                print "[MM " ; mmts() ; "] ProfilePickerScreen: remove requested for " ; profile.username
                 showRemoveDialog(profile)
             end if
         end if
@@ -144,7 +155,7 @@ sub onRemoveDialogButton()
 
     if buttonIndex = 0
         ' Remove confirmed
-        print "[MM] ProfilePickerScreen: remove confirmed for " ; m.pendingRemoveProfile.username
+        print "[MM " ; mmts() ; "] ProfilePickerScreen: remove confirmed for " ; m.pendingRemoveProfile.username
         m.top.removeProfileRequested = m.pendingRemoveProfile
 
         ' Adjust focus index if needed
@@ -152,6 +163,6 @@ sub onRemoveDialogButton()
             m.focusIndex = m.focusIndex - 1
         end if
     else
-        print "[MM] ProfilePickerScreen: remove cancelled"
+        print "[MM " ; mmts() ; "] ProfilePickerScreen: remove cancelled"
     end if
 end sub

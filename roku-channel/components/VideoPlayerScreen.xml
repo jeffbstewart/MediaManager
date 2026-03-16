@@ -15,9 +15,12 @@
             width="1920"
             height="1080"
             enableUI="true"
-            notificationInterval="10" />
+            notificationInterval="1" />
+
+        <!-- Skip Intro button is added dynamically as a child of the Video node -->
 
         <!-- Background tasks -->
         <ProgressTask id="progressTask" />
+        <SkipSegmentTask id="skipSegmentTask" />
     </children>
 </component>

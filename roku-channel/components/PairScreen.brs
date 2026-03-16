@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] PairScreen: init"
+    print "[MM " ; mmts() ; "] PairScreen: init"
     m.buttonGroup = m.top.findNode("buttonGroup")
     m.statusLabel = m.top.findNode("statusLabel")
     m.instructionLabel = m.top.findNode("instructionLabel")
@@ -22,7 +28,7 @@ end sub
 
 sub onVisibleChanged()
     if m.top.visible
-        print "[MM] PairScreen: now visible, starting discovery"
+        print "[MM " ; mmts() ; "] PairScreen: now visible, starting discovery"
         m.statusLabel.visible = false
         startDiscovery()
     end if
@@ -31,7 +37,7 @@ end sub
 ' ---- State: Discovery ----
 
 sub startDiscovery()
-    print "[MM] PairScreen: starting SSDP discovery"
+    print "[MM " ; mmts() ; "] PairScreen: starting SSDP discovery"
     m.instructionLabel.text = "Searching for Media Manager on your network..."
     m.buttonGroup.buttons = ["Enter Server Address Manually"]
     m.buttonGroup.setFocus(true)
@@ -45,12 +51,12 @@ end sub
 sub onDiscovered()
     url = m.pairTask.discoveredUrl
     if url <> "" and url <> invalid
-        print "[MM] PairScreen: discovered server at " ; url
+        print "[MM " ; mmts() ; "] PairScreen: discovered server at " ; url
         m.serverUrl = url
         m.instructionLabel.text = "Found server: " + url
         startPairing()
     else
-        print "[MM] PairScreen: SSDP discovery failed"
+        print "[MM " ; mmts() ; "] PairScreen: SSDP discovery failed"
         m.instructionLabel.text = "Could not find server automatically. Enter the address manually."
         m.buttonGroup.buttons = ["Enter Server Address"]
         m.buttonGroup.setFocus(true)
@@ -60,7 +66,7 @@ end sub
 ' ---- State: Pairing ----
 
 sub startPairing()
-    print "[MM] PairScreen: starting pairing with " ; m.serverUrl
+    print "[MM " ; mmts() ; "] PairScreen: starting pairing with " ; m.serverUrl
     m.instructionLabel.text = "Requesting pairing code..."
     m.buttonGroup.buttons = ["Cancel"]
     hideQrCode()
@@ -76,12 +82,12 @@ sub onPairCodeReceived()
     code = m.pairTask.pairCode
     if code = "" or code = invalid then return
 
-    print "[MM] PairScreen: pair code received: " ; code
+    print "[MM " ; mmts() ; "] PairScreen: pair code received: " ; code
 
     ' Use canonical base URL if available, otherwise SSDP-discovered URL
     baseUrl = m.pairTask.pairBaseUrl
     if baseUrl = invalid or baseUrl = "" then baseUrl = m.serverUrl
-    print "[MM] PairScreen: using base URL for pairing UI: " ; baseUrl
+    print "[MM " ; mmts() ; "] PairScreen: using base URL for pairing UI: " ; baseUrl
 
     ' Show QR code (always fetch from internal server, QR encodes the canonical URL)
     qrUrl = m.serverUrl + "/api/pair/qr?code=" + code
@@ -109,7 +115,7 @@ sub onPairStatus()
         username = m.pairTask.pairUsername
 
         if username = invalid then username = ""
-        print "[MM] PairScreen: paired! user=" ; username
+        print "[MM " ; mmts() ; "] PairScreen: paired! user=" ; username
 
         hideQrCode()
         m.instructionLabel.text = "Connected as " + username + "!"
@@ -120,7 +126,7 @@ sub onPairStatus()
         ' Use canonical base URL if server provided one, otherwise SSDP-discovered URL
         baseUrl = m.pairTask.pairBaseUrl
         if baseUrl <> invalid and baseUrl <> ""
-            print "[MM] PairScreen: using canonical base URL: " ; baseUrl
+            print "[MM " ; mmts() ; "] PairScreen: using canonical base URL: " ; baseUrl
         else
             baseUrl = m.serverUrl
         end if
@@ -133,7 +139,7 @@ sub onPairStatus()
         }
 
     else if status = "expired"
-        print "[MM] PairScreen: pair code expired"
+        print "[MM " ; mmts() ; "] PairScreen: pair code expired"
         hideQrCode()
         m.instructionLabel.text = "Pairing code expired. Try again."
         m.buttonGroup.buttons = ["Pair Again", "Enter Key Manually", "Cancel"]
@@ -144,7 +150,7 @@ end sub
 sub onPairError()
     errorMsg = m.pairTask.pairError
     if errorMsg <> "" and errorMsg <> invalid
-        print "[MM] PairScreen: pair error: " ; errorMsg
+        print "[MM " ; mmts() ; "] PairScreen: pair error: " ; errorMsg
         showStatus(errorMsg)
         m.buttonGroup.buttons = ["Retry", "Enter Server Address", "Cancel"]
         m.buttonGroup.setFocus(true)
@@ -157,7 +163,7 @@ sub onButtonSelected()
     index = m.buttonGroup.buttonSelected
     label = m.buttonGroup.buttons[index]
 
-    print "[MM] PairScreen: button pressed: " ; label
+    print "[MM " ; mmts() ; "] PairScreen: button pressed: " ; label
 
     if label = "Enter Server Address Manually" or label = "Enter Server Address"
         showKeyboard("Enter Server URL", "e.g. http://192.168.1.100:8080", m.serverUrl, "serverUrl")
@@ -170,7 +176,7 @@ sub onButtonSelected()
             startDiscovery()
         end if
     else if label = "Cancel"
-        print "[MM] PairScreen: cancel requested"
+        print "[MM " ; mmts() ; "] PairScreen: cancel requested"
         m.pairTask.control = "stop"
         m.top.cancelRequested = true
     end if
@@ -209,11 +215,11 @@ sub onKeyboardButton()
                 text = left(text, len(text) - 1)
             end if
             m.serverUrl = text
-            print "[MM] PairScreen: server URL set to " ; text
+            print "[MM " ; mmts() ; "] PairScreen: server URL set to " ; text
             startPairing()
         else if m.pendingField = "apiKey"
             apiKey = text.trim()
-            print "[MM] PairScreen: API key entered manually"
+            print "[MM " ; mmts() ; "] PairScreen: API key entered manually"
             ' Fire pairComplete — username unknown for manual key entry
             m.top.pairComplete = {
                 serverUrl: m.serverUrl,
@@ -222,7 +228,7 @@ sub onKeyboardButton()
             }
         end if
     else
-        print "[MM] PairScreen: keyboard cancelled for " ; m.pendingField
+        print "[MM " ; mmts() ; "] PairScreen: keyboard cancelled for " ; m.pendingField
     end if
 
     m.buttonGroup.setFocus(true)

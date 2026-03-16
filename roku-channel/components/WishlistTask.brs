@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] WishlistTask: init"
+    print "[MM " ; mmts() ; "] WishlistTask: init"
 end sub
 
 sub doPost()
@@ -10,7 +16,7 @@ sub doPost()
         return
     end if
 
-    print "[MM] WishlistTask: posting to " ; url
+    print "[MM " ; mmts() ; "] WishlistTask: posting to " ; url
 
     transfer = CreateObject("roUrlTransfer")
     transfer.SetUrl(url)
@@ -35,7 +41,7 @@ sub doPost()
         response = ""
     end if
 
-    print "[MM] WishlistTask: response code=" ; str(httpCode).trim()
+    print "[MM " ; mmts() ; "] WishlistTask: response code=" ; str(httpCode).trim()
 
     if httpCode <> 200 or response = "" or response = invalid
         m.top.wishError = "Wishlist request failed (HTTP " + str(httpCode).trim() + ")"

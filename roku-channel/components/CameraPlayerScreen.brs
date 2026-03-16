@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] CameraPlayerScreen: init"
+    print "[MM " ; mmts() ; "] CameraPlayerScreen: init"
     m.cameraPlayer = m.top.findNode("cameraPlayer")
     m.cameraNameLabel = m.top.findNode("cameraNameLabel")
 
@@ -27,7 +33,7 @@ sub onPlayContent()
     streamUrl = ""
     if content.streamUrl <> invalid then streamUrl = content.streamUrl
 
-    print "[MM] CameraPlayerScreen: playing " ; cameraName ; " — " ; streamUrl
+    print "[MM " ; mmts() ; "] CameraPlayerScreen: playing " ; cameraName ; " — " ; streamUrl
 
     m.cameraNameLabel.text = cameraName
     m.currentContent = content
@@ -51,30 +57,30 @@ end sub
 
 sub onPlayerStateChanged()
     state = m.cameraPlayer.state
-    print "[MM] CameraPlayerScreen: player state = " ; state
+    print "[MM " ; mmts() ; "] CameraPlayerScreen: player state = " ; state
 
     if state = "error"
         errorCode = ""
         errorMsg = ""
         if m.cameraPlayer.errorCode <> invalid then errorCode = str(m.cameraPlayer.errorCode).trim()
         if m.cameraPlayer.errorMsg <> invalid then errorMsg = m.cameraPlayer.errorMsg
-        print "[MM] CameraPlayerScreen: error code=" ; errorCode ; " msg=" ; errorMsg
+        print "[MM " ; mmts() ; "] CameraPlayerScreen: error code=" ; errorCode ; " msg=" ; errorMsg
 
         ' Retry on transient errors (HLS may need time to start)
         if m.retryCount < m.maxRetries
             m.retryCount = m.retryCount + 1
-            print "[MM] CameraPlayerScreen: retrying (" ; str(m.retryCount).trim() ; "/" ; str(m.maxRetries).trim() ; ")..."
+            print "[MM " ; mmts() ; "] CameraPlayerScreen: retrying (" ; str(m.retryCount).trim() ; "/" ; str(m.maxRetries).trim() ; ")..."
             m.cameraPlayer.control = "stop"
             m.retryTimer.control = "start"
         else
-            print "[MM] CameraPlayerScreen: max retries exceeded, giving up"
+            print "[MM " ; mmts() ; "] CameraPlayerScreen: max retries exceeded, giving up"
             stopPlayback()
         end if
     else if state = "finished"
         ' Live streams shouldn't "finish" but handle it — retry
         if m.retryCount < m.maxRetries
             m.retryCount = m.retryCount + 1
-            print "[MM] CameraPlayerScreen: stream finished, retrying..."
+            print "[MM " ; mmts() ; "] CameraPlayerScreen: stream finished, retrying..."
             m.cameraPlayer.control = "stop"
             m.retryTimer.control = "start"
         else
@@ -94,7 +100,7 @@ sub onRetryTimer()
     if m.currentContent.streamUrl <> invalid then streamUrl = m.currentContent.streamUrl
     if m.currentContent.name <> invalid then cameraName = m.currentContent.name
 
-    print "[MM] CameraPlayerScreen: retry timer fired, restarting stream"
+    print "[MM " ; mmts() ; "] CameraPlayerScreen: retry timer fired, restarting stream"
     startStream(streamUrl, cameraName)
 end sub
 
@@ -108,7 +114,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
     if key = "back"
-        print "[MM] CameraPlayerScreen: back pressed, stopping stream"
+        print "[MM " ; mmts() ; "] CameraPlayerScreen: back pressed, stopping stream"
         stopPlayback()
         return true
     end if

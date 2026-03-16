@@ -1,3 +1,9 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
     m.posterImage = m.top.findNode("posterImage")
     m.fallbackBg = m.top.findNode("fallbackBg")
@@ -33,7 +39,7 @@ end sub
 sub onPosterLoadStatus()
     status = m.posterImage.loadStatus
     if status = "failed"
-        print "[MM] CarouselItem: poster FAILED to load: " ; m.posterImage.uri
+        print "[MM " ; mmts() ; "] CarouselItem: poster FAILED to load: " ; m.posterImage.uri
     else if status = "ready"
         m.fallbackBg.visible = false
     end if

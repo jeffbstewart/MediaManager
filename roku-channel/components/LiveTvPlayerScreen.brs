@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] LiveTvPlayerScreen: init"
+    print "[MM " ; mmts() ; "] LiveTvPlayerScreen: init"
     m.liveTvPlayer = m.top.findNode("liveTvPlayer")
     m.channelOverlay = m.top.findNode("channelOverlay")
     m.channelNumberLabel = m.top.findNode("channelNumberLabel")
@@ -43,7 +49,7 @@ sub onPlayContent()
     streamUrl = ""
     if content.streamUrl <> invalid then streamUrl = content.streamUrl
 
-    print "[MM] LiveTvPlayerScreen: playing " ; guideNumber ; " " ; guideName ; " - " ; streamUrl
+    print "[MM " ; mmts() ; "] LiveTvPlayerScreen: playing " ; guideNumber ; " " ; guideName ; " - " ; streamUrl
 
     networkAff = ""
     if content.networkAffiliation <> invalid then networkAff = content.networkAffiliation
@@ -90,25 +96,25 @@ end sub
 
 sub onPlayerStateChanged()
     state = m.liveTvPlayer.state
-    print "[MM] LiveTvPlayerScreen: player state = " ; state
+    print "[MM " ; mmts() ; "] LiveTvPlayerScreen: player state = " ; state
 
     if state = "error"
         errorCode = ""
         errorMsg = ""
         if m.liveTvPlayer.errorCode <> invalid then errorCode = str(m.liveTvPlayer.errorCode).trim()
         if m.liveTvPlayer.errorMsg <> invalid then errorMsg = m.liveTvPlayer.errorMsg
-        print "[MM] LiveTvPlayerScreen: error code=" ; errorCode ; " msg=" ; errorMsg
+        print "[MM " ; mmts() ; "] LiveTvPlayerScreen: error code=" ; errorCode ; " msg=" ; errorMsg
 
         ' Retry on transient errors (HLS stream needs time to start on server)
         if m.retryCount < m.maxRetries
             m.retryCount = m.retryCount + 1
-            print "[MM] LiveTvPlayerScreen: retrying (" ; str(m.retryCount).trim() ; "/" ; str(m.maxRetries).trim() ; ")..."
+            print "[MM " ; mmts() ; "] LiveTvPlayerScreen: retrying (" ; str(m.retryCount).trim() ; "/" ; str(m.maxRetries).trim() ; ")..."
             m.loadingSubLabel.text = "Connecting... (" + str(m.retryCount).trim() + "/" + str(m.maxRetries).trim() + ")"
             m.loadingOverlay.visible = true
             m.liveTvPlayer.control = "stop"
             m.retryTimer.control = "start"
         else
-            print "[MM] LiveTvPlayerScreen: max retries exceeded, giving up"
+            print "[MM " ; mmts() ; "] LiveTvPlayerScreen: max retries exceeded, giving up"
             m.loadingLabel.text = "Channel unavailable"
             m.loadingSubLabel.text = "Press Back to return"
             m.loadingOverlay.visible = true
@@ -118,7 +124,7 @@ sub onPlayerStateChanged()
         ' Live streams should not finish - retry
         if m.retryCount < m.maxRetries
             m.retryCount = m.retryCount + 1
-            print "[MM] LiveTvPlayerScreen: stream finished, retrying..."
+            print "[MM " ; mmts() ; "] LiveTvPlayerScreen: stream finished, retrying..."
             m.loadingSubLabel.text = "Reconnecting... (" + str(m.retryCount).trim() + "/" + str(m.maxRetries).trim() + ")"
             m.loadingOverlay.visible = true
             m.liveTvPlayer.control = "stop"
@@ -143,7 +149,7 @@ sub onRetryTimer()
     if m.currentContent.guideNumber <> invalid then guideNumber = m.currentContent.guideNumber
     if m.currentContent.guideName <> invalid then guideName = m.currentContent.guideName
 
-    print "[MM] LiveTvPlayerScreen: retry timer fired, restarting stream"
+    print "[MM " ; mmts() ; "] LiveTvPlayerScreen: retry timer fired, restarting stream"
     startStream(streamUrl, guideNumber + " " + guideName)
 end sub
 
@@ -158,19 +164,19 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
     if key = "back"
-        print "[MM] LiveTvPlayerScreen: back pressed, stopping stream"
+        print "[MM " ; mmts() ; "] LiveTvPlayerScreen: back pressed, stopping stream"
         stopPlayback()
         return true
     end if
 
     ' Channel up/down via left/right on remote
     if key = "right"
-        print "[MM] LiveTvPlayerScreen: channel up"
+        print "[MM " ; mmts() ; "] LiveTvPlayerScreen: channel up"
         m.liveTvPlayer.control = "stop"
         m.top.channelStepRequested = 1
         return true
     else if key = "left"
-        print "[MM] LiveTvPlayerScreen: channel down"
+        print "[MM " ; mmts() ; "] LiveTvPlayerScreen: channel down"
         m.liveTvPlayer.control = "stop"
         m.top.channelStepRequested = -1
         return true

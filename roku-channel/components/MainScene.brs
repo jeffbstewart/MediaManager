@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] MainScene: init"
+    print "[MM " ; mmts() ; "] MainScene: init"
     m.profilePickerScreen = m.top.findNode("profilePickerScreen")
     m.pairScreen = m.top.findNode("pairScreen")
     m.homeScreen = m.top.findNode("homeScreen")
@@ -90,10 +96,10 @@ sub init()
     ' Load profiles and show picker
     profiles = loadProfiles()
     if profiles.count() = 0
-        print "[MM] MainScene: no profiles, going directly to PairScreen"
+        print "[MM " ; mmts() ; "] MainScene: no profiles, going directly to PairScreen"
         showScreen(m.pairScreen)
     else
-        print "[MM] MainScene: " ; str(profiles.count()).trim() ; " profile(s) found, showing picker"
+        print "[MM " ; mmts() ; "] MainScene: " ; str(profiles.count()).trim() ; " profile(s) found, showing picker"
         m.profilePickerScreen.profiles = profiles
         showScreen(m.profilePickerScreen)
     end if
@@ -112,7 +118,7 @@ sub cleanupV1Registry()
     end if
 
     ' No Profiles data — delete stale V1 keys
-    print "[MM] MainScene: cleaning up V1 registry keys"
+    print "[MM " ; mmts() ; "] MainScene: cleaning up V1 registry keys"
 
     v1Reg = CreateObject("roRegistrySection", "MediaManager")
     v1Reg.Delete("serverUrl")
@@ -127,7 +133,7 @@ sub cleanupV1Registry()
     end for
     bookmarksReg.Flush()
 
-    print "[MM] MainScene: V1 registry cleanup complete"
+    print "[MM " ; mmts() ; "] MainScene: V1 registry cleanup complete"
 end sub
 
 ' ---- Profile Management ----
@@ -138,12 +144,12 @@ function loadProfiles() as object
     countStr = reg.Read("count")
 
     if countStr = "" or countStr = invalid
-        print "[MM] MainScene: loadProfiles — no profiles in registry"
+        print "[MM " ; mmts() ; "] MainScene: loadProfiles — no profiles in registry"
         return profiles
     end if
 
     count = val(countStr)
-    print "[MM] MainScene: loadProfiles — count=" ; str(count).trim()
+    print "[MM " ; mmts() ; "] MainScene: loadProfiles — count=" ; str(count).trim()
 
     for i = 0 to count - 1
         prefix = "p" + str(i).trim() + "_"
@@ -155,7 +161,7 @@ function loadProfiles() as object
             avatarColor: reg.Read(prefix + "avatarColor")
         }
         maskedKey = maskApiKey(profile.apiKey)
-        print "[MM] MainScene: loadProfiles — [" ; str(i).trim() ; "] " ; profile.username ; " @ " ; profile.serverUrl ; " key=" ; maskedKey
+        print "[MM " ; mmts() ; "] MainScene: loadProfiles — [" ; str(i).trim() ; "] " ; profile.username ; " @ " ; profile.serverUrl ; " key=" ; maskedKey
         profiles.push(profile)
     end for
 
@@ -186,7 +192,7 @@ sub saveProfiles(profiles as object)
     end for
 
     reg.Flush()
-    print "[MM] MainScene: saveProfiles — saved " ; str(profiles.count()).trim() ; " profile(s)"
+    print "[MM " ; mmts() ; "] MainScene: saveProfiles — saved " ; str(profiles.count()).trim() ; " profile(s)"
 end sub
 
 function addProfile(serverUrl as string, apiKey as string, username as string) as object
@@ -207,7 +213,7 @@ function addProfile(serverUrl as string, apiKey as string, username as string) a
     profiles.push(profile)
     saveProfiles(profiles)
 
-    print "[MM] MainScene: addProfile — added " ; username ; " (color " ; avatarColor ; ")"
+    print "[MM " ; mmts() ; "] MainScene: addProfile — added " ; username ; " (color " ; avatarColor ; ")"
     return profile
 end function
 
@@ -215,7 +221,7 @@ sub removeProfile(profileIndex as integer)
     profiles = loadProfiles()
 
     if profileIndex < 0 or profileIndex >= profiles.count()
-        print "[MM] MainScene: removeProfile — index " ; str(profileIndex).trim() ; " out of range"
+        print "[MM " ; mmts() ; "] MainScene: removeProfile — index " ; str(profileIndex).trim() ; " out of range"
         return
     end if
 
@@ -242,7 +248,7 @@ sub removeProfile(profileIndex as integer)
         end if
     end if
 
-    print "[MM] MainScene: removeProfile — removed " ; removedName ; " (index " ; str(profileIndex).trim() ; ")"
+    print "[MM " ; mmts() ; "] MainScene: removeProfile — removed " ; removedName ; " (index " ; str(profileIndex).trim() ; ")"
 end sub
 
 ' ---- Screen Stack Navigation ----
@@ -256,7 +262,7 @@ sub showScreen(screen as object)
     screen.visible = true
     screen.setFocus(true)
     m.screenStack.push(screen)
-    print "[MM] MainScene: showScreen — stack depth=" ; str(m.screenStack.count()).trim()
+    print "[MM " ; mmts() ; "] MainScene: showScreen — stack depth=" ; str(m.screenStack.count()).trim()
 end sub
 
 sub hideTopScreen()
@@ -271,7 +277,7 @@ sub hideTopScreen()
         prevScreen.visible = true
         prevScreen.setFocus(true)
     end if
-    print "[MM] MainScene: hideTopScreen — stack depth=" ; str(m.screenStack.count()).trim()
+    print "[MM " ; mmts() ; "] MainScene: hideTopScreen — stack depth=" ; str(m.screenStack.count()).trim()
 end sub
 
 ' ---- Event Handlers ----
@@ -280,7 +286,7 @@ sub onProfileSelected()
     profile = m.profilePickerScreen.selectedProfile
     if profile = invalid then return
 
-    print "[MM] MainScene: onProfileSelected — " ; profile.username ; " @ " ; profile.serverUrl
+    print "[MM " ; mmts() ; "] MainScene: onProfileSelected — " ; profile.username ; " @ " ; profile.serverUrl
 
     ' Save lastUsed index
     reg = CreateObject("roRegistrySection", "Profiles")
@@ -293,7 +299,7 @@ sub onProfileSelected()
 end sub
 
 sub onAddProfileRequested()
-    print "[MM] MainScene: onAddProfileRequested — showing PairScreen"
+    print "[MM " ; mmts() ; "] MainScene: onAddProfileRequested — showing PairScreen"
     showScreen(m.pairScreen)
 end sub
 
@@ -304,7 +310,7 @@ sub onRemoveProfileRequested()
     profileIndex = profile.index
     if profileIndex = invalid then return
 
-    print "[MM] MainScene: onRemoveProfileRequested — removing index " ; str(profileIndex).trim()
+    print "[MM " ; mmts() ; "] MainScene: onRemoveProfileRequested — removing index " ; str(profileIndex).trim()
     removeProfile(profileIndex)
 
     ' Reload profiles and update picker
@@ -312,7 +318,7 @@ sub onRemoveProfileRequested()
     m.profilePickerScreen.profiles = profiles
 
     if profiles.count() = 0
-        print "[MM] MainScene: all profiles removed, showing PairScreen"
+        print "[MM " ; mmts() ; "] MainScene: all profiles removed, showing PairScreen"
         ' Clear stack and go to PairScreen
         m.screenStack = []
         m.profilePickerScreen.visible = false
@@ -324,7 +330,7 @@ sub onPairComplete()
     result = m.pairScreen.pairComplete
     if result = invalid then return
 
-    print "[MM] MainScene: onPairComplete — " ; result.username ; " @ " ; result.serverUrl
+    print "[MM " ; mmts() ; "] MainScene: onPairComplete — " ; result.username ; " @ " ; result.serverUrl
 
     ' Add the new profile
     profile = addProfile(result.serverUrl, result.apiKey, result.username)
@@ -363,12 +369,12 @@ sub onPairComplete()
 end sub
 
 sub onPairCancelled()
-    print "[MM] MainScene: onPairCancelled — returning to profile picker"
+    print "[MM " ; mmts() ; "] MainScene: onPairCancelled — returning to profile picker"
     hideTopScreen()
 end sub
 
 sub onSwitchProfileRequested()
-    print "[MM] MainScene: onSwitchProfileRequested — returning to profile picker"
+    print "[MM " ; mmts() ; "] MainScene: onSwitchProfileRequested — returning to profile picker"
     ' Pop HomeScreen
     hideTopScreen()
 
@@ -384,7 +390,7 @@ sub onRemoveProfileFromHome()
     profileIndex = profile.index
     if profileIndex = invalid then return
 
-    print "[MM] MainScene: onRemoveProfileFromHome — removing index " ; str(profileIndex).trim()
+    print "[MM " ; mmts() ; "] MainScene: onRemoveProfileFromHome — removing index " ; str(profileIndex).trim()
     removeProfile(profileIndex)
 
     ' Pop HomeScreen
@@ -395,7 +401,7 @@ sub onRemoveProfileFromHome()
     m.profilePickerScreen.profiles = profiles
 
     if profiles.count() = 0
-        print "[MM] MainScene: all profiles removed, showing PairScreen"
+        print "[MM " ; mmts() ; "] MainScene: all profiles removed, showing PairScreen"
         m.screenStack = []
         m.profilePickerScreen.visible = false
         showScreen(m.pairScreen)
@@ -408,14 +414,14 @@ sub onPlayRequested()
     playData = m.homeScreen.playRequested
     if playData = invalid then return
 
-    print "[MM] MainScene: play requested — " ; playData.name ; " (mediaType=" ; playData.mediaType ; ")"
+    print "[MM " ; mmts() ; "] MainScene: play requested — " ; playData.name ; " (mediaType=" ; playData.mediaType ; ")"
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
 
     if playData.mediaType = "LIVETV"
         ' Live TV channel: go directly to player
-        print "[MM] MainScene: routing to live TV player"
+        print "[MM " ; mmts() ; "] MainScene: routing to live TV player"
         channel = {
             id: 0,
             guideNumber: "",
@@ -456,14 +462,14 @@ sub onPlayRequested()
         showScreen(m.liveTvPlayerScreen)
     else if playData.mediaType = "TV"
         ' TV series: show episode picker
-        print "[MM] MainScene: routing to episode picker for TV title"
+        print "[MM " ; mmts() ; "] MainScene: routing to episode picker for TV title"
         m.episodePickerScreen.serverUrl = serverUrl
         m.episodePickerScreen.apiKey = apiKey
         m.episodePickerScreen.titleData = playData
         showScreen(m.episodePickerScreen)
     else
         ' Movie: show detail screen
-        print "[MM] MainScene: routing to movie detail"
+        print "[MM " ; mmts() ; "] MainScene: routing to movie detail"
         m.movieDetailScreen.serverUrl = serverUrl
         m.movieDetailScreen.apiKey = apiKey
         m.movieDetailScreen.titleData = playData
@@ -475,7 +481,7 @@ sub onEpisodeSelected()
     playData = m.episodePickerScreen.episodeSelected
     if playData = invalid then return
 
-    print "[MM] MainScene: episode selected — " ; playData.name ; " (transcode " ; str(playData.transcodeId).trim() ; ")"
+    print "[MM " ; mmts() ; "] MainScene: episode selected — " ; playData.name ; " (transcode " ; str(playData.transcodeId).trim() ; ")"
 
     ' Add server credentials
     playData.serverUrl = m.homeScreen.profileContent.serverUrl
@@ -486,7 +492,7 @@ sub onEpisodeSelected()
 end sub
 
 sub onPlaybackFinished()
-    print "[MM] MainScene: playback finished, returning"
+    print "[MM " ; mmts() ; "] MainScene: playback finished, returning"
     hideTopScreen()
 
     ' Refresh home feed to update resume positions
@@ -496,14 +502,14 @@ end sub
 sub onNextEpisodeStarted()
     content = m.videoPlayerScreen.nextEpisodeStarted
     if content = invalid then return
-    print "[MM] MainScene: auto-advancing to next episode — " ; content.name
+    print "[MM " ; mmts() ; "] MainScene: auto-advancing to next episode — " ; content.name
 end sub
 
 sub onMovieDetailPlayRequested()
     playData = m.movieDetailScreen.playRequested
     if playData = invalid then return
 
-    print "[MM] MainScene: movie detail play — " ; playData.name
+    print "[MM " ; mmts() ; "] MainScene: movie detail play — " ; playData.name
 
     ' playData is the full title detail from the server — build video play data
     videoData = {
@@ -540,7 +546,7 @@ sub onDetailTitleSelected()
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
 
-    print "[MM] MainScene: similar title selected — " ; st.name ; " (mediaType=" ; st.mediaType ; ")"
+    print "[MM " ; mmts() ; "] MainScene: similar title selected — " ; st.name ; " (mediaType=" ; st.mediaType ; ")"
 
     if st.mediaType = "TV"
         m.episodePickerScreen.serverUrl = serverUrl
@@ -566,7 +572,7 @@ sub onDetailTagSelected()
     end if
     if tagData = invalid then return
 
-    print "[MM] MainScene: tag selected from detail — " ; tagData.name
+    print "[MM " ; mmts() ; "] MainScene: tag selected from detail — " ; tagData.name
 
     m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
     m.tagScreen.apiKey = m.homeScreen.profileContent.apiKey
@@ -586,7 +592,7 @@ sub onDetailActorSelected()
     end if
     if actorData = invalid then return
 
-    print "[MM] MainScene: actor selected from detail — " ; actorData.name
+    print "[MM " ; mmts() ; "] MainScene: actor selected from detail — " ; actorData.name
 
     m.actorScreen.serverUrl = m.homeScreen.profileContent.serverUrl
     m.actorScreen.apiKey = m.homeScreen.profileContent.apiKey
@@ -600,7 +606,7 @@ sub onSearchRequested()
     query = m.homeScreen.searchRequested
     if query = invalid or query = "" then return
 
-    print "[MM] MainScene: search requested — '" ; query ; "'"
+    print "[MM " ; mmts() ; "] MainScene: search requested — '" ; query ; "'"
 
     ' Pass credentials and query to search results screen
     m.searchResultsScreen.serverUrl = m.homeScreen.profileContent.serverUrl
@@ -615,7 +621,7 @@ sub onSearchPlayRequested()
     playData = m.searchResultsScreen.playRequested
     if playData = invalid then return
 
-    print "[MM] MainScene: search play requested — " ; playData.name
+    print "[MM " ; mmts() ; "] MainScene: search play requested — " ; playData.name
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -631,7 +637,7 @@ sub onSearchEpisodePickerRequested()
     titleData = m.searchResultsScreen.episodePickerRequested
     if titleData = invalid then return
 
-    print "[MM] MainScene: search episode picker requested — " ; titleData.name
+    print "[MM " ; mmts() ; "] MainScene: search episode picker requested — " ; titleData.name
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -646,7 +652,7 @@ sub onCollectionSelected()
     collData = m.searchResultsScreen.collectionSelected
     if collData = invalid then return
 
-    print "[MM] MainScene: collection selected — " ; collData.name
+    print "[MM " ; mmts() ; "] MainScene: collection selected — " ; collData.name
 
     m.collectionScreen.serverUrl = m.homeScreen.profileContent.serverUrl
     m.collectionScreen.apiKey = m.homeScreen.profileContent.apiKey
@@ -658,7 +664,7 @@ sub onTagSelected()
     tagData = m.searchResultsScreen.tagSelected
     if tagData = invalid then return
 
-    print "[MM] MainScene: tag selected — " ; tagData.name
+    print "[MM " ; mmts() ; "] MainScene: tag selected — " ; tagData.name
 
     m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
     m.tagScreen.apiKey = m.homeScreen.profileContent.apiKey
@@ -671,7 +677,7 @@ sub onGenreSelected()
     genreData = m.searchResultsScreen.genreSelected
     if genreData = invalid then return
 
-    print "[MM] MainScene: genre selected — " ; genreData.name
+    print "[MM " ; mmts() ; "] MainScene: genre selected — " ; genreData.name
 
     ' Reuse TagScreen for genres
     m.tagScreen.serverUrl = m.homeScreen.profileContent.serverUrl
@@ -685,7 +691,7 @@ sub onActorSelected()
     actorData = m.searchResultsScreen.actorSelected
     if actorData = invalid then return
 
-    print "[MM] MainScene: actor selected — " ; actorData.name
+    print "[MM " ; mmts() ; "] MainScene: actor selected — " ; actorData.name
 
     m.actorScreen.serverUrl = m.homeScreen.profileContent.serverUrl
     m.actorScreen.apiKey = m.homeScreen.profileContent.apiKey
@@ -722,7 +728,7 @@ end sub
 sub handleLandingPlay(playData as object)
     if playData = invalid then return
 
-    print "[MM] MainScene: landing page play requested — " ; playData.name
+    print "[MM " ; mmts() ; "] MainScene: landing page play requested — " ; playData.name
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -737,7 +743,7 @@ end sub
 sub handleLandingEpisodePicker(titleData as object)
     if titleData = invalid then return
 
-    print "[MM] MainScene: landing page episode picker requested — " ; titleData.name
+    print "[MM " ; mmts() ; "] MainScene: landing page episode picker requested — " ; titleData.name
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -754,7 +760,7 @@ sub onWishRequested()
     wishData = m.actorScreen.wishRequested
     if wishData = invalid then return
 
-    print "[MM] MainScene: wish requested for " ; wishData.name
+    print "[MM " ; mmts() ; "] MainScene: wish requested for " ; wishData.name
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -789,24 +795,24 @@ sub onWishResult()
     if result = invalid then return
 
     if result.success = true
-        print "[MM] MainScene: wish added successfully"
+        print "[MM " ; mmts() ; "] MainScene: wish added successfully"
     else
         reason = ""
         if result.reason <> invalid then reason = result.reason
-        print "[MM] MainScene: wish failed — " ; reason
+        print "[MM " ; mmts() ; "] MainScene: wish failed — " ; reason
     end if
 end sub
 
 sub onWishError()
     errorMsg = m.wishlistTask.wishError
     if errorMsg = invalid then return
-    print "[MM] MainScene: wish error — " ; errorMsg
+    print "[MM " ; mmts() ; "] MainScene: wish error — " ; errorMsg
 end sub
 
 ' ---- Camera Screens ----
 
 sub onCamerasRequested()
-    print "[MM] MainScene: cameras requested"
+    print "[MM " ; mmts() ; "] MainScene: cameras requested"
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -821,21 +827,21 @@ sub onCameraSelected()
     camera = m.cameraListScreen.cameraSelected
     if camera = invalid then return
 
-    print "[MM] MainScene: camera selected for playback — " ; camera.name
+    print "[MM " ; mmts() ; "] MainScene: camera selected for playback — " ; camera.name
 
     m.cameraPlayerScreen.playContent = camera
     showScreen(m.cameraPlayerScreen)
 end sub
 
 sub onCameraPlaybackFinished()
-    print "[MM] MainScene: camera playback finished, returning to camera list"
+    print "[MM " ; mmts() ; "] MainScene: camera playback finished, returning to camera list"
     hideTopScreen()
 end sub
 
 ' ---- Live TV Screens ----
 
 sub onLiveTvRequested()
-    print "[MM] MainScene: live TV requested"
+    print "[MM " ; mmts() ; "] MainScene: live TV requested"
 
     serverUrl = m.homeScreen.profileContent.serverUrl
     apiKey = m.homeScreen.profileContent.apiKey
@@ -854,7 +860,7 @@ sub onLiveTvChannelSelected()
     guideNumber = ""
     if channel.guideName <> invalid then guideName = channel.guideName
     if channel.guideNumber <> invalid then guideNumber = channel.guideNumber
-    print "[MM] MainScene: live TV channel selected — " ; guideNumber ; " " ; guideName
+    print "[MM " ; mmts() ; "] MainScene: live TV channel selected — " ; guideNumber ; " " ; guideName
 
     ' Store channel list and find current index for channel stepping
     m.liveTvChannels = m.liveTvListScreen.channels
@@ -875,7 +881,7 @@ sub onLiveTvChannelSelected()
 end sub
 
 sub onLiveTvPlaybackFinished()
-    print "[MM] MainScene: live TV playback finished, returning to channel list"
+    print "[MM " ; mmts() ; "] MainScene: live TV playback finished, returning to channel list"
     hideTopScreen()
 end sub
 
@@ -898,7 +904,7 @@ sub onChannelStepRequested()
     guideNumber = ""
     if channel.guideName <> invalid then guideName = channel.guideName
     if channel.guideNumber <> invalid then guideNumber = channel.guideNumber
-    print "[MM] MainScene: channel step to " ; guideNumber ; " " ; guideName
+    print "[MM " ; mmts() ; "] MainScene: channel step to " ; guideNumber ; " " ; guideName
 
     m.liveTvPlayerScreen.playContent = channel
 end sub
@@ -909,7 +915,7 @@ sub onVoiceSearchQuery()
     query = m.top.voiceSearchQuery
     if query = invalid or query = "" then return
 
-    print "[MM] MainScene: voice search query received: " ; query
+    print "[MM " ; mmts() ; "] MainScene: voice search query received: " ; query
 
     ' Forward to HomeScreen if it's on the stack
     m.homeScreen.searchQuery = query
@@ -923,20 +929,20 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "back"
         ' Close dialog if open
         if m.top.dialog <> invalid
-            print "[MM] MainScene: back key — closing dialog"
+            print "[MM " ; mmts() ; "] MainScene: back key — closing dialog"
             m.top.dialog = invalid
             return true
         end if
 
         ' Pop screen stack
         if m.screenStack.count() > 1
-            print "[MM] MainScene: back key — popping screen stack"
+            print "[MM " ; mmts() ; "] MainScene: back key — popping screen stack"
             hideTopScreen()
             return true
         end if
 
         ' Last screen — let Roku handle exit
-        print "[MM] MainScene: back key — last screen, allowing exit"
+        print "[MM " ; mmts() ; "] MainScene: back key — last screen, allowing exit"
         return false
     end if
 

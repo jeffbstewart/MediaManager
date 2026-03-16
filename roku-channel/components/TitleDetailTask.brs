@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] TitleDetailTask: init"
+    print "[MM " ; mmts() ; "] TitleDetailTask: init"
 end sub
 
 sub doFetch()
@@ -9,7 +15,7 @@ sub doFetch()
         return
     end if
 
-    print "[MM] TitleDetailTask: fetching " ; url
+    print "[MM " ; mmts() ; "] TitleDetailTask: fetching " ; url
 
     xfer = createObject("roUrlTransfer")
     xfer.setUrl(url)
@@ -23,7 +29,7 @@ sub doFetch()
         if msg <> invalid
             code = msg.getResponseCode()
             body = msg.getString()
-            print "[MM] TitleDetailTask: response code=" ; str(code).trim() ; " body size=" ; str(len(body)).trim()
+            print "[MM " ; mmts() ; "] TitleDetailTask: response code=" ; str(code).trim() ; " body size=" ; str(len(body)).trim()
 
             if code = 200
                 json = parseJSON(body)

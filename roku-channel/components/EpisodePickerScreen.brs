@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] EpisodePickerScreen: init"
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: init"
     m.backdropImage = m.top.findNode("backdropImage")
     m.posterImage = m.top.findNode("posterImage")
     m.posterFallback = m.top.findNode("posterFallback")
@@ -84,7 +90,7 @@ end sub
 
 sub onFocusChanged()
     if m.top.hasFocus()
-        print "[MM] EpisodePickerScreen: group received focus, delegating to " ; m.focusSection
+        print "[MM " ; mmts() ; "] EpisodePickerScreen: group received focus, delegating to " ; m.focusSection
         setFocusSection(m.focusSection)
     end if
 end sub
@@ -97,7 +103,7 @@ sub onTitleDataChanged()
     titleName = titleData.name
     if titleName = invalid then titleName = "Unknown"
 
-    print "[MM] EpisodePickerScreen: loading title detail for " ; titleName ; " (id=" ; str(titleId).trim() ; ")"
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: loading title detail for " ; titleName ; " (id=" ; str(titleId).trim() ; ")"
 
     m.showTitle.text = titleName
     m.loadingLabel.visible = true
@@ -134,7 +140,7 @@ sub onDetailResult()
     m.loadingLabel.visible = false
     m.episodeArea.visible = true
 
-    print "[MM] EpisodePickerScreen: detail loaded — " ; detail.name
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: detail loaded — " ; detail.name
 
     ' Update metadata
     m.showTitle.text = detail.name
@@ -267,7 +273,7 @@ sub onDetailResult()
         nextEpisodeIdx = detail.nextEpisodeIndex
     end if
 
-    print "[MM] EpisodePickerScreen: next-up -> season " ; str(nextSeasonIdx).trim() ; " episode " ; str(nextEpisodeIdx).trim()
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: next-up -> season " ; str(nextSeasonIdx).trim() ; " episode " ; str(nextEpisodeIdx).trim()
 
     ' Load the next-up season and focus the episode
     loadEpisodes(nextSeasonIdx)
@@ -287,7 +293,7 @@ end sub
 sub onDetailError()
     errorMsg = m.titleDetailTask.detailError
     if errorMsg = invalid or errorMsg = "" then return
-    print "[MM] EpisodePickerScreen: detail error — " ; errorMsg
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: detail error — " ; errorMsg
     m.loadingLabel.text = "Failed to load: " + errorMsg
 end sub
 
@@ -341,7 +347,7 @@ sub loadEpisodes(seasonIndex as integer)
     end if
 
     updateEpisodeSlots()
-    print "[MM] EpisodePickerScreen: loadEpisodes — season=" ; seasonNum ; " episodes=" ; str(m.epLabels.count()).trim()
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: loadEpisodes — season=" ; seasonNum ; " episodes=" ; str(m.epLabels.count()).trim()
 end sub
 
 sub updateEpisodeSlots()
@@ -437,7 +443,7 @@ sub onSeasonDialogButton()
     m.top.getScene().dialog = invalid
 
     if seasonIdx >= 0 and seasonIdx < m.seasonsData.count()
-        print "[MM] EpisodePickerScreen: season selected from dialog — index=" ; str(seasonIdx).trim()
+        print "[MM " ; mmts() ; "] EpisodePickerScreen: season selected from dialog — index=" ; str(seasonIdx).trim()
         loadEpisodes(seasonIdx)
     end if
 
@@ -451,7 +457,7 @@ sub onTagChosen()
     if idx < 0 or idx >= m.tagData.count() then return
 
     tag = m.tagData[idx]
-    print "[MM] EpisodePickerScreen: tag selected — " ; tag.name ; " (id=" ; str(tag.id).trim() ; ")"
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: tag selected — " ; tag.name ; " (id=" ; str(tag.id).trim() ; ")"
     m.top.tagSelected = { id: tag.id, name: tag.name }
 end sub
 
@@ -464,7 +470,7 @@ sub onEpisodeChosen()
     if season.episodes = invalid or epIndex >= season.episodes.count() then return
 
     ep = season.episodes[epIndex]
-    print "[MM] EpisodePickerScreen: episode selected — S" ; str(season.seasonNumber).trim() ; "E" ; str(ep.episodeNumber).trim() ; " " ; ep.name
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: episode selected — S" ; str(season.seasonNumber).trim() ; "E" ; str(ep.episodeNumber).trim() ; " " ; ep.name
 
     playData = {
         name: m.titleDetail.name + " - S" + str(season.seasonNumber).trim() + "E" + str(ep.episodeNumber).trim() + " " + ep.name,
@@ -493,7 +499,7 @@ sub onCastChosen()
     if m.titleDetail.cast = invalid or idx >= m.titleDetail.cast.count() then return
 
     cm = m.titleDetail.cast[idx]
-    print "[MM] EpisodePickerScreen: cast selected — " ; cm.name ; " (person " ; str(cm.tmdbPersonId).trim() ; ")"
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: cast selected — " ; cm.name ; " (person " ; str(cm.tmdbPersonId).trim() ; ")"
     m.top.actorSelected = {
         tmdbPersonId: cm.tmdbPersonId,
         name: cm.name
@@ -508,7 +514,7 @@ sub onSimilarSelected()
     if m.titleDetail.similarTitles = invalid or itemIndex >= m.titleDetail.similarTitles.count() then return
 
     st = m.titleDetail.similarTitles[itemIndex]
-    print "[MM] EpisodePickerScreen: similar title selected — " ; st.name ; " (titleId=" ; str(st.titleId).trim() ; ")"
+    print "[MM " ; mmts() ; "] EpisodePickerScreen: similar title selected — " ; st.name ; " (titleId=" ; str(st.titleId).trim() ; ")"
     m.top.titleSelected = st
 end sub
 

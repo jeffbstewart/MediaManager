@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] ActorScreen: init"
+    print "[MM " ; mmts() ; "] ActorScreen: init"
     m.headerLabel = m.top.findNode("headerLabel")
     m.actorHeadshot = m.top.findNode("actorHeadshot")
     m.hintLabel = m.top.findNode("hintLabel")
@@ -73,7 +79,7 @@ end sub
 sub onDetailError()
     errorMsg = m.detailTask.detailError
     if errorMsg = invalid then return
-    print "[MM] ActorScreen: error — " ; errorMsg
+    print "[MM " ; mmts() ; "] ActorScreen: error — " ; errorMsg
     m.loadingLabel.text = "Failed to load actor"
 end sub
 
@@ -111,11 +117,11 @@ sub onItemSelected()
     if selectedIndex < 0 or selectedIndex >= m.items.count() then return
 
     item = m.items[selectedIndex]
-    print "[MM] ActorScreen: selected — " ; item.name
+    print "[MM " ; mmts() ; "] ActorScreen: selected — " ; item.name
 
     ' Only allow selection of playable items
     if item.playable <> invalid and not item.playable
-        print "[MM] ActorScreen: item not playable"
+        print "[MM " ; mmts() ; "] ActorScreen: item not playable"
         return
     end if
 
@@ -137,10 +143,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if selectedIndex >= 0 and selectedIndex < m.items.count()
             item = m.items[selectedIndex]
             if item.wished <> invalid and not item.wished
-                print "[MM] ActorScreen: wish requested for " ; item.name
+                print "[MM " ; mmts() ; "] ActorScreen: wish requested for " ; item.name
                 m.top.wishRequested = item
             else
-                print "[MM] ActorScreen: item already wished"
+                print "[MM " ; mmts() ; "] ActorScreen: item already wished"
             end if
             return true
         end if

@@ -1,5 +1,11 @@
+function mmts() as string
+    dt = createObject("roDateTime")
+    dt.toLocalTime()
+    return str(dt.getHours()).trim() + ":" + right("0" + str(dt.getMinutes()).trim(), 2) + ":" + right("0" + str(dt.getSeconds()).trim(), 2)
+end function
+
 sub init()
-    print "[MM] HomeScreen: init"
+    print "[MM " ; mmts() ; "] HomeScreen: init"
     m.profileAvatar = m.top.findNode("profileAvatar")
     m.profileLetter = m.top.findNode("profileLetter")
     m.profileName = m.top.findNode("profileName")
@@ -55,7 +61,7 @@ end sub
 
 sub onFocusChanged()
     if m.top.hasFocus()
-        print "[MM] HomeScreen: group received focus, delegating to " ; m.focusTarget
+        print "[MM " ; mmts() ; "] HomeScreen: group received focus, delegating to " ; m.focusTarget
         setFocusTarget(m.focusTarget)
     end if
 end sub
@@ -74,7 +80,7 @@ sub onProfileContentChanged()
     if apiKey = invalid then apiKey = ""
     if avatarColor = invalid then avatarColor = "#6366f1"
 
-    print "[MM] HomeScreen: profile loaded — " ; username ; " @ " ; serverUrl
+    print "[MM " ; mmts() ; "] HomeScreen: profile loaded — " ; username ; " @ " ; serverUrl
 
     m.serverUrl = serverUrl
     m.apiKey = apiKey
@@ -104,12 +110,12 @@ end sub
 
 sub fetchHomeFeed()
     if m.serverUrl = "" or m.apiKey = ""
-        print "[MM] HomeScreen: no server/key, showing empty state"
+        print "[MM " ; mmts() ; "] HomeScreen: no server/key, showing empty state"
         return
     end if
 
     feedUrl = m.serverUrl + "/roku/home.json?key=" + m.apiKey
-    print "[MM] HomeScreen: fetching home feed from " ; feedUrl
+    print "[MM " ; mmts() ; "] HomeScreen: fetching home feed from " ; feedUrl
 
     m.loadingLabel.visible = true
     m.rowList.visible = false
@@ -123,7 +129,7 @@ end sub
 sub onFeedResult()
     feedData = m.homeFeedTask.feedResult
     if feedData = invalid or feedData.carousels = invalid
-        print "[MM] HomeScreen: feed result invalid"
+        print "[MM " ; mmts() ; "] HomeScreen: feed result invalid"
         m.loadingLabel.text = "No content available"
         return
     end if
@@ -138,7 +144,7 @@ sub onFeedResult()
 
     ' Show camera button if cameras are available (server sends hasCameras flag)
     if feedData.hasCameras <> invalid and feedData.hasCameras = true
-        print "[MM] HomeScreen: cameras available, showing button"
+        print "[MM " ; mmts() ; "] HomeScreen: cameras available, showing button"
         m.cameraButton.visible = true
     else
         m.cameraButton.visible = false
@@ -146,7 +152,7 @@ sub onFeedResult()
 
     ' Show Live TV button if tuners are configured
     if feedData.hasLiveTv <> invalid and feedData.hasLiveTv = true
-        print "[MM] HomeScreen: live TV available, showing button"
+        print "[MM " ; mmts() ; "] HomeScreen: live TV available, showing button"
         m.liveTvButton.visible = true
     else
         m.liveTvButton.visible = false
@@ -170,13 +176,13 @@ sub onFeedError()
     errorMsg = m.homeFeedTask.feedError
     if errorMsg = invalid or errorMsg = "" then return
 
-    print "[MM] HomeScreen: feed error — " ; errorMsg
+    print "[MM " ; mmts() ; "] HomeScreen: feed error — " ; errorMsg
     m.loadingLabel.text = "Failed to load content"
     m.loadingLabel.visible = true
 end sub
 
 sub buildCarouselsFromFeed(carousels as object)
-    print "[MM] HomeScreen: building carousels from feed (" ; str(carousels.count()).trim() ; " rows)"
+    print "[MM " ; mmts() ; "] HomeScreen: building carousels from feed (" ; str(carousels.count()).trim() ; " rows)"
 
     rowContent = createObject("roSGNode", "ContentNode")
     totalItems = 0
@@ -226,7 +232,7 @@ sub buildCarouselsFromFeed(carousels as object)
 
     setFocusTarget("rowList")
 
-    print "[MM] HomeScreen: carousels built — " ; str(rowContent.getChildCount()).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
+    print "[MM " ; mmts() ; "] HomeScreen: carousels built — " ; str(rowContent.getChildCount()).trim() ; " rows, " ; str(totalItems).trim() ; " total items"
 end sub
 
 ' ---- Item Selection ----
@@ -238,14 +244,14 @@ sub onRowItemSelected()
     rowIndex = selected[0]
     itemIndex = selected[1]
 
-    print "[MM] HomeScreen: item selected — row=" ; str(rowIndex).trim() ; " item=" ; str(itemIndex).trim()
+    print "[MM " ; mmts() ; "] HomeScreen: item selected — row=" ; str(rowIndex).trim() ; " item=" ; str(itemIndex).trim()
 
     ' Look up the item data from the stored feed
     if rowIndex < m.feedCarousels.count()
         carousel = m.feedCarousels[rowIndex]
         if carousel.items <> invalid and itemIndex < carousel.items.count()
             item = carousel.items[itemIndex]
-            print "[MM] HomeScreen: playing " ; item.name ; " (titleId=" ; str(item.titleId).trim() ; ")"
+            print "[MM " ; mmts() ; "] HomeScreen: playing " ; item.name ; " (titleId=" ; str(item.titleId).trim() ; ")"
 
             if item.mediaType <> invalid and item.mediaType = "LIVETV"
                 ' Live TV channel — play directly
@@ -257,7 +263,7 @@ sub onRowItemSelected()
                 ' Movie — play directly
                 m.top.playRequested = item
             else
-                print "[MM] HomeScreen: no transcodeId for this item, cannot play"
+                print "[MM " ; mmts() ; "] HomeScreen: no transcodeId for this item, cannot play"
             end if
         end if
     end if
@@ -292,7 +298,7 @@ sub onSearchKeyboardButton()
         ' Search pressed
         setSearchText(text.trim())
     else
-        print "[MM] HomeScreen: search cancelled"
+        print "[MM " ; mmts() ; "] HomeScreen: search cancelled"
     end if
 
     setFocusTarget("search")
@@ -302,13 +308,13 @@ sub onSearchQueryChanged()
     query = m.top.searchQuery
     if query = invalid or query = "" then return
 
-    print "[MM] HomeScreen: voice search received: " ; query
+    print "[MM " ; mmts() ; "] HomeScreen: voice search received: " ; query
     setSearchText(query)
 end sub
 
 sub setSearchText(text as string)
     m.currentSearch = text
-    print "[MM] HomeScreen: search set to: " ; text
+    print "[MM " ; mmts() ; "] HomeScreen: search set to: " ; text
 
     ' Show search text in the search box placeholder
     m.searchPlaceholder.text = text
@@ -323,14 +329,14 @@ sub clearSearch()
     m.searchPlaceholder.text = "Search"
     m.searchPlaceholder.color = "#666666"
     m.searchBanner.visible = false
-    print "[MM] HomeScreen: search cleared"
+    print "[MM " ; mmts() ; "] HomeScreen: search cleared"
 end sub
 
 ' ---- Focus Management ----
 
 sub setFocusTarget(target as string)
     m.focusTarget = target
-    print "[MM] HomeScreen: focus → " ; target
+    print "[MM " ; mmts() ; "] HomeScreen: focus → " ; target
 
     ' Clear all focus indicators
     m.searchFocusRing.visible = false
@@ -361,7 +367,7 @@ end sub
 ' ---- Profile Panel ----
 
 sub openPanel()
-    print "[MM] HomeScreen: opening profile panel"
+    print "[MM " ; mmts() ; "] HomeScreen: opening profile panel"
     m.panelOpen = true
     m.profilePanel.visible = true
     m.panelIndex = 0
@@ -369,7 +375,7 @@ sub openPanel()
 end sub
 
 sub closePanel()
-    print "[MM] HomeScreen: closing profile panel"
+    print "[MM " ; mmts() ; "] HomeScreen: closing profile panel"
     m.panelOpen = false
     m.profilePanel.visible = false
     m.panelSwitchFocus.visible = false
@@ -387,7 +393,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
     if key = "options"
-        print "[MM] HomeScreen: options key — requesting profile switch"
+        print "[MM " ; mmts() ; "] HomeScreen: options key — requesting profile switch"
         m.top.switchProfileRequested = true
         return true
     end if
@@ -447,7 +453,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             end if
             return true
         else if key = "OK"
-            print "[MM] HomeScreen: live TV button pressed"
+            print "[MM " ; mmts() ; "] HomeScreen: live TV button pressed"
             m.top.liveTvRequested = true
             return true
         end if
@@ -466,7 +472,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             setFocusTarget("profile")
             return true
         else if key = "OK"
-            print "[MM] HomeScreen: cameras button pressed"
+            print "[MM " ; mmts() ; "] HomeScreen: cameras button pressed"
             m.top.camerasRequested = true
             return true
         end if
@@ -512,12 +518,12 @@ function handlePanelKey(key as string) as boolean
     else if key = "OK"
         if m.panelIndex = 0
             ' Switch Account
-            print "[MM] HomeScreen: panel — switch account"
+            print "[MM " ; mmts() ; "] HomeScreen: panel — switch account"
             closePanel()
             m.top.switchProfileRequested = true
         else if m.panelIndex = 1
             ' Remove Account
-            print "[MM] HomeScreen: panel — remove account"
+            print "[MM " ; mmts() ; "] HomeScreen: panel — remove account"
             closePanel()
             m.top.removeProfileRequested = true
         end if
