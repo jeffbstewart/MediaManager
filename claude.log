@@ -3402,3 +3402,26 @@ Navigation flow:
   - Video node enableUI=true consumes OK/arrows; only up/down/back pass through
   - Overlay must be child of Video node, not sibling (Jellyfin approach)
 ===
+
+=== 2026-03-15 22:00 — Credits detection + web player integration ===
+- Implemented full credits detection in MediaSkipDetector companion project:
+  - Migration 004: fingerprint_type column on fingerprint_cache (INTRO/CREDITS PK)
+  - Migration 005: metadata table with invalidate_skip_before timestamp to force
+    reprocessing of all directories after adding credits support
+  - FpcalcService.RunTail(): ffprobe duration + ffmpeg tail extraction + fpcalc
+  - IntroAnalysisService.AnalyzeCredits(): reverse fingerprints, compare pairwise,
+    convert reversed timestamps to absolute, merge END_CREDITS into .skip.json
+  - Worker runs credits as second pass after intro analysis
+  - Auto-detects ffmpeg/ffprobe on PATH; gracefully skips credits when unavailable
+  - Added ffmpeg to Docker image
+  - Verified: Wheel of Time S02 8/8, Xena S06 22/22 credits detected
+- MediaManager web player (VideoPlayerDialog):
+  - END_CREDITS segment triggers "Up Next" overlay when playback enters credits
+  - Without credits data, "Up Next" only fires on video 'ended' event
+  - Removed old chapter-boundary-based "Up Next" trigger
+  - Investigated cyan progress bar misalignment: overlay div spans full container
+    width but native controls scrub bar is narrower. Filed issue #57 for custom
+    progress bar. Deferred — functional skip behavior is correct.
+- Added ADMIN_GUIDE.md section documenting MediaSkipDetector setup and integration
+- Next: Roku channel credits skip implementation
+===

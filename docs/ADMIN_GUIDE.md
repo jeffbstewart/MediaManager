@@ -235,6 +235,70 @@ Catalog titles that have no transcoded files at all. This is your "rip these nex
 
 ---
 
+## Intro & Credits Detection (MediaSkipDetector)
+
+[MediaSkipDetector](https://github.com/jeffbstewart/MediaSkipDetector) is a companion service that automatically finds shared intro and end-credits sequences across TV episodes using Chromaprint audio fingerprinting. It runs alongside Media Manager, pointing at the same NAS media root.
+
+### How It Works
+
+1. **Scans** the NAS for directories containing 2+ TV episodes (files matching `SxxExx*.mkv`)
+2. **Fingerprints** the first 10 minutes of each episode (for intros) and the last 5 minutes (for credits) using fpcalc/FFmpeg
+3. **Compares** episodes pairwise to find shared audio sequences (the intro music, the credits theme)
+4. **Writes** a `.skip.json` file alongside each source MKV with the detected timestamps
+
+### Setup
+
+Deploy MediaSkipDetector as a Docker container pointing at the same media volume:
+
+```yaml
+services:
+  skipdetector:
+    image: ghcr.io/jeffbstewart/mediaskipdetector:latest
+    container_name: skipdetector
+    restart: unless-stopped
+    user: "1046:100"          # Same UID:GID as mediamanager
+    ports:
+      - "16004:16004"        # Status page + Prometheus metrics
+    volumes:
+      - /volume1/your-media-share:/media          # Same media volume, read/write
+      - /volume1/docker/skipdetector/data:/data    # Persistent fingerprint cache
+    environment:
+      - MEDIA_ROOT=/media
+      - DATA_DIR=/data
+```
+
+The media volume **must be read/write** &mdash; the detector writes `.skip.json` result files alongside the source MKV files. The UID:GID should match your media share permissions (same as the mediamanager container).
+
+fpcalc (Chromaprint) and FFmpeg are bundled in the Docker image. No additional configuration is needed for default operation. See the [MediaSkipDetector tuning docs](https://github.com/jeffbstewart/MediaSkipDetector/blob/main/docs/TUNING.md) for advanced parameter adjustment.
+
+### Import into Media Manager
+
+Media Manager automatically imports skip data during NAS scans (**Transcodes &rarr; Status &rarr; Scan NAS**). The scanner looks for files named `{video_basename}.{agent}.skip.json` alongside each source MKV. Each file contains a JSON array of skip segments:
+
+```json
+[
+  {"start": 42.15, "end": 87.93, "region_type": "INTRO"},
+  {"start": 2606.04, "end": 2658.31, "region_type": "END_CREDITS"}
+]
+```
+
+On every NAS scan, existing segments from the same agent are deleted and re-imported, so updated detections are picked up automatically.
+
+### Playback Integration
+
+Once imported, skip segments enhance playback in both the browser and Roku players:
+
+- **Progress bar** &mdash; Detected segments appear as **cyan regions** on the video progress bar, so you can see at a glance where the intro and credits are
+- **Skip Intro button** &mdash; When playback enters an INTRO segment, a "Skip Intro" button appears in the bottom-right corner. Click it to jump past the intro.
+- **Next Episode at credits** &mdash; When playback enters an END_CREDITS segment, the "Up Next" overlay appears with a 10-second countdown to auto-advance to the next episode. Without credits data, "Up Next" only appears when the video reaches the end.
+- **Roku** &mdash; The Roku channel shows "Press UP to Skip Intro" during intro segments
+
+### Monitoring
+
+The MediaSkipDetector status page at `http://<host>:16004/status` shows scan progress, fingerprint cache stats, and a history of recent analyses with hit rates. Prometheus metrics are available at `/metrics`.
+
+---
+
 ## Family Videos
 
 Family videos let you add personal recordings (home movies, recitals, events) to Media Manager alongside your movie and TV collection. The feature must be enabled in Settings before use.

@@ -419,14 +419,14 @@ class VideoPlayerDialog(
             "v.addEventListener('timeupdate',function(){" +
             "if(introSeg&&v.currentTime>=introSeg.start&&v.currentTime<introSeg.end){" +
             "skipBtn.style.display='block';}else{skipBtn.style.display='none';}});}}" +
-            // Last chapter boundary triggers Up Next if within last 15% of duration
-            "if(chapData&&chapData.length>0&&typeof startCountdown==='function'){" +
-            "var lastCh=chapData[chapData.length-1];" +
-            "var upNextBound=lastCh.start;" +
+            // END_CREDITS segment triggers Up Next when playback enters credits.
+            // Without credits data, Up Next only fires on the 'ended' event (line above).
+            "var creditsSeg=null;" +
+            "if(skipData){for(var si=0;si<skipData.length;si++){" +
+            "if(skipData[si].type==='END_CREDITS'){creditsSeg=skipData[si];break;}}}" +
+            "if(creditsSeg&&typeof startCountdown==='function'){" +
             "v.addEventListener('timeupdate',function(){" +
-            "if(!v.duration||v.duration<=0)return;" +
-            "if(upNextBound/v.duration<0.85)return;" +
-            "if(v.currentTime>=upNextBound){startCountdown();}});}" +
+            "if(v.currentTime>=creditsSeg.start&&v.currentTime<creditsSeg.end){startCountdown();}});}" +
             "}).catch(function(){});",
             this@VideoPlayerDialog.element // $0 for @ClientCallable access
         )
