@@ -65,13 +65,18 @@ object SearchIndexService {
         val genres = Genre.findAll().associateBy { it.id!! }
         val titleGenres = TitleGenre.findAll()
 
-        // Build media item product_name lookup: title_id -> list of product names
+        // Build media item product_name and UPC lookups: title_id -> list of values
         val mediaItemsById = MediaItem.findAll().associateBy { it.id!! }
-        val productNamesByTitle = HashMap<Long, List<String>>()
+        val productNamesByTitle = HashMap<Long, MutableList<String>>()
+        val upcsByTitle = HashMap<Long, MutableList<String>>()
         for (mit in MediaItemTitle.findAll()) {
-            val productName = mediaItemsById[mit.media_item_id]?.product_name ?: continue
-            productNamesByTitle.getOrPut(mit.title_id) { mutableListOf() }
-                .let { (it as MutableList).add(productName) }
+            val mediaItem = mediaItemsById[mit.media_item_id] ?: continue
+            mediaItem.product_name?.let {
+                productNamesByTitle.getOrPut(mit.title_id) { mutableListOf() }.add(it)
+            }
+            mediaItem.upc?.let {
+                upcsByTitle.getOrPut(mit.title_id) { mutableListOf() }.add(it)
+            }
         }
 
         // Build cast character_name lookup: title_id -> list of character names
@@ -94,7 +99,8 @@ object SearchIndexService {
                 indexTitleInternal(
                     id, title.name, title.sort_name, title.raw_upc_title, title.description,
                     productNamesByTitle[id] ?: emptyList(),
-                    characterNamesByTitle[id] ?: emptyList()
+                    characterNamesByTitle[id] ?: emptyList(),
+                    upcsByTitle[id] ?: emptyList()
                 )
             }
 
@@ -191,9 +197,11 @@ object SearchIndexService {
             return
         }
 
-        val productNames = MediaItemTitle.findAll()
-            .filter { it.title_id == titleId }
-            .mapNotNull { mit -> MediaItem.findById(mit.media_item_id)?.product_name }
+        val mediaItemLinks = MediaItemTitle.findAll().filter { it.title_id == titleId }
+        val linkedMediaItems = mediaItemLinks.mapNotNull { MediaItem.findById(it.media_item_id) }
+
+        val productNames = linkedMediaItems.mapNotNull { it.product_name }
+        val upcs = linkedMediaItems.mapNotNull { it.upc }
 
         val characterNames = CastMember.findAll()
             .filter { it.title_id == titleId }
@@ -203,7 +211,7 @@ object SearchIndexService {
             removeTitleInternal(titleId)
             indexTitleInternal(
                 titleId, title.name, title.sort_name, title.raw_upc_title, title.description,
-                productNames, characterNames
+                productNames, characterNames, upcs
             )
         }
     }
@@ -259,10 +267,11 @@ object SearchIndexService {
         rawUpcTitle: String? = null,
         description: String? = null,
         productNames: List<String> = emptyList(),
-        characterNames: List<String> = emptyList()
+        characterNames: List<String> = emptyList(),
+        upcs: List<String> = emptyList()
     ) {
         lock.write {
-            indexTitleInternal(titleId, name, sortName, rawUpcTitle, description, productNames, characterNames)
+            indexTitleInternal(titleId, name, sortName, rawUpcTitle, description, productNames, characterNames, upcs)
         }
     }
 
@@ -286,7 +295,8 @@ object SearchIndexService {
         titleId: Long, name: String, sortName: String?,
         rawUpcTitle: String?, description: String?,
         productNames: List<String> = emptyList(),
-        characterNames: List<String> = emptyList()
+        characterNames: List<String> = emptyList(),
+        upcs: List<String> = emptyList()
     ) {
         allTitleIds.add(titleId)
 
@@ -294,7 +304,7 @@ object SearchIndexService {
 
         // Index each field with sentinels between them
         val fields = listOfNotNull(name, sortName, rawUpcTitle, description) +
-            productNames + characterNames
+            productNames + characterNames + upcs
         for ((idx, field) in fields.withIndex()) {
             if (idx > 0) allTokens.add(FIELD_SENTINEL)
             val fieldTokens = tokenize(field)

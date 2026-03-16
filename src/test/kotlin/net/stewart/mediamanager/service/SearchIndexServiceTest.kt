@@ -386,6 +386,41 @@ class SearchIndexServiceTest {
     }
 
     @Test
+    fun `UPC barcode is searchable`() {
+        SearchIndexService.indexTitleForTest(
+            1, "The Dark Knight",
+            upcs = listOf("883929037575")
+        )
+        SearchIndexService.indexTitleForTest(2, "Batman Begins")
+
+        val result = SearchIndexService.search("883929037575")
+        assertEquals(setOf(1L), result)
+    }
+
+    @Test
+    fun `partial UPC does not match`() {
+        SearchIndexService.indexTitleForTest(
+            1, "The Dark Knight",
+            upcs = listOf("883929037575")
+        )
+
+        // Partial UPC should not match (token-based, not substring)
+        val result = SearchIndexService.search("88392")
+        assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `multiple UPCs on same title are all searchable`() {
+        SearchIndexService.indexTitleForTest(
+            1, "The Dark Knight",
+            upcs = listOf("883929037575", "012345678901")
+        )
+
+        assertEquals(setOf(1L), SearchIndexService.search("883929037575"))
+        assertEquals(setOf(1L), SearchIndexService.search("012345678901"))
+    }
+
+    @Test
     fun `removing a title removes it from search results`() {
         SearchIndexService.indexTitleForTest(1, "The Dark Knight")
         SearchIndexService.indexTitleForTest(2, "Dark Shadows")
