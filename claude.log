@@ -3430,4 +3430,15 @@ Navigation flow:
   - Last episode shows "Press UP to Exit" instead
   - Credits check runs every position update alongside intro check
   - Deployed and verified working on dev Roku
+- Added Whisper 1-hour timeout in transcode buddy (TranscodeWorker)
+  - Reports failure to server for retry, no sentinel written (allows retries)
+- Diagnosed NAS throughput issue: NIC auto-negotiated to 100Mbps instead of
+  1Gbps (cable reseat fixed it: 4 MB/s → 56 MB/s write, 2 MB/s → 68 MB/s read)
+- Added UPC unlink feature on title detail page (TitleDetailView):
+  - Shows UPCs in monospace below format badges
+  - Admin sees red unlink button when title has 2+ UPCs
+  - Deletes media_item_title_season children then media_item_title join
+  - Used to fix Live and Let Die / Star Trek TOS TMDB ID collision (both tmdb_id=253)
+- Documented tag-based release process in CLAUDE.md (never create releases
+  via gh CLI — push tags, let CI create release with roku-channel.zip)
 ===

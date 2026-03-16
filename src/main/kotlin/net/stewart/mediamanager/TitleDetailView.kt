@@ -280,9 +280,52 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     add(badgeRow)
                 }
 
-                // Tag badges
+                // UPC badges (admin: unlink button when multiple UPCs)
                 val currentUser = AuthService.getCurrentUser()
                 val isAdmin = currentUser?.isAdmin() == true
+                val linkedItems = MediaItemTitle.findAll().filter { it.title_id == title.id }
+                val mediaItems = linkedItems.mapNotNull { mit ->
+                    MediaItem.findById(mit.media_item_id)?.let { mi -> mi to mit }
+                }
+                val itemsWithUpc = mediaItems.filter { (mi, _) -> !mi.upc.isNullOrBlank() }
+                if (itemsWithUpc.isNotEmpty()) {
+                    val upcRow = HorizontalLayout().apply {
+                        isSpacing = true
+                        isPadding = false
+                        defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+                        style.set("flex-wrap", "wrap")
+                        style.set("margin-bottom", "var(--lumo-space-s)")
+                        for ((mi, mit) in itemsWithUpc) {
+                            add(Span(mi.upc).apply {
+                                style.set("color", "rgba(255,255,255,0.6)")
+                                style.set("font-size", "var(--lumo-font-size-xs)")
+                                style.set("font-family", "monospace")
+                            })
+                            if (isAdmin && itemsWithUpc.size > 1) {
+                                add(Button(VaadinIcon.UNLINK.create()).apply {
+                                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_ICON)
+                                    style.set("color", "rgba(255,100,100,0.7)")
+                                    element.setAttribute("title", "Unlink UPC ${mi.upc} from this title")
+                                    addClickListener {
+                                        // Delete child season links first, then the join
+                                        MediaItemTitleSeason.findAll()
+                                            .filter { it.media_item_title_id == mit.id }
+                                            .forEach { it.delete() }
+                                        mit.delete()
+                                        Notification.show(
+                                            "Unlinked UPC ${mi.upc} from this title",
+                                            3000, Notification.Position.BOTTOM_START
+                                        ).addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                                        buildContent(title)
+                                    }
+                                })
+                            }
+                        }
+                    }
+                    add(upcRow)
+                }
+
+                // Tag badges
                 val tags = TagService.getTagsForTitle(title.id!!)
                 if (tags.isNotEmpty() || isAdmin) {
                     val tagRow = HorizontalLayout().apply {

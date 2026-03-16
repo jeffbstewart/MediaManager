@@ -346,9 +346,17 @@ class TranscodeWorker(
                 outputBuilder.appendLine(sanitizeFfmpegOutput(rawLine))
             }
 
-            process.waitFor()
+            val finished = process.waitFor(1, java.util.concurrent.TimeUnit.HOURS)
             heartbeatThread.interrupt()
             heartbeatThread.join(2000)
+
+            if (!finished) {
+                log.error("Whisper timed out after 1 hour for {}, killing", relativePath)
+                process.destroyForcibly()
+                process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                apiClient.reportFailure(leaseId, "Whisper timed out after 1 hour")
+                return true
+            }
 
             if (!running.get()) return true
 
