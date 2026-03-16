@@ -165,6 +165,23 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 - **Co-author trailer**: always include when Claude authored or co-authored the change
 - No need to check `git log` for style — just follow this format
 
+### Creating Releases
+
+Releases are created by pushing a version tag. **Never create releases manually via `gh release create`** — the CI workflow handles release creation and attaches the Roku channel zip as an asset. Manually-created releases are immutable by the time CI runs, causing asset upload failures.
+
+```bash
+git tag v1.0.3
+git push --tags
+```
+
+The release workflow (`.github/workflows/release.yml`) will:
+1. Run tests
+2. Build and push the Docker image to GHCR
+3. Package `roku-channel/` as `roku-channel.zip`
+4. Create a GitHub Release with auto-generated notes and the zip attached
+
+To add custom release notes, edit the release on GitHub after CI creates it.
+
 ### Presubmit Check
 
 A git pre-commit hook scans staged changes for sensitive data (hardcoded IPs, UUIDs, API keys, etc.). If the commit is rejected, fix the violations or add known-safe values to `lifecycle/presubmit-allowlist.txt`.
