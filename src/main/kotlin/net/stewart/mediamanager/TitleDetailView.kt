@@ -603,6 +603,15 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
             transcodes.mapNotNull { it.id }.toSet()
         )
 
+        // Load skip segment data — which transcode IDs have skip segments?
+        val transcodeIds = transcodes.mapNotNull { it.id }.toSet()
+        val skipTranscodeIds = if (transcodeIds.isNotEmpty()) {
+            SkipSegment.findAll()
+                .filter { it.transcode_id in transcodeIds }
+                .map { it.transcode_id }
+                .toSet()
+        } else emptySet()
+
         // Season lifecycle overview
         buildSeasonOverview(title, container)
 
@@ -624,7 +633,25 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
             isAllRowsVisible = true
 
             addColumn({ it.episodeNumber.toString() }).setHeader("#").setWidth("60px").setFlexGrow(0)
-            addColumn({ it.episodeTitle ?: "" }).setHeader("Episode Title").setFlexGrow(1)
+            addColumn(ComponentRenderer { row ->
+                HorizontalLayout().apply {
+                    isSpacing = true
+                    isPadding = false
+                    defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+                    add(Span(row.episodeTitle ?: ""))
+                    if (row.hasSkipData) {
+                        add(Span("SKIP").apply {
+                            style.set("background-color", "rgba(0, 200, 200, 0.25)")
+                            style.set("color", "cyan")
+                            style.set("font-size", "var(--lumo-font-size-xxs)")
+                            style.set("padding", "1px 5px")
+                            style.set("border-radius", "4px")
+                            style.set("font-weight", "600")
+                            style.set("white-space", "nowrap")
+                        })
+                    }
+                }
+            }).setHeader("Episode Title").setFlexGrow(1)
             addColumn(ComponentRenderer { row ->
                 if (row.filePath != null && row.transcodeId != null) {
                     val epLabel = "S${row.episodeNumber.toString().padStart(2, '0')}" +
@@ -661,7 +688,7 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
             addValueChangeListener { event ->
                 val selectedSeason = event.value ?: return@addValueChangeListener
                 refreshEpisodeGrid(episodeGrid, allEpisodes, transcodes,
-                    transcodedEpisodeIds, selectedSeason)
+                    transcodedEpisodeIds, selectedSeason, skipTranscodeIds)
             }
         }
         container.add(seasonCombo)
@@ -669,7 +696,7 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
 
         // Initial load — must match the combo's default value
         refreshEpisodeGrid(episodeGrid, allEpisodes, transcodes,
-            transcodedEpisodeIds, seasonCombo.value)
+            transcodedEpisodeIds, seasonCombo.value, skipTranscodeIds)
     }
 
     // --- Season Overview ---
@@ -1469,7 +1496,8 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         allEpisodes: List<Episode>,
         transcodes: List<Transcode>,
         transcodedEpisodeIds: Set<Long>,
-        season: Int
+        season: Int,
+        skipTranscodeIds: Set<Long> = emptySet()
     ) {
         val seasonEpisodes = allEpisodes
             .filter { it.season_number == season }
@@ -1485,7 +1513,8 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                 transcoded = isTranscoded,
                 filePath = tc?.file_path,
                 transcodeId = tc?.id,
-                retranscodeRequested = tc?.retranscode_requested ?: false
+                retranscodeRequested = tc?.retranscode_requested ?: false,
+                hasSkipData = tc?.id in skipTranscodeIds
             )
         }
         grid.setItems(rows)
@@ -1619,5 +1648,6 @@ private data class EpisodeRow(
     val transcoded: Boolean,
     val filePath: String?,
     val transcodeId: Long? = null,
-    val retranscodeRequested: Boolean = false
+    val retranscodeRequested: Boolean = false,
+    val hasSkipData: Boolean = false
 )
