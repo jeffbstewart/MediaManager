@@ -3423,5 +3423,11 @@ Navigation flow:
     width but native controls scrub bar is narrower. Filed issue #57 for custom
     progress bar. Deferred — functional skip behavior is correct.
 - Added ADMIN_GUIDE.md section documenting MediaSkipDetector setup and integration
-- Next: Roku channel credits skip implementation
+- Roku channel credits skip:
+  - SkipSegmentTask: now returns both INTRO and END_CREDITS segments
+  - VideoPlayerScreen: second overlay "Press UP for Next Episode" shown during credits
+  - UP during credits: stops playback, reports progress, auto-advances to next episode
+  - Last episode shows "Press UP to Exit" instead
+  - Credits check runs every position update alongside intro check
+  - Deployed and verified working on dev Roku
 ===

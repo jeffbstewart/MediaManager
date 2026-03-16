@@ -35,9 +35,34 @@ sub init()
     m.skipIntroOverlay.appendChild(lbl)
     m.videoPlayer.appendChild(m.skipIntroOverlay)
 
+    ' Create credits overlay (same style, different text — updated in onCreditsSegmentLoaded)
+    m.creditsOverlay = createObject("roSGNode", "Group")
+    m.creditsOverlay.translation = [1400, 880]
+    m.creditsOverlay.visible = false
+    creditsBg = createObject("roSGNode", "Rectangle")
+    creditsBg.width = 440
+    creditsBg.height = 70
+    creditsBg.color = "#000000"
+    creditsBg.opacity = 0.75
+    m.creditsOverlay.appendChild(creditsBg)
+    creditsAccent = createObject("roSGNode", "Rectangle")
+    creditsAccent.width = 4
+    creditsAccent.height = 70
+    creditsAccent.color = "#00cccc"
+    m.creditsOverlay.appendChild(creditsAccent)
+    m.creditsLabel = createObject("roSGNode", "Label")
+    m.creditsLabel.translation = [24, 14]
+    m.creditsLabel.text = "Press UP for Next Episode"
+    m.creditsLabel.font = "font:MediumBoldSystemFont"
+    m.creditsLabel.color = "#00cccc"
+    m.creditsLabel.width = 400
+    m.creditsOverlay.appendChild(m.creditsLabel)
+    m.videoPlayer.appendChild(m.creditsOverlay)
+
     m.videoPlayer.observeField("state", "onVideoState")
     m.videoPlayer.observeField("position", "onVideoPosition")
     m.skipSegmentTask.observeField("skipSegments", "onSkipSegmentsLoaded")
+    m.skipSegmentTask.observeField("creditsSegment", "onCreditsSegmentLoaded")
 
     m.serverUrl = ""
     m.apiKey = ""
@@ -56,6 +81,11 @@ sub init()
     m.skipIntroStart = -1
     m.skipIntroEnd = -1
     m.skipIntroVisible = false
+
+    ' Credits state
+    m.skipCreditsStart = -1
+    m.skipCreditsEnd = -1
+    m.skipCreditsVisible = false
 
     ' Episode playlist context for auto-advance
     m.showName = ""
@@ -200,6 +230,10 @@ sub startPlayback(startPos as integer)
     m.skipIntroEnd = -1
     m.skipIntroVisible = false
     m.skipIntroOverlay.visible = false
+    m.skipCreditsStart = -1
+    m.skipCreditsEnd = -1
+    m.skipCreditsVisible = false
+    m.creditsOverlay.visible = false
     chaptersUrl = m.serverUrl + "/stream/" + m.transcodeId + "/chapters.json?key=" + m.apiKey
     print "[MM " ; mmts() ; "] VideoPlayerScreen: fetching skip data from " ; chaptersUrl
     m.skipSegmentTask.control = "stop"
@@ -284,6 +318,70 @@ sub doSkipIntro()
     end if
 end sub
 
+' ---- Credits / Next Episode ----
+
+sub onCreditsSegmentLoaded()
+    seg = m.skipSegmentTask.creditsSegment
+    if seg = invalid then return
+    m.skipCreditsStart = seg.startSeconds
+    m.skipCreditsEnd = seg.endSeconds
+
+    ' Set overlay text based on whether a next episode exists
+    nextEp = getNextEpisode()
+    if nextEp <> invalid
+        m.creditsLabel.text = "Press UP for Next Episode"
+    else
+        m.creditsLabel.text = "Press UP to Exit"
+    end if
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: credits segment loaded (" ; m.creditsLabel.text ; ")"
+end sub
+
+sub checkSkipCredits()
+    if m.skipCreditsStart < 0 then return
+    shouldShow = false
+    if m.currentPosition >= m.skipCreditsStart
+        if m.currentPosition < m.skipCreditsEnd
+            shouldShow = true
+        end if
+    end if
+    if shouldShow
+        if m.skipCreditsVisible = false
+            ' Hide skip intro overlay if it's showing (shouldn't overlap)
+            m.skipIntroOverlay.visible = false
+            m.skipIntroVisible = false
+            m.creditsOverlay.visible = true
+            m.skipCreditsVisible = true
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: showing credits overlay"
+        end if
+    else
+        if m.skipCreditsVisible = true
+            m.creditsOverlay.visible = false
+            m.skipCreditsVisible = false
+            print "[MM " ; mmts() ; "] VideoPlayerScreen: hiding credits overlay"
+        end if
+    end if
+end sub
+
+sub doSkipCredits()
+    print "[MM " ; mmts() ; "] VideoPlayerScreen: UP pressed during credits"
+    m.creditsOverlay.visible = false
+    m.skipCreditsVisible = false
+    m.skipCreditsStart = -1
+    m.skipCreditsEnd = -1
+
+    nextEp = getNextEpisode()
+    if nextEp <> invalid
+        m.exiting = true
+        reportProgress()
+        m.videoPlayer.control = "stop"
+        playNextEpisode(nextEp)
+    else
+        ' No next episode — exit playback
+        stopPlayback()
+        m.top.playbackFinished = true
+    end if
+end sub
+
 ' ---- Video State / Position ----
 
 sub onVideoState()
@@ -325,8 +423,9 @@ sub onVideoPosition()
     m.currentPosition = m.videoPlayer.position
     m.currentDuration = m.videoPlayer.duration
 
-    ' Check skip intro visibility
+    ' Check skip intro / credits visibility
     checkSkipIntro()
+    checkSkipCredits()
 
     ' Report progress every 60 seconds
     now = createObject("roDateTime")
@@ -452,6 +551,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "up"
+        if m.skipCreditsVisible
+            doSkipCredits()
+            return true
+        end if
         if m.skipIntroVisible
             print "[MM " ; mmts() ; "] VideoPlayerScreen: UP pressed — skipping intro"
             doSkipIntro()

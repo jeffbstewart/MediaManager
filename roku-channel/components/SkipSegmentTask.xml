@@ -3,6 +3,7 @@
     <interface>
         <field id="chaptersUrl" type="string" />
         <field id="skipSegments" type="assocarray" alwaysNotify="true" />
+        <field id="creditsSegment" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="SkipSegmentTask.brs" />

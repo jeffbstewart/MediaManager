@@ -56,24 +56,29 @@ sub parseResponse(body as string)
         return
     end if
 
-    ' Find the first INTRO segment
+    ' Find INTRO and END_CREDITS segments
     for each seg in segments
         segType = seg.type
         if segType = invalid then segType = seg.segment_type
-        if segType <> invalid and (lcase(segType) = "intro" or lcase(segType) = "introduction")
-            result = {
-                type: "INTRO",
-                startSeconds: seg.start,
-                endSeconds: seg["end"]
-            }
-            if result.startSeconds = invalid then result.startSeconds = seg.start_seconds
-            if result.endSeconds = invalid then result.endSeconds = seg.end_seconds
+        if segType = invalid then segType = ""
 
+        startVal = seg.start
+        if startVal = invalid then startVal = seg.start_seconds
+        endVal = seg["end"]
+        if endVal = invalid then endVal = seg.end_seconds
+
+        if startVal = invalid or endVal = invalid then continue for
+
+        typeL = lcase(segType)
+
+        if typeL = "intro" or typeL = "introduction"
+            result = { type: "INTRO", startSeconds: startVal, endSeconds: endVal }
             print "[MM " ; mmts() ; "] SkipSegmentTask: found INTRO at " ; str(result.startSeconds).trim() ; "-" ; str(result.endSeconds).trim()
             m.top.skipSegments = result
-            return
+        else if typeL = "end_credits" or typeL = "credits"
+            result = { type: "END_CREDITS", startSeconds: startVal, endSeconds: endVal }
+            print "[MM " ; mmts() ; "] SkipSegmentTask: found END_CREDITS at " ; str(result.startSeconds).trim() ; "-" ; str(result.endSeconds).trim()
+            m.top.creditsSegment = result
         end if
     end for
-
-    print "[MM " ; mmts() ; "] SkipSegmentTask: no INTRO segment in " ; str(segments.count()).trim() ; " segment(s)"
 end sub
