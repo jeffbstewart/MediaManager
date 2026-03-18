@@ -166,8 +166,8 @@ object MissingSeasonService {
         }
     }
 
-    /** Parses freetext like "2", "1,3", "S1, S2", "1-3", "all" into season numbers. */
-    private fun parseSeasonText(text: String): List<Int>? {
+    /** Parses freetext like "2", "1,3", "S1, S2", "1-3" into season numbers. Returns null if unparseable. */
+    fun parseSeasonText(text: String): List<Int>? {
         val trimmed = text.trim()
         // Single number
         trimmed.toIntOrNull()?.let { return listOf(it) }

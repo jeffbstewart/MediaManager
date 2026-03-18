@@ -280,7 +280,7 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                     add(badgeRow)
                 }
 
-                // UPC badges (admin: unlink button when multiple UPCs)
+                // UPC badges (admin: unlink button)
                 val currentUser = AuthService.getCurrentUser()
                 val isAdmin = currentUser?.isAdmin() == true
                 val linkedItems = MediaItemTitle.findAll().filter { it.title_id == title.id }
@@ -301,22 +301,32 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
                                 style.set("font-size", "var(--lumo-font-size-xs)")
                                 style.set("font-family", "monospace")
                             })
-                            if (isAdmin && itemsWithUpc.size > 1) {
+                            if (isAdmin) {
                                 add(Button(VaadinIcon.UNLINK.create()).apply {
                                     addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_ICON)
                                     style.set("color", "rgba(255,100,100,0.7)")
                                     element.setAttribute("title", "Unlink UPC ${mi.upc} from this title")
                                     addClickListener {
-                                        // Delete child season links first, then the join
-                                        MediaItemTitleSeason.findAll()
-                                            .filter { it.media_item_title_id == mit.id }
-                                            .forEach { it.delete() }
-                                        mit.delete()
-                                        Notification.show(
-                                            "Unlinked UPC ${mi.upc} from this title",
-                                            3000, Notification.Position.BOTTOM_START
-                                        ).addThemeVariants(NotificationVariant.LUMO_SUCCESS)
-                                        buildContent(title)
+                                        val isLastUpc = itemsWithUpc.size == 1
+                                        if (isLastUpc) {
+                                            // Confirm before unlinking the last UPC
+                                            val dlg = Dialog()
+                                            dlg.headerTitle = "Unlink last UPC?"
+                                            dlg.add(Span("This will remove UPC ${mi.upc} from this title. The media item will become orphaned."))
+                                            dlg.footer.add(
+                                                Button("Cancel") { dlg.close() },
+                                                Button("Unlink").apply {
+                                                    addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR)
+                                                    addClickListener {
+                                                        dlg.close()
+                                                        unlinkUpc(mi, mit, title)
+                                                    }
+                                                }
+                                            )
+                                            dlg.open()
+                                        } else {
+                                            unlinkUpc(mi, mit, title)
+                                        }
                                     }
                                 })
                             }
@@ -1682,6 +1692,31 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
         footer.element.setAttribute("slot", "footer")
         dialog.add(footer)
         dialog.open()
+    }
+
+    private fun unlinkUpc(mi: MediaItem, mit: MediaItemTitle, title: Title) {
+        // Delete child season links first, then the join
+        MediaItemTitleSeason.findAll()
+            .filter { it.media_item_title_id == mit.id }
+            .forEach { it.delete() }
+        mit.delete()
+
+        // Clear UPC from media item and delete associated barcode scan
+        val upc = mi.upc
+        if (upc != null) {
+            mi.upc = null
+            mi.save()
+            BarcodeScan.findAll()
+                .filter { it.upc == upc }
+                .forEach { it.delete() }
+        }
+
+        SearchIndexService.onTitleChanged(title.id!!)
+        Notification.show(
+            "Unlinked UPC $upc from this title",
+            3000, Notification.Position.BOTTOM_START
+        ).addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+        buildContent(title)
     }
 }
 

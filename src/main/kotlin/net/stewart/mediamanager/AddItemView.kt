@@ -9,6 +9,7 @@ import com.vaadin.flow.component.Key
 import com.vaadin.flow.component.button.Button
 import com.vaadin.flow.component.button.ButtonVariant
 import com.vaadin.flow.component.combobox.ComboBox
+import com.vaadin.flow.component.dialog.Dialog
 import com.vaadin.flow.component.datepicker.DatePicker
 import com.vaadin.flow.component.grid.Grid
 import com.vaadin.flow.component.html.Div
@@ -75,8 +76,8 @@ class AddItemView : KComposite(), AfterNavigationObserver {
 
     // Zone 2
     private lateinit var itemsGrid: Grid<AddItemRow>
-    private lateinit var filterToggle: Button
-    private var showAllRecent = false
+    private lateinit var filterCombo: ComboBox<ItemFilter>
+    private var currentFilter = ItemFilter.NEEDS_ATTENTION
     private var cachedItems: List<AddItemRow> = emptyList()
 
 
@@ -373,15 +374,17 @@ class AddItemView : KComposite(), AfterNavigationObserver {
                     style.set("margin", "0")
                 })
 
-                filterToggle = Button("Show All Recent").apply {
-                    addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
-                    addClickListener {
-                        showAllRecent = !showAllRecent
-                        text = if (showAllRecent) "Needs Attention Only" else "Show All Recent"
-                        refreshItemsGrid()
+                filterCombo = ComboBox<ItemFilter>().apply {
+                    setItems(*ItemFilter.entries.toTypedArray())
+                    setItemLabelGenerator { it.label }
+                    value = currentFilter
+                    width = "14em"
+                    addValueChangeListener {
+                        currentFilter = it.value ?: ItemFilter.NEEDS_ATTENTION
+                        applyFilter()
                     }
                 }
-                add(filterToggle)
+                add(filterCombo)
             }
 
             itemsGrid = grid {
@@ -411,6 +414,7 @@ class AddItemView : KComposite(), AfterNavigationObserver {
                         "ENRICHED" -> {} // ok
                         "PENDING", "REASSIGNMENT_REQUESTED" -> missing.add("enriching\u2026")
                         "NOT_LOOKED_UP" -> missing.add("UPC lookup\u2026")
+                        "NOT_FOUND" -> missing.add("UPC not in database")
                         "FAILED" -> missing.add("enrichment failed")
                         "SKIPPED" -> missing.add("no TMDB match")
                         "ABANDONED" -> missing.add("enrichment abandoned")
@@ -436,6 +440,26 @@ class AddItemView : KComposite(), AfterNavigationObserver {
 
                 addColumn({ it.createdAt?.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")) ?: "" })
                     .setHeader("Added").setWidth("100px").setFlexGrow(0)
+
+                addColumn(ComponentRenderer { row ->
+                    if (row.barcodeScanId != null && row.mediaItemId == null) {
+                        HorizontalLayout().apply {
+                            isSpacing = true
+                            isPadding = false
+                            add(Button("Link", VaadinIcon.LINK.create()).apply {
+                                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY)
+                                addClickListener { openLinkScanDialog(row) }
+                            })
+                            add(Button(VaadinIcon.TRASH.create()).apply {
+                                addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_ICON)
+                                element.setAttribute("title", "Delete scan ${row.upc}")
+                                addClickListener { confirmDeleteScan(row) }
+                            })
+                        }
+                    } else {
+                        Span("")
+                    }
+                }).setHeader("").setWidth("140px").setFlexGrow(0)
 
                 addItemClickListener { event ->
                     val item = event.item
@@ -494,11 +518,14 @@ class AddItemView : KComposite(), AfterNavigationObserver {
             val existingScan = BarcodeScan.findAll().firstOrNull { it.upc == upc }
             if (existingScan != null) {
                 val titleName = findTitleForScan(existingScan)
-                val detail = if (titleName != null) " ($titleName)" else ""
-                Notification.show("Already scanned: $upc$detail", 3000, Notification.Position.BOTTOM_START)
-                upcField.clear()
-                upcField.focus()
-                return
+                if (titleName != null) {
+                    Notification.show("Already scanned: $upc ($titleName)", 3000, Notification.Position.BOTTOM_START)
+                    upcField.clear()
+                    upcField.focus()
+                    return
+                }
+                // Orphaned scan — media item was unlinked. Delete stale record and allow re-scan.
+                existingScan.delete()
             }
 
             BarcodeScan(
@@ -550,7 +577,12 @@ class AddItemView : KComposite(), AfterNavigationObserver {
         val now = LocalDateTime.now()
 
         val seasonsText = searchSeasonsField.value?.trim()?.takeIf { it.isNotBlank() }
-        val seasonsValue = seasonsText?.let { parseSeasonsInput(it) }
+        val seasonsValue = seasonsText?.let {
+            parseSeasonsInput(it) ?: run {
+                showError("Invalid seasons format. Use numbers like: 2 or 1, 2 or 1-3")
+                return
+            }
+        }
 
         // Dedup Title
         val tmdbKey = result.tmdbKey() ?: TmdbId(tmdbId, MediaType.MOVIE)
@@ -599,6 +631,268 @@ class AddItemView : KComposite(), AfterNavigationObserver {
 
         searchEntryForm.isVisible = false
         selectedSearchResult = null
+        refreshItemsGrid()
+    }
+
+    // ==================== Delete Stuck Scan ====================
+
+    private fun confirmDeleteScan(row: AddItemRow) {
+        val scanId = row.barcodeScanId ?: return
+        val scan = BarcodeScan.findById(scanId) ?: return
+        val photos = OwnershipPhotoService.findByUpc(scan.upc)
+
+        if (photos.isEmpty()) {
+            // No photos — just delete immediately
+            scan.delete()
+            showSuccess("Deleted scan ${scan.upc}")
+            refreshItemsGrid()
+            return
+        }
+
+        val dlg = Dialog()
+        dlg.headerTitle = "Delete scan?"
+        dlg.add(Span("Delete UPC ${scan.upc} and its ${photos.size} ownership photo(s)?"))
+        dlg.footer.add(
+            Button("Cancel") { dlg.close() },
+            Button("Delete").apply {
+                addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR)
+                addClickListener {
+                    dlg.close()
+                    photos.forEach { OwnershipPhotoService.delete(it.id!!) }
+                    scan.delete()
+                    showSuccess("Deleted scan ${scan.upc}")
+                    refreshItemsGrid()
+                }
+            }
+        )
+        dlg.open()
+    }
+
+    // ==================== Link Stuck Scan Dialog ====================
+
+    private fun openLinkScanDialog(row: AddItemRow) {
+        val scanId = row.barcodeScanId ?: return
+        val scan = BarcodeScan.findById(scanId) ?: return
+
+        val dlg = Dialog()
+        dlg.headerTitle = "Link UPC ${scan.upc} to Title"
+        dlg.width = "600px"
+
+        // Show ownership photos for this UPC
+        val photos = OwnershipPhotoService.findByUpc(scan.upc)
+        val photoRow = if (photos.isNotEmpty()) {
+            HorizontalLayout().apply {
+                isSpacing = true
+                isPadding = false
+                style.set("overflow-x", "auto")
+                style.set("margin-bottom", "var(--lumo-space-s)")
+                for (photo in photos) {
+                    add(Image("/ownership-photos/${photo.id}", "Ownership photo").apply {
+                        height = "120px"
+                        style.set("border-radius", "4px")
+                        style.set("cursor", "pointer")
+                        style.set("flex-shrink", "0")
+                        element.addEventListener("click") {
+                            element.executeJs(
+                                "window.open('/ownership-photos/' + $0 + '?download=1', '_blank')",
+                                photo.id!!
+                            )
+                        }
+                    })
+                }
+            }
+        } else null
+
+        val searchField = TextField("Search TMDB").apply {
+            width = "100%"
+            placeholder = "Title name..."
+        }
+        val mediaTypeCombo = ComboBox<String>("Type").apply {
+            setItems("Movie", "TV")
+            value = "Movie"
+            width = "8em"
+        }
+        val searchBtn = Button("Search")
+        val searchRow = HorizontalLayout(searchField, mediaTypeCombo, searchBtn).apply {
+            width = "100%"
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
+            isSpacing = true
+            expand(searchField)
+        }
+
+        val resultsGrid = Grid<TmdbSearchResult>().apply {
+            width = "100%"
+            height = "300px"
+
+            addColumn(ComponentRenderer { r ->
+                val url = r.posterPath?.let { "https://image.tmdb.org/t/p/w92$it" }
+                if (url != null) {
+                    Image(url, r.title ?: "").apply {
+                        height = "60px"; width = "40px"
+                        style.set("object-fit", "cover")
+                    }
+                } else Span("\u2014")
+            }).setHeader("").setWidth("60px").setFlexGrow(0)
+
+            addColumn({ it.title ?: "" }).setHeader("Title").setFlexGrow(1)
+            addColumn({ it.releaseYear?.toString() ?: "" }).setHeader("Year").setWidth("70px").setFlexGrow(0)
+            addColumn({ r ->
+                r.overview?.let { if (it.length > 80) it.take(80) + "\u2026" else it } ?: ""
+            }).setHeader("Overview").setFlexGrow(1)
+        }
+        resultsGrid.isVisible = false
+
+        // Selection form (shown after picking a TMDB result)
+        val selectedLabel = Span()
+        val formatCombo = ComboBox<MediaFormat>("Format").apply {
+            setItems(*MediaFormat.entries.toTypedArray())
+            setItemLabelGenerator {
+                when (it) {
+                    MediaFormat.BLURAY -> "Blu-ray"
+                    MediaFormat.UHD_BLURAY -> "UHD Blu-ray"
+                    MediaFormat.HD_DVD -> "HD DVD"
+                    else -> it.name
+                }
+            }
+            value = MediaFormat.BLURAY
+        }
+        val seasonsField = TextField("Seasons").apply {
+            placeholder = "e.g. 2 or 1, 2"
+            width = "100%"
+        }
+        val seasonsRow = HorizontalLayout(seasonsField).apply {
+            width = "100%"
+            isVisible = false
+        }
+        val multiPackCheck = com.vaadin.flow.component.checkbox.Checkbox("Multi-pack (expand at /expand)")
+        val addBtn = Button("Link").apply {
+            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+        }
+        val selectionForm = VerticalLayout(selectedLabel, formatCombo, seasonsRow, multiPackCheck, addBtn).apply {
+            isPadding = false
+            isSpacing = true
+            isVisible = false
+        }
+
+        var selectedResult: TmdbSearchResult? = null
+
+        resultsGrid.addItemClickListener { event ->
+            selectedResult = event.item
+            val r = event.item
+            val yearStr = r.releaseYear?.let { " ($it)" } ?: ""
+            selectedLabel.text = "${r.title}$yearStr"
+            seasonsRow.isVisible = r.mediaType == MediaType.TV.name
+            selectionForm.isVisible = true
+        }
+
+        searchBtn.addClickListener {
+            val query = searchField.value?.trim() ?: ""
+            if (query.isBlank()) return@addClickListener
+            val results = if (mediaTypeCombo.value == "TV") {
+                tmdbService.searchTvMultiple(query)
+            } else {
+                tmdbService.searchMovieMultiple(query)
+            }
+            resultsGrid.setItems(results)
+            resultsGrid.isVisible = true
+            selectionForm.isVisible = false
+            selectedResult = null
+        }
+
+        addBtn.addClickListener {
+            val result = selectedResult ?: return@addClickListener
+            val tmdbId = result.tmdbId ?: return@addClickListener
+            val format = formatCombo.value ?: return@addClickListener
+            linkScanToTitle(scan, result, tmdbId, format, seasonsField.value?.trim()?.takeIf { it.isNotBlank() }, multiPackCheck.value)
+            dlg.close()
+        }
+
+        val content = VerticalLayout().apply {
+            isPadding = false
+            isSpacing = true
+            if (photoRow != null) add(photoRow)
+            add(searchRow, resultsGrid, selectionForm)
+        }
+        dlg.add(content)
+        dlg.open()
+    }
+
+    private fun linkScanToTitle(
+        scan: BarcodeScan,
+        result: TmdbSearchResult,
+        tmdbId: Int,
+        format: MediaFormat,
+        seasonsText: String?,
+        isMultiPack: Boolean = false
+    ) {
+        val now = LocalDateTime.now()
+        val seasonsValue = seasonsText?.let {
+            parseSeasonsInput(it) ?: run {
+                showError("Invalid seasons format. Use numbers like: 2 or 1, 2 or 1-3")
+                return
+            }
+        }
+
+        // Dedup Title — may already exist (e.g. linked to a transcode)
+        val tmdbKey = result.tmdbKey() ?: TmdbId(tmdbId, MediaType.MOVIE)
+        var title = Title.findAll().firstOrNull { it.tmdbKey() == tmdbKey }
+        val isNewTitle = title == null
+        if (title == null) {
+            val enrichStatus = if (isMultiPack) EnrichmentStatus.SKIPPED.name
+                else EnrichmentStatus.REASSIGNMENT_REQUESTED.name
+            title = Title(
+                name = result.title ?: "Unknown",
+                media_type = tmdbKey.typeString,
+                tmdb_id = tmdbKey.id,
+                release_year = result.releaseYear,
+                description = result.overview,
+                poster_path = result.posterPath,
+                enrichment_status = enrichStatus,
+                created_at = now,
+                updated_at = now
+            )
+            title.save()
+        }
+
+        // Create MediaItem with the scan's UPC
+        val mediaItem = MediaItem(
+            upc = scan.upc,
+            media_format = format.name,
+            entry_source = EntrySource.UPC_SCAN.name,
+            product_name = result.title,
+            title_count = 1,
+            expansion_status = if (isMultiPack) ExpansionStatus.NEEDS_EXPANSION.name
+                else ExpansionStatus.SINGLE.name,
+            created_at = now,
+            updated_at = now
+        )
+        mediaItem.save()
+
+        // Link media item to title
+        MediaItemTitle(
+            media_item_id = mediaItem.id!!,
+            title_id = title.id!!,
+            disc_number = 1,
+            seasons = seasonsValue
+        ).save()
+
+        // Update barcode scan
+        scan.lookup_status = LookupStatus.FOUND.name
+        scan.media_item_id = mediaItem.id
+        scan.notes = "Manually linked to ${result.title ?: "Unknown"}"
+        scan.save()
+
+        // Link orphaned ownership photos
+        OwnershipPhotoService.resolveOrphans(scan.upc, mediaItem.id!!)
+
+        // Update search index and fulfill wishes
+        SearchIndexService.onTitleChanged(title.id!!)
+        if (isNewTitle) {
+            WishListService.fulfillMediaWishes(tmdbKey)
+        }
+
+        val yearStr = result.releaseYear?.let { " ($it)" } ?: ""
+        showSuccess("Linked UPC ${scan.upc} to ${result.title}$yearStr")
         refreshItemsGrid()
     }
 
@@ -718,23 +1012,25 @@ class AddItemView : KComposite(), AfterNavigationObserver {
             ))
         }
 
-        // Pending BarcodeScan records (NOT_LOOKED_UP — no MediaItem yet)
+        // Pending/failed BarcodeScan records — no MediaItem yet
+        val stuckStatuses = setOf(LookupStatus.NOT_LOOKED_UP.name, LookupStatus.NOT_FOUND.name)
         val pendingScans = BarcodeScan.findAll()
-            .filter { it.lookup_status == LookupStatus.NOT_LOOKED_UP.name }
+            .filter { it.lookup_status in stuckStatuses }
             .sortedByDescending { it.scanned_at }
 
         for (scan in pendingScans) {
             // Skip if already represented by a MediaItem row
             if (rows.any { it.upc == scan.upc }) continue
 
+            val photoCount = OwnershipPhotoService.findByUpc(scan.upc).size
             rows.add(AddItemRow(
                 mediaItemId = null,
                 barcodeScanId = scan.id,
                 displayName = "UPC: ${scan.upc}",
                 formatLabel = "",
-                enrichmentStatus = "NOT_LOOKED_UP",
+                enrichmentStatus = scan.lookup_status,
                 hasPurchaseInfo = false,
-                photoCount = 0,
+                photoCount = photoCount,
                 sourceLabel = "UPC",
                 posterUrl = null,
                 createdAt = scan.scanned_at,
@@ -748,27 +1044,46 @@ class AddItemView : KComposite(), AfterNavigationObserver {
     }
 
     private fun applyFilter() {
-        val items = if (showAllRecent) cachedItems else cachedItems.filter { it.needsAttention }
+        val items = when (currentFilter) {
+            ItemFilter.ALL -> cachedItems
+            ItemFilter.NEEDS_ATTENTION -> cachedItems.filter { it.needsAttention }
+            ItemFilter.UPC_NOT_FOUND -> cachedItems.filter {
+                it.enrichmentStatus in setOf("NOT_LOOKED_UP", "NOT_FOUND")
+            }
+            ItemFilter.NEEDS_ENRICHMENT -> cachedItems.filter {
+                it.enrichmentStatus in setOf("PENDING", "REASSIGNMENT_REQUESTED", "FAILED", "SKIPPED", "ABANDONED")
+            }
+            ItemFilter.NEEDS_PURCHASE -> cachedItems.filter { !it.hasPurchaseInfo }
+            ItemFilter.NEEDS_PHOTOS -> cachedItems.filter { it.photoCount == 0 }
+        }
         itemsGrid.setItems(items)
     }
 
     // ==================== Helpers ====================
 
-    private fun parseSeasonsInput(input: String): String {
-        if (input.equals("all", ignoreCase = true)) return input.lowercase()
-        val rangeMatch = Regex("""^(\d+)\s*-\s*(\d+)$""").matchEntire(input)
-        if (rangeMatch != null) {
+    /**
+     * Parses and normalizes season input. Returns the normalized string (e.g. "S1, S2"),
+     * or null if the input can't be parsed into valid season numbers.
+     */
+    private fun parseSeasonsInput(input: String): String? {
+        val trimmed = input.trim()
+        // Normalize to "S1, S2" format, then validate via MissingSeasonService
+        val rangeMatch = Regex("""^(\d+)\s*-\s*(\d+)$""").matchEntire(trimmed)
+        val normalized = if (rangeMatch != null) {
             val start = rangeMatch.groupValues[1].toInt()
             val end = rangeMatch.groupValues[2].toInt()
-            return (start..end).joinToString(", ") { "S$it" }
+            (start..end).joinToString(", ") { "S$it" }
+        } else {
+            val parts = trimmed.split(",").map { it.trim().removePrefix("S").removePrefix("s") }
+                .filter { it.isNotEmpty() }
+            if (parts.all { it.toIntOrNull() != null }) {
+                parts.joinToString(", ") { "S$it" }
+            } else {
+                trimmed.toIntOrNull()?.let { "S$it" } ?: trimmed
+            }
         }
-        val parts = input.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        if (parts.all { it.matches(Regex("""\d+""")) }) {
-            return parts.joinToString(", ") { "S$it" }
-        }
-        val single = input.toIntOrNull()
-        if (single != null) return "S$single"
-        return input
+        // Validate: must be parseable by MissingSeasonService
+        return if (MissingSeasonService.parseSeasonText(normalized) != null) normalized else null
     }
 
     private fun showSuccess(message: String) {
@@ -779,5 +1094,14 @@ class AddItemView : KComposite(), AfterNavigationObserver {
     private fun showError(message: String) {
         Notification.show(message, 4000, Notification.Position.BOTTOM_START)
             .addThemeVariants(NotificationVariant.LUMO_ERROR)
+    }
+
+    private enum class ItemFilter(val label: String) {
+        NEEDS_ATTENTION("Needs Attention"),
+        UPC_NOT_FOUND("UPC Not Found"),
+        NEEDS_ENRICHMENT("Needs Enrichment"),
+        NEEDS_PURCHASE("Needs Purchase Info"),
+        NEEDS_PHOTOS("Needs Photos"),
+        ALL("All Recent")
     }
 }

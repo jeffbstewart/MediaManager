@@ -366,7 +366,7 @@ internal class TitleEditDialog(
             width = "100%"
         }
 
-        // Seasons field — editable when single join, disabled when multiple
+        // Seasons field — editable for all joins
         val joins = MediaItemTitle.findAll().filter { it.title_id == t.id }
         val seasonsField = TextField("Seasons").apply {
             width = "100%"
@@ -374,8 +374,7 @@ internal class TitleEditDialog(
                 value = joins[0].seasons ?: ""
             } else if (joins.size > 1) {
                 value = joins.mapNotNull { it.seasons }.distinct().joinToString(", ")
-                isEnabled = false
-                helperText = "Multiple media items linked — edit seasons per-item"
+                helperText = "Will update all ${joins.size} linked media items"
             }
         }
 
@@ -616,11 +615,17 @@ internal class TitleEditDialog(
                 changed = true
             }
 
-            // Save seasons on the join row (only when single join is editable)
-            if (joins.size == 1) {
-                val seasonsValue = newSeasons.trim().ifEmpty { null }
-                val join = MediaItemTitle.findById(joins[0].id!!)
-                if (join != null && join.seasons != seasonsValue) {
+            // Save seasons on all join rows
+            val seasonsValue = newSeasons.trim().ifEmpty { null }
+            if (seasonsValue != null && MissingSeasonService.parseSeasonText(seasonsValue) == null) {
+                Notification.show("Invalid seasons format. Use numbers like: 2 or 1, 2 or 1-3",
+                    4000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                return
+            }
+            for (j in joins) {
+                val join = MediaItemTitle.findById(j.id!!) ?: continue
+                if (join.seasons != seasonsValue) {
                     join.seasons = seasonsValue
                     join.save()
                     MissingSeasonService.syncStructuredSeasons(join.id!!, join.title_id, seasonsValue)

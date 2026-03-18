@@ -141,12 +141,18 @@ class MediaItemEditView : VerticalLayout(), BeforeEnterObserver {
             val seasonsField = TextField(label).apply {
                 width = "100%"
                 value = join.seasons ?: ""
-                placeholder = "e.g. S2 or S1, S2, S3"
+                placeholder = "e.g. 2 or 1, 2, 3"
                 valueChangeMode = ValueChangeMode.LAZY
                 valueChangeTimeout = 1000
                 addValueChangeListener {
                     val fresh = MediaItemTitle.findById(join.id!!) ?: return@addValueChangeListener
                     val seasonsValue = it.value?.trim()?.ifEmpty { null }
+                    if (seasonsValue != null && MissingSeasonService.parseSeasonText(seasonsValue) == null) {
+                        Notification.show("Invalid seasons format. Use numbers like: 2 or 1, 2 or 1-3",
+                            4000, Notification.Position.BOTTOM_START)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR)
+                        return@addValueChangeListener
+                    }
                     fresh.seasons = seasonsValue
                     fresh.save()
                     MissingSeasonService.syncStructuredSeasons(fresh.id!!, fresh.title_id, seasonsValue)
