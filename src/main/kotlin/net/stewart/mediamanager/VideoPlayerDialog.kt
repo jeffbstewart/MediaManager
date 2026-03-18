@@ -198,12 +198,23 @@ class VideoPlayerDialog(
         } else ""
 
         val videoHtml = """
-            <div style="width:100%; height:100%; position:relative; background:#000;">
-                <video id="vpd-video" controls autoplay playsinline
+            <div id="vpd-container" style="width:100%; height:100%; position:relative; background:#000;">
+                <style>
+                    video#vpd-video::-webkit-media-controls-fullscreen-button { display:none !important; }
+                    #vpd-fs-btn { position:absolute;top:10px;right:10px;
+                        background:rgba(0,0,0,0.6);color:white;border:1px solid rgba(255,255,255,0.3);
+                        border-radius:4px;cursor:pointer;font-size:18px;width:36px;height:36px;
+                        z-index:17;line-height:36px;text-align:center;padding:0;
+                        opacity:0;transition:opacity 0.3s;pointer-events:none; }
+                    #vpd-fs-btn.vpd-visible { opacity:0.7;pointer-events:auto; }
+                    #vpd-fs-btn.vpd-visible:hover { opacity:1; }
+                </style>
+                <video id="vpd-video" controls autoplay playsinline controlsList="nofullscreen"
                        style="max-width:100%; max-height:100%; width:100%; height:100%;"
                        src="$streamUrl">
                     Your browser does not support the video tag.
                 </video>
+                <button id="vpd-fs-btn" title="Fullscreen (f)">&#x26F6;</button>
                 <div id="vpd-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%;
                      display:flex; flex-direction:column; align-items:center; justify-content:center;
                      background:rgba(0,0,0,0.85); z-index:10; transition:opacity 0.3s;">
@@ -333,7 +344,22 @@ class VideoPlayerDialog(
             "x:parseInt(xywh[1]),y:parseInt(xywh[2]),w:parseInt(xywh[3]),h:parseInt(xywh[4])});" +
             "}}}i++;}}).catch(function(){});" +
             // Attach hover listener to the video container
-            "var container=v.parentElement;" +
+            "var container=document.getElementById('vpd-container');" +
+            // Toggle fullscreen on the container (not the video) so overlays stay visible
+            "function toggleFs(){" +
+            "if(document.fullscreenElement){document.exitFullscreen();}else{container.requestFullscreen();}}" +
+            // Custom fullscreen button
+            "document.getElementById('vpd-fs-btn').addEventListener('click',function(e){" +
+            "e.stopPropagation();toggleFs();});" +
+            // Double-click toggles fullscreen
+            "v.addEventListener('dblclick',function(e){e.preventDefault();toggleFs();});" +
+            // 'f' key toggles fullscreen
+            "document.addEventListener('keydown',function(e){" +
+            "if(e.key==='f'&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();toggleFs();}});" +
+            // Update button icon on fullscreen change
+            "document.addEventListener('fullscreenchange',function(){" +
+            "var btn=document.getElementById('vpd-fs-btn');" +
+            "if(btn)btn.innerHTML=document.fullscreenElement?'\\u2716':'\\u26F6';});" +
             "container.addEventListener('mousemove',function(e){" +
             "if(!vttCues||!v.duration||v.duration<=0)return;" +
             "var rect=v.getBoundingClientRect();" +
@@ -359,16 +385,21 @@ class VideoPlayerDialog(
             // Chapter markers + skip segments
             "var chBar=document.getElementById('vpd-chapter-bar');" +
             "var skipBtn=document.getElementById('vpd-skip-intro');" +
-            // Sync chapter bar visibility with native controls (fade with mouse idle)
-            "var chBarHideTimer=null;var chBarHasMarkers=false;" +
-            "function showChBar(){if(!chBarHasMarkers)return;chBar.style.opacity='1';chBar.style.transition='opacity 0.3s';}" +
-            "function hideChBar(){if(!chBarHasMarkers)return;chBar.style.opacity='0';chBar.style.transition='opacity 0.3s';}" +
-            "container.addEventListener('mousemove',function(){showChBar();" +
-            "if(chBarHideTimer)clearTimeout(chBarHideTimer);" +
-            "chBarHideTimer=setTimeout(hideChBar,3000);});" +
-            "container.addEventListener('mouseleave',function(){hideChBar();});" +
-            "v.addEventListener('pause',function(){showChBar();if(chBarHideTimer)clearTimeout(chBarHideTimer);});" +
-            "v.addEventListener('play',function(){if(chBarHideTimer)clearTimeout(chBarHideTimer);chBarHideTimer=setTimeout(hideChBar,3000);});" +
+            "var fsBtn=document.getElementById('vpd-fs-btn');" +
+            // Sync overlays with native controls (fade with mouse idle)
+            "var ctrlHideTimer=null;var chBarHasMarkers=false;" +
+            "function showControls(){" +
+            "if(chBarHasMarkers){chBar.style.opacity='1';chBar.style.transition='opacity 0.3s';}" +
+            "fsBtn.classList.add('vpd-visible');}" +
+            "function hideControls(){" +
+            "if(chBarHasMarkers){chBar.style.opacity='0';chBar.style.transition='opacity 0.3s';}" +
+            "fsBtn.classList.remove('vpd-visible');}" +
+            "container.addEventListener('mousemove',function(){showControls();" +
+            "if(ctrlHideTimer)clearTimeout(ctrlHideTimer);" +
+            "ctrlHideTimer=setTimeout(hideControls,3000);});" +
+            "container.addEventListener('mouseleave',function(){hideControls();});" +
+            "v.addEventListener('pause',function(){showControls();if(ctrlHideTimer)clearTimeout(ctrlHideTimer);});" +
+            "v.addEventListener('play',function(){if(ctrlHideTimer)clearTimeout(ctrlHideTimer);ctrlHideTimer=setTimeout(hideControls,3000);});" +
             "var chapData=null,skipData=null;" +
             "fetch('/stream/'+tid+'/chapters.json').then(function(r){" +
             "if(!r.ok)return null;return r.json();}).then(function(d){" +
