@@ -28,31 +28,72 @@ object CatalogHandler {
     private const val DEFAULT_PAGE_LIMIT = 25
     private const val MAX_PAGE_LIMIT = 100
 
-    fun handle(req: HttpServletRequest, resp: HttpServletResponse, path: String, mapper: ObjectMapper) {
-        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+    private val TITLE_SEASONS_EPISODES = Regex("titles/(\\d+)/seasons/(\\d+)/episodes")
+    private val TITLE_SEASONS = Regex("titles/(\\d+)/seasons")
+    private val TITLE_DETAIL = Regex("titles/(\\d+)")
+    private val ACTOR_DETAIL = Regex("actors/(\\d+)")
+    private val COLLECTION_DETAIL = Regex("collections/(\\d+)")
+    private val TAG_DETAIL = Regex("tags/(\\d+)")
+    private val GENRE_DETAIL = Regex("genres/(\\d+)")
 
+    fun handle(req: HttpServletRequest, resp: HttpServletResponse, path: String, mapper: ObjectMapper) {
         when {
-            path == "home" -> handleHome(req, resp, mapper, user)
-            path == "titles" -> handleTitles(req, resp, mapper, user)
-            path.matches(Regex("titles/(\\d+)")) -> {
-                val id = path.removePrefix("titles/").toLongOrNull()
-                if (id != null) handleTitleDetail(req, resp, mapper, user, id)
-                else {
-                    ApiV1Servlet.sendError(resp, 404, "not_found")
-                    MetricsRegistry.countHttpResponse("api_v1", 404)
-                }
-            }
-            path == "search" -> handleSearch(req, resp, mapper, user)
+            path == "home" -> handleHome(req, resp, mapper)
+            path == "titles" -> handleTitles(req, resp, mapper)
+            path == "search" -> handleSearch(req, resp, mapper)
             else -> {
-                ApiV1Servlet.sendError(resp, 404, "not_found")
-                MetricsRegistry.countHttpResponse("api_v1", 404)
+                // Match deeper paths first (most specific to least specific)
+                val seasonsEpisodesMatch = TITLE_SEASONS_EPISODES.matchEntire(path)
+                val seasonsMatch = TITLE_SEASONS.matchEntire(path)
+                val titleMatch = TITLE_DETAIL.matchEntire(path)
+                val actorMatch = ACTOR_DETAIL.matchEntire(path)
+                val collectionMatch = COLLECTION_DETAIL.matchEntire(path)
+                val tagMatch = TAG_DETAIL.matchEntire(path)
+                val genreMatch = GENRE_DETAIL.matchEntire(path)
+
+                when {
+                    seasonsEpisodesMatch != null -> {
+                        val titleId = seasonsEpisodesMatch.groupValues[1].toLong()
+                        val seasonNum = seasonsEpisodesMatch.groupValues[2].toInt()
+                        TvHandler.handleEpisodes(req, resp, mapper, titleId, seasonNum)
+                    }
+                    seasonsMatch != null -> {
+                        val titleId = seasonsMatch.groupValues[1].toLong()
+                        TvHandler.handleSeasons(req, resp, mapper, titleId)
+                    }
+                    titleMatch != null -> {
+                        val titleId = titleMatch.groupValues[1].toLong()
+                        handleTitleDetail(req, resp, mapper, titleId)
+                    }
+                    actorMatch != null -> {
+                        val personId = actorMatch.groupValues[1].toInt()
+                        BrowseHandler.handleActor(req, resp, mapper, personId)
+                    }
+                    collectionMatch != null -> {
+                        val collId = collectionMatch.groupValues[1].toInt()
+                        BrowseHandler.handleCollection(req, resp, mapper, collId)
+                    }
+                    tagMatch != null -> {
+                        val tagId = tagMatch.groupValues[1].toLong()
+                        BrowseHandler.handleTag(req, resp, mapper, tagId)
+                    }
+                    genreMatch != null -> {
+                        val genreId = genreMatch.groupValues[1].toLong()
+                        BrowseHandler.handleGenre(req, resp, mapper, genreId)
+                    }
+                    else -> {
+                        ApiV1Servlet.sendError(resp, 404, "not_found")
+                        MetricsRegistry.countHttpResponse("api_v1", 404)
+                    }
+                }
             }
         }
     }
 
     // --- Home Feed ---
 
-    private fun handleHome(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, user: AppUser) {
+    private fun handleHome(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
         val nasRoot = TranscoderAgent.getNasRoot()
         val catalog = loadCatalog(user, nasRoot)
 
@@ -121,7 +162,8 @@ object CatalogHandler {
 
     // --- Paginated Title List ---
 
-    private fun handleTitles(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, user: AppUser) {
+    private fun handleTitles(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
         val nasRoot = TranscoderAgent.getNasRoot()
         val catalog = loadCatalog(user, nasRoot)
 
@@ -206,7 +248,8 @@ object CatalogHandler {
 
     // --- Title Detail ---
 
-    private fun handleTitleDetail(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, user: AppUser, titleId: Long) {
+    private fun handleTitleDetail(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
         val title = Title.findById(titleId)
         if (title == null || title.hidden || !user.canSeeRating(title.content_rating)) {
             ApiV1Servlet.sendError(resp, 404, "not_found")
@@ -303,7 +346,8 @@ object CatalogHandler {
 
     // --- Search ---
 
-    private fun handleSearch(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, user: AppUser) {
+    private fun handleSearch(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
         val query = req.getParameter("q")?.trim() ?: ""
         if (query.isEmpty()) {
             ApiV1Servlet.sendJson(resp, 200, ApiSearchResponse("", emptyList(), emptyMap()), mapper)

@@ -129,3 +129,60 @@ data class ApiTitlePage(
     val limit: Int,
     val totalPages: Int
 )
+
+// --- Phase 3: TV + Landing Pages ---
+
+data class ApiSeason(
+    val seasonNumber: Int,
+    val name: String?,
+    val episodeCount: Int
+)
+
+data class ApiEpisode(
+    val episodeId: Long,
+    val transcodeId: Long?,
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val name: String?,
+    val quality: String?,
+    val playable: Boolean,
+    val hasSubtitles: Boolean,
+    val resumePosition: Double,
+    val watchedPercent: Int
+)
+
+data class ApiActorDetail(
+    val name: String,
+    val headshotUrl: String?,
+    val titles: List<ApiTitle>
+)
+
+data class ApiCollectionDetail(
+    val name: String,
+    val posterUrl: String?,
+    val items: List<ApiCollectionItem>
+)
+
+data class ApiCollectionItem(
+    val tmdbMovieId: Int,
+    val name: String,
+    val posterUrl: String?,
+    val year: Int?,
+    val owned: Boolean,
+    val playable: Boolean,
+    val titleId: Long?,
+    val quality: String?,
+    val contentRating: String?,
+    val transcodeId: Long?
+)
+
+data class ApiTagDetail(
+    val name: String,
+    val color: String,
+    val titles: List<ApiTitle>
+)
+
+data class ApiGenreDetail(
+    val name: String,
+    val titles: List<ApiTitle>
+)
