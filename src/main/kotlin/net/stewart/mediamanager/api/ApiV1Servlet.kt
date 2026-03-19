@@ -58,6 +58,7 @@ class ApiV1Servlet : HttpServlet() {
                 path == "info" && method == "GET" -> InfoHandler.handle(req, resp, mapper)
                 path.startsWith("catalog/") && method == "GET" -> CatalogHandler.handle(req, resp, path.removePrefix("catalog/"), mapper)
                 path.startsWith("playback/") -> PlaybackHandler.handle(req, resp, path.removePrefix("playback/"), mapper)
+                path == "wishlist" || path.startsWith("wishlist/") -> WishListHandler.handle(req, resp, path.removePrefix("wishlist").removePrefix("/"), mapper)
                 else -> {
                     sendError(resp, 404, "not_found")
                     MetricsRegistry.countHttpResponse("api_v1", 404)

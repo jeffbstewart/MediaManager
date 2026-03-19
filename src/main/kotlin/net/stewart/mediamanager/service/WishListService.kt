@@ -400,6 +400,63 @@ object WishListService {
             status, title.name, seasonNum, season.id)
     }
 
+    // --- API methods (explicit userId, no VaadinSession dependency) ---
+
+    fun getVisibleMediaWishesForUser(userId: Long): List<WishListItem> {
+        return WishListItem.findAll().filter {
+            it.user_id == userId &&
+                it.wish_type == WishType.MEDIA.name &&
+                (it.status == WishStatus.ACTIVE.name || it.status == WishStatus.FULFILLED.name)
+        }.sortedByDescending { it.created_at }
+    }
+
+    fun addMediaWishForUser(
+        userId: Long,
+        tmdbId: TmdbId,
+        title: String,
+        posterPath: String?,
+        releaseYear: Int?,
+        popularity: Double?,
+        seasonNumber: Int? = null
+    ): WishListItem? {
+        val exists = WishListItem.findAll().any {
+            it.user_id == userId &&
+                it.wish_type == WishType.MEDIA.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.tmdb_id == tmdbId.id &&
+                it.tmdb_media_type == tmdbId.typeString &&
+                (seasonNumber == null || it.season_number == seasonNumber)
+        }
+        if (exists) return null
+
+        val wish = WishListItem(
+            user_id = userId,
+            wish_type = WishType.MEDIA.name,
+            status = WishStatus.ACTIVE.name,
+            tmdb_id = tmdbId.id,
+            tmdb_title = title,
+            tmdb_media_type = tmdbId.typeString,
+            tmdb_poster_path = posterPath,
+            tmdb_release_year = releaseYear,
+            tmdb_popularity = popularity,
+            season_number = seasonNumber,
+            created_at = LocalDateTime.now()
+        )
+        wish.save()
+        log.info("API media wish added: user={} tmdb_id={} title=\"{}\"", userId, tmdbId, title)
+        return wish
+    }
+
+    fun cancelWishForUser(wishId: Long, userId: Long): Boolean {
+        val wish = WishListItem.findById(wishId) ?: return false
+        if (wish.user_id != userId) return false
+        if (wish.status != WishStatus.ACTIVE.name) return false
+        wish.status = WishStatus.CANCELLED.name
+        wish.save()
+        log.info("API wish cancelled: id={} user={}", wishId, userId)
+        return true
+    }
+
     fun userHasAnyMediaWish(): Boolean {
         val userId = currentUserId() ?: return false
         return WishListItem.findAll().any {
