@@ -3,6 +3,8 @@ package net.stewart.mediamanager.api
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.entity.Transcode
+import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PlaybackProgressService
 
@@ -22,6 +24,20 @@ object PlaybackHandler {
         if (transcodeId == null || !path.startsWith("progress/")) {
             ApiV1Servlet.sendError(resp, 400, "invalid_transcode_id")
             MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        // Parental controls: verify user can see the title linked to this transcode
+        val transcode = Transcode.findById(transcodeId)
+        if (transcode == null) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        val title = Title.findById(transcode.title_id)
+        if (title == null || !user.canSeeRating(title.content_rating)) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
             return
         }
 
@@ -50,12 +66,17 @@ object PlaybackHandler {
                     return
                 }
                 val position = body.get("position")?.asDouble()
-                if (position == null) {
-                    ApiV1Servlet.sendError(resp, 400, "missing_position")
+                if (position == null || position < 0 || position.isNaN() || position.isInfinite()) {
+                    ApiV1Servlet.sendError(resp, 400, "invalid_position")
                     MetricsRegistry.countHttpResponse("api_v1", 400)
                     return
                 }
                 val duration = body.get("duration")?.asDouble()
+                if (duration != null && (duration < 0 || duration.isNaN() || duration.isInfinite())) {
+                    ApiV1Servlet.sendError(resp, 400, "invalid_duration")
+                    MetricsRegistry.countHttpResponse("api_v1", 400)
+                    return
+                }
                 PlaybackProgressService.recordProgressForUser(user.id!!, transcodeId, position, duration)
                 resp.status = 204
                 MetricsRegistry.countHttpResponse("api_v1", 204)

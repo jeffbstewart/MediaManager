@@ -42,8 +42,11 @@ class ApiV1Servlet : HttpServlet() {
             return
         }
 
-        // Reject oversized request bodies (DoS protection)
-        if (req.contentLength > MAX_BODY_SIZE) {
+        // Reject oversized or unbounded request bodies (DoS protection).
+        // Content-Length of -1 means missing header (chunked encoding) — reject on
+        // methods with bodies to prevent unbounded reads.
+        val cl = req.contentLength
+        if (cl > MAX_BODY_SIZE || (cl < 0 && req.method in setOf("POST", "PUT", "PATCH"))) {
             sendError(resp, 413, "payload_too_large")
             MetricsRegistry.countHttpResponse("api_v1", 413)
             return
@@ -90,20 +93,8 @@ class ApiV1Servlet : HttpServlet() {
             resp.status = status
             val body = mutableMapOf<String, Any>("error" to error)
             body.putAll(extra)
-            // Write manually to avoid ObjectMapper dependency in static context
-            val json = buildString {
-                append("{")
-                body.entries.forEachIndexed { i, (k, v) ->
-                    if (i > 0) append(",")
-                    append("\"$k\":")
-                    when (v) {
-                        is String -> append("\"$v\"")
-                        else -> append(v)
-                    }
-                }
-                append("}")
-            }
-            resp.writer.write(json)
+            // Use a minimal ObjectMapper for proper JSON escaping
+            ObjectMapper().writeValue(resp.writer, body)
         }
 
         /**

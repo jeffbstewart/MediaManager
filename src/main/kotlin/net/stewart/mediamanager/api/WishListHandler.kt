@@ -108,12 +108,12 @@ object WishListHandler {
             return
         }
 
-        val posterPath = body.get("poster_path")?.asText()
+        val posterPath = body.get("poster_path")?.asText()?.take(500)
         val releaseYear = body.get("release_year")?.asInt()
         val popularity = body.get("popularity")?.asDouble()
         val seasonNumber = body.get("season_number")?.asInt()
 
-        val wish = WishListService.addMediaWishForUser(userId, tmdbId, title, posterPath, releaseYear, popularity, seasonNumber)
+        val wish = WishListService.addMediaWishForUser(userId, tmdbId, title.take(500), posterPath, releaseYear, popularity, seasonNumber)
         if (wish == null) {
             ApiV1Servlet.sendError(resp, 409, "already_wished")
             MetricsRegistry.countHttpResponse("api_v1", 409)
@@ -201,8 +201,7 @@ object WishListHandler {
             return
         }
 
-        userWish.status = WishStatus.CANCELLED.name
-        userWish.save()
+        WishListService.cancelWishForUser(userWish.id!!, userId)
         ApiV1Servlet.sendJson(resp, 200, mapOf("unvoted" to true), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
