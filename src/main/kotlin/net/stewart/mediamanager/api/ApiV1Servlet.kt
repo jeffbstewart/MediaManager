@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.api
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.SerializationFeature
 import jakarta.servlet.annotation.WebServlet
 import jakarta.servlet.http.HttpServlet
@@ -28,6 +29,7 @@ class ApiV1Servlet : HttpServlet() {
 
     val mapper: ObjectMapper = ObjectMapper().apply {
         enable(SerializationFeature.INDENT_OUTPUT)
+        propertyNamingStrategy = PropertyNamingStrategies.SNAKE_CASE
     }
 
     override fun service(req: HttpServletRequest, resp: HttpServletResponse) {
@@ -54,6 +56,7 @@ class ApiV1Servlet : HttpServlet() {
             when {
                 path.startsWith("auth/") -> AuthHandler.handle(req, resp, path.removePrefix("auth/"), mapper)
                 path == "info" && method == "GET" -> InfoHandler.handle(req, resp, mapper)
+                path.startsWith("catalog/") && method == "GET" -> CatalogHandler.handle(req, resp, path.removePrefix("catalog/"), mapper)
                 else -> {
                     sendError(resp, 404, "not_found")
                     MetricsRegistry.countHttpResponse("api_v1", 404)
