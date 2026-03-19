@@ -10,7 +10,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Phase 1: JWT Auth + Server Info
+## Phase 1: JWT Auth + Server Info ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app can discover the server, log in, and get tokens.
 
@@ -29,7 +31,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Security Audit Gate 1: Authentication
+## Security Audit Gate 1: Authentication ✅
+
+**Status: Passed** (2026-03-18) — 16/20 pass, 3 advisory, 1 low fail (fixed: body size limit + device_name truncation)
 
 **When:** After Phase 1 is implemented and tested.
 
@@ -51,7 +55,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Phase 2: Catalog Browsing (Home, Titles, Search)
+## Phase 2: Catalog Browsing (Home, Titles, Search) ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app can browse the library.
 
@@ -63,7 +69,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 **Depends on:** Phase 1
 
-## Phase 3: TV Shows + Landing Pages
+## Phase 3: TV Shows + Landing Pages ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app can browse TV seasons/episodes and drill into actors, collections, tags, genres.
 
@@ -73,7 +81,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 **Depends on:** Phase 2
 
-## Phase 4: Streaming + Playback Progress
+## Phase 4: Streaming + Playback Progress ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app can play video and track progress.
 
@@ -86,7 +96,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 **Depends on:** Phase 1
 
-## Phase 5: Wish List API
+## Phase 5: Wish List API ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app users can browse, add, and vote on wishes.
 
@@ -100,7 +112,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Security Audit Gate 2: First Write Operations
+## Security Audit Gate 2: First Write Operations ✅
+
+**Status: Passed** (2026-03-18) — 8/12 pass, 2 advisory, 3 fails (all fixed: Content-Length bypass, string length bounds, playback parental controls, position validation, JSON escaping, unvote audit logging)
 
 **When:** After Phase 5 is implemented (wish list is the first API that mutates user-visible state).
 
@@ -117,7 +131,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Phase 6: ForMobile Transcode Tier + Downloads
+## Phase 6: ForMobile Transcode Tier + Downloads ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** iOS app can download mobile-optimized videos for offline viewing.
 
@@ -147,7 +163,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 **Depends on:** Phase 4 (AuthFilter JWT for serving downloads)
 
-## Phase 7: Admin + Live Content
+## Phase 7: Admin + Live Content ✅
+
+**Status: Complete** (2026-03-18)
 
 **Goal:** Admin monitoring from mobile, camera and live TV access.
 
@@ -159,7 +177,9 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Security Audit Gate 3: Sensitive Content Access
+## Security Audit Gate 3: Sensitive Content Access ✅
+
+**Status: Passed** (2026-03-18) — 9/10 pass, 1 advisory (fixed: live TV content rating gate added to channel listing)
 
 **When:** After Phase 7 is implemented (cameras and live TV expose real-time private feeds).
 

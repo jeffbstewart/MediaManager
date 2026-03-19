@@ -3494,3 +3494,69 @@ Navigation flow:
   - Concurrent refresh race condition (mitigated by grace period)
 - Gate decision: Phase 2 may proceed
 ===
+
+=== 2026-03-18 02:00 — Phases 2-7 + Security Audit Gates 2-3 ===
+- Implemented all remaining iOS API phases in a single session
+
+Phase 2: Catalog Browsing
+- GET /catalog/home (carousels: resume, recent, movies, TV)
+- GET /catalog/titles (paginated, filterable by type/genre/tag/playable/search/sort)
+- GET /catalog/titles/{id} (full detail with cast, genres, tags, transcodes, progress)
+- GET /catalog/search?q= (mixed results: titles, actors, collections, tags, genres)
+- Files: api/CatalogHandler.kt, api/ApiModels.kt
+- ObjectMapper configured with SNAKE_CASE naming strategy
+
+Phase 3: TV Shows + Landing Pages
+- GET /catalog/titles/{id}/seasons, .../seasons/{num}/episodes
+- GET /catalog/actors/{tmdbPersonId}, /collections/{id}, /tags/{id}, /genres/{id}
+- Files: api/TvHandler.kt, api/BrowseHandler.kt
+- CatalogHandler routing refactored to regex matching with delegation
+
+Phase 4: Streaming + Playback Progress
+- Extended AuthFilter with JWT Bearer as third auth method (after cookie,
+  before device token) — all existing protected endpoints now work with JWT
+- GET/POST/DELETE /playback/progress/{transcodeId}
+- File: api/PlaybackHandler.kt
+
+Phase 5: Wish List API
+- GET /wishlist (aggregated with vote counts + user vote status)
+- POST /wishlist, DELETE /wishlist/{id}
+- POST/DELETE /wishlist/{id}/vote (vote/unvote for another user's wish)
+- Files: api/WishListHandler.kt
+- Added explicit-userId methods to WishListService for servlet context
+
+Security Audit Gate 2: Write Operations (passed)
+- 8/12 pass, 2 advisory, 3 medium fails (all fixed):
+  - Content-Length bypass on chunked encoding
+  - String field length bounds (wish title/posterPath)
+  - Playback progress parental controls bypass
+  - Position/duration NaN/Infinity validation
+  - JSON escaping in sendError
+  - Unvote audit logging gap
+
+Phase 6: ForMobile Transcode + Downloads (3-module change)
+- Updated encoding spec: 1080p H.264 High, 5 Mbps ABR, AAC 160k
+  (~4 GB per 2-hr movie, ~160 movies per 1 TB iPad)
+- Config flag: for_mobile_enabled in app_config (default: false)
+- GET /downloads/available, /manifest/{id}, POST /batch-manifest
+- GET /downloads/{id} (serve ForMobile MP4 with HTTP Range support)
+- transcode-common: EncoderProfile.mobileVariant(), TranscodeCommand.buildMobile()
+- transcode-buddy: PathTranslator ForMobile paths, TranscodeWorker dispatch
+- server: V066 migration, ForMobileService reconciliation, DownloadHandler
+
+Phase 7: Admin + Live Content
+- GET /admin/transcode-status (pending counts + active leases) — admin only
+- GET /admin/buddy-status (buddies + recent lease history) — admin only
+- GET /live/cameras (enabled cameras, no RTSP credentials)
+- GET /live/tv/channels (quality + content rating gate filtered)
+
+Security Audit Gate 3: Sensitive Content Access (passed)
+- 9/10 pass, 1 advisory (fixed):
+  - Added canAccessLiveTv() check to LiveHandler channel listing
+- All critical controls verified: credential redaction, admin gating,
+  parental controls on downloads, no internal URL leakage, JWT never in
+  stream URLs, path traversal prevention, concurrency limits preserved
+
+Total: 10 commits, 20+ new/modified files across 3 modules
+API ready for internet exposure pending deployment
+===
