@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.vokorm.findAll
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.LiveTvStreamServlet
+import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.LiveTvChannel
 import net.stewart.mediamanager.entity.LiveTvTuner
@@ -32,7 +34,7 @@ object LiveHandler {
 
         when (path) {
             "cameras" -> handleCameras(resp, mapper)
-            "tv/channels" -> handleTvChannels(req, resp, mapper, user.live_tv_min_quality)
+            "tv/channels" -> handleTvChannels(req, resp, mapper, user)
             else -> {
                 ApiV1Servlet.sendError(resp, 404, "not_found")
                 MetricsRegistry.countHttpResponse("api_v1", 404)
@@ -60,7 +62,15 @@ object LiveHandler {
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
-    private fun handleTvChannels(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userMinQuality: Int) {
+    private fun handleTvChannels(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, user: AppUser) {
+        // Content rating gate — same check as LiveTvStreamServlet
+        if (!LiveTvStreamServlet.canAccessLiveTv(user)) {
+            ApiV1Servlet.sendJson(resp, 200, mapOf("channels" to emptyList<Any>()), mapper)
+            MetricsRegistry.countHttpResponse("api_v1", 200)
+            return
+        }
+
+        val userMinQuality = user.live_tv_min_quality
         val enabledTunerIds = LiveTvTuner.findAll()
             .filter { it.enabled }
             .mapNotNull { it.id }
