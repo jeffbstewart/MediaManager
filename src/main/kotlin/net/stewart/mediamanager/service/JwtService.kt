@@ -230,7 +230,7 @@ object JwtService {
             user_id = user.id!!,
             token_hash = tokenHash,
             family_id = familyId ?: UUID.randomUUID().toString(),
-            device_name = deviceName,
+            device_name = deviceName.take(255),
             created_at = now,
             expires_at = now.plusDays(REFRESH_TOKEN_DAYS),
             revoked = false

@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory
 class ApiV1Servlet : HttpServlet() {
 
     private val log = LoggerFactory.getLogger(ApiV1Servlet::class.java)
+    private val MAX_BODY_SIZE = 65_536 // 64 KB — generous for auth payloads
 
     val mapper: ObjectMapper = ObjectMapper().apply {
         enable(SerializationFeature.INDENT_OUTPUT)
@@ -36,6 +37,13 @@ class ApiV1Servlet : HttpServlet() {
         if (!isSecureOrExempt(req)) {
             sendError(resp, 403, "https_required")
             MetricsRegistry.countHttpResponse("api_v1", 403)
+            return
+        }
+
+        // Reject oversized request bodies (DoS protection)
+        if (req.contentLength > MAX_BODY_SIZE) {
+            sendError(resp, 413, "payload_too_large")
+            MetricsRegistry.countHttpResponse("api_v1", 413)
             return
         }
 

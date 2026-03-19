@@ -3480,3 +3480,17 @@ Navigation flow:
   - POST /api/v1/auth/revoke — revoke a refresh token
   - GET /api/v1/info — server version, API version, capabilities, title count
 ===
+
+=== 2026-03-18 01:00 — Security Audit Gate 1: JWT Authentication ===
+- Conducted full security audit of Phase 1 JWT implementation
+- Results: 16 Pass, 3 Advisory, 1 Low-Severity Fail
+- All pre-implementation audit findings correctly addressed
+- Must-fix resolved:
+  - Added 64 KB request body size limit to ApiV1Servlet (DoS protection)
+  - Added device_name truncation to 255 chars in JwtService (prevents H2 error)
+- Advisories noted (no action required):
+  - Refresh endpoint rate limiting (mitigated by token requirement + family revocation)
+  - iOS Keychain guidance (client-side, document when iOS project starts)
+  - Concurrent refresh race condition (mitigated by grace period)
+- Gate decision: Phase 2 may proceed
+===
