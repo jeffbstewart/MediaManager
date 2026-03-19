@@ -390,6 +390,7 @@ object AuthService {
             log.info("AUDIT: Invalidated {} sessions for user_id={}", deleted, userId)
         }
         PairingService.revokeAllForUser(userId)
+        JwtService.revokeAllForUser(userId)
     }
 
     fun getCurrentTokenHash(): String? {

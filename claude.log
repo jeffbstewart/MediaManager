@@ -3442,3 +3442,41 @@ Navigation flow:
 - Documented tag-based release process in CLAUDE.md (never create releases
   via gh CLI — push tags, let CI create release with roku-channel.zip)
 ===
+
+=== 2026-03-18 00:30 — Phase 1: iOS API — JWT Auth + Server Info ===
+- Implemented Phase 1 of the iOS REST API (Issue #1, docs/IOS_PLAN.md)
+- Created /api/v1/ servlet namespace with JWT Bearer authentication
+- Files created:
+  - src/main/resources/db/migration/V065__refresh_token.sql — refresh token table
+    with family_id for rotation tracking
+  - src/main/kotlin/.../entity/RefreshToken.kt — VoK entity
+  - src/main/kotlin/.../service/JwtService.kt — HMAC-SHA256 JWT service with:
+    - Auto-generated 256-bit signing key stored in app_config
+    - iss/aud/sub claims validated on every request
+    - Dual-key validation for key rotation (current + previous)
+    - Refresh token rotation with 60s grace period for race conditions
+    - Family-based revocation for token theft detection
+    - 10 refresh token cap per user
+    - Key rotation procedure documented in KDoc
+  - src/main/kotlin/.../api/ApiV1Servlet.kt — servlet at /api/v1/* with:
+    - HTTPS enforcement in production (localhost + dev mode exempt)
+    - Bearer-only auth (JWT never accepted from URL params, cookies, or form)
+    - Jackson ObjectMapper for JSON
+    - Path routing to handlers
+  - src/main/kotlin/.../api/AuthHandler.kt — POST login/refresh/revoke
+  - src/main/kotlin/.../api/InfoHandler.kt — GET /info (authenticated)
+- Files modified:
+  - gradle/libs.versions.toml — added com.auth0:java-jwt:4.4.0
+  - build.gradle.kts — added implementation(libs.java.jwt)
+  - service/AuthService.kt — invalidateUserSessions() now also revokes
+    refresh tokens via JwtService.revokeAllForUser()
+  - Main.kt — added JwtService.cleanupExpiredTokens() to periodic maintenance
+- Security audit findings addressed: #4 (grace period), #6 (generic errors),
+  #7 (JWT claims), #10 (key rotation), #12 (HTTPS), #13 (token cap),
+  #14 (Bearer-only)
+- API endpoints:
+  - POST /api/v1/auth/login — username/password → access + refresh tokens
+  - POST /api/v1/auth/refresh — refresh token rotation → new token pair
+  - POST /api/v1/auth/revoke — revoke a refresh token
+  - GET /api/v1/info — server version, API version, capabilities, title count
+===

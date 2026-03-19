@@ -10,6 +10,7 @@ import net.stewart.mediamanager.service.ForBrowserValidator
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
+import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.SsdpResponder
 import net.stewart.mediamanager.service.CollectionRefreshAgent
@@ -103,6 +104,7 @@ fun main(args: Array<String>) {
         try {
             AuthService.cleanupOldAttempts()
             AuthService.cleanupExpiredTokens()
+            JwtService.cleanupExpiredTokens()
         } catch (e: Exception) {
             log.warn("Periodic cleanup failed: {}", e.message)
         }

@@ -19,6 +19,7 @@ slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 jbcrypt = "org.mindrot:jbcrypt:0.4"
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 gson = "com.google.code.gson:gson:2.11.0"
+java-jwt = "com.auth0:java-jwt:4.4.0"
 openpdf = "com.github.librepdf:openpdf:2.0.3"
 zxing-core = "com.google.zxing:core:3.5.3"
 zxing-javase = "com.google.zxing:javase:3.5.3"

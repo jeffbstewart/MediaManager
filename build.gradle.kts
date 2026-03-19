@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.jbcrypt)
     implementation(libs.micrometer.prometheus)
     implementation(libs.gson)
+    implementation(libs.java.jwt)
     implementation(libs.openpdf)
     implementation(libs.zxing.core)
     implementation(libs.zxing.javase)
