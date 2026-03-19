@@ -76,7 +76,7 @@ enum class UserFlagType { STARRED, HIDDEN, VIEWED }
 
 enum class LeaseStatus { CLAIMED, IN_PROGRESS, COMPLETED, FAILED, EXPIRED }
 
-enum class LeaseType { TRANSCODE, THUMBNAILS, SUBTITLES, CHAPTERS }
+enum class LeaseType { TRANSCODE, THUMBNAILS, SUBTITLES, CHAPTERS, MOBILE_TRANSCODE }
 
 /**
  * Content ratings from TMDB (MPAA for movies, TV Parental Guidelines for TV shows).

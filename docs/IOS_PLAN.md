@@ -122,9 +122,13 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 **Goal:** iOS app can download mobile-optimized videos for offline viewing.
 
 **ForMobile transcode profile:**
-- 720p, H.264 Main, 1.5 Mbps (ABR not CRF — predictable file sizes for shopping cart UX)
-- AAC stereo 128k
+- 1080p, H.264 High, 5.0 Mbps ABR (not CRF — predictable file sizes for shopping cart UX)
+- AAC stereo 160k
 - Path: `{nasRoot}/ForMobile/{relative}.mp4`
+- Expected size: ~6 GB per 3-hour movie, ~4 GB per 2-hour movie (~160 movies per 1 TB iPad)
+- Rationale: 720p at 1.5 Mbps looks soft on Retina iPad/iPhone displays. 1080p at 5 Mbps gives iTunes-quality downloads while still fitting 100+ movies per TB. ABR ensures predictable file sizes for the download cart UX.
+
+**Config flag:** `for_mobile_enabled` in `app_config` (default: false). When disabled, the lease service never creates `MOBILE_TRANSCODE` work, so no ForMobile files are produced. The download API endpoints remain active but naturally return empty results (no `for_mobile_available` transcodes exist). The `GET /info` endpoint conditionally includes `"downloads"` in the capabilities list only when enabled. Enable after ForBrowser backlog is complete.
 
 **New files:**
 - `db/migration/V066__for_mobile.sql` — add `for_mobile_available BOOLEAN DEFAULT FALSE` to `transcode` table
@@ -134,11 +138,12 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 **Modified files:**
 - `entity/Transcode.kt` — add `for_mobile_available` field
 - `entity/Enums.kt` — add `MOBILE_TRANSCODE` to LeaseType
-- `service/TranscodeLeaseService.kt` — add MOBILE_TRANSCODE eligibility in `claimWork()`
+- `service/TranscodeLeaseService.kt` — add MOBILE_TRANSCODE eligibility in `claimWork()`, gated by `for_mobile_enabled` config flag
 - `service/TranscoderAgent.kt` — add ForMobile path helpers
-- `transcode-common/.../TranscodeCommand.kt` — add `buildMobile()` with 720p/1.5Mbps profile
+- `transcode-common/.../TranscodeCommand.kt` — add `buildMobile()` with 1080p/5Mbps profile
 - `transcode-common/.../EncoderProfile.kt` — add mobile encoder profiles
 - `transcode-buddy/.../TranscodeWorker.kt` — handle MOBILE_TRANSCODE lease type
+- `api/InfoHandler.kt` — conditionally include `"downloads"` in capabilities when `for_mobile_enabled` is true
 
 **Depends on:** Phase 4 (AuthFilter JWT for serving downloads)
 
@@ -198,7 +203,8 @@ Phase 1: JWT Auth + Server Info
 - **JWT via `com.auth0:java-jwt`** — lightweight, no transitive deps, HMAC-SHA256
 - **No new services for catalog** — handlers assemble directly from entities, reusing SearchIndexService, TagService, etc.
 - **AuthFilter extended, not replaced** — JWT added as third auth method, preserving cookie + device token
-- **ForMobile uses ABR (not CRF)** — predictable file sizes for the download shopping cart UX
+- **ForMobile uses 1080p/5Mbps ABR (not CRF)** — predictable file sizes for shopping cart UX; 1080p for Retina displays; ~160 movies per 1 TB iPad
+- **ForMobile disabled by default** — `for_mobile_enabled` config flag, enable after ForBrowser backlog completes; download API returns empty results when disabled
 - **Existing Roku/buddy APIs untouched** — complete decoupling
 
 ## Verification Strategy

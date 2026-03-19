@@ -80,6 +80,58 @@ object TranscodeCommand {
     }
 
     /**
+     * Builds an FFmpeg command for ForMobile transcoding (1080p, 5 Mbps ABR).
+     * Always re-encodes video (never copies) to ensure consistent output.
+     * Caps resolution at 1080p without upscaling smaller sources.
+     */
+    fun buildMobile(
+        ffmpegPath: String,
+        sourceFile: File,
+        outputFile: File,
+        probe: VideoProbeResult,
+        encoder: EncoderProfile
+    ): Pair<List<String>, String> {
+        val mobileEncoder = EncoderProfile.mobileVariant(encoder)
+
+        val filters = mutableListOf<String>()
+        if (probe.interlaced) filters.add("yadif")
+        if (probe.isAnamorphic) {
+            filters.add("scale=trunc(iw*sar/2)*2:trunc(ih/2)*2")
+            filters.add("setsar=1:1")
+        }
+        // Cap at 1080p without upscaling; maintain aspect ratio; round to even
+        filters.add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2")
+
+        val command = mutableListOf(
+            ffmpegPath,
+            "-i", sourceFile.absolutePath,
+            "-map", "0:v:0",
+            "-map", "0:a:0",
+            "-dn"
+        ).apply {
+            addAll(mobileEncoder.args)
+            addAll(listOf("-level:v", "4.1"))
+            addAll(listOf("-vf", filters.joinToString(",")))
+            addAll(buildFpsArgs(probe))
+            addAll(listOf("-bsf:v", "filter_units=remove_types=6"))
+            addAll(listOf(
+                "-c:a", "aac",
+                "-ac", "2",
+                "-ar", "48000",
+                "-b:a", "160k",
+                "-map_chapters", "-1",
+                "-movflags", "+faststart",
+                "-threads", "0",
+                "-f", "mp4",
+                "-y",
+                outputFile.absolutePath
+            ))
+        }
+
+        return Pair(command, mobileEncoder.ffmpegEncoder)
+    }
+
+    /**
      * Builds the complete FFmpeg transcode command.
      *
      * @param ffmpegPath path to ffmpeg binary

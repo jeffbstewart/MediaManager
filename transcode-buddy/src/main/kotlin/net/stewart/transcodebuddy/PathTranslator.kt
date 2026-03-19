@@ -39,4 +39,22 @@ class PathTranslator(private val nasRoot: String) {
         val mp4 = forBrowserPath(relativePath)
         return File(mp4.parentFile, mp4.nameWithoutExtension + ".tmp")
     }
+
+    /**
+     * Returns the ForMobile output path for a source file.
+     * E.g., `BLURAY/Movie.mkv` -> `\\NAS\Prometheus\prometheus\ForMobile\BLURAY\Movie.mp4`
+     */
+    fun forMobilePath(relativePath: String): File {
+        val relFile = File(relativePath)
+        val mp4Name = relFile.nameWithoutExtension + ".mp4"
+        val relDir = relFile.parent ?: ""
+        return File(nasRoot, "ForMobile")
+            .resolve(relDir)
+            .resolve(mp4Name)
+    }
+
+    fun forMobileTmpPath(relativePath: String): File {
+        val mp4 = forMobilePath(relativePath)
+        return File(mp4.parentFile, mp4.nameWithoutExtension + ".tmp")
+    }
 }

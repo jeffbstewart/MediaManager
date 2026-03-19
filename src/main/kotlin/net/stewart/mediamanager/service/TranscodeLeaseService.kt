@@ -76,11 +76,13 @@ object TranscodeLeaseService {
         val activeThumbnailIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
         val activeSubtitleIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
         val activeChapterIds = getActiveLeasedTranscodeIds(LeaseType.CHAPTERS)
+        val activeMobileIds = getActiveLeasedTranscodeIds(LeaseType.MOBILE_TRANSCODE)
 
         val poisonPillIds = getPoisonPillTranscodeIds()
         val thumbnailPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
         val subtitlePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
         val chapterPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.CHAPTERS)
+        val mobilePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.MOBILE_TRANSCODE)
 
         // Pre-load chapter extraction state: transcode IDs that already have chapters or completed CHAPTERS leases
         val chapterExtractedIds = getChapterExtractedTranscodeIds()
@@ -150,6 +152,18 @@ object TranscodeLeaseService {
                 File(filePath).exists()
             ) {
                 workItems.add(WorkItem(tc, LeaseType.CHAPTERS, tc.title_id, 3))
+            }
+
+            // --- Check MOBILE_TRANSCODE eligibility ---
+            if (LeaseType.MOBILE_TRANSCODE.name !in skipTypes &&
+                isForMobileEnabled() &&
+                tc.id !in activeMobileIds &&
+                tc.id !in mobilePoisonPillIds &&
+                !tc.for_mobile_available &&
+                !TranscoderAgent.isMobileTranscoded(nasRoot, filePath) &&
+                File(filePath).exists()
+            ) {
+                workItems.add(WorkItem(tc, LeaseType.MOBILE_TRANSCODE, tc.title_id, 4))
             }
         }
 
@@ -702,6 +716,12 @@ object TranscodeLeaseService {
     fun hasSubtitleSentinel(mp4File: File): Boolean {
         val sentinel = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".en.srt.failed")
         return sentinel.exists()
+    }
+
+    fun isForMobileEnabled(): Boolean {
+        return AppConfig.findAll()
+            .firstOrNull { it.config_key == "for_mobile_enabled" }
+            ?.config_val?.equals("true", ignoreCase = true) ?: false
     }
 
     private fun getLeaseDurationMinutes(): Long {

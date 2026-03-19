@@ -97,6 +97,7 @@ class TranscoderAgent(
         else
             "/usr/bin/ffmpeg"
         private const val FOR_BROWSER_DIR = "ForBrowser"
+        private const val FOR_MOBILE_DIR = "ForMobile"
         private val DIRECT_EXTENSIONS = setOf("mp4", "m4v")
         private val TRANSCODE_EXTENSIONS = setOf("mkv", "avi")
 
@@ -123,6 +124,25 @@ class TranscoderAgent(
          */
         fun isTranscoded(nasRoot: String, sourceFilePath: String): Boolean {
             return getForBrowserPath(nasRoot, sourceFilePath).exists()
+        }
+
+        /**
+         * Computes the ForMobile mirrored path for a source file.
+         * E.g., `{nasRoot}/BLURAY/Movie.mkv` -> `{nasRoot}/ForMobile/BLURAY/Movie.mp4`
+         */
+        fun getForMobilePath(nasRoot: String, sourceFilePath: String): File {
+            val sourceFile = File(sourceFilePath)
+            val nasRootFile = File(nasRoot)
+            val relativePath = nasRootFile.toPath().relativize(sourceFile.toPath()).toString()
+            val mp4Name = File(relativePath).nameWithoutExtension + ".mp4"
+            val relativeDir = File(relativePath).parent ?: ""
+            return File(nasRoot, FOR_MOBILE_DIR)
+                .resolve(relativeDir)
+                .resolve(mp4Name)
+        }
+
+        fun isMobileTranscoded(nasRoot: String, sourceFilePath: String): Boolean {
+            return getForMobilePath(nasRoot, sourceFilePath).exists()
         }
 
         /**

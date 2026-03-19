@@ -7,6 +7,7 @@ import org.eclipse.jetty.server.ServerConnector
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.DatabaseBackupService
 import net.stewart.mediamanager.service.ForBrowserValidator
+import net.stewart.mediamanager.service.ForMobileService
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
@@ -135,6 +136,13 @@ fun main(args: Array<String>) {
             log.warn("Startup NAS scan failed: {}", e.message)
         }
     }, 5, TimeUnit.MINUTES)
+    scheduler.schedule({
+        try {
+            ForMobileService.reconcile()
+        } catch (e: Exception) {
+            log.warn("ForMobile reconciliation failed: {}", e.message)
+        }
+    }, 3, TimeUnit.MINUTES)
     Runtime.getRuntime().addShutdownHook(Thread { scheduler.shutdownNow() })
 
     // Internal-only server for /health and /metrics (not exposed to internet)

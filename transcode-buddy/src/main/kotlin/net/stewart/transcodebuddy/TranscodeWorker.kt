@@ -97,6 +97,9 @@ class TranscodeWorker(
         if (claim.leaseType == "CHAPTERS") {
             return processChapters(leaseId, relativePath)
         }
+        if (claim.leaseType == "MOBILE_TRANSCODE") {
+            return processMobileTranscode(leaseId, relativePath)
+        }
 
         val sourceFile = pathTranslator.sourceFile(relativePath)
         if (!sourceFile.exists()) {
@@ -230,6 +233,113 @@ class TranscodeWorker(
 
         } catch (e: Exception) {
             log.error("Transcode error for {}: {}", relativePath, e.message, e)
+            tmpFile.delete()
+            apiClient.reportFailure(leaseId, e.message ?: "Unknown error")
+            return true
+        }
+    }
+
+    /**
+     * Processes a MOBILE_TRANSCODE lease: re-encodes to 1080p/5Mbps for mobile downloads.
+     * Always re-encodes (never copies video) to ensure consistent output size.
+     */
+    private fun processMobileTranscode(leaseId: Long, relativePath: String): Boolean {
+        val sourceFile = pathTranslator.sourceFile(relativePath)
+        if (!sourceFile.exists()) {
+            log.error("Source file not found: {}", sourceFile.absolutePath)
+            apiClient.reportFailure(leaseId, "Source file not found on local NAS mount: ${sourceFile.absolutePath}")
+            return true
+        }
+
+        val mp4File = pathTranslator.forMobilePath(relativePath)
+        val tmpFile = pathTranslator.forMobileTmpPath(relativePath)
+        mp4File.parentFile?.mkdirs()
+
+        try {
+            val probe = probeVideo(config.ffmpegPath, sourceFile)
+            val durationSecs = probe.durationSecs
+
+            log.info("Mobile transcode: {} ({}x{}, {})", sourceFile.name,
+                probe.width, probe.height, probe.codec)
+
+            val (command, encoderName) = TranscodeCommand.buildMobile(
+                config.ffmpegPath, sourceFile, tmpFile, probe, encoder
+            )
+
+            log.info("Running: {}", command.joinToString(" "))
+            val process = ProcessBuilder(command).redirectErrorStream(true).start()
+
+            val progressPercent = AtomicInteger(0)
+            val heartbeatThread = Thread({
+                while (running.get() && process.isAlive) {
+                    try {
+                        Thread.sleep(config.progressIntervalSeconds * 1000L)
+                        if (process.isAlive) {
+                            apiClient.reportProgress(leaseId, progressPercent.get(), encoderName)
+                        }
+                    } catch (_: InterruptedException) { break }
+                }
+            }, "mobile-heartbeat-$leaseId").apply { isDaemon = true; start() }
+
+            val timeRegex = Regex("""time=(\d+):(\d+):(\d+)\.(\d+)""")
+            val outputBuilder = StringBuilder()
+
+            process.inputStream.bufferedReader().forEachLine { rawLine ->
+                if (!running.get()) { process.destroyForcibly(); return@forEachLine }
+                val line = sanitizeFfmpegOutput(rawLine)
+                outputBuilder.appendLine(line)
+                if (durationSecs != null && durationSecs > 0) {
+                    val match = timeRegex.find(line)
+                    if (match != null) {
+                        val h = match.groupValues[1].toInt()
+                        val m = match.groupValues[2].toInt()
+                        val s = match.groupValues[3].toInt()
+                        val frac = "0.${match.groupValues[4]}".toDouble()
+                        val currentSecs = h * 3600.0 + m * 60.0 + s + frac
+                        progressPercent.set(((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95))
+                    }
+                }
+            }
+
+            process.waitFor()
+            heartbeatThread.interrupt()
+            heartbeatThread.join(2000)
+
+            if (!running.get()) { tmpFile.delete(); return true }
+
+            val exitCode = process.exitValue()
+            if (exitCode != 0) {
+                val errorTail = outputBuilder.toString().takeLast(2000)
+                log.error("Mobile FFmpeg failed for {} (exit {}): {}", relativePath, exitCode, errorTail)
+                tmpFile.delete()
+                apiClient.reportFailure(leaseId, "FFmpeg exit code $exitCode: ${errorTail.takeLast(500)}")
+                return true
+            }
+
+            if (!tmpFile.renameTo(mp4File)) {
+                log.error("Failed to rename {} -> {}", tmpFile.absolutePath, mp4File.absolutePath)
+                tmpFile.delete()
+                apiClient.reportFailure(leaseId, "Failed to rename .tmp to .mp4")
+                return true
+            }
+
+            log.info("Mobile transcode complete: {} (size={})", mp4File.absolutePath, mp4File.length())
+
+            var reported = false
+            for (attempt in 1..3) {
+                if (apiClient.reportComplete(leaseId, encoderName, null, mp4File.length())) {
+                    reported = true; break
+                }
+                log.warn("reportComplete attempt {} failed, retrying...", attempt)
+                Thread.sleep(5000L * attempt)
+            }
+            if (!reported) {
+                log.error("Failed to report mobile completion for lease {} after retries", leaseId)
+            }
+            return true
+
+        } catch (e: Exception) {
+            log.error("Mobile transcode error for {}: {}", relativePath, e.message, e)
             tmpFile.delete()
             apiClient.reportFailure(leaseId, e.message ?: "Unknown error")
             return true
