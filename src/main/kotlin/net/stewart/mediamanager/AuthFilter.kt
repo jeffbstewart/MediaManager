@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.PairingService
 
 @WebFilter(urlPatterns = ["/posters/*", "/headshots/*", "/stream/*", "/backdrops/*", "/playback-progress/*", "/local-images/*", "/ownership-photos/*", "/collection-posters/*", "/cam/*", "/live-tv-stream/*"])
@@ -38,6 +39,17 @@ class AuthFilter : Filter {
             httpRequest.setAttribute(USER_ATTRIBUTE, user)
             chain.doFilter(request, response)
             return
+        }
+
+        // JWT Bearer auth (iOS app) — from Authorization header only
+        val authHeader = httpRequest.getHeader("Authorization")
+        if (authHeader != null && authHeader.startsWith("Bearer ", ignoreCase = true)) {
+            val jwtUser = JwtService.validateAccessToken(authHeader.substring(7).trim())
+            if (jwtUser != null) {
+                httpRequest.setAttribute(USER_ATTRIBUTE, jwtUser)
+                chain.doFilter(request, response)
+                return
+            }
         }
 
         // Device token auth (paired Roku/devices) — real user with their preferences
