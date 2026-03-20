@@ -1,5 +1,12 @@
 import SwiftUI
 
+struct PlaybackRoute: Hashable {
+    let transcodeId: Int
+    let titleName: String
+    let episodeName: String?
+    var hasSubtitles: Bool = false
+}
+
 struct TvShowRoute: Hashable {
     let titleId: Int
     let titleName: String

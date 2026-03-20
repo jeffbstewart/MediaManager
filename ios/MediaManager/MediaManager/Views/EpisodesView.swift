@@ -14,7 +14,18 @@ struct EpisodesView: View {
                 ContentUnavailableView("No episodes", systemImage: "tv")
             } else {
                 List(episodes, id: \.episodeId) { episode in
-                    EpisodeRow(episode: episode)
+                    if episode.playable, let tcId = episode.transcodeId {
+                        NavigationLink(value: PlaybackRoute(
+                            transcodeId: tcId,
+                            titleName: route.titleName,
+                            episodeName: episode.name ?? "S\(episode.seasonNumber)E\(episode.episodeNumber)",
+                            hasSubtitles: episode.hasSubtitles
+                        )) {
+                            EpisodeRow(episode: episode)
+                        }
+                    } else {
+                        EpisodeRow(episode: episode)
+                    }
                 }
             }
         }

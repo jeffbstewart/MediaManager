@@ -113,6 +113,40 @@ actor APIClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    func post(_ path: String, body: [String: Any]) async throws {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        let url = baseURL.appendingPathComponent("api/v1/\(path)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+    }
+
+    func delete(_ path: String) async throws {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        let url = baseURL.appendingPathComponent("api/v1/\(path)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+    }
+
+    /// Build a URL with JWT auth for AVPlayer (uses HTTPAdditionalHeaders, not query params).
+    func streamURL(for transcodeId: Int) async -> (URL, [String: String])? {
+        guard let baseURL else { return nil }
+        let url = baseURL.appendingPathComponent("stream/\(transcodeId)")
+        guard let token = accessToken else { return nil }
+        return (url, ["Authorization": "Bearer \(token)"])
+    }
+
     /// Fetch raw bytes (for images, streams) with JWT auth.
     func getRaw(_ path: String) async throws -> Data {
         guard let baseURL else { throw APIClientError.noServerURL }

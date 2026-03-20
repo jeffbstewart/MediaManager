@@ -54,6 +54,9 @@ struct ContentView: View {
                 .navigationDestination(for: SeasonRoute.self) { route in
                     EpisodesView(route: route)
                 }
+                .navigationDestination(for: PlaybackRoute.self) { route in
+                    VideoPlayerView(transcodeId: route.transcodeId, titleName: route.titleName, episodeName: route.episodeName)
+                }
             }
         }
     }

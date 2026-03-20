@@ -47,6 +47,18 @@ struct TitleDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
+                            // Play button for movies
+                            if detail.playable, detail.mediaType != "TV", let tcId = detail.transcodeId {
+                                NavigationLink(value: PlaybackRoute(
+                                    transcodeId: tcId, titleName: detail.name, episodeName: nil
+                                )) {
+                                    Label("Play", systemImage: "play.fill")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                            }
+
                             // Seasons button for TV
                             if detail.mediaType == "TV" {
                                 NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name)) {

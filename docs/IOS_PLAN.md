@@ -197,7 +197,40 @@ The work is organized into 7 implementation phases with 3 security audit gates. 
 
 ---
 
-## Phase Dependency Graph
+## iOS Client Phases
+
+The server-side API phases (1-7) are complete. The following tracks iOS client implementation:
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Server connection, SSDP discovery, JWT auth | Complete |
+| 2 | Catalog browsing (home, grid, detail, search) | Complete |
+| 3 | TV seasons/episodes | Complete |
+| 4 | Video playback + progress tracking | Complete |
+| 4a | Subtitle rendering (WebVTT via AVAssetResourceLoaderDelegate) | Planned |
+| 5 | Wish list | Planned |
+| 6 | Offline downloads (ForMobile) | Planned |
+| 7 | Admin status, cameras, live TV | Planned |
+| 8 | TOFU server fingerprint verification | Planned |
+
+### Phase 4a: Subtitle Rendering
+
+**Goal:** Display WebVTT subtitles during video playback.
+
+**Problem:** AVPlayer does not natively support adding external WebVTT subtitle tracks to a remote HTTP stream with custom auth headers. The standard `AVMediaSelectionGroup` approach only works for embedded subtitle tracks or HLS manifests with subtitle playlists.
+
+**Approach:** Implement `AVAssetResourceLoaderDelegate` to intercept subtitle URL requests, fetch the VTT from `/stream/{id}/subs.vtt` with JWT auth, and provide it to AVPlayer as a legible media selection option. This requires:
+- Custom URL scheme (e.g., `mmstream://`) to intercept requests
+- ResourceLoader delegate that fetches the real URL with Bearer auth
+- Composing a synthetic HLS-like manifest that references the subtitle track
+
+**Data already plumbed:** `hasSubtitles` flag flows from API → `ApiTranscode`/`ApiEpisode` → `PlaybackRoute` → `VideoPlayerView`. The CC badge shows on episode rows. Only the rendering is missing.
+
+**Depends on:** Phase 4
+
+---
+
+## Server-Side Phase Dependency Graph
 
 ```
 Phase 1: JWT Auth + Server Info
