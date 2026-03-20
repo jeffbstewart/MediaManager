@@ -21,6 +21,18 @@ struct VideoPlayerView: View {
             } else if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
+                    .overlay(alignment: .topLeading) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.left.circle.fill")
+                                .font(.title)
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.5))
+                        }
+                        .padding(.top, 8)
+                        .padding(.leading, 16)
+                    }
             } else {
                 ProgressView("Loading stream...")
             }

@@ -40,7 +40,7 @@ struct ContentView: View {
                     case .search:
                         SearchView()
                     case .wishList:
-                        PlaceholderView(title: "Wish List", icon: "heart")
+                        WishListView()
                     case nil:
                         HomeView()
                     }
