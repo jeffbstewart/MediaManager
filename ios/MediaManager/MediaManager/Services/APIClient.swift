@@ -113,6 +113,19 @@ actor APIClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    /// Fetch raw bytes (for images, streams) with JWT auth.
+    func getRaw(_ path: String) async throws -> Data {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        let url = baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: url)
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+        return data
+    }
+
     private func validateResponse(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
         switch http.statusCode {

@@ -30,44 +30,26 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            if let selectedTab {
-                switch selectedTab {
-                case .home:
-                    HomeView()
-                case .catalog:
-                    PlaceholderView(title: "Catalog", icon: "film")
-                case .search:
-                    PlaceholderView(title: "Search", icon: "magnifyingglass")
-                case .wishList:
-                    PlaceholderView(title: "Wish List", icon: "heart")
+            NavigationStack {
+                Group {
+                    switch selectedTab {
+                    case .home:
+                        HomeView()
+                    case .catalog:
+                        CatalogView()
+                    case .search:
+                        SearchView()
+                    case .wishList:
+                        PlaceholderView(title: "Wish List", icon: "heart")
+                    case nil:
+                        HomeView()
+                    }
                 }
-            } else {
-                HomeView()
+                .navigationDestination(for: ApiTitle.self) { title in
+                    TitleDetailView(titleId: title.id)
+                }
             }
         }
-    }
-}
-
-struct HomeView: View {
-    @Environment(AuthManager.self) private var authManager
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 64))
-                .foregroundStyle(.green)
-            Text("Connected")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            if let info = authManager.serverInfo {
-                Text("Server v\(info.serverVersion) — \(info.titleCount) titles")
-                    .foregroundStyle(.secondary)
-                Text("Capabilities: \(info.capabilities.joined(separator: ", "))")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            }
-        }
-        .padding()
     }
 }
 
