@@ -4,6 +4,8 @@ struct ServerSetupView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var serverURL = ""
     @State private var isConnecting = false
+    @State private var isSearching = true
+    @State private var discoveredURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -18,32 +20,72 @@ struct ServerSetupView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Enter your server address to get started.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                if isSearching {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Searching for server on your network...")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let discovered = discoveredURL {
+                    VStack(spacing: 12) {
+                        Label("Server found", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.headline)
+                        Text(discovered.absoluteString)
+                            .foregroundStyle(.secondary)
 
-                VStack(spacing: 16) {
-                    TextField("https://your-server.example.com", text: $serverURL)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.URL)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .onSubmit { connect() }
+                        Button(action: { connectTo(discovered.absoluteString) }) {
+                            if isConnecting {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Text("Connect")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(isConnecting)
+                        .padding(.horizontal)
+                    }
+                } else {
+                    Text("Enter your server address to get started.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
 
-                    Button(action: connect) {
-                        if isConnecting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Connect")
-                                .frame(maxWidth: .infinity)
+                if !isSearching {
+                    VStack(spacing: 16) {
+                        if discoveredURL != nil {
+                            Text("Or enter a different address:")
+                                .foregroundStyle(.secondary)
+                                .font(.callout)
+                        }
+
+                        TextField("https://your-server.example.com", text: $serverURL)
+                            .textFieldStyle(.roundedBorder)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .onSubmit { connectTo(serverURL) }
+
+                        if discoveredURL == nil {
+                            Button(action: { connectTo(serverURL) }) {
+                                if isConnecting {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                } else {
+                                    Text("Connect")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .disabled(serverURL.isEmpty || isConnecting)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(serverURL.isEmpty || isConnecting)
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
 
                 if let error = authManager.error {
                     Text(error)
@@ -58,13 +100,23 @@ struct ServerSetupView: View {
             }
             .padding()
             .navigationTitle("")
+            .task {
+                await discoverServer()
+            }
         }
     }
 
-    private func connect() {
+    private func discoverServer() async {
+        isSearching = true
+        let ssdp = SsdpDiscovery()
+        discoveredURL = await ssdp.discover(timeout: 3.0)
+        isSearching = false
+    }
+
+    private func connectTo(_ urlString: String) {
         isConnecting = true
         Task {
-            await authManager.connectToServer(urlString: serverURL)
+            await authManager.connectToServer(urlString: urlString)
             isConnecting = false
         }
     }
