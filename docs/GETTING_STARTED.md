@@ -104,7 +104,11 @@ Once the server is running and you've created your admin account:
 
 ---
 
-## Local Development
+## Mac Development
+
+For building the server and developing the iOS app on macOS, see [Mac Development Setup](MAC_SETUP.md).
+
+## Local Development (Windows)
 
 For contributors who want to build and run from source.
 

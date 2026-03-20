@@ -1,0 +1,28 @@
+# Normalize line endings: LF in repo, native on checkout
+* text=auto
+
+# Force LF for shell scripts (even on Windows, Git Bash needs LF)
+*.sh text eol=lf
+
+# Force LF for Kotlin/Java/SQL source
+*.kt text eol=lf
+*.java text eol=lf
+*.sql text eol=lf
+*.kts text eol=lf
+
+# Force LF for config/markup
+*.xml text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.properties text eol=lf
+
+# Binary files — no conversion
+*.png binary
+*.jpg binary
+*.jar binary
+*.zip binary
+*.p12 binary
+*.mobileprovision binary

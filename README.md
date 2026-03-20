@@ -34,6 +34,7 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 | [Roku Setup](docs/ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
 | [Transcode Buddy](docs/TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](docs/GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
+| [Mac Development Setup](docs/MAC_SETUP.md) | Contributors | macOS prerequisites, building, deploying, iOS development |
 | [Feature Tracker](docs/FEATURES.md) | Contributors | Completed features history; open items tracked in [GitHub Issues](https://github.com/jeffbstewart/MediaManager/issues) |
 | [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) | Contributors | Market positioning vs Plex, Jellyfin, CLZ Movies, and others |
 

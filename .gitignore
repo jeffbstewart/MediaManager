@@ -20,6 +20,13 @@ data/
 # Roku channel zip
 roku-channel.zip
 
+# iOS / Xcode signing (never commit)
+*.p12
+*.mobileprovision
+*.cer
+*.keystore
+*.jks
+
 # Secrets
 secrets/.env
 secrets/roku-deploy.env

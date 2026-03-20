@@ -91,6 +91,10 @@ check_pattern() {
     fi
 }
 
+# ---------- banned file extensions ----------
+# Files that must never be committed (signing certs, provisioning profiles)
+BANNED_EXTENSIONS=("*.p12" "*.mobileprovision" "*.cer" "*.keystore" "*.jks")
+
 # ---------- main ----------
 
 # Read diff from stdin
@@ -99,6 +103,36 @@ DIFF_INPUT=$(cat)
 if [[ -z "$DIFF_INPUT" ]]; then
     echo "presubmit: no diff input (pipe git diff --cached)"
     exit 0
+fi
+
+# ---------- banned file extension check ----------
+# Check if any staged files match banned extensions (signing certs, etc.)
+banned_files=()
+while IFS= read -r line; do
+    if [[ "$line" == "diff --git "* ]]; then
+        file="${line##* b/}"
+        for ext_pattern in "${BANNED_EXTENSIONS[@]}"; do
+            ext="${ext_pattern#\*}"  # strip leading * to get .p12, .mobileprovision, etc.
+            if [[ "$file" == *"$ext" ]]; then
+                banned_files+=("$file")
+                break
+            fi
+        done
+    fi
+done <<< "$DIFF_INPUT"
+
+if [[ ${#banned_files[@]} -gt 0 ]]; then
+    echo "============================================"
+    echo "PRESUBMIT CHECK FAILED — banned file type(s)"
+    echo "============================================"
+    echo "  The following files must not be committed"
+    echo "  (signing certificates, provisioning profiles):"
+    for f in "${banned_files[@]}"; do
+        echo "    $f"
+    done
+    echo ""
+    echo "  Add these extensions to .gitignore instead."
+    exit 1
 fi
 
 # Build list of file-level allowlist patterns (file:xxx entries)
@@ -173,7 +207,12 @@ else
     SCAN_MAX_AGE_DAYS=30
 
     if [[ -f "$SCAN_SENTINEL" ]]; then
-        age_days=$(( ($(date +%s) - $(stat -c %Y "$SCAN_SENTINEL")) / 86400 ))
+        if [[ "$OSTYPE" == darwin* ]]; then
+            file_mtime=$(stat -f %m "$SCAN_SENTINEL")
+        else
+            file_mtime=$(stat -c %Y "$SCAN_SENTINEL")
+        fi
+        age_days=$(( ($(date +%s) - file_mtime) / 86400 ))
         if [[ $age_days -gt $SCAN_MAX_AGE_DAYS ]]; then
             echo ""
             echo "WARNING: OWASP dependency scan is overdue (${age_days} days since last run)"

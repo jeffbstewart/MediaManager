@@ -50,7 +50,7 @@ DNC="DO NOT COM""MIT"
 dns_lower="do not sub""mit"
 
 # Sensitive values
-IP_PRIV="192.168.1""."100
+IP_PRIV="192.168.5""."42
 IP_PUB="54.230.10"".42"
 IP_OTHER="10.0.0"".1"
 IP_OTHER2="10.0.0"".5"
@@ -153,6 +153,20 @@ expect_fail "dirty line in mixed input" \
 # 19. Version-like strings (e.g. "4.1") should NOT trigger IP check
 expect_pass "version number not an IP" \
     '+level 4.1'
+
+# 20. Banned file extension (.p12) triggers
+expect_fail "banned .p12 file" \
+    "$(printf 'diff --git a/certs/dev.p12 b/certs/dev.p12\n+binary content')" \
+    "banned file type"
+
+# 21. Banned file extension (.mobileprovision) triggers
+expect_fail "banned .mobileprovision file" \
+    "$(printf 'diff --git a/app.mobileprovision b/app.mobileprovision\n+binary content')" \
+    "banned file type"
+
+# 22. Normal .kt file does not trigger banned file check
+expect_pass "normal .kt file allowed" \
+    "$(printf 'diff --git a/Foo.kt b/Foo.kt\n+val x = 42')"
 
 # ---------- results ----------
 
