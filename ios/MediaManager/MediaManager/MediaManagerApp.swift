@@ -2,9 +2,12 @@ import SwiftUI
 
 @main
 struct MediaManagerApp: App {
+    @State private var authManager = AuthManager()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environment(authManager)
         }
     }
 }

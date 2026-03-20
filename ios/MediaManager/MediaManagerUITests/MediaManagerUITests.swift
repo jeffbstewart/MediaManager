@@ -10,14 +10,14 @@ final class MediaManagerUITests: XCTestCase {
         app.launch()
     }
 
-    func testSidebarItemsExist() {
-        XCTAssertTrue(app.staticTexts["Home"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Catalog"].exists)
-        XCTAssertTrue(app.staticTexts["Search"].exists)
-        XCTAssertTrue(app.staticTexts["Wish List"].exists)
+    func testServerSetupScreenAppears() {
+        XCTAssertTrue(app.staticTexts["Media Manager"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Enter your server address to get started."].exists)
+        XCTAssertTrue(app.buttons["Connect"].exists)
     }
 
-    func testNavigationTitle() {
-        XCTAssertTrue(app.navigationBars["Media Manager"].waitForExistence(timeout: 5))
+    func testConnectButtonDisabledWhenEmpty() {
+        XCTAssertTrue(app.buttons["Connect"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Connect"].isEnabled)
     }
 }
