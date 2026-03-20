@@ -40,6 +40,8 @@ actor SsdpDiscovery {
                 connection.start(queue: .global(qos: .userInitiated))
                 connection.receive(minimumIncompleteLength: 1, maximumLength: 2048) { data, _, _, _ in
                     guard let data, let response = String(data: data, encoding: .utf8) else { return }
+                    // Only accept responses that match our service type
+                    guard response.localizedCaseInsensitiveContains(Self.serviceType) else { return }
                     if let url = Self.parseLocation(from: response) {
                         listener.cancel()
                         resumeOnce(url)

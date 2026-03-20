@@ -65,6 +65,10 @@ final class AuthManager {
             // Use the secure_url from the server if available, otherwise use what was entered
             let secureURLString: String
             if let secureUrl = discovery.secureUrl, !secureUrl.isEmpty {
+                guard secureUrl.hasPrefix("https://") else {
+                    self.error = "Server returned insecure URL — connection refused"
+                    return
+                }
                 secureURLString = secureUrl
             } else if normalized.hasPrefix("https://") {
                 secureURLString = normalized

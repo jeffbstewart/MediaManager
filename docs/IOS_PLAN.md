@@ -216,6 +216,39 @@ Phase 1: JWT Auth + Server Info
         └── [Security Audit Gate 3: Sensitive Content]
 ```
 
+## Security: SSDP Discovery and MITM Protection
+
+### Threat Model
+
+SSDP discovery is inherently unauthenticated. A malicious device on the LAN can respond to M-SEARCH with a spoofed `LOCATION:`, redirect the app to a proxy, and capture credentials by forwarding the login request to the real server. HTTPS does not prevent this because the attacker controls which HTTPS endpoint the app connects to.
+
+### Mitigations (implemented)
+
+- **`secure_url` HTTPS validation:** The iOS client rejects any `secure_url` from `/discover` that does not start with `https://`. Prevents trivial downgrade to HTTP.
+- **SSDP service type validation:** The client only accepts SSDP responses containing the expected `ST: urn:stewart:service:mediamanager:1` header. Filters out unrelated UPnP devices.
+- **SSDP only on first connection:** Once the user has connected, the HTTPS URL is saved in Keychain and used directly on subsequent launches. SSDP is never re-run after first setup, limiting the attack window to a single moment.
+- **No credentials over HTTP:** The SSDP→discover flow only retrieves the HTTPS URL. Login credentials are never sent until the app has switched to the HTTPS endpoint.
+
+### Mitigations (planned): TOFU Server Fingerprint
+
+Trust-on-first-use verification of the server's identity, independent of TLS certificates (which rotate every 90 days with Let's Encrypt).
+
+**Server side:**
+- Add `server_fingerprint` to the `/api/v1/discover` response: `SHA-256(jwt_signing_key)` — a hex digest of the server's JWT HMAC signing key. This value is stable (only changes during deliberate key rotation) and cannot be forged without possessing the signing key.
+
+**iOS client side:**
+1. On first successful login, save the `server_fingerprint` from `/discover` in Keychain alongside the server URL.
+2. On every subsequent connection (app relaunch, reconnect, SSDP rediscovery), call `/discover` and compare the returned fingerprint to the stored one.
+3. If the fingerprint matches: proceed normally.
+4. If the fingerprint changes: **block the connection** and display a warning: *"This server's identity has changed since you last connected. This could mean the server's signing key was rotated, or it could indicate a security issue. If you did not rotate the server's signing key, do not proceed."*
+5. Provide an "I rotated the key" button that clears the stored fingerprint and re-trusts.
+
+**Why this works:** The attacker can spoof SSDP, spoof `/discover`, and present a valid TLS cert — but they cannot produce the correct `server_fingerprint` because they don't have the JWT signing key. The only unprotected moment is the very first connection (before any fingerprint is stored), which is inherent to TOFU and acceptable for a household app.
+
+**Why not TLS certificate pinning:** Let's Encrypt certs rotate every 90 days. Pinning the cert would cause false alarms on every renewal. The JWT signing key is application-controlled and stable.
+
+---
+
 ## Key Design Decisions
 
 - **New `api/` subpackage** isolates iOS API code from Vaadin views and existing servlets
