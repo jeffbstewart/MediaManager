@@ -187,3 +187,41 @@ struct ApiSearchResponse: Codable {
     let results: [ApiSearchResult]
     let counts: [String: Int]
 }
+
+// --- Phase 3: TV Shows ---
+
+struct ApiSeason: Codable, Hashable {
+    let seasonNumber: Int
+    let name: String?
+    let episodeCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case seasonNumber = "season_number"
+        case name
+        case episodeCount = "episode_count"
+    }
+}
+
+struct ApiEpisode: Codable {
+    let episodeId: Int
+    let transcodeId: Int?
+    let seasonNumber: Int
+    let episodeNumber: Int
+    let name: String?
+    let quality: String?
+    let playable: Bool
+    let hasSubtitles: Bool
+    let resumePosition: Double
+    let watchedPercent: Int
+
+    enum CodingKeys: String, CodingKey {
+        case name, quality, playable
+        case episodeId = "episode_id"
+        case transcodeId = "transcode_id"
+        case seasonNumber = "season_number"
+        case episodeNumber = "episode_number"
+        case hasSubtitles = "has_subtitles"
+        case resumePosition = "resume_position"
+        case watchedPercent = "watched_percent"
+    }
+}

@@ -47,6 +47,16 @@ struct TitleDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
+                            // Seasons button for TV
+                            if detail.mediaType == "TV" {
+                                NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name)) {
+                                    Label("Seasons & Episodes", systemImage: "list.number")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                            }
+
                             // Genres
                             if !detail.genres.isEmpty {
                                 FlowLayout(spacing: 6) {

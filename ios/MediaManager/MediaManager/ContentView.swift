@@ -48,6 +48,12 @@ struct ContentView: View {
                 .navigationDestination(for: ApiTitle.self) { title in
                     TitleDetailView(titleId: title.id)
                 }
+                .navigationDestination(for: TvShowRoute.self) { route in
+                    SeasonsView(route: route)
+                }
+                .navigationDestination(for: SeasonRoute.self) { route in
+                    EpisodesView(route: route)
+                }
             }
         }
     }
