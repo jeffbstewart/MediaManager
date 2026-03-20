@@ -60,7 +60,7 @@ struct HomeView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             if let info = authManager.serverInfo {
-                Text("Server v\(info.version) — \(info.titleCount) titles")
+                Text("Server v\(info.serverVersion) — \(info.titleCount) titles")
                     .foregroundStyle(.secondary)
                 Text("Capabilities: \(info.capabilities.joined(separator: ", "))")
                     .foregroundStyle(.secondary)

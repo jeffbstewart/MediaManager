@@ -13,13 +13,13 @@ struct DiscoverResponse: Codable {
 }
 
 struct ServerInfo: Codable {
-    let version: String
-    let apiVersion: Int
+    let serverVersion: String
+    let apiVersion: String
     let capabilities: [String]
     let titleCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case version
+        case serverVersion = "server_version"
         case apiVersion = "api_version"
         case capabilities
         case titleCount = "title_count"
