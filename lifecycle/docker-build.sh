@@ -44,7 +44,7 @@ fi
 
 echo ""
 echo "Building ${FULL_NAME}:${TIMESTAMP}..."
-docker build -t "${FULL_NAME}:${TIMESTAMP}" .
+docker build --platform linux/amd64 -t "${FULL_NAME}:${TIMESTAMP}" .
 
 # Tag as latest too
 docker tag "${FULL_NAME}:${TIMESTAMP}" "${FULL_NAME}:latest"
