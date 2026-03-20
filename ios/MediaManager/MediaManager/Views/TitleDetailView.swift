@@ -88,27 +88,31 @@ struct TitleDetailView: View {
                                     .padding(.top, 8)
 
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    LazyHStack(spacing: 12) {
+                                    LazyHStack(alignment: .top, spacing: 16) {
                                         ForEach(detail.cast.prefix(20)) { member in
-                                            VStack(spacing: 4) {
+                                            VStack(spacing: 6) {
                                                 AuthenticatedImage(
                                                     path: member.headshotUrl,
                                                     apiClient: authManager.apiClient,
-                                                    cornerRadius: 30
+                                                    cornerRadius: 40,
+                                                    contentMode: .fit
                                                 )
-                                                .frame(width: 60, height: 60)
+                                                .frame(width: 80, height: 80)
 
                                                 Text(member.name)
-                                                    .font(.caption2)
-                                                    .lineLimit(1)
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
+                                                    .lineLimit(2)
+                                                    .multilineTextAlignment(.center)
                                                 if let character = member.characterName {
                                                     Text(character)
                                                         .font(.caption2)
                                                         .foregroundStyle(.secondary)
-                                                        .lineLimit(1)
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.center)
                                                 }
                                             }
-                                            .frame(width: 70)
+                                            .frame(width: 90)
                                         }
                                     }
                                 }

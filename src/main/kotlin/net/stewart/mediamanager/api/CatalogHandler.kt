@@ -264,7 +264,8 @@ object CatalogHandler {
             .filter { it.title_id == titleId }
             .sortedBy { it.cast_order }
         val cast = castMembers.map { cm ->
-            val headshotUrl = if (cm.headshot_cache_id != null) "/headshots/${cm.id}" else null
+            // Use profile_path (not headshot_cache_id) to decide — HeadshotServlet fetches on demand
+            val headshotUrl = if (cm.profile_path != null) "/headshots/${cm.id}" else null
             ApiCastMember(cm.tmdb_person_id, cm.name, cm.character_name, headshotUrl, cm.cast_order)
         }
 
@@ -392,7 +393,7 @@ object CatalogHandler {
             val ownedCount = members.count { m -> catalog.titlesById.containsKey(m.title_id) }
             if (ownedCount == 0) continue
             val headshotMember = members.maxByOrNull { it.popularity ?: 0.0 }
-            val headshotUrl = if (headshotMember?.headshot_cache_id != null) "/headshots/${headshotMember.id}" else null
+            val headshotUrl = if (headshotMember?.profile_path != null) "/headshots/${headshotMember.id}" else null
             val popularity = members.maxOfOrNull { it.popularity ?: 0.0 } ?: 0.0
             results.add(ApiSearchResult(
                 resultType = "actor", name = name,

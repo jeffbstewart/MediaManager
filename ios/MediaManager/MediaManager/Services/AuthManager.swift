@@ -38,8 +38,9 @@ final class AuthManager {
         Task {
             await apiClient.configure(baseURL: url, accessToken: accessToken)
             state = .authenticated(serverURL: url)
+            // The stored access token may be expired — refresh immediately
+            await performTokenRefresh()
             await refreshServerInfo()
-            scheduleTokenRefresh()
         }
     }
 
@@ -169,10 +170,13 @@ final class AuthManager {
             KeychainService.save(key: .refreshToken, value: response.refreshToken)
             await apiClient.setAccessToken(response.accessToken)
             scheduleTokenRefresh(expiresIn: response.expiresIn)
-        } catch is APIClientError {
+        } catch APIClientError.unauthorized {
+            // Refresh token itself was rejected — session is truly dead
+            await logout()
+        } catch APIClientError.httpError(let code, _) where code == 401 {
             await logout()
         } catch {
-            // Network error — retry in 30 seconds
+            // Network error or server error — retry in 30 seconds
             scheduleTokenRefresh(expiresIn: 30)
         }
     }

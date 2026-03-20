@@ -47,6 +47,7 @@ struct AuthenticatedImage: View {
     let path: String?
     let apiClient: APIClient
     var cornerRadius: CGFloat = 8
+    var contentMode: ContentMode = .fill
 
     @State private var image: UIImage?
     @State private var loading = false
@@ -56,7 +57,7 @@ struct AuthenticatedImage: View {
             if let image {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: contentMode)
             } else {
                 Rectangle()
                     .fill(.quaternary)
