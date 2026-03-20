@@ -36,6 +36,14 @@ class ApiV1Servlet : HttpServlet() {
         resp.contentType = "application/json"
         resp.characterEncoding = "UTF-8"
 
+        // /discover is unauthenticated and HTTPS-exempt — it returns only
+        // API versions and the canonical HTTPS URL for client bootstrap via SSDP.
+        val path0 = req.pathInfo?.removePrefix("/") ?: ""
+        if (path0 == "discover" && req.method == "GET") {
+            DiscoverHandler.handle(req, resp, mapper)
+            return
+        }
+
         if (!isSecureOrExempt(req)) {
             sendError(resp, 403, "https_required")
             MetricsRegistry.countHttpResponse("api_v1", 403)

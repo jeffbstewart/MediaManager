@@ -40,9 +40,22 @@ actor APIClient {
         self.accessToken = token
     }
 
+    /// Hit the unauthenticated /discover endpoint over HTTP (LAN) or HTTPS.
+    /// Returns API versions and the canonical HTTPS URL for secure communication.
+    func discover(serverURL: URL) async throws -> DiscoverResponse {
+        let url = serverURL.appendingPathComponent("api/v1/discover")
+        let (data, response) = try await session.data(from: url)
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(DiscoverResponse.self, from: data)
+    }
+
     func getServerInfo(serverURL: URL) async throws -> ServerInfo {
         let url = serverURL.appendingPathComponent("api/v1/info")
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
         return try JSONDecoder().decode(ServerInfo.self, from: data)
     }

@@ -43,13 +43,15 @@ final class AuthManager {
         }
     }
 
+    /// Connect via a URL entered manually (assumed HTTPS) or discovered via SSDP (HTTP LAN).
+    /// If the URL is HTTP, hits /discover to get the canonical HTTPS URL.
+    /// If the URL is already HTTPS, validates via /discover directly.
     func connectToServer(urlString: String) async {
         error = nil
         var normalized = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalized.hasPrefix("http://") && !normalized.hasPrefix("https://") {
             normalized = "https://\(normalized)"
         }
-        // Strip trailing slashes
         while normalized.hasSuffix("/") {
             normalized.removeLast()
         }
@@ -58,11 +60,27 @@ final class AuthManager {
             return
         }
         do {
-            let info = try await apiClient.getServerInfo(serverURL: url)
-            serverInfo = info
-            KeychainService.save(key: .serverURL, value: normalized)
-            await apiClient.configure(baseURL: url)
-            state = .needsLogin(serverURL: url)
+            let discovery = try await apiClient.discover(serverURL: url)
+
+            // Use the secure_url from the server if available, otherwise use what was entered
+            let secureURLString: String
+            if let secureUrl = discovery.secureUrl, !secureUrl.isEmpty {
+                secureURLString = secureUrl
+            } else if normalized.hasPrefix("https://") {
+                secureURLString = normalized
+            } else {
+                self.error = "Server did not provide a secure URL"
+                return
+            }
+
+            guard let secureURL = URL(string: secureURLString) else {
+                self.error = "Server returned invalid secure URL"
+                return
+            }
+
+            KeychainService.save(key: .serverURL, value: secureURLString)
+            await apiClient.configure(baseURL: secureURL)
+            state = .needsLogin(serverURL: secureURL)
         } catch {
             self.error = "Cannot reach server: \(error.localizedDescription)"
         }

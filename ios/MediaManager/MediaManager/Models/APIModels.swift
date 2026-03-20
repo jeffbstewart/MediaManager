@@ -1,5 +1,17 @@
 import Foundation
 
+struct DiscoverResponse: Codable {
+    let apiVersions: [String]
+    let authMethods: [String]
+    let secureUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case apiVersions = "api_versions"
+        case authMethods = "auth_methods"
+        case secureUrl = "secure_url"
+    }
+}
+
 struct ServerInfo: Codable {
     let version: String
     let apiVersion: Int

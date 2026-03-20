@@ -8,17 +8,15 @@ actor SsdpDiscovery {
     private static let multicastPort: UInt16 = 1900
 
     func discover(timeout: TimeInterval = 3.0) async -> URL? {
-        let mSearchMessage = """
-        M-SEARCH * HTTP/1.1\r
-        HOST: \(Self.multicastAddr):\(Self.multicastPort)\r
-        MAN: "ssdp:discover"\r
-        MX: 2\r
-        ST: \(Self.serviceType)\r
-        \r
+        let mSearchMessage =
+            "M-SEARCH * HTTP/1.1\r\n" +
+            "HOST: \(Self.multicastAddr):\(Self.multicastPort)\r\n" +
+            "MAN: \"ssdp:discover\"\r\n" +
+            "MX: 2\r\n" +
+            "ST: \(Self.serviceType)\r\n" +
+            "\r\n"
 
-        """
-
-        let result: URL? = await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             let resumed = Mutex(false)
 
             let resumeOnce: @Sendable (URL?) -> Void = { url in
@@ -29,39 +27,65 @@ actor SsdpDiscovery {
                 }
             }
 
-            let params = NWParameters.udp
-            params.allowLocalEndpointReuse = true
-            let group = NWEndpoint.hostPort(
-                host: NWEndpoint.Host(Self.multicastAddr),
-                port: NWEndpoint.Port(rawValue: Self.multicastPort)!
-            )
-            let connection = NWConnection(to: group, using: params)
+            // Use NWListener to receive the unicast response on a known port
+            let listenerParams = NWParameters.udp
+            listenerParams.allowLocalEndpointReuse = true
 
-            connection.stateUpdateHandler = { state in
-                if case .ready = state {
-                    let data = Data(mSearchMessage.utf8)
-                    connection.send(content: data, completion: .contentProcessed({ _ in }))
+            guard let listener = try? NWListener(using: listenerParams, on: .any) else {
+                resumeOnce(nil)
+                return
+            }
 
-                    connection.receive(minimumIncompleteLength: 1, maximumLength: 2048) { data, _, _, _ in
-                        guard let data, let response = String(data: data, encoding: .utf8) else {
-                            return
-                        }
-                        if let url = Self.parseLocation(from: response) {
-                            connection.cancel()
-                            resumeOnce(url)
-                        }
+            listener.newConnectionHandler = { connection in
+                connection.start(queue: .global(qos: .userInitiated))
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 2048) { data, _, _, _ in
+                    guard let data, let response = String(data: data, encoding: .utf8) else { return }
+                    if let url = Self.parseLocation(from: response) {
+                        listener.cancel()
+                        resumeOnce(url)
                     }
                 }
             }
 
-            connection.start(queue: .global(qos: .userInitiated))
+            listener.stateUpdateHandler = { state in
+                if case .ready = state {
+                    guard let listenerPort = listener.port else {
+                        listener.cancel()
+                        resumeOnce(nil)
+                        return
+                    }
 
+                    // Send M-SEARCH from a UDP connection bound to our listener port
+                    let sendParams = NWParameters.udp
+                    sendParams.requiredLocalEndpoint = NWEndpoint.hostPort(
+                        host: "0.0.0.0", port: listenerPort)
+                    sendParams.allowLocalEndpointReuse = true
+
+                    let target = NWEndpoint.hostPort(
+                        host: NWEndpoint.Host(Self.multicastAddr),
+                        port: NWEndpoint.Port(rawValue: Self.multicastPort)!
+                    )
+                    let sendConnection = NWConnection(to: target, using: sendParams)
+                    sendConnection.stateUpdateHandler = { sendState in
+                        if case .ready = sendState {
+                            let data = Data(mSearchMessage.utf8)
+                            sendConnection.send(content: data, completion: .contentProcessed({ _ in
+                                // Keep sendConnection alive until timeout
+                            }))
+                        }
+                    }
+                    sendConnection.start(queue: .global(qos: .userInitiated))
+                }
+            }
+
+            listener.start(queue: .global(qos: .userInitiated))
+
+            // Timeout
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                connection.cancel()
+                listener.cancel()
                 resumeOnce(nil)
             }
         }
-        return result
     }
 
     private static func parseLocation(from response: String) -> URL? {
