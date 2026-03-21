@@ -16,7 +16,18 @@ struct HomeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         ForEach(feed.carousels, id: \.name) { carousel in
-                            CarouselView(carousel: carousel, apiClient: authManager.apiClient)
+                            if carousel.name == "Resume Playing" {
+                                CarouselView(
+                                    carousel: carousel,
+                                    apiClient: authManager.apiClient,
+                                    dismissable: true,
+                                    onDismiss: { titleId in
+                                        await dismissContinueWatching(titleId)
+                                    }
+                                )
+                            } else {
+                                CarouselView(carousel: carousel, apiClient: authManager.apiClient)
+                            }
                         }
                     }
                     .padding(.vertical)
@@ -35,6 +46,11 @@ struct HomeView: View {
         }
     }
 
+    private func dismissContinueWatching(_ titleId: Int) async {
+        try? await authManager.apiClient.delete("catalog/home/continue-watching/\(titleId)")
+        await loadFeed()
+    }
+
     private func loadFeed() async {
         loading = feed == nil
         do {
@@ -50,6 +66,8 @@ struct HomeView: View {
 struct CarouselView: View {
     let carousel: ApiCarousel
     let apiClient: APIClient
+    var dismissable: Bool = false
+    var onDismiss: ((Int) async -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -61,10 +79,24 @@ struct CarouselView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 12) {
                     ForEach(carousel.items) { title in
-                        NavigationLink(value: title) {
-                            PosterCard(title: title, apiClient: apiClient)
+                        ZStack(alignment: .topTrailing) {
+                            NavigationLink(value: title) {
+                                PosterCard(title: title, apiClient: apiClient)
+                            }
+                            .buttonStyle(.plain)
+
+                            if dismissable {
+                                Button {
+                                    Task { await onDismiss?(title.id) }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .symbolRenderingMode(.palette)
+                                        .foregroundStyle(.white, .black.opacity(0.5))
+                                }
+                                .offset(x: 4, y: -4)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal)

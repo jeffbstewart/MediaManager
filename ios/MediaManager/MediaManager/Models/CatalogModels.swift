@@ -139,6 +139,8 @@ struct ApiTitleDetail: Codable {
     let transcodes: [ApiTranscode]
     let playbackProgress: ApiPlaybackProgress?
     let familyMembers: [String]?
+    let isFavorite: Bool?
+    let isHidden: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, name, year, description, popularity, quality, playable, cast, genres, tags, transcodes
@@ -152,6 +154,8 @@ struct ApiTitleDetail: Codable {
         case tmdbCollectionName = "tmdb_collection_name"
         case playbackProgress = "playback_progress"
         case familyMembers = "family_members"
+        case isFavorite = "is_favorite"
+        case isHidden = "is_hidden"
     }
 }
 

@@ -134,6 +134,20 @@ actor APIClient {
         try validateResponse(response, data: data)
     }
 
+    func put(_ path: String, body: [String: Any] = [:]) async throws {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+    }
+
     func delete(_ path: String) async throws {
         guard let baseURL else { throw APIClientError.noServerURL }
         let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!

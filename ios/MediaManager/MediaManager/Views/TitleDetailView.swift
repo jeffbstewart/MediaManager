@@ -5,6 +5,8 @@ struct TitleDetailView: View {
     let titleId: Int
     @State private var detail: ApiTitleDetail?
     @State private var loading = true
+    @State private var isFavorite = false
+    @State private var isHidden = false
 
     var body: some View {
         Group {
@@ -74,6 +76,39 @@ struct TitleDetailView: View {
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.large)
                             }
+
+                            // Action row: favorite, hide, re-transcode
+                            HStack(spacing: 20) {
+                                Button {
+                                    Task { await toggleFavorite(detail.id) }
+                                } label: {
+                                    Label(
+                                        isFavorite ? "Favorited" : "Favorite",
+                                        systemImage: isFavorite ? "star.fill" : "star"
+                                    )
+                                    .foregroundStyle(isFavorite ? .yellow : .secondary)
+                                }
+
+                                Button {
+                                    Task { await toggleHidden(detail.id) }
+                                } label: {
+                                    Label(
+                                        isHidden ? "Hidden" : "Hide",
+                                        systemImage: isHidden ? "eye.slash.fill" : "eye.slash"
+                                    )
+                                    .foregroundStyle(isHidden ? .red : .secondary)
+                                }
+
+                                if detail.playable {
+                                    Button {
+                                        Task { await requestRetranscode(detail.id) }
+                                    } label: {
+                                        Label("Re-transcode", systemImage: "arrow.clockwise")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .font(.subheadline)
 
                             // Genres
                             if !detail.genres.isEmpty {
@@ -191,7 +226,39 @@ struct TitleDetailView: View {
     private func loadDetail() async {
         loading = true
         detail = try? await authManager.apiClient.get("catalog/titles/\(titleId)")
+        isFavorite = detail?.isFavorite ?? false
+        isHidden = detail?.isHidden ?? false
         loading = false
+    }
+
+    private func toggleFavorite(_ id: Int) async {
+        isFavorite.toggle()
+        do {
+            if isFavorite {
+                try await authManager.apiClient.put("catalog/titles/\(id)/favorite")
+            } else {
+                try await authManager.apiClient.delete("catalog/titles/\(id)/favorite")
+            }
+        } catch {
+            isFavorite.toggle() // revert on failure
+        }
+    }
+
+    private func toggleHidden(_ id: Int) async {
+        isHidden.toggle()
+        do {
+            if isHidden {
+                try await authManager.apiClient.put("catalog/titles/\(id)/hidden")
+            } else {
+                try await authManager.apiClient.delete("catalog/titles/\(id)/hidden")
+            }
+        } catch {
+            isHidden.toggle() // revert on failure
+        }
+    }
+
+    private func requestRetranscode(_ id: Int) async {
+        try? await authManager.apiClient.post("catalog/titles/\(id)/request-retranscode", body: [:])
     }
 }
 
