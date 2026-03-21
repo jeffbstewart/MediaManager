@@ -158,13 +158,21 @@ struct WishSearchView: View {
     @State private var query = ""
     @State private var results: [TmdbSearchItem] = []
     @State private var addedIds: Set<String> = []
+    @State private var searching = false
+    @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
     let onDismiss: () async -> Void
 
     var body: some View {
         NavigationStack {
             List {
-                if results.isEmpty && !query.isEmpty {
+                if searching {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else if results.isEmpty && hasSearched {
                     ContentUnavailableView.search(text: query)
                 } else {
                     ForEach(results) { item in
@@ -189,6 +197,8 @@ struct WishSearchView: View {
             }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
+                hasSearched = false
+                searching = !newValue.trimmingCharacters(in: .whitespaces).isEmpty
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard !Task.isCancelled else { return }
@@ -201,11 +211,15 @@ struct WishSearchView: View {
     private func performSearch(_ query: String) async {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             results = []
+            hasSearched = false
             return
         }
+        searching = true
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         let response: TmdbSearchResponse? = try? await authManager.apiClient.get("tmdb/search?q=\(encoded)")
         results = response?.results ?? []
+        searching = false
+        hasSearched = true
     }
 
     private func addToWishList(_ item: TmdbSearchItem) async {
