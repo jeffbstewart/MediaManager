@@ -469,6 +469,7 @@ class TranscodeStatusView : KComposite() {
             // Line 3: throughput rates
             val throughputParts = mutableListOf<String>()
             if (stats.transcodeRate > 0) throughputParts.add("%.1f transcodes/hr".format(stats.transcodeRate))
+            if (stats.mobileRate > 0) throughputParts.add("%.1f mobile/hr".format(stats.mobileRate))
             if (stats.thumbnailRate > 0) throughputParts.add("%.0f thumbs/hr".format(stats.thumbnailRate))
             if (stats.subtitleRate > 0) throughputParts.add("%.0f subs/hr".format(stats.subtitleRate))
             if (stats.bytesPerHour > 0) throughputParts.add(stats.formatBytesPerHour())

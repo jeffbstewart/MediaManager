@@ -614,6 +614,7 @@ object TranscodeLeaseService {
         }
 
         val transcodeRate = rateForType(LeaseType.TRANSCODE)
+        val mobileRate = rateForType(LeaseType.MOBILE_TRANSCODE)
         val thumbnailRate = rateForType(LeaseType.THUMBNAILS)
         val subtitleRate = rateForType(LeaseType.SUBTITLES)
         val chapterRate = rateForType(LeaseType.CHAPTERS)
@@ -643,6 +644,7 @@ object TranscodeLeaseService {
             totalCompleted = totalCompleted,
             totalBytes = totalBytes,
             transcodeRate = transcodeRate,
+            mobileRate = mobileRate,
             thumbnailRate = thumbnailRate,
             subtitleRate = subtitleRate,
             chapterRate = chapterRate,
@@ -877,6 +879,7 @@ data class ThroughputStats(
     val totalCompleted: Int,
     val totalBytes: Long,
     val transcodeRate: Double,
+    val mobileRate: Double = 0.0,
     val thumbnailRate: Double,
     val subtitleRate: Double,
     val chapterRate: Double = 0.0,
@@ -885,7 +888,7 @@ data class ThroughputStats(
     val failedCount: Int
 ) {
     /** Combined files/hour across all task types. */
-    val filesPerHour: Double get() = transcodeRate + thumbnailRate + subtitleRate + chapterRate
+    val filesPerHour: Double get() = transcodeRate + mobileRate + thumbnailRate + subtitleRate + chapterRate
 
     /** Estimated seconds to complete given pending work, accounting for per-type rates. */
     fun estimateSecondsLeft(pending: PendingWork): Long? {
@@ -893,6 +896,10 @@ data class ThroughputStats(
         var hasRate = false
         if (pending.transcodes > 0 && transcodeRate > 0) {
             totalSeconds += pending.transcodes / transcodeRate * 3600
+            hasRate = true
+        }
+        if (pending.mobileTranscodes > 0 && mobileRate > 0) {
+            totalSeconds += pending.mobileTranscodes / mobileRate * 3600
             hasRate = true
         }
         if (pending.thumbnails > 0 && thumbnailRate > 0) {
