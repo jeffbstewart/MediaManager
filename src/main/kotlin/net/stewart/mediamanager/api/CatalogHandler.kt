@@ -497,7 +497,7 @@ object CatalogHandler {
             results.add(ApiSearchResult(
                 resultType = "collection", name = coll.name,
                 tmdbCollectionId = coll.tmdb_collection_id, posterUrl = posterUrl
-            ) to (maxPop + 10000.0))
+            ) to maxPop)
         }
 
         // 4. Tag search
@@ -513,7 +513,7 @@ object CatalogHandler {
                 .sumOf { catalog.titlesById[it]?.popularity ?: 0.0 }
             results.add(ApiSearchResult(
                 resultType = "tag", name = tag.name, id = tag.id, titleCount = playableCount
-            ) to (popSum + 5000.0))
+            ) to popSum)
         }
 
         // 5. Genre search
@@ -529,7 +529,7 @@ object CatalogHandler {
                 .sumOf { catalog.titlesById[it]?.popularity ?: 0.0 }
             results.add(ApiSearchResult(
                 resultType = "genre", name = genre.name, id = genre.id, titleCount = playableCount
-            ) to (popSum + 5000.0))
+            ) to popSum)
         }
 
         // Sort by score descending
