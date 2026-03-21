@@ -46,22 +46,30 @@ struct LiveStreamView: View {
                     VStack {
                         HStack {
                             Button {
-                                dismiss()
+                                cleanupAndDismiss()
                             } label: {
-                                Image(systemName: "chevron.left.circle.fill")
-                                    .font(.title)
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(.white, .black.opacity(0.5))
+                                HStack(spacing: 8) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 28))
+                                    Text("Close")
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.black.opacity(0.6))
+                                .clipShape(Capsule())
                             }
 
+                            Spacer()
+
                             Text(title)
-                                .font(.headline)
+                                .font(.subheadline)
                                 .foregroundStyle(.white)
                                 .shadow(radius: 4)
-
-                            Spacer()
+                                .padding(.trailing, 16)
                         }
-                        .padding(.top, 8)
+                        .padding(.top, 12)
                         .padding(.leading, 16)
 
                         Spacer()
@@ -80,11 +88,21 @@ struct LiveStreamView: View {
             await loadStream()
         }
         .onDisappear {
-            statusObserver?.cancel()
-            statusObserver = nil
-            player?.pause()
-            player = nil
+            cleanup()
         }
+    }
+
+    private func cleanupAndDismiss() {
+        cleanup()
+        dismiss()
+    }
+
+    private func cleanup() {
+        statusObserver?.cancel()
+        statusObserver = nil
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
     }
 
     private func loadStream() async {
