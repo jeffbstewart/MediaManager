@@ -9,6 +9,7 @@ final class AuthManager {
         case needsServer
         case needsLogin(serverURL: URL)
         case authenticated(serverURL: URL)
+        case fingerprintMismatch(serverURL: URL, expected: String, received: String)
     }
 
     private(set) var state: State = .needsServer
@@ -83,6 +84,22 @@ final class AuthManager {
                 return
             }
 
+            // TOFU fingerprint verification
+            if let receivedFingerprint = discovery.serverFingerprint {
+                let storedFingerprint = KeychainService.load(key: .serverFingerprint)
+                if let stored = storedFingerprint, stored != receivedFingerprint {
+                    // Fingerprint changed — possible MITM or key rotation
+                    state = .fingerprintMismatch(
+                        serverURL: secureURL,
+                        expected: stored,
+                        received: receivedFingerprint
+                    )
+                    return
+                }
+                // First connection or fingerprint matches — store/update it
+                KeychainService.save(key: .serverFingerprint, value: receivedFingerprint)
+            }
+
             KeychainService.save(key: .serverURL, value: secureURLString)
             await apiClient.configure(baseURL: secureURL)
             state = .needsLogin(serverURL: secureURL)
@@ -137,6 +154,15 @@ final class AuthManager {
             state = .needsLogin(serverURL: url)
         } else {
             state = .needsServer
+        }
+    }
+
+    /// Accept a changed server fingerprint (after deliberate key rotation).
+    /// Clears the stored fingerprint and retries connection.
+    func acceptFingerprintChange() async {
+        KeychainService.delete(key: .serverFingerprint)
+        if case .fingerprintMismatch(let url, _, _) = state {
+            await connectToServer(urlString: url.absoluteString)
         }
     }
 

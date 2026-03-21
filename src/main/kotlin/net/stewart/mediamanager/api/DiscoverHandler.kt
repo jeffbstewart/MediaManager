@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.AppConfig
+import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.MetricsRegistry
 
 /**
@@ -24,7 +25,8 @@ object DiscoverHandler {
 
         val response = mutableMapOf<String, Any>(
             "api_versions" to listOf("v1"),
-            "auth_methods" to listOf("jwt")
+            "auth_methods" to listOf("jwt"),
+            "server_fingerprint" to JwtService.getSigningKeyFingerprint()
         )
         if (!secureUrl.isNullOrBlank()) {
             response["secure_url"] = secureUrl

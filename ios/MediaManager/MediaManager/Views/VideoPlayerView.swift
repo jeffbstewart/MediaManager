@@ -18,6 +18,8 @@ struct VideoPlayerView: View {
     @State private var currentTranscodeId: Int?
     @State private var currentEpisodeName: String?
     @State private var currentNextEpisode: NextEpisode?
+    @State private var showControls = true
+    @State private var hideTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -30,25 +32,35 @@ struct VideoPlayerView: View {
             } else if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
-                    .overlay(alignment: .topLeading) {
-                        Button {
-                            cleanupAndDismiss()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 28))
-                                Text("Close")
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(.black.opacity(0.6))
-                            .clipShape(Capsule())
-                        }
-                        .padding(.top, 12)
-                        .padding(.leading, 16)
+                    .overlay {
+                        // Tap anywhere to toggle controls
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { toggleControls() }
                     }
+                    .overlay(alignment: .topLeading) {
+                        if showControls {
+                            Button {
+                                cleanupAndDismiss()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 28))
+                                    Text("Close")
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.black.opacity(0.6))
+                                .clipShape(Capsule())
+                            }
+                            .padding(.top, 12)
+                            .padding(.leading, 16)
+                            .transition(.opacity)
+                        }
+                    }
+                    .onAppear { scheduleHideControls() }
             } else {
                 ProgressView("Loading stream...")
             }
@@ -59,6 +71,26 @@ struct VideoPlayerView: View {
         }
         .onDisappear {
             cleanup()
+        }
+    }
+
+    private func toggleControls() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showControls.toggle()
+        }
+        if showControls {
+            scheduleHideControls()
+        }
+    }
+
+    private func scheduleHideControls() {
+        hideTask?.cancel()
+        hideTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showControls = false
+            }
         }
     }
 

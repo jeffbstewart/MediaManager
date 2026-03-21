@@ -213,8 +213,8 @@ The server-side API phases (1-7) are complete. The following tracks iOS client i
 | 5b | Actor page with biography, filmography, wish hearts | Complete |
 | 6 | Offline downloads (ForMobile) | Deferred (no transcodes ready) |
 | 7 | Cameras + live TV (viewer) | Complete |
-| 7a | Admin status views | Planned |
-| 8 | TOFU server fingerprint verification | Planned |
+| 7a | Admin status views | Complete |
+| 8 | TOFU server fingerprint verification | Complete |
 
 ### Phase 4a: Subtitle Rendering
 

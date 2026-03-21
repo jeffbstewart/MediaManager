@@ -306,6 +306,19 @@ object JwtService {
         }
     }
 
+    /**
+     * Returns a SHA-256 fingerprint of the JWT signing key for TOFU verification.
+     * Clients store this on first connection and verify it on reconnect to detect
+     * server spoofing (MITM via SSDP). The fingerprint is stable across restarts
+     * and only changes during deliberate key rotation.
+     */
+    fun getSigningKeyFingerprint(): String {
+        val key = getOrCreateSigningKey()
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(key.toByteArray())
+        return hash.joinToString("") { "%02x".format(it) }
+    }
+
     private fun getOrCreateSigningKey(): String {
         val existing = getConfigValue(CONFIG_KEY_SIGNING)
         if (existing != null) return existing

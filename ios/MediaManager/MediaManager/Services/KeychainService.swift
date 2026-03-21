@@ -8,6 +8,7 @@ enum KeychainService {
         case serverURL = "server_url"
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
+        case serverFingerprint = "server_fingerprint"
     }
 
     static func save(key: Key, value: String) {
@@ -51,7 +52,7 @@ enum KeychainService {
     }
 
     static func clearAll() {
-        for key in [Key.serverURL, .accessToken, .refreshToken] {
+        for key in [Key.serverURL, .accessToken, .refreshToken, .serverFingerprint] {
             delete(key: key)
         }
     }

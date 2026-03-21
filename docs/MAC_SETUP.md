@@ -183,6 +183,24 @@ Each family member needs to trust the developer certificate on first install (**
 
 **Updating:** Build a new archive and distribute the same way. The app updates in place &mdash; no data loss.
 
+### SSDP Network Discovery (Multicast Entitlement)
+
+The app uses SSDP multicast to auto-discover the mediaManager server on the local network. On iOS, UDP multicast requires the `com.apple.developer.networking.multicast` entitlement from Apple.
+
+**Current status:** Entitlement request submitted to Apple (2026-03-21). Typical turnaround is 1-2 weeks.
+
+**Without the entitlement:** SSDP discovery silently fails and the app falls back to manual URL entry. All other functionality works normally.
+
+**To request the entitlement** (if setting up a new developer account):
+1. Go to [developer.apple.com/contact/request/networking-multicast](https://developer.apple.com/contact/request/networking-multicast)
+2. Describe the use case: "SSDP (Simple Service Discovery Protocol) to discover a self-hosted media server on the local network. The app sends an M-SEARCH multicast to 239.255.255.250:1900 and listens for a unicast response containing the server's URL."
+3. Once granted, add the entitlement to the app's `.entitlements` file:
+```xml
+<key>com.apple.developer.networking.multicast</key>
+<true/>
+```
+4. Rebuild and deploy &mdash; SSDP will start working automatically.
+
 ---
 
 ## Cross-Platform Notes

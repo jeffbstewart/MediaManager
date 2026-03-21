@@ -4,11 +4,13 @@ struct DiscoverResponse: Codable {
     let apiVersions: [String]
     let authMethods: [String]
     let secureUrl: String?
+    let serverFingerprint: String?
 
     enum CodingKeys: String, CodingKey {
         case apiVersions = "api_versions"
         case authMethods = "auth_methods"
         case secureUrl = "secure_url"
+        case serverFingerprint = "server_fingerprint"
     }
 }
 
