@@ -8,6 +8,7 @@ struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
         NavigationSplitView {
@@ -74,7 +75,7 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            NavigationStack {
+            NavigationStack(path: $navigationPath) {
                 Group {
                     switch selectedTab {
                     case .home:
@@ -113,7 +114,14 @@ struct ContentView: View {
                     EpisodesView(route: route)
                 }
                 .navigationDestination(for: PlaybackRoute.self) { route in
-                    Color.clear.onAppear { playbackRoute = route }
+                    Color.clear.onAppear {
+                        playbackRoute = route
+                        // Pop this empty destination so closing the cover
+                        // returns to the episode list, not a blank page
+                        if !navigationPath.isEmpty {
+                            navigationPath.removeLast()
+                        }
+                    }
                 }
                 .navigationDestination(for: ActorRoute.self) { route in
                     ActorView(route: route)
