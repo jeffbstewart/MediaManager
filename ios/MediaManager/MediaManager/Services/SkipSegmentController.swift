@@ -42,29 +42,21 @@ final class SkipSegmentController {
     private var hasTriggeredUpNext = false
 
     func load(transcodeId: Int, apiClient: APIClient) async {
-        NSLog("MMAPP skip loading chapters for transcode %d", transcodeId)
         do {
             let response: ChaptersResponse = try await apiClient.get("stream/\(transcodeId)/chapters")
-            NSLog("MMAPP skip got %d chapters, %d skip segments", response.chapters.count, response.skipSegments.count)
             for seg in response.skipSegments {
-                NSLog("MMAPP skip segment: type=%@ start=%.1f end=%.1f", seg.type, seg.start, seg.end)
                 if seg.type == "INTRO" { introSegment = seg }
                 if seg.type == "END_CREDITS" { creditsSegment = seg }
             }
-            NSLog("MMAPP skip result: intro=%@, credits=%@",
-                  introSegment != nil ? "yes (\(introSegment!.start)-\(introSegment!.end))" : "no",
-                  creditsSegment != nil ? "yes (\(creditsSegment!.start)-\(creditsSegment!.end))" : "no")
         } catch {
-            NSLog("MMAPP skip load failed: %@", error.localizedDescription)
+            // No chapters/skip data available
         }
     }
 
     func startObserving(player: AVPlayer) {
         guard introSegment != nil || creditsSegment != nil else {
-            NSLog("MMAPP skip no segments to observe")
             return
         }
-        NSLog("MMAPP skip starting observer")
 
         let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in

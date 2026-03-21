@@ -207,7 +207,8 @@ The server-side API phases (1-7) are complete. The following tracks iOS client i
 | 2 | Catalog browsing (home, grid, detail, search) | Complete |
 | 3 | TV seasons/episodes | Complete |
 | 4 | Video playback + progress tracking | Complete |
-| 4a | Subtitle rendering (WebVTT via AVAssetResourceLoaderDelegate) | Planned |
+| 4a | Subtitles (VTT fetch/parse, timed overlay, CC toggle) | Complete |
+| 4b | Custom player (fading controls, scrub preview, skip intro/credits, AirPlay, speed) | Complete |
 | 5 | Wish list (browse, vote, TMDB search add, fulfilled notifications, dismiss) | Complete |
 | 5a | Content views (Movies, TV, Collections, Tags, Family) | Complete |
 | 5b | Actor page with biography, filmography, wish hearts | Complete |

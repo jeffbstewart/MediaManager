@@ -151,9 +151,7 @@ struct VideoPlayerView: View {
         }
 
         // Load subtitles — server returns 404 if none exist
-        NSLog("MMAPP loadStream calling subtitles.load for tcId=%d", tcId)
         await subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
-        NSLog("MMAPP loadStream calling subtitles.startObserving, cueCount=%d", subtitles.cueCount)
         subtitles.startObserving(player: avPlayer)
     }
 

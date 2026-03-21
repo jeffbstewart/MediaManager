@@ -29,7 +29,6 @@ final class ThumbnailScrubber {
             let data: Data = try await apiClient.getRaw("stream/\(transcodeId)/thumbs.vtt")
             guard let content = String(data: data, encoding: .utf8) else { return }
             cues = parseThumbnailVTT(content)
-            NSLog("MMAPP thumbs parsed %d cues", cues.count)
 
             // Determine which sprite sheets we need
             let sheetIndices = Set(cues.map { $0.sheetIndex })
@@ -40,12 +39,9 @@ final class ThumbnailScrubber {
                         sheets[index] = img
                     }
                 } catch {
-                    NSLog("MMAPP thumbs failed to load sheet %d", index)
                 }
             }
-            NSLog("MMAPP thumbs loaded %d sprite sheets", sheets.count)
         } catch {
-            NSLog("MMAPP thumbs load failed: %@", error.localizedDescription)
         }
 
         loading = false

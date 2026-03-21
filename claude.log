@@ -3675,3 +3675,56 @@ Server changes deployed:
 - LiveTvStreamServlet: master playlist, absolute segment URLs
 - HlsCameraRelay: 30-segment buffer, minSegments, segmentCount()
 ===
+
+=== 2026-03-21 — iOS App: Custom Player, Subtitles, Skip Segments ===
+
+Phase 4a — Subtitles:
+- SubtitleParser: VTT parser with \r\n/\r/\n normalization, binary
+  search for active cue, HTML tag stripping
+- SubtitleController: Observable class fetches VTT via authenticated
+  API, starts AVPlayer periodic time observer (4Hz), publishes
+  currentText for SwiftUI overlay
+- CC toggle button (yellow "CC" badge) when subtitles available
+- Root cause of initial failure: SRT files had Windows \r\n line
+  endings, parser split on \n\n which never matched
+
+Phase 4b — Custom Player:
+- Replaced SwiftUI VideoPlayer with AVPlayerLayer + UIViewRepresentable
+  for full control over overlay behavior
+- Fading transport controls (show on tap, hide after 5 seconds)
+- Custom scrub bar (DragGesture, not SwiftUI Slider — Slider had
+  re-entrancy bugs where editing callback fired true immediately
+  after false, permanently locking isScrubbing state)
+- Thumbnail preview on scrub from sprite sheet VTT files
+- Skip Intro button during INTRO skip segments
+- Up Next overlay during END_CREDITS with 10-second countdown and
+  auto-advance to next episode
+- Playback speed menu (0.5x-2x)
+- AirPlay with video device priority
+- Screen sleep prevention during playback
+- Back chevron navigation, title/episode info display
+- PlayerState Observable class for all mutable state (fixes struct
+  @State capture issues in AVPlayer closure callbacks)
+
+Server:
+- New GET /api/v1/stream/{id}/chapters endpoint (StreamDataHandler)
+- Fixed VTT subtitle Content-Length in VideoStreamServlet
+
+Other:
+- iOS device deploy script (lifecycle/ios-deploy.sh)
+- Ad Hoc distribution docs in MAC_SETUP.md
+- Developer.xcconfig for Team ID (gitignored)
+- Personal presubmit patterns (gitignored)
+- Audio session .playback for physical device audio
+- Search result ordering (titles before collections)
+- Collection search boost removed server-side
+- Build version display in sidebar
+
+Debugging insights:
+- SwiftUI struct @State properties captured by value in closures —
+  must use Observable class for state mutated by AVPlayer callbacks
+- SwiftUI Slider editing callback has re-entrancy: fires editing=true
+  immediately after editing=false, causing permanent scrub lock
+- xcrun simctl spawn booted log stream for simulator debugging
+- NSLog() captured by log stream, os.Logger also works at warning+
+===
