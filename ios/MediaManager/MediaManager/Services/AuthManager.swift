@@ -169,6 +169,7 @@ final class AuthManager {
             KeychainService.save(key: .accessToken, value: response.accessToken)
             KeychainService.save(key: .refreshToken, value: response.refreshToken)
             await apiClient.setAccessToken(response.accessToken)
+            updateStreamingCookie(response.accessToken)
             scheduleTokenRefresh(expiresIn: response.expiresIn)
         } catch APIClientError.unauthorized {
             // Refresh token itself was rejected — session is truly dead
@@ -178,6 +179,26 @@ final class AuthManager {
         } catch {
             // Network error or server error — retry in 30 seconds
             scheduleTokenRefresh(expiresIn: 30)
+        }
+    }
+
+    /// Updates the mm_jwt cookie used by AVPlayer for HLS streaming.
+    /// Called on every token refresh so active streams don't lose auth.
+    private func updateStreamingCookie(_ token: String) {
+        guard case .authenticated(let url) = state,
+              let host = url.host() else { return }
+        var cookieProps: [HTTPCookiePropertyKey: Any] = [
+            .name: "mm_jwt",
+            .value: token,
+            .domain: host,
+            .path: "/",
+        ]
+        if url.scheme == "https" {
+            cookieProps[.secure] = "TRUE"
+        }
+        let cookie = HTTPCookie(properties: cookieProps)
+        if let cookie {
+            HTTPCookieStorage.shared.setCookie(cookie)
         }
     }
 

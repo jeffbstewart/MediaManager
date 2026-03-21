@@ -40,6 +40,9 @@ actor APIClient {
         self.accessToken = token
     }
 
+    func getBaseURL() -> URL? { baseURL }
+    func getAccessToken() -> String? { accessToken }
+
     /// Hit the unauthenticated /discover endpoint over HTTP (LAN) or HTTPS.
     /// Returns API versions and the canonical HTTPS URL for secure communication.
     func discover(serverURL: URL) async throws -> DiscoverResponse {

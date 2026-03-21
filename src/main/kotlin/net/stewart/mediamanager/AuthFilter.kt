@@ -52,6 +52,19 @@ class AuthFilter : Filter {
             }
         }
 
+        // JWT cookie auth (iOS HLS streaming) — AVPlayer can't set Authorization headers
+        // on HLS sub-requests (playlist refreshes, .ts segments), so the iOS client sets
+        // a mm_jwt cookie containing the access token before starting HLS playback.
+        val jwtCookie = httpRequest.cookies?.firstOrNull { it.name == "mm_jwt" }
+        if (jwtCookie != null) {
+            val jwtUser = JwtService.validateAccessToken(jwtCookie.value)
+            if (jwtUser != null) {
+                httpRequest.setAttribute(USER_ATTRIBUTE, jwtUser)
+                chain.doFilter(request, response)
+                return
+            }
+        }
+
         // Device token auth (paired Roku/devices) — real user with their preferences
         val apiKey = httpRequest.getParameter("key")
         if (apiKey != null) {

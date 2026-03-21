@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, search, wishList
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList
 }
 
 struct ContentView: View {
@@ -26,6 +26,10 @@ struct ContentView: View {
                         .tag(Tab.tags)
                     Label("Family", systemImage: "video")
                         .tag(Tab.family)
+                    Label("Cameras", systemImage: "web.camera")
+                        .tag(Tab.cameras)
+                    Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
+                        .tag(Tab.liveTv)
                 }
 
                 Section {
@@ -73,6 +77,10 @@ struct ContentView: View {
                         TagsListView()
                     case .family:
                         CatalogView(typeFilter: "PERSONAL", navigationTitle: "Family")
+                    case .cameras:
+                        CamerasView()
+                    case .liveTv:
+                        LiveTvView()
                     case .search:
                         SearchView()
                     case .wishList:
