@@ -29,8 +29,8 @@ class TranscodeBacklogView : KComposite() {
 
     private val root = ui {
         verticalLayout {
-            h2("Transcode Backlog")
-            add(Span("Enriched titles with no linked transcodes.").apply {
+            h2("Rip Suggestions")
+            add(Span("Owned titles with no rip on the NAS — sorted by request count, then popularity.").apply {
                 style.set("color", "rgba(255,255,255,0.5)")
                 style.set("margin-bottom", "var(--lumo-space-m)")
             })
@@ -118,11 +118,17 @@ class TranscodeBacklogView : KComposite() {
             .map { it.title_id }
             .toSet()
 
-        // Enriched, non-hidden titles with ZERO linked transcodes
+        // Title IDs that have physical media (a media_item_title link)
+        val titlesWithMedia = MediaItemTitle.findAll()
+            .map { it.title_id }
+            .toSet()
+
+        // Enriched, non-hidden titles with physical media but ZERO linked transcodes
         var rows = titles
             .filter {
                 it.enrichment_status == EnrichmentStatus.ENRICHED.name &&
                     !it.hidden &&
+                    it.id in titlesWithMedia &&
                     it.id !in titlesWithTranscodes
             }
             .map { title ->

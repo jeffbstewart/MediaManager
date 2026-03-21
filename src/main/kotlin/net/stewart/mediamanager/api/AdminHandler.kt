@@ -1,10 +1,13 @@
 package net.stewart.mediamanager.api
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.vokorm.findAll
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.TranscodeLeaseService
+import net.stewart.mediamanager.service.WishListService
 
 /**
  * Handles GET /api/v1/admin/... endpoints (admin-only, access_level >= 2):
@@ -31,6 +34,7 @@ object AdminHandler {
         when (path) {
             "transcode-status" -> handleTranscodeStatus(resp, mapper)
             "buddy-status" -> handleBuddyStatus(resp, mapper)
+            "rip-backlog" -> handleRipBacklog(req, resp, mapper)
             else -> {
                 ApiV1Servlet.sendError(resp, 404, "not_found")
                 MetricsRegistry.countHttpResponse("api_v1", 404)
@@ -110,6 +114,64 @@ object AdminHandler {
         )
 
         ApiV1Servlet.sendJson(resp, 200, response, mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    /**
+     * GET /admin/rip-backlog — owned titles with no rip on the NAS.
+     * Sorted by transcode wish count (descending), then TMDB popularity (descending).
+     */
+    private fun handleRipBacklog(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val titles = Title.findAll()
+        val wishCounts = WishListService.getTranscodeWishCounts()
+
+        val titlesWithTranscodes = Transcode.findAll()
+            .filter { it.file_path != null }
+            .map { it.title_id }
+            .toSet()
+
+        val titlesWithMedia = MediaItemTitle.findAll()
+            .map { it.title_id }
+            .toSet()
+
+        val page = (req.getParameter("page")?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        val limit = (req.getParameter("limit")?.toIntOrNull() ?: 50).coerceIn(1, 200)
+
+        val rows = titles
+            .filter {
+                it.enrichment_status == EnrichmentStatus.ENRICHED.name &&
+                    !it.hidden &&
+                    it.id in titlesWithMedia &&
+                    it.id !in titlesWithTranscodes
+            }
+            .map { title ->
+                val posterUrl = if (title.poster_path != null) "/posters/w185/${title.id}" else null
+                mapOf(
+                    "title_id" to title.id,
+                    "title_name" to title.name,
+                    "media_type" to title.media_type,
+                    "release_year" to title.release_year,
+                    "poster_url" to posterUrl,
+                    "request_count" to (wishCounts[title.id] ?: 0),
+                    "popularity" to (title.popularity ?: 0.0)
+                )
+            }
+            .sortedWith(
+                compareByDescending<Map<String, Any?>> { it["request_count"] as Int }
+                    .thenByDescending { it["popularity"] as Double }
+            )
+
+        val total = rows.size
+        val totalPages = if (total == 0) 0 else (total + limit - 1) / limit
+        val pageRows = rows.drop((page - 1) * limit).take(limit)
+
+        ApiV1Servlet.sendJson(resp, 200, mapOf(
+            "items" to pageRows,
+            "total" to total,
+            "page" to page,
+            "limit" to limit,
+            "total_pages" to totalPages
+        ), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 }
