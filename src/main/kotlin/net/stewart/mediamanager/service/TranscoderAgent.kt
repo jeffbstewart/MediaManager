@@ -308,6 +308,15 @@ class TranscoderAgent(
         thread = null
     }
 
+    /** Bundle execution order: fast operations first, then by user value. */
+    private val BUNDLE_EXECUTION_ORDER = mapOf(
+        LeaseType.CHAPTERS.name to 0,
+        LeaseType.TRANSCODE.name to 1,
+        LeaseType.MOBILE_TRANSCODE.name to 2,
+        LeaseType.THUMBNAILS.name to 3,
+        LeaseType.SUBTITLES.name to 4
+    )
+
     private fun processNext() {
         val nasRoot = getNasRoot() ?: return
         val ffmpegPath = getFfmpegPath()
@@ -337,9 +346,9 @@ class TranscoderAgent(
         }
         pendingCount.set(needingCount)
 
-        // Claim work through the unified lease system
-        val lease = TranscodeLeaseService.claimWork("local")
-        if (lease == null) {
+        // Claim a bundle through the unified lease system
+        val bundle = TranscodeLeaseService.claimWork("local")
+        if (bundle == null) {
             broadcastStatus(TranscoderProgressEvent(
                 status = TranscoderStatus.IDLE,
                 currentFile = null,
@@ -352,34 +361,63 @@ class TranscoderAgent(
             return
         }
 
-        // Dispatch based on lease type
-        if (lease.lease_type == LeaseType.THUMBNAILS.name) {
-            processThumbnails(lease, nasRoot, ffmpegPath)
-            return
-        }
-        if (lease.lease_type == LeaseType.SUBTITLES.name) {
-            processSubtitles(lease, nasRoot)
-            return
-        }
+        // Sort leases by execution order and process each one
+        val sortedLeases = bundle.leases.sortedBy { BUNDLE_EXECUTION_ORDER[it.lease_type] ?: 99 }
+        val allLeaseIds = sortedLeases.map { it.id!! }
 
+        log.info("Processing bundle of {} lease(s) for: {}", sortedLeases.size, bundle.relativePath)
+
+        for (lease in sortedLeases) {
+            if (!running.get()) break
+
+            // Heartbeat all other leases in the bundle to keep them alive
+            allLeaseIds.filter { it != lease.id }.forEach { TranscodeLeaseService.heartbeat(it) }
+
+            try {
+                when (lease.lease_type) {
+                    LeaseType.CHAPTERS.name -> processChaptersLease(lease, nasRoot, ffmpegPath)
+                    LeaseType.TRANSCODE.name -> processTranscodeLease(
+                        lease, nasRoot, ffmpegPath, transcodes, totalCompleted, allLeaseIds
+                    )
+                    LeaseType.THUMBNAILS.name -> processThumbnails(lease, nasRoot, ffmpegPath)
+                    LeaseType.SUBTITLES.name -> processSubtitles(lease, nasRoot)
+                    else -> {
+                        log.info("Skipping unsupported lease type {} for local agent", lease.lease_type)
+                        TranscodeLeaseService.reportFailure(lease.id!!, "Unsupported lease type for local agent: ${lease.lease_type}")
+                    }
+                }
+            } catch (e: Exception) {
+                log.error("Error processing {} lease {} in bundle: {}", lease.lease_type, lease.id, e.message)
+                TranscodeLeaseService.reportFailure(lease.id!!, e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    /**
+     * Processes a TRANSCODE lease: FFmpeg re-encode to ForBrowser MP4.
+     */
+    private fun processTranscodeLease(
+        lease: net.stewart.mediamanager.entity.TranscodeLease,
+        nasRoot: String,
+        ffmpegPath: String,
+        transcodes: List<Transcode>,
+        totalCompletedIn: Int,
+        bundleLeaseIds: List<Long>
+    ) {
+        var totalCompleted = totalCompletedIn
         val next = Transcode.findById(lease.transcode_id) ?: return
         val sourceFile = File(next.file_path!!)
         val mp4File = getForBrowserPath(nasRoot, next.file_path!!)
         val relativePath = lease.relative_path
 
-        // Sum remaining bytes for ETA: use needingCount files
         val remainingBytes = transcodes
             .filter { tc -> !getForBrowserPath(nasRoot, tc.file_path!!).exists() && File(tc.file_path!!).exists() }
             .sumOf { it.file_size_bytes ?: 0L }
 
-        // Ensure parent directories exist
         mp4File.parentFile?.mkdirs()
-
         val tmpFile = File(mp4File.parentFile, mp4File.nameWithoutExtension + ".tmp")
 
         log.info("Transcoding: {} -> {}", sourceFile.absolutePath, mp4File.absolutePath)
-
-        // Start timing for throughput measurement
         currentFileSize = next.file_size_bytes ?: sourceFile.length()
         transcodeStartNanos = System.nanoTime()
 
@@ -397,7 +435,6 @@ class TranscoderAgent(
             val probe = probeVideo(ffmpegPath, sourceFile)
             val durationSecs = probe.durationSecs
 
-            // Log codec decision
             if (probe.browserSafe && !probe.needsVideoFilter) {
                 log.info("Source codec '{}' is browser-safe (no filters needed), copying video", probe.codec)
             } else if (probe.browserSafe) {
@@ -436,7 +473,6 @@ class TranscoderAgent(
                         val currentSecs = h * 3600.0 + m * 60.0 + s + frac
                         val percent = ((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95)
 
-                        // Update throughput measurement
                         val elapsedNanos = System.nanoTime() - transcodeStartNanos
                         val elapsedSecs = elapsedNanos / 1_000_000_000.0
                         if (elapsedSecs > 2.0 && percent > 0) {
@@ -444,8 +480,10 @@ class TranscoderAgent(
                             measuredBytesPerSec = bytesProcessed / elapsedSecs
                         }
 
-                        // Report progress to lease service (keeps lease alive)
                         TranscodeLeaseService.reportProgress(lease.id!!, percent, encoderName)
+
+                        // Heartbeat other bundle leases during long transcodes
+                        bundleLeaseIds.filter { it != lease.id }.forEach { TranscodeLeaseService.heartbeat(it) }
 
                         broadcastStatus(TranscoderProgressEvent(
                             status = TranscoderStatus.TRANSCODING,
@@ -487,7 +525,6 @@ class TranscoderAgent(
                 return
             }
 
-            // Rename .tmp -> .mp4
             if (!tmpFile.renameTo(mp4File)) {
                 log.error("Failed to rename {} -> {}", tmpFile.absolutePath, mp4File.absolutePath)
                 tmpFile.delete()
@@ -499,10 +536,8 @@ class TranscoderAgent(
             completedCounter.increment()
             bytesCounter.increment(currentFileSize.toDouble())
 
-            // Report completion through lease service (handles wish fulfillment)
             TranscodeLeaseService.reportComplete(lease.id!!, encoderName)
 
-            // Capture probe data for the ForBrowser MP4
             try {
                 val outputRelativePath = File(nasRoot).toPath()
                     .relativize(mp4File.toPath()).toString().replace('\\', '/')
@@ -520,8 +555,6 @@ class TranscoderAgent(
             }
 
             totalCompleted++
-
-            // Remaining bytes after this file completed
             val backlogBytes = remainingBytes - currentFileSize
 
             broadcastStatus(TranscoderProgressEvent(
@@ -553,7 +586,67 @@ class TranscoderAgent(
     }
 
     /**
-     * Processes a THUMBNAILS lease: generates sprite sheets + VTT for a ForBrowser MP4.
+     * Processes a CHAPTERS lease: extracts chapter markers from the source file via FFprobe.
+     */
+    private fun processChaptersLease(
+        lease: net.stewart.mediamanager.entity.TranscodeLease,
+        nasRoot: String,
+        ffmpegPath: String
+    ) {
+        val tc = Transcode.findById(lease.transcode_id)
+        if (tc == null || tc.file_path == null) {
+            TranscodeLeaseService.reportFailure(lease.id!!, "Transcode not found")
+            return
+        }
+
+        val sourceFile = File(tc.file_path!!)
+        if (!sourceFile.exists()) {
+            TranscodeLeaseService.reportFailure(lease.id!!, "Source file not found: ${sourceFile.name}")
+            return
+        }
+
+        log.info("Extracting chapters from: {}", sourceFile.name)
+        TranscodeLeaseService.reportProgress(lease.id!!, 10, null)
+
+        val chapters = net.stewart.transcode.probeChapters(ffmpegPath, sourceFile)
+
+        if (chapters.isEmpty()) {
+            log.info("No chapters found in: {}", sourceFile.name)
+        } else {
+            log.info("Found {} chapters in: {}", chapters.size, sourceFile.name)
+        }
+
+        // Report complete — chapter data is sent via a separate mechanism for the local agent.
+        // The BuddyApiServlet handleComplete processes chapters from the buddy; for local agent,
+        // we store chapters directly.
+        try {
+            if (chapters.isNotEmpty()) {
+                // Delete existing chapters for this transcode (idempotent)
+                net.stewart.mediamanager.entity.Chapter.findAll()
+                    .filter { it.transcode_id == lease.transcode_id }
+                    .forEach { it.delete() }
+
+                for (ch in chapters) {
+                    net.stewart.mediamanager.entity.Chapter(
+                        transcode_id = lease.transcode_id,
+                        chapter_number = ch.number,
+                        start_seconds = ch.startSeconds,
+                        end_seconds = ch.endSeconds,
+                        title = ch.title
+                    ).create()
+                }
+                log.info("Stored {} chapters for transcode_id={}", chapters.size, lease.transcode_id)
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to store chapters for transcode_id={}: {}", lease.transcode_id, e.message)
+        }
+
+        TranscodeLeaseService.reportComplete(lease.id!!, null)
+    }
+
+    /**
+     * Processes a THUMBNAILS lease: generates sprite sheets + VTT.
+     * Uses the source file directly (FFmpeg handles MKV/AVI/MP4).
      */
     private fun processThumbnails(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
@@ -567,46 +660,45 @@ class TranscoderAgent(
         }
 
         val filePath = tc.file_path!!
-        val mp4File = if (needsTranscoding(filePath)) {
-            getForBrowserPath(nasRoot, filePath)
-        } else {
-            File(filePath)
-        }
+        val sourceFile = File(filePath)
 
-        if (!mp4File.exists()) {
-            TranscodeLeaseService.reportFailure(lease.id!!, "MP4 file not found: ${mp4File.name}")
+        // Use source file directly — FFmpeg can generate thumbnails from any format.
+        // Fall back to ForBrowser if source doesn't exist (shouldn't happen in a bundle).
+        val videoFile = if (sourceFile.exists()) {
+            sourceFile
+        } else if (needsTranscoding(filePath)) {
+            val fb = getForBrowserPath(nasRoot, filePath)
+            if (fb.exists()) fb else {
+                TranscodeLeaseService.reportFailure(lease.id!!, "No video file found for thumbnails: ${sourceFile.name}")
+                return
+            }
+        } else {
+            TranscodeLeaseService.reportFailure(lease.id!!, "Source file not found: ${sourceFile.name}")
             return
         }
 
-        // Write sprites alongside the source file, not in ForBrowser
         val outputDir = getAuxOutputDir(filePath)
-        log.info("Generating thumbnails for {} -> {}", mp4File.name, outputDir)
+        log.info("Generating thumbnails for {} -> {}", videoFile.name, outputDir)
         TranscodeLeaseService.reportProgress(lease.id!!, 10, null)
 
-        val success = ThumbnailSpriteGenerator.generate(ffmpegPath, mp4File, outputDir)
+        val success = ThumbnailSpriteGenerator.generate(ffmpegPath, videoFile, outputDir)
 
         if (success) {
-            log.info("Thumbnails complete for: {}", mp4File.name)
+            log.info("Thumbnails complete for: {}", videoFile.name)
             TranscodeLeaseService.reportComplete(lease.id!!, null)
         } else {
-            log.warn("Thumbnail generation failed for: {}", mp4File.name)
+            log.warn("Thumbnail generation failed for: {}", videoFile.name)
             TranscodeLeaseService.reportFailure(lease.id!!, "FFmpeg thumbnail generation failed")
         }
     }
 
     /**
-     * Processes a SUBTITLES lease: generates SRT subtitles via Whisper.
-     * On the Docker server (local buddy), Whisper is typically not available,
-     * so this just reports failure. Remote buddies with whisper_path configured
-     * handle subtitles via TranscodeWorker.processSubtitles().
+     * Processes a SUBTITLES lease: local agent has no Whisper, reports failure.
      */
     private fun processSubtitles(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
-        nasRoot: String
+        @Suppress("UNUSED_PARAMETER") nasRoot: String
     ) {
-        // The local transcoder agent (Docker) doesn't have Whisper installed.
-        // Subtitle generation is handled by remote buddy workers with GPUs.
-        // If we're the only worker, skip gracefully.
         log.info("Skipping SUBTITLES lease {} (local agent has no Whisper)", lease.id)
         TranscodeLeaseService.reportFailure(lease.id!!, "Local agent does not have Whisper installed")
     }

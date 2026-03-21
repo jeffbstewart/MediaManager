@@ -19,7 +19,9 @@ data class BuddyConfig(
     val whisperModelDir: String? = null,
     val whisperLanguage: String = "en",
     val whisperDevice: String = "cuda",
-    val whisperComputeType: String = "float16"
+    val whisperComputeType: String = "float16",
+    /** Dedicated temp directory for staging source files locally before processing bundles. */
+    val localTempDir: String? = null
 ) {
     companion object {
         fun load(path: String): BuddyConfig {
@@ -46,7 +48,8 @@ data class BuddyConfig(
                 whisperModelDir = props.getProperty("whisper_model_dir"),
                 whisperLanguage = props.getProperty("whisper_language", "en"),
                 whisperDevice = props.getProperty("whisper_device", "cuda"),
-                whisperComputeType = props.getProperty("whisper_compute_type", "float16")
+                whisperComputeType = props.getProperty("whisper_compute_type", "float16"),
+                localTempDir = props.getProperty("local_temp_dir")
             )
         }
 

@@ -70,6 +70,18 @@ fun main(args: Array<String>) {
         log.info("Released {} stale lease(s) from previous session", released)
     }
 
+    // Initialize local file cache if configured
+    val localCache = if (config.localTempDir != null) {
+        val tempDir = File(config.localTempDir)
+        log.info("Local file cache: {}", tempDir.absolutePath)
+        val cache = LocalFileCache(tempDir, apiClient)
+        cache.startupCleanup()
+        cache
+    } else {
+        log.info("Local file cache: disabled (no local_temp_dir configured)")
+        null
+    }
+
     val pathTranslator = PathTranslator(config.nasRoot)
     val running = AtomicBoolean(true)
     val executor = Executors.newFixedThreadPool(config.workerCount)
@@ -86,7 +98,7 @@ fun main(args: Array<String>) {
 
     // Start workers
     for (i in 0 until config.workerCount) {
-        val worker = TranscodeWorker(config, apiClient, pathTranslator, encoder, i, running)
+        val worker = TranscodeWorker(config, apiClient, pathTranslator, encoder, i, running, localCache)
         executor.submit(worker)
     }
 

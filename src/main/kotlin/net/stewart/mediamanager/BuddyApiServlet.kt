@@ -49,6 +49,7 @@ class BuddyApiServlet : HttpServlet() {
                 "release" -> handleRelease(req, resp)
                 "clear-failures" -> handleClearFailures(resp)
                 "reclassify" -> handleReclassify(req, resp)
+                "check-pending" -> handleCheckPending(req, resp)
                 else -> resp.sendError(HttpServletResponse.SC_NOT_FOUND)
             }
         } catch (e: Exception) {
@@ -82,23 +83,29 @@ class BuddyApiServlet : HttpServlet() {
 
         val skipTypes = body.get("skip_types")?.asJsonArray
             ?.map { it.asString }?.toSet() ?: emptySet()
+        val cachedTranscodeIds = body.getAsJsonArray("cached_transcode_ids")
+            ?.map { it.asLong }?.toSet() ?: emptySet()
 
-        val lease = TranscodeLeaseService.claimWork(buddyName, skipTypes)
-        if (lease == null) {
+        val bundle = TranscodeLeaseService.claimWork(buddyName, skipTypes, cachedTranscodeIds)
+        if (bundle == null) {
             sendJson(resp, HttpServletResponse.SC_OK, mapOf(
-                "lease_id" to null,
+                "transcode_id" to null,
                 "message" to "No work available"
             ))
             return
         }
 
         sendJson(resp, HttpServletResponse.SC_OK, mapOf(
-            "lease_id" to lease.id,
-            "transcode_id" to lease.transcode_id,
-            "relative_path" to lease.relative_path,
-            "file_size_bytes" to lease.file_size_bytes,
-            "expires_at" to lease.expires_at?.toString(),
-            "lease_type" to lease.lease_type
+            "transcode_id" to bundle.transcodeId,
+            "relative_path" to bundle.relativePath,
+            "file_size_bytes" to bundle.fileSizeBytes,
+            "leases" to bundle.leases.map { lease ->
+                mapOf(
+                    "lease_id" to lease.id,
+                    "lease_type" to lease.lease_type,
+                    "expires_at" to lease.expires_at?.toString()
+                )
+            }
         ))
     }
 
@@ -252,24 +259,23 @@ class BuddyApiServlet : HttpServlet() {
 
     private fun handleHeartbeat(req: HttpServletRequest, resp: HttpServletResponse) {
         val body = parseBody(req)
-        val leaseId = body?.get("lease_id")?.asLong
 
-        if (leaseId == null) {
+        // Accept either single lease_id or array of lease_ids
+        val leaseIds = mutableListOf<Long>()
+        body?.get("lease_id")?.let { if (!it.isJsonNull) leaseIds.add(it.asLong) }
+        body?.getAsJsonArray("lease_ids")?.forEach { leaseIds.add(it.asLong) }
+
+        if (leaseIds.isEmpty()) {
             sendJson(resp, HttpServletResponse.SC_BAD_REQUEST,
-                mapOf("error" to "lease_id is required"))
+                mapOf("error" to "lease_id or lease_ids is required"))
             return
         }
 
-        val lease = TranscodeLeaseService.heartbeat(leaseId)
-        if (lease == null) {
-            sendJson(resp, HttpServletResponse.SC_NOT_FOUND,
-                mapOf("error" to "Lease not found or not active"))
-            return
-        }
+        val renewed = TranscodeLeaseService.heartbeatMultiple(leaseIds)
 
         sendJson(resp, HttpServletResponse.SC_OK, mapOf(
             "ok" to true,
-            "expires_at" to lease.expires_at?.toString()
+            "renewed" to renewed
         ))
     }
 
@@ -446,6 +452,23 @@ class BuddyApiServlet : HttpServlet() {
         } catch (e: Exception) {
             log.warn("Failed to auto-create intro skip segment for transcode_id={}: {}", transcodeId, e.message)
         }
+    }
+
+    private fun handleCheckPending(req: HttpServletRequest, resp: HttpServletResponse) {
+        val body = parseBody(req)
+        val transcodeIds = body?.getAsJsonArray("transcode_ids")
+            ?.map { it.asLong } ?: emptyList()
+
+        if (transcodeIds.isEmpty()) {
+            sendJson(resp, HttpServletResponse.SC_BAD_REQUEST,
+                mapOf("error" to "transcode_ids array is required"))
+            return
+        }
+
+        val pending = TranscodeLeaseService.checkPending(transcodeIds)
+        sendJson(resp, HttpServletResponse.SC_OK, mapOf(
+            "pending" to pending
+        ))
     }
 
     private fun authenticate(req: HttpServletRequest, resp: HttpServletResponse): Boolean {
