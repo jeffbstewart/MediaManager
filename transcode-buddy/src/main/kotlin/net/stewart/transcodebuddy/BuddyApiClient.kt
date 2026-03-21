@@ -12,13 +12,19 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-data class ClaimResponse(
-    val leaseId: Long?,
-    val transcodeId: Long?,
-    val relativePath: String?,
-    val fileSizeBytes: Long?,
-    val expiresAt: String?,
-    val leaseType: String = "TRANSCODE"
+/** A single lease within a bundle. */
+data class LeaseInfo(
+    val leaseId: Long,
+    val leaseType: String,
+    val expiresAt: String?
+)
+
+/** Bundle response from the claim endpoint: all outstanding work for one file. */
+data class BundleResponse(
+    val transcodeId: Long,
+    val relativePath: String,
+    val fileSizeBytes: Long,
+    val leases: List<LeaseInfo>
 )
 
 class BuddyApiClient(private val config: BuddyConfig) {
@@ -29,20 +35,48 @@ class BuddyApiClient(private val config: BuddyConfig) {
         .connectTimeout(Duration.ofSeconds(10))
         .build()
 
-    fun claimWork(skipTypes: Set<String> = emptySet()): ClaimResponse? {
+    /**
+     * Claims a bundle of work: all outstanding leases for the highest-priority file.
+     * Sends cached_transcode_ids so the server prefers files we already have locally.
+     */
+    fun claimWork(skipTypes: Set<String> = emptySet(), cachedTranscodeIds: Set<Long> = emptySet()): BundleResponse? {
         val data = mutableMapOf<String, Any>("buddy_name" to config.buddyName)
         if (skipTypes.isNotEmpty()) data["skip_types"] = skipTypes.toList()
+        if (cachedTranscodeIds.isNotEmpty()) data["cached_transcode_ids"] = cachedTranscodeIds.toList()
         val body = gson.toJson(data)
-        val json = post("claim", body) ?: return null
-        val leaseId = json.get("lease_id")
-        if (leaseId == null || leaseId.isJsonNull) return null
-        return ClaimResponse(
-            leaseId = leaseId.asLong,
-            transcodeId = json.get("transcode_id")?.asLong,
-            relativePath = json.get("relative_path")?.asString,
-            fileSizeBytes = json.get("file_size_bytes")?.asLong,
-            expiresAt = json.get("expires_at")?.asString,
-            leaseType = json.get("lease_type")?.asString ?: "TRANSCODE"
+        log.info("Claiming work (skipTypes={}, cachedIds={})", skipTypes, cachedTranscodeIds.size)
+        val json = post("claim", body)
+        if (json == null) {
+            log.info("Claim returned null (server returned non-200 or request failed)")
+            return null
+        }
+        val transcodeId = json.get("transcode_id")
+        if (transcodeId == null || transcodeId.isJsonNull) {
+            log.info("Claim returned no work (transcode_id is null/missing in response)")
+            return null
+        }
+
+        val leases = json.getAsJsonArray("leases")?.map { el ->
+            val obj = el.asJsonObject
+            LeaseInfo(
+                leaseId = obj.get("lease_id").asLong,
+                leaseType = obj.get("lease_type").asString,
+                expiresAt = obj.get("expires_at")?.asString
+            )
+        } ?: emptyList()
+
+        if (leases.isEmpty()) {
+            log.warn("Claim response had transcode_id={} but empty leases array", transcodeId)
+            return null
+        }
+
+        log.info("Claimed transcode_id={} with {} lease(s): {}", transcodeId.asLong, leases.size,
+            leases.joinToString { "${it.leaseType}(${it.leaseId})" })
+        return BundleResponse(
+            transcodeId = transcodeId.asLong,
+            relativePath = json.get("relative_path").asString,
+            fileSizeBytes = json.get("file_size_bytes")?.asLong ?: 0,
+            leases = leases
         )
     }
 
@@ -108,10 +142,17 @@ class BuddyApiClient(private val config: BuddyConfig) {
         return post("fail", gson.toJson(data)) != null
     }
 
-    fun heartbeat(leaseId: Long): String? {
-        val data = mapOf("lease_id" to leaseId)
-        val json = post("heartbeat", gson.toJson(data))
-        return json?.get("expires_at")?.asString
+    /** Heartbeat multiple leases at once (keeps all bundle leases alive). */
+    fun heartbeatMultiple(leaseIds: List<Long>): Boolean {
+        val data = mapOf("lease_ids" to leaseIds)
+        return post("heartbeat", gson.toJson(data)) != null
+    }
+
+    /** Check which transcode IDs have pending work (used for cache cleanup on startup). */
+    fun checkPending(transcodeIds: List<Long>): List<Long> {
+        val data = mapOf("transcode_ids" to transcodeIds)
+        val json = post("check-pending", gson.toJson(data)) ?: return emptyList()
+        return json.getAsJsonArray("pending")?.map { it.asLong } ?: emptyList()
     }
 
     fun releaseLeases(): Int {
@@ -136,12 +177,13 @@ class BuddyApiClient(private val config: BuddyConfig) {
 
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
             if (response.statusCode() != 200) {
-                log.warn("POST /buddy/{} returned {}: {}", endpoint, response.statusCode(), response.body())
+                log.warn("POST /buddy/{} returned {}: {}", endpoint, response.statusCode(), response.body().take(500))
                 return null
             }
+            log.debug("POST /buddy/{} -> 200 ({} bytes)", endpoint, response.body().length)
             JsonParser.parseString(response.body()).asJsonObject
         } catch (e: Exception) {
-            log.error("POST /buddy/{} failed: {}", endpoint, e.message)
+            log.error("POST /buddy/{} failed: {} ({})", endpoint, e.message, e.javaClass.simpleName)
             null
         }
     }
