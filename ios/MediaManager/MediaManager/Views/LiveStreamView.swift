@@ -87,7 +87,11 @@ struct LiveStreamView: View {
         .task {
             await loadStream()
         }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             cleanup()
         }
     }

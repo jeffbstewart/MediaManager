@@ -138,12 +138,14 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(item: $playbackRoute) { route in
-            VideoPlayerView(
+            CustomPlayerView(
                 transcodeId: route.transcodeId,
                 titleName: route.titleName,
                 episodeName: route.episodeName,
                 hasSubtitles: route.hasSubtitles,
-                nextEpisode: route.nextEpisode
+                nextEpisode: route.nextEpisode,
+                seasonNumber: route.seasonNumber,
+                episodeNumber: route.episodeNumber
             )
         }
     }

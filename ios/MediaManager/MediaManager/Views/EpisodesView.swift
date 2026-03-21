@@ -21,7 +21,9 @@ struct EpisodesView: View {
                             titleName: route.titleName,
                             episodeName: episode.name ?? "S\(episode.seasonNumber)E\(episode.episodeNumber)",
                             hasSubtitles: episode.hasSubtitles,
-                            nextEpisode: nextEp
+                            nextEpisode: nextEp,
+                            seasonNumber: episode.seasonNumber,
+                            episodeNumber: episode.episodeNumber
                         )) {
                             EpisodeRow(episode: episode)
                         }

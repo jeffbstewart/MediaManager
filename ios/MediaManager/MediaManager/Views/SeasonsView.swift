@@ -7,6 +7,8 @@ struct PlaybackRoute: Hashable, Identifiable {
     let episodeName: String?
     var hasSubtitles: Bool = false
     var nextEpisode: NextEpisode? = nil
+    var seasonNumber: Int? = nil
+    var episodeNumber: Int? = nil
 }
 
 struct NextEpisode: Hashable {

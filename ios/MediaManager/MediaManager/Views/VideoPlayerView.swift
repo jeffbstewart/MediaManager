@@ -31,7 +31,7 @@ struct VideoPlayerView: View {
             } else if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
-                    // Subtitle text overlay
+                    // Subtitle text overlay (always visible when enabled)
                     .overlay(alignment: .bottom) {
                         if subtitles.enabled, let subtitle = subtitles.currentText {
                             Text(subtitle)
@@ -50,7 +50,7 @@ struct VideoPlayerView: View {
                                 .allowsHitTesting(false)
                         }
                     }
-                    // Controls overlay
+                    // Controls overlay — small, semi-transparent, always tappable
                     .overlay(alignment: .topTrailing) {
                         HStack(spacing: 16) {
                             if subtitles.cueCount > 0 {
@@ -59,10 +59,10 @@ struct VideoPlayerView: View {
                                 } label: {
                                     Text("CC")
                                         .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(subtitles.enabled ? .black : .white)
+                                        .foregroundStyle(subtitles.enabled ? .black : .white.opacity(0.7))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
-                                        .background(subtitles.enabled ? .yellow : .white.opacity(0.3))
+                                        .background(subtitles.enabled ? .yellow.opacity(0.8) : .black.opacity(0.3))
                                         .clipShape(RoundedRectangle(cornerRadius: 4))
                                 }
                             }
@@ -71,9 +71,9 @@ struct VideoPlayerView: View {
                                 cleanupAndDismiss()
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 26))
+                                    .font(.system(size: 24))
                                     .symbolRenderingMode(.palette)
-                                    .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
+                                    .foregroundStyle(.white.opacity(0.6), .black.opacity(0.2))
                             }
                         }
                         .padding(.top, 12)
