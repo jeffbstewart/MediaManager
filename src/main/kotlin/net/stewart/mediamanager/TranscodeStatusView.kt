@@ -315,7 +315,8 @@ class TranscodeStatusView : KComposite() {
                     LeaseType.THUMBNAILS.name -> " [thumbs]"
                     LeaseType.SUBTITLES.name -> " [subs]"
                     LeaseType.CHAPTERS.name -> " [chapters]"
-                    else -> ""
+                    LeaseType.MOBILE_TRANSCODE.name -> " [mobile]"
+                    else -> " [browser]"
                 }
 
                 val statusText = if (isThumbsOrSubs) {
