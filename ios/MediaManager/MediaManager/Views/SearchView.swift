@@ -92,6 +92,11 @@ struct SearchView: View {
         }
     }
 
+    private static let typeOrder: [String: Int] = [
+        "movie": 0, "series": 0, "actor": 1,
+        "collection": 2, "tag": 3, "genre": 3
+    ]
+
     private func performSearch(_ query: String) async {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             results = []
@@ -101,7 +106,12 @@ struct SearchView: View {
         searching = true
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         let response: ApiSearchResponse? = try? await authManager.apiClient.get("catalog/search?q=\(encoded)")
-        results = response?.results ?? []
+        // Reorder: playable titles first, then actors, then collections/tags/genres
+        results = (response?.results ?? []).sorted {
+            let a = Self.typeOrder[$0.resultType] ?? 9
+            let b = Self.typeOrder[$1.resultType] ?? 9
+            return a < b
+        }
         searching = false
         hasSearched = true
     }
