@@ -19,5 +19,10 @@
 # Example IP in Roku PairScreen placeholder text
 192.168.1.100
 
+# Emby version numbers that look like IP addresses (competitive analysis)
+4.9.3.0
+4.10.0.5
+4.10.0.6
+
 # Third-party minified libraries (skip entire file)
 file:hls.min.js

@@ -4,7 +4,7 @@
 
 # Competitive Analysis
 
-*Updated March 13, 2026*
+*Updated March 21, 2026*
 
 ---
 
@@ -12,16 +12,17 @@
 
 MediaManager occupies a unique position in the home media management space: it is the only product that integrates **physical disc cataloging** (barcode scanning, purchase tracking, valuation, insurance reporting) with **digital playback** (NAS-based transcoding, in-browser and Roku streaming) in a single self-hosted application. The competitive landscape splits into two categories that MediaManager bridges: **media servers** (Plex, Jellyfin, Emby) that stream digital files but ignore physical ownership, and **collection catalogs** (CLZ Movies, DVD Profiler) that track what you own but don't play anything. No competitor does both.
 
-This is both the product's greatest strength and its strategic challenge: it competes on two fronts simultaneously, and is currently behind dedicated solutions on each front individually. However, rapid development in early 2026 has significantly closed the gap on both fronts -- the Roku channel now has search, personalized home rows, auto-play next episode, seek thumbnails, actor/tag/collection landing pages, and multi-user support, while the cataloging side gained automated replacement value estimation, mobile barcode scanning, and comprehensive insurance reporting.
+This is both the product's greatest strength and its strategic challenge: it competes on two fronts simultaneously, and is currently behind dedicated solutions on each front individually. However, rapid development in early 2026 has significantly closed the gap on both fronts -- the Roku channel is feature-complete with search, personalized home rows, auto-play next episode, seek thumbnails, actor/tag/collection landing pages, and multi-user support. The cataloging side gained automated replacement value estimation, mobile barcode scanning, and comprehensive insurance reporting. And the biggest gap -- mobile app coverage -- has been addressed with the launch of a native iOS app featuring full catalog browsing, video playback with a custom player (subtitles, skip segments, thumbnail scrubbing), wish list management, cameras, live TV, and admin views.
 
 **Notable competitive shifts since the last analysis:**
-- **Plex** pricing now in full effect: $6.99/mo, $69.99/yr, $249.99 lifetime (increases from $4.99/$39.99/$119.99). Remote streaming paywall enforced on Roku, expanding to Fire TV, Apple TV, and Android TV throughout 2026. Strong user backlash driving migration to Jellyfin.
-- **Jellyfin** continues momentum with Roku app v3.1.7 adding Dolby Vision/HDR10+/HLG, anamorphic video, manual subtitle sync, and automatic buffering retry. Multiple publications now describe it as "good enough to ditch Plex."
-- **Emby** is relatively quiet; lifetime pass remains $119 (had a $99 promo described as "likely the last time").
-- **Seerr merger complete** -- Overseerr and Jellyseerr are officially one project. Migration deadline end of March 2026; LinuxServer.io has deprecated the Overseerr image.
-- **Mydia** is a new entrant (pre-1.0, Elixir/Phoenix LiveView) with TMDB metadata, automated downloads, and P2P streaming. Still early and unstable.
+- **Plex** published an official open API for the first time and announced a dedicated server management app for web/mobile. Common Sense Media ratings integration coming for Plex Pass holders. Mobile apps no longer require Plex Pass or a $4.99 fee. Remote streaming paywall continues expanding to all TV apps and third-party clients throughout 2026. Remote Watch Pass introductory pricing ($1.99/mo) rises to $2.99/mo after June 2026.
+- **Jellyfin** released Server 10.11.6 (stable) with search accuracy and playback fixes. Web 10.11.5 added HEVC level 6.2 check and subtitle/RTL fixes. The 'Experimental' layout is now the default for non-TV devices. Theming overhaul enables runtime CSS variable customization. Roku app v3.1.7 added Dolby Vision/HDR10+/HLG and anamorphic video. Multiple publications continue to describe it as "good enough to ditch Plex."
+- **Emby** released Server 4.9.3.0 (stable, Jan 2026) and 4.10.0.6 (beta, Mar 2026). Beta features include dynamic media home screen sections with sorting/filtering, spotlight sections, and banner text options. Samsung Smart TV 2.1.0 shipped with auto-skip intros. A new native Linux app beta was announced. Premiere pricing unchanged: $5/mo, $54/yr, $119 lifetime.
+- **CLZ Movies** launched Custom Fields (Feb 2026), addressing their most-requested feature. Added TV series episode list editing and import from Movie Collector XML. Pricing unchanged: $3.95/mo or $39.95/yr (web), $1.99/mo or $19.99/yr (mobile).
+- **Seerr** merger of Overseerr + Jellyseerr is official (Feb 10, 2026). Auto-migration from either predecessor, no manual steps required. Now supports Plex, Jellyfin, and Emby. Legacy projects being deprecated once Seerr leaves beta.
+- **Mydia** reached 0.9.0 and announced a cross-platform media player (Feb 2026) with P2P remote access and offline downloads on Android, iOS, macOS. Added a project blog. Still in early development with expected breaking changes.
 - **DVD Profiler** remains defunct (website unresponsive since January 2026).
-- **MediaManager** shipped a major wave of Roku enhancements: personalized home rows ([#29](https://github.com/jeffbstewart/MediaManager/issues/29) Done), multi-user picker ([#30](https://github.com/jeffbstewart/MediaManager/issues/30) Done), search with voice ([#31](https://github.com/jeffbstewart/MediaManager/issues/31) Done), genre/tag filtering ([#32](https://github.com/jeffbstewart/MediaManager/issues/32) Done), auto-play next episode ([#33](https://github.com/jeffbstewart/MediaManager/issues/33) Done), title detail enhancements ([#34](https://github.com/jeffbstewart/MediaManager/issues/34) Done), similar titles ([#35](https://github.com/jeffbstewart/MediaManager/issues/35) Done), actor filmography ([#36](https://github.com/jeffbstewart/MediaManager/issues/36) Done), BIF seek thumbnails ([#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done), automated replacement value estimation ([#51](https://github.com/jeffbstewart/MediaManager/issues/51) Done), and pairing API rate limiting ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done).
+- **MediaManager** shipped the native iOS app ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) with full catalog browsing, custom video player with subtitles/skip segments/thumbnail scrubbing, wish list, cameras, live TV, and admin views. Also completed security hardening: buddy API device-token pairing ([#7](https://github.com/jeffbstewart/MediaManager/issues/7) Done), buddy API lease limits and audit logging ([#13](https://github.com/jeffbstewart/MediaManager/issues/13) Done), and skip segment import ([#54](https://github.com/jeffbstewart/MediaManager/issues/54) Done).
 
 ---
 
@@ -31,18 +32,18 @@ This is both the product's greatest strength and its strategic challenge: it com
 
 | Feature | **Plex** | **Jellyfin** | **Emby** | **MediaManager** |
 |---------|----------|-------------|----------|-----------------|
-| **License** | Freemium (Plex Pass: $6.99/mo, $69.99/yr, or $249.99 lifetime; Remote Watch Pass: $2/mo or $20/yr) | Free, open-source | Freemium (Emby Premiere: $4.99/mo, $54/yr, or $119 lifetime) | Free, self-hosted |
-| **Client apps** | 20+ platforms (smart TVs, mobile, web, Roku, Fire TV, Apple TV, gaming consoles) | 10+ platforms (web, mobile, Roku, Android TV, Apple TV -- community-maintained) | 15+ platforms (similar to Plex) | Web browser + custom Roku channel -- [#1](https://github.com/jeffbstewart/MediaManager/issues/1) iOS app, [#5](https://github.com/jeffbstewart/MediaManager/issues/5) mobile offline |
+| **License** | Freemium (Plex Pass: $6.99/mo, $69.99/yr, or $249.99 lifetime; Remote Watch Pass: $1.99/mo intro, $2.99/mo after Jun 2026, or $19.99/yr) | Free, open-source | Freemium (Emby Premiere: $5/mo, $54/yr, or $119 lifetime) | Free, self-hosted |
+| **Client apps** | 20+ platforms (smart TVs, mobile, web, Roku, Fire TV, Apple TV, gaming consoles) | 10+ platforms (web, mobile, Roku, Android TV, Apple TV -- community-maintained) | 15+ platforms (similar to Plex; new native Linux app beta) | Web browser + custom Roku channel + **native iOS app** ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) -- [#5](https://github.com/jeffbstewart/MediaManager/issues/5) mobile offline |
 | **Transcoding** | Excellent; hardware accel behind paywall | Excellent; hardware accel free; Dolby Vision tone-mapping | Excellent; hardware accel behind paywall | FFmpeg-based; CPU and NVENC GPU; background pre-transcoding |
 | **Library scanning** | Automatic file detection + rich metadata | Automatic file detection + metadata | Automatic file detection + metadata | Automatic NAS scanning + TMDB enrichment + TMDB collection tracking |
 | **User management** | Multi-user with managed/shared accounts | Multi-user with parental controls | Multi-user with parental controls | Multi-user with access levels and content rating ceilings; Roku multi-user picker ([#30](https://github.com/jeffbstewart/MediaManager/issues/30) Done) |
 | **Remote access** | Cloud relay (requires Plex Pass or Remote Watch Pass for TV apps) | Manual (reverse proxy) | Built-in option | Manual (reverse proxy) |
 | **Live TV/DVR** | Yes (premium) | Yes (via plugins) | Yes (premium) | Live TV via HDHomeRun ([#27](https://github.com/jeffbstewart/MediaManager/issues/27) cameras Done, [#41](https://github.com/jeffbstewart/MediaManager/issues/41) tuner Done); no DVR yet |
-| **Mobile apps** | Yes (iOS, Android -- no longer requires Plex Pass) | Yes (community) | Yes | No -- [#1](https://github.com/jeffbstewart/MediaManager/issues/1) iOS app |
-| **Smart TV apps** | Yes (all major platforms) | Yes (expanding; Roku app v3.1.7 with Dolby Vision/HDR10+/HLG) | Yes | Roku only (custom sideloaded) |
-| **Seek thumbnails** | Yes (premium) | Yes (trickplay, free -- 100x faster in 10.11) | Yes (premium) | **Yes** (BIF trick play -- [#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done) |
-| **Subtitle support** | Excellent (multiple formats, download) | Excellent (OpenSubtitles plugin) | Excellent | SRT generation from transcodes; auto-enabled -- [#40](https://github.com/jeffbstewart/MediaManager/issues/40) subtitle toggle |
-| **Watch history sync** | Cross-device | Cross-device | Cross-device | Cross-device (browser <-> Roku via server) |
+| **Mobile apps** | Yes (iOS, Android -- no longer requires Plex Pass or $4.99 fee) | Yes (community) | Yes | **Yes** (native iOS app with custom player, subtitles, skip segments, thumbnail scrubbing -- [#1](https://github.com/jeffbstewart/MediaManager/issues/1)); no Android yet |
+| **Smart TV apps** | Yes (all major platforms) | Yes (expanding; Roku app v3.1.7 with Dolby Vision/HDR10+/HLG) | Yes (Samsung Smart TV 2.1.0 with auto-skip intros) | Roku only (custom sideloaded) |
+| **Seek thumbnails** | Yes (premium) | Yes (trickplay, free -- 100x faster in 10.11) | Yes (premium) | **Yes** (BIF trick play on Roku + thumbnail scrubbing on iOS -- [#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done) |
+| **Subtitle support** | Excellent (multiple formats, download) | Excellent (OpenSubtitles plugin) | Excellent | SRT generation from transcodes; VTT rendering on iOS; auto-enabled -- [#40](https://github.com/jeffbstewart/MediaManager/issues/40) Roku subtitle toggle |
+| **Watch history sync** | Cross-device | Cross-device | Cross-device | Cross-device (browser <-> Roku <-> iOS via server) |
 | **Continue Watching** | Yes | Yes | Yes | **Yes** (personalized home rows -- [#29](https://github.com/jeffbstewart/MediaManager/issues/29) Done) |
 | **Search** | Yes (full-text, voice) | Yes (search, genre browsing) | Yes | **Yes** (text + voice search, genre/tag/collection/actor browsing -- [#31](https://github.com/jeffbstewart/MediaManager/issues/31), [#32](https://github.com/jeffbstewart/MediaManager/issues/32) Done) |
 | **Auto-play next episode** | Yes | Yes | Yes | **Yes** ([#33](https://github.com/jeffbstewart/MediaManager/issues/33) Done) |
@@ -52,7 +53,7 @@ This is both the product's greatest strength and its strategic challenge: it com
 
 | Feature | **CLZ Movies** | **DVD Profiler** | **My Movies** | **MediaManager** |
 |---------|---------------|-----------------|--------------|-----------------|
-| **License** | ~$2/mo or ~$20/yr (mobile); ~$4/mo or ~$40/yr (web) | Defunct (website down since Jan 2026) | Free/premium | Free, self-hosted |
+| **License** | $1.99/mo or $19.99/yr (mobile); $3.95/mo or $39.95/yr (web) | Defunct (website down since Jan 2026) | Free/premium | Free, self-hosted |
 | **Barcode scanning** | Yes (camera, 98% hit rate; new one-by-one mode) | N/A (discontinued) | Yes | **Yes** (phone camera via PWA + UPC lookup -- [#42](https://github.com/jeffbstewart/MediaManager/issues/42) Done) |
 | **Metadata source** | IMDb | N/A | Multiple | TMDB (posters, cast, genres, descriptions, popularity, collections) |
 | **Physical format tracking** | DVD, Blu-ray, 4K UHD, HD-DVD, LaserDisc, VHS, UMD | N/A | DVD, Blu-ray | DVD, Blu-ray, UHD (auto-detected via FFprobe resolution) |
@@ -62,21 +63,22 @@ This is both the product's greatest strength and its strategic challenge: it com
 | **Playback integration** | None | N/A | None | **Yes** (in-browser + Roku streaming) |
 | **Collection value/insurance** | eBay price lookup; automatic eBay search links (new) | N/A | No | **Yes** (automated Keepa replacement pricing, executive summary, gap analysis, proof of ownership -- [#44](https://github.com/jeffbstewart/MediaManager/issues/44)--[#46](https://github.com/jeffbstewart/MediaManager/issues/46), [#51](https://github.com/jeffbstewart/MediaManager/issues/51) Done) |
 | **Collection tracking** | Manual | N/A | No | **Yes** (TMDB collection auto-linking, owned vs. unowned visibility -- [#49](https://github.com/jeffbstewart/MediaManager/issues/49)--[#50](https://github.com/jeffbstewart/MediaManager/issues/50) Done) |
-| **Custom fields** | Yes (added Feb 2026) | N/A | No | No (structured schema; tags provide flexible categorization) |
+| **Custom fields** | Yes (launched Feb 2026) | N/A | No | No (structured schema; tags provide flexible categorization) |
+| **TV episode editing** | Yes (added Sep 2025; XML import from Movie Collector) | N/A | No | No (TV series managed via TMDB metadata) |
 | **Platform** | iOS, Android, Web, Windows | N/A | Windows | Web (any device with a browser) |
 
 ### Category 3: Request Management (Adjacent)
 
 | Tool | Purpose | Relationship to MediaManager |
 |------|---------|------------------------------|
-| **Seerr** (merged from Overseerr + Jellyseerr, Feb 2026; migration deadline end of March 2026) | Users request movies/TV; integrates with Sonarr/Radarr to auto-download; supports Plex, Jellyfin, and Emby | MediaManager's wish list serves the same "users request, admin fulfills" workflow, but for *physical media purchases* rather than automated downloads. MediaManager's season lifecycle tracking ([#25](https://github.com/jeffbstewart/MediaManager/issues/25) Done) adds structured fulfillment that Seerr lacks for physical media. |
+| **Seerr** (merged from Overseerr + Jellyseerr, Feb 2026; auto-migration, legacy deprecation in progress) | Users request movies/TV; integrates with Sonarr/Radarr to auto-download; supports Plex, Jellyfin, and Emby | MediaManager's wish list serves the same "users request, admin fulfills" workflow, but for *physical media purchases* rather than automated downloads. MediaManager's season lifecycle tracking ([#25](https://github.com/jeffbstewart/MediaManager/issues/25) Done) adds structured fulfillment that Seerr lacks for physical media. |
 | **Ombi** | Similar request management for Plex/Emby/Jellyfin | Likely to lose users to the unified Seerr project |
 
 ### Category 4: New Entrants
 
 | Tool | Purpose | Relationship to MediaManager |
 |------|---------|------------------------------|
-| **Mydia** (pre-1.0, Elixir/Phoenix LiveView) | Self-hosted media management with TMDB/TVDB metadata, automated downloads (qBittorrent/SABnzbd), multi-user, P2P streaming | Targets the Plex/Jellyfin space with a modern stack. No physical media cataloging. Still pre-1.0 with expected breaking changes; not yet a serious competitor. |
+| **Mydia** (0.9.0, Elixir/Phoenix LiveView) | Self-hosted media management with TMDB/TVDB metadata, automated downloads (qBittorrent/SABnzbd/NZBGet), multi-user with SSO, P2P streaming. Announced cross-platform media player (Feb 2026) with P2P remote access, offline downloads on Android/iOS/macOS. | Targets the Plex/Jellyfin space with a modern stack. No physical media cataloging. Still pre-1.0 with expected breaking changes; the cross-platform player announcement is ambitious but unproven. |
 
 ---
 
@@ -112,15 +114,18 @@ Automatic discovery of TMDB collections (franchises, series) with visibility int
 ### 10. Personal/Home Video Support
 Integration of personal and home videos alongside the commercial media library ([#28](https://github.com/jeffbstewart/MediaManager/issues/28) Done). No media server competitor treats home videos as first-class catalog entries alongside purchased media.
 
-### 11. API Rate Limiting and Security Hardening
-The pairing API is rate-limited per-IP with a global cap on active pair codes ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done), preventing DoS attacks on the unauthenticated pairing flow. Further API hardening is tracked in [#7](https://github.com/jeffbstewart/MediaManager/issues/7) and [#13](https://github.com/jeffbstewart/MediaManager/issues/13).
+### 11. Native iOS App
+A full-featured native iOS app ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) with SwiftUI, featuring SSDP server auto-discovery, JWT authentication, catalog browsing with posters and search, title detail with cast, a custom video player with subtitles (VTT parser), skip segments, and thumbnail scrubbing, wish list management with TMDB search, security cameras, live TV, and admin transcode status views. This addresses what was previously the #1 competitive weakness and puts MediaManager ahead of CLZ Movies (which has no playback) while narrowing the gap with Plex/Jellyfin on mobile.
+
+### 12. API Rate Limiting and Security Hardening
+The pairing API is rate-limited per-IP with a global cap on active pair codes ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done). Buddy API hardening completed with device-token pairing ([#7](https://github.com/jeffbstewart/MediaManager/issues/7) Done), lease limits, probe validation, and audit logging ([#13](https://github.com/jeffbstewart/MediaManager/issues/13) Done). Remaining: [#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#24](https://github.com/jeffbstewart/MediaManager/issues/24) H2 password rotation.
 
 ---
 
 ## MediaManager Weaknesses
 
-### 1. Client App Coverage (Critical Gap)
-Only web browser and a sideloaded Roku channel. No iOS app, no Android app, no Apple TV, no Fire TV, no Android TV, no smart TV apps. Plex and Jellyfin support 10-20+ platforms. This is the single largest competitive disadvantage -- most households expect to watch on their phone or tablet. See [#1](https://github.com/jeffbstewart/MediaManager/issues/1) (iOS app) and [#5](https://github.com/jeffbstewart/MediaManager/issues/5) (mobile offline playback).
+### 1. Client App Coverage (Narrowing Gap)
+Web browser, sideloaded Roku channel, and native iOS app. No Android app, no Apple TV, no Fire TV, no Android TV, no smart TV apps. Plex and Jellyfin support 10-20+ platforms. The iOS app launch significantly narrows this gap -- the most common mobile platform now has a dedicated client -- but Android users and non-Roku smart TV owners remain unserved. See [#5](https://github.com/jeffbstewart/MediaManager/issues/5) (mobile offline playback).
 
 ### 2. No Remote Access Out of the Box
 Plex's cloud relay provides zero-config remote streaming (though now paywalled for TV apps). MediaManager requires manual reverse proxy setup (nginx, Caddy, etc.) for access outside the LAN. This is a barrier for less technical users and for watching media away from home.
@@ -148,7 +153,7 @@ No Trakt.tv sync, no Sonarr/Radarr integration, no OpenSubtitles plugin, no DLNA
 
 | Feature | Why It Matters | Competitive Effect | Tracked In |
 |---------|---------------|-------------------|------------|
-| **Mobile streaming app** (iOS/Android, even a PWA) | Most media consumption happens on phones/tablets; web browser playback on mobile is subpar | Addresses the #1 competitive weakness | [#1](https://github.com/jeffbstewart/MediaManager/issues/1) |
+| **Android streaming app** | iOS app shipped; Android remains unserved. Most households have a mix of iOS and Android devices | Completes mobile coverage | -- |
 | **On-the-fly transcoding** (or adaptive bitrate) | Eliminates the "wait for transcode queue" delay and reduces storage | Matches Plex/Jellyfin's core streaming experience | -- |
 | **Additional TV platform apps** (Fire TV, Apple TV, Android TV) | Expands device coverage beyond Roku | Addresses client app coverage gap | -- |
 
@@ -197,12 +202,14 @@ The competitive moat is the **integration between physical ownership tracking an
 3. ~~Roku personalization + search + auto-play~~ ([#29](https://github.com/jeffbstewart/MediaManager/issues/29), [#31](https://github.com/jeffbstewart/MediaManager/issues/31), [#33](https://github.com/jeffbstewart/MediaManager/issues/33) Done)
 4. ~~Automated replacement value estimation~~ ([#51](https://github.com/jeffbstewart/MediaManager/issues/51) Done)
 5. ~~Roku detail enhancements + similar titles + actor pages + seek thumbnails~~ ([#34](https://github.com/jeffbstewart/MediaManager/issues/34)--[#36](https://github.com/jeffbstewart/MediaManager/issues/36), [#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done)
+6. ~~Native iOS app~~ ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) -- Full catalog browsing, custom video player with subtitles/skip segments/thumbnail scrubbing, wish list, cameras, live TV, admin views
+7. ~~Security hardening~~ -- Buddy API device-token pairing ([#7](https://github.com/jeffbstewart/MediaManager/issues/7) Done), lease limits + probe validation + audit logging ([#13](https://github.com/jeffbstewart/MediaManager/issues/13) Done), pairing API rate limiting ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done)
 
 **Next priorities:**
 1. **Roku polish** ([#40](https://github.com/jeffbstewart/MediaManager/issues/40) subtitle toggle, [#38](https://github.com/jeffbstewart/MediaManager/issues/38) quick actions, [#37](https://github.com/jeffbstewart/MediaManager/issues/37) wish list view) -- Completes the Roku experience for parity with Jellyfin's Roku app on core UX
-2. **Shareable wish lists** ([#43](https://github.com/jeffbstewart/MediaManager/issues/43)) -- Leans into the unique "physical media household" positioning
-3. **Security hardening** ([#7](https://github.com/jeffbstewart/MediaManager/issues/7), [#12](https://github.com/jeffbstewart/MediaManager/issues/12), [#13](https://github.com/jeffbstewart/MediaManager/issues/13), [#24](https://github.com/jeffbstewart/MediaManager/issues/24)) -- Necessary for confidence in internet-exposed deployment
-4. **Mobile playback app** ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) -- Expands reach without competing head-to-head on server architecture
+2. **iOS polish** ([#5](https://github.com/jeffbstewart/MediaManager/issues/5) mobile offline playback, [#55](https://github.com/jeffbstewart/MediaManager/issues/55) chapter seeking, [#57](https://github.com/jeffbstewart/MediaManager/issues/57) custom web progress bar) -- Deepens the mobile experience
+3. **Shareable wish lists** ([#43](https://github.com/jeffbstewart/MediaManager/issues/43)) -- Leans into the unique "physical media household" positioning
+4. **Remaining security hardening** ([#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#24](https://github.com/jeffbstewart/MediaManager/issues/24) H2 password rotation) -- Necessary for confidence in internet-exposed deployment
 
 ---
 
@@ -241,6 +248,15 @@ The competitive moat is the **integration between physical ownership tracking an
 - [DVD Profiler (Wikipedia)](https://en.wikipedia.org/wiki/DVD_Profiler)
 - [Kodi vs Plex vs Jellyfin vs Emby Showdown](https://diymediaserver.com/post/kodi-vs-plex-vs-jellyfin-vs-emby-the-ultimate-media-playback-software-showdown/)
 - [Top 7 Plex Alternatives 2026](https://www.rapidseedbox.com/blog/plex-alternatives)
+- [Plex Pro Week '25: API Unlocked](https://www.plex.tv/blog/plex-pro-week-25-api-unlocked/)
+- [Plex Pricing 2026 (CheckThat.ai)](https://checkthat.ai/brands/plex/pricing)
+- [Jellyfin Server Releases (GitHub)](https://github.com/jellyfin/jellyfin/releases)
+- [Jellyfin Desktop Releases (GitHub)](https://github.com/jellyfin/jellyfin-desktop/releases)
+- [Emby Server 4.9.3.0 / 4.10.0.5 Beta (VideoHelp)](https://www.videohelp.com/software/Emby)
+- [CLZ Movies Mobile What's New](https://clz.com/movies/mobile/whatsnew)
+- [CLZ Movies Web What's New](https://clz.com/movies/web/whatsnew)
+- [Mydia 0.9.0 Documentation](https://docs.mydia.dev/0.9.0/)
+- [Jellyfin vs Plex 2026 (JellyWatch)](https://jellywatch.app/blog/jellyfin-vs-plex-self-hosted-media-server-2026)
 
 ---
 
