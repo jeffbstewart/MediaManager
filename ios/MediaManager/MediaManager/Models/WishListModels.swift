@@ -36,6 +36,32 @@ struct ApiWishListResponse: Codable {
     let wishes: [ApiWish]
 }
 
+struct ApiTranscodeWish: Codable, Identifiable {
+    let id: Int
+    let titleId: Int
+    let titleName: String
+    let posterUrl: String?
+    let mediaType: String?
+    let requestedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case titleId = "title_id"
+        case titleName = "title_name"
+        case posterUrl = "poster_url"
+        case mediaType = "media_type"
+        case requestedAt = "requested_at"
+    }
+}
+
+struct ApiTranscodeWishListResponse: Codable {
+    let transcodeWishes: [ApiTranscodeWish]
+
+    enum CodingKeys: String, CodingKey {
+        case transcodeWishes = "transcode_wishes"
+    }
+}
+
 struct TmdbSearchItem: Codable, Identifiable {
     var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")" }
     let tmdbId: Int?

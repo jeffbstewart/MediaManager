@@ -39,6 +39,44 @@ struct ApiCarousel: Codable {
 
 struct ApiHomeFeed: Codable {
     let carousels: [ApiCarousel]
+    let missingSeasons: [ApiMissingSeason]?
+
+    enum CodingKeys: String, CodingKey {
+        case carousels
+        case missingSeasons = "missing_seasons"
+    }
+}
+
+struct ApiMissingSeason: Codable, Identifiable {
+    var id: Int { titleId }
+    let titleId: Int
+    let titleName: String
+    let posterUrl: String?
+    let tmdbId: Int?
+    let mediaType: String?
+    let seasons: [ApiMissingSeasonEntry]
+
+    enum CodingKeys: String, CodingKey {
+        case seasons
+        case titleId = "title_id"
+        case titleName = "title_name"
+        case posterUrl = "poster_url"
+        case tmdbId = "tmdb_id"
+        case mediaType = "media_type"
+    }
+}
+
+struct ApiMissingSeasonEntry: Codable, Identifiable {
+    var id: Int { seasonNumber }
+    let seasonNumber: Int
+    let name: String?
+    let episodeCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case seasonNumber = "season_number"
+        case episodeCount = "episode_count"
+    }
 }
 
 struct ApiTitlePage: Codable {

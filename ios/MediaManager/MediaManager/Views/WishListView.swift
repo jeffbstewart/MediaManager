@@ -3,6 +3,7 @@ import SwiftUI
 struct WishListView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var wishes: [ApiWish] = []
+    @State private var transcodeWishes: [ApiTranscodeWish] = []
     @State private var loading = true
     @State private var showingSearch = false
 
@@ -40,6 +41,35 @@ struct WishListView: View {
                             }
                         }
                     }
+
+                    if !transcodeWishes.isEmpty {
+                        Section("Transcode Requests") {
+                            ForEach(transcodeWishes) { wish in
+                                HStack(spacing: 12) {
+                                    AuthenticatedImage(path: wish.posterUrl, apiClient: authManager.apiClient)
+                                        .frame(width: 40, height: 60)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(wish.titleName)
+                                            .fontWeight(.medium)
+                                        Text(wish.mediaType == "TV" ? "TV Series" : "Movie")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Button {
+                                        Task { await removeTranscodeWish(wish.titleId) }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -68,9 +98,16 @@ struct WishListView: View {
 
     private func loadWishes() async {
         loading = wishes.isEmpty
-        let response: ApiWishListResponse? = try? await authManager.apiClient.get("wishlist")
-        wishes = response?.wishes ?? []
+        async let mediaResponse: ApiWishListResponse? = try? authManager.apiClient.get("wishlist")
+        async let transcodeResponse: ApiTranscodeWishListResponse? = try? authManager.apiClient.get("wishlist/transcodes")
+        wishes = await mediaResponse?.wishes ?? []
+        transcodeWishes = await transcodeResponse?.transcodeWishes ?? []
         loading = false
+    }
+
+    private func removeTranscodeWish(_ titleId: Int) async {
+        try? await authManager.apiClient.delete("wishlist/transcodes/\(titleId)")
+        await loadWishes()
     }
 
     private func dismissWish(_ wish: ApiWish) async {

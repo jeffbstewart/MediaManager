@@ -15,6 +15,52 @@ struct HomeView: View {
             } else if let feed, !feed.carousels.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
+                        // Missing seasons notifications
+                        if let missing = feed.missingSeasons, !missing.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("New Seasons Available")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .padding(.horizontal)
+
+                                ForEach(missing) { ms in
+                                    HStack(spacing: 12) {
+                                        AuthenticatedImage(path: ms.posterUrl, apiClient: authManager.apiClient)
+                                            .frame(width: 50, height: 75)
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(ms.titleName)
+                                                .fontWeight(.medium)
+                                            ForEach(ms.seasons) { season in
+                                                Text(season.name ?? "Season \(season.seasonNumber)")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+
+                                        Spacer()
+
+                                        Button {
+                                            Task { await wishForSeason(ms) }
+                                        } label: {
+                                            Image(systemName: "heart.circle")
+                                                .font(.title2)
+                                                .foregroundStyle(.red)
+                                        }
+
+                                        Button {
+                                            Task { await dismissMissingSeason(ms) }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.title3)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+
                         ForEach(feed.carousels, id: \.name) { carousel in
                             if carousel.name == "Resume Playing" {
                                 CarouselView(
@@ -44,6 +90,30 @@ struct HomeView: View {
         .refreshable {
             await loadFeed()
         }
+    }
+
+    private func wishForSeason(_ ms: ApiMissingSeason) async {
+        for season in ms.seasons {
+            let body: [String: Any] = [
+                "tmdb_id": ms.tmdbId ?? 0,
+                "media_type": ms.mediaType ?? "TV",
+                "title": ms.titleName,
+                "season_number": season.seasonNumber
+            ]
+            try? await authManager.apiClient.post("wishlist", body: body)
+        }
+        await loadFeed()
+    }
+
+    private func dismissMissingSeason(_ ms: ApiMissingSeason) async {
+        for season in ms.seasons {
+            let body: [String: Any] = [
+                "title_id": ms.titleId,
+                "season_number": season.seasonNumber
+            ]
+            try? await authManager.apiClient.post("catalog/home/dismiss-missing-season", body: body)
+        }
+        await loadFeed()
     }
 
     private func dismissContinueWatching(_ titleId: Int) async {
