@@ -99,9 +99,9 @@ struct LiveStreamView: View {
             return
         }
 
-        // Set mm_jwt cookie so AVPlayer's native HLS handling authenticates
-        // all sub-requests (playlist refreshes, .ts segments).
-        // AuthFilter checks this cookie and validates the JWT.
+        // Use AVURLAssetHTTPCookiesKey (documented public API) — unlike
+        // AVURLAssetHTTPHeaderFieldsKey, cookies ARE sent on all HLS
+        // sub-requests (playlist refreshes, .ts segments).
         let isSecure = baseURL.scheme == "https"
         var cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "mm_jwt",
@@ -112,13 +112,13 @@ struct LiveStreamView: View {
         if isSecure {
             cookieProps[.secure] = "TRUE"
         }
-        let cookie = HTTPCookie(properties: cookieProps)
-        if let cookie {
-            HTTPCookieStorage.shared.setCookie(cookie)
+        guard let cookie = HTTPCookie(properties: cookieProps) else {
+            error = "Failed to create auth cookie"
+            return
         }
 
         let asset = AVURLAsset(url: url, options: [
-            "AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]
+            AVURLAssetHTTPCookiesKey: [cookie]
         ])
         let item = AVPlayerItem(asset: asset)
 

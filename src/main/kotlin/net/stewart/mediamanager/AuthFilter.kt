@@ -19,6 +19,8 @@ class AuthFilter : Filter {
     companion object {
         /** Request attribute key for the authenticated AppUser (synthetic user for Roku API key auth). */
         const val USER_ATTRIBUTE = "net.stewart.mediamanager.authUser"
+        /** Request attribute for the auth method used (cookie, jwt_header, jwt_cookie, device_token). */
+        const val AUTH_METHOD_ATTRIBUTE = "net.stewart.mediamanager.authMethod"
     }
 
     override fun init(filterConfig: FilterConfig?) {}
@@ -37,6 +39,7 @@ class AuthFilter : Filter {
         val user = AuthService.validateCookieFromRequest(httpRequest)
         if (user != null) {
             httpRequest.setAttribute(USER_ATTRIBUTE, user)
+            httpRequest.setAttribute(AUTH_METHOD_ATTRIBUTE, "cookie")
             chain.doFilter(request, response)
             return
         }
@@ -47,6 +50,7 @@ class AuthFilter : Filter {
             val jwtUser = JwtService.validateAccessToken(authHeader.substring(7).trim())
             if (jwtUser != null) {
                 httpRequest.setAttribute(USER_ATTRIBUTE, jwtUser)
+                httpRequest.setAttribute(AUTH_METHOD_ATTRIBUTE, "jwt_header")
                 chain.doFilter(request, response)
                 return
             }
@@ -60,6 +64,7 @@ class AuthFilter : Filter {
             val jwtUser = JwtService.validateAccessToken(jwtCookie.value)
             if (jwtUser != null) {
                 httpRequest.setAttribute(USER_ATTRIBUTE, jwtUser)
+                httpRequest.setAttribute(AUTH_METHOD_ATTRIBUTE, "jwt_cookie")
                 chain.doFilter(request, response)
                 return
             }
@@ -71,6 +76,7 @@ class AuthFilter : Filter {
             val deviceUser = PairingService.validateDeviceToken(apiKey)
             if (deviceUser != null) {
                 httpRequest.setAttribute(USER_ATTRIBUTE, deviceUser)
+                httpRequest.setAttribute(AUTH_METHOD_ATTRIBUTE, "device_token")
                 chain.doFilter(request, response)
                 return
             }

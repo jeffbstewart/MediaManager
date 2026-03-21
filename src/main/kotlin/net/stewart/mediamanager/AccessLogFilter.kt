@@ -89,16 +89,17 @@ class AccessLogFilter : Filter {
         UUID_PATTERN.replace(uri, "[REDACTED]")
 
     private fun resolveUsername(request: HttpServletRequest): String {
-        if (!AuthService.hasUsers()) return "-"
-
-        val user = AuthService.validateCookieFromRequest(request)
-        if (user != null) return user.username
-
-        val apiKey = request.getParameter("key")
-        if (apiKey != null) {
-            val deviceUser = PairingService.validateDeviceToken(apiKey)
-            if (deviceUser != null) return deviceUser.username
+        // Use auth attributes set by AuthFilter (avoids re-validating)
+        val user = request.getAttribute(AuthFilter.USER_ATTRIBUTE) as? net.stewart.mediamanager.entity.AppUser
+        val authMethod = request.getAttribute(AuthFilter.AUTH_METHOD_ATTRIBUTE) as? String
+        if (user != null) {
+            return if (authMethod != null) "${user.username}[$authMethod]" else user.username
         }
+
+        // Fallback for requests not going through AuthFilter (e.g. Vaadin views)
+        if (!AuthService.hasUsers()) return "-"
+        val cookieUser = AuthService.validateCookieFromRequest(request)
+        if (cookieUser != null) return "${cookieUser.username}[cookie]"
 
         return "-"
     }
