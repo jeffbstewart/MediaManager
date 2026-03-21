@@ -2,6 +2,9 @@ import SwiftUI
 
 struct CatalogView: View {
     @Environment(AuthManager.self) private var authManager
+    var typeFilter: String? = nil
+    var navigationTitle: String = "Catalog"
+
     @State private var titles: [ApiTitle] = []
     @State private var total = 0
     @State private var page = 1
@@ -38,7 +41,7 @@ struct CatalogView: View {
                 }
             }
         }
-        .navigationTitle("Catalog (\(total))")
+        .navigationTitle("\(navigationTitle) (\(total))")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -67,8 +70,12 @@ struct CatalogView: View {
 
     private func loadPage() async {
         loading = true
+        var query = "catalog/titles?page=\(page)&limit=25&sort=\(sort)"
+        if let typeFilter {
+            query += "&type=\(typeFilter)"
+        }
         do {
-            let result: ApiTitlePage = try await authManager.apiClient.get("catalog/titles?page=\(page)&limit=25&sort=\(sort)")
+            let result: ApiTitlePage = try await authManager.apiClient.get(query)
             titles.append(contentsOf: result.titles)
             total = result.total
             totalPages = result.totalPages

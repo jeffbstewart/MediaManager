@@ -81,17 +81,25 @@ struct PosterCard: View {
         VStack(alignment: .leading, spacing: 4) {
             AuthenticatedImage(path: title.posterUrl, apiClient: apiClient)
                 .frame(width: 120, height: 180)
+                .clipped()
 
             Text(title.name)
                 .font(.caption)
                 .lineLimit(2)
-                .frame(width: 120, alignment: .leading)
 
             if let year = title.year {
                 Text(String(year))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            if let members = title.familyMembers, !members.isEmpty {
+                Text(members.joined(separator: ", "))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
+        .frame(width: 120, alignment: .topLeading)
     }
 }

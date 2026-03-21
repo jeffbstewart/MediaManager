@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, catalog, search, wishList
+    case home, movies, tvShows, collections, tags, family, search, wishList
 }
 
 struct ContentView: View {
@@ -14,12 +14,39 @@ struct ContentView: View {
             List(selection: $selectedTab) {
                 Label("Home", systemImage: "house")
                     .tag(Tab.home)
-                Label("Catalog", systemImage: "film")
-                    .tag(Tab.catalog)
-                Label("Search", systemImage: "magnifyingglass")
-                    .tag(Tab.search)
-                Label("Wish List", systemImage: "heart")
+
+                Section("Content") {
+                    Label("Movies", systemImage: "film")
+                        .tag(Tab.movies)
+                    Label("TV Shows", systemImage: "tv")
+                        .tag(Tab.tvShows)
+                    Label("Collections", systemImage: "square.stack")
+                        .tag(Tab.collections)
+                    Label("Tags", systemImage: "tag")
+                        .tag(Tab.tags)
+                    Label("Family", systemImage: "video")
+                        .tag(Tab.family)
+                }
+
+                Section {
+                    Label("Search", systemImage: "magnifyingglass")
+                        .tag(Tab.search)
+                    HStack {
+                        Label("Wish List", systemImage: "heart")
+                        if let count = authManager.serverInfo?.user?.fulfilledWishCount, count > 0 {
+                            Spacer()
+                            Text("\(count)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.green)
+                                .clipShape(Capsule())
+                        }
+                    }
                     .tag(Tab.wishList)
+                }
             }
             .navigationTitle("Media Manager")
             .toolbar {
@@ -36,8 +63,16 @@ struct ContentView: View {
                     switch selectedTab {
                     case .home:
                         HomeView()
-                    case .catalog:
-                        CatalogView()
+                    case .movies:
+                        CatalogView(typeFilter: "MOVIE", navigationTitle: "Movies")
+                    case .tvShows:
+                        CatalogView(typeFilter: "TV", navigationTitle: "TV Shows")
+                    case .collections:
+                        CollectionsListView()
+                    case .tags:
+                        TagsListView()
+                    case .family:
+                        CatalogView(typeFilter: "PERSONAL", navigationTitle: "Family")
                     case .search:
                         SearchView()
                     case .wishList:
@@ -61,6 +96,12 @@ struct ContentView: View {
                 .navigationDestination(for: ActorRoute.self) { route in
                     ActorView(route: route)
                 }
+                .navigationDestination(for: CollectionRoute.self) { route in
+                    CollectionDetailView(route: route)
+                }
+                .navigationDestination(for: TagRoute.self) { route in
+                    TagDetailView(route: route)
+                }
             }
         }
         .fullScreenCover(item: $playbackRoute) { route in
@@ -70,24 +111,6 @@ struct ContentView: View {
                 episodeName: route.episodeName,
                 hasSubtitles: route.hasSubtitles
             )
-        }
-    }
-}
-
-struct PlaceholderView: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            Text("Coming soon")
-                .foregroundStyle(.secondary)
         }
     }
 }

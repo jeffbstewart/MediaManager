@@ -16,6 +16,7 @@ struct ApiTitle: Codable, Identifiable, Hashable {
     let tmdbId: Int?
     let tmdbCollectionId: Int?
     let tmdbCollectionName: String?
+    let familyMembers: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, year, description, popularity, quality, playable
@@ -27,6 +28,7 @@ struct ApiTitle: Codable, Identifiable, Hashable {
         case tmdbId = "tmdb_id"
         case tmdbCollectionId = "tmdb_collection_id"
         case tmdbCollectionName = "tmdb_collection_name"
+        case familyMembers = "family_members"
     }
 }
 
@@ -136,6 +138,7 @@ struct ApiTitleDetail: Codable {
     let tags: [ApiTag]
     let transcodes: [ApiTranscode]
     let playbackProgress: ApiPlaybackProgress?
+    let familyMembers: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, year, description, popularity, quality, playable, cast, genres, tags, transcodes
@@ -148,6 +151,7 @@ struct ApiTitleDetail: Codable {
         case tmdbCollectionId = "tmdb_collection_id"
         case tmdbCollectionName = "tmdb_collection_name"
         case playbackProgress = "playback_progress"
+        case familyMembers = "family_members"
     }
 }
 
@@ -186,6 +190,43 @@ struct ApiSearchResponse: Codable {
     let query: String
     let results: [ApiSearchResult]
     let counts: [String: Int]
+}
+
+// --- List Endpoints ---
+
+struct ApiCollectionListItem: Codable, Identifiable {
+    var id: Int { tmdbCollectionId }
+    let tmdbCollectionId: Int
+    let name: String
+    let posterUrl: String?
+    let titleCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case tmdbCollectionId = "tmdb_collection_id"
+        case posterUrl = "poster_url"
+        case titleCount = "title_count"
+    }
+}
+
+struct ApiCollectionListResponse: Codable {
+    let collections: [ApiCollectionListItem]
+}
+
+struct ApiTagListItem: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let color: String
+    let titleCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, color
+        case titleCount = "title_count"
+    }
+}
+
+struct ApiTagListResponse: Codable {
+    let tags: [ApiTagListItem]
 }
 
 // --- Browse/Landing Pages ---
@@ -240,6 +281,46 @@ struct ApiCreditEntry: Codable, Identifiable {
         case releaseYear = "release_year"
         case posterUrl = "poster_url"
     }
+}
+
+struct ApiCollectionDetail: Codable {
+    let name: String
+    let posterUrl: String?
+    let items: [ApiCollectionItem]
+
+    enum CodingKeys: String, CodingKey {
+        case name, items
+        case posterUrl = "poster_url"
+    }
+}
+
+struct ApiCollectionItem: Codable, Identifiable {
+    var id: Int { tmdbMovieId }
+    let tmdbMovieId: Int
+    let name: String
+    let posterUrl: String?
+    let year: Int?
+    let owned: Bool
+    let playable: Bool
+    let titleId: Int?
+    let quality: String?
+    let contentRating: String?
+    let transcodeId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name, year, owned, playable, quality
+        case tmdbMovieId = "tmdb_movie_id"
+        case posterUrl = "poster_url"
+        case titleId = "title_id"
+        case contentRating = "content_rating"
+        case transcodeId = "transcode_id"
+    }
+}
+
+struct ApiTagDetail: Codable {
+    let name: String
+    let color: String
+    let titles: [ApiTitle]
 }
 
 // --- Phase 3: TV Shows ---

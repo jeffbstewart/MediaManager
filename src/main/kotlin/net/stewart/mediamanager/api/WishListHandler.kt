@@ -4,10 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.vokorm.findAll
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import net.stewart.mediamanager.entity.TmdbId
-import net.stewart.mediamanager.entity.WishListItem
-import net.stewart.mediamanager.entity.WishStatus
-import net.stewart.mediamanager.entity.WishType
+import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.WishListService
 
@@ -35,6 +32,10 @@ object WishListHandler {
             path.matches(Regex("\\d+/vote")) && method == "DELETE" -> {
                 val wishId = path.removeSuffix("/vote").toLong()
                 handleUnvote(req, resp, mapper, user.id!!, wishId)
+            }
+            path.matches(Regex("\\d+/dismiss")) && method == "POST" -> {
+                val wishId = path.removeSuffix("/dismiss").toLong()
+                handleDismiss(req, resp, mapper, user.id!!, wishId)
             }
             path.matches(Regex("\\d+")) && method == "DELETE" -> {
                 val wishId = path.toLong()
@@ -74,11 +75,47 @@ object WishListHandler {
                 "voters" to agg.voters,
                 "voted" to voted,
                 "wish_id" to userWish?.id,
-                "acquisition_status" to agg.acquisitionStatus
+                "acquisition_status" to agg.acquisitionStatus,
+                "status" to "active"
             )
         }
 
-        ApiV1Servlet.sendJson(resp, 200, mapOf("wishes" to items), mapper)
+        // Include fulfilled (non-dismissed) wishes for this user
+        val fulfilledWishes = WishListItem.findAll().filter {
+            it.user_id == userId &&
+                it.wish_type == WishType.MEDIA.name &&
+                it.status == WishStatus.FULFILLED.name
+        }
+
+        // Find title IDs for fulfilled wishes so we can link to them
+        val allTitles = Title.findAll()
+        val titlesByTmdb = allTitles
+            .filter { it.tmdb_id != null }
+            .groupBy { Pair(it.tmdb_id!!, it.media_type) }
+
+        val fulfilledItems = fulfilledWishes.map { wish ->
+            val posterUrl = if (wish.tmdb_poster_path != null) "https://image.tmdb.org/t/p/w500${wish.tmdb_poster_path}" else null
+            val titleId = titlesByTmdb[Pair(wish.tmdb_id, wish.tmdb_media_type)]?.firstOrNull()?.id
+
+            mapOf(
+                "tmdb_id" to wish.tmdb_id,
+                "media_type" to wish.tmdb_media_type,
+                "title" to (wish.tmdb_title ?: "Unknown"),
+                "poster_url" to posterUrl,
+                "release_year" to wish.tmdb_release_year,
+                "season_number" to wish.season_number,
+                "vote_count" to 0,
+                "voters" to emptyList<String>(),
+                "voted" to true,
+                "wish_id" to wish.id,
+                "acquisition_status" to null,
+                "status" to "fulfilled",
+                "title_id" to titleId
+            )
+        }
+
+        // Fulfilled first, then active
+        ApiV1Servlet.sendJson(resp, 200, mapOf("wishes" to fulfilledItems + items), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
@@ -122,6 +159,19 @@ object WishListHandler {
 
         ApiV1Servlet.sendJson(resp, 201, mapOf("id" to wish.id, "created" to true), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 201)
+    }
+
+    private fun handleDismiss(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userId: Long, wishId: Long) {
+        val wish = WishListItem.findById(wishId)
+        if (wish == null || wish.user_id != userId || wish.status != WishStatus.FULFILLED.name) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        wish.status = WishStatus.DISMISSED.name
+        wish.save()
+        ApiV1Servlet.sendJson(resp, 200, mapOf("dismissed" to true), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
     private fun handleCancel(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userId: Long, wishId: Long) {

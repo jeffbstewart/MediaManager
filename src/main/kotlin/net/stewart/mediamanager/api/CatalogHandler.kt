@@ -41,6 +41,8 @@ object CatalogHandler {
             path == "home" -> handleHome(req, resp, mapper)
             path == "titles" -> handleTitles(req, resp, mapper)
             path == "search" -> handleSearch(req, resp, mapper)
+            path == "collections" -> handleCollectionsList(req, resp, mapper)
+            path == "tags" -> handleTagsList(req, resp, mapper)
             else -> {
                 // Match deeper paths first (most specific to least specific)
                 val seasonsEpisodesMatch = TITLE_SEASONS_EPISODES.matchEntire(path)
@@ -96,6 +98,7 @@ object CatalogHandler {
         val user = ApiV1Servlet.requireAuth(req, resp) ?: return
         val nasRoot = TranscoderAgent.getNasRoot()
         val catalog = loadCatalog(user, nasRoot)
+        val familyNames = loadFamilyMemberNames()
 
         val carousels = mutableListOf<ApiCarousel>()
 
@@ -108,7 +111,7 @@ object CatalogHandler {
             for (tc in titleTranscodes) {
                 val progress = progressByTranscode[tc.id]
                 if (progress != null && progress.position_seconds > 0) {
-                    resumeItems.add(toApiTitle(title, tc, nasRoot) to progress)
+                    resumeItems.add(toApiTitle(title, tc, nasRoot, familyNames) to progress)
                     break
                 }
             }
@@ -130,7 +133,7 @@ object CatalogHandler {
             if (title.id!! !in playableTitleIds) continue
             if (title.id!! in seenTitleIds) continue
             seenTitleIds.add(title.id!!)
-            recentItems.add(toApiTitle(title, tc, nasRoot))
+            recentItems.add(toApiTitle(title, tc, nasRoot, familyNames))
         }
         if (recentItems.isNotEmpty()) {
             carousels.add(ApiCarousel("Recently Added", recentItems))
@@ -154,6 +157,16 @@ object CatalogHandler {
             .map { toApiTitle(it, catalog.playableByTitle[it.id]?.firstOrNull(), nasRoot) }
         if (tvItems.isNotEmpty()) {
             carousels.add(ApiCarousel("TV Series", tvItems))
+        }
+
+        // 5. Family / Personal Videos by event date
+        val familyItems = catalog.playableTitles
+            .filter { it.media_type == MediaType.PERSONAL.name }
+            .sortedByDescending { it.event_date }
+            .take(MAX_CAROUSEL_ITEMS)
+            .map { toApiTitle(it, catalog.playableByTitle[it.id]?.firstOrNull(), nasRoot, familyNames) }
+        if (familyItems.isNotEmpty()) {
+            carousels.add(ApiCarousel("Family", familyItems))
         }
 
         ApiV1Servlet.sendJson(resp, 200, ApiHomeFeed(carousels), mapper)
@@ -237,9 +250,10 @@ object CatalogHandler {
         val offset = (page - 1) * limit
         val pageTitles = titles.drop(offset).take(limit)
 
+        val familyNames = loadFamilyMemberNames()
         val apiTitles = pageTitles.map { title ->
             val tc = catalog.playableByTitle[title.id]?.firstOrNull()
-            toApiTitle(title, tc, nasRoot)
+            toApiTitle(title, tc, nasRoot, familyNames)
         }
 
         ApiV1Servlet.sendJson(resp, 200, ApiTitlePage(apiTitles, total, page, limit, totalPages), mapper)
@@ -315,7 +329,11 @@ object CatalogHandler {
 
         val anyPlayable = apiTranscodes.any { it.playable }
         val bestTc = allTranscodes.firstOrNull { isPlayable(it, nasRoot) }
-        val posterUrl = if (title.poster_path != null) "/posters/w500/${title.id}" else null
+        val posterUrl = when {
+            title.media_type == MediaType.PERSONAL.name && title.poster_cache_id != null -> "/local-images/${title.poster_cache_id}"
+            title.poster_path != null -> "/posters/w500/${title.id}"
+            else -> null
+        }
         val backdropUrl = if (title.backdrop_path != null) "/backdrops/${title.id}" else null
 
         val detail = ApiTitleDetail(
@@ -338,10 +356,73 @@ object CatalogHandler {
             genres = genres,
             tags = tags,
             transcodes = apiTranscodes,
-            playbackProgress = progress
+            playbackProgress = progress,
+            familyMembers = if (title.media_type == MediaType.PERSONAL.name) {
+                loadFamilyMemberNames()[title.id!!]?.takeIf { it.isNotEmpty() }
+            } else null
         )
 
         ApiV1Servlet.sendJson(resp, 200, detail, mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    // --- Collections List ---
+
+    private fun handleCollectionsList(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+
+        val collections = TmdbCollection.findAll()
+        val allTitles = Title.findAll()
+            .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
+            .filter { user.canSeeRating(it.content_rating) }
+
+        val titlesByCollection = allTitles
+            .filter { it.tmdb_collection_id != null }
+            .groupBy { it.tmdb_collection_id!! }
+
+        val apiCollections = collections
+            .mapNotNull { coll ->
+                val titles = titlesByCollection[coll.tmdb_collection_id] ?: return@mapNotNull null
+                val posterUrl = if (coll.poster_path != null) "/collection-posters/${coll.tmdb_collection_id}" else null
+                mapOf(
+                    "tmdb_collection_id" to coll.tmdb_collection_id,
+                    "name" to coll.name,
+                    "poster_url" to posterUrl,
+                    "title_count" to titles.size
+                )
+            }
+            .sortedBy { it["name"] as String }
+
+        ApiV1Servlet.sendJson(resp, 200, mapOf("collections" to apiCollections), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    // --- Tags List ---
+
+    private fun handleTagsList(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val catalog = loadCatalog(user, nasRoot)
+        val playableTitleIds = catalog.playableTitles.mapNotNull { it.id }.toSet()
+
+        val allTags = Tag.findAll()
+        val titleTags = TitleTag.findAll()
+        val titleIdsByTag = titleTags.groupBy { it.tag_id }.mapValues { (_, tts) -> tts.map { it.title_id }.toSet() }
+
+        val apiTags = allTags.mapNotNull { tag ->
+            val tagTitleIds = titleIdsByTag[tag.id] ?: return@mapNotNull null
+            val playableCount = tagTitleIds.count { it in playableTitleIds }
+            if (playableCount == 0) return@mapNotNull null
+            mapOf(
+                "id" to tag.id,
+                "name" to tag.name,
+                "color" to tag.bg_color,
+                "title_count" to playableCount
+            )
+        }.sortedBy { it["name"] as String }
+
+        ApiV1Servlet.sendJson(resp, 200, mapOf("tags" to apiTags), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
@@ -474,7 +555,8 @@ object CatalogHandler {
 
     private fun loadCatalog(user: AppUser, nasRoot: String?): CatalogData {
         val allTitles = Title.findAll()
-            .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
+            .filter { !it.hidden }
+            .filter { it.enrichment_status == EnrichmentStatus.ENRICHED.name || it.media_type == MediaType.PERSONAL.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = allTitles.associateBy { it.id }
 
@@ -494,9 +576,25 @@ object CatalogHandler {
         return CatalogData(allTitles, titlesById, playableTitles, playableTranscodes, playableByTitle)
     }
 
-    private fun toApiTitle(title: Title, tc: Transcode?, nasRoot: String?): ApiTitle {
-        val posterUrl = if (title.poster_path != null) "/posters/w500/${title.id}" else null
+    private fun loadFamilyMemberNames(): Map<Long, List<String>> {
+        val members = FamilyMember.findAll().associateBy { it.id }
+        val links = TitleFamilyMember.findAll()
+        return links.groupBy { it.title_id }.mapValues { (_, tfms) ->
+            tfms.mapNotNull { members[it.family_member_id]?.name }
+        }
+    }
+
+    private fun toApiTitle(title: Title, tc: Transcode?, nasRoot: String?, familyNames: Map<Long, List<String>>? = null): ApiTitle {
+        val posterUrl = when {
+            title.media_type == MediaType.PERSONAL.name && title.poster_cache_id != null -> "/local-images/${title.poster_cache_id}"
+            title.poster_path != null -> "/posters/w500/${title.id}"
+            else -> null
+        }
         val backdropUrl = if (title.backdrop_path != null) "/backdrops/${title.id}" else null
+        val familyMembers = if (title.media_type == MediaType.PERSONAL.name && familyNames != null) {
+            familyNames[title.id]?.takeIf { it.isNotEmpty() }
+        } else null
+
         return ApiTitle(
             id = title.id!!,
             name = title.name,
@@ -512,7 +610,8 @@ object CatalogHandler {
             transcodeId = tc?.id,
             tmdbId = title.tmdb_id,
             tmdbCollectionId = title.tmdb_collection_id,
-            tmdbCollectionName = title.tmdb_collection_name
+            tmdbCollectionName = title.tmdb_collection_name,
+            familyMembers = familyMembers
         )
     }
 

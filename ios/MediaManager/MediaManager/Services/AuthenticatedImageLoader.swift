@@ -71,6 +71,7 @@ struct AuthenticatedImage: View {
                     }
             }
         }
+        .clipped()
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .task(id: path) {
             guard let path, !path.isEmpty else { return }

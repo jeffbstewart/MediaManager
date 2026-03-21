@@ -14,9 +14,31 @@ struct WishListView: View {
                 ContentUnavailableView("No wishes yet", systemImage: "heart",
                     description: Text("Tap + to search for movies and TV shows to add."))
             } else {
-                List(wishes) { wish in
-                    WishRow(wish: wish, apiClient: authManager.apiClient) {
-                        await toggleVote(wish)
+                List {
+                    let fulfilled = wishes.filter { $0.isFulfilled }
+                    let active = wishes.filter { !$0.isFulfilled }
+
+                    if !fulfilled.isEmpty {
+                        Section {
+                            ForEach(fulfilled) { wish in
+                                FulfilledWishRow(wish: wish, apiClient: authManager.apiClient) {
+                                    await dismissWish(wish)
+                                }
+                            }
+                        } header: {
+                            Label("Ready to Watch", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
+
+                    if !active.isEmpty {
+                        Section(fulfilled.isEmpty ? "" : "Wishes") {
+                            ForEach(active) { wish in
+                                WishRow(wish: wish, apiClient: authManager.apiClient) {
+                                    await toggleVote(wish)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -49,6 +71,12 @@ struct WishListView: View {
         let response: ApiWishListResponse? = try? await authManager.apiClient.get("wishlist")
         wishes = response?.wishes ?? []
         loading = false
+    }
+
+    private func dismissWish(_ wish: ApiWish) async {
+        guard let wishId = wish.wishId else { return }
+        try? await authManager.apiClient.post("wishlist/\(wishId)/dismiss", body: [:])
+        await loadWishes()
     }
 
     private func toggleVote(_ wish: ApiWish) async {
@@ -149,6 +177,65 @@ struct WishRow: View {
         case "arrived": "Arrived"
         default: status.capitalized
         }
+    }
+}
+
+struct FulfilledWishRow: View {
+    let wish: ApiWish
+    let apiClient: APIClient
+    let onDismiss: () async -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let posterUrl = wish.posterUrl, let url = URL(string: posterUrl) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle().fill(.quaternary)
+                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+                }
+                .frame(width: 50, height: 75)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(wish.title)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 6) {
+                    if let type = wish.mediaType {
+                        Text(type == "TV" ? "TV Series" : "Movie")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let year = wish.releaseYear {
+                        Text("(\(String(year)))")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let season = wish.seasonNumber {
+                        Text("S\(season)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+
+                Text("Now in your collection!")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.green)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await onDismiss() }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
     }
 }
 

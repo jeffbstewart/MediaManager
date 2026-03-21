@@ -1,7 +1,7 @@
 import Foundation
 
 struct ApiWish: Codable, Identifiable {
-    var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")-\(seasonNumber ?? 0)" }
+    var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")-\(seasonNumber ?? 0)-\(status ?? "")" }
     let tmdbId: Int?
     let mediaType: String?
     let title: String
@@ -13,9 +13,13 @@ struct ApiWish: Codable, Identifiable {
     let voted: Bool
     let wishId: Int?
     let acquisitionStatus: String?
+    let status: String?
+    let titleId: Int?
+
+    var isFulfilled: Bool { status == "fulfilled" }
 
     enum CodingKeys: String, CodingKey {
-        case title, voted, voters
+        case title, voted, voters, status
         case tmdbId = "tmdb_id"
         case mediaType = "media_type"
         case posterUrl = "poster_url"
@@ -24,6 +28,7 @@ struct ApiWish: Codable, Identifiable {
         case voteCount = "vote_count"
         case wishId = "wish_id"
         case acquisitionStatus = "acquisition_status"
+        case titleId = "title_id"
     }
 }
 

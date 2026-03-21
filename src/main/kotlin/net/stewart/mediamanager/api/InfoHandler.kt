@@ -5,6 +5,9 @@ import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.ContentRating
+import net.stewart.mediamanager.entity.WishListItem
+import net.stewart.mediamanager.entity.WishStatus
+import net.stewart.mediamanager.entity.WishType
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.TranscodeLeaseService
 
@@ -28,6 +31,13 @@ object InfoHandler {
             capabilities.add("downloads")
         }
 
+        // Count fulfilled wishes for badge
+        val fulfilledWishCount = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+            handle.createQuery(
+                "SELECT COUNT(*) FROM wish_list_item WHERE user_id = :userId AND wish_type = 'MEDIA' AND status = 'FULFILLED'"
+            ).bind("userId", user.id).mapTo(Int::class.java).one()
+        }
+
         // Resolve rating ceiling label for display
         val ratingCeilingLabel = if (user.rating_ceiling != null) {
             ContentRating.entries.firstOrNull { it.ordinalLevel == user.rating_ceiling }?.displayLabel
@@ -44,7 +54,8 @@ object InfoHandler {
                 "display_name" to user.display_name,
                 "is_admin" to user.isAdmin(),
                 "rating_ceiling" to user.rating_ceiling,
-                "rating_ceiling_label" to ratingCeilingLabel
+                "rating_ceiling_label" to ratingCeilingLabel,
+                "fulfilled_wish_count" to fulfilledWishCount
             )
         )
 

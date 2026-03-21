@@ -22,7 +22,8 @@ data class ApiTitle(
     val transcodeId: Long?,
     val tmdbId: Int?,
     val tmdbCollectionId: Int?,
-    val tmdbCollectionName: String?
+    val tmdbCollectionName: String?,
+    val familyMembers: List<String>? = null
 )
 
 data class ApiTitleDetail(
@@ -45,7 +46,8 @@ data class ApiTitleDetail(
     val genres: List<ApiGenre>,
     val tags: List<ApiTag>,
     val transcodes: List<ApiTranscode>,
-    val playbackProgress: ApiPlaybackProgress?
+    val playbackProgress: ApiPlaybackProgress?,
+    val familyMembers: List<String>? = null
 )
 
 data class ApiCastMember(

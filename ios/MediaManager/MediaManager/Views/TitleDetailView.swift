@@ -13,10 +13,14 @@ struct TitleDetailView: View {
             } else if let detail {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        // Backdrop
-                        AuthenticatedImage(path: detail.backdropUrl, apiClient: authManager.apiClient, cornerRadius: 0)
-                            .frame(height: 220)
-                            .frame(maxWidth: .infinity)
+                        // Hero image — use backdrop, or poster for personal videos
+                        AuthenticatedImage(
+                            path: detail.backdropUrl ?? detail.posterUrl,
+                            apiClient: authManager.apiClient,
+                            cornerRadius: 0
+                        )
+                        .frame(height: 220)
+                        .frame(maxWidth: .infinity)
 
                         VStack(alignment: .leading, spacing: 12) {
                             // Title + metadata
@@ -98,6 +102,23 @@ struct TitleDetailView: View {
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 4)
                                             .background(.tint.opacity(0.15))
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+
+                            // Family members
+                            if let members = detail.familyMembers, !members.isEmpty {
+                                Text("People")
+                                    .font(.headline)
+                                    .padding(.top, 8)
+                                FlowLayout(spacing: 6) {
+                                    ForEach(members, id: \.self) { name in
+                                        Label(name, systemImage: "person")
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(.fill.tertiary)
                                             .clipShape(Capsule())
                                     }
                                 }
