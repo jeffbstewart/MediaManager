@@ -208,9 +208,12 @@ The server-side API phases (1-7) are complete. The following tracks iOS client i
 | 3 | TV seasons/episodes | Complete |
 | 4 | Video playback + progress tracking | Complete |
 | 4a | Subtitle rendering (WebVTT via AVAssetResourceLoaderDelegate) | Planned |
-| 5 | Wish list | Planned |
-| 6 | Offline downloads (ForMobile) | Planned |
-| 7 | Admin status, cameras, live TV | Planned |
+| 5 | Wish list (browse, vote, TMDB search add, fulfilled notifications, dismiss) | Complete |
+| 5a | Content views (Movies, TV, Collections, Tags, Family) | Complete |
+| 5b | Actor page with biography, filmography, wish hearts | Complete |
+| 6 | Offline downloads (ForMobile) | Deferred (no transcodes ready) |
+| 7 | Cameras + live TV (viewer) | In progress |
+| 7a | Admin status views | Planned |
 | 8 | TOFU server fingerprint verification | Planned |
 
 ### Phase 4a: Subtitle Rendering

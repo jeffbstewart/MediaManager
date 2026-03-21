@@ -3560,3 +3560,80 @@ Security Audit Gate 3: Sensitive Content Access (passed)
 Total: 10 commits, 20+ new/modified files across 3 modules
 API ready for internet exposure pending deployment
 ===
+
+=== 2026-03-20 — iOS App: First Session (Mac Development) ===
+- Set up Mac dev environment: Xcode 16.4, Swift 6.1.2, iOS 26.3 simulator
+- Created .gitattributes for cross-platform line endings (LF in repo)
+- Updated presubmit check: banned iOS signing file types (.p12, .mobileprovision),
+  fixed macOS stat compatibility, added 3 tests (now 23/23)
+- Added .gitignore entries for Xcode (xcuserdata, DerivedData, IPA, signing files)
+- Created docs/MAC_SETUP.md with prerequisites, build, deploy, iOS dev instructions
+- Fixed docker-build.sh: --platform linux/amd64 for Apple Silicon → Synology NAS
+- Set up Docker Desktop with insecure-registries for local NAS registry
+
+iOS App Shell:
+- Created ios/MediaManager/ Xcode project: SwiftUI, universal iPhone+iPad
+- Bundle ID net.stewart.mediamanager, deployment target iOS 26.0, Swift 6.0
+- App icon cropped from Roku channel art (315px upscaled to 1024px)
+- XCUITest target with UI tests
+- Info.plist with NSAllowsLocalNetworking for SSDP discovery
+
+Phase 1 — Server Connection & Auth:
+- SsdpDiscovery: NWListener-based M-SEARCH with Mutex for Swift 6 concurrency
+- New server endpoint GET /api/v1/discover (unauthenticated, HTTPS-exempt)
+  returns api_versions, auth_methods, secure_url from roku_base_url config
+- ServerSetupView: SSDP auto-discovery → one-tap connect, manual URL fallback
+- LoginView: username/password → JWT stored in Keychain
+- AuthManager: state machine (needsServer → needsLogin → authenticated)
+- Token refresh at 80% lifetime, immediate refresh on session restore
+- KeychainService for server URL + tokens
+
+Phase 2 — Catalog Browsing:
+- AuthenticatedImageLoader: JWT-auth'd image fetching with NSCache (500 items)
+- HomeView: carousels (Resume Playing, Recently Added, Movies, TV, Family)
+- CatalogView: paginated grid with sort, type filter, infinite scroll
+- TitleDetailView: backdrop, metadata, genres, tags, cast, play button
+- SearchView: 300ms debounce, movies/TV/actors/collections/tags/genres
+
+Phase 3 — TV Shows:
+- SeasonsView → EpisodesView drill-down
+- Circular watch progress indicator on episode rows (checkmark at 90%+)
+
+Phase 4 — Video Playback:
+- VideoPlayerView: AVPlayer with JWT via AVURLAsset HTTPAdditionalHeaders
+- Full-screen cover presentation (no sidebar on iPad)
+- Resume from saved position (parallel load, doesn't block playback)
+- Progress reporting every 10 seconds + on exit
+- preferredForwardBufferDuration = 30 for smooth streaming
+
+Phase 5 — Wish List & Content Views:
+- WishListView: browse, vote/unvote, fulfilled section with dismiss
+- TMDB search via new GET /api/v1/tmdb/search (server proxies, rating-filtered)
+- Fulfilled wish badge on sidebar (green count from /info endpoint)
+- ActorView: biography, dates, place of birth, owned titles with character
+  names, other works grid with wish heart buttons (optimistic UI)
+- CollectionsListView + CollectionDetailView with wish hearts on unowned
+- TagsListView + TagDetailView with color dots
+- Family/personal video support: /local-images/ posters, family member names
+- Expanded sidebar: Home, Movies, TV Shows, Collections, Tags, Family
+
+Server Changes (deployed via Docker from Mac):
+- GET /api/v1/discover — unauthenticated bootstrap endpoint
+- GET /api/v1/tmdb/search — TMDB search proxy with rating filter
+- POST /api/v1/wishlist/{id}/dismiss — dismiss fulfilled wishes
+- Enriched actor detail (biography, TMDB credits, wish status)
+- /info: user block includes is_admin, rating_ceiling, fulfilled_wish_count
+- Fixed headshot URLs (profile_path not headshot_cache_id) in CatalogHandler
+  and BrowseHandler
+- Personal video support in loadCatalog, toApiTitle, handleTitleDetail
+- Collections list and tags list endpoints
+- Family member names on ApiTitle and ApiTitleDetail
+
+Security:
+- Security audit: 18 findings, 1 high fixed (secure_url HTTPS validation)
+- SSDP service type validation
+- TOFU server fingerprint plan documented
+- ATS NSAllowsLocalNetworking for LAN discovery
+
+Files: ~30 new Swift files, ~10 modified Kotlin files
+===
