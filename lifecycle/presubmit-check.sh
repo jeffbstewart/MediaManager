@@ -186,6 +186,16 @@ check_pattern "UUID" "$PAT_UUID"
 check_pattern "Long hex string (possible key/hash)" "$PAT_HEX"
 check_pattern "API key prefix" "$PAT_APIKEY"
 
+# Personal patterns (gitignored, per-developer)
+PERSONAL_PATTERNS="$SCRIPT_DIR/presubmit-personal-patterns.txt"
+if [[ -f "$PERSONAL_PATTERNS" ]]; then
+    while IFS= read -r pat; do
+        pat="${pat%$'\r'}"
+        [[ -z "$pat" || "$pat" == \#* ]] && continue
+        check_pattern "Personal pattern" "$pat"
+    done < "$PERSONAL_PATTERNS"
+fi
+
 if [[ $violations -gt 0 ]]; then
     echo "============================================"
     echo "PRESUBMIT CHECK FAILED — $violations violation(s)"

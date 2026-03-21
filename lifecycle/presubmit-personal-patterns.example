@@ -1,0 +1,7 @@
+# Personal presubmit patterns — one literal per line.
+# Copy this file to presubmit-personal-patterns.txt and add values
+# that should never appear in your commits (Team IDs, local IPs, etc.)
+# This file is gitignored — each developer maintains their own copy.
+#
+# Example:
+# ABCDE12345

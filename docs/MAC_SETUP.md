@@ -130,16 +130,58 @@ The app communicates with the server via the `/api/v1/` REST API. Point it at yo
 
 ### Code Signing
 
-Xcode manages signing certificates and provisioning profiles automatically via the macOS Keychain. No signing files should ever be committed to the repository — `.gitignore` excludes `.p12`, `.mobileprovision`, and `.cer` files, and the presubmit hook blocks them as a safety net.
+Xcode manages signing certificates and provisioning profiles automatically via the macOS Keychain. No signing files should ever be committed to the repository &mdash; `.gitignore` excludes `.p12`, `.mobileprovision`, and `.cer` files, and the presubmit hook blocks them as a safety net.
 
-To configure signing:
+**Developer Team ID setup:**
 
-1. Open the project in Xcode
-2. Select the target &rarr; **Signing & Capabilities**
-3. Enable **Automatically manage signing**
-4. Select your Apple Developer team
+Your Apple Developer Team ID is kept in a gitignored `Developer.xcconfig` file so it never enters source control:
 
-The Team ID in the `.xcodeproj` is a public identifier and safe to commit.
+```bash
+cd ios/MediaManager
+cp Developer.xcconfig.example Developer.xcconfig
+```
+
+Edit `Developer.xcconfig` and replace `YOUR_TEAM_ID_HERE` with your Team ID (found in [Apple Developer &rarr; Membership](https://developer.apple.com/account#MembershipDetailsCard)). Xcode picks this up automatically via the project's build configuration &mdash; no need to set the team in the Xcode UI.
+
+### Installing on Your Device
+
+1. Connect your iPhone or iPad via USB
+2. Open the project in Xcode: `open ios/MediaManager/MediaManager.xcodeproj`
+3. Select your device from the device dropdown (top of the Xcode window)
+4. Hit **Run** (&#8984;R)
+5. First time only: on the device, go to **Settings &rarr; General &rarr; VPN &amp; Device Management** and trust your developer certificate
+
+The app installs and launches on your device. Subsequent builds are incremental and fast.
+
+### Ad Hoc Distribution to Family Members
+
+Ad Hoc distribution lets you install the app on up to 100 registered devices per year without App Store review.
+
+**One-time setup:**
+
+1. Each family member sends you their device UDID (on the device: **Settings &rarr; General &rarr; About**, tap and hold the serial number row to copy)
+2. Log in to [Apple Developer &rarr; Devices](https://developer.apple.com/account/resources/devices/list) and register each UDID
+3. Xcode automatically includes registered devices in your provisioning profile
+
+**Building the IPA:**
+
+1. In Xcode, select **Any iOS Device** as the build target (not a specific device or simulator)
+2. **Product &rarr; Archive**
+3. When the archive completes, the Organizer window opens
+4. Select the archive and click **Distribute App**
+5. Choose **Ad Hoc**
+6. Follow the prompts &mdash; Xcode signs the IPA for your registered devices
+7. Click **Export** to save the `.ipa` file
+
+**Installing on family devices:**
+
+- **AirDrop:** Share the `.ipa` file via AirDrop to the device
+- **Apple Configurator:** Connect the device via USB, drag the `.ipa` into Apple Configurator
+- **Web link:** Host the `.ipa` on a local web server with a manifest `.plist` &mdash; the device installs it via Safari
+
+Each family member needs to trust the developer certificate on first install (**Settings &rarr; General &rarr; VPN &amp; Device Management**).
+
+**Updating:** Build a new archive and distribute the same way. The app updates in place &mdash; no data loss.
 
 ---
 
