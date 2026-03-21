@@ -46,6 +46,8 @@ struct CustomPlayerView: View {
     @State private var currentEpisodeName: String?
     @State private var currentNextEpisode: NextEpisode?
     @State private var subtitles = SubtitleController()
+    @State private var thumbnails = ThumbnailScrubber()
+    @State private var scrubThumbnail: UIImage?
 
     // Controls state
     @State private var showControls = true
@@ -272,6 +274,21 @@ struct CustomPlayerView: View {
     @ViewBuilder
     private func bottomBar(player: AVPlayer) -> some View {
         VStack(spacing: 8) {
+            // Thumbnail preview during scrubbing
+            if isScrubbing, let thumb = scrubThumbnail {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 90)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(.white.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(radius: 4)
+                    .transition(.opacity)
+            }
+
             // Scrub bar
             Slider(
                 value: Binding(
@@ -279,6 +296,7 @@ struct CustomPlayerView: View {
                     set: { newValue in
                         scrubTime = newValue
                         isScrubbing = true
+                        scrubThumbnail = thumbnails.thumbnail(at: newValue)
                         resetHideTimer()
                     }
                 ),
@@ -287,6 +305,7 @@ struct CustomPlayerView: View {
                 if !editing && isScrubbing {
                     player.seek(to: CMTime(seconds: scrubTime, preferredTimescale: 600))
                     isScrubbing = false
+                    scrubThumbnail = nil
                 }
             }
             .tint(.white)
@@ -416,10 +435,10 @@ struct CustomPlayerView: View {
             }
         }
 
-        // Load subtitles
-        NSLog("MMAPP loadStream calling subtitles.load for tcId=%d", tcId)
-        await subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
-        NSLog("MMAPP loadStream calling subtitles.startObserving, cueCount=%d", subtitles.cueCount)
+        // Load subtitles and thumbnails in parallel
+        async let subLoad: () = subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
+        async let thumbLoad: () = thumbnails.load(transcodeId: tcId, apiClient: authManager.apiClient)
+        _ = await (subLoad, thumbLoad)
         subtitles.startObserving(player: avPlayer)
     }
 
