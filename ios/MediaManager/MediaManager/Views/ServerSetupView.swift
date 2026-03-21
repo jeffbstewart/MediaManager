@@ -20,13 +20,7 @@ struct ServerSetupView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                if isSearching {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Searching for server on your network...")
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let discovered = discoveredURL {
+                if let discovered = discoveredURL {
                     VStack(spacing: 12) {
                         Label("Server found", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
@@ -48,44 +42,39 @@ struct ServerSetupView: View {
                         .disabled(isConnecting)
                         .padding(.horizontal)
                     }
-                } else {
-                    Text("Enter your server address to get started.")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
 
-                if !isSearching {
-                    VStack(spacing: 16) {
-                        if discoveredURL != nil {
-                            Text("Or enter a different address:")
-                                .foregroundStyle(.secondary)
-                                .font(.callout)
-                        }
+                VStack(spacing: 16) {
+                    if discoveredURL != nil {
+                        Text("Or enter a different address:")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                    } else {
+                        Text("Enter your server address to connect.")
+                            .foregroundStyle(.secondary)
+                    }
 
-                        TextField("https://your-server.example.com", text: $serverURL)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.URL)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .onSubmit { connectTo(serverURL) }
+                    TextField("https://your-server.example.com", text: $serverURL)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .onSubmit { connectTo(serverURL) }
 
-                        if discoveredURL == nil {
-                            Button(action: { connectTo(serverURL) }) {
-                                if isConnecting {
-                                    ProgressView()
-                                        .frame(maxWidth: .infinity)
-                                } else {
-                                    Text("Connect")
-                                        .frame(maxWidth: .infinity)
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                            .disabled(serverURL.isEmpty || isConnecting)
+                    Button(action: { connectTo(serverURL) }) {
+                        if isConnecting {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Text("Connect")
+                                .frame(maxWidth: .infinity)
                         }
                     }
-                    .padding(.horizontal)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(serverURL.isEmpty || isConnecting)
                 }
+                .padding(.horizontal)
 
                 if let error = authManager.error {
                     Text(error)
@@ -109,7 +98,7 @@ struct ServerSetupView: View {
     private func discoverServer() async {
         isSearching = true
         let ssdp = SsdpDiscovery()
-        discoveredURL = await ssdp.discover(timeout: 3.0)
+        discoveredURL = await ssdp.discover(timeout: 2.0)
         isSearching = false
     }
 

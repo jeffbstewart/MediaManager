@@ -62,10 +62,15 @@ struct ContentView: View {
             .navigationTitle("Media Manager")
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    Button("Sign Out") {
-                        Task { await authManager.logout() }
+                    VStack(spacing: 4) {
+                        Button("Sign Out") {
+                            Task { await authManager.logout() }
+                        }
+                        .font(.callout)
+                        Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                     }
-                    .font(.callout)
                 }
             }
         } detail: {

@@ -101,5 +101,6 @@ struct PosterCard: View {
             }
         }
         .frame(width: 120, alignment: .topLeading)
+        .contentShape(Rectangle())
     }
 }
