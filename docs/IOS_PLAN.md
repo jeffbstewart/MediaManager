@@ -216,8 +216,10 @@ The server-side API phases (1-7) are complete. The following tracks iOS client i
 | 7 | Cameras + live TV (viewer) | Complete |
 | 7a | Admin status views | Complete |
 | 8 | TOFU server fingerprint verification | Complete |
-| 9 | Profile, sessions, title personalization, home interactions (server) | In Progress |
+| 9 | Profile, sessions, title personalization, home interactions (server) | Complete |
 | 9a | Profile, sessions, title personalization, home interactions (iOS) | Pending |
+| 10 | Admin API: user management, purchase wishes, NAS actions, data quality, tags, settings (server) | In Progress |
+| 10a | Admin screens (iOS) | Pending |
 
 ### Phase 9: Profile, Sessions & Title Personalization (Server)
 
@@ -310,6 +312,109 @@ Transcode Wishes:
 - Wish list: transcode wishes tab
 
 **Depends on:** Phase 9 (server)
+
+### Phase 10: Admin API (Server)
+
+**Goal:** Expose admin-only functionality via `/api/v1/admin/` endpoints so the iOS app can manage users, monitor data quality, handle purchase wishes, trigger NAS scans, and configure settings — without requiring the desktop web UI.
+
+**Gap analysis (admin features missing from iOS):**
+
+| Priority | Feature | Web Route | iOS Status |
+|----------|---------|-----------|------------|
+| High | User management (list, promote, unlock, reset PW, delete) | `/users` | Missing |
+| High | Purchase wishes (view votes, update acquisition status) | `/purchase-wishes` | Missing |
+| High | NAS scan trigger | `/transcodes/status` | Missing (read-only only) |
+| High | Clear transcode failures | `/transcodes/status` | Missing |
+| Medium | Data quality (enrichment issues, edit metadata, re-enrich) | `/data-quality` | Missing |
+| Medium | Tag management (CRUD) | `/tags` | Missing |
+| Medium | Settings (NAS path, buddy keys, Keepa, personal videos) | `/settings` | Missing |
+| Medium | Linked transcodes (view, unlink) | `/transcodes/linked` | Missing |
+| Medium | Unmatched files (accept suggestion, ignore, manual link) | `/transcodes/unmatched` | Missing |
+| Medium | Add item (UPC lookup, TMDB search + add to catalog) | `/add` | Missing |
+| Low | Camera settings (CRUD, test snapshot) | `/cameras/settings` | Missing |
+| Low | Live TV settings (tuners, channels, global limits) | `/live-tv/settings` | Missing |
+| Low | Multi-pack expansion | `/expand` | Missing (grid-heavy) |
+| Low | Family member management | `/family` | Missing |
+| Deferred | Amazon order import (CSV upload) | `/import` | Desktop workflow |
+| Deferred | Ownership documentation (UPC scan + photo capture) | `/document-ownership` | Desktop workflow |
+| Deferred | Insurance report (PDF/CSV generation) | `/report` | Desktop workflow |
+
+**Excluded:** First-user setup (`/setup`) — use mobile browser if needed.
+
+**New endpoints (all admin-only, require access_level >= 2):**
+
+User Management:
+- `GET /api/v1/admin/users` — list all users
+- `PUT /api/v1/admin/users/{id}/role` — promote/demote `{"access_level": 1|2}`
+- `PUT /api/v1/admin/users/{id}/rating-ceiling` — set ceiling `{"ceiling": 5}` or `{"ceiling": null}`
+- `POST /api/v1/admin/users/{id}/unlock` — unlock locked account
+- `POST /api/v1/admin/users/{id}/reset-password` — `{"new_password":"...", "force_change": true}`
+- `POST /api/v1/admin/users/{id}/force-password-change` — set must_change_password flag
+- `DELETE /api/v1/admin/users/{id}` — delete user (blocked if last admin or self)
+
+Purchase Wishes:
+- `GET /api/v1/admin/purchase-wishes` — aggregated wishes with vote counts + acquisition status
+- `PUT /api/v1/admin/purchase-wishes/{wishId}/status` — update acquisition status `{"status": "ORDERED"}`
+
+NAS Scan + Failure Management:
+- `POST /api/v1/admin/scan-nas` — trigger background NAS scan, returns immediately
+- `POST /api/v1/admin/clear-failures` — clear failed transcode leases
+
+Data Quality:
+- `GET /api/v1/admin/data-quality` — paginated titles with enrichment issues
+- `PUT /api/v1/admin/titles/{id}/metadata` — edit title metadata `{"name":"...", "release_year":2024, ...}`
+- `DELETE /api/v1/admin/titles/{id}` — delete title and related data
+- `POST /api/v1/admin/titles/{id}/re-enrich` — re-trigger TMDB enrichment
+
+Tag Management:
+- `POST /api/v1/admin/tags` — create tag `{"name":"...", "color":"#hex"}`
+- `PUT /api/v1/admin/tags/{id}` — edit tag
+- `DELETE /api/v1/admin/tags/{id}` — delete tag
+- (GET already exists: `GET /api/v1/catalog/tags`)
+
+Settings:
+- `GET /api/v1/admin/settings` — current server settings
+- `PUT /api/v1/admin/settings` — update settings (partial, only provided keys)
+
+Transcode Management:
+- `GET /api/v1/admin/transcodes/linked` — paginated linked transcodes with file status
+- `POST /api/v1/admin/transcodes/{id}/unlink` — unlink a transcode from its title
+- `GET /api/v1/admin/transcodes/unmatched` — unmatched NAS files with suggestions
+- `POST /api/v1/admin/transcodes/unmatched/{id}/accept` — accept top suggestion
+- `POST /api/v1/admin/transcodes/unmatched/{id}/ignore` — mark as ignored
+- `POST /api/v1/admin/transcodes/unmatched/{id}/link` — manual link `{"title_id": 123}`
+
+Catalog / Add Item:
+- `POST /api/v1/admin/catalog/upc-lookup` — UPC barcode lookup `{"upc": "012345678901"}`
+- `POST /api/v1/admin/catalog/tmdb-add` — add title from TMDB `{"tmdb_id": 123, "media_type": "movie"}`
+
+**New server files:**
+- `api/UserManagementHandler.kt`
+- `api/PurchaseWishHandler.kt`
+- `api/AdminActionHandler.kt` (NAS scan, clear failures, data quality, settings)
+
+**Modified server files:**
+- `api/AdminHandler.kt` — extended routing for all new sub-paths
+- `api/ApiModels.kt` — new DTOs as needed
+
+**Depends on:** Phase 1 (JWT auth)
+
+### Phase 10a: Admin Screens (iOS)
+
+**Goal:** iOS client screens for the Phase 10 API endpoints.
+
+**Screens (in priority order):**
+- User management list (promote/demote, unlock, reset PW, force change, delete)
+- Purchase wishes list (vote counts, acquisition status picker)
+- NAS scan button + clear failures button (on existing admin status screen)
+- Data quality list (enrichment status, edit metadata sheet)
+- Tag management list (create/edit/delete)
+- Settings screen (view/edit key configuration values)
+- Linked transcodes list (with unlink action)
+- Unmatched files list (accept/ignore/link actions)
+- Add item screen (UPC scanner via camera, TMDB search)
+
+**Depends on:** Phase 10 (server)
 
 ### Phase 4a: Subtitle Rendering
 

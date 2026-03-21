@@ -10,9 +10,14 @@ import net.stewart.mediamanager.service.TranscodeLeaseService
 import net.stewart.mediamanager.service.WishListService
 
 /**
- * Handles GET /api/v1/admin/... endpoints (admin-only, access_level >= 2):
- * - /admin/transcode-status — pending work counts + active leases
- * - /admin/buddy-status — active leases, completed today, poison pills
+ * Handles /api/v1/admin/... endpoints (admin-only, access_level >= 2).
+ * Routes to sub-handlers for distinct feature areas:
+ * - /admin/transcode-status, /admin/buddy-status, /admin/rip-backlog — direct (GET)
+ * - /admin/users/... — UserManagementHandler
+ * - /admin/purchase-wishes/... — PurchaseWishHandler
+ * - /admin/transcodes/... — TranscodeManagementHandler
+ * - /admin/scan-nas, /admin/clear-failures, /admin/data-quality,
+ *   /admin/titles/..., /admin/settings, /admin/tags/... — AdminActionHandler
  */
 object AdminHandler {
 
@@ -25,16 +30,26 @@ object AdminHandler {
             return
         }
 
-        if (req.method != "GET") {
-            ApiV1Servlet.sendError(resp, 405, "method_not_allowed")
-            MetricsRegistry.countHttpResponse("api_v1", 405)
-            return
-        }
+        when {
+            // Sub-handler delegation
+            path == "users" || path.startsWith("users/") ->
+                UserManagementHandler.handle(req, resp, path.removePrefix("users").removePrefix("/"), mapper, user)
+            path == "purchase-wishes" || path.startsWith("purchase-wishes/") ->
+                PurchaseWishHandler.handle(req, resp, path.removePrefix("purchase-wishes").removePrefix("/"), mapper)
+            path.startsWith("transcodes/") ->
+                TranscodeManagementHandler.handle(req, resp, path.removePrefix("transcodes/"), mapper)
 
-        when (path) {
-            "transcode-status" -> handleTranscodeStatus(resp, mapper)
-            "buddy-status" -> handleBuddyStatus(resp, mapper)
-            "rip-backlog" -> handleRipBacklog(req, resp, mapper)
+            // AdminActionHandler paths
+            path == "scan-nas" || path == "clear-failures" ||
+            path == "data-quality" || path.startsWith("titles/") ||
+            path == "settings" || path == "tags" || path.startsWith("tags/") ->
+                AdminActionHandler.handle(req, resp, path, mapper)
+
+            // Direct GET-only endpoints
+            path == "transcode-status" && req.method == "GET" -> handleTranscodeStatus(resp, mapper)
+            path == "buddy-status" && req.method == "GET" -> handleBuddyStatus(resp, mapper)
+            path == "rip-backlog" && req.method == "GET" -> handleRipBacklog(req, resp, mapper)
+
             else -> {
                 ApiV1Servlet.sendError(resp, 404, "not_found")
                 MetricsRegistry.countHttpResponse("api_v1", 404)
