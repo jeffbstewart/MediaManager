@@ -3,16 +3,21 @@ import SwiftUI
 struct ProfileResponse: Codable {
     let username: String
     let displayName: String
-    let role: String
-    let ratingCeiling: String?
+    let isAdmin: Bool
+    let ratingCeiling: Int?
+    let ratingCeilingLabel: String?
     let liveTvMinQuality: Int
 
     enum CodingKeys: String, CodingKey {
-        case username, role
+        case username
         case displayName = "display_name"
+        case isAdmin = "is_admin"
         case ratingCeiling = "rating_ceiling"
+        case ratingCeilingLabel = "rating_ceiling_label"
         case liveTvMinQuality = "live_tv_min_quality"
     }
+
+    var roleDisplay: String { isAdmin ? "Admin" : "Viewer" }
 }
 
 struct ProfileView: View {
@@ -32,8 +37,8 @@ struct ProfileView: View {
                     Section("Account") {
                         LabeledContent("Username", value: profile.username)
                         LabeledContent("Display Name", value: profile.displayName)
-                        LabeledContent("Role", value: profile.role)
-                        if let ceiling = profile.ratingCeiling {
+                        LabeledContent("Role", value: profile.roleDisplay)
+                        if let ceiling = profile.ratingCeilingLabel {
                             LabeledContent("Rating Limit", value: ceiling)
                         }
                     }
