@@ -67,6 +67,16 @@ docker --version
 
 > **Note:** Docker Desktop requires a [paid license](https://www.docker.com/pricing/) for companies with >250 employees or >$10M revenue. [Colima](https://github.com/ablemachines/colima) is a free alternative: `brew install colima && colima start`.
 
+**Insecure registries:** If deploying to a local Docker registry over HTTP (not HTTPS), add it to Docker Desktop's engine config. Open **Docker Desktop &rarr; Settings &rarr; Docker Engine** and add:
+
+```json
+"insecure-registries": ["172.16.4.12:15000"]
+```
+
+Replace the IP and port with your registry's address. Click **Apply &amp; Restart**.
+
+**Cross-compilation:** The Mac builds ARM64 images by default, but the Synology NAS is x86_64. The `lifecycle/docker-build.sh` script uses `--platform linux/amd64` to cross-compile. This is slower (~3 min vs ~1 min) due to QEMU emulation.
+
 ### Git
 
 macOS ships with Apple Git via Xcode command line tools. Verify:

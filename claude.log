@@ -3637,3 +3637,41 @@ Security:
 
 Files: ~30 new Swift files, ~10 modified Kotlin files
 ===
+
+=== 2026-03-20 (cont.) — Camera & Live TV Streaming ===
+- Cameras: snapshot thumbnails in list, full-screen HLS live streaming
+- Live TV: channel list with guide numbers, network, reception quality
+  bars, full-screen HLS streaming
+- HLS auth: AVURLAssetHTTPCookiesKey with mm_jwt cookie — documented
+  Apple API that propagates cookies to all HLS sub-requests (playlist
+  refreshes, .ts segments). Server-side AuthFilter accepts mm_jwt cookie.
+- Auth method logging: access log shows jeff[cookie], jeff[jwt_header],
+  jeff[jwt_cookie], jeff[device_token] for debugging
+- Camera relay warmup: new GET /cam/{id}/start endpoint blocks until
+  relay has 10+ segments buffered. iOS calls this before starting
+  AVPlayer to ensure warm buffer on first playlist request.
+- Ring buffer increased from 10 to 30 segments (15 seconds of video)
+- Master playlist wrappers: both CameraStreamServlet and
+  LiveTvStreamServlet now serve two-level HLS (master → variant) as
+  required by AVPlayer
+- Live TV: variant playlist with fully-qualified absolute segment URLs,
+  auto-play on readyToPlay, warmup via pre-fetching variant playlist
+- Close button: prominent capsule pill with explicit player cleanup
+  (pause + replaceCurrentItem(nil)) to stop audio on dismiss
+
+Debugging insights:
+- AVURLAssetHTTPHeaderFieldsKey is undocumented/private and only sends
+  headers on the initial request — not viable for HLS
+- AVAssetResourceLoaderDelegate is NOT called for HLS segment requests
+- AVPlayer requires minimum ~10 segments (5 seconds at 0.5s/segment)
+  to start playback — 6 segments was insufficient
+- Access log ring buffer (200 entries) overflows with 2/sec HLS polls,
+  hiding segment requests — they ARE happening, just pushed out
+
+Server changes deployed:
+- AuthFilter: mm_jwt cookie auth + auth method attribute
+- AccessLogFilter: shows auth method in username field
+- CameraStreamServlet: /start endpoint, master playlist, diagnostic logging
+- LiveTvStreamServlet: master playlist, absolute segment URLs
+- HlsCameraRelay: 30-segment buffer, minSegments, segmentCount()
+===
