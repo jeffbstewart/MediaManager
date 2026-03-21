@@ -35,6 +35,18 @@ data class EncoderProfile(
                 "-profile:v", "high"
             )
         )
+        val VIDEOTOOLBOX = EncoderProfile(
+            name = "videotoolbox",
+            ffmpegEncoder = "h264_videotoolbox",
+            args = listOf(
+                "-pix_fmt", "yuv420p",
+                "-c:v", "h264_videotoolbox",
+                "-b:v", "8M",
+                "-maxrate", "12M",
+                "-bufsize", "16M",
+                "-profile:v", "high"
+            )
+        )
         val CPU = EncoderProfile(
             name = "cpu",
             ffmpegEncoder = "libx264",
@@ -49,6 +61,7 @@ data class EncoderProfile(
         fun byName(name: String): EncoderProfile? = when (name.lowercase()) {
             "nvenc" -> NVENC
             "qsv" -> QSV
+            "videotoolbox", "vtb" -> VIDEOTOOLBOX
             "cpu" -> CPU
             else -> null
         }
@@ -69,6 +82,11 @@ data class EncoderProfile(
                 "qsv" -> listOf(
                     "-pix_fmt", "yuv420p", "-c:v", "h264_qsv",
                     "-preset", "veryslow",
+                    "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
+                    "-profile:v", "high"
+                )
+                "videotoolbox" -> listOf(
+                    "-pix_fmt", "yuv420p", "-c:v", "h264_videotoolbox",
                     "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
                     "-profile:v", "high"
                 )

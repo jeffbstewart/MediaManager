@@ -201,6 +201,78 @@ The app uses SSDP multicast to auto-discover the mediaManager server on the loca
 ```
 4. Rebuild and deploy &mdash; SSDP will start working automatically.
 
+## Transcode Buddy on Mac
+
+The Mac can serve as a transcode buddy worker, using Apple Silicon's VideoToolbox hardware encoder for video transcoding and faster-whisper for AI subtitle generation.
+
+### Prerequisites
+
+- **FFmpeg** with VideoToolbox support: `brew install ffmpeg`
+- **Java 21+**: `brew install --cask corretto` (or already installed for server builds)
+- **NAS mounted** at a local path (e.g., `/Volumes/PlexServedMedia/media`)
+- **faster-whisper** (optional, for subtitles): `pip3 install faster-whisper`
+
+### Setup
+
+1. **Get a buddy API key** from the server: **Settings &rarr; Buddy Keys &rarr; New Key**
+
+2. **Configure** &mdash; copy and edit the buddy properties:
+
+```bash
+cp transcode-buddy/example.buddy.properties transcode-buddy/buddy.properties
+```
+
+Key settings for Mac:
+
+```properties
+server_url=https://your-server.example.com
+api_key=your-buddy-key
+buddy_name=macbook-pro
+nas_root=/Volumes/YourNASShare/media
+ffmpeg_path=/opt/homebrew/bin/ffmpeg
+ffprobe_path=/opt/homebrew/bin/ffprobe
+encoder_preference=videotoolbox,cpu
+whisper_path=/path/to/MediaManager/lifecycle/faster-whisper-mac.sh
+whisper_device=cpu
+whisper_compute_type=int8
+```
+
+3. **Build and run:**
+
+```bash
+./lifecycle/run-buddy.sh
+```
+
+4. **Monitor:** `./lifecycle/buddy-log.sh -f`
+
+5. **Stop:** `./lifecycle/stop-buddy.sh`
+
+### VideoToolbox Encoder
+
+The `videotoolbox` encoder uses Apple Silicon's hardware media engine for H.264 encoding. It's comparable in speed to NVIDIA NVENC and doesn't load the CPU. The encoder is auto-detected on startup &mdash; if VideoToolbox is unavailable, it falls back to CPU (libx264).
+
+### Whisper Subtitles on Mac
+
+The Windows transcode buddy uses `faster-whisper-xxl.exe` (standalone binary with bundled CUDA). On Mac, we use the Python `faster-whisper` library via a wrapper script (`lifecycle/faster-whisper-mac.sh`).
+
+Key differences from Windows:
+- **Device:** `cpu` instead of `cuda` (Apple Silicon doesn't support CUDA)
+- **Compute type:** `int8` instead of `float16` (optimized for CPU inference)
+- **Performance:** Roughly 4x faster than real-time on Apple Silicon CPU with `large-v3-turbo`. A 30-minute episode takes ~7-8 minutes.
+
+The first run downloads the Whisper model (~1.5 GB for `large-v3-turbo`).
+
+### Network Performance
+
+**Use wired ethernet** for transcode buddy work. SMB file reads over WiFi are significantly slower &mdash; thumbnail generation for a 2-hour Blu-ray movie takes 30+ minutes over WiFi vs ~6 minutes over gigabit ethernet. Transcode jobs read the full source file, so network throughput directly impacts performance.
+
+To verify ethernet is active and at gigabit speed:
+
+```bash
+ifconfig en7 | grep media
+# Expected: media: autoselect (1000baseT <full-duplex>)
+```
+
 ---
 
 ## Cross-Platform Notes

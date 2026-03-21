@@ -420,8 +420,8 @@ class TranscodeWorker(
                 "--language", config.whisperLanguage,
                 "--output_format", "srt",
                 "--output_dir", outputDir.absolutePath,
-                "--device", "cuda",
-                "--compute_type", "float16"
+                "--device", config.whisperDevice,
+                "--compute_type", config.whisperComputeType
             )
             if (config.whisperModelDir != null) {
                 command.addAll(listOf("--model_dir", config.whisperModelDir))

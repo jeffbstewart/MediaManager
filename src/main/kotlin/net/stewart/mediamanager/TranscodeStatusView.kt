@@ -306,10 +306,10 @@ class TranscodeStatusView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
         } else {
+            val dtf = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
             for (lease in activeLeases) {
                 val fileName = lease.relative_path.substringAfterLast('/')
-                val status = if (lease.status == LeaseStatus.IN_PROGRESS.name)
-                    "${lease.progress_percent}%" else "claimed"
+                val isThumbsOrSubs = lease.lease_type in setOf(LeaseType.THUMBNAILS.name, LeaseType.SUBTITLES.name, LeaseType.CHAPTERS.name)
                 val encoderInfo = if (lease.encoder != null) " [${lease.encoder}]" else ""
                 val typeTag = when (lease.lease_type) {
                     LeaseType.THUMBNAILS.name -> " [thumbs]"
@@ -317,10 +317,21 @@ class TranscodeStatusView : KComposite() {
                     LeaseType.CHAPTERS.name -> " [chapters]"
                     else -> ""
                 }
-                buddyActiveList.add(Span("${lease.buddy_name}: $fileName — $status$encoderInfo$typeTag").apply {
+
+                val statusText = if (isThumbsOrSubs) {
+                    val since = lease.claimed_at?.format(dtf) ?: "?"
+                    "running since $since"
+                } else if (lease.status == LeaseStatus.IN_PROGRESS.name) {
+                    "${lease.progress_percent}%"
+                } else {
+                    "claimed"
+                }
+
+                buddyActiveList.add(Span("${lease.buddy_name}: $fileName — $statusText$encoderInfo$typeTag").apply {
                     style.set("font-size", "var(--lumo-font-size-s)")
                 })
-                if (lease.status == LeaseStatus.IN_PROGRESS.name) {
+                // Only show progress bar for transcodes, not thumbnails/subs/chapters
+                if (!isThumbsOrSubs && lease.status == LeaseStatus.IN_PROGRESS.name) {
                     buddyActiveList.add(ProgressBar().apply {
                         min = 0.0
                         max = 100.0
@@ -333,7 +344,7 @@ class TranscodeStatusView : KComposite() {
         }
 
         buddyRecentList.removeAll()
-        val recentLeases = TranscodeLeaseService.getRecentLeases(5)
+        val recentLeases = TranscodeLeaseService.getRecentLeases(20)
             .filter { it.buddy_name != "local" }
         if (recentLeases.isEmpty()) {
             buddyRecentList.add(Span("No recent buddy activity").apply {
@@ -341,23 +352,87 @@ class TranscodeStatusView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
         } else {
+            val dtf = java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+
+            val html = StringBuilder()
+            html.append("""<table style="width:100%;border-collapse:collapse;font-size:var(--lumo-font-size-xs)">""")
+            html.append("<thead><tr style=\"color:var(--lumo-secondary-text-color)\">")
+            html.append("<th style=\"text-align:left;padding:2px 8px\"></th>")
+            html.append("<th style=\"text-align:left;padding:2px 8px\">Buddy</th>")
+            html.append("<th style=\"text-align:left;padding:2px 8px\">Type</th>")
+            html.append("<th style=\"text-align:left;padding:2px 8px\">Start \u2192 End</th>")
+            html.append("<th style=\"text-align:left;padding:2px 8px\">Elapsed</th>")
+            html.append("<th style=\"text-align:right;padding:2px 8px\">Size</th>")
+            html.append("<th style=\"text-align:right;padding:2px 8px\">Throughput</th>")
+            html.append("<th style=\"text-align:left;padding:2px 8px\">File</th>")
+            html.append("</tr></thead><tbody>")
+
             for (lease in recentLeases) {
-                val fileName = lease.relative_path.substringAfterLast('/')
+                val fileName = lease.relative_path.substringAfterLast('/').take(40)
                 val icon = if (lease.status == LeaseStatus.COMPLETED.name) "\u2713" else "\u2717"
                 val color = if (lease.status == LeaseStatus.COMPLETED.name)
                     "var(--lumo-success-text-color)" else "var(--lumo-error-text-color)"
-                val encoderInfo = if (lease.encoder != null) " [${lease.encoder}]" else ""
+                val encoder = lease.encoder ?: "-"
                 val typeTag = when (lease.lease_type) {
-                    LeaseType.THUMBNAILS.name -> " [thumbs]"
-                    LeaseType.SUBTITLES.name -> " [subs]"
-                    LeaseType.CHAPTERS.name -> " [chapters]"
-                    else -> ""
+                    LeaseType.THUMBNAILS.name -> "thumbs"
+                    LeaseType.SUBTITLES.name -> "subs"
+                    LeaseType.CHAPTERS.name -> "chapters"
+                    LeaseType.MOBILE_TRANSCODE.name -> "mobile"
+                    else -> "transcode"
                 }
-                buddyRecentList.add(Span("  $icon ${lease.buddy_name}: $fileName$encoderInfo$typeTag").apply {
-                    style.set("font-size", "var(--lumo-font-size-s)")
-                    style.set("color", color)
-                })
+
+                val startStr = lease.claimed_at?.format(dtf) ?: "-"
+                val endStr = lease.completed_at?.format(dtf) ?: "-"
+
+                val durationSec = if (lease.claimed_at != null && lease.completed_at != null) {
+                    java.time.Duration.between(lease.claimed_at, lease.completed_at).seconds
+                } else null
+
+                val sizeBytes = lease.file_size_bytes
+                val sizeStr = when {
+                    sizeBytes == null || sizeBytes <= 0 -> "-"
+                    sizeBytes >= 1_073_741_824 -> "%.1f GB".format(sizeBytes / 1_073_741_824.0)
+                    sizeBytes >= 1_048_576 -> "%.0f MB".format(sizeBytes / 1_048_576.0)
+                    else -> "%.0f KB".format(sizeBytes / 1024.0)
+                }
+
+                val throughputStr = if (durationSec != null && durationSec > 0 && sizeBytes != null && sizeBytes > 0) {
+                    val mbPerSec = sizeBytes / 1_048_576.0 / durationSec
+                    if (mbPerSec >= 1.0) "%.1f MB/s".format(mbPerSec) else "%.0f KB/s".format(mbPerSec * 1024)
+                } else "-"
+
+                val durationStr = if (durationSec != null) {
+                    val h = durationSec / 3600
+                    val m = (durationSec % 3600) / 60
+                    val s = durationSec % 60
+                    when {
+                        h > 0 -> "${h} hr ${m} min"
+                        m > 0 -> "${m} min ${s} sec"
+                        else -> "${s} sec"
+                    }
+                } else "-"
+
+                html.append("<tr style=\"color:$color\">")
+                html.append("<td style=\"padding:2px 8px\">$icon</td>")
+                html.append("<td style=\"padding:2px 8px\">${lease.buddy_name}</td>")
+                html.append("<td style=\"padding:2px 8px\">$typeTag</td>")
+                html.append("<td style=\"padding:2px 8px\">$startStr \u2192 $endStr</td>")
+                html.append("<td style=\"padding:2px 8px\">$durationStr</td>")
+                html.append("<td style=\"text-align:right;padding:2px 8px\">$sizeStr</td>")
+                html.append("<td style=\"text-align:right;padding:2px 8px\">$throughputStr</td>")
+                html.append("<td style=\"padding:2px 8px\">$fileName</td>")
+                html.append("</tr>")
+
+                if (lease.status != LeaseStatus.COMPLETED.name && lease.error_message != null) {
+                    html.append("<tr style=\"color:var(--lumo-error-text-color)\">")
+                    html.append("<td></td><td colspan=\"7\" style=\"padding:0 8px 4px 8px;font-size:var(--lumo-font-size-xxs)\">\u2514 ${lease.error_message}</td>")
+                    html.append("</tr>")
+                }
             }
+
+            html.append("</tbody></table>")
+
+            buddyRecentList.add(com.vaadin.flow.component.Html("<div>$html</div>"))
         }
     }
 

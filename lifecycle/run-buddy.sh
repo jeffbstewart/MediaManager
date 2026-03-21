@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Run the transcode buddy worker
-# Uses the buddy.properties config in transcode-buddy/
+# Run the transcode buddy worker.
+# Cross-platform: works on macOS, Linux, and Windows (Git Bash).
 #
-# Uses javaw.exe (no console window) so ffmpeg/whisper child processes
-# cannot emit BEL characters to a console and cause audible beeps.
-# SLF4J is configured to write logs to data/buddy.log directly
-# (see simplelogger.properties), so javaw's lack of stdout/stderr is fine.
+# Logs are written to data/buddy.log via SLF4J simplelogger.properties.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,18 +13,45 @@ if [ ! -d "$INSTALL_DIR" ]; then
     cd "$PROJECT_ROOT" && ./gradlew :transcode-buddy:installDist || exit 1
 fi
 
-export JAVA_HOME="$HOME/.jdks/corretto-25.0.2"
 cd "$PROJECT_ROOT/transcode-buddy"
 
-# Use relative lib path from CWD — Java on Windows/Git Bash does not
-# understand POSIX-style absolute paths like /c/Programming/...
+# Detect JAVA_HOME if not set
+if [ -z "$JAVA_HOME" ]; then
+    if [ -d "$HOME/.jdks/corretto-25.0.2" ]; then
+        export JAVA_HOME="$HOME/.jdks/corretto-25.0.2"
+    elif command -v java &>/dev/null; then
+        export JAVA_HOME="$(java -XshowSettings:properties 2>&1 | grep 'java.home' | awk '{print $NF}')"
+    else
+        echo "ERROR: JAVA_HOME not set and java not found in PATH"
+        exit 1
+    fi
+fi
+
+# Use relative lib path from CWD
 LIB_DIR="../transcode-buddy/build/install/transcode-buddy/lib"
+
+# Detect OS for platform-specific settings
+case "$OSTYPE" in
+    darwin*|linux*)
+        CLASSPATH_SEP=":"
+        JAVA_BIN="$JAVA_HOME/bin/java"
+        ;;
+    msys*|cygwin*|win32*)
+        CLASSPATH_SEP=";"
+        # Use javaw on Windows (no console window, avoids FFmpeg BEL beeps)
+        JAVA_BIN="$JAVA_HOME/bin/javaw"
+        ;;
+    *)
+        CLASSPATH_SEP=":"
+        JAVA_BIN="$JAVA_HOME/bin/java"
+        ;;
+esac
 
 # Build classpath from all jars in lib/
 CLASSPATH=""
 for jar in "$LIB_DIR"/*.jar; do
     if [ -n "$CLASSPATH" ]; then
-        CLASSPATH="$CLASSPATH;$jar"
+        CLASSPATH="$CLASSPATH$CLASSPATH_SEP$jar"
     else
         CLASSPATH="$jar"
     fi
@@ -37,6 +61,8 @@ done
 mkdir -p "$PROJECT_ROOT/data"
 
 echo "Starting transcode buddy (logs: data/buddy.log)..."
-"$JAVA_HOME/bin/javaw" -classpath "$CLASSPATH" net.stewart.transcodebuddy.MainKt &
+echo "  JAVA_HOME: $JAVA_HOME"
+echo "  Java bin:  $JAVA_BIN"
+"$JAVA_BIN" -classpath "$CLASSPATH" net.stewart.transcodebuddy.MainKt &
 BUDDY_PID=$!
 echo "Transcode buddy started (PID $BUDDY_PID)."

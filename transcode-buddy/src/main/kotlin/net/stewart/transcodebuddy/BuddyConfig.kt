@@ -17,7 +17,9 @@ data class BuddyConfig(
     val whisperPath: String? = null,
     val whisperModel: String = "large-v3-turbo",
     val whisperModelDir: String? = null,
-    val whisperLanguage: String = "en"
+    val whisperLanguage: String = "en",
+    val whisperDevice: String = "cuda",
+    val whisperComputeType: String = "float16"
 ) {
     companion object {
         fun load(path: String): BuddyConfig {
@@ -42,7 +44,9 @@ data class BuddyConfig(
                 whisperPath = props.getProperty("whisper_path"),
                 whisperModel = props.getProperty("whisper_model", "large-v3-turbo"),
                 whisperModelDir = props.getProperty("whisper_model_dir"),
-                whisperLanguage = props.getProperty("whisper_language", "en")
+                whisperLanguage = props.getProperty("whisper_language", "en"),
+                whisperDevice = props.getProperty("whisper_device", "cuda"),
+                whisperComputeType = props.getProperty("whisper_compute_type", "float16")
             )
         }
 

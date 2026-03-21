@@ -3728,3 +3728,38 @@ Debugging insights:
 - xcrun simctl spawn booted log stream for simulator debugging
 - NSLog() captured by log stream, os.Logger also works at warning+
 ===
+
+=== 2026-03-21 (cont.) — Transcode Buddy on Mac + Web UI Updates ===
+
+Transcode Buddy:
+- Added VideoToolbox encoder profile (h264_videotoolbox) to
+  EncoderProfile.kt — ABR 8Mbps for ForBrowser, 5Mbps for ForMobile
+- Added whisper_device and whisper_compute_type config properties
+  to BuddyConfig — removes hardcoded --device cuda --compute_type
+  float16 so Mac can use --device cpu --compute_type int8
+- Created faster-whisper-wrapper.py: Python wrapper providing
+  faster-whisper-xxl compatible CLI using the faster-whisper library
+- Created faster-whisper-mac.sh: shell wrapper to invoke the Python
+  script as whisper_path in buddy.properties
+- Cross-platform lifecycle scripts: run-buddy.sh detects OS for
+  java vs javaw and : vs ; classpath separator; stop-buddy.sh uses
+  pgrep/kill on Unix, wmic/taskkill on Windows
+
+Web UI — Transcode Status Page:
+- Enhanced recent buddy activity: HTML table with 20 items showing
+  buddy name, job type, start→end times, human-readable elapsed
+  time, output size, and throughput (MB/s)
+- Active leases: thumbnails/subs/chapters show "running since HH:MM"
+  instead of misleading 10% progress bar (thumbnail generator only
+  reports 10% at start, then 100% at completion)
+- Column order: Buddy, Type, Start→End, Elapsed, Size, Throughput,
+  File
+
+Performance observations:
+- Oblivion thumbnail generation (2hr Blu-ray, 749 frames, 8 sheets):
+  ~30+ min over WiFi, expected ~6 min over gigabit ethernet
+  (Windows buddy does same job in 6-7 min)
+- Bottleneck is SMB read throughput, not CPU — must use wired ethernet
+- VideoToolbox encoder detected and available on Apple Silicon
+- faster-whisper installed via pip3 (Xcode Python 3.9)
+===
