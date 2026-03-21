@@ -6,7 +6,9 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.MetricsRegistry
+import net.stewart.mediamanager.service.TmdbService
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.service.WishListService
 import java.io.File
 
 /**
@@ -21,6 +23,8 @@ object BrowseHandler {
     private val DIRECT_EXTENSIONS = setOf("mp4", "m4v")
     private val TRANSCODE_EXTENSIONS = setOf("mkv", "avi")
 
+    private val tmdbService = TmdbService()
+
     fun handleActor(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, tmdbPersonId: Int) {
         val user = ApiV1Servlet.requireAuth(req, resp) ?: return
 
@@ -32,21 +36,24 @@ object BrowseHandler {
             return
         }
 
-        val actorName = castMembers.first().name
+        // TMDB person details (biography, dates, etc.)
+        val person = tmdbService.fetchPersonDetails(tmdbPersonId)
+        val actorName = person.name ?: castMembers.first().name
         val headshotMember = castMembers.maxByOrNull { it.popularity ?: 0.0 }
-        val headshotUrl = if (headshotMember?.headshot_cache_id != null) "/headshots/${headshotMember.id}" else null
+        val headshotUrl = if (headshotMember?.profile_path != null) "/headshots/${headshotMember.id}" else null
 
         val allTitles = Title.findAll()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = allTitles.associateBy { it.id }
+        val characterByTitleId = castMembers.associate { it.title_id to it.character_name }
 
         val allTranscodes = Transcode.findAll().filter { it.file_path != null }
         val playableByTitle = allTranscodes.filter { isPlayable(it, nasRoot) }.groupBy { it.title_id }
 
-        // Deduplicate by TMDB identity
+        // Build owned titles with character names
         val seenTmdbKeys = mutableSetOf<TmdbId>()
-        val titles = mutableListOf<ApiTitle>()
+        val ownedTitles = mutableListOf<ApiOwnedCredit>()
 
         for (cm in castMembers.sortedByDescending { titlesById[it.title_id]?.popularity ?: 0.0 }) {
             val title = titlesById[cm.title_id] ?: continue
@@ -62,7 +69,7 @@ object BrowseHandler {
             if (!playable) continue
 
             val posterUrl = if (title.poster_path != null) "/posters/w500/${title.id}" else null
-            titles.add(ApiTitle(
+            val apiTitle = ApiTitle(
                 id = title.id!!, name = title.name, mediaType = title.media_type,
                 year = title.release_year, description = title.description,
                 posterUrl = posterUrl, backdropUrl = null,
@@ -70,10 +77,46 @@ object BrowseHandler {
                 quality = qualityLabel(tc!!), playable = true, transcodeId = tc.id,
                 tmdbId = title.tmdb_id, tmdbCollectionId = title.tmdb_collection_id,
                 tmdbCollectionName = title.tmdb_collection_name
-            ))
+            )
+            ownedTitles.add(ApiOwnedCredit(apiTitle, characterByTitleId[cm.title_id]))
         }
 
-        ApiV1Servlet.sendJson(resp, 200, ApiActorDetail(actorName, headshotUrl, titles), mapper)
+        // TMDB credits for other works (not owned)
+        val allCredits = tmdbService.fetchPersonCredits(tmdbPersonId)
+        val ownedTmdbKeys = allTitles.mapNotNull { it.tmdbKey() }.toSet()
+        val wishedTmdbKeys = WishListService.getActiveMediaWishes()
+            .mapNotNull { it.tmdbKey() }
+            .toSet()
+
+        val otherWorks = allCredits
+            .filter { it.tmdbKey() !in ownedTmdbKeys }
+            .map { credit ->
+                val posterUrl = if (credit.posterPath != null) "https://image.tmdb.org/t/p/w500${credit.posterPath}" else null
+                ApiCreditEntry(
+                    tmdbId = credit.tmdbId,
+                    title = credit.title,
+                    mediaType = credit.mediaType,
+                    characterName = credit.characterName,
+                    releaseYear = credit.releaseYear,
+                    posterUrl = posterUrl,
+                    popularity = credit.popularity,
+                    wished = credit.tmdbKey() in wishedTmdbKeys
+                )
+            }
+
+        val detail = ApiActorDetail(
+            name = actorName,
+            headshotUrl = headshotUrl,
+            biography = person.biography?.takeIf { it.isNotBlank() },
+            birthday = person.birthday,
+            deathday = person.deathday,
+            placeOfBirth = person.placeOfBirth,
+            knownForDepartment = person.knownForDepartment,
+            ownedTitles = ownedTitles,
+            otherWorks = otherWorks
+        )
+
+        ApiV1Servlet.sendJson(resp, 200, detail, mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 

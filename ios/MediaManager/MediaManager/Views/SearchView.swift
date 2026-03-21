@@ -32,6 +32,14 @@ struct SearchView: View {
                                 SearchResultRow(result: result, apiClient: authManager.apiClient)
                             }
                         }
+                    case "actor":
+                        if let personId = result.tmdbPersonId {
+                            NavigationLink(value: ActorRoute(tmdbPersonId: personId, name: result.name)) {
+                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            }
+                        } else {
+                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                        }
                     default:
                         SearchResultRow(result: result, apiClient: authManager.apiClient)
                     }

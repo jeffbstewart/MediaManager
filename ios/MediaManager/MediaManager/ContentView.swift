@@ -7,6 +7,7 @@ enum Tab: Hashable {
 struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var selectedTab: Tab? = .home
+    @State private var playbackRoute: PlaybackRoute?
 
     var body: some View {
         NavigationSplitView {
@@ -55,9 +56,20 @@ struct ContentView: View {
                     EpisodesView(route: route)
                 }
                 .navigationDestination(for: PlaybackRoute.self) { route in
-                    VideoPlayerView(transcodeId: route.transcodeId, titleName: route.titleName, episodeName: route.episodeName)
+                    Color.clear.onAppear { playbackRoute = route }
+                }
+                .navigationDestination(for: ActorRoute.self) { route in
+                    ActorView(route: route)
                 }
             }
+        }
+        .fullScreenCover(item: $playbackRoute) { route in
+            VideoPlayerView(
+                transcodeId: route.transcodeId,
+                titleName: route.titleName,
+                episodeName: route.episodeName,
+                hasSubtitles: route.hasSubtitles
+            )
         }
     }
 }

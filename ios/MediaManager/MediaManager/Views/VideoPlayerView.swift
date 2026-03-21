@@ -60,7 +60,7 @@ struct VideoPlayerView: View {
         ])
         let item = AVPlayerItem(asset: asset)
         let avPlayer = AVPlayer(playerItem: item)
-        avPlayer.automaticallyWaitsToMinimizeStalling = false
+        item.preferredForwardBufferDuration = 30
 
         self.player = avPlayer
         avPlayer.play()

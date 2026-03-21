@@ -112,29 +112,32 @@ struct TitleDetailView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     LazyHStack(alignment: .top, spacing: 16) {
                                         ForEach(detail.cast.prefix(20)) { member in
-                                            VStack(spacing: 6) {
-                                                AuthenticatedImage(
-                                                    path: member.headshotUrl,
-                                                    apiClient: authManager.apiClient,
-                                                    cornerRadius: 40,
-                                                    contentMode: .fit
-                                                )
-                                                .frame(width: 80, height: 80)
+                                            NavigationLink(value: ActorRoute(tmdbPersonId: member.tmdbPersonId, name: member.name)) {
+                                                VStack(spacing: 6) {
+                                                    AuthenticatedImage(
+                                                        path: member.headshotUrl,
+                                                        apiClient: authManager.apiClient,
+                                                        cornerRadius: 40,
+                                                        contentMode: .fit
+                                                    )
+                                                    .frame(width: 80, height: 80)
 
-                                                Text(member.name)
-                                                    .font(.caption)
-                                                    .fontWeight(.medium)
-                                                    .lineLimit(2)
-                                                    .multilineTextAlignment(.center)
-                                                if let character = member.characterName {
-                                                    Text(character)
-                                                        .font(.caption2)
-                                                        .foregroundStyle(.secondary)
+                                                    Text(member.name)
+                                                        .font(.caption)
+                                                        .fontWeight(.medium)
                                                         .lineLimit(2)
                                                         .multilineTextAlignment(.center)
+                                                    if let character = member.characterName {
+                                                        Text(character)
+                                                            .font(.caption2)
+                                                            .foregroundStyle(.secondary)
+                                                            .lineLimit(2)
+                                                            .multilineTextAlignment(.center)
+                                                    }
                                                 }
+                                                .frame(width: 90)
                                             }
-                                            .frame(width: 90)
+                                            .buttonStyle(.plain)
                                         }
                                     }
                                 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import net.stewart.mediamanager.entity.ContentRating
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.TranscodeLeaseService
 
@@ -27,6 +28,11 @@ object InfoHandler {
             capabilities.add("downloads")
         }
 
+        // Resolve rating ceiling label for display
+        val ratingCeilingLabel = if (user.rating_ceiling != null) {
+            ContentRating.entries.firstOrNull { it.ordinalLevel == user.rating_ceiling }?.displayLabel
+        } else null
+
         val response = mapOf(
             "server_version" to "0.1.0",
             "api_version" to "v1",
@@ -36,7 +42,9 @@ object InfoHandler {
                 "id" to user.id,
                 "username" to user.username,
                 "display_name" to user.display_name,
-                "is_admin" to user.isAdmin()
+                "is_admin" to user.isAdmin(),
+                "rating_ceiling" to user.rating_ceiling,
+                "rating_ceiling_label" to ratingCeilingLabel
             )
         )
 

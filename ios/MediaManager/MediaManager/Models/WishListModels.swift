@@ -30,3 +30,28 @@ struct ApiWish: Codable, Identifiable {
 struct ApiWishListResponse: Codable {
     let wishes: [ApiWish]
 }
+
+struct TmdbSearchItem: Codable, Identifiable {
+    var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")" }
+    let tmdbId: Int?
+    let title: String?
+    let mediaType: String?
+    let releaseYear: Int?
+    let posterUrl: String?
+    let posterPath: String?
+    let popularity: Double?
+    let overview: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, popularity, overview
+        case tmdbId = "tmdb_id"
+        case mediaType = "media_type"
+        case releaseYear = "release_year"
+        case posterUrl = "poster_url"
+        case posterPath = "poster_path"
+    }
+}
+
+struct TmdbSearchResponse: Codable {
+    let results: [TmdbSearchItem]
+}

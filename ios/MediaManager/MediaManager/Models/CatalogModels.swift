@@ -188,6 +188,60 @@ struct ApiSearchResponse: Codable {
     let counts: [String: Int]
 }
 
+// --- Browse/Landing Pages ---
+
+struct ApiActorDetail: Codable {
+    let name: String
+    let headshotUrl: String?
+    let biography: String?
+    let birthday: String?
+    let deathday: String?
+    let placeOfBirth: String?
+    let knownForDepartment: String?
+    let ownedTitles: [ApiOwnedCredit]
+    let otherWorks: [ApiCreditEntry]
+
+    enum CodingKeys: String, CodingKey {
+        case name, biography, birthday, deathday
+        case headshotUrl = "headshot_url"
+        case placeOfBirth = "place_of_birth"
+        case knownForDepartment = "known_for_department"
+        case ownedTitles = "owned_titles"
+        case otherWorks = "other_works"
+    }
+}
+
+struct ApiOwnedCredit: Codable {
+    let title: ApiTitle
+    let characterName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case characterName = "character_name"
+    }
+}
+
+struct ApiCreditEntry: Codable, Identifiable {
+    var id: String { "\(tmdbId)-\(mediaType)" }
+    let tmdbId: Int
+    let title: String
+    let mediaType: String
+    let characterName: String?
+    let releaseYear: Int?
+    let posterUrl: String?
+    let popularity: Double
+    let wished: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case title, popularity, wished
+        case tmdbId = "tmdb_id"
+        case mediaType = "media_type"
+        case characterName = "character_name"
+        case releaseYear = "release_year"
+        case posterUrl = "poster_url"
+    }
+}
+
 // --- Phase 3: TV Shows ---
 
 struct ApiSeason: Codable, Hashable {

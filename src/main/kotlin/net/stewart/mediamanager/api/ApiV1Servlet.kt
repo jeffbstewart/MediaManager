@@ -73,6 +73,7 @@ class ApiV1Servlet : HttpServlet() {
                 path.startsWith("downloads/") || path == "downloads" -> DownloadHandler.handle(req, resp, path.removePrefix("downloads").removePrefix("/"), mapper)
                 path.startsWith("admin/") -> AdminHandler.handle(req, resp, path.removePrefix("admin/"), mapper)
                 path.startsWith("live/") -> LiveHandler.handle(req, resp, path.removePrefix("live/"), mapper)
+                path == "tmdb/search" && method == "GET" -> TmdbSearchHandler.handle(req, resp, mapper)
                 else -> {
                     sendError(resp, 404, "not_found")
                     MetricsRegistry.countHttpResponse("api_v1", 404)

@@ -17,12 +17,31 @@ struct ServerInfo: Codable {
     let apiVersion: String
     let capabilities: [String]
     let titleCount: Int
+    let user: ServerUserInfo?
 
     enum CodingKeys: String, CodingKey {
         case serverVersion = "server_version"
         case apiVersion = "api_version"
         case capabilities
         case titleCount = "title_count"
+        case user
+    }
+}
+
+struct ServerUserInfo: Codable {
+    let id: Int
+    let username: String
+    let displayName: String
+    let isAdmin: Bool
+    let ratingCeiling: Int?
+    let ratingCeilingLabel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, username
+        case displayName = "display_name"
+        case isAdmin = "is_admin"
+        case ratingCeiling = "rating_ceiling"
+        case ratingCeilingLabel = "rating_ceiling_label"
     }
 }
 

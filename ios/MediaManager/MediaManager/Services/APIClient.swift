@@ -103,7 +103,11 @@ actor APIClient {
 
     func get<T: Decodable>(_ path: String) async throws -> T {
         guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/\(path)")
+        // Use string concatenation to preserve query strings — appendingPathComponent
+        // percent-encodes '?' which breaks paths like "tmdb/search?q=foo"
+        guard let url = URL(string: baseURL.absoluteString + "/api/v1/" + path) else {
+            throw APIClientError.invalidURL
+        }
         var request = URLRequest(url: url)
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -115,7 +119,7 @@ actor APIClient {
 
     func post(_ path: String, body: [String: Any]) async throws {
         guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/\(path)")
+        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -129,7 +133,7 @@ actor APIClient {
 
     func delete(_ path: String) async throws {
         guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/\(path)")
+        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         if let accessToken {

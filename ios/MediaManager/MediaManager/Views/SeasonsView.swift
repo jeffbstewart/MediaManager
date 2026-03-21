@@ -1,6 +1,7 @@
 import SwiftUI
 
-struct PlaybackRoute: Hashable {
+struct PlaybackRoute: Hashable, Identifiable {
+    var id: Int { transcodeId }
     let transcodeId: Int
     let titleName: String
     let episodeName: String?

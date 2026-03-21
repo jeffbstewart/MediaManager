@@ -154,7 +154,29 @@ data class ApiEpisode(
 data class ApiActorDetail(
     val name: String,
     val headshotUrl: String?,
-    val titles: List<ApiTitle>
+    val biography: String?,
+    val birthday: String?,
+    val deathday: String?,
+    val placeOfBirth: String?,
+    val knownForDepartment: String?,
+    val ownedTitles: List<ApiOwnedCredit>,
+    val otherWorks: List<ApiCreditEntry>
+)
+
+data class ApiOwnedCredit(
+    val title: ApiTitle,
+    val characterName: String?
+)
+
+data class ApiCreditEntry(
+    val tmdbId: Int,
+    val title: String,
+    val mediaType: String,
+    val characterName: String?,
+    val releaseYear: Int?,
+    val posterUrl: String?,
+    val popularity: Double,
+    val wished: Boolean
 )
 
 data class ApiCollectionDetail(
