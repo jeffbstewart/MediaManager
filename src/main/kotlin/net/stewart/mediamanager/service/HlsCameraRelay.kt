@@ -43,7 +43,7 @@ class HlsCameraRelay(
     private val log = LoggerFactory.getLogger(HlsCameraRelay::class.java)
 
     companion object {
-        private const val RING_BUFFER_SIZE = 10
+        private const val RING_BUFFER_SIZE = 30
         private const val POLL_INTERVAL_MS = 500L
         private const val DEFAULT_SEGMENT_DURATION = 0.5
     }
@@ -100,16 +100,31 @@ class HlsCameraRelay(
 
     fun isRunning(): Boolean = running.get()
 
+    /** Returns the current number of segments in the buffer. */
+    fun segmentCount(): Int = bufferLock.read { segments.size }
+
     /**
      * Generate an m3u8 playlist from the current ring buffer contents.
      * Returns null if no segments are available yet.
      */
-    fun generatePlaylist(baseUrl: String, keyParam: String): String? {
+    /**
+     * Generate an m3u8 playlist from the current ring buffer contents.
+     * Returns null if fewer than [minSegments] are available — AVPlayer requires
+     * at least 3 × TARGETDURATION seconds of content to start playback.
+     */
+    fun generatePlaylist(baseUrl: String, keyParam: String, minSegments: Int = 10): String? {
         touch()
         val currentSegments = bufferLock.read {
-            if (segments.isEmpty()) return null
+            if (segments.size < minSegments) {
+                log.info("generatePlaylist for camera {}: only {} segments (need {}), waiting",
+                    cameraId, segments.size, minSegments)
+                return null
+            }
             segments.toList()
         }
+        log.info("generatePlaylist for camera {}: {} segments, seq {}-{}",
+            cameraId, currentSegments.size,
+            currentSegments.first().sequenceNumber, currentSegments.last().sequenceNumber)
 
         val oldestSeq = currentSegments.first().sequenceNumber
         val td = Math.ceil(targetDuration).toInt().coerceAtLeast(1)

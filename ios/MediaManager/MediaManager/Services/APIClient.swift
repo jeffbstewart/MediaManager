@@ -154,6 +154,21 @@ actor APIClient {
         return (url, ["Authorization": "Bearer \(token)"])
     }
 
+    /// Hit a non-api path with JWT auth and wait for 200 (e.g. /cam/3/start).
+    func warmUpStream(_ path: String) async throws {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        guard let url = URL(string: baseURL.absoluteString + path) else {
+            throw APIClientError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 35 // relay warmup can take up to 30s
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+    }
+
     /// Fetch raw bytes (for images, streams) with JWT auth.
     func getRaw(_ path: String) async throws -> Data {
         guard let baseURL else { throw APIClientError.noServerURL }

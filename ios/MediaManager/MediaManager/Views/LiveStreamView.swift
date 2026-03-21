@@ -99,9 +99,24 @@ struct LiveStreamView: View {
             return
         }
 
-        // Use AVURLAssetHTTPCookiesKey (documented public API) — unlike
-        // AVURLAssetHTTPHeaderFieldsKey, cookies ARE sent on all HLS
-        // sub-requests (playlist refreshes, .ts segments).
+        // Warm up the stream before pointing AVPlayer at it.
+        // Camera: hit /cam/{id}/start which blocks until relay has segments.
+        // Live TV: hit the variant playlist which blocks until FFmpeg produces it.
+        let warmupPath: String
+        if streamPath.contains("/cam/") {
+            warmupPath = streamPath.replacingOccurrences(of: "stream.m3u8", with: "start")
+        } else {
+            warmupPath = streamPath.replacingOccurrences(of: "stream.m3u8", with: "hls/live.m3u8")
+        }
+        do {
+            try await authManager.apiClient.warmUpStream(warmupPath)
+        } catch {
+            self.error = "Stream not available: \(error.localizedDescription)"
+            return
+        }
+
+        // Use AVURLAssetHTTPCookiesKey (documented public API) — cookies
+        // are sent on all HLS sub-requests (playlist refreshes, .ts segments).
         let isSecure = baseURL.scheme == "https"
         var cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "mm_jwt",
@@ -129,12 +144,52 @@ struct LiveStreamView: View {
         let avPlayer = AVPlayer(playerItem: item)
         avPlayer.automaticallyWaitsToMinimizeStalling = false
 
+        // Log all player state changes for debugging HLS issues
         statusObserver = item.publisher(for: \.status)
-            .combineLatest(avPlayer.publisher(for: \.timeControlStatus))
+            .combineLatest(
+                avPlayer.publisher(for: \.timeControlStatus),
+                avPlayer.publisher(for: \.reasonForWaitingToPlay)
+            )
             .receive(on: DispatchQueue.main)
-            .sink { itemStatus, timeStatus in
-                if itemStatus == .readyToPlay && timeStatus == .playing {
-                    withAnimation { buffering = false }
+            .sink { itemStatus, timeStatus, waitReason in
+                let statusStr = switch itemStatus {
+                    case .unknown: "unknown"
+                    case .readyToPlay: "readyToPlay"
+                    case .failed: "failed"
+                    @unknown default: "other"
+                }
+                let timeStr = switch timeStatus {
+                    case .paused: "paused"
+                    case .playing: "playing"
+                    case .waitingToPlayAtSpecifiedRate: "waiting"
+                    @unknown default: "other"
+                }
+                print("[MM-HLS] item.status=\(statusStr) timeControl=\(timeStr) waitReason=\(waitReason?.rawValue ?? "none")")
+
+                if let err = item.error {
+                    print("[MM-HLS] item.error: \(err.localizedDescription)")
+                    if let underlyingErr = (err as NSError).userInfo[NSUnderlyingErrorKey] as? NSError {
+                        print("[MM-HLS] underlying: \(underlyingErr)")
+                    }
+                }
+
+                if let log = item.errorLog() {
+                    for event in log.events {
+                        print("[MM-HLS] errorLog: \(event.errorStatusCode) \(event.errorDomain) \(event.errorComment ?? "") uri=\(event.uri ?? "")")
+                    }
+                }
+
+                if let log = item.accessLog() {
+                    for event in log.events {
+                        print("[MM-HLS] accessLog: \(event.uri ?? "") bytes=\(event.numberOfBytesTransferred)")
+                    }
+                }
+
+                if itemStatus == .readyToPlay {
+                    avPlayer.play()
+                    if timeStatus == .playing {
+                        withAnimation { buffering = false }
+                    }
                 } else if itemStatus == .failed {
                     error = item.error?.localizedDescription ?? "Stream failed"
                 }

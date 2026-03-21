@@ -69,7 +69,16 @@ class LiveTvStreamServlet : HttpServlet() {
             // Route based on path
             val action = if (parts.size >= 2) parts[1] else ""
             when (action) {
-                "stream.m3u8" -> handlePlaylist(req, resp, channel, user)
+                "stream.m3u8" -> handleMasterPlaylist(req, resp, channel, user)
+                "hls" -> {
+                    val hlsAction = if (parts.size >= 3) parts[2] else ""
+                    if (hlsAction == "live.m3u8") {
+                        handlePlaylist(req, resp, channel, user)
+                    } else {
+                        resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+                        MetricsRegistry.countHttpResponse("live-tv", 404)
+                    }
+                }
                 "segment" -> {
                     val segmentName = if (parts.size >= 3) parts[2] else ""
                     handleSegment(resp, channel, segmentName)
@@ -86,6 +95,32 @@ class LiveTvStreamServlet : HttpServlet() {
             }
             MetricsRegistry.countHttpResponse("live-tv", 500)
         }
+    }
+
+    /**
+     * Serve a master playlist pointing to the variant playlist.
+     * AVPlayer requires master → variant two-level HLS structure.
+     */
+    private fun handleMasterPlaylist(req: HttpServletRequest, resp: HttpServletResponse, channel: LiveTvChannel, user: AppUser) {
+        val configured = AppConfig.findAll()
+            .firstOrNull { it.config_key == "roku_base_url" }
+            ?.config_val?.trimEnd('/')
+        val baseUrl = if (!configured.isNullOrBlank()) configured else {
+            val scheme = req.getHeader("X-Forwarded-Proto") ?: req.scheme
+            val host = req.getHeader("X-Forwarded-Host") ?: req.getHeader("Host") ?: "localhost"
+            "$scheme://$host"
+        }
+        val apiKey = req.getParameter("key")
+        val keyParam = if (apiKey != null) "?key=$apiKey" else ""
+        val variantUrl = "$baseUrl/live-tv-stream/${channel.id}/hls/live.m3u8$keyParam"
+
+        val master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000\n$variantUrl\n"
+        resp.contentType = "application/vnd.apple.mpegurl"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "no-cache")
+        resp.setContentLength(master.toByteArray(Charsets.UTF_8).size)
+        resp.writer.write(master)
+        MetricsRegistry.countHttpResponse("live-tv", 200)
     }
 
     private fun handlePlaylist(req: HttpServletRequest, resp: HttpServletResponse, channel: LiveTvChannel, user: AppUser) {
@@ -121,14 +156,23 @@ class LiveTvStreamServlet : HttpServlet() {
             return
         }
 
-        // Read playlist and rewrite segment URLs to absolute paths
+        // Read playlist and rewrite segment URLs to fully-qualified absolute paths.
+        // AVPlayer needs full URLs so cookies are sent on segment requests.
+        val configured = AppConfig.findAll()
+            .firstOrNull { it.config_key == "roku_base_url" }
+            ?.config_val?.trimEnd('/')
+        val baseUrl = if (!configured.isNullOrBlank()) configured else {
+            val scheme = req.getHeader("X-Forwarded-Proto") ?: req.scheme
+            val host = req.getHeader("X-Forwarded-Host") ?: req.getHeader("Host") ?: "localhost"
+            "$scheme://$host"
+        }
         val apiKey = req.getParameter("key")
         val keyParam = if (apiKey != null) "?key=$apiKey" else ""
         val content = playlistFile.readText()
         val rewritten = content.lines().joinToString("\n") { line ->
             if (line.endsWith(".ts")) {
                 val segName = line.trim()
-                "/live-tv-stream/${channel.id}/segment/$segName$keyParam"
+                "$baseUrl/live-tv-stream/${channel.id}/segment/$segName$keyParam"
             } else {
                 line
             }

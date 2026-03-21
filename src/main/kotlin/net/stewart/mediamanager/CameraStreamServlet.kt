@@ -61,7 +61,9 @@ class CameraStreamServlet : HttpServlet() {
 
         try {
             when {
-                subPath == "stream.m3u8" -> serveRelayPlaylist(camera, req, resp)
+                subPath == "start" -> serveStartRelay(camera, resp)
+                subPath == "stream.m3u8" -> serveMasterPlaylist(camera, req, resp)
+                subPath == "hls/live.m3u8" -> serveRelayPlaylist(camera, req, resp)
                 subPath.startsWith("hls/segment/") -> serveRelaySegment(camera, subPath, resp)
                 subPath == "snapshot.jpg" -> proxySnapshot(camera, resp)
                 subPath == "mjpeg" -> proxyMjpeg(camera, resp)
@@ -81,7 +83,73 @@ class CameraStreamServlet : HttpServlet() {
     }
 
     /**
-     * Serve an HLS playlist generated from the relay's ring buffer.
+     * Start (or warm up) the HLS relay for a camera. Blocks until enough segments
+     * are buffered for reliable playback, then returns 200 with segment count.
+     * The iOS client calls this before requesting stream.m3u8 so AVPlayer gets
+     * a full playlist on the first request.
+     */
+    private fun serveStartRelay(camera: Camera, resp: HttpServletResponse) {
+        val apiPort = Go2rtcAgent.instance?.apiPort ?: 1984
+        val relay = HlsRelayManager.getOrCreateRelay(camera.id!!, camera.go2rtc_name, apiPort)
+
+        if (relay == null) {
+            resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Too many active camera streams")
+            MetricsRegistry.countHttpResponse("camera-stream", 503)
+            return
+        }
+
+        // Block until relay has enough segments (up to 30 seconds)
+        val minSegments = 10
+        for (attempt in 1..120) {
+            relay.touch()
+            val count = relay.segmentCount()
+            if (count >= minSegments) {
+                log.info("Camera '{}' relay ready: {} segments", camera.name, count)
+                resp.contentType = "application/json"
+                resp.writer.write("""{"ready":true,"segments":$count}""")
+                MetricsRegistry.countHttpResponse("camera-stream", 200)
+                return
+            }
+            Thread.sleep(250)
+        }
+
+        log.warn("Camera '{}' relay not ready after 30s", camera.name)
+        resp.contentType = "application/json"
+        resp.status = HttpServletResponse.SC_GATEWAY_TIMEOUT
+        resp.writer.write("""{"ready":false,"error":"Stream not ready after 30 seconds"}""")
+        MetricsRegistry.countHttpResponse("camera-stream", 504)
+    }
+
+    /**
+     * Serve a master playlist that references the variant/media playlist.
+     * AVPlayer requires a two-level HLS structure: master → variant → segments.
+     */
+    private fun serveMasterPlaylist(camera: Camera, req: HttpServletRequest, resp: HttpServletResponse) {
+        val apiPort = Go2rtcAgent.instance?.apiPort ?: 1984
+        val relay = HlsRelayManager.getOrCreateRelay(camera.id!!, camera.go2rtc_name, apiPort)
+
+        if (relay == null) {
+            resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Too many active camera streams")
+            MetricsRegistry.countHttpResponse("camera-stream", 503)
+            return
+        }
+
+        val baseUrl = getBaseUrl(req)
+        val key = keyParam(req)
+        val variantUrl = "$baseUrl/cam/${camera.id}/hls/live.m3u8${if (key.isNotEmpty()) key else ""}"
+
+        val master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2000000\n$variantUrl\n"
+
+        resp.contentType = "application/vnd.apple.mpegurl"
+        resp.characterEncoding = "UTF-8"
+        resp.setHeader("Cache-Control", "no-cache")
+        resp.setContentLength(master.toByteArray(Charsets.UTF_8).size)
+        resp.writer.write(master)
+        MetricsRegistry.countHttpResponse("camera-stream", 200)
+    }
+
+    /**
+     * Serve the variant/media playlist from the relay's ring buffer.
      * Creates a relay on-demand if one doesn't exist for this camera.
      */
     private fun serveRelayPlaylist(camera: Camera, req: HttpServletRequest, resp: HttpServletResponse) {
@@ -97,16 +165,18 @@ class CameraStreamServlet : HttpServlet() {
         val baseUrl = getBaseUrl(req)
         val key = keyParam(req)
 
-        // The relay may not have segments yet if it just started. Wait briefly.
+        // Short wait — the /start endpoint handles the long warmup.
+        // This just handles the case where segments exist but haven't
+        // been generated into a playlist yet.
         var playlist: String? = null
-        for (attempt in 1..10) {
+        for (attempt in 1..8) {
             playlist = relay.generatePlaylist(baseUrl, key)
             if (playlist != null) break
-            Thread.sleep(500)
+            Thread.sleep(250)
         }
 
         if (playlist == null) {
-            log.warn("HLS relay for camera '{}' has no segments after waiting", camera.name)
+            log.warn("HLS relay for camera '{}' has insufficient segments", camera.name)
             resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Stream not ready")
             MetricsRegistry.countHttpResponse("camera-stream", 503)
             return
@@ -117,7 +187,9 @@ class CameraStreamServlet : HttpServlet() {
             resp.contentType = "application/vnd.apple.mpegurl"
             resp.characterEncoding = "UTF-8"
             resp.setHeader("Cache-Control", "no-cache")
+            resp.setContentLength(playlist.toByteArray(Charsets.UTF_8).size)
             resp.writer.write(playlist)
+            log.info("Served HLS playlist for camera '{}': {} bytes", camera.name, playlist.length)
             MetricsRegistry.countCameraStreamBytes("hls", playlist.length.toLong())
             MetricsRegistry.countHttpResponse("camera-stream", 200)
         } finally {
