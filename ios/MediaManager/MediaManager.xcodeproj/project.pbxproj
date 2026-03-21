@@ -72,6 +72,7 @@
 				AA000010 /* MediaManager */,
 				BB000020 /* MediaManagerUITests */,
 				AA000031 /* Products */,
+				C7F25F702F6EC2B500955D2D /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -82,6 +83,14 @@
 				BB000010 /* MediaManagerUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C7F25F702F6EC2B500955D2D /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				AA000002 /* Developer.xcconfig */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

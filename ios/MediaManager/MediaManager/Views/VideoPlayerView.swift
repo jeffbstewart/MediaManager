@@ -18,6 +18,7 @@ struct VideoPlayerView: View {
     @State private var currentTranscodeId: Int?
     @State private var currentEpisodeName: String?
     @State private var currentNextEpisode: NextEpisode?
+    @State private var subtitles = SubtitleController()
 
     var body: some View {
         Group {
@@ -30,17 +31,53 @@ struct VideoPlayerView: View {
             } else if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
+                    // Subtitle text overlay
+                    .overlay(alignment: .bottom) {
+                        if subtitles.enabled, let subtitle = subtitles.currentText {
+                            Text(subtitle)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black, radius: 3, x: 0, y: 1)
+                                .shadow(color: .black, radius: 3, x: 0, y: -1)
+                                .shadow(color: .black, radius: 3, x: 1, y: 0)
+                                .shadow(color: .black, radius: 3, x: -1, y: 0)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 6)
+                                .background(.black.opacity(0.6))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .padding(.bottom, 80)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    // Controls overlay
                     .overlay(alignment: .topTrailing) {
-                        Button {
-                            cleanupAndDismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 26))
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
+                        HStack(spacing: 16) {
+                            if subtitles.cueCount > 0 {
+                                Button {
+                                    subtitles.enabled.toggle()
+                                } label: {
+                                    Text("CC")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(subtitles.enabled ? .black : .white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(subtitles.enabled ? .yellow : .white.opacity(0.3))
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+                            }
+
+                            Button {
+                                cleanupAndDismiss()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 26))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white.opacity(0.8), .black.opacity(0.3))
+                            }
                         }
                         .padding(.top, 12)
-                        .padding(.trailing, 60)
+                        .padding(.trailing, 16)
                     }
             } else {
                 ProgressView("Loading stream...")
@@ -67,6 +104,7 @@ struct VideoPlayerView: View {
             NotificationCenter.default.removeObserver(endObserver)
         }
         endObserver = nil
+        subtitles.stop(player: player)
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -111,6 +149,12 @@ struct VideoPlayerView: View {
                 await avPlayer.seek(to: CMTime(seconds: position, preferredTimescale: 1))
             }
         }
+
+        // Load subtitles — server returns 404 if none exist
+        NSLog("MMAPP loadStream calling subtitles.load for tcId=%d", tcId)
+        await subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
+        NSLog("MMAPP loadStream calling subtitles.startObserving, cueCount=%d", subtitles.cueCount)
+        subtitles.startObserving(player: avPlayer)
     }
 
     @MainActor

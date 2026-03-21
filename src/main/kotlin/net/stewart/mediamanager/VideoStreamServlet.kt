@@ -290,6 +290,7 @@ class VideoStreamServlet : HttpServlet() {
             resp.contentType = "text/vtt"
             resp.characterEncoding = "UTF-8"
             resp.setHeader("Cache-Control", "public, max-age=86400")
+            resp.setContentLength(vttContent.toByteArray(Charsets.UTF_8).size)
             resp.writer.write(vttContent)
         } else {
             resp.contentType = "application/x-subrip"

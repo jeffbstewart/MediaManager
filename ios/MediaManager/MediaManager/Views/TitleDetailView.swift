@@ -53,8 +53,10 @@ struct TitleDetailView: View {
 
                             // Play button for movies
                             if detail.playable, detail.mediaType != "TV", let tcId = detail.transcodeId {
+                                let tcHasSubs = detail.transcodes.first(where: { $0.id == tcId })?.hasSubtitles ?? false
                                 NavigationLink(value: PlaybackRoute(
-                                    transcodeId: tcId, titleName: detail.name, episodeName: nil
+                                    transcodeId: tcId, titleName: detail.name, episodeName: nil,
+                                    hasSubtitles: tcHasSubs
                                 )) {
                                     Label("Play", systemImage: "play.fill")
                                         .frame(maxWidth: .infinity)
