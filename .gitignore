@@ -46,3 +46,4 @@ src/main/frontend/
 
 # Transcode buddy local config
 transcode-buddy/buddy.properties
+.DS_Store
