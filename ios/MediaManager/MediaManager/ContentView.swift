@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, admin
 }
 
 struct ContentView: View {
@@ -30,6 +30,13 @@ struct ContentView: View {
                         .tag(Tab.cameras)
                     Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
                         .tag(Tab.liveTv)
+                }
+
+                if authManager.serverInfo?.user?.isAdmin == true {
+                    Section("Admin") {
+                        Label("Transcode Status", systemImage: "gearshape.2")
+                            .tag(Tab.admin)
+                    }
                 }
 
                 Section {
@@ -81,6 +88,8 @@ struct ContentView: View {
                         CamerasView()
                     case .liveTv:
                         LiveTvView()
+                    case .admin:
+                        AdminView()
                     case .search:
                         SearchView()
                     case .wishList:
