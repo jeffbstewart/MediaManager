@@ -665,16 +665,20 @@ object TranscodeLeaseService {
         val thumbPoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
         val subtitlePoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
         val chapterPoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.CHAPTERS)
+        val mobilePoisonIds = getPoisonPillTranscodeIds(leaseType = LeaseType.MOBILE_TRANSCODE)
         val activeTranscodeIds = getActiveLeasedTranscodeIds()
         val activeThumbIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
         val activeSubIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
         val activeChapterIds = getActiveLeasedTranscodeIds(LeaseType.CHAPTERS)
+        val activeMobileIds = getActiveLeasedTranscodeIds(LeaseType.MOBILE_TRANSCODE)
         val chapterExtractedIds = getChapterExtractedTranscodeIds()
+        val mobileEnabled = isForMobileEnabled()
 
         var pendingTranscodes = 0
         var pendingThumbnails = 0
         var pendingSubtitles = 0
         var pendingChapters = 0
+        var pendingMobile = 0
 
         for (tc in Transcode.findAll()) {
             if (tc.file_path == null || tc.title_id in hiddenTitleIds) continue
@@ -709,9 +713,18 @@ object TranscodeLeaseService {
             ) {
                 pendingChapters++
             }
+
+            // ForMobile transcoding
+            if (mobileEnabled &&
+                tc.id !in activeMobileIds && tc.id !in mobilePoisonIds &&
+                !tc.for_mobile_available &&
+                !TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
+            ) {
+                pendingMobile++
+            }
         }
 
-        return PendingWork(pendingTranscodes, pendingThumbnails, pendingSubtitles, pendingChapters)
+        return PendingWork(pendingTranscodes, pendingThumbnails, pendingSubtitles, pendingChapters, pendingMobile)
     }
 
     /**
@@ -854,9 +867,10 @@ data class PendingWork(
     val transcodes: Int,
     val thumbnails: Int,
     val subtitles: Int,
-    val chapters: Int = 0
+    val chapters: Int = 0,
+    val mobileTranscodes: Int = 0
 ) {
-    val total get() = transcodes + thumbnails + subtitles + chapters
+    val total get() = transcodes + thumbnails + subtitles + chapters + mobileTranscodes
 }
 
 data class ThroughputStats(

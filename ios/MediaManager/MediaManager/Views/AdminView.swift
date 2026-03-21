@@ -18,6 +18,9 @@ struct AdminView: View {
                             if pending.transcodes > 0 {
                                 Label("\(pending.transcodes) transcodes", systemImage: "film")
                             }
+                            if let mobile = pending.mobileTranscodes, mobile > 0 {
+                                Label("\(mobile) mobile", systemImage: "iphone")
+                            }
                             if pending.thumbnails > 0 {
                                 Label("\(pending.thumbnails) thumbnails", systemImage: "photo")
                             }

@@ -77,6 +77,7 @@ object AdminHandler {
         val response = mapOf(
             "pending" to mapOf(
                 "transcodes" to pending.transcodes,
+                "mobile_transcodes" to pending.mobileTranscodes,
                 "thumbnails" to pending.thumbnails,
                 "subtitles" to pending.subtitles,
                 "chapters" to pending.chapters,

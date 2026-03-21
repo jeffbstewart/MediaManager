@@ -456,6 +456,7 @@ class TranscodeStatusView : KComposite() {
             if (pending.total > 0) {
                 val parts = mutableListOf<String>()
                 if (pending.transcodes > 0) parts.add("${pending.transcodes} transcodes")
+                if (pending.mobileTranscodes > 0) parts.add("${pending.mobileTranscodes} mobile")
                 if (pending.thumbnails > 0) parts.add("${pending.thumbnails} thumbnails")
                 if (pending.subtitles > 0) parts.add("${pending.subtitles} subtitles")
                 if (pending.chapters > 0) parts.add("${pending.chapters} chapters")

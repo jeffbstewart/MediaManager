@@ -12,10 +12,17 @@ struct TranscodeStatusResponse: Codable {
 
 struct PendingWork: Codable {
     let transcodes: Int
+    let mobileTranscodes: Int?
     let thumbnails: Int
     let subtitles: Int
     let chapters: Int
     let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case transcodes
+        case mobileTranscodes = "mobile_transcodes"
+        case thumbnails, subtitles, chapters, total
+    }
 }
 
 struct TranscodeLease: Codable, Identifiable {
