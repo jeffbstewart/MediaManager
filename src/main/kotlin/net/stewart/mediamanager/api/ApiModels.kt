@@ -47,7 +47,9 @@ data class ApiTitleDetail(
     val tags: List<ApiTag>,
     val transcodes: List<ApiTranscode>,
     val playbackProgress: ApiPlaybackProgress?,
-    val familyMembers: List<String>? = null
+    val familyMembers: List<String>? = null,
+    val isFavorite: Boolean = false,
+    val isHidden: Boolean = false
 )
 
 data class ApiCastMember(

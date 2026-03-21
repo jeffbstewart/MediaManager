@@ -43,20 +43,25 @@ object InfoHandler {
             ContentRating.entries.firstOrNull { it.ordinalLevel == user.rating_ceiling }?.displayLabel
         } else null
 
+        val userMap = mutableMapOf<String, Any?>(
+            "id" to user.id,
+            "username" to user.username,
+            "display_name" to user.display_name,
+            "is_admin" to user.isAdmin(),
+            "rating_ceiling" to user.rating_ceiling,
+            "rating_ceiling_label" to ratingCeilingLabel,
+            "fulfilled_wish_count" to fulfilledWishCount
+        )
+        if (user.must_change_password) {
+            userMap["password_change_required"] = true
+        }
+
         val response = mapOf(
             "server_version" to "0.1.0",
             "api_version" to "v1",
             "capabilities" to capabilities,
             "title_count" to titleCount,
-            "user" to mapOf(
-                "id" to user.id,
-                "username" to user.username,
-                "display_name" to user.display_name,
-                "is_admin" to user.isAdmin(),
-                "rating_ceiling" to user.rating_ceiling,
-                "rating_ceiling_label" to ratingCeilingLabel,
-                "fulfilled_wish_count" to fulfilledWishCount
-            )
+            "user" to userMap
         )
 
         ApiV1Servlet.sendJson(resp, 200, response, mapper)

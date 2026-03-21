@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.MetricsRegistry
+import net.stewart.mediamanager.service.TranscoderAgent
 import net.stewart.mediamanager.service.WishListService
 
 /**
@@ -23,6 +24,18 @@ object WishListHandler {
         val method = req.method
 
         when {
+            // Transcode wishes sub-routes
+            path == "transcodes" && method == "GET" -> handleTranscodeList(req, resp, mapper, user.id!!)
+            path == "transcodes" && method == "POST" -> handleTranscodeAdd(req, resp, mapper, user.id!!)
+            path.startsWith("transcodes/") && method == "DELETE" -> {
+                val titleId = path.removePrefix("transcodes/").toLongOrNull()
+                if (titleId != null) handleTranscodeRemove(req, resp, mapper, user.id!!, titleId)
+                else {
+                    ApiV1Servlet.sendError(resp, 400, "invalid_request")
+                    MetricsRegistry.countHttpResponse("api_v1", 400)
+                }
+            }
+            // Media wishes
             path.isEmpty() && method == "GET" -> handleList(req, resp, mapper, user.id!!)
             path.isEmpty() && method == "POST" -> handleAdd(req, resp, mapper, user.id!!)
             path.matches(Regex("\\d+/vote")) && method == "POST" -> {
@@ -253,6 +266,75 @@ object WishListHandler {
 
         WishListService.cancelWishForUser(userWish.id!!, userId)
         ApiV1Servlet.sendJson(resp, 200, mapOf("unvoted" to true), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    // --- Transcode Wishes ---
+
+    private fun handleTranscodeList(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userId: Long) {
+        val wishes = WishListService.getActiveTranscodeWishesForUser(userId)
+        val nasRoot = TranscoderAgent.getNasRoot()
+
+        val items = wishes.mapNotNull { wish ->
+            val title = wish.title_id?.let { Title.findById(it) } ?: return@mapNotNull null
+            val posterUrl = if (title.poster_path != null) "/posters/w500/${title.id}" else null
+
+            mapOf(
+                "id" to wish.id,
+                "title_id" to title.id,
+                "title_name" to title.name,
+                "poster_url" to posterUrl,
+                "media_type" to title.media_type,
+                "requested_at" to wish.created_at?.toString()
+            )
+        }
+
+        ApiV1Servlet.sendJson(resp, 200, mapOf("transcode_wishes" to items), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    private fun handleTranscodeAdd(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userId: Long) {
+        val body = try {
+            mapper.readTree(req.reader)
+        } catch (e: Exception) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request")
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        val titleId = body.get("title_id")?.asLong()
+        if (titleId == null) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request")
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        val title = Title.findById(titleId)
+        if (title == null) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+
+        val wish = WishListService.addTranscodeWishForUser(userId, titleId)
+        if (wish == null) {
+            ApiV1Servlet.sendError(resp, 409, "already_wished")
+            MetricsRegistry.countHttpResponse("api_v1", 409)
+            return
+        }
+
+        ApiV1Servlet.sendJson(resp, 201, mapOf("id" to wish.id, "created" to true), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 201)
+    }
+
+    private fun handleTranscodeRemove(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, userId: Long, titleId: Long) {
+        val removed = WishListService.removeTranscodeWishForUser(userId, titleId)
+        if (!removed) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        ApiV1Servlet.sendJson(resp, 200, mapOf("removed" to true), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 }

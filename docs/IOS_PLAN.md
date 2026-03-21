@@ -216,6 +216,100 @@ The server-side API phases (1-7) are complete. The following tracks iOS client i
 | 7 | Cameras + live TV (viewer) | Complete |
 | 7a | Admin status views | Complete |
 | 8 | TOFU server fingerprint verification | Complete |
+| 9 | Profile, sessions, title personalization, home interactions (server) | In Progress |
+| 9a | Profile, sessions, title personalization, home interactions (iOS) | Pending |
+
+### Phase 9: Profile, Sessions & Title Personalization (Server)
+
+**Goal:** Close the feature gap between the web app's viewer-level functionality and the iOS API. The web app exposes profile settings, password management, session management, title favorites/hiding, continue-watching dismissal, missing season notifications, and transcode wishes — none of which have API equivalents.
+
+**Gap analysis (non-admin features missing from iOS):**
+
+| Category | Feature | Web Implementation |
+|----------|---------|-------------------|
+| Profile | View account info (username, display name, role, rating limit) | ProfileView |
+| Profile | Change password (current → new, validation) | ProfileView |
+| Profile | Forced password change ("must change before continuing") | ChangePasswordView |
+| Profile | Live TV minimum quality preference (1-5 stars) | ProfileView ComboBox |
+| Sessions | List active sessions (browser + app + devices) | ProfileView / ActiveSessionsView |
+| Sessions | Revoke individual session | Per-row revoke button |
+| Sessions | Revoke all other sessions | Bulk revoke button |
+| Titles | Favorite/star toggle | TitleDetailView gold star |
+| Titles | Hide/unhide title (personal visibility) | TitleDetailView button |
+| Titles | Request re-transcode | TitleDetailView refresh button |
+| Home | Dismiss continue-watching item | MainView X button |
+| Home | Missing seasons notifications + wish-for-season | MainView section |
+| Home | Dismiss missing season notification | MainView dismiss button |
+| Wishes | Transcode wishes (request priority transcoding) | WishListView section |
+
+**New endpoints (16 endpoints + 2 response extensions):**
+
+Profile & Account:
+- `GET /api/v1/profile` — user profile (username, display_name, role, rating ceiling, TV quality pref)
+- `PUT /api/v1/profile/tv-quality` — set minimum TV channel quality `{"min_quality": 3}`
+
+Auth:
+- `POST /api/v1/auth/change-password` — change password `{"current_password":"...","new_password":"..."}`
+  - Issues new token pair, revokes all other sessions/refresh tokens
+  - Returns 400 for validation failures, 401 for wrong current password
+
+Forced Password Change:
+- Login response and `GET /info` include `password_change_required: true` when flag is set
+- All other endpoints return `403 {"error":"password_change_required"}` until changed
+- Exemptions: `auth/*`, `profile`, `profile/*`, `info`, `discover`
+
+Sessions:
+- `GET /api/v1/sessions` — merged list of session_token + refresh_token + device_token rows
+- `DELETE /api/v1/sessions/{id}?type={browser|app|device}` — revoke one session
+- `DELETE /api/v1/sessions?scope=others` — revoke all except current refresh token
+
+Title Personalization:
+- `PUT /api/v1/catalog/titles/{id}/favorite` — set favorite
+- `DELETE /api/v1/catalog/titles/{id}/favorite` — clear favorite
+- `PUT /api/v1/catalog/titles/{id}/hidden` — hide title for current user
+- `DELETE /api/v1/catalog/titles/{id}/hidden` — unhide
+- `POST /api/v1/catalog/titles/{id}/request-retranscode` — request re-transcode
+- `GET /catalog/titles/{id}` response extended with `is_favorite` and `is_hidden` fields
+
+Home Feed Interactions:
+- `DELETE /api/v1/catalog/home/continue-watching/{titleId}` — dismiss from continue watching
+- `POST /api/v1/catalog/home/dismiss-missing-season` — dismiss notification `{"title_id":42,"season_number":8}`
+- `GET /catalog/home` response extended with `missing_seasons` array
+
+Transcode Wishes:
+- `GET /api/v1/wishlist/transcodes` — list active transcode wishes for current user
+- `POST /api/v1/wishlist/transcodes` — add transcode wish `{"title_id":123}`
+- `DELETE /api/v1/wishlist/transcodes/{titleId}` — remove transcode wish
+
+**New server files:**
+- `api/ProfileHandler.kt` — profile read + TV quality update
+- `api/SessionHandler.kt` — session listing + revocation
+
+**Modified server files:**
+- `api/ApiV1Servlet.kt` — routing for new handlers + password change gate
+- `api/AuthHandler.kt` — change-password endpoint
+- `api/InfoHandler.kt` — password_change_required in response
+- `api/CatalogHandler.kt` — accept non-GET for title actions + home interactions; extend detail/home responses
+- `api/WishListHandler.kt` — transcode wish sub-routes
+- `api/ApiModels.kt` — new DTOs (ApiHomeFeed extended, ApiTitleDetail extended)
+- `service/UserTitleFlagService.kt` — add ForUser() overloads (API context has no VaadinSession)
+- `service/WishListService.kt` — add ForUser() transcode wish overloads
+
+**Depends on:** Phase 1 (JWT auth), Phase 2 (catalog), Phase 5 (wish list)
+
+### Phase 9a: Profile, Sessions & Title Personalization (iOS)
+
+**Goal:** iOS client screens for the Phase 9 API endpoints.
+
+**Screens:**
+- Profile view (account info, TV quality picker, change password form)
+- Active sessions list (with swipe-to-revoke, revoke-all button)
+- Forced password change sheet (intercepts 403 password_change_required)
+- Title detail: favorite heart toggle, hide/unhide toggle, request re-transcode button
+- Home: dismiss button on continue-watching cards, missing seasons section with wish buttons
+- Wish list: transcode wishes tab
+
+**Depends on:** Phase 9 (server)
 
 ### Phase 4a: Subtitle Rendering
 

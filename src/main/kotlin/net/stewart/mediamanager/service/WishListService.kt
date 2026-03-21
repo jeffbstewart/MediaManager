@@ -447,6 +447,51 @@ object WishListService {
         return wish
     }
 
+    // --- ForUser overloads for transcode wishes (API context, no VaadinSession) ---
+
+    fun addTranscodeWishForUser(userId: Long, titleId: Long): WishListItem? {
+        if (hasActiveTranscodeWishForUser(userId, titleId)) return null
+        val wish = WishListItem(
+            user_id = userId,
+            wish_type = WishType.TRANSCODE.name,
+            status = WishStatus.ACTIVE.name,
+            title_id = titleId,
+            created_at = LocalDateTime.now()
+        )
+        wish.save()
+        log.info("API transcode wish added: user={} title_id={}", userId, titleId)
+        return wish
+    }
+
+    fun removeTranscodeWishForUser(userId: Long, titleId: Long): Boolean {
+        val wish = WishListItem.findAll().firstOrNull {
+            it.user_id == userId &&
+                it.wish_type == WishType.TRANSCODE.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.title_id == titleId
+        } ?: return false
+        wish.delete()
+        log.info("API transcode wish removed: user={} title_id={}", userId, titleId)
+        return true
+    }
+
+    fun hasActiveTranscodeWishForUser(userId: Long, titleId: Long): Boolean {
+        return WishListItem.findAll().any {
+            it.user_id == userId &&
+                it.wish_type == WishType.TRANSCODE.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.title_id == titleId
+        }
+    }
+
+    fun getActiveTranscodeWishesForUser(userId: Long): List<WishListItem> {
+        return WishListItem.findAll().filter {
+            it.user_id == userId &&
+                it.wish_type == WishType.TRANSCODE.name &&
+                it.status == WishStatus.ACTIVE.name
+        }.sortedByDescending { it.created_at }
+    }
+
     fun cancelWishForUser(wishId: Long, userId: Long): Boolean {
         val wish = WishListItem.findById(wishId) ?: return false
         if (wish.user_id != userId) return false

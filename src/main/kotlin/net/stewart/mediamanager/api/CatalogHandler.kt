@@ -6,8 +6,11 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.MetricsRegistry
+import net.stewart.mediamanager.service.MissingSeasonService
+import net.stewart.mediamanager.service.PlaybackProgressService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.service.UserTitleFlagService
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -31,12 +34,58 @@ object CatalogHandler {
     private val TITLE_SEASONS_EPISODES = Regex("titles/(\\d+)/seasons/(\\d+)/episodes")
     private val TITLE_SEASONS = Regex("titles/(\\d+)/seasons")
     private val TITLE_DETAIL = Regex("titles/(\\d+)")
+    private val TITLE_FAVORITE = Regex("titles/(\\d+)/favorite")
+    private val TITLE_HIDDEN = Regex("titles/(\\d+)/hidden")
+    private val TITLE_RETRANSCODE = Regex("titles/(\\d+)/request-retranscode")
+    private val CONTINUE_WATCHING_DISMISS = Regex("home/continue-watching/(\\d+)")
     private val ACTOR_DETAIL = Regex("actors/(\\d+)")
     private val COLLECTION_DETAIL = Regex("collections/(\\d+)")
     private val TAG_DETAIL = Regex("tags/(\\d+)")
     private val GENRE_DETAIL = Regex("genres/(\\d+)")
 
     fun handle(req: HttpServletRequest, resp: HttpServletResponse, path: String, mapper: ObjectMapper) {
+        val method = req.method
+
+        // Non-GET action endpoints (title personalization + home interactions)
+        val favoriteMatch = TITLE_FAVORITE.matchEntire(path)
+        val hiddenMatch = TITLE_HIDDEN.matchEntire(path)
+        val retranscodeMatch = TITLE_RETRANSCODE.matchEntire(path)
+        val dismissCwMatch = CONTINUE_WATCHING_DISMISS.matchEntire(path)
+
+        when {
+            favoriteMatch != null && method in setOf("PUT", "DELETE") -> {
+                val titleId = favoriteMatch.groupValues[1].toLong()
+                handleFavorite(req, resp, mapper, titleId, method == "PUT")
+                return
+            }
+            hiddenMatch != null && method in setOf("PUT", "DELETE") -> {
+                val titleId = hiddenMatch.groupValues[1].toLong()
+                handleHidden(req, resp, mapper, titleId, method == "PUT")
+                return
+            }
+            retranscodeMatch != null && method == "POST" -> {
+                val titleId = retranscodeMatch.groupValues[1].toLong()
+                handleRequestRetranscode(req, resp, mapper, titleId)
+                return
+            }
+            dismissCwMatch != null && method == "DELETE" -> {
+                val titleId = dismissCwMatch.groupValues[1].toLong()
+                handleDismissContinueWatching(req, resp, mapper, titleId)
+                return
+            }
+            path == "home/dismiss-missing-season" && method == "POST" -> {
+                handleDismissMissingSeason(req, resp, mapper)
+                return
+            }
+        }
+
+        // GET-only endpoints
+        if (method != "GET") {
+            ApiV1Servlet.sendError(resp, 405, "method_not_allowed")
+            MetricsRegistry.countHttpResponse("api_v1", 405)
+            return
+        }
+
         when {
             path == "home" -> handleHome(req, resp, mapper)
             path == "titles" -> handleTitles(req, resp, mapper)
@@ -169,7 +218,27 @@ object CatalogHandler {
             carousels.add(ApiCarousel("Family", familyItems))
         }
 
-        ApiV1Servlet.sendJson(resp, 200, ApiHomeFeed(carousels), mapper)
+        // Missing seasons notifications
+        val missingSeasonsData = MissingSeasonService.getMissingSeasonsForUser(user.id!!)
+        val missingSeasons = missingSeasonsData.map { ms ->
+            val posterUrl = if (ms.posterPath != null) "/posters/w500/${ms.titleId}" else null
+            mapOf(
+                "title_id" to ms.titleId,
+                "title_name" to ms.titleName,
+                "poster_url" to posterUrl,
+                "tmdb_id" to ms.tmdbId,
+                "media_type" to ms.tmdbMediaType,
+                "seasons" to ms.missingSeasons.map { s ->
+                    mapOf("season_number" to s.season_number, "name" to s.name, "episode_count" to s.episode_count)
+                }
+            )
+        }
+
+        val homeFeed = mapOf(
+            "carousels" to carousels,
+            "missing_seasons" to missingSeasons
+        )
+        ApiV1Servlet.sendJson(resp, 200, homeFeed, mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
@@ -336,6 +405,10 @@ object CatalogHandler {
         }
         val backdropUrl = if (title.backdrop_path != null) "/backdrops/${title.id}" else null
 
+        // User-specific flags
+        val isFavorite = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        val isHidden = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+
         val detail = ApiTitleDetail(
             id = title.id!!,
             name = title.name,
@@ -359,7 +432,9 @@ object CatalogHandler {
             playbackProgress = progress,
             familyMembers = if (title.media_type == MediaType.PERSONAL.name) {
                 loadFamilyMemberNames()[title.id!!]?.takeIf { it.isNotEmpty() }
-            } else null
+            } else null,
+            isFavorite = isFavorite,
+            isHidden = isHidden
         )
 
         ApiV1Servlet.sendJson(resp, 200, detail, mapper)
@@ -541,6 +616,107 @@ object CatalogHandler {
 
         ApiV1Servlet.sendJson(resp, 200, ApiSearchResponse(query, sorted, counts), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    // --- Title Personalization Actions ---
+
+    private fun handleFavorite(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long, setFlag: Boolean) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        val title = Title.findById(titleId)
+        if (title == null || title.hidden || !user.canSeeRating(title.content_rating)) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        if (setFlag) {
+            UserTitleFlagService.setFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        } else {
+            UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        }
+        resp.status = 204
+        MetricsRegistry.countHttpResponse("api_v1", 204)
+    }
+
+    private fun handleHidden(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long, setFlag: Boolean) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        val title = Title.findById(titleId)
+        if (title == null || !user.canSeeRating(title.content_rating)) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        if (setFlag) {
+            UserTitleFlagService.setFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+        } else {
+            UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+        }
+        resp.status = 204
+        MetricsRegistry.countHttpResponse("api_v1", 204)
+    }
+
+    private fun handleRequestRetranscode(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        val title = Title.findById(titleId)
+        if (title == null || title.hidden || !user.canSeeRating(title.content_rating)) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        val transcodes = Transcode.findAll().filter { it.title_id == titleId && it.file_path != null }
+        val updated = transcodes.filter { !it.retranscode_requested }.onEach {
+            it.retranscode_requested = true
+            it.save()
+        }
+        if (updated.isEmpty()) {
+            ApiV1Servlet.sendError(resp, 409, "already_requested")
+            MetricsRegistry.countHttpResponse("api_v1", 409)
+            return
+        }
+        log.info("Re-transcode requested for title_id={} by user_id={} ({} transcodes)", titleId, user.id, updated.size)
+        ApiV1Servlet.sendJson(resp, 200, mapOf("queued" to true, "count" to updated.size), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    // --- Home Feed Interactions ---
+
+    private fun handleDismissContinueWatching(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        // Find all progress records for this user on transcodes belonging to this title
+        val transcodeIds = Transcode.findAll().filter { it.title_id == titleId }.mapNotNull { it.id }.toSet()
+        val progress = PlaybackProgress.findAll().filter {
+            it.user_id == user.id && it.transcode_id in transcodeIds
+        }
+        progress.forEach { it.delete() }
+        resp.status = 204
+        MetricsRegistry.countHttpResponse("api_v1", 204)
+    }
+
+    private fun handleDismissMissingSeason(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        val body = try {
+            mapper.readTree(req.reader)
+        } catch (e: Exception) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request")
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+        val titleId = body.get("title_id")?.asLong()
+        val seasonNumber = body.get("season_number")?.asInt()
+
+        if (titleId == null) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request")
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        if (seasonNumber != null) {
+            MissingSeasonService.dismiss(user.id!!, titleId, seasonNumber)
+        } else {
+            // Dismiss all missing seasons for this title
+            MissingSeasonService.dismissAllForTitle(user.id!!, titleId)
+        }
+        resp.status = 204
+        MetricsRegistry.countHttpResponse("api_v1", 204)
     }
 
     // --- Shared catalog loading ---

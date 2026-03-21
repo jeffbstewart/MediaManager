@@ -63,11 +63,27 @@ class ApiV1Servlet : HttpServlet() {
         val path = req.pathInfo?.removePrefix("/") ?: ""
         val method = req.method
 
+        // Password change gate: if user must change password, only allow auth, profile, info, and discover.
+        // This runs before routing to block access to all other endpoints.
+        if (!path.startsWith("auth/") && path != "info" && path != "profile" && !path.startsWith("profile/")) {
+            val token = extractBearer(req)
+            if (token != null) {
+                val gateUser = JwtService.validateAccessToken(token)
+                if (gateUser?.must_change_password == true) {
+                    sendError(resp, 403, "password_change_required")
+                    MetricsRegistry.countHttpResponse("api_v1", 403)
+                    return
+                }
+            }
+        }
+
         try {
             when {
                 path.startsWith("auth/") -> AuthHandler.handle(req, resp, path.removePrefix("auth/"), mapper)
                 path == "info" && method == "GET" -> InfoHandler.handle(req, resp, mapper)
-                path.startsWith("catalog/") && method == "GET" -> CatalogHandler.handle(req, resp, path.removePrefix("catalog/"), mapper)
+                path == "profile" || path.startsWith("profile/") -> ProfileHandler.handle(req, resp, path.removePrefix("profile").removePrefix("/"), mapper)
+                path == "sessions" || path.startsWith("sessions/") -> SessionHandler.handle(req, resp, path.removePrefix("sessions").removePrefix("/"), mapper)
+                path.startsWith("catalog/") -> CatalogHandler.handle(req, resp, path.removePrefix("catalog/"), mapper)
                 path.startsWith("playback/") -> PlaybackHandler.handle(req, resp, path.removePrefix("playback/"), mapper)
                 path == "wishlist" || path.startsWith("wishlist/") -> WishListHandler.handle(req, resp, path.removePrefix("wishlist").removePrefix("/"), mapper)
                 path.startsWith("downloads/") || path == "downloads" -> DownloadHandler.handle(req, resp, path.removePrefix("downloads").removePrefix("/"), mapper)
