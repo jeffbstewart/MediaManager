@@ -15,6 +15,7 @@ final class AuthManager {
     private(set) var state: State = .needsServer
     private(set) var serverInfo: ServerInfo?
     private(set) var error: String?
+    private(set) var passwordChangeRequired = false
 
     let apiClient = APIClient()
     private var refreshTask: Task<Void, Never>?
@@ -231,5 +232,10 @@ final class AuthManager {
     private func refreshServerInfo() async {
         guard case .authenticated(let url) = state else { return }
         serverInfo = try? await apiClient.getServerInfo(serverURL: url)
+        passwordChangeRequired = serverInfo?.user?.passwordChangeRequired ?? false
+    }
+
+    func clearPasswordChangeRequired() {
+        passwordChangeRequired = false
     }
 }

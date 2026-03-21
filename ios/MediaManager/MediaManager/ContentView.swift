@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, admin
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, admin, profile
 }
 
 struct ContentView: View {
@@ -59,6 +59,11 @@ struct ContentView: View {
                     }
                     .tag(Tab.wishList)
                 }
+
+                Section {
+                    Label("Profile", systemImage: "person.circle")
+                        .tag(Tab.profile)
+                }
             }
             .navigationTitle("Media Manager")
             .toolbar {
@@ -94,6 +99,8 @@ struct ContentView: View {
                         CamerasView()
                     case .liveTv:
                         LiveTvView()
+                    case .profile:
+                        ProfileView()
                     case .admin:
                         AdminView()
                     case .search:

@@ -11,9 +11,91 @@ struct RootView: View {
             LoginView(serverURL: serverURL)
         case .authenticated:
             ContentView()
+                .sheet(isPresented: .init(
+                    get: { authManager.passwordChangeRequired },
+                    set: { _ in }
+                )) {
+                    ForcedPasswordChangeView()
+                }
         case .fingerprintMismatch(_, let expected, let received):
             FingerprintMismatchView(expected: expected, received: received)
         }
+    }
+}
+
+struct ForcedPasswordChangeView: View {
+    @Environment(AuthManager.self) private var authManager
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var error: String?
+    @State private var saving = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+
+                Image(systemName: "lock.rotation")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.orange)
+
+                Text("Password Change Required")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("Your administrator requires you to change your password before continuing.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                VStack(spacing: 12) {
+                    SecureField("New Password", text: $newPassword)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.newPassword)
+
+                    SecureField("Confirm Password", text: $confirmPassword)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.newPassword)
+
+                    if let error {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                    }
+
+                    Button(saving ? "Saving..." : "Change Password") {
+                        Task { await changePassword() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(newPassword.isEmpty || newPassword != confirmPassword || saving)
+                }
+                .padding(.horizontal)
+
+                Spacer()
+                Spacer()
+            }
+            .interactiveDismissDisabled()
+        }
+    }
+
+    private func changePassword() async {
+        error = nil
+        guard newPassword.count >= 8 else {
+            error = "Password must be at least 8 characters"
+            return
+        }
+        saving = true
+        do {
+            try await authManager.apiClient.post("auth/change-password", body: [
+                "current_password": "",
+                "new_password": newPassword
+            ])
+            authManager.clearPasswordChangeRequired()
+        } catch {
+            self.error = error.localizedDescription
+        }
+        saving = false
     }
 }
 

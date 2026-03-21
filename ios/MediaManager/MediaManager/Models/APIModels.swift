@@ -38,6 +38,7 @@ struct ServerUserInfo: Codable {
     let ratingCeiling: Int?
     let ratingCeilingLabel: String?
     let fulfilledWishCount: Int?
+    let passwordChangeRequired: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, username
@@ -46,6 +47,7 @@ struct ServerUserInfo: Codable {
         case ratingCeiling = "rating_ceiling"
         case ratingCeilingLabel = "rating_ceiling_label"
         case fulfilledWishCount = "fulfilled_wish_count"
+        case passwordChangeRequired = "password_change_required"
     }
 }
 
