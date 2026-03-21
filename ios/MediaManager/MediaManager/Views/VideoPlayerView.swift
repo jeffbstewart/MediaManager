@@ -9,28 +9,44 @@ struct VideoPlayerView: View {
     let titleName: String
     let episodeName: String?
     var hasSubtitles: Bool = false
+    var nextEpisode: NextEpisode? = nil
 
     @State private var player: AVPlayer?
     @State private var error: String?
     @State private var progressTimer: Timer?
+    @State private var endObserver: Any?
+    @State private var currentTranscodeId: Int?
+    @State private var currentEpisodeName: String?
+    @State private var currentNextEpisode: NextEpisode?
 
     var body: some View {
         Group {
             if let error {
-                ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
+                VStack(spacing: 16) {
+                    ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
+                    Button("Close") { cleanupAndDismiss() }
+                        .buttonStyle(.borderedProminent)
+                }
             } else if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
                     .overlay(alignment: .topLeading) {
                         Button {
-                            dismiss()
+                            cleanupAndDismiss()
                         } label: {
-                            Image(systemName: "chevron.left.circle.fill")
-                                .font(.title)
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, .black.opacity(0.5))
+                            HStack(spacing: 8) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 28))
+                                Text("Close")
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(.black.opacity(0.6))
+                            .clipShape(Capsule())
                         }
-                        .padding(.top, 8)
+                        .padding(.top, 12)
                         .padding(.leading, 16)
                     }
             } else {
@@ -42,15 +58,32 @@ struct VideoPlayerView: View {
             await loadStream()
         }
         .onDisappear {
-            stopProgressReporting()
-            saveProgressOnExit()
-            player?.pause()
-            player = nil
+            cleanup()
         }
     }
 
+    private func cleanupAndDismiss() {
+        saveProgressOnExit()
+        cleanup()
+        dismiss()
+    }
+
+    private func cleanup() {
+        stopProgressReporting()
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        endObserver = nil
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+    }
+
     private func loadStream() async {
-        guard let (url, headers) = await authManager.apiClient.streamURL(for: transcodeId) else {
+        let tcId = currentTranscodeId ?? transcodeId
+        let nextEp = currentNextEpisode ?? nextEpisode
+
+        guard let (url, headers) = await authManager.apiClient.streamURL(for: tcId) else {
             error = "Unable to build stream URL"
             return
         }
@@ -66,14 +99,43 @@ struct VideoPlayerView: View {
         avPlayer.play()
         startProgressReporting()
 
+        // Watch for end of playback → auto-advance to next episode
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [nextEp] _ in
+            Task { @MainActor in
+                await advanceToNextEpisode(nextEp)
+            }
+        }
+
         // Seek to saved position in parallel — don't block playback start
         Task {
             let progress: ApiPlaybackProgress? = try? await authManager.apiClient.get(
-                "playback/progress/\(transcodeId)")
+                "playback/progress/\(tcId)")
             if let position = progress?.positionSeconds, position > 0 {
                 await avPlayer.seek(to: CMTime(seconds: position, preferredTimescale: 1))
             }
         }
+    }
+
+    @MainActor
+    private func advanceToNextEpisode(_ nextEp: NextEpisode?) async {
+        guard let nextEp else {
+            cleanupAndDismiss()
+            return
+        }
+
+        // Save final progress for current episode
+        saveProgressOnExit()
+        cleanup()
+
+        // Set up next episode
+        currentTranscodeId = nextEp.transcodeId
+        currentEpisodeName = nextEp.episodeName
+        currentNextEpisode = nil // We don't know the next-next episode
+        await loadStream()
     }
 
     @MainActor
@@ -90,18 +152,23 @@ struct VideoPlayerView: View {
         progressTimer = nil
     }
 
+    private var activeTranscodeId: Int {
+        currentTranscodeId ?? transcodeId
+    }
+
     private func saveProgressOnExit() {
         guard let player else { return }
         let position = player.currentTime().seconds
         let duration = player.currentItem?.duration.seconds
         guard position.isFinite && position > 0 else { return }
+        let tcId = activeTranscodeId
 
         Task {
             var body: [String: Any] = ["position": position]
             if let duration, duration.isFinite && duration > 0 {
                 body["duration"] = duration
             }
-            try? await authManager.apiClient.post("playback/progress/\(transcodeId)", body: body)
+            try? await authManager.apiClient.post("playback/progress/\(tcId)", body: body)
         }
     }
 
@@ -116,6 +183,6 @@ struct VideoPlayerView: View {
         if let duration, duration.isFinite && duration > 0 {
             body["duration"] = duration
         }
-        try? await authManager.apiClient.post("playback/progress/\(transcodeId)", body: body)
+        try? await authManager.apiClient.post("playback/progress/\(activeTranscodeId)", body: body)
     }
 }

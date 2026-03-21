@@ -13,13 +13,15 @@ struct EpisodesView: View {
             } else if episodes.isEmpty {
                 ContentUnavailableView("No episodes", systemImage: "tv")
             } else {
-                List(episodes, id: \.episodeId) { episode in
+                List(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
                     if episode.playable, let tcId = episode.transcodeId {
+                        let nextEp = findNextPlayable(after: index)
                         NavigationLink(value: PlaybackRoute(
                             transcodeId: tcId,
                             titleName: route.titleName,
                             episodeName: episode.name ?? "S\(episode.seasonNumber)E\(episode.episodeNumber)",
-                            hasSubtitles: episode.hasSubtitles
+                            hasSubtitles: episode.hasSubtitles,
+                            nextEpisode: nextEp
                         )) {
                             EpisodeRow(episode: episode)
                         }
@@ -33,6 +35,20 @@ struct EpisodesView: View {
         .task {
             await loadEpisodes()
         }
+    }
+
+    private func findNextPlayable(after index: Int) -> NextEpisode? {
+        for i in (index + 1)..<episodes.count {
+            let ep = episodes[i]
+            if ep.playable, let tcId = ep.transcodeId {
+                return NextEpisode(
+                    transcodeId: tcId,
+                    episodeName: ep.name ?? "S\(ep.seasonNumber)E\(ep.episodeNumber)",
+                    hasSubtitles: ep.hasSubtitles
+                )
+            }
+        }
+        return nil
     }
 
     private func loadEpisodes() async {

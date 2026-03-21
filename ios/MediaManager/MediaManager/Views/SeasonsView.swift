@@ -6,6 +6,13 @@ struct PlaybackRoute: Hashable, Identifiable {
     let titleName: String
     let episodeName: String?
     var hasSubtitles: Bool = false
+    var nextEpisode: NextEpisode? = nil
+}
+
+struct NextEpisode: Hashable {
+    let transcodeId: Int
+    let episodeName: String
+    let hasSubtitles: Bool
 }
 
 struct TvShowRoute: Hashable {

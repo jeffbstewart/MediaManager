@@ -120,7 +120,8 @@ struct ContentView: View {
                 transcodeId: route.transcodeId,
                 titleName: route.titleName,
                 episodeName: route.episodeName,
-                hasSubtitles: route.hasSubtitles
+                hasSubtitles: route.hasSubtitles,
+                nextEpisode: route.nextEpisode
             )
         }
     }
