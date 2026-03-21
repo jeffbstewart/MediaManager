@@ -48,6 +48,30 @@ struct SearchView: View {
                         } else {
                             SearchResultRow(result: result, apiClient: authManager.apiClient)
                         }
+                    case "collection":
+                        if let collId = result.tmdbCollectionId {
+                            NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: result.name)) {
+                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            }
+                        } else {
+                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                        }
+                    case "tag":
+                        if let tagId = result.itemId {
+                            NavigationLink(value: TagRoute(id: tagId, name: result.name)) {
+                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            }
+                        } else {
+                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                        }
+                    case "genre":
+                        if let genreId = result.itemId {
+                            NavigationLink(value: GenreRoute(id: genreId, name: result.name)) {
+                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            }
+                        } else {
+                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                        }
                     default:
                         SearchResultRow(result: result, apiClient: authManager.apiClient)
                     }

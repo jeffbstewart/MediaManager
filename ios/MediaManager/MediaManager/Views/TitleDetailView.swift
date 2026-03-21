@@ -87,6 +87,14 @@ struct TitleDetailView: View {
                                 }
                             }
 
+                            // Collection link
+                            if let collId = detail.tmdbCollectionId, let collName = detail.tmdbCollectionName {
+                                NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: collName)) {
+                                    Label(collName, systemImage: "square.stack")
+                                        .font(.subheadline)
+                                }
+                            }
+
                             // Description
                             if let description = detail.description {
                                 Text(description)

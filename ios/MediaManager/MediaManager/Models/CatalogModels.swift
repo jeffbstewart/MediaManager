@@ -156,7 +156,7 @@ struct ApiTitleDetail: Codable {
 }
 
 struct ApiSearchResult: Codable, Identifiable {
-    var id: String { "\(resultType)-\(name)-\(titleId ?? 0)" }
+    var id: String { "\(resultType)-\(name)-\(titleId ?? 0)-\(itemId ?? 0)" }
     let resultType: String
     let name: String
     let titleId: Int?
@@ -170,6 +170,7 @@ struct ApiSearchResult: Codable, Identifiable {
     let tmdbPersonId: Int?
     let headshotUrl: String?
     let titleCount: Int?
+    let itemId: Int?
 
     enum CodingKeys: String, CodingKey {
         case name, year, quality
@@ -183,6 +184,7 @@ struct ApiSearchResult: Codable, Identifiable {
         case tmdbPersonId = "tmdb_person_id"
         case headshotUrl = "headshot_url"
         case titleCount = "title_count"
+        case itemId = "id"
     }
 }
 

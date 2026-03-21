@@ -110,6 +110,9 @@ struct ContentView: View {
                 .navigationDestination(for: TagRoute.self) { route in
                     TagDetailView(route: route)
                 }
+                .navigationDestination(for: GenreRoute.self) { route in
+                    GenreDetailView(route: route)
+                }
             }
         }
         .fullScreenCover(item: $playbackRoute) { route in
