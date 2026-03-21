@@ -28,8 +28,8 @@ object TranscodeLeaseService {
     /** Number of failed/expired leases before a transcode is considered a poison pill. */
     private const val DEFAULT_MAX_FAILURES = 3
 
-    /** Max simultaneous active leases per buddy to prevent a compromised key from starving others. */
-    private const val MAX_LEASES_PER_BUDDY = 3
+    /** Max simultaneous active bundles per buddy (counts unique transcode_ids, not individual leases). */
+    private const val MAX_BUNDLES_PER_BUDDY = 3
 
     /**
      * Work item representing a single piece of work (transcode, thumbnail, subtitle, or chapter)
@@ -44,29 +44,39 @@ object TranscodeLeaseService {
     )
 
     /**
-     * Claims the next available work item for a buddy worker.
+     * Claims all outstanding work for the highest-priority file as a bundle.
      *
-     * Unified priority ordering:
-     * 1. Wished titles first (priority transcodes jump to top)
-     * 2. Then by TMDB popularity (most popular first)
-     * 3. Within the same title: transcode → thumbnails → subtitles
+     * Returns a [LeaseBundle] containing multiple leases for a single transcode_id,
+     * allowing the buddy to copy the source file once and process all operations
+     * against the local copy.
      *
-     * This ensures a high-priority title gets fully processed (transcode,
-     * thumbnails, subtitles) before moving to the next title.
+     * Priority ordering:
+     * 1. Files already cached by the buddy ([cachedTranscodeIds]) — avoids re-copying
+     * 2. Wished titles first (priority transcodes jump to top)
+     * 3. Then by TMDB popularity (most popular first)
+     *
+     * Per-buddy limit counts active bundles (unique transcode_ids), not individual leases.
      *
      * Synchronized to prevent two workers from claiming the same file.
-     * Returns the lease record, or null if no work is available.
      */
-    fun claimWork(buddyName: String, skipTypes: Set<String> = emptySet()): TranscodeLease? = synchronized(claimLock) {
+    fun claimWork(
+        buddyName: String,
+        skipTypes: Set<String> = emptySet(),
+        cachedTranscodeIds: Set<Long> = emptySet()
+    ): LeaseBundle? = synchronized(claimLock) {
         expireStaleLeases()
 
-        // Per-buddy lease limit: prevent a single buddy from hoarding all work
-        val activeBuddyLeases = TranscodeLease.findAll().count {
-            it.buddy_name == buddyName &&
-                (it.status == LeaseStatus.CLAIMED.name || it.status == LeaseStatus.IN_PROGRESS.name)
-        }
-        if (activeBuddyLeases >= MAX_LEASES_PER_BUDDY) {
-            log.info("Buddy '{}' at lease limit ({}/{}), rejecting claim", buddyName, activeBuddyLeases, MAX_LEASES_PER_BUDDY)
+        // Per-buddy bundle limit: count active bundles (unique transcode_ids), not individual leases
+        val activeBundleCount = TranscodeLease.findAll()
+            .filter {
+                it.buddy_name == buddyName &&
+                    (it.status == LeaseStatus.CLAIMED.name || it.status == LeaseStatus.IN_PROGRESS.name)
+            }
+            .map { it.transcode_id }
+            .distinct()
+            .count()
+        if (activeBundleCount >= MAX_BUNDLES_PER_BUDDY) {
+            log.info("Buddy '{}' at bundle limit ({}/{}), rejecting claim", buddyName, activeBundleCount, MAX_BUNDLES_PER_BUDDY)
             return null
         }
 
@@ -109,37 +119,27 @@ object TranscodeLeaseService {
             }
 
             // --- Check THUMBNAILS eligibility ---
-            // Sprites should exist alongside the source file (or ForBrowser as legacy fallback).
-            // A playable MP4 must exist (source for MP4/M4V, ForBrowser for MKV/AVI) to generate from.
+            // FFmpeg can generate thumbnails from any video format (MKV, MP4, AVI).
+            // No need to wait for ForBrowser transcode — source file is sufficient.
             if (LeaseType.THUMBNAILS.name !in skipTypes &&
                 tc.id !in activeThumbnailIds &&
                 tc.id !in thumbnailPoisonPillIds
             ) {
-                val playableMp4 = if (TranscoderAgent.needsTranscoding(filePath)) {
-                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-                } else {
-                    File(filePath)
-                }
                 val hasSprites = TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt") != null
-                if (playableMp4.exists() && !hasSprites) {
+                if (!hasSprites && File(filePath).exists()) {
                     workItems.add(WorkItem(tc, LeaseType.THUMBNAILS, tc.title_id, 1))
                 }
             }
 
             // --- Check SUBTITLES eligibility ---
-            // SRT files should exist alongside the source file (or ForBrowser as legacy fallback).
+            // Whisper reads MKV/AVI source directly for best audio quality — no playable MP4 needed.
             if (LeaseType.SUBTITLES.name !in skipTypes &&
                 tc.id !in activeSubtitleIds &&
                 tc.id !in subtitlePoisonPillIds
             ) {
-                val playableMp4 = if (TranscoderAgent.needsTranscoding(filePath)) {
-                    TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-                } else {
-                    File(filePath)
-                }
                 val hasSubs = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt") != null
                 val hasSentinel = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt.failed") != null
-                if (playableMp4.exists() && !hasSubs && !hasSentinel) {
+                if (!hasSubs && !hasSentinel && File(filePath).exists()) {
                     workItems.add(WorkItem(tc, LeaseType.SUBTITLES, tc.title_id, 2))
                 }
             }
@@ -180,20 +180,58 @@ object TranscodeLeaseService {
             }
         )
 
-        val winner = sorted.first()
-        return createLease(winner.transcode, nasRoot, buddyName, winner.leaseType)
+        // Pick the best transcode_id: prefer cached files, then highest priority
+        val orderedTranscodeIds = sorted.map { it.transcode.id!! }.distinct()
+        val winnerId = if (cachedTranscodeIds.isNotEmpty()) {
+            orderedTranscodeIds.firstOrNull { it in cachedTranscodeIds } ?: orderedTranscodeIds.first()
+        } else {
+            orderedTranscodeIds.first()
+        }
+
+        // Create leases for ALL outstanding work on the winning file
+        val winnerItems = workItems.filter { it.transcode.id == winnerId }
+        return createBundle(winnerItems, nasRoot, buddyName)
     }
 
-    private fun createLease(tc: Transcode, nasRoot: String, buddyName: String, leaseType: LeaseType): TranscodeLease {
+    private fun createBundle(items: List<WorkItem>, nasRoot: String, buddyName: String): LeaseBundle {
+        val tc = items.first().transcode
         val sourceFile = File(tc.file_path!!)
         val relativePath = File(nasRoot).toPath().relativize(sourceFile.toPath()).toString()
+            .replace('\\', '/')
+        val fileSizeBytes = tc.file_size_bytes ?: sourceFile.length()
+
+        val leases = items.map { item ->
+            createLease(item.transcode, nasRoot, buddyName, item.leaseType, relativePath)
+        }
+
+        val types = leases.map { it.lease_type }
+        log.info("Bundle of {} lease(s) claimed by '{}': {} — types={} (transcode_id={})",
+            leases.size, buddyName, relativePath, types, tc.id)
+
+        return LeaseBundle(
+            transcodeId = tc.id!!,
+            relativePath = relativePath,
+            fileSizeBytes = fileSizeBytes,
+            leases = leases
+        )
+    }
+
+    private fun createLease(
+        tc: Transcode,
+        nasRoot: String,
+        buddyName: String,
+        leaseType: LeaseType,
+        relativePath: String? = null
+    ): TranscodeLease {
+        val sourceFile = File(tc.file_path!!)
+        val relPath = relativePath ?: File(nasRoot).toPath().relativize(sourceFile.toPath()).toString()
             .replace('\\', '/')
         val leaseDuration = getLeaseDurationMinutes()
 
         val lease = TranscodeLease(
             transcode_id = tc.id!!,
             buddy_name = buddyName,
-            relative_path = relativePath,
+            relative_path = relPath,
             file_size_bytes = tc.file_size_bytes ?: sourceFile.length(),
             claimed_at = LocalDateTime.now(),
             expires_at = LocalDateTime.now().plusMinutes(leaseDuration),
@@ -203,12 +241,12 @@ object TranscodeLeaseService {
         lease.save()
 
         log.info("Lease {} ({}) claimed by '{}': {} (transcode_id={})",
-            lease.id, leaseType, buddyName, relativePath, tc.id)
+            lease.id, leaseType, buddyName, relPath, tc.id)
 
         Broadcaster.broadcastBuddyProgress(BuddyProgressEvent(
             leaseId = lease.id!!,
             buddyName = buddyName,
-            relativePath = relativePath,
+            relativePath = relPath,
             status = LeaseStatus.CLAIMED.name,
             progressPercent = 0,
             encoder = null
@@ -320,6 +358,80 @@ object TranscodeLeaseService {
         log.debug("Heartbeat for lease {} (buddy='{}', file={})", leaseId, lease.buddy_name, lease.relative_path)
 
         return lease
+    }
+
+    /**
+     * Heartbeat for multiple lease IDs at once. Used by buddies to keep all
+     * leases in a bundle alive while processing one at a time.
+     */
+    fun heartbeatMultiple(leaseIds: List<Long>): Int {
+        var renewed = 0
+        for (id in leaseIds) {
+            if (heartbeat(id) != null) renewed++
+        }
+        return renewed
+    }
+
+    /**
+     * Checks which of the given transcode IDs have outstanding work.
+     * Used by buddies on startup to determine which cached files are still useful.
+     * Lightweight query — no leases are created.
+     */
+    fun checkPending(transcodeIds: List<Long>): List<Long> {
+        if (transcodeIds.isEmpty()) return emptyList()
+
+        val nasRoot = TranscoderAgent.getNasRoot() ?: return emptyList()
+        val hiddenTitleIds = Title.findAll().filter { it.hidden }.mapNotNull { it.id }.toSet()
+
+        val activeLeasedIds = getActiveLeasedTranscodeIds()
+        val activeThumbnailIds = getActiveLeasedTranscodeIds(LeaseType.THUMBNAILS)
+        val activeSubtitleIds = getActiveLeasedTranscodeIds(LeaseType.SUBTITLES)
+        val activeChapterIds = getActiveLeasedTranscodeIds(LeaseType.CHAPTERS)
+        val activeMobileIds = getActiveLeasedTranscodeIds(LeaseType.MOBILE_TRANSCODE)
+
+        val poisonPillIds = getPoisonPillTranscodeIds()
+        val thumbnailPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.THUMBNAILS)
+        val subtitlePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.SUBTITLES)
+        val chapterPoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.CHAPTERS)
+        val mobilePoisonPillIds = getPoisonPillTranscodeIds(leaseType = LeaseType.MOBILE_TRANSCODE)
+        val chapterExtractedIds = getChapterExtractedTranscodeIds()
+
+        val requestedSet = transcodeIds.toSet()
+        val pending = mutableSetOf<Long>()
+
+        for (tc in Transcode.findAll()) {
+            if (tc.id !in requestedSet) continue
+            if (tc.file_path == null || tc.title_id in hiddenTitleIds) continue
+            val filePath = tc.file_path!!
+            if (!File(filePath).exists()) continue
+
+            if (TranscoderAgent.needsTranscoding(filePath) &&
+                tc.id !in activeLeasedIds && tc.id !in poisonPillIds &&
+                !TranscoderAgent.isTranscoded(nasRoot, filePath)
+            ) { pending.add(tc.id!!); continue }
+
+            val hasSprites = TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt") != null
+            if (!hasSprites && tc.id !in activeThumbnailIds && tc.id !in thumbnailPoisonPillIds) {
+                pending.add(tc.id!!); continue
+            }
+
+            val hasSubs = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt") != null
+            val hasSentinel = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt.failed") != null
+            if (!hasSubs && !hasSentinel && tc.id !in activeSubtitleIds && tc.id !in subtitlePoisonPillIds) {
+                pending.add(tc.id!!); continue
+            }
+
+            if (tc.id !in activeChapterIds && tc.id !in chapterPoisonPillIds && tc.id !in chapterExtractedIds) {
+                pending.add(tc.id!!); continue
+            }
+
+            if (TranscodeLeaseService.isForMobileEnabled() &&
+                tc.id !in activeMobileIds && tc.id !in mobilePoisonPillIds &&
+                !tc.for_mobile_available && !TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
+            ) { pending.add(tc.id!!); continue }
+        }
+
+        return pending.toList()
     }
 
     /**
@@ -567,45 +679,34 @@ object TranscodeLeaseService {
         for (tc in Transcode.findAll()) {
             if (tc.file_path == null || tc.title_id in hiddenTitleIds) continue
             val filePath = tc.file_path!!
+            val sourceFile = File(filePath)
+            if (!sourceFile.exists()) continue
 
-            if (TranscoderAgent.needsTranscoding(filePath)) {
-                // Needs ForBrowser transcoding
-                if (tc.id !in activeTranscodeIds && tc.id !in transcodePoisonIds &&
-                    !TranscoderAgent.isTranscoded(nasRoot, filePath) &&
-                    File(filePath).exists()) {
-                    pendingTranscodes++
-                }
-
-                // Check thumbnail/subtitle on the ForBrowser copy
-                val forBrowserFile = TranscoderAgent.getForBrowserPath(nasRoot, filePath)
-                if (forBrowserFile.exists()) {
-                    if (tc.id !in activeThumbIds && tc.id !in thumbPoisonIds &&
-                        !net.stewart.transcode.ThumbnailSpriteGenerator.hasSprites(forBrowserFile)) {
-                        pendingThumbnails++
-                    }
-                    if (tc.id !in activeSubIds && tc.id !in subtitlePoisonIds &&
-                        !hasSubtitleFile(forBrowserFile) && !hasSubtitleSentinel(forBrowserFile)) {
-                        pendingSubtitles++
-                    }
-                }
-            } else {
-                // Already browser-compatible (MP4/M4V) — check thumbnails/subtitles on source
-                val sourceFile = File(filePath)
-                if (sourceFile.exists()) {
-                    if (tc.id !in activeThumbIds && tc.id !in thumbPoisonIds &&
-                        !net.stewart.transcode.ThumbnailSpriteGenerator.hasSprites(sourceFile)) {
-                        pendingThumbnails++
-                    }
-                    if (tc.id !in activeSubIds && tc.id !in subtitlePoisonIds &&
-                        !hasSubtitleFile(sourceFile) && !hasSubtitleSentinel(sourceFile)) {
-                        pendingSubtitles++
-                    }
-                }
+            // ForBrowser transcoding
+            if (TranscoderAgent.needsTranscoding(filePath) &&
+                tc.id !in activeTranscodeIds && tc.id !in transcodePoisonIds &&
+                !TranscoderAgent.isTranscoded(nasRoot, filePath)
+            ) {
+                pendingTranscodes++
             }
 
-            // Chapters are probed on the source file regardless of transcode status
+            // Thumbnails — source file is sufficient (FFmpeg handles MKV)
+            val hasSprites = TranscoderAgent.findAuxFile(nasRoot, filePath, ".thumbs.vtt") != null
+            if (!hasSprites && tc.id !in activeThumbIds && tc.id !in thumbPoisonIds) {
+                pendingThumbnails++
+            }
+
+            // Subtitles — source file is sufficient (Whisper reads MKV directly)
+            val hasSubs = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt") != null
+            val hasSentinel = TranscoderAgent.findAuxFile(nasRoot, filePath, ".en.srt.failed") != null
+            if (!hasSubs && !hasSentinel && tc.id !in activeSubIds && tc.id !in subtitlePoisonIds) {
+                pendingSubtitles++
+            }
+
+            // Chapters
             if (tc.id !in activeChapterIds && tc.id !in chapterPoisonIds &&
-                tc.id !in chapterExtractedIds && File(filePath).exists()) {
+                tc.id !in chapterExtractedIds
+            ) {
                 pendingChapters++
             }
         }
@@ -721,7 +822,7 @@ object TranscodeLeaseService {
     fun isForMobileEnabled(): Boolean {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "for_mobile_enabled" }
-            ?.config_val?.equals("true", ignoreCase = true) ?: false
+            ?.config_val?.equals("true", ignoreCase = true) ?: true
     }
 
     private fun getLeaseDurationMinutes(): Long {
@@ -731,6 +832,17 @@ object TranscodeLeaseService {
             ?: DEFAULT_LEASE_MINUTES
     }
 }
+
+/**
+ * A bundle of leases for a single source file. The buddy copies the file once
+ * to local temp, then processes all leases against the local copy.
+ */
+data class LeaseBundle(
+    val transcodeId: Long,
+    val relativePath: String,
+    val fileSizeBytes: Long,
+    val leases: List<TranscodeLease>
+)
 
 data class BuddyStatusSummary(
     val activeLeases: Int,
