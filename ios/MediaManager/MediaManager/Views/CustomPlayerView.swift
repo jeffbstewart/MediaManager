@@ -48,17 +48,14 @@ struct CustomPlayerView: View {
     @State private var subtitles = SubtitleController()
     @State private var thumbnails = ThumbnailScrubber()
     @State private var scrubThumbnail: UIImage?
+    @State private var skipController = SkipSegmentController()
 
     // Controls state
     @State private var showControls = true
     @State private var hideTask: Task<Void, Never>?
-    @State private var isPlaying = false
-    @State private var currentTime: Double = 0
-    @State private var duration: Double = 0
-    @State private var isScrubbing = false
-    @State private var scrubTime: Double = 0
     @State private var timeObserver: Any?
     @State private var playbackSpeed: Float = 1.0
+    @State private var ps = PlayerState()
 
     private let speeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
@@ -102,6 +99,77 @@ struct CustomPlayerView: View {
                         }
                     }
 
+                    // Skip Intro button
+                    if skipController.showSkipIntro {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button {
+                                    skipController.skipIntro(player: player)
+                                } label: {
+                                    Text("Skip Intro")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 12)
+                                        .background(.white.opacity(0.2))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(.white.opacity(0.6), lineWidth: 1)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .padding(.trailing, 24)
+                                .padding(.bottom, 100)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                    if skipController.showUpNext, let nextEp = currentNextEpisode ?? nextEpisode {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                VStack(spacing: 12) {
+                                    Text("Up Next")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+
+                                    Text(nextEp.episodeName)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white.opacity(0.8))
+
+                                    if skipController.upNextCountdown > 0 {
+                                        Text("Starting in \(skipController.upNextCountdown)s")
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.6))
+                                    }
+
+                                    HStack(spacing: 16) {
+                                        Button("Play Now") {
+                                            skipController.cancelUpNext()
+                                            Task { await advanceToNextEpisode(nextEp) }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+
+                                        Button("Cancel") {
+                                            skipController.cancelUpNext()
+                                        }
+                                        .foregroundStyle(.white)
+                                    }
+                                }
+                                .padding(20)
+                                .background(.black.opacity(0.8))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.trailing, 24)
+                                .padding(.bottom, 100)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
                     // Controls overlay (fades in/out)
                     if showControls {
                         controlsOverlay(player: player)
@@ -110,6 +178,15 @@ struct CustomPlayerView: View {
                 }
                 .ignoresSafeArea()
                 .statusBarHidden(true)
+                .onChange(of: skipController.upNextCountdown) { _, newValue in
+                    if newValue == 0, skipController.showUpNext {
+                        let nextEp = currentNextEpisode ?? nextEpisode
+                        skipController.cancelUpNext()
+                        if let nextEp {
+                            Task { await advanceToNextEpisode(nextEp) }
+                        }
+                    }
+                }
             } else {
                 ProgressView("Loading stream...")
             }
@@ -245,16 +322,16 @@ struct CustomPlayerView: View {
 
             // Play/Pause
             Button {
-                if isPlaying {
+                if ps.isPlaying {
                     player.pause()
                 } else {
                     player.play()
                     player.rate = playbackSpeed
                 }
-                isPlaying.toggle()
+                ps.isPlaying.toggle()
                 resetHideTimer()
             } label: {
-                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                Image(systemName: ps.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(.white)
             }
@@ -273,9 +350,11 @@ struct CustomPlayerView: View {
 
     @ViewBuilder
     private func bottomBar(player: AVPlayer) -> some View {
+        let displayTime = ps.isScrubbing ? ps.scrubTime : ps.currentTime
+
         VStack(spacing: 8) {
             // Thumbnail preview during scrubbing
-            if isScrubbing, let thumb = scrubThumbnail {
+            if ps.isScrubbing, let thumb = ps.scrubThumbnail {
                 Image(uiImage: thumb)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -289,34 +368,55 @@ struct CustomPlayerView: View {
                     .transition(.opacity)
             }
 
-            // Scrub bar
-            Slider(
-                value: Binding(
-                    get: { isScrubbing ? scrubTime : currentTime },
-                    set: { newValue in
-                        scrubTime = newValue
-                        isScrubbing = true
-                        scrubThumbnail = thumbnails.thumbnail(at: newValue)
-                        resetHideTimer()
-                    }
-                ),
-                in: 0...max(duration, 1)
-            ) { editing in
-                if !editing && isScrubbing {
-                    player.seek(to: CMTime(seconds: scrubTime, preferredTimescale: 600))
-                    isScrubbing = false
-                    scrubThumbnail = nil
+            // Custom scrub bar using GeometryReader + DragGesture
+            // (SwiftUI Slider has re-entrancy bugs with editing callbacks)
+            GeometryReader { geo in
+                let width = geo.size.width
+                let progress = ps.duration > 0 ? displayTime / ps.duration : 0
+
+                ZStack(alignment: .leading) {
+                    // Track background
+                    Capsule()
+                        .fill(.white.opacity(0.3))
+                        .frame(height: 4)
+
+                    // Progress fill
+                    Capsule()
+                        .fill(.white)
+                        .frame(width: max(0, width * progress), height: 4)
+
+                    // Thumb
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 14, height: 14)
+                        .offset(x: max(0, min(width - 14, width * progress - 7)))
                 }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let fraction = max(0, min(1, value.location.x / width))
+                            ps.scrubTime = fraction * ps.duration
+                            ps.isScrubbing = true
+                            ps.scrubThumbnail = thumbnails.thumbnail(at: ps.scrubTime)
+                            resetHideTimer()
+                        }
+                        .onEnded { _ in
+                            player.seek(to: CMTime(seconds: ps.scrubTime, preferredTimescale: 600))
+                            ps.isScrubbing = false
+                            ps.scrubThumbnail = nil
+                        }
+                )
             }
-            .tint(.white)
+            .frame(height: 20)
 
             // Time labels
             HStack {
-                Text(formatTime(isScrubbing ? scrubTime : currentTime))
+                Text(formatTime(displayTime))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.7))
                 Spacer()
-                Text("-" + formatTime(max(0, duration - (isScrubbing ? scrubTime : currentTime))))
+                Text("-" + formatTime(max(0, ps.duration - displayTime)))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.7))
             }
@@ -385,6 +485,7 @@ struct CustomPlayerView: View {
         }
         timeObserver = nil
         subtitles.stop(player: player)
+        skipController.stop(player: player)
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -409,7 +510,7 @@ struct CustomPlayerView: View {
         avPlayer.allowsExternalPlayback = true
         avPlayer.usesExternalPlaybackWhileExternalScreenIsActive = true
         self.player = avPlayer
-        isPlaying = true
+        ps.isPlaying = true
         avPlayer.play()
         startProgressReporting()
         startTimeObserver(player: avPlayer)
@@ -435,21 +536,24 @@ struct CustomPlayerView: View {
             }
         }
 
-        // Load subtitles and thumbnails in parallel
+        // Load subtitles, thumbnails, and skip segments in parallel
         async let subLoad: () = subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
         async let thumbLoad: () = thumbnails.load(transcodeId: tcId, apiClient: authManager.apiClient)
-        _ = await (subLoad, thumbLoad)
+        async let skipLoad: () = skipController.load(transcodeId: tcId, apiClient: authManager.apiClient)
+        _ = await (subLoad, thumbLoad, skipLoad)
         subtitles.startObserving(player: avPlayer)
+        skipController.startObserving(player: avPlayer)
     }
 
     private func startTimeObserver(player: AVPlayer) {
+        let state = ps
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            guard !isScrubbing else { return }
-            currentTime = time.seconds.isFinite ? time.seconds : 0
+            let t = time.seconds
+            if t.isFinite { state.currentTime = t }
             let dur = player.currentItem?.duration.seconds ?? 0
-            duration = dur.isFinite ? dur : 0
-            isPlaying = player.timeControlStatus == .playing
+            if dur.isFinite && dur > 0 { state.duration = dur }
+            state.isPlaying = player.timeControlStatus == .playing
         }
     }
 
@@ -519,6 +623,19 @@ struct CustomPlayerView: View {
 }
 
 // MARK: - AirPlay Button
+
+/// Reference-type wrapper so AVPlayer closures can read/write current state.
+/// @State on a struct creates copies in closures — this class avoids that.
+@Observable
+@MainActor
+final class PlayerState {
+    var isPlaying = false
+    var currentTime: Double = 0
+    var duration: Double = 0
+    var isScrubbing = false
+    var scrubTime: Double = 0
+    var scrubThumbnail: UIImage? = nil
+}
 
 struct AirPlayButton: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView {
