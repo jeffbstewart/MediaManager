@@ -375,6 +375,181 @@ actor GrpcClient {
         request.type = type
         return try await wishListService.searchTmdb(request, metadata: authMetadata())
     }
+    // MARK: - Admin RPCs
+
+    func adminTranscodeStatus() async throws -> MMTranscodeStatusResponse {
+        try await adminService.getTranscodeStatus(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminBuddyStatus() async throws -> MMBuddyStatusResponse {
+        try await adminService.getBuddyStatus(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminScanNas() async throws {
+        _ = try await adminService.scanNas(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminClearFailures() async throws {
+        _ = try await adminService.clearFailures(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminGetSettings() async throws -> MMSettingsResponse {
+        try await adminService.getSettings(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminUpdateSetting(key: String, value: String) async throws {
+        var request = MMUpdateSettingRequest()
+        // Map string config key to proto SettingKey enum
+        request.key = MMSettingKey.fromConfigKey(key)
+        request.value = value
+        _ = try await adminService.updateSetting(request, metadata: authMetadata())
+    }
+
+    func adminListLinkedTranscodes(page: Int32) async throws -> MMLinkedTranscodeResponse {
+        var request = MMPaginationRequest()
+        request.page = page
+        request.limit = 50
+        return try await adminService.listLinkedTranscodes(request, metadata: authMetadata())
+    }
+
+    func adminUnlinkTranscode(id: Int64) async throws {
+        var request = MMTranscodeIdRequest()
+        request.transcodeID = id
+        _ = try await adminService.unlinkTranscode(request, metadata: authMetadata())
+    }
+
+    func adminListTags() async throws -> MMAdminTagListResponse {
+        try await adminService.listTags(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminCreateTag(name: String, color: String) async throws {
+        var request = MMCreateTagRequest()
+        request.name = name
+        request.color = MMColor.with { $0.hex = color }
+        _ = try await adminService.createTag(request, metadata: authMetadata())
+    }
+
+    func adminUpdateTag(id: Int64, name: String, color: String) async throws {
+        var request = MMUpdateTagRequest()
+        request.tagID = id
+        request.name = name
+        request.color = MMColor.with { $0.hex = color }
+        _ = try await adminService.updateTag(request, metadata: authMetadata())
+    }
+
+    func adminDeleteTag(id: Int64) async throws {
+        var request = MMTagIdRequest()
+        request.tagID = id
+        _ = try await adminService.deleteTag(request, metadata: authMetadata())
+    }
+
+    func adminListDataQuality(page: Int32) async throws -> MMDataQualityResponse {
+        var request = MMDataQualityRequest()
+        request.page = page
+        request.limit = 50
+        return try await adminService.listDataQuality(request, metadata: authMetadata())
+    }
+
+    func adminReEnrich(titleId: Int64) async throws {
+        var request = MMTitleIdRequest()
+        request.titleID = titleId
+        _ = try await adminService.reEnrich(request, metadata: authMetadata())
+    }
+
+    func adminDeleteTitle(id: Int64) async throws {
+        var request = MMTitleIdRequest()
+        request.titleID = id
+        _ = try await adminService.deleteTitle(request, metadata: authMetadata())
+    }
+
+    func adminListPurchaseWishes() async throws -> MMPurchaseWishListResponse {
+        try await adminService.listPurchaseWishes(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminUpdatePurchaseWishStatus(tmdbId: Int32, status: AcquisitionStatus) async throws {
+        var request = MMUpdatePurchaseWishStatusRequest()
+        request.tmdbID = tmdbId
+        request.status = status.protoValue
+        _ = try await adminService.updatePurchaseWishStatus(request, metadata: authMetadata())
+    }
+
+    func adminListUsers() async throws -> MMUserListResponse {
+        try await adminService.listUsers(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminCreateUser(username: String, password: String, displayName: String?) async throws {
+        var request = MMCreateUserRequest()
+        request.username = username
+        request.password = password
+        if let dn = displayName { request.displayName = dn }
+        request.forceChange = true
+        _ = try await adminService.createUser(request, metadata: authMetadata())
+    }
+
+    func adminUpdateUserRole(id: Int64, accessLevel: Int32) async throws {
+        var request = MMUpdateUserRoleRequest()
+        request.userID = id
+        request.accessLevel = accessLevel == 2 ? .admin : .viewer
+        _ = try await adminService.updateUserRole(request, metadata: authMetadata())
+    }
+
+    func adminUpdateUserRatingCeiling(id: Int64, ceiling: Int32?) async throws {
+        var request = MMUpdateUserRatingCeilingRequest()
+        request.userID = id
+        if let c = ceiling {
+            request.ceiling = MMRatingLevel(rawValue: Int(c)) ?? .unknown
+        }
+        _ = try await adminService.updateUserRatingCeiling(request, metadata: authMetadata())
+    }
+
+    func adminUnlockUser(id: Int64) async throws {
+        var request = MMUserIdRequest()
+        request.userID = id
+        _ = try await adminService.unlockUser(request, metadata: authMetadata())
+    }
+
+    func adminForcePasswordChange(id: Int64) async throws {
+        var request = MMUserIdRequest()
+        request.userID = id
+        _ = try await adminService.forcePasswordChange(request, metadata: authMetadata())
+    }
+
+    func adminResetPassword(id: Int64, newPassword: String) async throws {
+        var request = MMResetPasswordRequest()
+        request.userID = id
+        request.newPassword = newPassword
+        request.forceChange = true
+        _ = try await adminService.resetPassword(request, metadata: authMetadata())
+    }
+
+    func adminDeleteUser(id: Int64) async throws {
+        var request = MMUserIdRequest()
+        request.userID = id
+        _ = try await adminService.deleteUser(request, metadata: authMetadata())
+    }
+
+    func adminListUnmatchedFiles() async throws -> MMUnmatchedResponse {
+        try await adminService.listUnmatchedFiles(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminAcceptUnmatched(id: Int64) async throws {
+        var request = MMUnmatchedIdRequest()
+        request.unmatchedID = id
+        _ = try await adminService.acceptUnmatched(request, metadata: authMetadata())
+    }
+
+    func adminIgnoreUnmatched(id: Int64) async throws {
+        var request = MMUnmatchedIdRequest()
+        request.unmatchedID = id
+        _ = try await adminService.ignoreUnmatched(request, metadata: authMetadata())
+    }
+
+    func adminLinkUnmatched(id: Int64, titleId: Int64) async throws {
+        var request = MMLinkUnmatchedRequest()
+        request.unmatchedID = id
+        request.titleID = titleId
+        _ = try await adminService.linkUnmatched(request, metadata: authMetadata())
+    }
 }
 
 // MARK: - Error type

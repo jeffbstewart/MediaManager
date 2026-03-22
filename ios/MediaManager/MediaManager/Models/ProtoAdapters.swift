@@ -645,4 +645,378 @@ struct ApiTvChannelListResponse: Sendable {
     var channels: [ApiTvChannel] { proto.channels.map { ApiTvChannel(proto: $0) } }
 }
 
+// MARK: - Profile / Sessions
+
+struct ProfileResponse: Sendable {
+    let proto: MMProfileResponse
+
+    var username: String? { proto.username.isEmpty ? nil : proto.username }
+    var displayName: String? { proto.hasDisplayName ? proto.displayName : nil }
+    var isAdmin: Bool? { proto.isAdmin }
+    var ratingCeiling: Int? { proto.hasRatingCeiling ? Int(proto.ratingCeiling.rawValue) : nil }
+    var ratingCeilingLabel: String? { proto.hasRatingCeilingLabel ? proto.ratingCeilingLabel : nil }
+    var liveTvMinQuality: Int? { Int(proto.liveTvMinQuality.rawValue) }
+    var subtitlesEnabled: Bool? { proto.subtitlesEnabled }
+    var mustChangePassword: Bool? { proto.mustChangePassword }
+    var roleDisplay: String { (proto.isAdmin) ? "Admin" : "Viewer" }
+}
+
+struct ApiSession: Identifiable, Sendable {
+    let proto: MMSessionInfo
+
+    var id: String { "\(proto.id)-\(proto.type.rawValue)" }
+    var sessionId: SessionID { SessionID(proto: proto.id) }
+    var type: String {
+        switch proto.type {
+        case .browser: "browser"
+        case .app: "app"
+        case .device: "device"
+        default: "unknown"
+        }
+    }
+    var deviceName: String? { proto.hasDeviceName ? proto.deviceName : nil }
+    var createdAt: String? { proto.hasCreatedAt ? proto.createdAt.isoString : nil }
+    var lastUsedAt: String? { proto.hasLastUsedAt ? proto.lastUsedAt.isoString : nil }
+    var expiresAt: String? { proto.hasExpiresAt ? proto.expiresAt.isoString : nil }
+    var isCurrent: Bool { proto.isCurrent }
+}
+
+struct ApiSessionListResponse: Sendable {
+    let proto: MMSessionListResponse
+
+    var sessions: [ApiSession] { proto.sessions.map { ApiSession(proto: $0) } }
+}
+
+// MARK: - Admin Models
+
+struct TranscodeStatusResponse: Sendable {
+    let proto: MMTranscodeStatusResponse
+
+    var pending: PendingWork { PendingWork(proto: proto) }
+    var activeLeases: [TranscodeLease] { proto.activeLeases.map { TranscodeLease(proto: $0) } }
+}
+
+struct PendingWork: Sendable {
+    let transcodes: Int
+    let mobileTranscodes: Int?
+    let thumbnails: Int
+    let subtitles: Int
+    let chapters: Int
+    let total: Int
+
+    init(proto: MMTranscodeStatusResponse) {
+        transcodes = Int(proto.pendingTranscode)
+        mobileTranscodes = Int(proto.pendingLowStorage)
+        thumbnails = Int(proto.pendingThumbnails)
+        subtitles = Int(proto.pendingSubtitles)
+        chapters = Int(proto.pendingChapters)
+        total = transcodes + (mobileTranscodes ?? 0) + thumbnails + subtitles + chapters
+    }
+}
+
+struct TranscodeLease: Identifiable, Sendable {
+    let proto: MMActiveLease
+
+    var id: LeaseID { LeaseID(proto: proto.leaseID) }
+    var leaseId: LeaseID { id }
+    var buddyName: String? { proto.buddyName.isEmpty ? nil : proto.buddyName }
+    var relativePath: String? { proto.relativePath.isEmpty ? nil : proto.relativePath }
+    var leaseType: String? { proto.leaseType.displayString }
+    var status: String? { proto.status.displayString }
+    var progressPercent: Int? { Int(proto.progressPercent) }
+    var encoder: String? { proto.hasEncoder ? proto.encoder : nil }
+    var claimedAt: String? { proto.hasClaimedAt ? proto.claimedAt.isoString : nil }
+}
+
+struct BuddyStatusResponse: Sendable {
+    let proto: MMBuddyStatusResponse
+
+    var buddies: [BuddyInfo] { proto.buddies.map { BuddyInfo(proto: $0) } }
+    var recentLeases: [RecentLease] { proto.recentLeases.map { RecentLease(proto: $0) } }
+}
+
+struct BuddyInfo: Identifiable, Sendable {
+    let proto: MMBuddyInfo
+
+    var id: String { proto.name }
+    var name: String? { proto.name.isEmpty ? nil : proto.name }
+    var activeLeases: Int { Int(proto.activeLeases) }
+    var currentWork: [BuddyWork] { [] } // Not in proto; kept for view compat
+}
+
+struct BuddyWork: Identifiable, Sendable {
+    var id: Int { 0 }
+    var leaseId: LeaseID { LeaseID(rawValue: 0) }
+    var relativePath: String? { nil }
+    var leaseType: String? { nil }
+    var progressPercent: Int? { nil }
+    var encoder: String? { nil }
+}
+
+struct RecentLease: Identifiable, Sendable {
+    let proto: MMRecentLease
+
+    var id: LeaseID { LeaseID(proto: proto.leaseID) }
+    var leaseId: LeaseID { id }
+    var buddyName: String? { proto.buddyName.isEmpty ? nil : proto.buddyName }
+    var relativePath: String? { proto.relativePath.isEmpty ? nil : proto.relativePath }
+    var leaseType: String? { proto.leaseType.displayString }
+    var status: String? { proto.status.displayString }
+    var encoder: String? { nil }
+    var completedAt: String? { proto.hasCompletedAt ? proto.completedAt.isoString : nil }
+    var errorMessage: String? { nil }
+}
+
+struct AdminUser: Identifiable, Sendable {
+    let proto: MMUserInfo
+
+    var id: UserID { UserID(proto: proto.id) }
+    var username: String { proto.username }
+    var displayName: String? { proto.hasDisplayName ? proto.displayName : nil }
+    var accessLevel: Int { Int(proto.accessLevel.rawValue) }
+    var isAdmin: Bool { proto.accessLevel == .admin }
+    var locked: Bool { proto.locked }
+    var mustChangePassword: Bool { proto.mustChangePassword }
+    var ratingCeiling: Int? { proto.hasRatingCeiling ? Int(proto.ratingCeiling.rawValue) : nil }
+    var ratingCeilingLabel: String? { nil }
+    var createdAt: String? { nil }
+}
+
+struct AdminUserListResponse: Sendable {
+    let proto: MMUserListResponse
+
+    var users: [AdminUser] { proto.users.map { AdminUser(proto: $0) } }
+}
+
+struct AdminPurchaseWish: Identifiable, Sendable {
+    let proto: MMPurchaseWish
+
+    var id: String { "\(proto.tmdbID)-\(proto.mediaType.rawValue)" }
+    var tmdbId: TmdbID { TmdbID(proto: Int64(proto.tmdbID)) }
+    var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
+    var title: String { proto.title }
+    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
+    var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
+    var seasonNumber: Int? { nil }
+    var voteCount: Int { Int(proto.voteCount) }
+    var voters: [String] { proto.voters }
+    var acquisitionStatus: String? { proto.acquisitionStatus.displayString }
+}
+
+struct AdminPurchaseWishListResponse: Sendable {
+    let proto: MMPurchaseWishListResponse
+
+    var wishes: [AdminPurchaseWish] { proto.wishes.map { AdminPurchaseWish(proto: $0) } }
+}
+
+struct AdminDataQualityTitle: Identifiable, Sendable {
+    let proto: MMDataQualityItem
+
+    var id: TitleID { TitleID(proto: proto.titleID) }
+    var name: String { proto.name }
+    var mediaType: MediaType? { proto.mediaType.appMediaType }
+    var enrichmentStatus: String? { proto.enrichmentStatus.displayString }
+    var tmdbId: TmdbID? { nil }
+    var releaseYear: Int? { nil }
+    var contentRating: String? { nil }
+    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
+    var hidden: Bool { false }
+    var createdAt: String? { nil }
+}
+
+struct AdminDataQualityResponse: Sendable {
+    let proto: MMDataQualityResponse
+
+    var titles: [AdminDataQualityTitle] { proto.items.map { AdminDataQualityTitle(proto: $0) } }
+    var total: Int { Int(proto.pagination.total) }
+    var page: Int { Int(proto.pagination.page) }
+    var limit: Int { Int(proto.pagination.limit) }
+    var totalPages: Int { Int(proto.pagination.totalPages) }
+}
+
+struct AdminSettingsResponse: Sendable {
+    let proto: MMSettingsResponse
+
+    var settings: [String: String?] {
+        var dict: [String: String?] = [:]
+        for setting in proto.settings {
+            if let key = setting.key.configKey {
+                dict[key] = setting.value.isEmpty ? nil : setting.value
+            }
+        }
+        return dict
+    }
+    var buddyKeys: [AdminBuddyKey] { [] } // Not in gRPC proto yet
+}
+
+struct AdminBuddyKey: Identifiable, Sendable {
+    var id: BuddyKeyID
+    var name: String
+    var createdAt: String?
+}
+
+struct AdminLinkedTranscode: Identifiable, Sendable {
+    let proto: MMLinkedTranscodeItem
+
+    var id: TranscodeID { TranscodeID(proto: proto.transcodeID) }
+    var transcodeId: TranscodeID { id }
+    var titleId: TitleID { TitleID(proto: proto.titleID) }
+    var titleName: String { proto.titleName }
+    var mediaType: MediaType? { nil }
+    var posterUrl: String? { nil }
+    var filePath: String? { proto.hasFilePath ? proto.filePath : nil }
+    var mediaFormat: String? { proto.mediaFormat.displayString }
+    var seasonNumber: Int? { nil }
+    var episodeNumber: Int? { nil }
+    var episodeName: String? { nil }
+    var retranscodeRequested: Bool? { nil }
+}
+
+struct AdminLinkedTranscodeResponse: Sendable {
+    let proto: MMLinkedTranscodeResponse
+
+    var transcodes: [AdminLinkedTranscode] { proto.transcodes.map { AdminLinkedTranscode(proto: $0) } }
+    var total: Int { Int(proto.pagination.total) }
+    var page: Int { Int(proto.pagination.page) }
+    var limit: Int { Int(proto.pagination.limit) }
+    var totalPages: Int { Int(proto.pagination.totalPages) }
+}
+
+struct AdminUnmatchedFile: Identifiable, Sendable {
+    let proto: MMUnmatchedFile
+
+    var id: UnmatchedFileID { UnmatchedFileID(proto: proto.id) }
+    var fileName: String { String(proto.filePath.split(separator: "/").last ?? "") }
+    var directory: String? { nil }
+    var mediaType: MediaType? { nil }
+    var parsedTitle: String? { nil }
+    var parsedYear: Int? { nil }
+    var parsedSeason: Int? { nil }
+    var parsedEpisode: Int? { nil }
+    var suggestions: [AdminMatchSuggestion] {
+        if proto.hasSuggestedTitle {
+            [AdminMatchSuggestion(titleId: TitleID(proto: proto.suggestedTitleID),
+                                  titleName: proto.suggestedTitle,
+                                  score: proto.matchScore)]
+        } else { [] }
+    }
+}
+
+struct AdminMatchSuggestion: Identifiable, Sendable {
+    var id: TitleID { titleId }
+    let titleId: TitleID
+    let titleName: String
+    let score: Double
+}
+
+struct AdminUnmatchedResponse: Sendable {
+    let proto: MMUnmatchedResponse
+
+    var unmatched: [AdminUnmatchedFile] { proto.unmatched.map { AdminUnmatchedFile(proto: $0) } }
+    var total: Int { Int(proto.total) }
+}
+
+// MARK: - Admin Enum Display Extensions
+
+extension MMLeaseStatus {
+    var displayString: String? {
+        switch self {
+        case .claimed: "CLAIMED"
+        case .inProgress: "IN_PROGRESS"
+        case .completed: "COMPLETED"
+        case .failed: "FAILED"
+        case .expired: "EXPIRED"
+        default: nil
+        }
+    }
+}
+
+extension MMLeaseType {
+    var displayString: String? {
+        switch self {
+        case .transcode: "TRANSCODE"
+        case .thumbnails: "THUMBNAILS"
+        case .subtitles: "SUBTITLES"
+        case .chapters: "CHAPTERS"
+        case .lowStorageTranscode: "MOBILE_TRANSCODE"
+        default: nil
+        }
+    }
+}
+
+extension MMEnrichmentStatus {
+    var displayString: String? {
+        switch self {
+        case .pending: "PENDING"
+        case .enriched: "ENRICHED"
+        case .skipped: "SKIPPED"
+        case .failed: "FAILED"
+        case .reassignmentRequested: "REASSIGNMENT_REQUESTED"
+        case .abandoned: "ABANDONED"
+        default: nil
+        }
+    }
+}
+
+extension MMSettingKey {
+    var configKey: String? {
+        switch self {
+        case .nasRootPath: "nas_root_path"
+        case .ffmpegPath: "ffmpeg_path"
+        case .go2RtcPath: "go2rtc_path"
+        case .rokuBaseURL: "roku_base_url"
+        case .go2RtcApiPort: "go2rtc_api_port"
+        case .personalVideoEnabled: "personal_video_enabled"
+        case .forMobileEnabled: "for_mobile_enabled"
+        case .keepaEnabled: "keepa_enabled"
+        case .personalVideoNasDir: "personal_video_nas_dir"
+        case .buddyLeaseDurationMinutes: "buddy_lease_duration_minutes"
+        case .keepaApiKey: "keepa_api_key"
+        case .keepaTokensPerMinute: "keepa_tokens_per_minute"
+        case .liveTvMinRating: "live_tv_min_rating"
+        case .liveTvMaxStreams: "live_tv_max_streams"
+        case .liveTvIdleTimeoutSeconds: "live_tv_idle_timeout_seconds"
+        default: nil
+        }
+    }
+}
+
+// MARK: - AcquisitionStatus proto mapping
+
+extension AcquisitionStatus {
+    var protoValue: MMAcquisitionStatus {
+        switch self {
+        case .ordered: .ordered
+        case .shipped: .ordered  // no proto equivalent, map to ordered
+        case .arrived: .owned
+        case .ripped: .owned
+        case .returned: .rejected
+        case .none: .unknown
+        }
+    }
+}
+
+extension MMSettingKey {
+    static func fromConfigKey(_ key: String) -> MMSettingKey {
+        switch key {
+        case "nas_root_path": .nasRootPath
+        case "ffmpeg_path": .ffmpegPath
+        case "go2rtc_path": .go2RtcPath
+        case "roku_base_url": .rokuBaseURL
+        case "go2rtc_api_port": .go2RtcApiPort
+        case "personal_video_enabled": .personalVideoEnabled
+        case "for_mobile_enabled": .forMobileEnabled
+        case "keepa_enabled": .keepaEnabled
+        case "personal_video_nas_dir": .personalVideoNasDir
+        case "buddy_lease_duration_minutes": .buddyLeaseDurationMinutes
+        case "keepa_api_key": .keepaApiKey
+        case "keepa_tokens_per_minute": .keepaTokensPerMinute
+        case "live_tv_min_rating": .liveTvMinRating
+        case "live_tv_max_streams": .liveTvMaxStreams
+        case "live_tv_idle_timeout_seconds": .liveTvIdleTimeoutSeconds
+        default: .unknown
+        }
+    }
+}
+
 // ID wrapper proto initializers are in Types.swift

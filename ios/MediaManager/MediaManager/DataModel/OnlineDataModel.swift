@@ -8,7 +8,7 @@ final class OnlineDataModel: DataModel {
     let apiClient: APIClient
     private let authManager: AuthManager
     let downloads: DownloadManager
-    // Initialized after self is fully available (can't reference self in init)
+    private var grpcClient: GrpcClient { authManager.grpcClient }
     private var _offlineDelegate: OfflineDataModel?
     private var offlineDelegate: OfflineDataModel {
         if let d = _offlineDelegate { return d }
@@ -33,7 +33,7 @@ final class OnlineDataModel: DataModel {
         self.downloads = downloadManager
     }
 
-    // MARK: - Image Data
+    // MARK: - Image Data (stays HTTP)
 
     func imageData(path: String) async -> Data? {
         try? await apiClient.getRaw(path)
@@ -43,107 +43,110 @@ final class OnlineDataModel: DataModel {
 
     func homeFeed() async throws -> ApiHomeFeed {
         if !isOnline { return try await offlineDelegate.homeFeed() }
-        return try await apiClient.get("catalog/home")
+        let response = try await grpcClient.homeFeed()
+        return ApiHomeFeed(proto: response)
     }
 
     func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage {
         if !isOnline { return try await offlineDelegate.titles(type: type, page: page, sort: sort) }
-        var query = "catalog/titles?page=\(page)&limit=25"
-        if let sort { query += "&sort=\(sort)" }
-        query += "&type=\(type.rawValue)"
-        return try await apiClient.get(query)
+        let protoType: MMMediaType = switch type {
+        case .movie: .movie
+        case .tv: .tv
+        case .personal: .personal
+        }
+        let response = try await grpcClient.listTitles(
+            type: protoType, page: Int32(page), limit: 25, sort: sort, query: nil, playableOnly: false)
+        return ApiTitlePage(proto: response)
     }
 
     func titleDetail(id: TitleID) async throws -> ApiTitleDetail {
         if !isOnline { return try await offlineDelegate.titleDetail(id: id) }
-        return try await apiClient.get("catalog/titles/\(id.rawValue)")
+        let response = try await grpcClient.getTitleDetail(id: id.protoValue)
+        return ApiTitleDetail(proto: response)
     }
 
     func seasons(titleId: TitleID) async throws -> [ApiSeason] {
         if !isOnline { return try await offlineDelegate.seasons(titleId: titleId) }
-        return try await apiClient.get("catalog/titles/\(titleId.rawValue)/seasons")
+        let response = try await grpcClient.listSeasons(titleId: titleId.protoValue)
+        return response.seasons.map { ApiSeason(proto: $0) }
     }
 
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode] {
         if !isOnline { return try await offlineDelegate.episodes(titleId: titleId, season: season) }
-        return try await apiClient.get("catalog/titles/\(titleId.rawValue)/seasons/\(season)/episodes")
+        let response = try await grpcClient.listEpisodes(titleId: titleId.protoValue, season: Int32(season))
+        return response.episodes.map { ApiEpisode(proto: $0) }
     }
 
     func search(query: String) async throws -> ApiSearchResponse {
         if !isOnline { throw DataModelError.offline }
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        return try await apiClient.get("catalog/search?q=\(encoded)")
+        let response = try await grpcClient.search(query: query)
+        return ApiSearchResponse(proto: response)
     }
 
     func actorDetail(id: TmdbPersonID) async throws -> ApiActorDetail {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/actors/\(id.rawValue)")
+        let response = try await grpcClient.getActorDetail(personId: id.protoValue)
+        return ApiActorDetail(proto: response)
     }
 
     func collections() async throws -> ApiCollectionListResponse {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/collections")
+        let response = try await grpcClient.listCollections()
+        return ApiCollectionListResponse(proto: response)
     }
 
     func collectionDetail(id: TmdbCollectionID) async throws -> ApiCollectionDetail {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/collections/\(id.rawValue)")
+        let response = try await grpcClient.getCollectionDetail(id: id.protoValue)
+        return ApiCollectionDetail(proto: response)
     }
 
     func tags() async throws -> ApiTagListResponse {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/tags")
+        let response = try await grpcClient.listTags()
+        return ApiTagListResponse(proto: response)
     }
 
     func tagDetail(id: TagID) async throws -> ApiTagDetail {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/tags/\(id.rawValue)")
+        let response = try await grpcClient.getTagDetail(id: id.protoValue)
+        return ApiTagDetail(proto: response)
     }
 
     func genreDetail(id: GenreID) async throws -> ApiGenreDetail {
         if !isOnline { throw DataModelError.offline }
-        return try await apiClient.get("catalog/genres/\(id.rawValue)")
+        let response = try await grpcClient.getGenreDetail(id: id.protoValue)
+        return ApiGenreDetail(proto: response)
     }
 
     func setFavorite(titleId: TitleID, favorite: Bool) async throws {
         if !isOnline { throw DataModelError.offline }
-        if favorite {
-            try await apiClient.put("catalog/titles/\(titleId.rawValue)/favorite")
-        } else {
-            try await apiClient.delete("catalog/titles/\(titleId.rawValue)/favorite")
-        }
+        try await grpcClient.setFavorite(titleId: titleId.protoValue, value: favorite)
     }
 
     func setHidden(titleId: TitleID, hidden: Bool) async throws {
         if !isOnline { throw DataModelError.offline }
-        if hidden {
-            try await apiClient.put("catalog/titles/\(titleId.rawValue)/hidden")
-        } else {
-            try await apiClient.delete("catalog/titles/\(titleId.rawValue)/hidden")
-        }
+        try await grpcClient.setHidden(titleId: titleId.protoValue, value: hidden)
     }
 
     func requestRetranscode(titleId: TitleID) async throws {
         if !isOnline { throw DataModelError.offline }
-        try await apiClient.post("catalog/titles/\(titleId.rawValue)/request-retranscode", body: [:])
+        try await grpcClient.requestRetranscode(titleId: titleId.protoValue)
     }
 
     func requestMobileTranscode(titleId: TitleID) async throws {
         if !isOnline { throw DataModelError.offline }
-        try await apiClient.post("catalog/titles/\(titleId.rawValue)/request-mobile-transcode", body: [:])
+        try await grpcClient.requestLowStorageTranscode(titleId: titleId.protoValue)
     }
 
     func dismissContinueWatching(titleId: TitleID) async throws {
         if !isOnline { throw DataModelError.offline }
-        try await apiClient.delete("catalog/home/continue-watching/\(titleId.rawValue)")
+        try await grpcClient.dismissContinueWatching(titleId: titleId.protoValue)
     }
 
     func dismissMissingSeason(titleId: TitleID, tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int) async throws {
         if !isOnline { throw DataModelError.offline }
-        try await apiClient.post("catalog/home/dismiss-missing-season", body: [
-            "title_id": titleId.rawValue,
-            "season_number": seasonNumber
-        ])
+        try await grpcClient.dismissMissingSeason(titleId: titleId.protoValue, seasonNumber: Int32(seasonNumber))
     }
 
     // MARK: - PlaybackDataModel
@@ -154,13 +157,17 @@ final class OnlineDataModel: DataModel {
             return AVURLAsset(url: localURL)
         }
         if !isOnline { return nil }
+        // Video streaming stays HTTP (Range requests, HLS)
         guard let (url, headers) = await apiClient.streamURL(for: transcodeId.rawValue) else { return nil }
         return AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
     }
 
     func playbackProgress(transcodeId: TranscodeID) async -> ApiPlaybackProgress? {
         if !isOnline { return nil }
-        return try? await apiClient.get("playback/progress/\(transcodeId.rawValue)")
+        guard let response = try? await grpcClient.getProgress(transcodeId: transcodeId.protoValue) else {
+            return nil
+        }
+        return ApiPlaybackProgress(proto: response)
     }
 
     func reportProgress(transcodeId: TranscodeID, position: Double, duration: Double?) async {
@@ -168,227 +175,236 @@ final class OnlineDataModel: DataModel {
             downloads.queueProgressUpdate(transcodeId: transcodeId, position: position, duration: duration)
             return
         }
-        var body: [String: Any] = ["position": position]
-        if let duration { body["duration"] = duration }
-        try? await apiClient.post("playback/progress/\(transcodeId.rawValue)", body: body)
+        try? await grpcClient.reportProgress(transcodeId: transcodeId.protoValue, position: position, duration: duration)
     }
 
     // MARK: - WishListDataModel
 
     func wishList() async throws -> ApiWishListResponse {
-        try await apiClient.get("wishlist")
+        let response = try await grpcClient.wishList()
+        return ApiWishListResponse(proto: response)
     }
 
     func transcodeWishList() async throws -> ApiTranscodeWishListResponse {
-        try await apiClient.get("wishlist/transcodes")
+        let response = try await grpcClient.transcodeWishList()
+        return ApiTranscodeWishListResponse(proto: response)
     }
 
     func addWish(tmdbId: TmdbID, mediaType: MediaType, title: String, year: Int?,
                  posterPath: String?, seasonNumber: Int?) async throws {
-        var body: [String: Any] = [
-            "tmdb_id": tmdbId.rawValue,
-            "media_type": mediaType.rawValue,
-            "title": title
-        ]
-        if let year { body["release_year"] = year }
-        if let posterPath { body["poster_path"] = posterPath }
-        if let seasonNumber { body["season_number"] = seasonNumber }
-        try await apiClient.post("wishlist", body: body)
+        let protoType: MMMediaType = switch mediaType {
+        case .movie: .movie
+        case .tv: .tv
+        case .personal: .personal
+        }
+        _ = try await grpcClient.addWish(
+            tmdbId: tmdbId.protoValue,
+            mediaType: protoType,
+            title: title,
+            posterPath: posterPath,
+            releaseYear: year.map { Int32($0) },
+            seasonNumber: seasonNumber.map { Int32($0) })
     }
 
     func deleteWish(id: WishID) async throws {
-        try await apiClient.delete("wishlist/\(id.rawValue)")
+        try await grpcClient.deleteWish(id: id.protoValue)
     }
 
     func voteOnWish(id: WishID, vote: Bool) async throws {
-        if vote {
-            try await apiClient.post("wishlist/\(id.rawValue)/vote", body: [:])
-        } else {
-            try await apiClient.delete("wishlist/\(id.rawValue)/vote")
-        }
+        try await grpcClient.voteOnWish(id: id.protoValue, vote: vote)
     }
 
     func dismissWish(id: WishID) async throws {
-        try await apiClient.post("wishlist/\(id.rawValue)/dismiss", body: [:])
+        try await grpcClient.dismissWish(id: id.protoValue)
     }
 
     func deleteTranscodeWish(titleId: TitleID) async throws {
-        try await apiClient.delete("wishlist/transcodes/\(titleId.rawValue)")
+        try await grpcClient.deleteTranscodeWish(titleId: titleId.protoValue)
     }
 
     func searchTmdb(query: String) async throws -> TmdbSearchResponse {
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        return try await apiClient.get("tmdb/search?q=\(encoded)")
+        let response = try await grpcClient.searchTmdb(query: query, type: .unknown)
+        return TmdbSearchResponse(proto: response)
     }
 
     // MARK: - ProfileDataModel
 
     func profile() async throws -> ProfileResponse {
-        try await apiClient.get("profile")
+        let response = try await grpcClient.getProfile()
+        return ProfileResponse(proto: response)
     }
 
     func updateTvQuality(_ quality: Int) async throws {
-        try await apiClient.put("profile/tv-quality", body: ["min_quality": quality])
+        let protoQuality: MMQuality = switch quality {
+        case 1: .sd
+        case 2: .fhd
+        case 3: .uhd
+        default: .unknown
+        }
+        try await grpcClient.updateTvQuality(protoQuality)
     }
 
     func changePassword(current: String, new: String) async throws {
-        try await apiClient.post("auth/change-password", body: [
-            "current_password": current,
-            "new_password": new
-        ])
+        _ = try await grpcClient.changePassword(current: current, new: new)
     }
 
     func sessions() async throws -> ApiSessionListResponse {
-        try await apiClient.get("sessions")
+        let response = try await grpcClient.listSessions()
+        return ApiSessionListResponse(proto: response)
     }
 
     func deleteSession(id: SessionID, type: SessionType) async throws {
-        try await apiClient.delete("sessions/\(id.rawValue)?type=\(type.rawValue)")
+        let protoType: MMSessionType = switch type {
+        case .access: .browser
+        case .refresh: .app
+        }
+        try await grpcClient.deleteSession(id: id.protoValue, type: protoType)
     }
 
     func deleteOtherSessions() async throws {
-        try await apiClient.delete("sessions?scope=others")
+        try await grpcClient.deleteOtherSessions()
     }
 
     // MARK: - LiveDataModel
 
     func cameras() async throws -> ApiCameraListResponse {
-        try await apiClient.get("live/cameras")
+        let response = try await grpcClient.listCameras()
+        return ApiCameraListResponse(proto: response)
     }
 
     func tvChannels() async throws -> ApiTvChannelListResponse {
-        try await apiClient.get("live/tv/channels")
+        let response = try await grpcClient.listTvChannels()
+        return ApiTvChannelListResponse(proto: response)
     }
 
     func warmUpStream(path: String) async throws {
-        try await apiClient.warmUpStream(path)
+        try await grpcClient.warmUpStream(path: path)
     }
 
     // MARK: - AdminDataModel
 
     func transcodeStatus() async throws -> TranscodeStatusResponse {
-        try await apiClient.get("admin/transcode-status")
+        let response = try await grpcClient.adminTranscodeStatus()
+        return TranscodeStatusResponse(proto: response)
     }
 
     func buddyStatus() async throws -> BuddyStatusResponse {
-        try await apiClient.get("admin/buddy-status")
+        let response = try await grpcClient.adminBuddyStatus()
+        return BuddyStatusResponse(proto: response)
     }
 
     func scanNas() async throws {
-        try await apiClient.post("admin/scan-nas", body: [:])
+        try await grpcClient.adminScanNas()
     }
 
     func clearFailures() async throws {
-        try await apiClient.post("admin/clear-failures", body: [:])
+        try await grpcClient.adminClearFailures()
     }
 
     func adminSettings() async throws -> AdminSettingsResponse {
-        try await apiClient.get("admin/settings")
+        let response = try await grpcClient.adminGetSettings()
+        return AdminSettingsResponse(proto: response)
     }
 
     func updateSetting(key: String, value: String?) async throws {
-        try await apiClient.put("admin/settings", body: [key: value ?? ""])
+        try await grpcClient.adminUpdateSetting(key: key, value: value ?? "")
     }
 
     func linkedTranscodes(page: Int) async throws -> AdminLinkedTranscodeResponse {
-        try await apiClient.get("admin/transcodes/linked?page=\(page)&limit=50")
+        let response = try await grpcClient.adminListLinkedTranscodes(page: Int32(page))
+        return AdminLinkedTranscodeResponse(proto: response)
     }
 
     func unlinkTranscode(id: TranscodeID) async throws {
-        try await apiClient.post("admin/transcodes/\(id.rawValue)/unlink", body: [:])
+        try await grpcClient.adminUnlinkTranscode(id: id.protoValue)
     }
 
     func adminTags() async throws -> ApiTagListResponse {
-        try await apiClient.get("admin/tags")
+        let response = try await grpcClient.adminListTags()
+        return ApiTagListResponse(proto: response)
     }
 
     func createTag(name: String, color: String) async throws {
-        try await apiClient.post("admin/tags", body: ["name": name, "color": color])
+        try await grpcClient.adminCreateTag(name: name, color: color)
     }
 
     func updateTag(id: TagID, name: String, color: String) async throws {
-        try await apiClient.put("admin/tags/\(id.rawValue)", body: ["name": name, "color": color])
+        try await grpcClient.adminUpdateTag(id: id.protoValue, name: name, color: color)
     }
 
     func deleteTag(id: TagID) async throws {
-        try await apiClient.delete("admin/tags/\(id.rawValue)")
+        try await grpcClient.adminDeleteTag(id: id.protoValue)
     }
 
     func dataQuality(page: Int) async throws -> AdminDataQualityResponse {
-        try await apiClient.get("admin/data-quality?page=\(page)&limit=50")
+        let response = try await grpcClient.adminListDataQuality(page: Int32(page))
+        return AdminDataQualityResponse(proto: response)
     }
 
     func reEnrich(titleId: TitleID) async throws {
-        try await apiClient.post("admin/titles/\(titleId.rawValue)/re-enrich", body: [:])
+        try await grpcClient.adminReEnrich(titleId: titleId.protoValue)
     }
 
     func deleteTitle(id: TitleID) async throws {
-        try await apiClient.delete("admin/titles/\(id.rawValue)")
+        try await grpcClient.adminDeleteTitle(id: id.protoValue)
     }
 
     func purchaseWishes() async throws -> AdminPurchaseWishListResponse {
-        try await apiClient.get("admin/purchase-wishes")
+        let response = try await grpcClient.adminListPurchaseWishes()
+        return AdminPurchaseWishListResponse(proto: response)
     }
 
     func updatePurchaseWishStatus(tmdbId: TmdbID, status: AcquisitionStatus) async throws {
-        try await apiClient.put("admin/purchase-wishes/\(tmdbId.rawValue)/status", body: ["status": status.rawValue])
+        try await grpcClient.adminUpdatePurchaseWishStatus(tmdbId: tmdbId.protoValue, status: status)
     }
 
     func adminUsers() async throws -> AdminUserListResponse {
-        try await apiClient.get("admin/users")
+        let response = try await grpcClient.adminListUsers()
+        return AdminUserListResponse(proto: response)
     }
 
     func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws {
-        var body: [String: Any] = [
-            "username": username,
-            "password": password,
-            "force_change": true
-        ]
-        if let displayName { body["display_name"] = displayName }
-        try await apiClient.post("admin/users", body: body)
+        try await grpcClient.adminCreateUser(username: username, password: password, displayName: displayName)
     }
 
     func updateUserRole(id: UserID, accessLevel: Int) async throws {
-        try await apiClient.put("admin/users/\(id.rawValue)/role", body: ["access_level": accessLevel])
+        try await grpcClient.adminUpdateUserRole(id: id.protoValue, accessLevel: Int32(accessLevel))
     }
 
     func updateUserRatingCeiling(id: UserID, ceiling: Int?) async throws {
-        let body: [String: Any] = ceiling != nil ? ["ceiling": ceiling!] : ["ceiling": NSNull()]
-        try await apiClient.put("admin/users/\(id.rawValue)/rating-ceiling", body: body)
+        try await grpcClient.adminUpdateUserRatingCeiling(id: id.protoValue, ceiling: ceiling.map { Int32($0) })
     }
 
     func unlockUser(id: UserID) async throws {
-        try await apiClient.post("admin/users/\(id.rawValue)/unlock", body: [:])
+        try await grpcClient.adminUnlockUser(id: id.protoValue)
     }
 
     func forcePasswordChange(id: UserID) async throws {
-        try await apiClient.post("admin/users/\(id.rawValue)/force-password-change", body: [:])
+        try await grpcClient.adminForcePasswordChange(id: id.protoValue)
     }
 
     func resetPassword(id: UserID, newPassword: String) async throws {
-        try await apiClient.post("admin/users/\(id.rawValue)/reset-password", body: [
-            "new_password": newPassword,
-            "force_change": true
-        ])
+        try await grpcClient.adminResetPassword(id: id.protoValue, newPassword: newPassword)
     }
 
     func deleteUser(id: UserID) async throws {
-        try await apiClient.delete("admin/users/\(id.rawValue)")
+        try await grpcClient.adminDeleteUser(id: id.protoValue)
     }
 
     func unmatchedFiles() async throws -> AdminUnmatchedResponse {
-        try await apiClient.get("admin/transcodes/unmatched")
+        let response = try await grpcClient.adminListUnmatchedFiles()
+        return AdminUnmatchedResponse(proto: response)
     }
 
     func acceptUnmatched(id: UnmatchedFileID) async throws {
-        try await apiClient.post("admin/transcodes/unmatched/\(id.rawValue)/accept", body: [:])
+        try await grpcClient.adminAcceptUnmatched(id: id.protoValue)
     }
 
     func ignoreUnmatched(id: UnmatchedFileID) async throws {
-        try await apiClient.post("admin/transcodes/unmatched/\(id.rawValue)/ignore", body: [:])
+        try await grpcClient.adminIgnoreUnmatched(id: id.protoValue)
     }
 
     func linkUnmatched(id: UnmatchedFileID, titleId: TitleID) async throws {
-        try await apiClient.post("admin/transcodes/unmatched/\(id.rawValue)/link", body: ["title_id": titleId.rawValue])
+        try await grpcClient.adminLinkUnmatched(id: id.protoValue, titleId: titleId.protoValue)
     }
 }

@@ -5,11 +5,6 @@ struct GenreRoute: Hashable {
     let name: String
 }
 
-struct ApiGenreDetail: Codable {
-    let name: String
-    let titles: [ApiTitle]
-}
-
 struct GenreDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     let route: GenreRoute

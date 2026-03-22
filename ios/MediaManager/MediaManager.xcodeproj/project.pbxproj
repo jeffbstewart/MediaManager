@@ -6,6 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C731DE882F705F5000A84CB7 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000010 /* SwiftProtobuf */; };
+		C731DE892F705F5000A84CB7 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000011 /* GRPCCore */; };
+		C731DE8A2F705F5000A84CB7 /* GRPCNIOTransportHTTP2 in Frameworks */ = {isa = PBXBuildFile; productRef = CC000012 /* GRPCNIOTransportHTTP2 */; };
+		C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000013 /* GRPCProtobuf */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BB000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -53,6 +60,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */,
+				C731DE8A2F705F5000A84CB7 /* GRPCNIOTransportHTTP2 in Frameworks */,
+				C731DE892F705F5000A84CB7 /* GRPCCore in Frameworks */,
+				C731DE882F705F5000A84CB7 /* SwiftProtobuf in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -113,6 +124,10 @@
 			);
 			name = MediaManager;
 			packageProductDependencies = (
+				CC000010 /* SwiftProtobuf */,
+				CC000011 /* GRPCCore */,
+				CC000012 /* GRPCNIOTransportHTTP2 */,
+				CC000013 /* GRPCProtobuf */,
 			);
 			productName = MediaManager;
 			productReference = AA000001 /* MediaManager.app */;
@@ -163,6 +178,12 @@
 			);
 			mainGroup = AA000030;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CC000001 /* XCRemoteSwiftPackageReference "swift-protobuf" */,
+				CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */,
+				CC000003 /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */,
+				CC000004 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA000031 /* Products */;
 			projectDirPath = "";
@@ -457,6 +478,64 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CC000001 /* XCRemoteSwiftPackageReference "swift-protobuf" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-protobuf.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.28.1;
+			};
+		};
+		CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-2.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+		CC000003 /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-nio-transport.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+		CC000004 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-protobuf.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC000010 /* SwiftProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC000001 /* XCRemoteSwiftPackageReference "swift-protobuf" */;
+			productName = SwiftProtobuf;
+		};
+		CC000011 /* GRPCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */;
+			productName = GRPCCore;
+		};
+		CC000012 /* GRPCNIOTransportHTTP2 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC000003 /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */;
+			productName = GRPCNIOTransportHTTP2;
+		};
+		CC000013 /* GRPCProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC000004 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */;
+			productName = GRPCProtobuf;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA000050 /* Project object */;
 }

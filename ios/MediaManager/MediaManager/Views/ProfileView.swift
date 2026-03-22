@@ -1,28 +1,6 @@
 import SwiftUI
 
-struct ProfileResponse: Codable {
-    let username: String?
-    let displayName: String?
-    let isAdmin: Bool?
-    let ratingCeiling: Int?
-    let ratingCeilingLabel: String?
-    let liveTvMinQuality: Int?
-    let subtitlesEnabled: Bool?
-    let mustChangePassword: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case username
-        case displayName = "display_name"
-        case isAdmin = "is_admin"
-        case ratingCeiling = "rating_ceiling"
-        case ratingCeilingLabel = "rating_ceiling_label"
-        case liveTvMinQuality = "live_tv_min_quality"
-        case subtitlesEnabled = "subtitles_enabled"
-        case mustChangePassword = "must_change_password"
-    }
-
-    var roleDisplay: String { (isAdmin ?? false) ? "Admin" : "Viewer" }
-}
+// ProfileResponse is defined in ProtoAdapters.swift
 
 struct ProfileView: View {
     @Environment(AuthManager.self) private var authManager

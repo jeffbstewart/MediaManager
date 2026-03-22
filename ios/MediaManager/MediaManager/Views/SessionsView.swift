@@ -1,29 +1,6 @@
 import SwiftUI
 
-struct ApiSession: Codable, Identifiable {
-    var id: String { "\(sessionId.rawValue)-\(type)" }
-    let sessionId: SessionID
-    let type: String
-    let deviceName: String?
-    let createdAt: String?
-    let lastUsedAt: String?
-    let expiresAt: String?
-    let isCurrent: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case sessionId = "id"
-        case deviceName = "device_name"
-        case createdAt = "created_at"
-        case lastUsedAt = "last_used_at"
-        case expiresAt = "expires_at"
-        case isCurrent = "is_current"
-    }
-}
-
-struct ApiSessionListResponse: Codable {
-    let sessions: [ApiSession]
-}
+// ApiSession and ApiSessionListResponse defined in ProtoAdapters.swift
 
 struct SessionsView: View {
     @Environment(OnlineDataModel.self) private var dataModel
