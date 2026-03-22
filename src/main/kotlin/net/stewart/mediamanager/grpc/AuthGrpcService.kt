@@ -57,7 +57,15 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
         }
 
         val rawToken = request.refreshToken.toStringUtf8()
-        when (val result = JwtService.refresh(rawToken)) {
+        // Wrap in try-catch to prevent token leakage in exception stack traces
+        val result = try {
+            JwtService.refresh(rawToken)
+        } catch (e: StatusException) {
+            throw e
+        } catch (e: Exception) {
+            throw StatusException(Status.INTERNAL.withDescription("Token refresh failed"))
+        }
+        when (result) {
             is RefreshResult.Success -> {
                 return tokenResponse {
                     accessToken = ByteString.copyFromUtf8(result.tokenPair.accessToken)
@@ -77,7 +85,11 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
 
     override suspend fun revoke(request: RevokeRequest): RevokeResponse {
         if (!request.refreshToken.isEmpty) {
-            JwtService.revoke(request.refreshToken.toStringUtf8())
+            try {
+                JwtService.revoke(request.refreshToken.toStringUtf8())
+            } catch (_: Exception) {
+                // Swallow — never reveal token validity
+            }
         }
         // Always return success to prevent token existence probing
         return revokeResponse { revoked = true }

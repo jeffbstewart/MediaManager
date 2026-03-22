@@ -760,13 +760,26 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             // Iterate all known setting keys and emit only those that have a mapping
             for (settingKey in SettingKey.entries) {
                 val configKey = settingKey.toConfigKey() ?: continue
-                val configVal = configByKey[configKey]?.config_val ?: ""
+                val rawVal = configByKey[configKey]?.config_val ?: ""
+                // Mask sensitive values — show presence but not content
+                val configVal = if (settingKey in SENSITIVE_SETTINGS && rawVal.isNotBlank()) {
+                    "••••••••"
+                } else {
+                    rawVal
+                }
                 settings.add(setting {
                     key = settingKey
                     value = configVal
                 })
             }
         }
+    }
+
+    companion object {
+        /** Settings whose values should be masked in GetSettings responses. */
+        private val SENSITIVE_SETTINGS = setOf(
+            SettingKey.SETTING_KEY_KEEPA_API_KEY
+        )
     }
 
     override suspend fun updateSetting(request: UpdateSettingRequest): Empty {

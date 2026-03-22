@@ -19,7 +19,7 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
         return downloadAvailableResponse {
             downloads.addAll(transcodes.mapNotNull { tc ->
                 val title = titles[tc.title_id] ?: return@mapNotNull null
-                if (!user.canSeeRating(title.content_rating)) return@mapNotNull null
+                if (title.hidden || !user.canSeeRating(title.content_rating)) return@mapNotNull null
                 downloadAvailableItem {
                     transcodeId = tc.id!!
                     titleId = title.id!!
@@ -46,9 +46,11 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
     }
 
     private fun buildManifest(transcodeId: Long): DownloadManifest? {
+        val user = currentUser()
         val tc = Transcode.findById(transcodeId) ?: return null
         if (!tc.for_mobile_available) return null
         val title = TitleEntity.findById(tc.title_id) ?: return null
+        if (title.hidden || !user.canSeeRating(title.content_rating)) return null
         val nasRoot = TranscoderAgent.getNasRoot() ?: return null
         val file = TranscoderAgent.getForMobilePath(nasRoot, tc.file_path ?: return null)
         if (!file.exists()) return null

@@ -5,12 +5,24 @@ import io.grpc.StatusException
 import net.stewart.mediamanager.entity.Chapter
 import net.stewart.mediamanager.entity.SkipSegment
 import net.stewart.mediamanager.entity.Transcode
+import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.service.PlaybackProgressService
 
 class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBase() {
 
+    /** Verifies the user can access the title associated with a transcode. */
+    private fun requireAccessToTranscode(transcodeId: Long) {
+        val user = currentUser()
+        val transcode = Transcode.findById(transcodeId) ?: return // no transcode = no data, safe
+        val title = TitleEntity.findById(transcode.title_id) ?: return
+        if (title.hidden || !user.canSeeRating(title.content_rating)) {
+            throw StatusException(Status.NOT_FOUND.withDescription("Transcode not found"))
+        }
+    }
+
     override suspend fun getProgress(request: TranscodeIdRequest): PlaybackProgress {
         val user = currentUser()
+        requireAccessToTranscode(request.transcodeId)
         val progress = PlaybackProgressService.getProgressForUser(user.id!!, request.transcodeId)
             ?: return playbackProgress { transcodeId = request.transcodeId }
         return progress.toProto()
@@ -18,6 +30,7 @@ class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBa
 
     override suspend fun reportProgress(request: ReportProgressRequest): Empty {
         val user = currentUser()
+        requireAccessToTranscode(request.transcodeId)
         PlaybackProgressService.recordProgressForUser(
             user.id!!,
             request.transcodeId,
@@ -29,12 +42,14 @@ class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBa
 
     override suspend fun clearProgress(request: TranscodeIdRequest): Empty {
         val user = currentUser()
+        requireAccessToTranscode(request.transcodeId)
         val progress = PlaybackProgressService.getProgressForUser(user.id!!, request.transcodeId)
         progress?.delete()
         return Empty.getDefaultInstance()
     }
 
     override suspend fun getChapters(request: TranscodeIdRequest): ChaptersResponse {
+        requireAccessToTranscode(request.transcodeId)
         val transcode = Transcode.findById(request.transcodeId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Transcode not found"))
 
