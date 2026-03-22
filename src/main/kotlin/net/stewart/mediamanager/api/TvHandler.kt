@@ -88,6 +88,8 @@ object TvHandler {
                 .maxByOrNull { formatPriority(it) }
             val progress = bestTc?.id?.let { progressByTranscode[it] }
 
+            // For mobile status, check all transcodes for this episode (not just the best playable one)
+            val anyTc = epTranscodes.firstOrNull()
             ApiEpisode(
                 episodeId = ep.id!!,
                 transcodeId = bestTc?.id,
@@ -98,7 +100,9 @@ object TvHandler {
                 playable = bestTc != null,
                 hasSubtitles = bestTc != null && hasSubtitleFile(bestTc, nasRoot),
                 resumePosition = progress?.position_seconds ?: 0.0,
-                watchedPercent = computeWatchedPercent(progress)
+                watchedPercent = computeWatchedPercent(progress),
+                forMobileAvailable = epTranscodes.any { it.for_mobile_available },
+                forMobileRequested = (anyTc?.for_mobile_requested ?: false)
             )
         }
 

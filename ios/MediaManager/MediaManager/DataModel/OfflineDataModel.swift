@@ -107,6 +107,10 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
 
+    func requestMobileTranscode(titleId: TitleID) async throws {
+        throw DataModelError.offline
+    }
+
     func dismissContinueWatching(titleId: TitleID) async throws {
         throw DataModelError.offline
     }

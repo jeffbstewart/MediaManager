@@ -169,10 +169,12 @@ object TranscodeLeaseService {
 
         if (workItems.isEmpty()) return null
 
-        // Unified sort: wished first, then popularity, then work type within title
+        // Unified sort: wished first, then mobile-requested first, then popularity, then work type within title
         val sorted = workItems.sortedWith(
             compareByDescending<WorkItem> {
                 if (it.titleId in wishedTitleIds) 1 else 0
+            }.thenByDescending {
+                if (it.leaseType == LeaseType.MOBILE_TRANSCODE && it.transcode.for_mobile_requested) 1 else 0
             }.thenByDescending {
                 titles[it.titleId]?.popularity ?: Double.MIN_VALUE
             }.thenBy {

@@ -3867,3 +3867,22 @@ Documentation:
   toggle, auto-detection, server unreachable), What Works Offline
   (feature availability table), Returning Online
 ===
+
+=== 2026-03-22 09:00 — Fix Download UX + Non-Playable Title Visibility ===
+- Added `for_mobile_requested` column to transcode table (V067 migration)
+- Added `forMobileAvailable` and `forMobileRequested` fields to ApiTranscode, ApiEpisode
+- Added `forMobileAvailable` field to ApiTitle and ApiTitleDetail
+- New endpoint: POST /api/v1/catalog/titles/{id}/request-mobile-transcode
+  - Sets for_mobile_requested=true on transcodes without ForMobile
+  - Returns 409 if already requested or available
+- TranscodeLeaseService now prioritizes for_mobile_requested titles in MOBILE_TRANSCODE queue
+- DownloadHandler.buildManifest() now returns has_subtitles, has_thumbnails, has_chapters
+- iOS: TitleDetailView download button gated on forMobileAvailable==true
+  - Shows "Request Download" button when ForMobile not available
+  - Shows "Download Requested" label (orange) after request
+- iOS: Non-playable title banner on detail page with "Request Transcode" button
+- iOS: PosterCard dims non-playable titles (50% opacity) with "Not Playable" caption
+- iOS: EpisodeRow shows per-episode download indicator (available/requested/downloaded)
+- iOS: CatalogDataModel protocol + implementations for requestMobileTranscode
+- All server tests pass, both server and iOS build successfully
+===

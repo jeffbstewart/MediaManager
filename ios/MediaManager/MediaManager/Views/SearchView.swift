@@ -35,7 +35,8 @@ struct SearchView: View {
                                 playable: result.transcodeId != nil,
                                 transcodeId: result.transcodeId,
                                 tmdbId: nil, tmdbCollectionId: nil,
-                                tmdbCollectionName: nil, familyMembers: nil
+                                tmdbCollectionName: nil, familyMembers: nil,
+                                forMobileAvailable: nil
                             )) {
                                 SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }

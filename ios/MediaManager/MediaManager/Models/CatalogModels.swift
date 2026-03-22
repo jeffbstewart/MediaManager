@@ -17,6 +17,7 @@ struct ApiTitle: Codable, Identifiable, Hashable {
     let tmdbCollectionId: TmdbCollectionID?
     let tmdbCollectionName: String?
     let familyMembers: [String]?
+    let forMobileAvailable: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, name, year, description, popularity, quality, playable
@@ -29,6 +30,7 @@ struct ApiTitle: Codable, Identifiable, Hashable {
         case tmdbCollectionId = "tmdb_collection_id"
         case tmdbCollectionName = "tmdb_collection_name"
         case familyMembers = "family_members"
+        case forMobileAvailable = "for_mobile_available"
     }
 }
 
@@ -129,6 +131,8 @@ struct ApiTranscode: Codable, Identifiable {
     let episodeName: String?
     let playable: Bool
     let hasSubtitles: Bool
+    let forMobileAvailable: Bool?
+    let forMobileRequested: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, quality, playable
@@ -138,6 +142,8 @@ struct ApiTranscode: Codable, Identifiable {
         case episodeNumber = "episode_number"
         case episodeName = "episode_name"
         case hasSubtitles = "has_subtitles"
+        case forMobileAvailable = "for_mobile_available"
+        case forMobileRequested = "for_mobile_requested"
     }
 }
 
@@ -179,9 +185,11 @@ struct ApiTitleDetail: Codable {
     let familyMembers: [String]?
     let isFavorite: Bool?
     let isHidden: Bool?
+    let forMobileAvailable: Bool?
+    let wished: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, year, description, popularity, quality, playable, cast, genres, tags, transcodes
+        case id, name, year, description, popularity, quality, playable, cast, genres, tags, transcodes, wished
         case mediaType = "media_type"
         case posterUrl = "poster_url"
         case backdropUrl = "backdrop_url"
@@ -194,6 +202,7 @@ struct ApiTitleDetail: Codable {
         case familyMembers = "family_members"
         case isFavorite = "is_favorite"
         case isHidden = "is_hidden"
+        case forMobileAvailable = "for_mobile_available"
     }
 }
 
@@ -392,6 +401,8 @@ struct ApiEpisode: Codable {
     let hasSubtitles: Bool
     let resumePosition: Double
     let watchedPercent: Int
+    let forMobileAvailable: Bool?
+    let forMobileRequested: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name, quality, playable
@@ -402,5 +413,7 @@ struct ApiEpisode: Codable {
         case hasSubtitles = "has_subtitles"
         case resumePosition = "resume_position"
         case watchedPercent = "watched_percent"
+        case forMobileAvailable = "for_mobile_available"
+        case forMobileRequested = "for_mobile_requested"
     }
 }

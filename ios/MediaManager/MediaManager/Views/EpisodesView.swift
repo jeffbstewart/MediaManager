@@ -8,6 +8,18 @@ struct EpisodesView: View {
 
     private var isOffline: Bool { !dataModel.isOnline }
 
+    private var showDownloads: Bool {
+        dataModel.capabilities.contains("downloads") && !isOffline
+    }
+
+    /// Episodes in this season that have ForMobile available but aren't downloaded yet.
+    private var downloadableEpisodes: [ApiEpisode] {
+        episodes.filter { ep in
+            guard ep.forMobileAvailable == true, let tcId = ep.transcodeId else { return false }
+            return dataModel.downloads.state(for: tcId) == nil
+        }
+    }
+
     var body: some View {
         Group {
             if loading {
@@ -15,26 +27,56 @@ struct EpisodesView: View {
             } else if episodes.isEmpty {
                 ContentUnavailableView("No episodes", systemImage: "tv")
             } else {
-                List(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
-                    let isPlayable = isOffline
-                        ? (episode.transcodeId.flatMap { dataModel.downloads.localFileURL(for: $0) } != nil)
-                        : (episode.playable && episode.transcodeId != nil)
-
-                    if isPlayable, let tcId = episode.transcodeId {
-                        let nextEp = findNextPlayable(after: index)
-                        NavigationLink(value: PlaybackRoute(
-                            transcodeId: tcId,
-                            titleName: route.titleName,
-                            episodeName: episode.name ?? "S\(episode.seasonNumber)E\(episode.episodeNumber)",
-                            hasSubtitles: episode.hasSubtitles,
-                            nextEpisode: nextEp,
-                            seasonNumber: episode.seasonNumber,
-                            episodeNumber: episode.episodeNumber
-                        )) {
-                            EpisodeRow(episode: episode, isOfflineUnavailable: isOffline && !isPlayable)
+                List {
+                    // Download Season button
+                    if showDownloads && !downloadableEpisodes.isEmpty {
+                        Section {
+                            Button {
+                                downloadSeason()
+                            } label: {
+                                Label(
+                                    "Download Season (\(downloadableEpisodes.count) episodes)",
+                                    systemImage: "arrow.down.circle"
+                                )
+                            }
                         }
-                    } else {
-                        EpisodeRow(episode: episode, isOfflineUnavailable: isOffline && !isPlayable)
+                    }
+
+                    Section {
+                        ForEach(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
+                            let isPlayable = isOffline
+                                ? (episode.transcodeId.flatMap { dataModel.downloads.localFileURL(for: $0) } != nil)
+                                : (episode.playable && episode.transcodeId != nil)
+
+                            if isPlayable, let tcId = episode.transcodeId {
+                                let nextEp = findNextPlayable(after: index)
+                                NavigationLink(value: PlaybackRoute(
+                                    transcodeId: tcId,
+                                    titleName: route.titleName,
+                                    episodeName: episode.name ?? "S\(episode.seasonNumber)E\(episode.episodeNumber)",
+                                    hasSubtitles: episode.hasSubtitles,
+                                    nextEpisode: nextEp,
+                                    seasonNumber: episode.seasonNumber,
+                                    episodeNumber: episode.episodeNumber
+                                )) {
+                                    EpisodeRow(
+                                        episode: episode,
+                                        titleId: route.titleId,
+                                        titleName: route.titleName,
+                                        posterUrl: route.posterUrl,
+                                        isOfflineUnavailable: isOffline && !isPlayable
+                                    )
+                                }
+                            } else {
+                                EpisodeRow(
+                                    episode: episode,
+                                    titleId: route.titleId,
+                                    titleName: route.titleName,
+                                    posterUrl: route.posterUrl,
+                                    isOfflineUnavailable: isOffline && !isPlayable
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -42,6 +84,20 @@ struct EpisodesView: View {
         .navigationTitle(route.season.name ?? "Season \(route.season.seasonNumber)")
         .task {
             await loadEpisodes()
+        }
+    }
+
+    private func downloadSeason() {
+        for ep in downloadableEpisodes {
+            guard let tcId = ep.transcodeId else { continue }
+            dataModel.downloads.startDownload(
+                transcodeId: tcId,
+                titleId: route.titleId,
+                titleName: route.titleName,
+                posterUrl: route.posterUrl,
+                quality: ep.quality,
+                year: nil
+            )
         }
     }
 
@@ -73,8 +129,27 @@ struct EpisodesView: View {
 }
 
 struct EpisodeRow: View {
+    @Environment(OnlineDataModel.self) private var dataModel
     let episode: ApiEpisode
+    let titleId: TitleID
+    let titleName: String
+    let posterUrl: String?
     var isOfflineUnavailable: Bool = false
+    @State private var mobileRequested: Bool
+
+    init(episode: ApiEpisode, titleId: TitleID, titleName: String, posterUrl: String?,
+         isOfflineUnavailable: Bool = false) {
+        self.episode = episode
+        self.titleId = titleId
+        self.titleName = titleName
+        self.posterUrl = posterUrl
+        self.isOfflineUnavailable = isOfflineUnavailable
+        self._mobileRequested = State(initialValue: episode.forMobileRequested ?? false)
+    }
+
+    private var showDownloads: Bool {
+        dataModel.capabilities.contains("downloads") && dataModel.isOnline
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -114,6 +189,11 @@ struct EpisodeRow: View {
 
             Spacer()
 
+            // Per-episode download status
+            if showDownloads, let tcId = episode.transcodeId {
+                episodeDownloadIndicator(transcodeId: tcId)
+            }
+
             // Watch progress indicator
             if episode.watchedPercent > 0 {
                 ZStack {
@@ -133,5 +213,47 @@ struct EpisodeRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func episodeDownloadIndicator(transcodeId: TranscodeID) -> some View {
+        let dlState = dataModel.downloads.state(for: transcodeId)
+
+        if dlState == .completed {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.body)
+        } else if dlState == .downloading || dlState == .fetchingMetadata {
+            ProgressView()
+                .controlSize(.small)
+        } else if dlState == .failed {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(.red)
+                .font(.body)
+        } else if dlState == .paused {
+            Image(systemName: "pause.circle.fill")
+                .foregroundStyle(.orange)
+                .font(.body)
+        } else if episode.forMobileAvailable == true {
+            Button {
+                dataModel.downloads.startDownload(
+                    transcodeId: transcodeId,
+                    titleId: titleId,
+                    titleName: titleName,
+                    posterUrl: posterUrl,
+                    quality: episode.quality,
+                    year: nil
+                )
+            } label: {
+                Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.body)
+            }
+            .buttonStyle(.plain)
+        } else if mobileRequested {
+            Image(systemName: "clock.arrow.circlepath")
+                .foregroundStyle(.orange)
+                .font(.caption)
+        }
     }
 }

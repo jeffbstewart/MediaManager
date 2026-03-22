@@ -23,7 +23,8 @@ data class ApiTitle(
     val tmdbId: Int?,
     val tmdbCollectionId: Int?,
     val tmdbCollectionName: String?,
-    val familyMembers: List<String>? = null
+    val familyMembers: List<String>? = null,
+    val forMobileAvailable: Boolean? = null
 )
 
 data class ApiTitleDetail(
@@ -49,7 +50,9 @@ data class ApiTitleDetail(
     val playbackProgress: ApiPlaybackProgress?,
     val familyMembers: List<String>? = null,
     val isFavorite: Boolean = false,
-    val isHidden: Boolean = false
+    val isHidden: Boolean = false,
+    val forMobileAvailable: Boolean? = null,
+    val wished: Boolean = false
 )
 
 data class ApiCastMember(
@@ -80,7 +83,9 @@ data class ApiTranscode(
     val episodeNumber: Int?,
     val episodeName: String?,
     val playable: Boolean,
-    val hasSubtitles: Boolean
+    val hasSubtitles: Boolean,
+    val forMobileAvailable: Boolean = false,
+    val forMobileRequested: Boolean = false
 )
 
 data class ApiPlaybackProgress(
@@ -152,7 +157,9 @@ data class ApiEpisode(
     val playable: Boolean,
     val hasSubtitles: Boolean,
     val resumePosition: Double,
-    val watchedPercent: Int
+    val watchedPercent: Int,
+    val forMobileAvailable: Boolean = false,
+    val forMobileRequested: Boolean = false
 )
 
 data class ApiActorDetail(

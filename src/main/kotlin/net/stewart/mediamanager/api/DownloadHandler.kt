@@ -61,7 +61,7 @@ object DownloadHandler {
                 mapOf(
                     "transcode_id" to tc.id,
                     "title_id" to title.id,
-                    "name" to title.name,
+                    "title_name" to title.name,
                     "media_type" to title.media_type,
                     "year" to title.release_year,
                     "poster_url" to posterUrl,
@@ -121,12 +121,19 @@ object DownloadHandler {
         val mobileFile = TranscoderAgent.getForMobilePath(nasRoot, tc.file_path!!)
         if (!mobileFile.exists()) return null
 
+        val hasSubtitles = TranscoderAgent.findAuxFile(nasRoot, tc.file_path!!, ".en.srt") != null
+        val hasThumbnails = TranscoderAgent.findAuxFile(nasRoot, tc.file_path!!, ".thumbs.vtt") != null
+        val hasChapters = Chapter.findAll().any { it.transcode_id == tc.id }
+
         return mapOf(
             "transcode_id" to tc.id,
             "title_id" to title.id,
-            "name" to title.name,
+            "title_name" to title.name,
             "file_size_bytes" to mobileFile.length(),
-            "quality" to "1080p"
+            "quality" to "1080p",
+            "has_subtitles" to hasSubtitles,
+            "has_thumbnails" to hasThumbnails,
+            "has_chapters" to hasChapters
         )
     }
 

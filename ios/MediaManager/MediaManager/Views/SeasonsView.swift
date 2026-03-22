@@ -20,12 +20,14 @@ struct NextEpisode: Hashable {
 struct TvShowRoute: Hashable {
     let titleId: TitleID
     let titleName: String
+    var posterUrl: String? = nil
 }
 
 struct SeasonRoute: Hashable {
     let titleId: TitleID
     let titleName: String
     let season: ApiSeason
+    var posterUrl: String? = nil
 }
 
 struct SeasonsView: View {
@@ -44,7 +46,7 @@ struct SeasonsView: View {
                 ContentUnavailableView("No seasons", systemImage: "tv")
             } else {
                 List(seasons, id: \.seasonNumber) { season in
-                    NavigationLink(value: SeasonRoute(titleId: route.titleId, titleName: route.titleName, season: season)) {
+                    NavigationLink(value: SeasonRoute(titleId: route.titleId, titleName: route.titleName, season: season, posterUrl: route.posterUrl)) {
                         HStack {
                             Text(season.name ?? "Season \(season.seasonNumber)")
                                 .fontWeight(.medium)

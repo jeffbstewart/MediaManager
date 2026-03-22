@@ -16,6 +16,7 @@ import Foundation
     func setFavorite(titleId: TitleID, favorite: Bool) async throws
     func setHidden(titleId: TitleID, hidden: Bool) async throws
     func requestRetranscode(titleId: TitleID) async throws
+    func requestMobileTranscode(titleId: TitleID) async throws
     func dismissContinueWatching(titleId: TitleID) async throws
     func dismissMissingSeason(titleId: TitleID, tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int) async throws
 }

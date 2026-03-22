@@ -28,7 +28,8 @@ struct CollectionDetailView: View {
                                     popularity: nil, quality: item.quality,
                                     playable: item.playable, transcodeId: item.transcodeId,
                                     tmdbId: item.tmdbMovieId, tmdbCollectionId: nil,
-                                    tmdbCollectionName: nil, familyMembers: nil
+                                    tmdbCollectionName: nil, familyMembers: nil,
+                                    forMobileAvailable: nil
                                 )) {
                                     collectionItemCard(item)
                                 }

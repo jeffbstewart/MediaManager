@@ -37,6 +37,7 @@ object CatalogHandler {
     private val TITLE_FAVORITE = Regex("titles/(\\d+)/favorite")
     private val TITLE_HIDDEN = Regex("titles/(\\d+)/hidden")
     private val TITLE_RETRANSCODE = Regex("titles/(\\d+)/request-retranscode")
+    private val TITLE_MOBILE_TRANSCODE = Regex("titles/(\\d+)/request-mobile-transcode")
     private val CONTINUE_WATCHING_DISMISS = Regex("home/continue-watching/(\\d+)")
     private val ACTOR_DETAIL = Regex("actors/(\\d+)")
     private val COLLECTION_DETAIL = Regex("collections/(\\d+)")
@@ -50,6 +51,7 @@ object CatalogHandler {
         val favoriteMatch = TITLE_FAVORITE.matchEntire(path)
         val hiddenMatch = TITLE_HIDDEN.matchEntire(path)
         val retranscodeMatch = TITLE_RETRANSCODE.matchEntire(path)
+        val mobileTranscodeMatch = TITLE_MOBILE_TRANSCODE.matchEntire(path)
         val dismissCwMatch = CONTINUE_WATCHING_DISMISS.matchEntire(path)
 
         when {
@@ -66,6 +68,11 @@ object CatalogHandler {
             retranscodeMatch != null && method == "POST" -> {
                 val titleId = retranscodeMatch.groupValues[1].toLong()
                 handleRequestRetranscode(req, resp, mapper, titleId)
+                return
+            }
+            mobileTranscodeMatch != null && method == "POST" -> {
+                val titleId = mobileTranscodeMatch.groupValues[1].toLong()
+                handleRequestMobileTranscode(req, resp, mapper, titleId)
                 return
             }
             dismissCwMatch != null && method == "DELETE" -> {
@@ -379,7 +386,9 @@ object CatalogHandler {
                 episodeNumber = episode?.episode_number,
                 episodeName = episode?.name,
                 playable = playable,
-                hasSubtitles = hasSubtitles
+                hasSubtitles = hasSubtitles,
+                forMobileAvailable = tc.for_mobile_available,
+                forMobileRequested = tc.for_mobile_requested
             )
         }.sortedWith(compareBy(
             { it.seasonNumber ?: Int.MAX_VALUE },
@@ -409,6 +418,16 @@ object CatalogHandler {
         val isFavorite = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
         val isHidden = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
 
+        // Wish list status — any user has an active media wish for this title's TMDB identity
+        val wished = if (title.tmdb_id != null) {
+            WishListItem.findAll().any {
+                it.wish_type == WishType.MEDIA.name &&
+                    it.status == WishStatus.ACTIVE.name &&
+                    it.tmdb_id == title.tmdb_id &&
+                    it.tmdb_media_type == title.media_type
+            }
+        } else false
+
         val detail = ApiTitleDetail(
             id = title.id!!,
             name = title.name,
@@ -434,7 +453,9 @@ object CatalogHandler {
                 loadFamilyMemberNames()[title.id!!]?.takeIf { it.isNotEmpty() }
             } else null,
             isFavorite = isFavorite,
-            isHidden = isHidden
+            isHidden = isHidden,
+            forMobileAvailable = bestTc?.for_mobile_available ?: false,
+            wished = wished
         )
 
         ApiV1Servlet.sendJson(resp, 200, detail, mapper)
@@ -677,6 +698,30 @@ object CatalogHandler {
         MetricsRegistry.countHttpResponse("api_v1", 200)
     }
 
+    private fun handleRequestMobileTranscode(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long) {
+        val user = ApiV1Servlet.requireAuth(req, resp) ?: return
+        val title = Title.findById(titleId)
+        if (title == null || title.hidden || !user.canSeeRating(title.content_rating)) {
+            ApiV1Servlet.sendError(resp, 404, "not_found")
+            MetricsRegistry.countHttpResponse("api_v1", 404)
+            return
+        }
+        val transcodes = Transcode.findAll().filter { it.title_id == titleId && it.file_path != null }
+        val eligible = transcodes.filter { !it.for_mobile_available && !it.for_mobile_requested }
+        if (eligible.isEmpty()) {
+            ApiV1Servlet.sendError(resp, 409, "already_requested")
+            MetricsRegistry.countHttpResponse("api_v1", 409)
+            return
+        }
+        eligible.forEach {
+            it.for_mobile_requested = true
+            it.save()
+        }
+        log.info("Mobile transcode requested for title_id={} by user_id={} ({} transcodes)", titleId, user.id, eligible.size)
+        ApiV1Servlet.sendJson(resp, 200, mapOf("queued" to true, "count" to eligible.size), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
     // --- Home Feed Interactions ---
 
     private fun handleDismissContinueWatching(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, titleId: Long) {
@@ -787,7 +832,8 @@ object CatalogHandler {
             tmdbId = title.tmdb_id,
             tmdbCollectionId = title.tmdb_collection_id,
             tmdbCollectionName = title.tmdb_collection_name,
-            familyMembers = familyMembers
+            familyMembers = familyMembers,
+            forMobileAvailable = tc?.for_mobile_available
         )
     }
 

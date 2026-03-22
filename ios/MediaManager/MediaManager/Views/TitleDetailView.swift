@@ -7,6 +7,7 @@ struct TitleDetailView: View {
     @State private var loading = true
     @State private var isFavorite = false
     @State private var isHidden = false
+    @State private var mobileRequested = false
 
     private var isOffline: Bool { !dataModel.isOnline }
 
@@ -61,6 +62,47 @@ struct TitleDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
+                            // Non-playable info banner (movies/personal only — TV shows have Seasons button)
+                            if !detail.playable && detail.mediaType != .tv && !isOffline {
+                                if detail.transcodes.isEmpty {
+                                    // No file on NAS at all — disc not ripped or not released
+                                    HStack(spacing: 8) {
+                                        Image(systemName: detail.wished == true ? "heart.circle" : "info.circle")
+                                            .foregroundStyle(detail.wished == true ? .red : .orange)
+                                        Text(detail.wished == true
+                                            ? "This title is on the wish list"
+                                            : "This title isn't available yet")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background((detail.wished == true ? Color.red : .orange).opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                } else {
+                                    // File exists on NAS but hasn't been transcoded yet
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "info.circle")
+                                            .foregroundStyle(.orange)
+                                        Text("This title hasn't been transcoded yet")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.orange.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                    Button {
+                                        Task { await requestRetranscode(detail.id) }
+                                    } label: {
+                                        Label("Request Transcode", systemImage: "arrow.clockwise")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+
                             // Play button for movies
                             if detail.playable, detail.mediaType != .tv, let tcId = detail.transcodeId {
                                 let tcHasSubs = detail.transcodes.first(where: { $0.id == tcId })?.hasSubtitles ?? false
@@ -80,7 +122,7 @@ struct TitleDetailView: View {
 
                             // Seasons button for TV
                             if detail.mediaType == .tv {
-                                NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name)) {
+                                NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name, posterUrl: detail.posterUrl)) {
                                     Label("Seasons & Episodes", systemImage: "list.number")
                                         .frame(maxWidth: .infinity)
                                 }
@@ -120,11 +162,23 @@ struct TitleDetailView: View {
                                         }
                                     }
 
-                                    // Download button (movies only, when downloads capability available)
+                                    // Download area (movies only, when downloads capability available)
                                     if dataModel.capabilities.contains("downloads"),
                                        detail.mediaType != .tv,
                                        let tcId = detail.transcodeId {
-                                        downloadButton(detail: detail, transcodeId: tcId)
+                                        if detail.forMobileAvailable == true {
+                                            downloadButton(detail: detail, transcodeId: tcId)
+                                        } else if mobileRequested {
+                                            Label("Download Requested", systemImage: "clock.arrow.circlepath")
+                                                .foregroundStyle(.orange)
+                                        } else {
+                                            Button {
+                                                Task { await requestMobileTranscode(detail.id) }
+                                            } label: {
+                                                Label("Request Download", systemImage: "arrow.down.circle")
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
                                     }
                                 }
                                 .font(.subheadline)
@@ -266,6 +320,7 @@ struct TitleDetailView: View {
         detail = try? await dataModel.titleDetail(id: titleId)
         isFavorite = detail?.isFavorite ?? false
         isHidden = detail?.isHidden ?? false
+        mobileRequested = detail?.transcodes.contains(where: { $0.forMobileRequested == true }) ?? false
         loading = false
     }
 
@@ -289,6 +344,17 @@ struct TitleDetailView: View {
 
     private func requestRetranscode(_ id: TitleID) async {
         try? await dataModel.requestRetranscode(titleId: id)
+        mobileRequested = true
+    }
+
+    private func requestMobileTranscode(_ id: TitleID) async {
+        do {
+            try await dataModel.requestMobileTranscode(titleId: id)
+            mobileRequested = true
+        } catch {
+            // Already requested or already available — treat as requested
+            mobileRequested = true
+        }
     }
 
     @ViewBuilder

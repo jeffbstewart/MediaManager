@@ -93,11 +93,13 @@ struct DownloadsView: View {
                     Button { dataModel.downloads.pauseDownload(transcodeId: item.transcodeId) } label: {
                         Image(systemName: "pause.circle.fill")
                             .font(.title2)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                 case .paused, .failed:
                     Button { dataModel.downloads.resumeDownload(transcodeId: item.transcodeId) } label: {
                         Image(systemName: "arrow.clockwise.circle.fill")
                             .font(.title2)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                 default:
                     EmptyView()
@@ -106,8 +108,10 @@ struct DownloadsView: View {
                 Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red.opacity(0.7))
+                        .frame(minWidth: 44, minHeight: 44)
                 }
+                .buttonStyle(.plain)
             }
 
             if item.state == .downloading {
@@ -137,7 +141,8 @@ struct DownloadsView: View {
             tmdbId: nil,
             tmdbCollectionId: nil,
             tmdbCollectionName: nil,
-            familyMembers: nil
+            familyMembers: nil,
+            forMobileAvailable: nil
         )) {
             HStack {
                 posterImage(item)

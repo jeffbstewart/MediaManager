@@ -128,6 +128,11 @@ final class OnlineDataModel: DataModel {
         try await apiClient.post("catalog/titles/\(titleId.rawValue)/request-retranscode", body: [:])
     }
 
+    func requestMobileTranscode(titleId: TitleID) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await apiClient.post("catalog/titles/\(titleId.rawValue)/request-mobile-transcode", body: [:])
+    }
+
     func dismissContinueWatching(titleId: TitleID) async throws {
         if !isOnline { throw DataModelError.offline }
         try await apiClient.delete("catalog/home/continue-watching/\(titleId.rawValue)")

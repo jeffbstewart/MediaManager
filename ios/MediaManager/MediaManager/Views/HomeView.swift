@@ -188,6 +188,7 @@ struct PosterCard: View {
             AuthenticatedImage(path: title.posterUrl, apiClient: apiClient)
                 .frame(width: 120, height: 180)
                 .clipped()
+                .opacity(title.playable ? 1.0 : 0.5)
 
             Text(title.name)
                 .font(.caption)
@@ -197,6 +198,12 @@ struct PosterCard: View {
                 Text(String(year))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            if !title.playable {
+                Text("Not Playable")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             }
 
             if let members = title.familyMembers, !members.isEmpty {

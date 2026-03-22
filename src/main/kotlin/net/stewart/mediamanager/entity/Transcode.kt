@@ -17,6 +17,7 @@ data class Transcode(
     var notes: String? = null,
     var retranscode_requested: Boolean = false,
     var for_mobile_available: Boolean = false,
+    var for_mobile_requested: Boolean = false,
     var file_modified_at: LocalDateTime? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
