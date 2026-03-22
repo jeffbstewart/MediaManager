@@ -37,6 +37,9 @@ xcuserdata/
 DerivedData/
 *.ipa
 
+# iOS generated protobuf/gRPC stubs
+ios/MediaManager/MediaManager/Generated/
+
 # Secrets
 secrets/.env
 secrets/roku-deploy.env

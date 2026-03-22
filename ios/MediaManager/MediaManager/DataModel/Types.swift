@@ -196,6 +196,75 @@ struct TmdbID: Hashable, Codable, Sendable {
     }
 }
 
+// MARK: - Proto Convenience Inits
+// Explicitly-labeled initializers for converting proto Int64 IDs to type-safe wrappers.
+// The `proto:` label prevents accidental implicit conversion.
+
+extension TitleID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension TranscodeID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension EpisodeID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension TmdbPersonID {
+    init(proto value: Int32) { self.init(rawValue: Int(value)) }
+    var protoValue: Int32 { Int32(rawValue) }
+}
+extension TmdbCollectionID {
+    init(proto value: Int32) { self.init(rawValue: Int(value)) }
+    var protoValue: Int32 { Int32(rawValue) }
+}
+extension TagID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension GenreID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension WishID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension UserID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension SessionID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension CameraID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension ChannelID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension TmdbID {
+    init(proto value: Int32) { self.init(rawValue: Int(value)) }
+    var protoValue: Int32 { Int32(rawValue) }
+}
+extension LeaseID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension UnmatchedFileID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension BuddyKeyID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+
 // MARK: - Enums replacing string constants
 
 enum MediaType: String, Codable, Sendable, CaseIterable {
