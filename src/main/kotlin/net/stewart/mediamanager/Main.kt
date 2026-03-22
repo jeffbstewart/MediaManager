@@ -175,13 +175,19 @@ fun main(args: Array<String>) {
                     log.info("Jetty connector idle timeout set to {}ms", connector.idleTimeout)
 
                     // Add HTTP/2 cleartext (h2c) support alongside HTTP/1.1.
-                    // This lets gRPC clients (iOS, Android) use native HTTP/2 on the LAN
-                    // without TLS, while existing HTTP/1.1 clients (Vaadin, Roku, browsers)
-                    // continue working on the same port.
-                    val httpConfig = org.eclipse.jetty.server.HttpConfiguration()
-                    val h2c = org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory(httpConfig)
-                    connector.addConnectionFactory(h2c)
-                    log.info("HTTP/2 cleartext (h2c) enabled on port {}", connector.port)
+                    // Must stop connector before adding factories, then restart.
+                    try {
+                        connector.stop()
+                        val httpConfig = org.eclipse.jetty.server.HttpConfiguration()
+                        val h2c = org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory(httpConfig)
+                        connector.addConnectionFactory(h2c)
+                        connector.start()
+                        log.info("HTTP/2 cleartext (h2c) enabled on port {}", connector.port)
+                    } catch (e: Exception) {
+                        log.error("Failed to enable h2c — gRPC native transport will not work", e)
+                        // Fatal: gRPC clients won't be able to connect without h2c
+                        throw e
+                    }
                 }
             }
         }

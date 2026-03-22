@@ -1,18 +1,19 @@
-# Stage 1: Build
-FROM amazoncorretto:25-alpine AS builder
-RUN apk add --no-cache nodejs npm
+# Stage 1: Build (glibc-based image for protoc plugin compatibility)
+FROM --platform=$BUILDPLATFORM amazoncorretto:25 AS builder
+RUN yum install -y nodejs npm findutils && yum clean all
 WORKDIR /build
 COPY gradlew gradlew.bat ./
 COPY gradle/ gradle/
-COPY build.gradle.kts settings.gradle.kts ./
+COPY build.gradle.kts settings.gradle.kts gradle.properties ./
 COPY gradle/libs.versions.toml gradle/libs.versions.toml
 RUN chmod +x gradlew && ./gradlew --no-daemon --version
+COPY proto/ proto/
 COPY src/ src/
 COPY transcode-common/ transcode-common/
 COPY transcode-buddy/ transcode-buddy/
-RUN ./gradlew --no-daemon -Pvaadin.productionMode installDist
+RUN ./gradlew --no-daemon --max-workers=2 -Pvaadin.productionMode installDist
 
-# Stage 2: Runtime
+# Stage 2: Runtime (Alpine for smaller image)
 FROM amazoncorretto:25-alpine
 RUN apk add --no-cache ffmpeg curl
 # Download go2rtc binary for camera stream relay (never port-map 1984 externally)
