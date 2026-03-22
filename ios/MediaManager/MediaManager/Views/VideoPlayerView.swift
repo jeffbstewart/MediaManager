@@ -2,10 +2,10 @@ import SwiftUI
 import AVKit
 
 struct VideoPlayerView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
 
-    let transcodeId: Int
+    let transcodeId: TranscodeID
     let titleName: String
     let episodeName: String?
     var hasSubtitles: Bool = false
@@ -15,7 +15,7 @@ struct VideoPlayerView: View {
     @State private var error: String?
     @State private var progressTimer: Timer?
     @State private var endObserver: Any?
-    @State private var currentTranscodeId: Int?
+    @State private var currentTranscodeId: TranscodeID?
     @State private var currentEpisodeName: String?
     @State private var currentNextEpisode: NextEpisode?
     @State private var subtitles = SubtitleController()
@@ -114,7 +114,7 @@ struct VideoPlayerView: View {
         let tcId = currentTranscodeId ?? transcodeId
         let nextEp = currentNextEpisode ?? nextEpisode
 
-        guard let (url, headers) = await authManager.apiClient.streamURL(for: tcId) else {
+        guard let (url, headers) = await dataModel.apiClient.streamURL(for: tcId.rawValue) else {
             error = "Unable to build stream URL"
             return
         }
@@ -143,15 +143,14 @@ struct VideoPlayerView: View {
 
         // Seek to saved position in parallel — don't block playback start
         Task {
-            let progress: ApiPlaybackProgress? = try? await authManager.apiClient.get(
-                "playback/progress/\(tcId)")
+            let progress = await dataModel.playbackProgress(transcodeId: tcId)
             if let position = progress?.positionSeconds, position > 0 {
                 await avPlayer.seek(to: CMTime(seconds: position, preferredTimescale: 1))
             }
         }
 
         // Load subtitles — server returns 404 if none exist
-        await subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient)
+        await subtitles.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient)
         subtitles.startObserving(player: avPlayer)
     }
 
@@ -187,7 +186,7 @@ struct VideoPlayerView: View {
         progressTimer = nil
     }
 
-    private var activeTranscodeId: Int {
+    private var activeTranscodeId: TranscodeID {
         currentTranscodeId ?? transcodeId
     }
 
@@ -198,12 +197,9 @@ struct VideoPlayerView: View {
         guard position.isFinite && position > 0 else { return }
         let tcId = activeTranscodeId
 
+        let dur = (duration?.isFinite == true && duration! > 0) ? duration : nil
         Task {
-            var body: [String: Any] = ["position": position]
-            if let duration, duration.isFinite && duration > 0 {
-                body["duration"] = duration
-            }
-            try? await authManager.apiClient.post("playback/progress/\(tcId)", body: body)
+            await dataModel.reportProgress(transcodeId: tcId, position: position, duration: dur)
         }
     }
 
@@ -214,10 +210,7 @@ struct VideoPlayerView: View {
         let duration = player.currentItem?.duration.seconds
         guard position.isFinite && position > 0 else { return }
 
-        var body: [String: Any] = ["position": position]
-        if let duration, duration.isFinite && duration > 0 {
-            body["duration"] = duration
-        }
-        try? await authManager.apiClient.post("playback/progress/\(activeTranscodeId)", body: body)
+        let dur = (duration?.isFinite == true && duration! > 0) ? duration : nil
+        await dataModel.reportProgress(transcodeId: activeTranscodeId, position: position, duration: dur)
     }
 }

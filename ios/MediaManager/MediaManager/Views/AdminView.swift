@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var transcodeStatus: TranscodeStatusResponse?
     @State private var buddyStatus: BuddyStatusResponse?
     @State private var loading = true
@@ -172,8 +172,8 @@ struct AdminView: View {
 
     private func loadStatus() async {
         loading = transcodeStatus == nil
-        async let t: TranscodeStatusResponse? = try? authManager.apiClient.get("admin/transcode-status")
-        async let b: BuddyStatusResponse? = try? authManager.apiClient.get("admin/buddy-status")
+        async let t = try? dataModel.transcodeStatus()
+        async let b = try? dataModel.buddyStatus()
         transcodeStatus = await t
         buddyStatus = await b
         loading = false
@@ -183,7 +183,7 @@ struct AdminView: View {
         scanning = true
         statusMessage = nil
         do {
-            try await authManager.apiClient.post("admin/scan-nas", body: [:])
+            try await dataModel.scanNas()
             statusMessage = "NAS scan started"
         } catch {
             statusMessage = "Scan failed"
@@ -195,7 +195,7 @@ struct AdminView: View {
     private func clearFailures() async {
         clearing = true
         statusMessage = nil
-        try? await authManager.apiClient.post("admin/clear-failures", body: [:])
+        try? await dataModel.clearFailures()
         statusMessage = "Failures cleared"
         clearing = false
         dismissStatusAfterDelay()

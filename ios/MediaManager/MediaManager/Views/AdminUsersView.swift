@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminUsersView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var users: [AdminUser] = []
     @State private var loading = true
     @State private var selectedUser: AdminUser?
@@ -99,7 +99,7 @@ struct AdminUsersView: View {
 
     private func loadUsers() async {
         loading = users.isEmpty
-        let response: AdminUserListResponse? = try? await authManager.apiClient.get("admin/users")
+        let response = try? await dataModel.adminUsers()
         users = response?.users ?? []
         loading = false
     }
@@ -108,7 +108,7 @@ struct AdminUsersView: View {
 // MARK: - User Detail Sheet
 
 struct AdminUserDetailView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     let user: AdminUser
     let onComplete: () async -> Void
@@ -255,7 +255,7 @@ struct AdminUserDetailView: View {
         error = nil
         let newLevel = user.isAdmin ? 1 : 2
         do {
-            try await authManager.apiClient.put("admin/users/\(user.id)/role", body: ["access_level": newLevel])
+            try await dataModel.updateUserRole(id: user.id, accessLevel: newLevel)
             await onComplete()
             showSuccess(user.isAdmin ? "Demoted to Viewer" : "Promoted to Admin")
         } catch {
@@ -265,9 +265,8 @@ struct AdminUserDetailView: View {
 
     private func setRatingCeiling(_ ceiling: Int?) async {
         error = nil
-        let body: [String: Any] = ceiling != nil ? ["ceiling": ceiling!] : ["ceiling": NSNull()]
         do {
-            try await authManager.apiClient.put("admin/users/\(user.id)/rating-ceiling", body: body)
+            try await dataModel.updateUserRatingCeiling(id: user.id, ceiling: ceiling)
             await onComplete()
             showSuccess("Rating limit updated")
         } catch {
@@ -276,13 +275,13 @@ struct AdminUserDetailView: View {
     }
 
     private func unlockUser() async {
-        try? await authManager.apiClient.post("admin/users/\(user.id)/unlock", body: [:])
+        try? await dataModel.unlockUser(id: user.id)
         await onComplete()
         showSuccess("Account unlocked")
     }
 
     private func forcePasswordChange() async {
-        try? await authManager.apiClient.post("admin/users/\(user.id)/force-password-change", body: [:])
+        try? await dataModel.forcePasswordChange(id: user.id)
         await onComplete()
         showSuccess("Password change required on next login")
     }
@@ -298,7 +297,7 @@ struct AdminUserDetailView: View {
     private func deleteUser() async {
         error = nil
         do {
-            try await authManager.apiClient.delete("admin/users/\(user.id)")
+            try await dataModel.deleteUser(id: user.id)
             await onComplete()
             dismiss()
         } catch {
@@ -318,7 +317,7 @@ struct AdminUserDetailView: View {
 // MARK: - Reset Password Sheet
 
 struct AdminResetPasswordView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     let user: AdminUser
     let onComplete: () async -> Void
@@ -377,10 +376,7 @@ struct AdminResetPasswordView: View {
         saving = true
         error = nil
         do {
-            try await authManager.apiClient.post("admin/users/\(user.id)/reset-password", body: [
-                "new_password": newPassword,
-                "force_change": forceChange
-            ])
+            try await dataModel.resetPassword(id: user.id, newPassword: newPassword)
             await onComplete()
             dismiss()
         } catch {
@@ -393,7 +389,7 @@ struct AdminResetPasswordView: View {
 // MARK: - Create User Sheet
 
 struct AdminCreateUserView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     let onComplete: () async -> Void
 
@@ -452,12 +448,7 @@ struct AdminCreateUserView: View {
         saving = true
         error = nil
         do {
-            try await authManager.apiClient.post("admin/users", body: [
-                "username": username,
-                "display_name": displayName,
-                "password": password,
-                "force_change": forceChange
-            ])
+            try await dataModel.createUser(username: username, password: password, displayName: displayName, accessLevel: 1)
             await onComplete()
             dismiss()
         } catch {

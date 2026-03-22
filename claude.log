@@ -3763,3 +3763,107 @@ Performance observations:
 - VideoToolbox encoder detected and available on Apple Silicon
 - faster-whisper installed via pip3 (Xcode Python 3.9)
 ===
+
+=== 2026-03-22 — iOS: Type-Safe DataModel Protocol ===
+Introduced a DataModel protocol abstraction for the iOS app, replacing
+scattered `authManager.apiClient.get("path")` calls with type-safe
+methods and wrapper ID types.
+
+New files created (DataModel/):
+- Types.swift — 16 ID wrapper structs (TitleID, TranscodeID, etc.) with
+  single-value Codable coding for JSON compatibility, plus 8 enums
+  (MediaType, SearchResultType, AcquisitionStatus, etc.)
+- CatalogDataModel.swift, PlaybackDataModel.swift, WishListDataModel.swift,
+  ProfileDataModel.swift, LiveDataModel.swift, AdminDataModel.swift —
+  Sub-protocols for each feature area
+- DataModel.swift — Composite protocol composing all sub-protocols,
+  plus DataModelError enum (offline, notFound, serverError)
+- OnlineDataModel.swift — Concrete implementation wrapping APIClient,
+  routes to OfflineDataModel when isEffectivelyOffline
+- OfflineDataModel.swift — Stub offline implementation serving cached
+  data for titleDetail/seasons/episodes/playback, throws .offline for
+  all online-only operations
+
+Model files updated:
+- CatalogModels.swift — ApiTitle.id→TitleID, .transcodeId→TranscodeID?,
+  .mediaType→MediaType, .tmdbId→TmdbID?, etc. Same for ApiTitleDetail,
+  ApiTranscode, ApiEpisode, ApiSearchResult, ApiCastMember, ApiGenre,
+  ApiTag, ApiCollectionItem, ApiCreditEntry
+- APIModels.swift — ServerUserInfo.id→UserID
+- WishListModels.swift — ApiWish.tmdbId→TmdbID?, .mediaType→MediaType?,
+  .wishId→WishID?, ApiTranscodeWish.id→TranscodeID, .titleId→TitleID
+- AdminModels.swift — AdminUser.id→UserID, TranscodeLease.leaseId→LeaseID,
+  AdminLinkedTranscode IDs typed, AdminUnmatchedFile.id→UnmatchedFileID,
+  AdminPurchaseWish.tmdbId→TmdbID, .mediaType→MediaType
+- LiveModels.swift — ApiCamera.id→CameraID, ApiTvChannel.id→ChannelID
+- DownloadModels.swift — DownloadItem.transcodeId→TranscodeID,
+  .titleId→TitleID, TitleCacheEntry.titleId→TitleID, etc.
+
+Service files updated:
+- DownloadManager.swift — All public APIs use typed IDs (TranscodeID,
+  TitleID) instead of raw Int
+- AuthManager.swift — Added serverUnreachable flag for offline mode
+  detection; set on network errors during token refresh/server info
+
+Route structs updated:
+- PlaybackRoute.transcodeId→TranscodeID, NextEpisode.transcodeId→TranscodeID
+- TvShowRoute.titleId→TitleID, SeasonRoute.titleId→TitleID
+- ActorRoute.tmdbPersonId→TmdbPersonID
+- CollectionRoute.tmdbCollectionId→TmdbCollectionID
+- TagRoute.id→TagID, GenreRoute.id→GenreID
+
+All 28 view files migrated from authManager.apiClient to dataModel
+protocol methods with typed parameters.
+
+App wiring (MediaManagerApp.swift):
+- OnlineDataModel created at app launch, injected via .environment()
+- DownloadManager configured with apiClient in onAppear
+
+=== 2026-03-22 — iOS: Offline Data Model + Offline Mode UI ===
+Added OfflineDataModel stub and offline mode UI affordances.
+
+OfflineDataModel (DataModel/OfflineDataModel.swift):
+- Implements full DataModel protocol
+- Supports: titleDetail (cached), seasons (cached), episodes (cached),
+  streamAsset (local MP4), reportProgress (queued for sync)
+- Throws DataModelError.offline for all online-only operations
+- Delegates capabilities/userInfo to OnlineDataModel (cached from last
+  online session)
+
+OnlineDataModel updates:
+- Internal offlineDelegate routes calls through OfflineDataModel when
+  isEffectivelyOffline is true
+- All methods check isOnline first; catalog/playback methods delegate
+  to offline model, everything else throws .offline
+- streamAsset prefers local downloaded files before remote stream
+- reportProgress queues updates locally when offline
+
+Server unreachable detection (AuthManager):
+- serverUnreachable flag set on network errors during token refresh
+  or server info fetch, cleared on success
+- RootView shows alert when serverUnreachable && hasCompletedDownloads:
+  "Server Unreachable — Go Offline?" with Go Offline / Keep Trying
+
+Offline mode UI (ContentView):
+- Existing toggle in sidebar bottom bar
+- When toggled on, redirects from ALL online-only tabs to Downloads
+  and clears navigation path
+- Shows "Offline mode" or "No connection" status text
+- Online-only sidebar tabs hidden when offline (Home, Movies, TV,
+  Collections, Tags, Family, Cameras, Live TV, Search, Wish List,
+  Profile, all Admin tabs)
+
+View simplification:
+- Removed redundant if-isOffline branching from TitleDetailView,
+  SeasonsView, EpisodesView, CustomPlayerView — views now just call
+  dataModel methods, which route to cached data when offline
+- CustomPlayerView uses dataModel.streamAsset() instead of manual
+  local/remote path selection
+- Progress reporting unified through dataModel.reportProgress()
+
+Documentation:
+- docs/USER_GUIDE.md — Added "iOS App" section covering: Getting
+  Connected, Downloading for Offline Playback, Offline Mode (manual
+  toggle, auto-detection, server unreachable), What Works Offline
+  (feature availability table), Returning Online
+===

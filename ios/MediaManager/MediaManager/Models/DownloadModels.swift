@@ -9,9 +9,9 @@ enum DownloadState: String, Codable {
 }
 
 struct DownloadItem: Codable, Identifiable {
-    var id: Int { transcodeId }
-    let transcodeId: Int
-    let titleId: Int
+    var id: TranscodeID { transcodeId }
+    let transcodeId: TranscodeID
+    let titleId: TitleID
     let titleName: String
     let posterUrl: String?
     let quality: String?
@@ -48,7 +48,7 @@ struct DownloadItem: Codable, Identifiable {
     }
 
     var localDir: URL {
-        DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId)")
+        DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId.rawValue)")
     }
 
     var videoFileURL: URL {
@@ -68,8 +68,8 @@ struct DownloadItem: Codable, Identifiable {
         downloadsRoot.appendingPathComponent("titles")
     }
 
-    static func titleCacheDir(for titleId: Int) -> URL {
-        titlesRoot.appendingPathComponent("\(titleId)")
+    static func titleCacheDir(for titleId: TitleID) -> URL {
+        titlesRoot.appendingPathComponent("\(titleId.rawValue)")
     }
 }
 
@@ -77,7 +77,7 @@ struct DownloadItem: Codable, Identifiable {
 
 /// Tracks when a title's offline cache was last refreshed.
 struct TitleCacheEntry: Codable {
-    let titleId: Int
+    let titleId: TitleID
     var lastUpdated: Date
 
     enum CodingKeys: String, CodingKey {
@@ -90,7 +90,7 @@ struct TitleCacheEntry: Codable {
 
 /// Queued progress report for syncing to server when connectivity returns.
 struct PendingProgressUpdate: Codable {
-    let transcodeId: Int
+    let transcodeId: TranscodeID
     let position: Double
     let duration: Double?
     let timestamp: Date
@@ -104,15 +104,15 @@ struct PendingProgressUpdate: Codable {
 // MARK: - API Response Structs
 
 struct ApiDownloadAvailable: Codable, Identifiable {
-    var id: Int { transcodeId }
-    let transcodeId: Int
-    let titleId: Int
+    var id: TranscodeID { transcodeId }
+    let transcodeId: TranscodeID
+    let titleId: TitleID
     let titleName: String
     let posterUrl: String?
     let quality: String?
     let year: Int?
     let fileSizeBytes: Int64
-    let mediaType: String
+    let mediaType: MediaType
 
     enum CodingKeys: String, CodingKey {
         case quality, year
@@ -126,8 +126,8 @@ struct ApiDownloadAvailable: Codable, Identifiable {
 }
 
 struct ApiDownloadManifest: Codable {
-    let transcodeId: Int
-    let titleId: Int
+    let transcodeId: TranscodeID
+    let titleId: TitleID
     let titleName: String
     let fileSizeBytes: Int64
     let hasSubtitles: Bool

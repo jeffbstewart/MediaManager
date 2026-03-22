@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct CollectionDetailView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: CollectionRoute
     @State private var detail: ApiCollectionDetail?
     @State private var loading = true
-    @State private var localWished: [Int: Bool] = [:]
+    @State private var localWished: [TmdbID: Bool] = [:]
 
     private let columns = [
         GridItem(.adaptive(minimum: 110), spacing: 12)
@@ -22,7 +22,7 @@ struct CollectionDetailView: View {
                             if item.owned, let titleId = item.titleId {
                                 NavigationLink(value: ApiTitle(
                                     id: titleId, name: item.name,
-                                    mediaType: "MOVIE", year: item.year,
+                                    mediaType: .movie, year: item.year,
                                     description: nil, posterUrl: item.posterUrl,
                                     backdropUrl: nil, contentRating: item.contentRating,
                                     popularity: nil, quality: item.quality,
@@ -64,7 +64,6 @@ struct CollectionDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .opacity(item.owned ? 1.0 : 0.6)
 
-                // Wish heart for unowned items
                 if !item.owned {
                     Button {
                         Task { await toggleWish(item) }
@@ -111,7 +110,7 @@ struct CollectionDetailView: View {
                         .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
                 }
             } else {
-                AuthenticatedImage(path: posterUrl, apiClient: authManager.apiClient)
+                AuthenticatedImage(path: posterUrl, apiClient: dataModel.apiClient)
             }
         } else {
             Rectangle().fill(.quaternary)
@@ -124,31 +123,30 @@ struct CollectionDetailView: View {
         localWished[item.tmdbMovieId] = !currentlyWished
 
         if currentlyWished {
-            let response: ApiWishListResponse? = try? await authManager.apiClient.get("wishlist")
-            if let wish = response?.wishes.first(where: { $0.tmdbId == item.tmdbMovieId && $0.mediaType == "MOVIE" }),
+            let response = try? await dataModel.wishList()
+            if let wish = response?.wishes.first(where: { $0.tmdbId == item.tmdbMovieId && $0.mediaType == .movie }),
                let wishId = wish.wishId {
-                try? await authManager.apiClient.delete("wishlist/\(wishId)")
+                try? await dataModel.deleteWish(id: wishId)
             }
         } else {
-            var body: [String: Any] = [
-                "tmdb_id": item.tmdbMovieId,
-                "media_type": "MOVIE",
-                "title": item.name,
-                "popularity": 0
-            ]
+            var posterPath: String? = nil
             if let posterUrl = item.posterUrl, posterUrl.contains("image.tmdb.org") {
-                body["poster_path"] = posterUrl.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
+                posterPath = posterUrl.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
             }
-            if let year = item.year {
-                body["release_year"] = year
-            }
-            try? await authManager.apiClient.post("wishlist", body: body)
+            try? await dataModel.addWish(
+                tmdbId: item.tmdbMovieId,
+                mediaType: .movie,
+                title: item.name,
+                year: item.year,
+                posterPath: posterPath,
+                seasonNumber: nil
+            )
         }
     }
 
     private func loadDetail() async {
         loading = true
-        detail = try? await authManager.apiClient.get("catalog/collections/\(route.tmdbCollectionId)")
+        detail = try? await dataModel.collectionDetail(id: route.tmdbCollectionId)
         loading = false
     }
 }

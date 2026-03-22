@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminPurchaseWishesView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var wishes: [AdminPurchaseWish] = []
     @State private var loading = true
 
@@ -19,7 +19,7 @@ struct AdminPurchaseWishesView: View {
                         HStack(spacing: 12) {
                             AuthenticatedImage(
                                 path: wish.posterUrl,
-                                apiClient: authManager.apiClient
+                                apiClient: dataModel.apiClient
                             )
                             .frame(width: 50, height: 75)
 
@@ -29,7 +29,7 @@ struct AdminPurchaseWishesView: View {
                                     .lineLimit(2)
 
                                 HStack(spacing: 6) {
-                                    Text(wish.mediaType)
+                                    Text(wish.mediaType.rawValue)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if let year = wish.releaseYear {
@@ -86,7 +86,7 @@ struct AdminPurchaseWishesView: View {
 
     private func loadWishes() async {
         loading = wishes.isEmpty
-        let response: AdminPurchaseWishListResponse? = try? await authManager.apiClient.get("admin/purchase-wishes")
+        let response = try? await dataModel.purchaseWishes()
         wishes = response?.wishes ?? []
         loading = false
     }
@@ -95,7 +95,9 @@ struct AdminPurchaseWishesView: View {
         // Find the first wish item to get its ID for the PUT
         // The API expects a wish ID, but our model has aggregated data.
         // We need to pass the tmdb_id + media_type to identify the wish group.
-        try? await authManager.apiClient.put("admin/purchase-wishes/\(wish.tmdbId)/status", body: ["status": status])
+        if let acqStatus = AcquisitionStatus(rawValue: status) {
+            try? await dataModel.updatePurchaseWishStatus(tmdbId: wish.tmdbId, status: acqStatus)
+        }
         await loadWishes()
     }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminDataQualityView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var titles: [AdminDataQualityTitle] = []
     @State private var loading = true
     @State private var page = 1
@@ -20,7 +20,7 @@ struct AdminDataQualityView: View {
                         HStack(spacing: 12) {
                             AuthenticatedImage(
                                 path: title.posterUrl,
-                                apiClient: authManager.apiClient
+                                apiClient: dataModel.apiClient
                             )
                             .frame(width: 50, height: 75)
 
@@ -31,7 +31,7 @@ struct AdminDataQualityView: View {
 
                                 HStack(spacing: 6) {
                                     if let type = title.mediaType {
-                                        Text(type)
+                                        Text(type.rawValue)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -118,7 +118,7 @@ struct AdminDataQualityView: View {
 
     private func loadTitles() async {
         loading = titles.isEmpty
-        let response: AdminDataQualityResponse? = try? await authManager.apiClient.get("admin/data-quality?page=\(page)&limit=50")
+        let response = try? await dataModel.dataQuality(page: page)
         titles = response?.titles ?? []
         totalPages = response?.totalPages ?? 0
         loading = false
@@ -126,18 +126,18 @@ struct AdminDataQualityView: View {
 
     private func loadMore() async {
         page += 1
-        let response: AdminDataQualityResponse? = try? await authManager.apiClient.get("admin/data-quality?page=\(page)&limit=50")
+        let response = try? await dataModel.dataQuality(page: page)
         titles += response?.titles ?? []
         totalPages = response?.totalPages ?? 0
     }
 
     private func reEnrich(_ title: AdminDataQualityTitle) async {
-        try? await authManager.apiClient.post("admin/titles/\(title.id)/re-enrich", body: [:])
+        try? await dataModel.reEnrich(titleId: title.id)
         await loadTitles()
     }
 
     private func deleteTitle(_ title: AdminDataQualityTitle) async {
-        try? await authManager.apiClient.delete("admin/titles/\(title.id)")
+        try? await dataModel.deleteTitle(id: title.id)
         titles.removeAll { $0.id == title.id }
     }
 }

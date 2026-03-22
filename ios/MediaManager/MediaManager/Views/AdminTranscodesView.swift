@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminTranscodesView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var transcodes: [AdminLinkedTranscode] = []
     @State private var loading = true
     @State private var page = 1
@@ -19,7 +19,7 @@ struct AdminTranscodesView: View {
                         HStack(spacing: 12) {
                             AuthenticatedImage(
                                 path: tc.posterUrl,
-                                apiClient: authManager.apiClient
+                                apiClient: dataModel.apiClient
                             )
                             .frame(width: 40, height: 60)
 
@@ -85,7 +85,7 @@ struct AdminTranscodesView: View {
 
     private func loadTranscodes() async {
         loading = transcodes.isEmpty
-        let response: AdminLinkedTranscodeResponse? = try? await authManager.apiClient.get("admin/transcodes/linked?page=\(page)&limit=50")
+        let response = try? await dataModel.linkedTranscodes(page: page)
         transcodes = response?.transcodes ?? []
         totalPages = response?.totalPages ?? 0
         loading = false
@@ -93,13 +93,13 @@ struct AdminTranscodesView: View {
 
     private func loadMore() async {
         page += 1
-        let response: AdminLinkedTranscodeResponse? = try? await authManager.apiClient.get("admin/transcodes/linked?page=\(page)&limit=50")
+        let response = try? await dataModel.linkedTranscodes(page: page)
         transcodes += response?.transcodes ?? []
         totalPages = response?.totalPages ?? 0
     }
 
     private func unlinkTranscode(_ tc: AdminLinkedTranscode) async {
-        try? await authManager.apiClient.post("admin/transcodes/\(tc.transcodeId)/unlink", body: [:])
+        try? await dataModel.unlinkTranscode(id: tc.transcodeId)
         transcodes.removeAll { $0.transcodeId == tc.transcodeId }
     }
 }

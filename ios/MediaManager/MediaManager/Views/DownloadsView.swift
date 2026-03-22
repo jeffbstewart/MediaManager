@@ -1,17 +1,16 @@
 import SwiftUI
 
 struct DownloadsView: View {
-    @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
+    @Environment(OnlineDataModel.self) private var dataModel
 
-    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
+    private var isOffline: Bool { dataModel.downloads.isEffectivelyOffline }
 
     var body: some View {
         List {
-            let active = downloadManager.items.filter {
+            let active = dataModel.downloads.items.filter {
                 $0.state == .fetchingMetadata || $0.state == .downloading || $0.state == .paused || $0.state == .failed
             }
-            let completed = downloadManager.items.filter { $0.state == .completed }
+            let completed = dataModel.downloads.items.filter { $0.state == .completed }
 
             // Group completed downloads by title
             let titleGroups = Dictionary(grouping: completed) { $0.titleId }
@@ -91,12 +90,12 @@ struct DownloadsView: View {
 
                 switch item.state {
                 case .downloading:
-                    Button { downloadManager.pauseDownload(transcodeId: item.transcodeId) } label: {
+                    Button { dataModel.downloads.pauseDownload(transcodeId: item.transcodeId) } label: {
                         Image(systemName: "pause.circle.fill")
                             .font(.title2)
                     }
                 case .paused, .failed:
-                    Button { downloadManager.resumeDownload(transcodeId: item.transcodeId) } label: {
+                    Button { dataModel.downloads.resumeDownload(transcodeId: item.transcodeId) } label: {
                         Image(systemName: "arrow.clockwise.circle.fill")
                             .font(.title2)
                     }
@@ -104,7 +103,7 @@ struct DownloadsView: View {
                     EmptyView()
                 }
 
-                Button { downloadManager.deleteDownload(transcodeId: item.transcodeId) } label: {
+                Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
                         .foregroundStyle(.secondary)
@@ -125,7 +124,7 @@ struct DownloadsView: View {
         NavigationLink(value: ApiTitle(
             id: item.titleId,
             name: item.titleName,
-            mediaType: episodeCount > 1 ? "TV" : "MOVIE",
+            mediaType: episodeCount > 1 ? .tv : .movie,
             year: item.year,
             description: nil,
             posterUrl: item.posterUrl,
@@ -175,9 +174,9 @@ struct DownloadsView: View {
             Button(role: .destructive) {
                 // Delete all downloads for this title
                 let titleId = item.titleId
-                let toDelete = downloadManager.items.filter { $0.titleId == titleId && $0.state == .completed }
+                let toDelete = dataModel.downloads.items.filter { $0.titleId == titleId && $0.state == .completed }
                 for dl in toDelete {
-                    downloadManager.deleteDownload(transcodeId: dl.transcodeId)
+                    dataModel.downloads.deleteDownload(transcodeId: dl.transcodeId)
                 }
             } label: {
                 Label("Delete", systemImage: "trash")
@@ -188,7 +187,7 @@ struct DownloadsView: View {
     @ViewBuilder
     private func posterImage(_ item: DownloadItem) -> some View {
         // Try cached poster first (works offline), fall back to authenticated fetch
-        if let data = downloadManager.loadCachedImage(for: item.titleId, name: "poster.jpg"),
+        if let data = dataModel.downloads.loadCachedImage(for: item.titleId, name: "poster.jpg"),
            let uiImage = UIImage(data: data) {
             Image(uiImage: uiImage)
                 .resizable()
@@ -198,7 +197,7 @@ struct DownloadsView: View {
         } else if let posterUrl = item.posterUrl {
             AuthenticatedImage(
                 path: posterUrl,
-                apiClient: authManager.apiClient,
+                apiClient: dataModel.apiClient,
                 cornerRadius: 4,
                 contentMode: .fill
             )
@@ -218,7 +217,7 @@ struct DownloadsView: View {
 
     private var storageRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            let used = downloadManager.totalStorageUsed
+            let used = dataModel.downloads.totalStorageUsed
             let free = (try? FileManager.default.attributesOfFileSystem(
                 forPath: NSHomeDirectory())[.systemFreeSize] as? Int64) ?? 0
 

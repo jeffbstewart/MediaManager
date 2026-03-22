@@ -6,7 +6,7 @@ import Combine
 /// Sets a mm_jwt cookie so AVPlayer's native HLS stack authenticates
 /// all sub-requests (playlist refreshes, .ts segments).
 struct LiveStreamView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
 
     let streamPath: String
@@ -110,8 +110,8 @@ struct LiveStreamView: View {
     }
 
     private func loadStream() async {
-        guard let baseURL = await authManager.apiClient.getBaseURL(),
-              let token = await authManager.apiClient.getAccessToken() else {
+        guard let baseURL = await dataModel.apiClient.getBaseURL(),
+              let token = await dataModel.apiClient.getAccessToken() else {
             error = "Not authenticated"
             return
         }
@@ -131,7 +131,7 @@ struct LiveStreamView: View {
             warmupPath = streamPath.replacingOccurrences(of: "stream.m3u8", with: "hls/live.m3u8")
         }
         do {
-            try await authManager.apiClient.warmUpStream(warmupPath)
+            try await dataModel.apiClient.warmUpStream(warmupPath)
         } catch {
             self.error = "Stream not available: \(error.localizedDescription)"
             return

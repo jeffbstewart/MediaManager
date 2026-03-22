@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct TagRoute: Hashable {
-    let id: Int
+    let id: TagID
     let name: String
 }
 
 struct TagsListView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var tags: [ApiTagListItem] = []
     @State private var loading = true
 
@@ -45,7 +45,7 @@ struct TagsListView: View {
 
     private func loadTags() async {
         loading = tags.isEmpty
-        let response: ApiTagListResponse? = try? await authManager.apiClient.get("catalog/tags")
+        let response = try? await dataModel.tags()
         tags = response?.tags ?? []
         loading = false
     }

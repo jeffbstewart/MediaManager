@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct ApiSession: Codable, Identifiable {
-    var id: String { "\(sessionId)-\(type)" }
-    let sessionId: Int
+    var id: String { "\(sessionId.rawValue)-\(type)" }
+    let sessionId: SessionID
     let type: String
     let deviceName: String?
     let createdAt: String?
@@ -26,7 +26,7 @@ struct ApiSessionListResponse: Codable {
 }
 
 struct SessionsView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     @State private var sessions: [ApiSession] = []
     @State private var loading = true
@@ -122,7 +122,6 @@ struct SessionsView: View {
             relative.unitsStyle = .abbreviated
             return relative.localizedString(for: date, relativeTo: Date())
         }
-        // Try without fractional seconds
         formatter.formatOptions = [.withInternetDateTime]
         if let date = formatter.date(from: iso) {
             let relative = RelativeDateTimeFormatter()
@@ -134,18 +133,19 @@ struct SessionsView: View {
 
     private func loadSessions() async {
         loading = true
-        let response: ApiSessionListResponse? = try? await authManager.apiClient.get("sessions")
+        let response = try? await dataModel.sessions()
         sessions = response?.sessions ?? []
         loading = false
     }
 
     private func revokeSession(_ session: ApiSession) async {
-        try? await authManager.apiClient.delete("sessions/\(session.sessionId)?type=\(session.type)")
+        let sessionType = SessionType(rawValue: session.type) ?? .access
+        try? await dataModel.deleteSession(id: session.sessionId, type: sessionType)
         await loadSessions()
     }
 
     private func revokeAllOthers() async {
-        try? await authManager.apiClient.delete("sessions?scope=others")
+        try? await dataModel.deleteOtherSessions()
         await loadSessions()
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LiveTvView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var channels: [ApiTvChannel] = []
     @State private var loading = true
     @State private var selectedChannel: ApiTvChannel?
@@ -74,7 +74,7 @@ struct LiveTvView: View {
 
     private func loadChannels() async {
         loading = channels.isEmpty
-        let response: ApiTvChannelListResponse? = try? await authManager.apiClient.get("live/tv/channels")
+        let response = try? await dataModel.tvChannels()
         channels = response?.channels ?? []
         loading = false
     }

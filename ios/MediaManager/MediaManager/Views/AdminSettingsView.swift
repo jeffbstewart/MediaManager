@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminSettingsView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var settings: [String: String] = [:]
     @State private var buddyKeys: [AdminBuddyKey] = []
     @State private var loading = true
@@ -73,7 +73,7 @@ struct AdminSettingsView: View {
 
     private func loadSettings() async {
         loading = settings.isEmpty
-        let response: AdminSettingsResponse? = try? await authManager.apiClient.get("admin/settings")
+        let response = try? await dataModel.adminSettings()
         if let s = response?.settings {
             settings = s.compactMapValues { $0 }
         }
@@ -82,6 +82,6 @@ struct AdminSettingsView: View {
     }
 
     private func saveSetting(_ key: String, value: String) async {
-        try? await authManager.apiClient.put("admin/settings", body: [key: value])
+        try? await dataModel.updateSetting(key: key, value: value)
     }
 }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct PlaybackRoute: Hashable, Identifiable {
-    var id: Int { transcodeId }
-    let transcodeId: Int
+    var id: TranscodeID { transcodeId }
+    let transcodeId: TranscodeID
     let titleName: String
     let episodeName: String?
     var hasSubtitles: Bool = false
@@ -12,30 +12,29 @@ struct PlaybackRoute: Hashable, Identifiable {
 }
 
 struct NextEpisode: Hashable {
-    let transcodeId: Int
+    let transcodeId: TranscodeID
     let episodeName: String
     let hasSubtitles: Bool
 }
 
 struct TvShowRoute: Hashable {
-    let titleId: Int
+    let titleId: TitleID
     let titleName: String
 }
 
 struct SeasonRoute: Hashable {
-    let titleId: Int
+    let titleId: TitleID
     let titleName: String
     let season: ApiSeason
 }
 
 struct SeasonsView: View {
-    @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: TvShowRoute
     @State private var seasons: [ApiSeason] = []
     @State private var loading = true
 
-    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
+    private var isOffline: Bool { !dataModel.isOnline }
 
     var body: some View {
         Group {
@@ -66,11 +65,7 @@ struct SeasonsView: View {
 
     private func loadSeasons() async {
         loading = true
-        if isOffline {
-            seasons = downloadManager.loadCachedSeasons(for: route.titleId) ?? []
-        } else {
-            seasons = (try? await authManager.apiClient.get("catalog/titles/\(route.titleId)/seasons")) ?? []
-        }
+        seasons = (try? await dataModel.seasons(titleId: route.titleId)) ?? []
         loading = false
     }
 }

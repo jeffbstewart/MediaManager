@@ -24,10 +24,10 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     private var backgroundSession: URLSession!
     private var apiClient: APIClient?
     private var cachedBaseURL: URL?
-    private var activeTaskMap: [Int: Int] = [:]  // URLSessionTask.taskIdentifier → transcodeId
+    private var activeTaskMap: [Int: TranscodeID] = [:]  // URLSessionTask.taskIdentifier → transcodeId
     private var backgroundCompletionHandler: (() -> Void)?
     private var networkMonitor: NWPathMonitor?
-    private var titleCacheEntries: [Int: TitleCacheEntry] = [:]  // titleId → entry
+    private var titleCacheEntries: [TitleID: TitleCacheEntry] = [:]  // titleId → entry
     private var pendingProgress: [PendingProgressUpdate] = []
 
     private static let sessionIdentifier = "net.stewart.mediamanager.downloads"
@@ -75,7 +75,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - Public API
 
-    func startDownload(transcodeId: Int, titleId: Int, titleName: String,
+    func startDownload(transcodeId: TranscodeID, titleId: TitleID, titleName: String,
                        posterUrl: String?, quality: String?, year: Int?) {
         guard item(for: transcodeId) == nil else { return }
 
@@ -105,7 +105,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    func pauseDownload(transcodeId: Int) {
+    func pauseDownload(transcodeId: TranscodeID) {
         guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }),
               items[index].state == .downloading else { return }
 
@@ -127,7 +127,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    func resumeDownload(transcodeId: Int) {
+    func resumeDownload(transcodeId: TranscodeID) {
         guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }),
               items[index].state == .paused || items[index].state == .failed else { return }
 
@@ -153,7 +153,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         persist()
     }
 
-    func deleteDownload(transcodeId: Int) {
+    func deleteDownload(transcodeId: TranscodeID) {
         guard let item = item(for: transcodeId) else { return }
         let titleId = item.titleId
 
@@ -166,7 +166,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         // Remove transcode directory
-        let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId)")
+        let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId.rawValue)")
         try? FileManager.default.removeItem(at: dir)
 
         items.removeAll { $0.transcodeId == transcodeId }
@@ -176,14 +176,14 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         cleanupTitleCacheIfOrphaned(titleId: titleId)
     }
 
-    func localFileURL(for transcodeId: Int) -> URL? {
+    func localFileURL(for transcodeId: TranscodeID) -> URL? {
         guard let item = item(for: transcodeId),
               item.state == .completed else { return nil }
         let url = item.videoFileURL
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    func localDir(for transcodeId: Int) -> URL? {
+    func localDir(for transcodeId: TranscodeID) -> URL? {
         guard let item = item(for: transcodeId),
               item.state == .completed else { return nil }
         let url = item.localDir
@@ -191,11 +191,11 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue ? url : nil
     }
 
-    func state(for transcodeId: Int) -> DownloadState? {
+    func state(for transcodeId: TranscodeID) -> DownloadState? {
         item(for: transcodeId)?.state
     }
 
-    func item(for transcodeId: Int) -> DownloadItem? {
+    func item(for transcodeId: TranscodeID) -> DownloadItem? {
         items.first { $0.transcodeId == transcodeId }
     }
 
@@ -210,14 +210,14 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - Offline Mode
 
     /// Set of unique title IDs that have at least one completed download.
-    var offlineTitleIds: Set<Int> {
+    var offlineTitleIds: Set<TitleID> {
         Set(items.filter { $0.state == .completed }.map { $0.titleId })
     }
 
     // MARK: - Title Cache
 
     /// Returns the title cache directory for a given title, or nil if no cache exists.
-    func titleCacheDir(for titleId: Int) -> URL? {
+    func titleCacheDir(for titleId: TitleID) -> URL? {
         let dir = DownloadItem.titleCacheDir(for: titleId)
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir),
@@ -226,7 +226,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Load cached title detail from disk.
-    func loadCachedTitleDetail(for titleId: Int) -> ApiTitleDetail? {
+    func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
         guard let dir = titleCacheDir(for: titleId) else { return nil }
         let file = dir.appendingPathComponent("detail.json")
         guard let data = try? Data(contentsOf: file) else { return nil }
@@ -234,7 +234,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Load cached seasons from disk.
-    func loadCachedSeasons(for titleId: Int) -> [ApiSeason]? {
+    func loadCachedSeasons(for titleId: TitleID) -> [ApiSeason]? {
         guard let dir = titleCacheDir(for: titleId) else { return nil }
         let file = dir.appendingPathComponent("seasons.json")
         guard let data = try? Data(contentsOf: file) else { return nil }
@@ -242,7 +242,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Load cached episodes for a season from disk.
-    func loadCachedEpisodes(for titleId: Int, season: Int) -> [ApiEpisode]? {
+    func loadCachedEpisodes(for titleId: TitleID, season: Int) -> [ApiEpisode]? {
         guard let dir = titleCacheDir(for: titleId) else { return nil }
         let file = dir.appendingPathComponent("episodes_\(season).json")
         guard let data = try? Data(contentsOf: file) else { return nil }
@@ -250,7 +250,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Load a cached image (poster, backdrop, headshot) from the title cache.
-    func loadCachedImage(for titleId: Int, name: String) -> Data? {
+    func loadCachedImage(for titleId: TitleID, name: String) -> Data? {
         guard let dir = titleCacheDir(for: titleId) else { return nil }
         return try? Data(contentsOf: dir.appendingPathComponent(name))
     }
@@ -258,7 +258,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - Progress Queue
 
     /// Queue a progress update for later sync (used when offline).
-    func queueProgressUpdate(transcodeId: Int, position: Double, duration: Double?) {
+    func queueProgressUpdate(transcodeId: TranscodeID, position: Double, duration: Double?) {
         // Replace any existing entry for this transcode (only latest matters)
         pendingProgress.removeAll { $0.transcodeId == transcodeId }
         pendingProgress.append(PendingProgressUpdate(
@@ -276,12 +276,12 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
         var remaining: [PendingProgressUpdate] = []
         for update in pendingProgress {
-            var body: [String: Any] = ["position": update.position]
+            nonisolated(unsafe) var body: [String: Any] = ["position": update.position]
             if let dur = update.duration {
                 body["duration"] = dur
             }
             do {
-                try await apiClient.post("playback/progress/\(update.transcodeId)", body: body)
+                try await apiClient.post("playback/progress/\(update.transcodeId.rawValue)", body: body)
             } catch {
                 remaining.append(update)
             }
@@ -322,7 +322,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         MainActor.assumeIsolated {
             guard let tcId = activeTaskMap[taskId] else { return }
 
-            let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(tcId)")
+            let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(tcId.rawValue)")
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
             let dest = dir.appendingPathComponent("video.mp4")
             try? fm.removeItem(at: dest)
@@ -384,7 +384,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - Private: Download Flow
 
-    private func performDownload(transcodeId tcId: Int) async {
+    private func performDownload(transcodeId tcId: TranscodeID) async {
         guard let apiClient else {
             markFailed(transcodeId: tcId, error: "Not configured")
             return
@@ -397,7 +397,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
         // Fetch manifest
         do {
-            let manifest: ApiDownloadManifest = try await apiClient.get("downloads/manifest/\(tcId)")
+            let manifest: ApiDownloadManifest = try await apiClient.get("downloads/manifest/\(tcId.rawValue)")
             guard let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
             items[index].fileSizeBytes = manifest.fileSizeBytes
         } catch {
@@ -440,11 +440,12 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         task.resume()
     }
 
-    private func downloadSupportingFiles(transcodeId: Int, dir: URL) async {
+    private func downloadSupportingFiles(transcodeId: TranscodeID, dir: URL) async {
         guard let apiClient else { return }
+        let tcRaw = transcodeId.rawValue
 
         // Subtitles
-        if let data = try? await apiClient.getRaw("stream/\(transcodeId)/subs.vtt"),
+        if let data = try? await apiClient.getRaw("stream/\(tcRaw)/subs.vtt"),
            let content = String(data: data, encoding: .utf8), content.contains("-->") {
             try? data.write(to: dir.appendingPathComponent("subs.vtt"))
             if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
@@ -453,13 +454,13 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         // Thumbnails VTT
-        if let data = try? await apiClient.getRaw("stream/\(transcodeId)/thumbs.vtt"),
+        if let data = try? await apiClient.getRaw("stream/\(tcRaw)/thumbs.vtt"),
            let content = String(data: data, encoding: .utf8), content.contains("-->") {
             try? data.write(to: dir.appendingPathComponent("thumbs.vtt"))
 
             let sheetIndices = parseSpriteSheetIndices(from: content)
             for sheetIndex in sheetIndices {
-                if let imgData = try? await apiClient.getRaw("stream/\(transcodeId)/thumbs_\(sheetIndex).jpg") {
+                if let imgData = try? await apiClient.getRaw("stream/\(tcRaw)/thumbs_\(sheetIndex).jpg") {
                     try? imgData.write(to: dir.appendingPathComponent("thumbs_\(sheetIndex).jpg"))
                 }
             }
@@ -470,7 +471,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         // Chapters/skip segments
-        if let data = try? await apiClient.getRaw("api/v1/stream/\(transcodeId)/chapters") {
+        if let data = try? await apiClient.getRaw("api/v1/stream/\(tcRaw)/chapters") {
             if (try? JSONDecoder().decode(ChaptersResponse.self, from: data)) != nil {
                 try? data.write(to: dir.appendingPathComponent("chapters.json"))
                 if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
@@ -485,14 +486,15 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - Private: Title Cache
 
     /// Cache title detail, images, seasons, and episodes for offline use.
-    private func cacheTitleData(titleId: Int) async {
+    private func cacheTitleData(titleId: TitleID) async {
         guard let apiClient else { return }
         let dir = DownloadItem.titleCacheDir(for: titleId)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let titleRaw = titleId.rawValue
 
         // Title detail
         do {
-            let detail: ApiTitleDetail = try await apiClient.get("catalog/titles/\(titleId)")
+            let detail: ApiTitleDetail = try await apiClient.get("catalog/titles/\(titleRaw)")
             let data = try JSONEncoder().encode(detail)
             try data.write(to: dir.appendingPathComponent("detail.json"), options: .atomic)
 
@@ -516,7 +518,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
             for member in detail.cast.prefix(20) {
                 if let headshotUrl = member.headshotUrl {
                     if let imgData = try? await apiClient.getRaw(headshotUrl) {
-                        try? imgData.write(to: headshotsDir.appendingPathComponent("\(member.tmdbPersonId).jpg"))
+                        try? imgData.write(to: headshotsDir.appendingPathComponent("\(member.tmdbPersonId.rawValue).jpg"))
                     }
                 }
             }
@@ -525,14 +527,14 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         // Seasons
-        if let seasons: [ApiSeason] = try? await apiClient.get("catalog/titles/\(titleId)/seasons"),
+        if let seasons: [ApiSeason] = try? await apiClient.get("catalog/titles/\(titleRaw)/seasons"),
            let data = try? JSONEncoder().encode(seasons) {
             try? data.write(to: dir.appendingPathComponent("seasons.json"), options: .atomic)
 
             // Episodes for each season
             for season in seasons {
                 if let episodes: [ApiEpisode] = try? await apiClient.get(
-                    "catalog/titles/\(titleId)/seasons/\(season.seasonNumber)/episodes"),
+                    "catalog/titles/\(titleRaw)/seasons/\(season.seasonNumber)/episodes"),
                    let epData = try? JSONEncoder().encode(episodes) {
                     try? epData.write(to: dir.appendingPathComponent("episodes_\(season.seasonNumber).json"), options: .atomic)
                 }
@@ -545,7 +547,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Refresh title cache only if stale (older than 24 hours).
-    private func cacheTitleDataIfStale(titleId: Int) async {
+    private func cacheTitleDataIfStale(titleId: TitleID) async {
         if let entry = titleCacheEntries[titleId],
            Date().timeIntervalSince(entry.lastUpdated) < Self.cacheStaleInterval {
             return // Still fresh
@@ -554,7 +556,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Remove title cache directory if no downloads remain for that title.
-    private func cleanupTitleCacheIfOrphaned(titleId: Int) {
+    private func cleanupTitleCacheIfOrphaned(titleId: TitleID) {
         let hasRemainingDownloads = items.contains { $0.titleId == titleId }
         if !hasRemainingDownloads {
             let dir = DownloadItem.titleCacheDir(for: titleId)
@@ -599,12 +601,12 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         return indices
     }
 
-    private func downloadURL(for transcodeId: Int) -> URL? {
+    private func downloadURL(for transcodeId: TranscodeID) -> URL? {
         guard let baseURL = cachedBaseURL else { return nil }
-        return URL(string: baseURL.absoluteString + "/api/v1/downloads/\(transcodeId)")
+        return URL(string: baseURL.absoluteString + "/api/v1/downloads/\(transcodeId.rawValue)")
     }
 
-    private func markFailed(transcodeId: Int, error: String) {
+    private func markFailed(transcodeId: TranscodeID, error: String) {
         guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) else { return }
         items[index].state = .failed
         items[index].errorMessage = error
@@ -667,7 +669,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
                     if self.items[i].state == .downloading || self.items[i].state == .fetchingMetadata {
                         let hasActiveTask = tasks.contains { task in
                             if let url = task.originalRequest?.url?.absoluteString,
-                               url.contains("/downloads/\(self.items[i].transcodeId)") {
+                               url.contains("/downloads/\(self.items[i].transcodeId.rawValue)") {
                                 self.activeTaskMap[task.taskIdentifier] = self.items[i].transcodeId
                                 return true
                             }

@@ -2,7 +2,7 @@ import SwiftUI
 import AVKit
 
 struct CamerasView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var cameras: [ApiCamera] = []
     @State private var loading = true
     @State private var selectedCamera: ApiCamera?
@@ -23,7 +23,7 @@ struct CamerasView: View {
                             // Snapshot preview
                             AuthenticatedImage(
                                 path: camera.snapshotUrl,
-                                apiClient: authManager.apiClient,
+                                apiClient: dataModel.apiClient,
                                 cornerRadius: 6
                             )
                             .frame(width: 80, height: 45)
@@ -66,7 +66,7 @@ struct CamerasView: View {
 
     private func loadCameras() async {
         loading = cameras.isEmpty
-        let response: ApiCameraListResponse? = try? await authManager.apiClient.get("live/cameras")
+        let response = try? await dataModel.cameras()
         cameras = response?.cameras ?? []
         loading = false
     }

@@ -1,9 +1,9 @@
 import Foundation
 
 struct ApiWish: Codable, Identifiable {
-    var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")-\(seasonNumber ?? 0)-\(status ?? "")" }
-    let tmdbId: Int?
-    let mediaType: String?
+    var id: String { "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")-\(seasonNumber ?? 0)-\(status ?? "")" }
+    let tmdbId: TmdbID?
+    let mediaType: MediaType?
     let title: String
     let posterUrl: String?
     let releaseYear: Int?
@@ -11,10 +11,10 @@ struct ApiWish: Codable, Identifiable {
     let voteCount: Int
     let voters: [String]
     let voted: Bool
-    let wishId: Int?
+    let wishId: WishID?
     let acquisitionStatus: String?
     let status: String?
-    let titleId: Int?
+    let titleId: TitleID?
 
     var isFulfilled: Bool { status == "fulfilled" }
 
@@ -37,11 +37,11 @@ struct ApiWishListResponse: Codable {
 }
 
 struct ApiTranscodeWish: Codable, Identifiable {
-    let id: Int
-    let titleId: Int
+    let id: TranscodeID
+    let titleId: TitleID
     let titleName: String
     let posterUrl: String?
-    let mediaType: String?
+    let mediaType: MediaType?
     let requestedAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -63,10 +63,10 @@ struct ApiTranscodeWishListResponse: Codable {
 }
 
 struct TmdbSearchItem: Codable, Identifiable {
-    var id: String { "\(tmdbId ?? 0)-\(mediaType ?? "")" }
-    let tmdbId: Int?
+    var id: String { "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")" }
+    let tmdbId: TmdbID?
     let title: String?
-    let mediaType: String?
+    let mediaType: MediaType?
     let releaseYear: Int?
     let posterUrl: String?
     let posterPath: String?

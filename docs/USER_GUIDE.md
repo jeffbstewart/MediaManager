@@ -262,6 +262,76 @@ Media Manager includes a custom Roku channel for TV playback. See the [Roku Setu
 
 ---
 
+## iOS App
+
+Media Manager has a native iOS app for iPhone and iPad. The app connects to your server over HTTPS and provides the same browsing, searching, and playback experience as the browser, plus offline downloads for watching without a network connection.
+
+### Getting Connected
+
+1. Open the app and enter your server's URL (e.g., `https://media.example.com`)
+2. The app discovers the server and prompts for your username and password
+3. Once authenticated, your full library appears in the sidebar
+
+The app uses the same accounts and permissions as the web UI &mdash; your playback progress, wish list votes, and favorites sync across all devices.
+
+### Downloading for Offline Playback
+
+When the server has the **downloads** capability enabled, you can download movies for offline playback.
+
+**To download a title:**
+1. Open any movie's detail page
+2. Tap the **Download** button (arrow icon) in the action row below the play button
+3. The download begins in the background &mdash; you can continue browsing
+
+**Download management:**
+- Open the **Downloads** tab in the sidebar to see active and completed downloads
+- Swipe left on any completed download to delete it
+- The storage section at the bottom shows how much space downloads use and how much free space remains
+- Downloads include subtitles, thumbnail previews, and skip segment data when available
+
+**What gets cached:** When a download completes, the app also caches the title's detail page, poster and backdrop images, cast headshots, and (for TV shows) season and episode listings. This means you can browse a downloaded title's full detail page, navigate its seasons and episodes, and see cast information &mdash; all without a connection.
+
+**TV episodes:** Individual episodes can be downloaded. The episode list shows which episodes are available offline and which require a connection.
+
+### Offline Mode
+
+Offline mode lets you use the app with only your downloaded content, without contacting the server. There are three ways to enter offline mode:
+
+1. **Manual toggle** &mdash; Flip the **Online/Offline** switch at the bottom of the sidebar. The app immediately switches to showing only downloaded content.
+
+2. **Automatic detection** &mdash; If you lose network connectivity (airplane mode, poor signal), the app detects this and enters offline mode automatically. When connectivity returns, it switches back.
+
+3. **Server unreachable** &mdash; If the app can authenticate but can't reach the server (server is down, network path blocked), it offers an alert: "Server Unreachable &mdash; Go Offline?" Tapping **Go Offline** engages offline mode so you can watch your downloaded content instead of staring at a loading spinner.
+
+### What Works Offline
+
+| Feature | Offline? | Notes |
+|---------|----------|-------|
+| Browse downloaded titles | Yes | Title detail, seasons, episodes from cache |
+| Play downloaded content | Yes | Full playback with subtitles, thumbnails, skip segments |
+| Playback progress | Queued | Position saved locally, synced to server when back online |
+| Home screen | No | Requires server |
+| Catalog browsing | No | Requires server |
+| Search | No | Requires server |
+| Wish list | No | Requires server |
+| Actor pages | No | Requires server |
+| Collections, tags, genres | No | Requires server |
+| Cameras, Live TV | No | Requires server (live streams) |
+| Profile, sessions | No | Requires server |
+| Admin functions | No | Requires server |
+| New downloads | No | Requires server |
+
+When offline, the sidebar shows only the **Downloads** tab. Online-only tabs (Home, Movies, TV Shows, etc.) are hidden. Within a downloaded title's detail page, action buttons like Favorite, Hide, and Re-transcode are hidden since they require server communication. Cast members are displayed but not tappable (actor pages require the server).
+
+### Returning Online
+
+Flip the offline toggle back to **Online**, or simply restore network connectivity. The app:
+- Re-shows all sidebar tabs
+- Syncs any queued playback progress to the server
+- Resumes normal operation
+
+---
+
 <p align="center">
   <a href="index.md">Documentation Home</a> &bull;
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;

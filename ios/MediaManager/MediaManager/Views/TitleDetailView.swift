@@ -1,15 +1,14 @@
 import SwiftUI
 
 struct TitleDetailView: View {
-    @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
-    let titleId: Int
+    @Environment(OnlineDataModel.self) private var dataModel
+    let titleId: TitleID
     @State private var detail: ApiTitleDetail?
     @State private var loading = true
     @State private var isFavorite = false
     @State private var isHidden = false
 
-    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
+    private var isOffline: Bool { !dataModel.isOnline }
 
     var body: some View {
         Group {
@@ -26,7 +25,7 @@ struct TitleDetailView: View {
                         } else {
                             AuthenticatedImage(
                                 path: detail.backdropUrl ?? detail.posterUrl,
-                                apiClient: authManager.apiClient,
+                                apiClient: dataModel.apiClient,
                                 cornerRadius: 0
                             )
                             .frame(height: 220)
@@ -56,17 +55,17 @@ struct TitleDetailView: View {
                                     Text(quality)
                                         .fontWeight(.semibold)
                                 }
-                                Text(detail.mediaType == "TV" ? "TV Series" : "Movie")
+                                Text(detail.mediaType == .tv ? "TV Series" : "Movie")
                                     .foregroundStyle(.secondary)
                             }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
                             // Play button for movies
-                            if detail.playable, detail.mediaType != "TV", let tcId = detail.transcodeId {
+                            if detail.playable, detail.mediaType != .tv, let tcId = detail.transcodeId {
                                 let tcHasSubs = detail.transcodes.first(where: { $0.id == tcId })?.hasSubtitles ?? false
                                 // In offline mode, only show play if we have the local file
-                                if !isOffline || downloadManager.localFileURL(for: tcId) != nil {
+                                if !isOffline || dataModel.downloads.localFileURL(for: tcId) != nil {
                                     NavigationLink(value: PlaybackRoute(
                                         transcodeId: tcId, titleName: detail.name, episodeName: nil,
                                         hasSubtitles: tcHasSubs
@@ -80,7 +79,7 @@ struct TitleDetailView: View {
                             }
 
                             // Seasons button for TV
-                            if detail.mediaType == "TV" {
+                            if detail.mediaType == .tv {
                                 NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name)) {
                                     Label("Seasons & Episodes", systemImage: "list.number")
                                         .frame(maxWidth: .infinity)
@@ -122,8 +121,8 @@ struct TitleDetailView: View {
                                     }
 
                                     // Download button (movies only, when downloads capability available)
-                                    if authManager.serverInfo?.capabilities.contains("downloads") == true,
-                                       detail.mediaType != "TV",
+                                    if dataModel.capabilities.contains("downloads"),
+                                       detail.mediaType != .tv,
                                        let tcId = detail.transcodeId {
                                         downloadButton(detail: detail, transcodeId: tcId)
                                     }
@@ -212,7 +211,7 @@ struct TitleDetailView: View {
                                                 } else {
                                                     AuthenticatedImage(
                                                         path: member.headshotUrl,
-                                                        apiClient: authManager.apiClient,
+                                                        apiClient: dataModel.apiClient,
                                                         cornerRadius: 40,
                                                         contentMode: .fit
                                                     )
@@ -264,57 +263,44 @@ struct TitleDetailView: View {
 
     private func loadDetail() async {
         loading = true
-        if isOffline {
-            // Load from cache
-            detail = downloadManager.loadCachedTitleDetail(for: titleId)
-        } else {
-            detail = try? await authManager.apiClient.get("catalog/titles/\(titleId)")
-        }
+        detail = try? await dataModel.titleDetail(id: titleId)
         isFavorite = detail?.isFavorite ?? false
         isHidden = detail?.isHidden ?? false
         loading = false
     }
 
-    private func toggleFavorite(_ id: Int) async {
+    private func toggleFavorite(_ id: TitleID) async {
         isFavorite.toggle()
         do {
-            if isFavorite {
-                try await authManager.apiClient.put("catalog/titles/\(id)/favorite")
-            } else {
-                try await authManager.apiClient.delete("catalog/titles/\(id)/favorite")
-            }
+            try await dataModel.setFavorite(titleId: id, favorite: isFavorite)
         } catch {
             isFavorite.toggle()
         }
     }
 
-    private func toggleHidden(_ id: Int) async {
+    private func toggleHidden(_ id: TitleID) async {
         isHidden.toggle()
         do {
-            if isHidden {
-                try await authManager.apiClient.put("catalog/titles/\(id)/hidden")
-            } else {
-                try await authManager.apiClient.delete("catalog/titles/\(id)/hidden")
-            }
+            try await dataModel.setHidden(titleId: id, hidden: isHidden)
         } catch {
             isHidden.toggle()
         }
     }
 
-    private func requestRetranscode(_ id: Int) async {
-        try? await authManager.apiClient.post("catalog/titles/\(id)/request-retranscode", body: [:])
+    private func requestRetranscode(_ id: TitleID) async {
+        try? await dataModel.requestRetranscode(titleId: id)
     }
 
     @ViewBuilder
-    private func downloadButton(detail: ApiTitleDetail, transcodeId: Int) -> some View {
-        let dlState = downloadManager.state(for: transcodeId)
+    private func downloadButton(detail: ApiTitleDetail, transcodeId: TranscodeID) -> some View {
+        let dlState = dataModel.downloads.state(for: transcodeId)
 
         switch dlState {
         case .completed:
             Label("Downloaded", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .downloading, .fetchingMetadata:
-            if let item = downloadManager.item(for: transcodeId) {
+            if let item = dataModel.downloads.item(for: transcodeId) {
                 HStack(spacing: 4) {
                     ProgressView(value: item.progress)
                         .frame(width: 40)
@@ -325,21 +311,21 @@ struct TitleDetailView: View {
             }
         case .paused:
             Button {
-                downloadManager.resumeDownload(transcodeId: transcodeId)
+                dataModel.downloads.resumeDownload(transcodeId: transcodeId)
             } label: {
                 Label("Resume", systemImage: "arrow.down.circle")
                     .foregroundStyle(.orange)
             }
         case .failed:
             Button {
-                downloadManager.resumeDownload(transcodeId: transcodeId)
+                dataModel.downloads.resumeDownload(transcodeId: transcodeId)
             } label: {
                 Label("Retry", systemImage: "arrow.clockwise.circle")
                     .foregroundStyle(.red)
             }
         case nil:
             Button {
-                downloadManager.startDownload(
+                dataModel.downloads.startDownload(
                     transcodeId: transcodeId,
                     titleId: detail.id,
                     titleName: detail.name,
@@ -357,15 +343,15 @@ struct TitleDetailView: View {
     // MARK: - Offline Image Helpers
 
     @ViewBuilder
-    private func offlineImage(titleId: Int, name: String, fallback: String? = nil) -> some View {
-        if let data = downloadManager.loadCachedImage(for: titleId, name: name),
+    private func offlineImage(titleId: TitleID, name: String, fallback: String? = nil) -> some View {
+        if let data = dataModel.downloads.loadCachedImage(for: titleId, name: name),
            let uiImage = UIImage(data: data) {
             Image(uiImage: uiImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .clipped()
         } else if let fallback,
-                  let data = downloadManager.loadCachedImage(for: titleId, name: fallback),
+                  let data = dataModel.downloads.loadCachedImage(for: titleId, name: fallback),
                   let uiImage = UIImage(data: data) {
             Image(uiImage: uiImage)
                 .resizable()
@@ -382,8 +368,8 @@ struct TitleDetailView: View {
     }
 
     @ViewBuilder
-    private func offlineHeadshot(titleId: Int, personId: Int) -> some View {
-        if let data = downloadManager.loadCachedImage(for: titleId, name: "headshots/\(personId).jpg"),
+    private func offlineHeadshot(titleId: TitleID, personId: TmdbPersonID) -> some View {
+        if let data = dataModel.downloads.loadCachedImage(for: titleId, name: "headshots/\(personId.rawValue).jpg"),
            let uiImage = UIImage(data: data) {
             Image(uiImage: uiImage)
                 .resizable()

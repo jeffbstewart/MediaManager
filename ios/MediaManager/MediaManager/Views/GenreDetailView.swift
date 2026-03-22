@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct GenreRoute: Hashable {
-    let id: Int
+    let id: GenreID
     let name: String
 }
 
@@ -11,7 +11,7 @@ struct ApiGenreDetail: Codable {
 }
 
 struct GenreDetailView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: GenreRoute
     @State private var detail: ApiGenreDetail?
     @State private var loading = true
@@ -29,7 +29,7 @@ struct GenreDetailView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(detail.titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title, apiClient: authManager.apiClient)
+                                PosterCard(title: title, apiClient: dataModel.apiClient)
                             }
                             .buttonStyle(.plain)
                         }
@@ -49,7 +49,7 @@ struct GenreDetailView: View {
 
     private func loadDetail() async {
         loading = true
-        detail = try? await authManager.apiClient.get("catalog/genres/\(route.id)")
+        detail = try? await dataModel.genreDetail(id: route.id)
         loading = false
     }
 }

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
+    @State private var showOfflineOffer = false
 
     var body: some View {
         switch authManager.state {
@@ -17,6 +19,19 @@ struct RootView: View {
                 )) {
                     ForcedPasswordChangeView()
                 }
+                .alert("Server Unreachable", isPresented: $showOfflineOffer) {
+                    Button("Go Offline") {
+                        dataModel.downloads.isOfflineMode = true
+                    }
+                    Button("Keep Trying", role: .cancel) {}
+                } message: {
+                    Text("Can't reach the server. You can switch to offline mode to browse and play your downloaded content.")
+                }
+                .onChange(of: authManager.serverUnreachable) { _, unreachable in
+                    if unreachable && dataModel.downloads.hasCompletedDownloads && !dataModel.downloads.isOfflineMode {
+                        showOfflineOffer = true
+                    }
+                }
         case .fingerprintMismatch(_, let expected, let received):
             FingerprintMismatchView(expected: expected, received: received)
         }
@@ -24,6 +39,7 @@ struct RootView: View {
 }
 
 struct ForcedPasswordChangeView: View {
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AuthManager.self) private var authManager
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -87,10 +103,7 @@ struct ForcedPasswordChangeView: View {
         }
         saving = true
         do {
-            try await authManager.apiClient.post("auth/change-password", body: [
-                "current_password": "",
-                "new_password": newPassword
-            ])
+            try await dataModel.changePassword(current: "", new: newPassword)
             authManager.clearPasswordChangeRequired()
         } catch {
             self.error = error.localizedDescription

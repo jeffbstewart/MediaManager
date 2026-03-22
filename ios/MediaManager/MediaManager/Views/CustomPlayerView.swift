@@ -27,11 +27,10 @@ struct PlayerLayerView: UIViewRepresentable {
 /// Fully custom video player with fading controls, subtitle overlay,
 /// scrub bar, AirPlay, and episode info display.
 struct CustomPlayerView: View {
-    @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
 
-    let transcodeId: Int
+    let transcodeId: TranscodeID
     let titleName: String
     let episodeName: String?
     var hasSubtitles: Bool = false
@@ -43,7 +42,7 @@ struct CustomPlayerView: View {
     @State private var error: String?
     @State private var progressTimer: Timer?
     @State private var endObserver: Any?
-    @State private var currentTranscodeId: Int?
+    @State private var currentTranscodeId: TranscodeID?
     @State private var currentEpisodeName: String?
     @State private var currentNextEpisode: NextEpisode?
     @State private var subtitles = SubtitleController()
@@ -496,21 +495,11 @@ struct CustomPlayerView: View {
         let tcId = currentTranscodeId ?? transcodeId
         let nextEp = currentNextEpisode ?? nextEpisode
 
-        // Check for local downloaded file first
-        let localURL = downloadManager.localFileURL(for: tcId)
-        let offlineDir = downloadManager.localDir(for: tcId)
+        let offlineDir = dataModel.downloads.localDir(for: tcId)
 
-        let asset: AVURLAsset
-        if let localURL {
-            asset = AVURLAsset(url: localURL)
-        } else {
-            guard let (url, headers) = await authManager.apiClient.streamURL(for: tcId) else {
-                error = "Unable to build stream URL"
-                return
-            }
-            asset = AVURLAsset(url: url, options: [
-                "AVURLAssetHTTPHeaderFieldsKey": headers
-            ])
+        guard let asset = await dataModel.streamAsset(transcodeId: tcId) else {
+            error = "Unable to build stream URL"
+            return
         }
 
         let item = AVPlayerItem(asset: asset)
@@ -539,8 +528,7 @@ struct CustomPlayerView: View {
 
         // Seek to saved position
         Task {
-            let progress: ApiPlaybackProgress? = try? await authManager.apiClient.get(
-                "playback/progress/\(tcId)")
+            let progress = await dataModel.playbackProgress(transcodeId: tcId)
             if let position = progress?.positionSeconds, position > 0 {
                 await avPlayer.seek(to: CMTime(seconds: position, preferredTimescale: 1))
             }
@@ -548,9 +536,9 @@ struct CustomPlayerView: View {
 
         // Load subtitles, thumbnails, and skip segments in parallel
         // Pass local directory for offline playback support
-        async let subLoad: () = subtitles.load(transcodeId: tcId, apiClient: authManager.apiClient, localDir: offlineDir)
-        async let thumbLoad: () = thumbnails.load(transcodeId: tcId, apiClient: authManager.apiClient, localDir: offlineDir)
-        async let skipLoad: () = skipController.load(transcodeId: tcId, apiClient: authManager.apiClient, localDir: offlineDir)
+        async let subLoad: () = subtitles.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
+        async let thumbLoad: () = thumbnails.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
+        async let skipLoad: () = skipController.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
         _ = await (subLoad, thumbLoad, skipLoad)
         subtitles.startObserving(player: avPlayer)
         skipController.startObserving(player: avPlayer)
@@ -586,7 +574,7 @@ struct CustomPlayerView: View {
 
     // MARK: - Progress
 
-    private var activeTranscodeId: Int {
+    private var activeTranscodeId: TranscodeID {
         currentTranscodeId ?? transcodeId
     }
 
@@ -612,14 +600,8 @@ struct CustomPlayerView: View {
         let tcId = activeTranscodeId
         let duration = (dur?.isFinite == true && dur! > 0) ? dur : nil
 
-        if downloadManager.isEffectivelyOffline {
-            downloadManager.queueProgressUpdate(transcodeId: tcId, position: position, duration: duration)
-        } else {
-            Task {
-                var body: [String: Any] = ["position": position]
-                if let duration { body["duration"] = duration }
-                try? await authManager.apiClient.post("playback/progress/\(tcId)", body: body)
-            }
+        Task {
+            await dataModel.reportProgress(transcodeId: tcId, position: position, duration: duration)
         }
     }
 
@@ -631,14 +613,7 @@ struct CustomPlayerView: View {
         guard position.isFinite && position > 0 else { return }
         let duration = (dur?.isFinite == true && dur! > 0) ? dur : nil
 
-        if downloadManager.isEffectivelyOffline {
-            downloadManager.queueProgressUpdate(
-                transcodeId: activeTranscodeId, position: position, duration: duration)
-        } else {
-            var body: [String: Any] = ["position": position]
-            if let duration { body["duration"] = duration }
-            try? await authManager.apiClient.post("playback/progress/\(activeTranscodeId)", body: body)
-        }
+        await dataModel.reportProgress(transcodeId: activeTranscodeId, position: position, duration: duration)
     }
 }
 

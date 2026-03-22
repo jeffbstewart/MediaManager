@@ -9,7 +9,7 @@ enum Tab: Hashable {
 
 struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
     @State private var navigationPath = NavigationPath()
@@ -17,11 +17,11 @@ struct ContentView: View {
 
     /// Downloads capability is available if the server reports it OR we've seen it before (cached).
     private var hasDownloadsCapability: Bool {
-        authManager.serverInfo?.capabilities.contains("downloads") == true
+        dataModel.capabilities.contains("downloads")
         || authManager.cachedCapabilities.contains("downloads")
     }
 
-    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
+    private var isOffline: Bool { !dataModel.isOnline }
 
     var body: some View {
         NavigationSplitView {
@@ -47,7 +47,7 @@ struct ContentView: View {
                             .tag(Tab.liveTv)
                     }
 
-                    if authManager.serverInfo?.user?.isAdmin == true {
+                    if dataModel.userInfo?.isAdmin == true {
                         Section("Admin") {
                             Label("Transcode Status", systemImage: "gearshape.2")
                                 .tag(Tab.adminStatus)
@@ -75,7 +75,7 @@ struct ContentView: View {
                             .tag(Tab.search)
                         HStack {
                             Label("Wish List", systemImage: "heart")
-                            if let count = authManager.serverInfo?.user?.fulfilledWishCount, count > 0 {
+                            if let count = dataModel.userInfo?.fulfilledWishCount, count > 0 {
                                 Spacer()
                                 Text("\(count)")
                                     .font(.caption2)
@@ -90,12 +90,12 @@ struct ContentView: View {
                         .tag(Tab.wishList)
                     }
 
-                    if hasDownloadsCapability || downloadManager.hasCompletedDownloads {
+                    if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
                         HStack {
                             Label("Downloads", systemImage: "arrow.down.circle")
-                            if downloadManager.activeDownloadCount > 0 {
+                            if dataModel.downloads.activeDownloadCount > 0 {
                                 Spacer()
-                                Text("\(downloadManager.activeDownloadCount)")
+                                Text("\(dataModel.downloads.activeDownloadCount)")
                                     .font(.caption2)
                                     .fontWeight(.bold)
                                     .foregroundStyle(.white)
@@ -121,29 +121,40 @@ struct ContentView: View {
                 ToolbarItem(placement: .bottomBar) {
                     VStack(spacing: 8) {
                         // Offline mode toggle
-                        @Bindable var dm = downloadManager
+                        @Bindable var dm = dataModel.downloads
                         Toggle(isOn: $dm.isOfflineMode) {
                             Label(
-                                downloadManager.isOfflineMode ? "Offline Mode" : "Online",
-                                systemImage: downloadManager.isEffectivelyOffline
+                                dataModel.downloads.isOfflineMode ? "Offline Mode" : "Online",
+                                systemImage: dataModel.downloads.isEffectivelyOffline
                                     ? "wifi.slash" : "wifi"
                             )
                             .font(.callout)
                         }
                         .toggleStyle(.switch)
                         .tint(.orange)
-                        .onChange(of: downloadManager.isOfflineMode) { _, newValue in
-                            if newValue && (selectedTab == .home || selectedTab == .profile
-                                || selectedTab == .search || selectedTab == .wishList) {
-                                // Switch to Downloads when entering offline mode
-                                if downloadManager.hasCompletedDownloads || hasDownloadsCapability {
+                        .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
+                            if newValue {
+                                // When going offline, redirect from online-only tabs to Downloads
+                                let onlineOnlyTabs: Set<Tab> = [
+                                    .home, .movies, .tvShows, .collections, .tags, .family,
+                                    .cameras, .liveTv, .search, .wishList, .profile,
+                                    .adminStatus, .adminUsers, .adminPurchaseWishes,
+                                    .adminDataQuality, .adminTags, .adminTranscodes,
+                                    .adminUnmatched, .adminSettings
+                                ]
+                                if let tab = selectedTab, onlineOnlyTabs.contains(tab) {
                                     selectedTab = .downloads
                                 }
+                                navigationPath = NavigationPath()
                             }
                         }
 
-                        if !downloadManager.hasNetworkConnectivity && !downloadManager.isOfflineMode {
+                        if isOffline && !dataModel.downloads.isOfflineMode {
                             Text("No connection")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        } else if isOffline {
+                            Text("Offline mode")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                         }
@@ -168,15 +179,15 @@ struct ContentView: View {
                     case .home:
                         HomeView()
                     case .movies:
-                        CatalogView(typeFilter: "MOVIE", navigationTitle: "Movies")
+                        CatalogView(typeFilter: .movie, navigationTitle: "Movies")
                     case .tvShows:
-                        CatalogView(typeFilter: "TV", navigationTitle: "TV Shows")
+                        CatalogView(typeFilter: .tv, navigationTitle: "TV Shows")
                     case .collections:
                         CollectionsListView()
                     case .tags:
                         TagsListView()
                     case .family:
-                        CatalogView(typeFilter: "PERSONAL", navigationTitle: "Family")
+                        CatalogView(typeFilter: .personal, navigationTitle: "Family")
                     case .cameras:
                         CamerasView()
                     case .liveTv:
@@ -206,7 +217,7 @@ struct ContentView: View {
                     case .downloads:
                         DownloadsView()
                     case nil:
-                        if isOffline && downloadManager.hasCompletedDownloads {
+                        if isOffline && dataModel.downloads.hasCompletedDownloads {
                             DownloadsView()
                         } else {
                             HomeView()
@@ -244,9 +255,6 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear {
-            downloadManager.configure(apiClient: authManager.apiClient)
-        }
         .alert("Sign Out", isPresented: $showLogoutConfirmation) {
             Button("Sign Out", role: .destructive) {
                 Task { await authManager.logout() }
@@ -272,5 +280,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AuthManager())
-        .environment(DownloadManager())
+        .environment(OnlineDataModel(authManager: AuthManager(), downloadManager: DownloadManager()))
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WishListView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var wishes: [ApiWish] = []
     @State private var transcodeWishes: [ApiTranscodeWish] = []
     @State private var loading = true
@@ -22,7 +22,7 @@ struct WishListView: View {
                     if !fulfilled.isEmpty {
                         Section {
                             ForEach(fulfilled) { wish in
-                                FulfilledWishRow(wish: wish, apiClient: authManager.apiClient) {
+                                FulfilledWishRow(wish: wish) {
                                     await dismissWish(wish)
                                 }
                             }
@@ -35,7 +35,7 @@ struct WishListView: View {
                     if !active.isEmpty {
                         Section(fulfilled.isEmpty ? "" : "Wishes") {
                             ForEach(active) { wish in
-                                WishRow(wish: wish, apiClient: authManager.apiClient) {
+                                WishRow(wish: wish) {
                                     await toggleVote(wish)
                                 }
                             }
@@ -46,13 +46,13 @@ struct WishListView: View {
                         Section("Transcode Requests") {
                             ForEach(transcodeWishes) { wish in
                                 HStack(spacing: 12) {
-                                    AuthenticatedImage(path: wish.posterUrl, apiClient: authManager.apiClient)
+                                    AuthenticatedImage(path: wish.posterUrl, apiClient: dataModel.apiClient)
                                         .frame(width: 40, height: 60)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(wish.titleName)
                                             .fontWeight(.medium)
-                                        Text(wish.mediaType == "TV" ? "TV Series" : "Movie")
+                                        Text(wish.mediaType == .tv ? "TV Series" : "Movie")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -98,44 +98,39 @@ struct WishListView: View {
 
     private func loadWishes() async {
         loading = wishes.isEmpty
-        async let mediaResponse: ApiWishListResponse? = try? authManager.apiClient.get("wishlist")
-        async let transcodeResponse: ApiTranscodeWishListResponse? = try? authManager.apiClient.get("wishlist/transcodes")
+        async let mediaResponse = try? dataModel.wishList()
+        async let transcodeResponse = try? dataModel.transcodeWishList()
         wishes = await mediaResponse?.wishes ?? []
         transcodeWishes = await transcodeResponse?.transcodeWishes ?? []
         loading = false
     }
 
-    private func removeTranscodeWish(_ titleId: Int) async {
-        try? await authManager.apiClient.delete("wishlist/transcodes/\(titleId)")
+    private func removeTranscodeWish(_ titleId: TitleID) async {
+        try? await dataModel.deleteTranscodeWish(titleId: titleId)
         await loadWishes()
     }
 
     private func dismissWish(_ wish: ApiWish) async {
         guard let wishId = wish.wishId else { return }
-        try? await authManager.apiClient.post("wishlist/\(wishId)/dismiss", body: [:])
+        try? await dataModel.dismissWish(id: wishId)
         await loadWishes()
     }
 
     private func toggleVote(_ wish: ApiWish) async {
-        if wish.voted, let wishId = wish.wishId {
-            try? await authManager.apiClient.delete("wishlist/\(wishId)/vote")
-        } else if let wishId = wish.wishId {
-            try? await authManager.apiClient.post("wishlist/\(wishId)/vote", body: [:])
-        }
+        guard let wishId = wish.wishId else { return }
+        try? await dataModel.voteOnWish(id: wishId, vote: !wish.voted)
         await loadWishes()
     }
 }
 
 struct WishRow: View {
     let wish: ApiWish
-    let apiClient: APIClient
     let onToggleVote: () async -> Void
 
     @State private var voting = false
 
     var body: some View {
         HStack(spacing: 12) {
-            // Poster — TMDB URLs, no auth needed
             if let posterUrl = wish.posterUrl, let url = URL(string: posterUrl) {
                 AsyncImage(url: url) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
@@ -153,7 +148,7 @@ struct WishRow: View {
 
                 HStack(spacing: 6) {
                     if let type = wish.mediaType {
-                        Text(type == "TV" ? "TV Series" : "Movie")
+                        Text(type == .tv ? "TV Series" : "Movie")
                             .foregroundStyle(.secondary)
                     }
                     if let year = wish.releaseYear {
@@ -183,7 +178,6 @@ struct WishRow: View {
 
             Spacer()
 
-            // Vote button
             Button {
                 voting = true
                 Task {
@@ -219,7 +213,6 @@ struct WishRow: View {
 
 struct FulfilledWishRow: View {
     let wish: ApiWish
-    let apiClient: APIClient
     let onDismiss: () async -> Void
 
     var body: some View {
@@ -241,7 +234,7 @@ struct FulfilledWishRow: View {
 
                 HStack(spacing: 6) {
                     if let type = wish.mediaType {
-                        Text(type == "TV" ? "TV Series" : "Movie")
+                        Text(type == .tv ? "TV Series" : "Movie")
                             .foregroundStyle(.secondary)
                     }
                     if let year = wish.releaseYear {
@@ -277,7 +270,7 @@ struct FulfilledWishRow: View {
 }
 
 struct WishSearchView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [TmdbSearchItem] = []
@@ -339,8 +332,7 @@ struct WishSearchView: View {
             return
         }
         searching = true
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let response: TmdbSearchResponse? = try? await authManager.apiClient.get("tmdb/search?q=\(encoded)")
+        let response = try? await dataModel.searchTmdb(query: query)
         results = response?.results ?? []
         searching = false
         hasSearched = true
@@ -351,19 +343,14 @@ struct WishSearchView: View {
               let mediaType = item.mediaType,
               let title = item.title else { return }
 
-        var body: [String: Any] = [
-            "tmdb_id": tmdbId,
-            "media_type": mediaType,
-            "title": title,
-            "popularity": item.popularity ?? 0
-        ]
-        if let posterPath = item.posterPath {
-            body["poster_path"] = posterPath
-        }
-        if let year = item.releaseYear {
-            body["release_year"] = year
-        }
-        try? await authManager.apiClient.post("wishlist", body: body)
+        try? await dataModel.addWish(
+            tmdbId: tmdbId,
+            mediaType: mediaType,
+            title: title,
+            year: item.releaseYear,
+            posterPath: item.posterPath,
+            seasonNumber: nil
+        )
         addedIds.insert(item.id)
     }
 }
@@ -391,7 +378,7 @@ struct TmdbSearchRow: View {
                     .fontWeight(.medium)
 
                 HStack(spacing: 6) {
-                    Text(item.mediaType == "TV" ? "TV Series" : "Movie")
+                    Text(item.mediaType == .tv ? "TV Series" : "Movie")
                         .foregroundStyle(.secondary)
                     if let year = item.releaseYear {
                         Text("(\(String(year)))")

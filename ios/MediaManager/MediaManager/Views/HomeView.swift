@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var feed: ApiHomeFeed?
     @State private var error: String?
     @State private var loading = true
@@ -25,7 +25,7 @@ struct HomeView: View {
 
                                 ForEach(missing) { ms in
                                     HStack(spacing: 12) {
-                                        AuthenticatedImage(path: ms.posterUrl, apiClient: authManager.apiClient)
+                                        AuthenticatedImage(path: ms.posterUrl, apiClient: dataModel.apiClient)
                                             .frame(width: 50, height: 75)
 
                                         VStack(alignment: .leading, spacing: 4) {
@@ -65,14 +65,14 @@ struct HomeView: View {
                             if carousel.name == "Resume Playing" {
                                 CarouselView(
                                     carousel: carousel,
-                                    apiClient: authManager.apiClient,
+                                    apiClient: dataModel.apiClient,
                                     dismissable: true,
                                     onDismiss: { titleId in
                                         await dismissContinueWatching(titleId)
                                     }
                                 )
                             } else {
-                                CarouselView(carousel: carousel, apiClient: authManager.apiClient)
+                                CarouselView(carousel: carousel, apiClient: dataModel.apiClient)
                             }
                         }
                     }
@@ -93,38 +93,42 @@ struct HomeView: View {
     }
 
     private func wishForSeason(_ ms: ApiMissingSeason) async {
+        guard let tmdbId = ms.tmdbId else { return }
         for season in ms.seasons {
-            let body: [String: Any] = [
-                "tmdb_id": ms.tmdbId ?? 0,
-                "media_type": ms.mediaType ?? "TV",
-                "title": ms.titleName,
-                "season_number": season.seasonNumber
-            ]
-            try? await authManager.apiClient.post("wishlist", body: body)
+            try? await dataModel.addWish(
+                tmdbId: tmdbId,
+                mediaType: ms.mediaType ?? .tv,
+                title: ms.titleName,
+                year: nil,
+                posterPath: nil,
+                seasonNumber: season.seasonNumber
+            )
         }
         await loadFeed()
     }
 
     private func dismissMissingSeason(_ ms: ApiMissingSeason) async {
+        guard let tmdbId = ms.tmdbId else { return }
         for season in ms.seasons {
-            let body: [String: Any] = [
-                "title_id": ms.titleId,
-                "season_number": season.seasonNumber
-            ]
-            try? await authManager.apiClient.post("catalog/home/dismiss-missing-season", body: body)
+            try? await dataModel.dismissMissingSeason(
+                titleId: ms.titleId,
+                tmdbId: tmdbId,
+                mediaType: ms.mediaType ?? .tv,
+                seasonNumber: season.seasonNumber
+            )
         }
         await loadFeed()
     }
 
-    private func dismissContinueWatching(_ titleId: Int) async {
-        try? await authManager.apiClient.delete("catalog/home/continue-watching/\(titleId)")
+    private func dismissContinueWatching(_ titleId: TitleID) async {
+        try? await dataModel.dismissContinueWatching(titleId: titleId)
         await loadFeed()
     }
 
     private func loadFeed() async {
         loading = feed == nil
         do {
-            feed = try await authManager.apiClient.get("catalog/home")
+            feed = try await dataModel.homeFeed()
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -137,7 +141,7 @@ struct CarouselView: View {
     let carousel: ApiCarousel
     let apiClient: APIClient
     var dismissable: Bool = false
-    var onDismiss: ((Int) async -> Void)? = nil
+    var onDismiss: ((TitleID) async -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

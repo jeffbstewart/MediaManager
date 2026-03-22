@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct CollectionRoute: Hashable {
-    let tmdbCollectionId: Int
+    let tmdbCollectionId: TmdbCollectionID
     let name: String
 }
 
 struct CollectionsListView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var collections: [ApiCollectionListItem] = []
     @State private var loading = true
 
@@ -20,7 +20,7 @@ struct CollectionsListView: View {
                 List(collections) { collection in
                     NavigationLink(value: CollectionRoute(tmdbCollectionId: collection.tmdbCollectionId, name: collection.name)) {
                         HStack(spacing: 12) {
-                            AuthenticatedImage(path: collection.posterUrl, apiClient: authManager.apiClient)
+                            AuthenticatedImage(path: collection.posterUrl, apiClient: dataModel.apiClient)
                                 .frame(width: 50, height: 75)
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -47,7 +47,7 @@ struct CollectionsListView: View {
 
     private func loadCollections() async {
         loading = collections.isEmpty
-        let response: ApiCollectionListResponse? = try? await authManager.apiClient.get("catalog/collections")
+        let response = try? await dataModel.collections()
         collections = response?.collections ?? []
         loading = false
     }

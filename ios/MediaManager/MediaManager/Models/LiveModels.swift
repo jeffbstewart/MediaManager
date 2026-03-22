@@ -1,7 +1,7 @@
 import Foundation
 
 struct ApiCamera: Codable, Identifiable {
-    let id: Int
+    let id: CameraID
     let name: String
     let hlsUrl: String
     let snapshotUrl: String
@@ -18,7 +18,7 @@ struct ApiCameraListResponse: Codable {
 }
 
 struct ApiTvChannel: Codable, Identifiable {
-    let id: Int
+    let id: ChannelID
     let guideNumber: String
     let guideName: String
     let networkAffiliation: String?

@@ -31,7 +31,7 @@ struct ServerInfo: Codable {
 }
 
 struct ServerUserInfo: Codable {
-    let id: Int
+    let id: UserID
     let username: String
     let displayName: String
     let isAdmin: Bool

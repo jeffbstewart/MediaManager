@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct ActorRoute: Hashable {
-    let tmdbPersonId: Int
+    let tmdbPersonId: TmdbPersonID
     let name: String
 }
 
 struct ActorView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: ActorRoute
     @State private var detail: ApiActorDetail?
     @State private var loading = true
@@ -24,10 +24,8 @@ struct ActorView: View {
             } else if let detail {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Hero section
                         heroSection(detail)
 
-                        // Owned titles
                         if !detail.ownedTitles.isEmpty {
                             sectionHeader("In Your Collection")
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -43,7 +41,6 @@ struct ActorView: View {
                             }
                         }
 
-                        // Other works
                         if !detail.otherWorks.isEmpty {
                             sectionHeader("Other Works")
                             LazyVGrid(columns: columns, spacing: 16) {
@@ -72,7 +69,7 @@ struct ActorView: View {
         VStack(spacing: 12) {
             AuthenticatedImage(
                 path: detail.headshotUrl,
-                apiClient: authManager.apiClient,
+                apiClient: dataModel.apiClient,
                 cornerRadius: 60,
                 contentMode: .fit
             )
@@ -82,7 +79,6 @@ struct ActorView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            // Metadata row
             HStack(spacing: 8) {
                 if let dept = detail.knownForDepartment {
                     Text(dept)
@@ -100,7 +96,6 @@ struct ActorView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Biography
             if let bio = detail.biography, !bio.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(bio)
@@ -124,7 +119,7 @@ struct ActorView: View {
     @ViewBuilder
     private func ownedCard(_ owned: ApiOwnedCredit) -> some View {
         VStack(alignment: .center, spacing: 4) {
-            AuthenticatedImage(path: owned.title.posterUrl, apiClient: authManager.apiClient)
+            AuthenticatedImage(path: owned.title.posterUrl, apiClient: dataModel.apiClient)
                 .frame(width: 120, height: 180)
 
             Text(owned.title.name)
@@ -157,7 +152,6 @@ struct ActorView: View {
         let wished = isWished(credit)
         VStack(alignment: .center, spacing: 4) {
             ZStack(alignment: .topTrailing) {
-                // TMDB poster — public URL, no auth needed
                 if let posterUrl = credit.posterUrl, let url = URL(string: posterUrl) {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
@@ -174,7 +168,6 @@ struct ActorView: View {
                         .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
                 }
 
-                // Wish heart button
                 Button {
                     Task { await toggleWish(credit) }
                 } label: {
@@ -197,7 +190,7 @@ struct ActorView: View {
                 if let year = credit.releaseYear {
                     Text(String(year))
                 }
-                Text(credit.mediaType == "TV" ? "TV" : "Film")
+                Text(credit.mediaType == .tv ? "TV" : "Film")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -231,36 +224,30 @@ struct ActorView: View {
 
     private func toggleWish(_ credit: ApiCreditEntry) async {
         let currentlyWished = isWished(credit)
-
-        // Update UI immediately
         localWished[credit.id] = !currentlyWished
 
         if currentlyWished {
-            let response: ApiWishListResponse? = try? await authManager.apiClient.get("wishlist")
+            let response = try? await dataModel.wishList()
             if let wish = response?.wishes.first(where: { $0.tmdbId == credit.tmdbId && $0.mediaType == credit.mediaType }),
                let wishId = wish.wishId {
-                try? await authManager.apiClient.delete("wishlist/\(wishId)")
+                try? await dataModel.deleteWish(id: wishId)
             }
         } else {
-            var body: [String: Any] = [
-                "tmdb_id": credit.tmdbId,
-                "media_type": credit.mediaType,
-                "title": credit.title,
-                "popularity": credit.popularity
-            ]
-            if let posterUrl = credit.posterUrl {
-                body["poster_path"] = posterUrl.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
-            }
-            if let year = credit.releaseYear {
-                body["release_year"] = year
-            }
-            try? await authManager.apiClient.post("wishlist", body: body)
+            let posterPath = credit.posterUrl?.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
+            try? await dataModel.addWish(
+                tmdbId: credit.tmdbId,
+                mediaType: credit.mediaType,
+                title: credit.title,
+                year: credit.releaseYear,
+                posterPath: posterPath,
+                seasonNumber: nil
+            )
         }
     }
 
     private func loadActor() async {
         loading = detail == nil
-        detail = try? await authManager.apiClient.get("catalog/actors/\(route.tmdbPersonId)")
+        detail = try? await dataModel.actorDetail(id: route.tmdbPersonId)
         loading = false
     }
 }

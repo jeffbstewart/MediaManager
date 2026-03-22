@@ -26,8 +26,8 @@ struct PendingWork: Codable {
 }
 
 struct TranscodeLease: Codable, Identifiable {
-    var id: Int { leaseId }
-    let leaseId: Int
+    var id: LeaseID { leaseId }
+    let leaseId: LeaseID
     let buddyName: String?
     let relativePath: String?
     let leaseType: String?
@@ -72,8 +72,8 @@ struct BuddyInfo: Codable, Identifiable {
 }
 
 struct BuddyWork: Codable, Identifiable {
-    var id: Int { leaseId }
-    let leaseId: Int
+    var id: LeaseID { leaseId }
+    let leaseId: LeaseID
     let relativePath: String?
     let leaseType: String?
     let progressPercent: Int?
@@ -89,8 +89,8 @@ struct BuddyWork: Codable, Identifiable {
 }
 
 struct RecentLease: Codable, Identifiable {
-    var id: Int { leaseId }
-    let leaseId: Int
+    var id: LeaseID { leaseId }
+    let leaseId: LeaseID
     let buddyName: String?
     let relativePath: String?
     let leaseType: String?
@@ -113,7 +113,7 @@ struct RecentLease: Codable, Identifiable {
 // MARK: - User Management
 
 struct AdminUser: Codable, Identifiable {
-    let id: Int
+    let id: UserID
     let username: String
     let displayName: String?
     let accessLevel: Int
@@ -143,9 +143,9 @@ struct AdminUserListResponse: Codable {
 // MARK: - Purchase Wishes
 
 struct AdminPurchaseWish: Codable, Identifiable {
-    var id: String { "\(tmdbId)-\(mediaType)-\(seasonNumber ?? -1)" }
-    let tmdbId: Int
-    let mediaType: String
+    var id: String { "\(tmdbId.rawValue)-\(mediaType.rawValue)-\(seasonNumber ?? -1)" }
+    let tmdbId: TmdbID
+    let mediaType: MediaType
     let title: String
     let posterUrl: String?
     let releaseYear: Int?
@@ -173,11 +173,11 @@ struct AdminPurchaseWishListResponse: Codable {
 // MARK: - Data Quality
 
 struct AdminDataQualityTitle: Codable, Identifiable {
-    let id: Int
+    let id: TitleID
     let name: String
-    let mediaType: String?
+    let mediaType: MediaType?
     let enrichmentStatus: String?
-    let tmdbId: Int?
+    let tmdbId: TmdbID?
     let releaseYear: Int?
     let contentRating: String?
     let posterUrl: String?
@@ -222,7 +222,7 @@ struct AdminSettingsResponse: Codable {
 }
 
 struct AdminBuddyKey: Codable, Identifiable {
-    let id: Int
+    let id: BuddyKeyID
     let name: String
     let createdAt: String?
 
@@ -235,11 +235,11 @@ struct AdminBuddyKey: Codable, Identifiable {
 // MARK: - Linked Transcodes
 
 struct AdminLinkedTranscode: Codable, Identifiable {
-    var id: Int { transcodeId }
-    let transcodeId: Int
-    let titleId: Int
+    var id: TranscodeID { transcodeId }
+    let transcodeId: TranscodeID
+    let titleId: TitleID
     let titleName: String
-    let mediaType: String?
+    let mediaType: MediaType?
     let posterUrl: String?
     let filePath: String?
     let mediaFormat: String?
@@ -279,10 +279,10 @@ struct AdminLinkedTranscodeResponse: Codable {
 // MARK: - Unmatched Files
 
 struct AdminUnmatchedFile: Codable, Identifiable {
-    let id: Int
+    let id: UnmatchedFileID
     let fileName: String
     let directory: String?
-    let mediaType: String?
+    let mediaType: MediaType?
     let parsedTitle: String?
     let parsedYear: Int?
     let parsedSeason: Int?
@@ -301,8 +301,8 @@ struct AdminUnmatchedFile: Codable, Identifiable {
 }
 
 struct AdminMatchSuggestion: Codable, Identifiable {
-    var id: Int { titleId }
-    let titleId: Int
+    var id: TitleID { titleId }
+    let titleId: TitleID
     let titleName: String
     let score: Double
 

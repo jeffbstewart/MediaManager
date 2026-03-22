@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct CatalogView: View {
-    @Environment(AuthManager.self) private var authManager
-    var typeFilter: String? = nil
+    @Environment(OnlineDataModel.self) private var dataModel
+    var typeFilter: MediaType? = nil
     var navigationTitle: String = "Catalog"
 
     @State private var titles: [ApiTitle] = []
@@ -25,7 +25,7 @@ struct CatalogView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title, apiClient: authManager.apiClient)
+                                PosterCard(title: title, apiClient: dataModel.apiClient)
                             }
                             .buttonStyle(.plain)
                         }
@@ -70,17 +70,15 @@ struct CatalogView: View {
 
     private func loadPage() async {
         loading = true
-        var query = "catalog/titles?page=\(page)&limit=25&sort=\(sort)"
         if let typeFilter {
-            query += "&type=\(typeFilter)"
-        }
-        do {
-            let result: ApiTitlePage = try await authManager.apiClient.get(query)
-            titles.append(contentsOf: result.titles)
-            total = result.total
-            totalPages = result.totalPages
-        } catch {
-            // silently handle for now
+            do {
+                let result = try await dataModel.titles(type: typeFilter, page: page, sort: sort)
+                titles.append(contentsOf: result.titles)
+                total = result.total
+                totalPages = result.totalPages
+            } catch {
+                // silently handle for now
+            }
         }
         loading = false
     }

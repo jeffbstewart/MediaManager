@@ -1,13 +1,12 @@
 import SwiftUI
 
 struct EpisodesView: View {
-    @Environment(AuthManager.self) private var authManager
-    @Environment(DownloadManager.self) private var downloadManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: SeasonRoute
     @State private var episodes: [ApiEpisode] = []
     @State private var loading = true
 
-    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
+    private var isOffline: Bool { !dataModel.isOnline }
 
     var body: some View {
         Group {
@@ -18,7 +17,7 @@ struct EpisodesView: View {
             } else {
                 List(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
                     let isPlayable = isOffline
-                        ? (episode.transcodeId.flatMap { downloadManager.localFileURL(for: $0) } != nil)
+                        ? (episode.transcodeId.flatMap { dataModel.downloads.localFileURL(for: $0) } != nil)
                         : (episode.playable && episode.transcodeId != nil)
 
                     if isPlayable, let tcId = episode.transcodeId {
@@ -52,7 +51,7 @@ struct EpisodesView: View {
             guard let tcId = ep.transcodeId else { continue }
 
             let playable = isOffline
-                ? (downloadManager.localFileURL(for: tcId) != nil)
+                ? (dataModel.downloads.localFileURL(for: tcId) != nil)
                 : ep.playable
 
             if playable {
@@ -68,14 +67,7 @@ struct EpisodesView: View {
 
     private func loadEpisodes() async {
         loading = true
-        if isOffline {
-            episodes = downloadManager.loadCachedEpisodes(
-                for: route.titleId, season: route.season.seasonNumber) ?? []
-        } else {
-            episodes = (try? await authManager.apiClient.get(
-                "catalog/titles/\(route.titleId)/seasons/\(route.season.seasonNumber)/episodes"
-            )) ?? []
-        }
+        episodes = (try? await dataModel.episodes(titleId: route.titleId, season: route.season.seasonNumber)) ?? []
         loading = false
     }
 }

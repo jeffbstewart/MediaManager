@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TagDetailView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     let route: TagRoute
     @State private var detail: ApiTagDetail?
     @State private var loading = true
@@ -19,7 +19,7 @@ struct TagDetailView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(detail.titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title, apiClient: authManager.apiClient)
+                                PosterCard(title: title, apiClient: dataModel.apiClient)
                             }
                             .buttonStyle(.plain)
                         }
@@ -39,7 +39,7 @@ struct TagDetailView: View {
 
     private func loadDetail() async {
         loading = true
-        detail = try? await authManager.apiClient.get("catalog/tags/\(route.id)")
+        detail = try? await dataModel.tagDetail(id: route.id)
         loading = false
     }
 }

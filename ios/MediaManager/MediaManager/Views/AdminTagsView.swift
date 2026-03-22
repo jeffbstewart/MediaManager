@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminTagsView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var tags: [ApiTagListItem] = []
     @State private var loading = true
     @State private var showCreate = false
@@ -83,20 +83,20 @@ struct AdminTagsView: View {
 
     private func loadTags() async {
         loading = tags.isEmpty
-        let response: ApiTagListResponse? = try? await authManager.apiClient.get("admin/tags")
+        let response = try? await dataModel.adminTags()
         tags = response?.tags ?? []
         loading = false
     }
 
     private func deleteTag(_ tag: ApiTagListItem) async {
-        try? await authManager.apiClient.delete("admin/tags/\(tag.id)")
+        try? await dataModel.deleteTag(id: tag.id)
         tags.removeAll { $0.id == tag.id }
         tagToDelete = nil
     }
 }
 
 struct AdminTagEditView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     let tag: ApiTagListItem?
     let onComplete: () async -> Void
@@ -174,9 +174,9 @@ struct AdminTagEditView: View {
         error = nil
         do {
             if let tag {
-                try await authManager.apiClient.put("admin/tags/\(tag.id)", body: ["name": name, "color": color])
+                try await dataModel.updateTag(id: tag.id, name: name, color: color)
             } else {
-                try await authManager.apiClient.post("admin/tags", body: ["name": name, "color": color])
+                try await dataModel.createTag(name: name, color: color)
             }
             await onComplete()
             dismiss()

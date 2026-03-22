@@ -26,6 +26,7 @@ struct ProfileResponse: Codable {
 
 struct ProfileView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var profile: ProfileResponse?
     @State private var loading = true
     @State private var showChangePassword = false
@@ -57,7 +58,7 @@ struct ProfileView: View {
                             }
                         }
                         .onChange(of: tvQuality) { _, newValue in
-                            Task { await updateTvQuality(newValue) }
+                            Task { try? await dataModel.updateTvQuality(newValue) }
                         }
                     }
 
@@ -99,7 +100,7 @@ struct ProfileView: View {
     private func loadProfile() async {
         loading = true
         do {
-            let result: ProfileResponse = try await authManager.apiClient.get("profile")
+            let result = try await dataModel.profile()
             guard !Task.isCancelled else { return }
             profile = result
         } catch is CancellationError {
@@ -111,14 +112,10 @@ struct ProfileView: View {
         tvQuality = profile?.liveTvMinQuality ?? 1
         loading = false
     }
-
-    private func updateTvQuality(_ quality: Int) async {
-        try? await authManager.apiClient.put("profile/tv-quality", body: ["min_quality": quality])
-    }
 }
 
 struct ChangePasswordView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
     @State private var currentPassword = ""
     @State private var newPassword = ""
@@ -182,10 +179,7 @@ struct ChangePasswordView: View {
 
         saving = true
         do {
-            try await authManager.apiClient.post("auth/change-password", body: [
-                "current_password": currentPassword,
-                "new_password": newPassword
-            ])
+            try await dataModel.changePassword(current: currentPassword, new: newPassword)
             dismiss()
         } catch APIClientError.httpError(_, let msg) {
             error = msg == "invalid_credentials" ? "Current password is incorrect" : msg

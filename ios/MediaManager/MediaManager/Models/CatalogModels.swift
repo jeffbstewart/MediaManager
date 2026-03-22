@@ -1,9 +1,9 @@
 import Foundation
 
 struct ApiTitle: Codable, Identifiable, Hashable {
-    let id: Int
+    let id: TitleID
     let name: String
-    let mediaType: String
+    let mediaType: MediaType
     let year: Int?
     let description: String?
     let posterUrl: String?
@@ -12,9 +12,9 @@ struct ApiTitle: Codable, Identifiable, Hashable {
     let popularity: Double?
     let quality: String?
     let playable: Bool
-    let transcodeId: Int?
-    let tmdbId: Int?
-    let tmdbCollectionId: Int?
+    let transcodeId: TranscodeID?
+    let tmdbId: TmdbID?
+    let tmdbCollectionId: TmdbCollectionID?
     let tmdbCollectionName: String?
     let familyMembers: [String]?
 
@@ -48,12 +48,12 @@ struct ApiHomeFeed: Codable {
 }
 
 struct ApiMissingSeason: Codable, Identifiable {
-    var id: Int { titleId }
-    let titleId: Int
+    var id: TitleID { titleId }
+    let titleId: TitleID
     let titleName: String
     let posterUrl: String?
-    let tmdbId: Int?
-    let mediaType: String?
+    let tmdbId: TmdbID?
+    let mediaType: MediaType?
     let seasons: [ApiMissingSeasonEntry]
 
     enum CodingKeys: String, CodingKey {
@@ -93,8 +93,8 @@ struct ApiTitlePage: Codable {
 }
 
 struct ApiCastMember: Codable, Identifiable {
-    var id: Int { tmdbPersonId }
-    let tmdbPersonId: Int
+    var id: TmdbPersonID { tmdbPersonId }
+    let tmdbPersonId: TmdbPersonID
     let name: String
     let characterName: String?
     let headshotUrl: String?
@@ -109,21 +109,21 @@ struct ApiCastMember: Codable, Identifiable {
 }
 
 struct ApiGenre: Codable, Identifiable {
-    let id: Int
+    let id: GenreID
     let name: String
 }
 
 struct ApiTag: Codable, Identifiable {
-    let id: Int
+    let id: TagID
     let name: String
     let color: String
 }
 
 struct ApiTranscode: Codable, Identifiable {
-    let id: Int
+    let id: TranscodeID
     let mediaFormat: String?
     let quality: String
-    let episodeId: Int?
+    let episodeId: EpisodeID?
     let seasonNumber: Int?
     let episodeNumber: Int?
     let episodeName: String?
@@ -142,7 +142,7 @@ struct ApiTranscode: Codable, Identifiable {
 }
 
 struct ApiPlaybackProgress: Codable {
-    let transcodeId: Int
+    let transcodeId: TranscodeID
     let positionSeconds: Double
     let durationSeconds: Double?
     let updatedAt: String?
@@ -156,9 +156,9 @@ struct ApiPlaybackProgress: Codable {
 }
 
 struct ApiTitleDetail: Codable {
-    let id: Int
+    let id: TitleID
     let name: String
-    let mediaType: String
+    let mediaType: MediaType
     let year: Int?
     let description: String?
     let posterUrl: String?
@@ -167,9 +167,9 @@ struct ApiTitleDetail: Codable {
     let popularity: Double?
     let quality: String?
     let playable: Bool
-    let transcodeId: Int?
-    let tmdbId: Int?
-    let tmdbCollectionId: Int?
+    let transcodeId: TranscodeID?
+    let tmdbId: TmdbID?
+    let tmdbCollectionId: TmdbCollectionID?
     let tmdbCollectionName: String?
     let cast: [ApiCastMember]
     let genres: [ApiGenre]
@@ -198,18 +198,18 @@ struct ApiTitleDetail: Codable {
 }
 
 struct ApiSearchResult: Codable, Identifiable {
-    var id: String { "\(resultType)-\(name)-\(titleId ?? 0)-\(itemId ?? 0)" }
+    var id: String { "\(resultType)-\(name)-\(titleId?.rawValue ?? 0)-\(itemId ?? 0)" }
     let resultType: String
     let name: String
-    let titleId: Int?
+    let titleId: TitleID?
     let posterUrl: String?
     let year: Int?
     let quality: String?
     let contentRating: String?
-    let transcodeId: Int?
-    let mediaType: String?
-    let tmdbCollectionId: Int?
-    let tmdbPersonId: Int?
+    let transcodeId: TranscodeID?
+    let mediaType: MediaType?
+    let tmdbCollectionId: TmdbCollectionID?
+    let tmdbPersonId: TmdbPersonID?
     let headshotUrl: String?
     let titleCount: Int?
     let itemId: Int?
@@ -239,8 +239,8 @@ struct ApiSearchResponse: Codable {
 // --- List Endpoints ---
 
 struct ApiCollectionListItem: Codable, Identifiable {
-    var id: Int { tmdbCollectionId }
-    let tmdbCollectionId: Int
+    var id: TmdbCollectionID { tmdbCollectionId }
+    let tmdbCollectionId: TmdbCollectionID
     let name: String
     let posterUrl: String?
     let titleCount: Int
@@ -258,7 +258,7 @@ struct ApiCollectionListResponse: Codable {
 }
 
 struct ApiTagListItem: Codable, Identifiable {
-    let id: Int
+    let id: TagID
     let name: String
     let color: String
     let titleCount: Int
@@ -307,10 +307,10 @@ struct ApiOwnedCredit: Codable {
 }
 
 struct ApiCreditEntry: Codable, Identifiable {
-    var id: String { "\(tmdbId)-\(mediaType)" }
-    let tmdbId: Int
+    var id: String { "\(tmdbId.rawValue)-\(mediaType.rawValue)" }
+    let tmdbId: TmdbID
     let title: String
-    let mediaType: String
+    let mediaType: MediaType
     let characterName: String?
     let releaseYear: Int?
     let posterUrl: String?
@@ -339,17 +339,17 @@ struct ApiCollectionDetail: Codable {
 }
 
 struct ApiCollectionItem: Codable, Identifiable {
-    var id: Int { tmdbMovieId }
-    let tmdbMovieId: Int
+    var id: TmdbID { tmdbMovieId }
+    let tmdbMovieId: TmdbID
     let name: String
     let posterUrl: String?
     let year: Int?
     let owned: Bool
     let playable: Bool
-    let titleId: Int?
+    let titleId: TitleID?
     let quality: String?
     let contentRating: String?
-    let transcodeId: Int?
+    let transcodeId: TranscodeID?
 
     enum CodingKeys: String, CodingKey {
         case name, year, owned, playable, quality
@@ -382,8 +382,8 @@ struct ApiSeason: Codable, Hashable {
 }
 
 struct ApiEpisode: Codable {
-    let episodeId: Int
-    let transcodeId: Int?
+    let episodeId: EpisodeID
+    let transcodeId: TranscodeID?
     let seasonNumber: Int
     let episodeNumber: Int
     let name: String?

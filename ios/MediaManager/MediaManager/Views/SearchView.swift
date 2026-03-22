@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SearchView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var query = ""
     @State private var results: [ApiSearchResult] = []
     @State private var searching = false
@@ -25,7 +25,7 @@ struct SearchView: View {
                         if let titleId = result.titleId {
                             NavigationLink(value: ApiTitle(
                                 id: titleId, name: result.name,
-                                mediaType: result.mediaType ?? "MOVIE",
+                                mediaType: result.mediaType ?? .movie,
                                 year: result.year, description: nil,
                                 posterUrl: result.posterUrl,
                                 backdropUrl: nil,
@@ -37,43 +37,43 @@ struct SearchView: View {
                                 tmdbId: nil, tmdbCollectionId: nil,
                                 tmdbCollectionName: nil, familyMembers: nil
                             )) {
-                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }
                         }
                     case "actor":
                         if let personId = result.tmdbPersonId {
                             NavigationLink(value: ActorRoute(tmdbPersonId: personId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }
                         } else {
-                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
                         }
                     case "collection":
                         if let collId = result.tmdbCollectionId {
                             NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }
                         } else {
-                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
                         }
                     case "tag":
                         if let tagId = result.itemId {
-                            NavigationLink(value: TagRoute(id: tagId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            NavigationLink(value: TagRoute(id: TagID(rawValue: tagId), name: result.name)) {
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }
                         } else {
-                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
                         }
                     case "genre":
                         if let genreId = result.itemId {
-                            NavigationLink(value: GenreRoute(id: genreId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            NavigationLink(value: GenreRoute(id: GenreID(rawValue: genreId), name: result.name)) {
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
                             }
                         } else {
-                            SearchResultRow(result: result, apiClient: authManager.apiClient)
+                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
                         }
                     default:
-                        SearchResultRow(result: result, apiClient: authManager.apiClient)
+                        SearchResultRow(result: result, apiClient: dataModel.apiClient)
                     }
                 }
             }
@@ -104,8 +104,7 @@ struct SearchView: View {
             return
         }
         searching = true
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let response: ApiSearchResponse? = try? await authManager.apiClient.get("catalog/search?q=\(encoded)")
+        let response = try? await dataModel.search(query: query)
         // Reorder: playable titles first, then actors, then collections/tags/genres
         results = (response?.results ?? []).sorted {
             let a = Self.typeOrder[$0.resultType] ?? 9

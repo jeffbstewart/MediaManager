@@ -16,6 +16,8 @@ final class AuthManager {
     private(set) var serverInfo: ServerInfo?
     private(set) var error: String?
     private(set) var passwordChangeRequired = false
+    /// Set when authenticated but server is unreachable (network error during token refresh/info fetch).
+    private(set) var serverUnreachable = false
 
     let apiClient = APIClient()
     private var refreshTask: Task<Void, Never>?
@@ -197,6 +199,7 @@ final class AuthManager {
             KeychainService.save(key: .refreshToken, value: response.refreshToken)
             await apiClient.setAccessToken(response.accessToken)
             updateStreamingCookie(response.accessToken)
+            serverUnreachable = false
             scheduleTokenRefresh(expiresIn: response.expiresIn)
         } catch APIClientError.unauthorized {
             // Refresh token itself was rejected — session is truly dead
@@ -204,7 +207,8 @@ final class AuthManager {
         } catch APIClientError.httpError(let code, _) where code == 401 {
             await logout()
         } catch {
-            // Network error or server error — retry in 30 seconds
+            // Network error or server error — mark unreachable and retry
+            serverUnreachable = true
             scheduleTokenRefresh(expiresIn: 30)
         }
     }
@@ -237,10 +241,18 @@ final class AuthManager {
 
     private func refreshServerInfo() async {
         guard case .authenticated(let url) = state else { return }
-        serverInfo = try? await apiClient.getServerInfo(serverURL: url)
-        passwordChangeRequired = serverInfo?.user?.passwordChangeRequired ?? false
-        if let caps = serverInfo?.capabilities {
-            UserDefaults.standard.set(caps, forKey: "cachedCapabilities")
+        do {
+            serverInfo = try await apiClient.getServerInfo(serverURL: url)
+            passwordChangeRequired = serverInfo?.user?.passwordChangeRequired ?? false
+            if let caps = serverInfo?.capabilities {
+                UserDefaults.standard.set(caps, forKey: "cachedCapabilities")
+            }
+            serverUnreachable = false
+        } catch {
+            // Server info fetch failed — server may be unreachable
+            if serverInfo == nil {
+                serverUnreachable = true
+            }
         }
     }
 

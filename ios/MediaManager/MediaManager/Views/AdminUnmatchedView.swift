@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminUnmatchedView: View {
-    @Environment(AuthManager.self) private var authManager
+    @Environment(OnlineDataModel.self) private var dataModel
     @State private var files: [AdminUnmatchedFile] = []
     @State private var loading = true
 
@@ -103,23 +103,23 @@ struct AdminUnmatchedView: View {
 
     private func loadFiles() async {
         loading = files.isEmpty
-        let response: AdminUnmatchedResponse? = try? await authManager.apiClient.get("admin/transcodes/unmatched")
+        let response = try? await dataModel.unmatchedFiles()
         files = response?.unmatched ?? []
         loading = false
     }
 
     private func acceptSuggestion(_ file: AdminUnmatchedFile) async {
-        try? await authManager.apiClient.post("admin/transcodes/unmatched/\(file.id)/accept", body: [:])
+        try? await dataModel.acceptUnmatched(id: file.id)
         files.removeAll { $0.id == file.id }
     }
 
     private func ignoreFile(_ file: AdminUnmatchedFile) async {
-        try? await authManager.apiClient.post("admin/transcodes/unmatched/\(file.id)/ignore", body: [:])
+        try? await dataModel.ignoreUnmatched(id: file.id)
         files.removeAll { $0.id == file.id }
     }
 
-    private func linkToTitle(_ file: AdminUnmatchedFile, titleId: Int) async {
-        try? await authManager.apiClient.post("admin/transcodes/unmatched/\(file.id)/link", body: ["title_id": titleId])
+    private func linkToTitle(_ file: AdminUnmatchedFile, titleId: TitleID) async {
+        try? await dataModel.linkUnmatched(id: file.id, titleId: titleId)
         files.removeAll { $0.id == file.id }
     }
 }
