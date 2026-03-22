@@ -369,7 +369,7 @@ class TranscodeStatusView : KComposite() {
             html.append("</tr></thead><tbody>")
 
             for (lease in recentLeases) {
-                val fileName = lease.relative_path.substringAfterLast('/').take(40)
+                val fileName = lease.relative_path.substringAfterLast('/').take(80)
                 val icon = if (lease.status == LeaseStatus.COMPLETED.name) "\u2713" else "\u2717"
                 val color = if (lease.status == LeaseStatus.COMPLETED.name)
                     "var(--lumo-success-text-color)" else "var(--lumo-error-text-color)"
