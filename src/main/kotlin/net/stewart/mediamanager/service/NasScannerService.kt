@@ -86,6 +86,10 @@ object NasScannerService {
         // Ensure managed directories exist with .mm-ignore markers
         ManagedDirectoryService.ensureManagedDirectories()
 
+        // Clean up any transcode/discovered records pointing into managed directories
+        // (e.g., ForBrowser, ForMobile) — these are output dirs, not source dirs.
+        cleanupManagedDirectoryRecords(nasRoot)
+
         Broadcaster.broadcastNasScan(NasScanProgress(phase = "SCANNING", message = "Discovering files..."))
 
         // Phase 1: Discover files — auto-classify top-level directories
@@ -683,4 +687,46 @@ object NasScannerService {
         val mediaType: String,
         val fileModifiedAt: LocalDateTime? = null
     )
+
+    /**
+     * Deletes transcode records, leases, and discovered files whose paths point into
+     * managed output directories (ForBrowser, ForMobile). These are output dirs that
+     * should never be treated as source media. Runs on every scan as a safety net.
+     */
+    private fun cleanupManagedDirectoryRecords(nasRoot: String) {
+        val managedPrefixes = ManagedDirectoryService.MANAGED_DIRS.map { "$nasRoot${File.separator}$it" } +
+            ManagedDirectoryService.MANAGED_DIRS.map { "$nasRoot/$it" }
+
+        fun isManaged(path: String?): Boolean =
+            path != null && managedPrefixes.any { path.startsWith(it, ignoreCase = true) }
+
+        // Delete transcode leases for managed-dir transcodes
+        val bogusTcIds = Transcode.findAll()
+            .filter { isManaged(it.file_path) }
+            .mapNotNull { it.id }
+            .toSet()
+
+        if (bogusTcIds.isNotEmpty()) {
+            val leases = TranscodeLease.findAll().filter { it.transcode_id in bogusTcIds }
+            leases.forEach { it.delete() }
+            log.info("Managed-dir cleanup: deleted {} leases for managed-dir transcodes", leases.size)
+
+            // Delete the bogus transcode records
+            for (tcId in bogusTcIds) {
+                Transcode.findById(tcId)?.delete()
+            }
+            log.info("Managed-dir cleanup: deleted {} transcode records pointing into managed directories", bogusTcIds.size)
+        }
+
+        // Delete discovered files pointing into managed directories
+        val bogusDiscovered = DiscoveredFile.findAll().filter { isManaged(it.file_path) }
+        if (bogusDiscovered.isNotEmpty()) {
+            bogusDiscovered.forEach { it.delete() }
+            log.info("Managed-dir cleanup: deleted {} discovered file records from managed directories", bogusDiscovered.size)
+        }
+
+        if (bogusTcIds.isEmpty() && bogusDiscovered.isEmpty()) {
+            log.info("Managed-dir cleanup: no bogus managed-directory records found")
+        }
+    }
 }
