@@ -30,9 +30,12 @@ struct SeasonRoute: Hashable {
 
 struct SeasonsView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(DownloadManager.self) private var downloadManager
     let route: TvShowRoute
     @State private var seasons: [ApiSeason] = []
     @State private var loading = true
+
+    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
 
     var body: some View {
         Group {
@@ -63,7 +66,11 @@ struct SeasonsView: View {
 
     private func loadSeasons() async {
         loading = true
-        seasons = (try? await authManager.apiClient.get("catalog/titles/\(route.titleId)/seasons")) ?? []
+        if isOffline {
+            seasons = downloadManager.loadCachedSeasons(for: route.titleId) ?? []
+        } else {
+            seasons = (try? await authManager.apiClient.get("catalog/titles/\(route.titleId)/seasons")) ?? []
+        }
         loading = false
     }
 }

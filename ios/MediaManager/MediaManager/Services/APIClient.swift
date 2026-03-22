@@ -196,6 +196,12 @@ actor APIClient {
         return data
     }
 
+    /// Build the full download URL for a transcode (used by DownloadManager).
+    func downloadURL(for transcodeId: Int) -> URL? {
+        guard let baseURL else { return nil }
+        return URL(string: baseURL.absoluteString + "/api/v1/downloads/\(transcodeId)")
+    }
+
     private func validateResponse(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
         switch http.statusCode {

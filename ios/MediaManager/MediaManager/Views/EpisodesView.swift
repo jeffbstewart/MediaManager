@@ -2,9 +2,12 @@ import SwiftUI
 
 struct EpisodesView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(DownloadManager.self) private var downloadManager
     let route: SeasonRoute
     @State private var episodes: [ApiEpisode] = []
     @State private var loading = true
+
+    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
 
     var body: some View {
         Group {
@@ -14,7 +17,11 @@ struct EpisodesView: View {
                 ContentUnavailableView("No episodes", systemImage: "tv")
             } else {
                 List(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
-                    if episode.playable, let tcId = episode.transcodeId {
+                    let isPlayable = isOffline
+                        ? (episode.transcodeId.flatMap { downloadManager.localFileURL(for: $0) } != nil)
+                        : (episode.playable && episode.transcodeId != nil)
+
+                    if isPlayable, let tcId = episode.transcodeId {
                         let nextEp = findNextPlayable(after: index)
                         NavigationLink(value: PlaybackRoute(
                             transcodeId: tcId,
@@ -25,10 +32,10 @@ struct EpisodesView: View {
                             seasonNumber: episode.seasonNumber,
                             episodeNumber: episode.episodeNumber
                         )) {
-                            EpisodeRow(episode: episode)
+                            EpisodeRow(episode: episode, isOfflineUnavailable: isOffline && !isPlayable)
                         }
                     } else {
-                        EpisodeRow(episode: episode)
+                        EpisodeRow(episode: episode, isOfflineUnavailable: isOffline && !isPlayable)
                     }
                 }
             }
@@ -42,7 +49,13 @@ struct EpisodesView: View {
     private func findNextPlayable(after index: Int) -> NextEpisode? {
         for i in (index + 1)..<episodes.count {
             let ep = episodes[i]
-            if ep.playable, let tcId = ep.transcodeId {
+            guard let tcId = ep.transcodeId else { continue }
+
+            let playable = isOffline
+                ? (downloadManager.localFileURL(for: tcId) != nil)
+                : ep.playable
+
+            if playable {
                 return NextEpisode(
                     transcodeId: tcId,
                     episodeName: ep.name ?? "S\(ep.seasonNumber)E\(ep.episodeNumber)",
@@ -55,15 +68,21 @@ struct EpisodesView: View {
 
     private func loadEpisodes() async {
         loading = true
-        episodes = (try? await authManager.apiClient.get(
-            "catalog/titles/\(route.titleId)/seasons/\(route.season.seasonNumber)/episodes"
-        )) ?? []
+        if isOffline {
+            episodes = downloadManager.loadCachedEpisodes(
+                for: route.titleId, season: route.season.seasonNumber) ?? []
+        } else {
+            episodes = (try? await authManager.apiClient.get(
+                "catalog/titles/\(route.titleId)/seasons/\(route.season.seasonNumber)/episodes"
+            )) ?? []
+        }
         loading = false
     }
 }
 
 struct EpisodeRow: View {
     let episode: ApiEpisode
+    var isOfflineUnavailable: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -89,7 +108,11 @@ struct EpisodeRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if !episode.playable {
+                    if isOfflineUnavailable {
+                        Text("Not downloaded")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else if !episode.playable {
                         Text("Unavailable")
                             .font(.caption)
                             .foregroundStyle(.red)

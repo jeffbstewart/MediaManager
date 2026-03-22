@@ -229,10 +229,19 @@ final class AuthManager {
         }
     }
 
+    /// Cached capabilities from the last successful server info fetch.
+    /// Used to show/hide features (like Downloads tab) when the server is unreachable.
+    var cachedCapabilities: [String] {
+        UserDefaults.standard.stringArray(forKey: "cachedCapabilities") ?? []
+    }
+
     private func refreshServerInfo() async {
         guard case .authenticated(let url) = state else { return }
         serverInfo = try? await apiClient.getServerInfo(serverURL: url)
         passwordChangeRequired = serverInfo?.user?.passwordChangeRequired ?? false
+        if let caps = serverInfo?.capabilities {
+            UserDefaults.standard.set(caps, forKey: "cachedCapabilities")
+        }
     }
 
     func clearPasswordChangeRequired() {

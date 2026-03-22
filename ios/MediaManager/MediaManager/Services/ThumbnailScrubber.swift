@@ -21,9 +21,28 @@ final class ThumbnailScrubber {
     var isAvailable: Bool { !cues.isEmpty }
 
     /// Load the thumbs.vtt and pre-fetch sprite sheet images.
-    func load(transcodeId: Int, apiClient: APIClient) async {
+    func load(transcodeId: Int, apiClient: APIClient, localDir: URL? = nil) async {
         guard !loading else { return }
         loading = true
+
+        // Try local files first
+        if let localDir {
+            let localVTT = localDir.appendingPathComponent("thumbs.vtt")
+            if let data = try? Data(contentsOf: localVTT),
+               let content = String(data: data, encoding: .utf8) {
+                cues = parseThumbnailVTT(content)
+                let sheetIndices = Set(cues.map { $0.sheetIndex })
+                for index in sheetIndices {
+                    let localImg = localDir.appendingPathComponent("thumbs_\(index).jpg")
+                    if let imgData = try? Data(contentsOf: localImg),
+                       let img = UIImage(data: imgData) {
+                        sheets[index] = img
+                    }
+                }
+                loading = false
+                return
+            }
+        }
 
         do {
             let data: Data = try await apiClient.getRaw("stream/\(transcodeId)/thumbs.vtt")

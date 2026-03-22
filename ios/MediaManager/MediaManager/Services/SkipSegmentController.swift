@@ -41,7 +41,20 @@ final class SkipSegmentController {
     private var hasSkippedIntro = false
     private var hasTriggeredUpNext = false
 
-    func load(transcodeId: Int, apiClient: APIClient) async {
+    func load(transcodeId: Int, apiClient: APIClient, localDir: URL? = nil) async {
+        // Try local file first
+        if let localDir {
+            let localFile = localDir.appendingPathComponent("chapters.json")
+            if let data = try? Data(contentsOf: localFile),
+               let response = try? JSONDecoder().decode(ChaptersResponse.self, from: data) {
+                for seg in response.skipSegments {
+                    if seg.type == "INTRO" { introSegment = seg }
+                    if seg.type == "END_CREDITS" { creditsSegment = seg }
+                }
+                return
+            }
+        }
+
         do {
             let response: ChaptersResponse = try await apiClient.get("stream/\(transcodeId)/chapters")
             for seg in response.skipSegments {

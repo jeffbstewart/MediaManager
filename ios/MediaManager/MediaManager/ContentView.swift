@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, profile
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile
     // Admin tabs
     case adminStatus, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched
@@ -9,87 +9,152 @@ enum Tab: Hashable {
 
 struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(DownloadManager.self) private var downloadManager
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
     @State private var navigationPath = NavigationPath()
+    @State private var showLogoutConfirmation = false
+
+    /// Downloads capability is available if the server reports it OR we've seen it before (cached).
+    private var hasDownloadsCapability: Bool {
+        authManager.serverInfo?.capabilities.contains("downloads") == true
+        || authManager.cachedCapabilities.contains("downloads")
+    }
+
+    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                Label("Home", systemImage: "house")
-                    .tag(Tab.home)
+                if !isOffline {
+                    Label("Home", systemImage: "house")
+                        .tag(Tab.home)
 
-                Section("Content") {
-                    Label("Movies", systemImage: "film")
-                        .tag(Tab.movies)
-                    Label("TV Shows", systemImage: "tv")
-                        .tag(Tab.tvShows)
-                    Label("Collections", systemImage: "square.stack")
-                        .tag(Tab.collections)
-                    Label("Tags", systemImage: "tag")
-                        .tag(Tab.tags)
-                    Label("Family", systemImage: "video")
-                        .tag(Tab.family)
-                    Label("Cameras", systemImage: "web.camera")
-                        .tag(Tab.cameras)
-                    Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
-                        .tag(Tab.liveTv)
-                }
-
-                if authManager.serverInfo?.user?.isAdmin == true {
-                    Section("Admin") {
-                        Label("Transcode Status", systemImage: "gearshape.2")
-                            .tag(Tab.adminStatus)
-                        Label("Users", systemImage: "person.2")
-                            .tag(Tab.adminUsers)
-                        Label("Purchase Wishes", systemImage: "cart")
-                            .tag(Tab.adminPurchaseWishes)
-                        Label("Data Quality", systemImage: "exclamationmark.triangle")
-                            .tag(Tab.adminDataQuality)
+                    Section("Content") {
+                        Label("Movies", systemImage: "film")
+                            .tag(Tab.movies)
+                        Label("TV Shows", systemImage: "tv")
+                            .tag(Tab.tvShows)
+                        Label("Collections", systemImage: "square.stack")
+                            .tag(Tab.collections)
                         Label("Tags", systemImage: "tag")
-                            .tag(Tab.adminTags)
-                        Label("Transcodes", systemImage: "film.stack")
-                            .tag(Tab.adminTranscodes)
-                        Label("Unmatched Files", systemImage: "questionmark.folder")
-                            .tag(Tab.adminUnmatched)
-                        Label("Settings", systemImage: "gear")
-                            .tag(Tab.adminSettings)
+                            .tag(Tab.tags)
+                        Label("Family", systemImage: "video")
+                            .tag(Tab.family)
+                        Label("Cameras", systemImage: "web.camera")
+                            .tag(Tab.cameras)
+                        Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
+                            .tag(Tab.liveTv)
                     }
-                }
 
-                Section {
-                    Label("Search", systemImage: "magnifyingglass")
-                        .tag(Tab.search)
-                    HStack {
-                        Label("Wish List", systemImage: "heart")
-                        if let count = authManager.serverInfo?.user?.fulfilledWishCount, count > 0 {
-                            Spacer()
-                            Text("\(count)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.green)
-                                .clipShape(Capsule())
+                    if authManager.serverInfo?.user?.isAdmin == true {
+                        Section("Admin") {
+                            Label("Transcode Status", systemImage: "gearshape.2")
+                                .tag(Tab.adminStatus)
+                            Label("Users", systemImage: "person.2")
+                                .tag(Tab.adminUsers)
+                            Label("Purchase Wishes", systemImage: "cart")
+                                .tag(Tab.adminPurchaseWishes)
+                            Label("Data Quality", systemImage: "exclamationmark.triangle")
+                                .tag(Tab.adminDataQuality)
+                            Label("Tags", systemImage: "tag")
+                                .tag(Tab.adminTags)
+                            Label("Transcodes", systemImage: "film.stack")
+                                .tag(Tab.adminTranscodes)
+                            Label("Unmatched Files", systemImage: "questionmark.folder")
+                                .tag(Tab.adminUnmatched)
+                            Label("Settings", systemImage: "gear")
+                                .tag(Tab.adminSettings)
                         }
                     }
-                    .tag(Tab.wishList)
                 }
 
                 Section {
-                    Label("Profile", systemImage: "person.circle")
-                        .tag(Tab.profile)
+                    if !isOffline {
+                        Label("Search", systemImage: "magnifyingglass")
+                            .tag(Tab.search)
+                        HStack {
+                            Label("Wish List", systemImage: "heart")
+                            if let count = authManager.serverInfo?.user?.fulfilledWishCount, count > 0 {
+                                Spacer()
+                                Text("\(count)")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.green)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .tag(Tab.wishList)
+                    }
+
+                    if hasDownloadsCapability || downloadManager.hasCompletedDownloads {
+                        HStack {
+                            Label("Downloads", systemImage: "arrow.down.circle")
+                            if downloadManager.activeDownloadCount > 0 {
+                                Spacer()
+                                Text("\(downloadManager.activeDownloadCount)")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.blue)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .tag(Tab.downloads)
+                    }
+                }
+
+                if !isOffline {
+                    Section {
+                        Label("Profile", systemImage: "person.circle")
+                            .tag(Tab.profile)
+                    }
                 }
             }
             .navigationTitle("Media Manager")
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    VStack(spacing: 4) {
-                        Button("Sign Out") {
-                            Task { await authManager.logout() }
+                    VStack(spacing: 8) {
+                        // Offline mode toggle
+                        @Bindable var dm = downloadManager
+                        Toggle(isOn: $dm.isOfflineMode) {
+                            Label(
+                                downloadManager.isOfflineMode ? "Offline Mode" : "Online",
+                                systemImage: downloadManager.isEffectivelyOffline
+                                    ? "wifi.slash" : "wifi"
+                            )
+                            .font(.callout)
                         }
-                        .font(.callout)
+                        .toggleStyle(.switch)
+                        .tint(.orange)
+                        .onChange(of: downloadManager.isOfflineMode) { _, newValue in
+                            if newValue && (selectedTab == .home || selectedTab == .profile
+                                || selectedTab == .search || selectedTab == .wishList) {
+                                // Switch to Downloads when entering offline mode
+                                if downloadManager.hasCompletedDownloads || hasDownloadsCapability {
+                                    selectedTab = .downloads
+                                }
+                            }
+                        }
+
+                        if !downloadManager.hasNetworkConnectivity && !downloadManager.isOfflineMode {
+                            Text("No connection")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+
+                        HStack(spacing: 16) {
+                            Button("Sign Out") {
+                                showLogoutConfirmation = true
+                            }
+                            .font(.callout)
+                        }
+
                         Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
@@ -138,8 +203,14 @@ struct ContentView: View {
                         SearchView()
                     case .wishList:
                         WishListView()
+                    case .downloads:
+                        DownloadsView()
                     case nil:
-                        HomeView()
+                        if isOffline && downloadManager.hasCompletedDownloads {
+                            DownloadsView()
+                        } else {
+                            HomeView()
+                        }
                     }
                 }
                 .navigationDestination(for: ApiTitle.self) { title in
@@ -154,8 +225,6 @@ struct ContentView: View {
                 .navigationDestination(for: PlaybackRoute.self) { route in
                     Color.clear.onAppear {
                         playbackRoute = route
-                        // Pop this empty destination so closing the cover
-                        // returns to the episode list, not a blank page
                         if !navigationPath.isEmpty {
                             navigationPath.removeLast()
                         }
@@ -175,6 +244,17 @@ struct ContentView: View {
                 }
             }
         }
+        .onAppear {
+            downloadManager.configure(apiClient: authManager.apiClient)
+        }
+        .alert("Sign Out", isPresented: $showLogoutConfirmation) {
+            Button("Sign Out", role: .destructive) {
+                Task { await authManager.logout() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to sign out?")
+        }
         .fullScreenCover(item: $playbackRoute) { route in
             CustomPlayerView(
                 transcodeId: route.transcodeId,
@@ -192,4 +272,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AuthManager())
+        .environment(DownloadManager())
 }

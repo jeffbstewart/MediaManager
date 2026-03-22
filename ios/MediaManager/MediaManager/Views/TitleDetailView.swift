@@ -2,11 +2,14 @@ import SwiftUI
 
 struct TitleDetailView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(DownloadManager.self) private var downloadManager
     let titleId: Int
     @State private var detail: ApiTitleDetail?
     @State private var loading = true
     @State private var isFavorite = false
     @State private var isHidden = false
+
+    private var isOffline: Bool { downloadManager.isEffectivelyOffline }
 
     var body: some View {
         Group {
@@ -16,13 +19,19 @@ struct TitleDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         // Hero image — use backdrop, or poster for personal videos
-                        AuthenticatedImage(
-                            path: detail.backdropUrl ?? detail.posterUrl,
-                            apiClient: authManager.apiClient,
-                            cornerRadius: 0
-                        )
-                        .frame(height: 220)
-                        .frame(maxWidth: .infinity)
+                        if isOffline {
+                            offlineImage(titleId: detail.id, name: "backdrop.jpg", fallback: "poster.jpg")
+                                .frame(height: 220)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            AuthenticatedImage(
+                                path: detail.backdropUrl ?? detail.posterUrl,
+                                apiClient: authManager.apiClient,
+                                cornerRadius: 0
+                            )
+                            .frame(height: 220)
+                            .frame(maxWidth: .infinity)
+                        }
 
                         VStack(alignment: .leading, spacing: 12) {
                             // Title + metadata
@@ -56,15 +65,18 @@ struct TitleDetailView: View {
                             // Play button for movies
                             if detail.playable, detail.mediaType != "TV", let tcId = detail.transcodeId {
                                 let tcHasSubs = detail.transcodes.first(where: { $0.id == tcId })?.hasSubtitles ?? false
-                                NavigationLink(value: PlaybackRoute(
-                                    transcodeId: tcId, titleName: detail.name, episodeName: nil,
-                                    hasSubtitles: tcHasSubs
-                                )) {
-                                    Label("Play", systemImage: "play.fill")
-                                        .frame(maxWidth: .infinity)
+                                // In offline mode, only show play if we have the local file
+                                if !isOffline || downloadManager.localFileURL(for: tcId) != nil {
+                                    NavigationLink(value: PlaybackRoute(
+                                        transcodeId: tcId, titleName: detail.name, episodeName: nil,
+                                        hasSubtitles: tcHasSubs
+                                    )) {
+                                        Label("Play", systemImage: "play.fill")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.large)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.large)
                             }
 
                             // Seasons button for TV
@@ -77,38 +89,47 @@ struct TitleDetailView: View {
                                 .controlSize(.large)
                             }
 
-                            // Action row: favorite, hide, re-transcode
-                            HStack(spacing: 20) {
-                                Button {
-                                    Task { await toggleFavorite(detail.id) }
-                                } label: {
-                                    Label(
-                                        isFavorite ? "Favorited" : "Favorite",
-                                        systemImage: isFavorite ? "star.fill" : "star"
-                                    )
-                                    .foregroundStyle(isFavorite ? .yellow : .secondary)
-                                }
-
-                                Button {
-                                    Task { await toggleHidden(detail.id) }
-                                } label: {
-                                    Label(
-                                        isHidden ? "Hidden" : "Hide",
-                                        systemImage: isHidden ? "eye.slash.fill" : "eye.slash"
-                                    )
-                                    .foregroundStyle(isHidden ? .red : .secondary)
-                                }
-
-                                if detail.playable {
+                            // Action row: favorite, hide, re-transcode, download
+                            if !isOffline {
+                                HStack(spacing: 20) {
                                     Button {
-                                        Task { await requestRetranscode(detail.id) }
+                                        Task { await toggleFavorite(detail.id) }
                                     } label: {
-                                        Label("Re-transcode", systemImage: "arrow.clockwise")
-                                            .foregroundStyle(.secondary)
+                                        Label(
+                                            isFavorite ? "Favorited" : "Favorite",
+                                            systemImage: isFavorite ? "star.fill" : "star"
+                                        )
+                                        .foregroundStyle(isFavorite ? .yellow : .secondary)
+                                    }
+
+                                    Button {
+                                        Task { await toggleHidden(detail.id) }
+                                    } label: {
+                                        Label(
+                                            isHidden ? "Hidden" : "Hide",
+                                            systemImage: isHidden ? "eye.slash.fill" : "eye.slash"
+                                        )
+                                        .foregroundStyle(isHidden ? .red : .secondary)
+                                    }
+
+                                    if detail.playable {
+                                        Button {
+                                            Task { await requestRetranscode(detail.id) }
+                                        } label: {
+                                            Label("Re-transcode", systemImage: "arrow.clockwise")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+
+                                    // Download button (movies only, when downloads capability available)
+                                    if authManager.serverInfo?.capabilities.contains("downloads") == true,
+                                       detail.mediaType != "TV",
+                                       let tcId = detail.transcodeId {
+                                        downloadButton(detail: detail, transcodeId: tcId)
                                     }
                                 }
+                                .font(.subheadline)
                             }
-                            .font(.subheadline)
 
                             // Genres
                             if !detail.genres.isEmpty {
@@ -124,11 +145,17 @@ struct TitleDetailView: View {
                                 }
                             }
 
-                            // Collection link
-                            if let collId = detail.tmdbCollectionId, let collName = detail.tmdbCollectionName {
-                                NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: collName)) {
+                            // Collection info (display only, no link when offline)
+                            if let collName = detail.tmdbCollectionName {
+                                if isOffline {
                                     Label(collName, systemImage: "square.stack")
                                         .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                } else if let collId = detail.tmdbCollectionId {
+                                    NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: collName)) {
+                                        Label(collName, systemImage: "square.stack")
+                                            .font(.subheadline)
+                                    }
                                 }
                             }
 
@@ -138,7 +165,7 @@ struct TitleDetailView: View {
                                     .font(.body)
                             }
 
-                            // Tags
+                            // Tags (display only)
                             if !detail.tags.isEmpty {
                                 FlowLayout(spacing: 6) {
                                     ForEach(detail.tags) { tag in
@@ -178,8 +205,11 @@ struct TitleDetailView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     LazyHStack(alignment: .top, spacing: 16) {
                                         ForEach(detail.cast.prefix(20)) { member in
-                                            NavigationLink(value: ActorRoute(tmdbPersonId: member.tmdbPersonId, name: member.name)) {
-                                                VStack(spacing: 6) {
+                                            let castContent = VStack(spacing: 6) {
+                                                if isOffline {
+                                                    offlineHeadshot(titleId: detail.id, personId: member.tmdbPersonId)
+                                                        .frame(width: 80, height: 80)
+                                                } else {
                                                     AuthenticatedImage(
                                                         path: member.headshotUrl,
                                                         apiClient: authManager.apiClient,
@@ -187,23 +217,32 @@ struct TitleDetailView: View {
                                                         contentMode: .fit
                                                     )
                                                     .frame(width: 80, height: 80)
+                                                }
 
-                                                    Text(member.name)
-                                                        .font(.caption)
-                                                        .fontWeight(.medium)
+                                                Text(member.name)
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
+                                                    .lineLimit(2)
+                                                    .multilineTextAlignment(.center)
+                                                if let character = member.characterName {
+                                                    Text(character)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.secondary)
                                                         .lineLimit(2)
                                                         .multilineTextAlignment(.center)
-                                                    if let character = member.characterName {
-                                                        Text(character)
-                                                            .font(.caption2)
-                                                            .foregroundStyle(.secondary)
-                                                            .lineLimit(2)
-                                                            .multilineTextAlignment(.center)
-                                                    }
                                                 }
-                                                .frame(width: 90)
                                             }
-                                            .buttonStyle(.plain)
+                                            .frame(width: 90)
+
+                                            if isOffline {
+                                                // No navigation to actor page when offline
+                                                castContent
+                                            } else {
+                                                NavigationLink(value: ActorRoute(tmdbPersonId: member.tmdbPersonId, name: member.name)) {
+                                                    castContent
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
                                         }
                                     }
                                 }
@@ -225,7 +264,12 @@ struct TitleDetailView: View {
 
     private func loadDetail() async {
         loading = true
-        detail = try? await authManager.apiClient.get("catalog/titles/\(titleId)")
+        if isOffline {
+            // Load from cache
+            detail = downloadManager.loadCachedTitleDetail(for: titleId)
+        } else {
+            detail = try? await authManager.apiClient.get("catalog/titles/\(titleId)")
+        }
         isFavorite = detail?.isFavorite ?? false
         isHidden = detail?.isHidden ?? false
         loading = false
@@ -240,7 +284,7 @@ struct TitleDetailView: View {
                 try await authManager.apiClient.delete("catalog/titles/\(id)/favorite")
             }
         } catch {
-            isFavorite.toggle() // revert on failure
+            isFavorite.toggle()
         }
     }
 
@@ -253,12 +297,106 @@ struct TitleDetailView: View {
                 try await authManager.apiClient.delete("catalog/titles/\(id)/hidden")
             }
         } catch {
-            isHidden.toggle() // revert on failure
+            isHidden.toggle()
         }
     }
 
     private func requestRetranscode(_ id: Int) async {
         try? await authManager.apiClient.post("catalog/titles/\(id)/request-retranscode", body: [:])
+    }
+
+    @ViewBuilder
+    private func downloadButton(detail: ApiTitleDetail, transcodeId: Int) -> some View {
+        let dlState = downloadManager.state(for: transcodeId)
+
+        switch dlState {
+        case .completed:
+            Label("Downloaded", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .downloading, .fetchingMetadata:
+            if let item = downloadManager.item(for: transcodeId) {
+                HStack(spacing: 4) {
+                    ProgressView(value: item.progress)
+                        .frame(width: 40)
+                    Text("\(Int(item.progress * 100))%")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.blue)
+            }
+        case .paused:
+            Button {
+                downloadManager.resumeDownload(transcodeId: transcodeId)
+            } label: {
+                Label("Resume", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.orange)
+            }
+        case .failed:
+            Button {
+                downloadManager.resumeDownload(transcodeId: transcodeId)
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise.circle")
+                    .foregroundStyle(.red)
+            }
+        case nil:
+            Button {
+                downloadManager.startDownload(
+                    transcodeId: transcodeId,
+                    titleId: detail.id,
+                    titleName: detail.name,
+                    posterUrl: detail.posterUrl,
+                    quality: detail.quality,
+                    year: detail.year
+                )
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Offline Image Helpers
+
+    @ViewBuilder
+    private func offlineImage(titleId: Int, name: String, fallback: String? = nil) -> some View {
+        if let data = downloadManager.loadCachedImage(for: titleId, name: name),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .clipped()
+        } else if let fallback,
+                  let data = downloadManager.loadCachedImage(for: titleId, name: fallback),
+                  let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .clipped()
+        } else {
+            Rectangle()
+                .fill(.quaternary)
+                .overlay {
+                    Image(systemName: "film")
+                        .foregroundStyle(.secondary)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func offlineHeadshot(titleId: Int, personId: Int) -> some View {
+        if let data = downloadManager.loadCachedImage(for: titleId, name: "headshots/\(personId).jpg"),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(.quaternary)
+                .overlay {
+                    Image(systemName: "person")
+                        .foregroundStyle(.secondary)
+                }
+        }
     }
 }
 
