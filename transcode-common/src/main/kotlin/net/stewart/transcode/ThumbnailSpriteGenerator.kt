@@ -28,8 +28,8 @@ object ThumbnailSpriteGenerator {
      * Output files are written to [outputDir] (defaults to mp4File's directory).
      * Skips if the VTT file already exists and is newer than the MP4.
      */
-    fun generate(ffmpegPath: String, mp4File: File, outputDir: File = mp4File.parentFile): Boolean {
-        val baseName = mp4File.nameWithoutExtension
+    fun generate(ffmpegPath: String, mp4File: File, outputDir: File = mp4File.parentFile, outputBaseName: String? = null): Boolean {
+        val baseName = outputBaseName ?: mp4File.nameWithoutExtension
         val parentDir = outputDir
         outputDir.mkdirs()
         val vttFile = File(parentDir, "$baseName.thumbs.vtt")

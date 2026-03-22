@@ -422,13 +422,14 @@ class TranscodeWorker(
     }
 
     private fun generateThumbnails(leaseId: Long, videoFile: File, relativePath: String): Boolean {
-        // Write sprites alongside the source file on NAS
+        // Write sprites alongside the source file on NAS, using the original filename
         val sourceFile = pathTranslator.sourceFile(relativePath)
         val outputDir = sourceFile.parentFile
+        val outputBaseName = File(relativePath).nameWithoutExtension
         log.info("Generating thumbnails for {} -> {}", videoFile.name, outputDir)
         apiClient.reportProgress(leaseId, 10, null)
 
-        val success = ThumbnailSpriteGenerator.generate(config.ffmpegPath, videoFile, outputDir)
+        val success = ThumbnailSpriteGenerator.generate(config.ffmpegPath, videoFile, outputDir, outputBaseName)
 
         if (success) {
             log.info("Thumbnails complete for: {}", videoFile.name)

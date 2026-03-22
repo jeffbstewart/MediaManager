@@ -20,7 +20,8 @@ object ManagedDirectoryService {
 
     /** Directories managed by mediamanager — always excluded from NAS scanning. */
     val MANAGED_DIRS = listOf(
-        "ForBrowser"
+        "ForBrowser",
+        "ForMobile"
     )
 
     /**
