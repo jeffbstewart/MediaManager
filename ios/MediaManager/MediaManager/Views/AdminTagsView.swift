@@ -9,39 +9,40 @@ struct AdminTagsView: View {
     @State private var tagToDelete: ApiTagListItem?
 
     var body: some View {
-        Group {
+        List {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity)
+                    .listRowSeparator(.hidden)
             } else if tags.isEmpty {
                 ContentUnavailableView("No tags", systemImage: "tag")
+                    .listRowSeparator(.hidden)
             } else {
-                List {
-                    ForEach(tags) { tag in
-                        HStack {
-                            Circle()
-                                .fill(Color(hex: tag.color) ?? .gray)
-                                .frame(width: 16, height: 16)
-                            Text(tag.name)
-                                .fontWeight(.medium)
-                            Spacer()
-                            Text("\(tag.titleCount)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ForEach(tags) { tag in
+                    HStack {
+                        Circle()
+                            .fill(Color(hex: tag.color) ?? .gray)
+                            .frame(width: 16, height: 16)
+                        Text(tag.name)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text("\(tag.titleCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button("Delete", role: .destructive) {
+                            tagToDelete = tag
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button("Delete", role: .destructive) {
-                                tagToDelete = tag
-                            }
-                            Button("Edit") {
-                                editingTag = tag
-                            }
-                            .tint(.blue)
+                        Button("Edit") {
+                            editingTag = tag
                         }
-                        .contextMenu {
-                            Button("Edit") { editingTag = tag }
-                            Button("Delete", role: .destructive) {
-                                tagToDelete = tag
-                            }
+                        .tint(.blue)
+                    }
+                    .contextMenu {
+                        Button("Edit") { editingTag = tag }
+                        Button("Delete", role: .destructive) {
+                            tagToDelete = tag
                         }
                     }
                 }

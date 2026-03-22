@@ -416,6 +416,15 @@ Catalog / Add Item:
 
 **Depends on:** Phase 10 (server)
 
+**Known gaps (Phase 10a):**
+- Cannot add/remove titles from a tag on the tag admin page
+- Tags are not visible or editable on the title detail page
+- User rating ceiling picker does not work from the user admin detail view
+- Settings page does not expose or allow editing the Keepa API token
+- Settings page does not allow editing the personal video directory (read-only display)
+- Purchase Wishes admin view status updates do not persist (PUT may be using wrong ID)
+- Add item screen (UPC scanner, TMDB search) not yet implemented
+
 ### Phase 4a: Subtitle Rendering
 
 **Goal:** Display WebVTT subtitles during video playback.
