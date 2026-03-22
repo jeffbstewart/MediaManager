@@ -45,12 +45,15 @@ services:
     # MM_NAS_ROOT:      Path to media inside the container (matches volume mount).
     # MM_BEHIND_PROXY:  Set to true if behind a reverse proxy (nginx, traefik)
     #                   so the app trusts X-Forwarded-* headers.
+    # TZ:              IANA timezone for UI timestamp display (e.g., America/New_York,
+    #                   America/Los_Angeles, Europe/London). Default: America/New_York.
     environment:
       - H2_PASSWORD=change_me_to_a_strong_password
       - H2_FILE_PASSWORD=change_me_to_another_strong_password
       - TMDB_API_KEY=your_tmdb_api_key_here
       - MM_NAS_ROOT=/media
       - MM_BEHIND_PROXY=true
+      - TZ=America/New_York
 
     # ── Health Check ─────────────────────────────────────────────────
     healthcheck:
