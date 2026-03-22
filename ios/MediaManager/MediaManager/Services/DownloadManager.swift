@@ -227,26 +227,18 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     /// Load cached title detail from disk.
     func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
-        guard let dir = titleCacheDir(for: titleId) else { return nil }
-        let file = dir.appendingPathComponent("detail.json")
-        guard let data = try? Data(contentsOf: file) else { return nil }
-        return try? JSONDecoder().decode(ApiTitleDetail.self, from: data)
+        // TODO: Implement protobuf-based cache (JSON cache removed in gRPC migration)
+        return nil
     }
 
     /// Load cached seasons from disk.
     func loadCachedSeasons(for titleId: TitleID) -> [ApiSeason]? {
-        guard let dir = titleCacheDir(for: titleId) else { return nil }
-        let file = dir.appendingPathComponent("seasons.json")
-        guard let data = try? Data(contentsOf: file) else { return nil }
-        return try? JSONDecoder().decode([ApiSeason].self, from: data)
+        return nil
     }
 
     /// Load cached episodes for a season from disk.
     func loadCachedEpisodes(for titleId: TitleID, season: Int) -> [ApiEpisode]? {
-        guard let dir = titleCacheDir(for: titleId) else { return nil }
-        let file = dir.appendingPathComponent("episodes_\(season).json")
-        guard let data = try? Data(contentsOf: file) else { return nil }
-        return try? JSONDecoder().decode([ApiEpisode].self, from: data)
+        return nil
     }
 
     /// Load a cached image (poster, backdrop, headshot) from the title cache.
@@ -486,64 +478,10 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - Private: Title Cache
 
     /// Cache title detail, images, seasons, and episodes for offline use.
+    /// TODO: Migrate to gRPC-based caching (REST endpoint no longer available).
     private func cacheTitleData(titleId: TitleID) async {
-        guard let apiClient else { return }
-        let dir = DownloadItem.titleCacheDir(for: titleId)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let titleRaw = titleId.rawValue
-
-        // Title detail
-        do {
-            let detail: ApiTitleDetail = try await apiClient.get("catalog/titles/\(titleRaw)")
-            let data = try JSONEncoder().encode(detail)
-            try data.write(to: dir.appendingPathComponent("detail.json"), options: .atomic)
-
-            // Poster image
-            if let posterUrl = detail.posterUrl {
-                if let imgData = try? await apiClient.getRaw(posterUrl) {
-                    try? imgData.write(to: dir.appendingPathComponent("poster.jpg"))
-                }
-            }
-
-            // Backdrop image
-            if let backdropUrl = detail.backdropUrl {
-                if let imgData = try? await apiClient.getRaw(backdropUrl) {
-                    try? imgData.write(to: dir.appendingPathComponent("backdrop.jpg"))
-                }
-            }
-
-            // Cast headshots
-            let headshotsDir = dir.appendingPathComponent("headshots")
-            try? FileManager.default.createDirectory(at: headshotsDir, withIntermediateDirectories: true)
-            for member in detail.cast.prefix(20) {
-                if let headshotUrl = member.headshotUrl {
-                    if let imgData = try? await apiClient.getRaw(headshotUrl) {
-                        try? imgData.write(to: headshotsDir.appendingPathComponent("\(member.tmdbPersonId.rawValue).jpg"))
-                    }
-                }
-            }
-        } catch {
-            // Title detail fetch failed — don't block on this
-        }
-
-        // Seasons
-        if let seasons: [ApiSeason] = try? await apiClient.get("catalog/titles/\(titleRaw)/seasons"),
-           let data = try? JSONEncoder().encode(seasons) {
-            try? data.write(to: dir.appendingPathComponent("seasons.json"), options: .atomic)
-
-            // Episodes for each season
-            for season in seasons {
-                if let episodes: [ApiEpisode] = try? await apiClient.get(
-                    "catalog/titles/\(titleRaw)/seasons/\(season.seasonNumber)/episodes"),
-                   let epData = try? JSONEncoder().encode(episodes) {
-                    try? epData.write(to: dir.appendingPathComponent("episodes_\(season.seasonNumber).json"), options: .atomic)
-                }
-            }
-        }
-
-        // Update cache timestamp
-        titleCacheEntries[titleId] = TitleCacheEntry(titleId: titleId, lastUpdated: Date())
-        persistTitleCacheEntries()
+        // Stubbed out during gRPC migration — cache will be rebuilt when
+        // DownloadManager is fully migrated to use gRPC for metadata.
     }
 
     /// Refresh title cache only if stale (older than 24 hours).

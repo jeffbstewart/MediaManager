@@ -4,7 +4,6 @@ enum APIClientError: LocalizedError {
     case noServerURL
     case invalidURL
     case httpError(Int, String)
-    case rateLimited(retryAfter: Int)
     case unauthorized
     case networkError(Error)
 
@@ -13,13 +12,14 @@ enum APIClientError: LocalizedError {
         case .noServerURL: "No server URL configured"
         case .invalidURL: "Invalid URL"
         case .httpError(let code, let message): "HTTP \(code): \(message)"
-        case .rateLimited(let seconds): "Rate limited. Retry after \(seconds)s"
         case .unauthorized: "Session expired"
         case .networkError(let error): error.localizedDescription
         }
     }
 }
 
+/// HTTP client for binary operations that stay outside gRPC:
+/// video streaming (Range requests), image loading, file downloads.
 actor APIClient {
     private let session: URLSession
     private var baseURL: URL?
@@ -43,123 +43,6 @@ actor APIClient {
     func getBaseURL() -> URL? { baseURL }
     func getAccessToken() -> String? { accessToken }
 
-    /// Hit the unauthenticated /discover endpoint over HTTP (LAN) or HTTPS.
-    /// Returns API versions and the canonical HTTPS URL for secure communication.
-    func discover(serverURL: URL) async throws -> DiscoverResponse {
-        let url = serverURL.appendingPathComponent("api/v1/discover")
-        let (data, response) = try await session.data(from: url)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(DiscoverResponse.self, from: data)
-    }
-
-    func getServerInfo(serverURL: URL) async throws -> ServerInfo {
-        let url = serverURL.appendingPathComponent("api/v1/info")
-        var request = URLRequest(url: url)
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(ServerInfo.self, from: data)
-    }
-
-    func login(username: String, password: String, deviceName: String = "iOS") async throws -> AuthResponse {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/auth/login")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["username": username, "password": password, "device_name": deviceName]
-        request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(AuthResponse.self, from: data)
-    }
-
-    func refreshToken(_ refreshToken: String) async throws -> AuthResponse {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/auth/refresh")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["refresh_token": refreshToken]
-        request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(AuthResponse.self, from: data)
-    }
-
-    func revokeToken(_ refreshToken: String) async throws {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = baseURL.appendingPathComponent("api/v1/auth/revoke")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let body = ["refresh_token": refreshToken]
-        request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-    }
-
-    func get<T: Decodable>(_ path: String) async throws -> T {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        // Use string concatenation to preserve query strings — appendingPathComponent
-        // percent-encodes '?' which breaks paths like "tmdb/search?q=foo"
-        guard let url = URL(string: baseURL.absoluteString + "/api/v1/" + path) else {
-            throw APIClientError.invalidURL
-        }
-        var request = URLRequest(url: url)
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
-
-    func post(_ path: String, body: [String: Any]) async throws {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-    }
-
-    func put(_ path: String, body: [String: Any] = [:]) async throws {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-    }
-
-    func delete(_ path: String) async throws {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        let url = URL(string: baseURL.absoluteString + "/api/v1/" + path)!
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-    }
-
     /// Build a URL with JWT auth for AVPlayer (uses HTTPAdditionalHeaders, not query params).
     func streamURL(for transcodeId: Int) async -> (URL, [String: String])? {
         guard let baseURL else { return nil }
@@ -168,14 +51,14 @@ actor APIClient {
         return (url, ["Authorization": "Bearer \(token)"])
     }
 
-    /// Hit a non-api path with JWT auth and wait for 200 (e.g. /cam/3/start).
+    /// Hit a path with JWT auth and wait for 200 (e.g. HLS relay warmup).
     func warmUpStream(_ path: String) async throws {
         guard let baseURL else { throw APIClientError.noServerURL }
         guard let url = URL(string: baseURL.absoluteString + path) else {
             throw APIClientError.invalidURL
         }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 35 // relay warmup can take up to 30s
+        request.timeoutInterval = 35
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -196,10 +79,42 @@ actor APIClient {
         return data
     }
 
+    /// Generic GET with JWT auth and JSON decoding (used by DownloadManager for manifests).
+    func get<T: Decodable>(_ path: String) async throws -> T {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        guard let url = URL(string: baseURL.absoluteString + "/" + path) else {
+            throw APIClientError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// POST with JWT auth (used by DownloadManager for progress sync).
+    func post(_ path: String, body: [String: Any]) async throws {
+        guard let baseURL else { throw APIClientError.noServerURL }
+        guard let url = URL(string: baseURL.absoluteString + "/" + path) else {
+            throw APIClientError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
+    }
+
     /// Build the full download URL for a transcode (used by DownloadManager).
     func downloadURL(for transcodeId: Int) -> URL? {
         guard let baseURL else { return nil }
-        return URL(string: baseURL.absoluteString + "/api/v1/downloads/\(transcodeId)")
+        return URL(string: baseURL.absoluteString + "/downloads/\(transcodeId)")
     }
 
     private func validateResponse(_ response: URLResponse, data: Data) throws {
@@ -209,12 +124,8 @@ actor APIClient {
             return
         case 401:
             throw APIClientError.unauthorized
-        case 429:
-            let apiError = try? JSONDecoder().decode(APIError.self, from: data)
-            throw APIClientError.rateLimited(retryAfter: apiError?.retryAfter ?? 60)
         default:
-            let apiError = try? JSONDecoder().decode(APIError.self, from: data)
-            throw APIClientError.httpError(http.statusCode, apiError?.error ?? "Unknown error")
+            throw APIClientError.httpError(http.statusCode, "HTTP error")
         }
     }
 }

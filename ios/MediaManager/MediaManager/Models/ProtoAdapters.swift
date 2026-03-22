@@ -156,6 +156,8 @@ extension MMCalendarDate {
 struct ApiTitle: Identifiable, Hashable, Sendable {
     let proto: MMTitle
 
+    init(proto: MMTitle) { self.proto = proto }
+
     var id: TitleID { TitleID(proto: Int64(proto.id)) }
     var name: String { proto.name }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
@@ -168,11 +170,37 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     var quality: String? { proto.quality.displayString }
     var playable: Bool { proto.playable }
     var transcodeId: TranscodeID? { proto.hasTranscodeID ? TranscodeID(proto: proto.transcodeID) : nil }
-    var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: Int64(proto.tmdbID)) : nil }
-    var tmdbCollectionId: TmdbCollectionID? { proto.hasTmdbCollectionID ? TmdbCollectionID(proto: Int64(proto.tmdbCollectionID)) : nil }
+    var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: proto.tmdbID) : nil }
+    var tmdbCollectionId: TmdbCollectionID? { proto.hasTmdbCollectionID ? TmdbCollectionID(proto: proto.tmdbCollectionID) : nil }
     var tmdbCollectionName: String? { proto.hasTmdbCollectionName ? proto.tmdbCollectionName : nil }
     var familyMembers: [String]? { proto.familyMembers.isEmpty ? nil : proto.familyMembers }
     var forMobileAvailable: Bool? { proto.lowStorageTranscodeAvailable }
+
+    /// Convenience init for constructing ApiTitle from fields (used by views like DownloadsView).
+    init(id: TitleID, name: String, mediaType: MediaType, year: Int? = nil,
+         description: String? = nil, posterUrl: String? = nil, backdropUrl: String? = nil,
+         contentRating: String? = nil, popularity: Double? = nil, quality: String? = nil,
+         playable: Bool = false, transcodeId: TranscodeID? = nil, tmdbId: TmdbID? = nil,
+         tmdbCollectionId: TmdbCollectionID? = nil, tmdbCollectionName: String? = nil,
+         familyMembers: [String]? = nil, forMobileAvailable: Bool? = nil) {
+        var t = MMTitle()
+        t.id = id.protoValue
+        t.name = name
+        t.mediaType = mediaType == .movie ? .movie : mediaType == .tv ? .tv : .personal
+        if let y = year { t.year = Int32(y) }
+        if let d = description { t.description_p = d }
+        if let p = posterUrl { t.posterURL = p }
+        if let b = backdropUrl { t.backdropURL = b }
+        if let p = popularity { t.popularity = p }
+        t.playable = playable
+        if let tid = transcodeId { t.transcodeID = tid.protoValue }
+        if let tmid = tmdbId { t.tmdbID = tmid.protoValue }
+        if let cid = tmdbCollectionId { t.tmdbCollectionID = cid.protoValue }
+        if let cn = tmdbCollectionName { t.tmdbCollectionName = cn }
+        if let fm = familyMembers { t.familyMembers = fm }
+        t.lowStorageTranscodeAvailable = forMobileAvailable ?? false
+        self.proto = t
+    }
 
     static func == (lhs: ApiTitle, rhs: ApiTitle) -> Bool {
         lhs.proto.id == rhs.proto.id
@@ -206,7 +234,7 @@ struct ApiMissingSeason: Identifiable, Sendable {
     var titleId: TitleID { TitleID(proto: proto.titleID) }
     var titleName: String { proto.titleName }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
-    var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: Int64(proto.tmdbID)) : nil }
+    var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: proto.tmdbID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var seasons: [ApiMissingSeasonEntry] { proto.seasons.map { ApiMissingSeasonEntry(proto: $0) } }
 }
@@ -234,7 +262,7 @@ struct ApiCastMember: Identifiable, Sendable {
     let proto: MMCastMember
 
     var id: TmdbPersonID { tmdbPersonId }
-    var tmdbPersonId: TmdbPersonID { TmdbPersonID(proto: Int64(proto.tmdbPersonID)) }
+    var tmdbPersonId: TmdbPersonID { TmdbPersonID(proto: proto.tmdbPersonID) }
     var name: String { proto.name }
     var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
     var headshotUrl: String? { proto.hasHeadshotURL ? proto.headshotURL : nil }
@@ -299,8 +327,8 @@ struct ApiTitleDetail: Sendable {
     var quality: String? { t.quality.displayString }
     var playable: Bool { t.playable }
     var transcodeId: TranscodeID? { t.hasTranscodeID ? TranscodeID(proto: t.transcodeID) : nil }
-    var tmdbId: TmdbID? { t.hasTmdbID ? TmdbID(proto: Int64(t.tmdbID)) : nil }
-    var tmdbCollectionId: TmdbCollectionID? { t.hasTmdbCollectionID ? TmdbCollectionID(proto: Int64(t.tmdbCollectionID)) : nil }
+    var tmdbId: TmdbID? { t.hasTmdbID ? TmdbID(proto: t.tmdbID) : nil }
+    var tmdbCollectionId: TmdbCollectionID? { t.hasTmdbCollectionID ? TmdbCollectionID(proto: t.tmdbCollectionID) : nil }
     var tmdbCollectionName: String? { t.hasTmdbCollectionName ? t.tmdbCollectionName : nil }
     var familyMembers: [String]? { t.familyMembers.isEmpty ? nil : t.familyMembers }
     var forMobileAvailable: Bool? { t.lowStorageTranscodeAvailable }
@@ -333,8 +361,8 @@ struct ApiSearchResult: Identifiable, Sendable {
     var contentRating: String? { proto.contentRating.displayString }
     var transcodeId: TranscodeID? { proto.hasTranscodeID ? TranscodeID(proto: proto.transcodeID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
-    var tmdbCollectionId: TmdbCollectionID? { proto.hasTmdbCollectionID ? TmdbCollectionID(proto: Int64(proto.tmdbCollectionID)) : nil }
-    var tmdbPersonId: TmdbPersonID? { proto.hasTmdbPersonID ? TmdbPersonID(proto: Int64(proto.tmdbPersonID)) : nil }
+    var tmdbCollectionId: TmdbCollectionID? { proto.hasTmdbCollectionID ? TmdbCollectionID(proto: proto.tmdbCollectionID) : nil }
+    var tmdbPersonId: TmdbPersonID? { proto.hasTmdbPersonID ? TmdbPersonID(proto: proto.tmdbPersonID) : nil }
     var headshotUrl: String? { proto.hasHeadshotURL ? proto.headshotURL : nil }
     var titleCount: Int? { proto.hasTitleCount ? Int(proto.titleCount) : nil }
     var itemId: Int? { proto.hasItemID ? Int(proto.itemID) : nil }
@@ -354,7 +382,7 @@ struct ApiCollectionListItem: Identifiable, Sendable {
     let proto: MMCollectionListItem
 
     var id: TmdbCollectionID { tmdbCollectionId }
-    var tmdbCollectionId: TmdbCollectionID { TmdbCollectionID(proto: Int64(proto.tmdbCollectionID)) }
+    var tmdbCollectionId: TmdbCollectionID { TmdbCollectionID(proto: proto.tmdbCollectionID) }
     var name: String { proto.name }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var titleCount: Int { Int(proto.titleCount) }
@@ -367,19 +395,39 @@ struct ApiCollectionListResponse: Sendable {
 }
 
 struct ApiTagListItem: Identifiable, Sendable {
-    let proto: MMTagListItem
+    let id: TagID
+    let name: String
+    let color: String
+    let titleCount: Int
 
-    var id: TagID { TagID(proto: proto.id) }
-    var name: String { proto.name }
-    var color: String { proto.color.hex }
-    var titleCount: Int { Int(proto.titleCount) }
+    init(proto: MMTagListItem) {
+        id = TagID(proto: proto.id)
+        name = proto.name
+        color = proto.color.hex
+        titleCount = Int(proto.titleCount)
+    }
+
+    init(adminProto tag: MMAdminTagListItem) {
+        id = TagID(proto: tag.id)
+        name = tag.name
+        color = tag.color.hex
+        titleCount = Int(tag.titleCount)
+    }
 }
 
 struct ApiTagListResponse: Sendable {
-    let proto: MMTagListResponse
+    let tags: [ApiTagListItem]
 
-    var tags: [ApiTagListItem] { proto.tags.map { ApiTagListItem(proto: $0) } }
+    init(proto: MMTagListResponse) {
+        tags = proto.tags.map { ApiTagListItem(proto: $0) }
+    }
+
+    init(tags: [ApiTagListItem]) {
+        self.tags = tags
+    }
 }
+
+// ApiTagListResponse defined above with both proto and manual inits
 
 // MARK: - Browse/Landing Pages
 
@@ -408,7 +456,7 @@ struct ApiCreditEntry: Identifiable, Sendable {
     let proto: MMCreditEntry
 
     var id: String { "\(tmdbId.rawValue)-\(mediaType.rawValue)" }
-    var tmdbId: TmdbID { TmdbID(proto: Int64(proto.tmdbID)) }
+    var tmdbId: TmdbID { TmdbID(proto: proto.tmdbID) }
     var title: String { proto.title }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
@@ -430,7 +478,7 @@ struct ApiCollectionItem: Identifiable, Sendable {
     let proto: MMCollectionItem
 
     var id: TmdbID { tmdbMovieId }
-    var tmdbMovieId: TmdbID { TmdbID(proto: Int64(proto.tmdbMovieID)) }
+    var tmdbMovieId: TmdbID { TmdbID(proto: proto.tmdbMovieID) }
     var name: String { proto.name }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
@@ -551,7 +599,7 @@ struct ApiWish: Identifiable, Sendable {
     var id: String {
         "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")-\(seasonNumber ?? 0)-\(status ?? "")"
     }
-    var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: Int64(proto.tmdbID)) : nil }
+    var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var title: String { proto.title }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
@@ -595,7 +643,7 @@ struct TmdbSearchItem: Identifiable, Sendable {
     let proto: MMTmdbResult
 
     var id: String { "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")" }
-    var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: Int64(proto.tmdbID)) : nil }
+    var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
     var title: String? { proto.title.isEmpty ? nil : proto.title }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
@@ -792,7 +840,7 @@ struct AdminPurchaseWish: Identifiable, Sendable {
     let proto: MMPurchaseWish
 
     var id: String { "\(proto.tmdbID)-\(proto.mediaType.rawValue)" }
-    var tmdbId: TmdbID { TmdbID(proto: Int64(proto.tmdbID)) }
+    var tmdbId: TmdbID { TmdbID(proto: proto.tmdbID) }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var title: String { proto.title }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }

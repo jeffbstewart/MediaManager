@@ -41,7 +41,7 @@ final class SkipSegmentController {
     private var hasSkippedIntro = false
     private var hasTriggeredUpNext = false
 
-    func load(transcodeId: Int, apiClient: APIClient, localDir: URL? = nil) async {
+    func load(transcodeId: Int, grpcClient: GrpcClient, localDir: URL? = nil) async {
         // Try local file first
         if let localDir {
             let localFile = localDir.appendingPathComponent("chapters.json")
@@ -56,10 +56,17 @@ final class SkipSegmentController {
         }
 
         do {
-            let response: ChaptersResponse = try await apiClient.get("stream/\(transcodeId)/chapters")
+            let response = try await grpcClient.getChapters(transcodeId: Int64(transcodeId))
             for seg in response.skipSegments {
-                if seg.type == "INTRO" { introSegment = seg }
-                if seg.type == "END_CREDITS" { creditsSegment = seg }
+                let type = seg.segmentType
+                let data = SkipSegmentData(
+                    type: type == .intro ? "INTRO" : type == .credits ? "END_CREDITS" : "UNKNOWN",
+                    start: seg.start.seconds,
+                    end: seg.end.seconds,
+                    method: nil
+                )
+                if type == .intro { introSegment = data }
+                if type == .credits { creditsSegment = data }
             }
         } catch {
             // No chapters/skip data available

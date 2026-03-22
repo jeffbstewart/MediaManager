@@ -22,8 +22,8 @@ actor GrpcClient {
         )
         let client = GRPCClient(transport: transport)
 
-        // Start the client's background task
-        Task { try await client.run() }
+        // Start the client's connection management background task
+        Task { try await client.runConnections() }
 
         self.grpcClient = client
     }
@@ -249,6 +249,12 @@ actor GrpcClient {
         var request = MMTranscodeIdRequest()
         request.transcodeID = transcodeId
         return try await playbackService.getProgress(request, metadata: authMetadata())
+    }
+
+    func getChapters(transcodeId: Int64) async throws -> MMChaptersResponse {
+        var request = MMTranscodeIdRequest()
+        request.transcodeID = transcodeId
+        return try await playbackService.getChapters(request, metadata: authMetadata())
     }
 
     func reportProgress(transcodeId: Int64, position: Double, duration: Double?) async throws {

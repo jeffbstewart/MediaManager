@@ -267,7 +267,7 @@ final class AuthManager {
         do {
             let protoInfo = try await grpcClient.getInfo()
             serverInfo = ServerInfo(proto: protoInfo)
-            passwordChangeRequired = protoInfo.user.hasField(fieldNumber: 0) ? false : false
+            passwordChangeRequired = false  // TODO: extract from profile or server info
             // Check if user needs password change from profile
             if let caps = serverInfo?.capabilities {
                 UserDefaults.standard.set(caps, forKey: "cachedCapabilities")

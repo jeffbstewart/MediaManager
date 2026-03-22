@@ -538,7 +538,7 @@ struct CustomPlayerView: View {
         // Pass local directory for offline playback support
         async let subLoad: () = subtitles.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
         async let thumbLoad: () = thumbnails.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
-        async let skipLoad: () = skipController.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
+        async let skipLoad: () = skipController.load(transcodeId: tcId.rawValue, grpcClient: dataModel.grpcClient, localDir: offlineDir)
         _ = await (subLoad, thumbLoad, skipLoad)
         subtitles.startObserving(player: avPlayer)
         skipController.startObserving(player: avPlayer)

@@ -8,7 +8,7 @@ final class OnlineDataModel: DataModel {
     let apiClient: APIClient
     private let authManager: AuthManager
     let downloads: DownloadManager
-    private var grpcClient: GrpcClient { authManager.grpcClient }
+    var grpcClient: GrpcClient { authManager.grpcClient }
     private var _offlineDelegate: OfflineDataModel?
     private var offlineDelegate: OfflineDataModel {
         if let d = _offlineDelegate { return d }
@@ -321,7 +321,11 @@ final class OnlineDataModel: DataModel {
 
     func adminTags() async throws -> ApiTagListResponse {
         let response = try await grpcClient.adminListTags()
-        return ApiTagListResponse(proto: response)
+        // Admin tag list uses MMAdminTagListResponse; convert to ApiTagListResponse
+        let items = response.tags.map { tag in
+            ApiTagListItem(adminProto: tag)
+        }
+        return ApiTagListResponse(tags: items)
     }
 
     func createTag(name: String, color: String) async throws {

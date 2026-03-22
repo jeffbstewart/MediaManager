@@ -111,6 +111,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA000060 /* Build configuration list for PBXNativeTarget "MediaManager" */;
 			buildPhases = (
+				CC000020 /* Generate Proto */,
 				AA000041 /* Sources */,
 				AA000020 /* Frameworks */,
 				AA000042 /* Resources */,
@@ -211,6 +212,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		CC000020 /* Generate Proto */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Generate Proto";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "PROTO_DIR=\"${SRCROOT}/../../proto\"\nOUT_DIR=\"${SRCROOT}/MediaManager/Generated\"\nmkdir -p \"$OUT_DIR\"\n\nPROTOC=$(which protoc)\nif [ -z \"$PROTOC\" ]; then\n  echo \"warning: protoc not found, skipping proto generation\"\n  exit 0\nfi\n\n$PROTOC \\\n  --proto_path=\"$PROTO_DIR\" \\\n  --swift_out=\"$OUT_DIR\" \\\n  --grpc-swift-2_out=\"$OUT_DIR\" \\\n  \"$PROTO_DIR\"/*.proto\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000041 /* Sources */ = {
@@ -327,7 +346,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -390,7 +409,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
