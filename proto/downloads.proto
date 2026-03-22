@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+
+// Low-storage (ForMobile) download metadata.
+// Actual file download stays as HTTP (Range requests, resumable binary transfer).
+service DownloadService {
+  // List all titles with low-storage transcode files ready.
+  rpc ListAvailable(Empty) returns (DownloadAvailableResponse);
+
+  // Get manifest (file size, aux file flags) for a single transcode.
+  rpc GetManifest(ManifestRequest) returns (DownloadManifest);
+
+  // Get manifests for multiple transcodes at once.
+  rpc BatchManifest(BatchManifestRequest) returns (BatchManifestResponse);
+}
+
+message ManifestRequest {
+  int64 transcode_id = 1;
+}
+
+message BatchManifestRequest {
+  repeated int64 transcode_ids = 1;
+}
+
+message DownloadAvailableItem {
+  int64 transcode_id = 1;
+  int64 title_id = 2;
+  string title_name = 3;
+  MediaType media_type = 4;
+  optional string poster_url = 5;
+  ContentRating content_rating = 6;
+  optional int32 year = 7;
+  Quality quality = 8;
+}
+
+message DownloadAvailableResponse {
+  repeated DownloadAvailableItem downloads = 1;
+}
+
+message DownloadManifest {
+  int64 transcode_id = 1;
+  int64 title_id = 2;
+  string title_name = 3;
+  int64 file_size_bytes = 4;
+  Quality quality = 5;
+  bool has_subtitles = 6;
+  bool has_thumbnails = 7;
+  bool has_chapters = 8;
+}
+
+message BatchManifestResponse {
+  repeated DownloadManifest manifests = 1;
+}

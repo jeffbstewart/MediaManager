@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// Playback progress tracking.
+// Actual video streaming stays as HTTP (Range requests, binary data).
+service PlaybackService {
+  rpc GetProgress(TranscodeIdRequest) returns (PlaybackProgress);
+  rpc ReportProgress(ReportProgressRequest) returns (Empty);
+  rpc ClearProgress(TranscodeIdRequest) returns (Empty);
+
+  // Chapter and skip segment data for the player UI.
+  rpc GetChapters(TranscodeIdRequest) returns (ChaptersResponse);
+}
+
+message ReportProgressRequest {
+  int64 transcode_id = 1;
+  PlaybackOffset position = 2;
+  optional PlaybackOffset duration = 3;
+}
+
+message Chapter {
+  string title = 1;
+  PlaybackOffset start = 2;
+  PlaybackOffset end = 3;
+}
+
+enum SkipSegmentType {
+  SKIP_SEGMENT_TYPE_UNKNOWN = 0;
+  SKIP_SEGMENT_TYPE_INTRO = 1;
+  SKIP_SEGMENT_TYPE_CREDITS = 2;
+  SKIP_SEGMENT_TYPE_RECAP = 3;
+}
+
+message SkipSegment {
+  SkipSegmentType segment_type = 1;
+  PlaybackOffset start = 2;
+  PlaybackOffset end = 3;
+}
+
+message ChaptersResponse {
+  repeated Chapter chapters = 1;
+  repeated SkipSegment skip_segments = 2;
+}

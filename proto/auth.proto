@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+// Authentication service.
+// This is the only service accessible without a valid session token.
+// All other services require a Bearer token obtained from Login or Refresh.
+service AuthService {
+  // Authenticate with username/password, receive token pair.
+  rpc Login(LoginRequest) returns (TokenResponse);
+
+  // Exchange a refresh token for a new token pair (token rotation).
+  rpc Refresh(RefreshRequest) returns (TokenResponse);
+
+  // Revoke a refresh token (logout).
+  rpc Revoke(RevokeRequest) returns (RevokeResponse);
+
+  // Change password. Requires valid current password. Returns new token pair.
+  rpc ChangePassword(ChangePasswordRequest) returns (TokenResponse);
+}
+
+enum TokenType {
+  TOKEN_TYPE_UNKNOWN = 0;
+  TOKEN_TYPE_BEARER = 1;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  optional string device_name = 3;  // e.g. "Jeff's iPad"
+}
+
+message TokenResponse {
+  // Opaque token blobs — clients must not parse or interpret these.
+  // When attaching to gRPC metadata, use the "authorization-bin" key
+  // (gRPC binary metadata convention handles base64 encoding automatically).
+  bytes access_token = 1;
+  bytes refresh_token = 2;
+  int32 expires_in = 3;             // seconds until access_token expires
+  TokenType token_type = 4;
+  bool password_change_required = 5;
+}
+
+message RefreshRequest {
+  bytes refresh_token = 1;
+}
+
+message RevokeRequest {
+  bytes refresh_token = 1;
+}
+
+message RevokeResponse {
+  bool revoked = 1;
+}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}

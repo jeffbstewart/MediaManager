@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "time.proto";
+
+// ============================================================================
+// Shared enums
+// ============================================================================
+
+enum MediaType {
+  MEDIA_TYPE_UNKNOWN = 0;
+  MEDIA_TYPE_MOVIE = 1;
+  MEDIA_TYPE_TV = 2;
+  MEDIA_TYPE_PERSONAL = 3;
+}
+
+// Content ratings. TV and movie ratings occupy separate ranges so they
+// can be compared within their own system but never accidentally mixed.
+// For cross-system restrictiveness comparison, use RatingLevel instead.
+enum ContentRating {
+  CONTENT_RATING_UNKNOWN = 0;
+
+  // MPAA movie ratings (100–199)
+  CONTENT_RATING_G = 100;
+  CONTENT_RATING_PG = 101;
+  CONTENT_RATING_PG_13 = 102;
+  CONTENT_RATING_R = 103;
+  CONTENT_RATING_NC_17 = 104;
+
+  // US TV ratings (200–299)
+  CONTENT_RATING_TV_Y = 200;
+  CONTENT_RATING_TV_Y7 = 201;
+  CONTENT_RATING_TV_G = 202;
+  CONTENT_RATING_TV_PG = 203;
+  CONTENT_RATING_TV_14 = 204;
+  CONTENT_RATING_TV_MA = 205;
+
+  // Catch-all for ratings not in the above lists
+  CONTENT_RATING_NR = 300;
+}
+
+// Unified restrictiveness tier for cross-system comparison. The server maps
+// each ContentRating to a RatingLevel. Used for user rating ceilings —
+// comparison is simply: mapped_level <= user_ceiling.
+//
+// Mapping:
+//   CHILDREN → G, TV-Y, TV-Y7, TV-G
+//   GENERAL  → PG, TV-PG
+//   TEEN     → PG-13, TV-14
+//   MATURE   → R, TV-MA
+//   ADULT    → NC-17
+enum RatingLevel {
+  RATING_LEVEL_UNKNOWN = 0;
+  RATING_LEVEL_CHILDREN = 1;
+  RATING_LEVEL_GENERAL = 2;
+  RATING_LEVEL_TEEN = 3;
+  RATING_LEVEL_MATURE = 4;
+  RATING_LEVEL_ADULT = 5;
+}
+
+enum MediaFormat {
+  MEDIA_FORMAT_UNKNOWN = 0;
+  MEDIA_FORMAT_DVD = 1;
+  MEDIA_FORMAT_BLURAY = 2;
+  MEDIA_FORMAT_UHD_BLURAY = 3;
+  MEDIA_FORMAT_HD_DVD = 4;
+}
+
+// Video quality tier. Derived from MediaFormat on the server:
+// DVD → SD, BLURAY/HD_DVD → FHD, UHD_BLURAY → UHD.
+// Low-storage transcodes are always FHD (re-encoded to 1080p).
+enum Quality {
+  QUALITY_UNKNOWN = 0;
+  QUALITY_SD = 1;       // 480p (DVD source)
+  QUALITY_FHD = 2;      // 1080p (Blu-ray, HD DVD source)
+  QUALITY_UHD = 3;      // 2160p (UHD Blu-ray source)
+}
+
+enum SearchResultType {
+  SEARCH_RESULT_TYPE_UNKNOWN = 0;
+  SEARCH_RESULT_TYPE_MOVIE = 1;
+  SEARCH_RESULT_TYPE_SERIES = 2;
+  SEARCH_RESULT_TYPE_ACTOR = 3;
+  SEARCH_RESULT_TYPE_COLLECTION = 4;
+  SEARCH_RESULT_TYPE_TAG = 5;
+  SEARCH_RESULT_TYPE_GENRE = 6;
+}
+
+// User access level / role.
+enum AccessLevel {
+  ACCESS_LEVEL_UNKNOWN = 0;
+  ACCESS_LEVEL_VIEWER = 1;   // Level 1: catalog, playback, search
+  ACCESS_LEVEL_ADMIN = 2;    // Level 2: full admin access
+}
+
+// Acquisition status for purchase wishes.
+enum AcquisitionStatus {
+  ACQUISITION_STATUS_UNKNOWN = 0;
+  ACQUISITION_STATUS_NOT_AVAILABLE = 1;
+  ACQUISITION_STATUS_REJECTED = 2;
+  ACQUISITION_STATUS_ORDERED = 3;
+  ACQUISITION_STATUS_OWNED = 4;
+  ACQUISITION_STATUS_NEEDS_ASSISTANCE = 5;
+}
+
+// ============================================================================
+// Shared scalar types
+// ============================================================================
+
+message Empty {}
+
+// Shared ID wrapper requests — used by multiple services.
+message TitleIdRequest {
+  int64 title_id = 1;
+}
+
+message TranscodeIdRequest {
+  int64 transcode_id = 1;
+}
+
+message TagIdRequest {
+  int64 tag_id = 1;
+}
+
+message GenreIdRequest {
+  int64 genre_id = 1;
+}
+
+// CSS hex color. The string includes the leading '#' and uses uppercase hex,
+// e.g. "#FF5733", "#2196F3". Always exactly 7 characters (#RRGGBB).
+message Color {
+  string hex = 1;
+}
+
+// ============================================================================
+// Pagination
+// ============================================================================
+
+message PaginationRequest {
+  int32 page = 1;   // 1-based
+  int32 limit = 2;  // max items per page
+}
+
+message PaginationInfo {
+  int32 total = 1;
+  int32 page = 2;
+  int32 limit = 3;
+  int32 total_pages = 4;
+}
+
+// ============================================================================
+// Catalog types
+// ============================================================================
+
+message Title {
+  int64 id = 1;
+  string name = 2;
+  MediaType media_type = 3;
+  optional int32 year = 4;
+  optional string description = 5;
+  optional string poster_url = 6;
+  optional string backdrop_url = 7;
+  ContentRating content_rating = 8;
+  optional double popularity = 9;
+  Quality quality = 10;
+  bool playable = 11;
+  optional int64 transcode_id = 12;
+  optional int32 tmdb_id = 13;
+  optional int32 tmdb_collection_id = 14;
+  optional string tmdb_collection_name = 15;
+  repeated string family_members = 16;
+  bool high_quality_transcode_available = 17;
+  bool low_storage_transcode_available = 18;
+}
+
+// Full title detail. Embeds Title to avoid field duplication, then adds
+// detail-only fields (cast, genres, tags, transcodes, user flags, etc.).
+message TitleDetail {
+  Title title = 1;
+  repeated CastMember cast = 2;
+  repeated Genre genres = 3;
+  repeated Tag tags = 4;
+  repeated Transcode transcodes = 5;
+  optional PlaybackProgress playback_progress = 6;
+  bool is_favorite = 7;
+  bool is_hidden = 8;
+  bool wished = 9;
+}
+
+message Transcode {
+  int64 id = 1;
+  MediaFormat media_format = 2;
+  Quality quality = 3;
+  optional int64 episode_id = 4;
+  optional int32 season_number = 5;
+  optional int32 episode_number = 6;
+  optional string episode_name = 7;
+  bool playable = 8;
+  bool has_subtitles = 9;
+  bool low_storage_transcode_available = 10;
+  bool low_storage_transcode_requested = 11;
+}
+
+message CastMember {
+  int32 tmdb_person_id = 1;
+  string name = 2;
+  optional string character_name = 3;
+  optional string headshot_url = 4;
+  int32 order = 5;
+}
+
+message Genre {
+  int64 id = 1;
+  string name = 2;
+}
+
+message Tag {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+}
+
+message PlaybackProgress {
+  int64 transcode_id = 1;
+  PlaybackOffset position = 2;
+  optional PlaybackOffset duration = 3;
+  optional Timestamp updated_at = 4;
+}
+
+// ============================================================================
+// TV
+// ============================================================================
+
+message Season {
+  int32 season_number = 1;
+  optional string name = 2;
+  int32 episode_count = 3;
+}
+
+message Episode {
+  int64 episode_id = 1;
+  optional int64 transcode_id = 2;
+  int32 season_number = 3;
+  int32 episode_number = 4;
+  optional string name = 5;
+  Quality quality = 6;
+  bool playable = 7;
+  bool has_subtitles = 8;
+  PlaybackOffset resume_position = 9;
+  optional PlaybackOffset duration = 10;
+  bool low_storage_transcode_available = 11;
+  bool low_storage_transcode_requested = 12;
+}
+
+// ============================================================================
+// Search
+// ============================================================================
+
+message SearchResult {
+  SearchResultType result_type = 1;
+  string name = 2;
+  optional int64 title_id = 3;
+  optional string poster_url = 4;
+  optional int32 year = 5;
+  Quality quality = 6;
+  ContentRating content_rating = 7;
+  optional int64 transcode_id = 8;
+  MediaType media_type = 9;
+  optional int32 tmdb_collection_id = 10;
+  optional int32 tmdb_person_id = 11;
+  optional string headshot_url = 12;
+  optional int32 title_count = 13;
+  optional int64 item_id = 14;
+}
+
+// ============================================================================
+// Browse / Landing Pages
+// ============================================================================
+
+message ActorDetail {
+  string name = 1;
+  optional string headshot_url = 2;
+  optional string biography = 3;
+  optional CalendarDate birthday = 4;
+  optional CalendarDate deathday = 5;
+  optional string place_of_birth = 6;
+  optional string known_for_department = 7;
+  repeated OwnedCredit owned_titles = 8;
+  repeated CreditEntry other_works = 9;
+}
+
+message OwnedCredit {
+  Title title = 1;
+  optional string character_name = 2;
+}
+
+message CreditEntry {
+  int32 tmdb_id = 1;
+  string title = 2;
+  MediaType media_type = 3;
+  optional string character_name = 4;
+  optional int32 release_year = 5;
+  optional string poster_url = 6;
+  double popularity = 7;
+  bool wished = 8;
+}
+
+message CollectionDetail {
+  string name = 1;
+  optional string poster_url = 2;
+  repeated CollectionItem items = 3;
+}
+
+message CollectionItem {
+  int32 tmdb_movie_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  optional int32 year = 4;
+  bool owned = 5;
+  bool playable = 6;
+  optional int64 title_id = 7;
+  Quality quality = 8;
+  ContentRating content_rating = 9;
+  optional int64 transcode_id = 10;
+}
+
+message TagDetail {
+  string name = 1;
+  Color color = 2;
+  repeated Title titles = 3;
+}
+
+message GenreDetail {
+  string name = 1;
+  repeated Title titles = 2;
+}
+
+// ============================================================================
+// List items (for collection/tag list endpoints)
+// ============================================================================
+
+message CollectionListItem {
+  int32 tmdb_collection_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  int32 title_count = 4;
+}
+
+message TagListItem {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+  int32 title_count = 4;
+}
+
+// ============================================================================
+// Home feed
+// ============================================================================
+
+message Carousel {
+  string name = 1;
+  repeated Title items = 2;
+}
+
+message MissingSeason {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional string poster_url = 3;
+  optional int32 tmdb_id = 4;
+  MediaType media_type = 5;
+  repeated MissingSeasonEntry seasons = 6;
+}
+
+message MissingSeasonEntry {
+  int32 season_number = 1;
+  optional string name = 2;
+  optional int32 episode_count = 3;
+}

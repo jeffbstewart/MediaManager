@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+
+// Live camera and TV channel metadata.
+// Actual HLS/MJPEG streams stay as HTTP endpoints.
+service LiveService {
+  rpc ListCameras(Empty) returns (CameraListResponse);
+  rpc ListTvChannels(Empty) returns (TvChannelListResponse);
+
+  // Warm up an HLS stream (triggers FFmpeg/go2rtc startup).
+  rpc WarmUpStream(WarmUpStreamRequest) returns (Empty);
+}
+
+message Camera {
+  int64 id = 1;
+  string name = 2;
+  optional string location = 3;
+  string stream_url = 4;         // relative HLS URL (no credentials)
+  optional string snapshot_url = 5;
+}
+
+message CameraListResponse {
+  repeated Camera cameras = 1;
+}
+
+message TvChannel {
+  int64 id = 1;
+  string name = 2;
+  // Channel number as a string because digital TV sub-channels use
+  // dotted notation (e.g. "41.3", "5.1") that cannot be represented
+  // as a plain integer.
+  string number = 3;
+  ContentRating content_rating = 4;
+  Quality quality = 5;
+  string stream_url = 6;         // relative HLS URL
+}
+
+message TvChannelListResponse {
+  repeated TvChannel channels = 1;
+}
+
+message WarmUpStreamRequest {
+  string path = 1;
+}

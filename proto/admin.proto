@@ -1,0 +1,423 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// Admin-only operations. All RPCs require access_level >= 2.
+service AdminService {
+  // --- Transcode Monitoring ---
+  rpc GetTranscodeStatus(Empty) returns (TranscodeStatusResponse);
+  rpc GetBuddyStatus(Empty) returns (BuddyStatusResponse);
+  rpc ScanNas(Empty) returns (Empty);
+  rpc ClearFailures(Empty) returns (ClearFailuresResponse);
+
+  // Server-streaming: live transcode progress pushed to client.
+  rpc WatchTranscodeProgress(Empty) returns (stream TranscodeProgressEvent);
+
+  // --- Transcode Management ---
+  rpc ListLinkedTranscodes(PaginationRequest) returns (LinkedTranscodeResponse);
+  rpc UnlinkTranscode(TranscodeIdRequest) returns (Empty);
+  rpc ListUnmatchedFiles(Empty) returns (UnmatchedResponse);
+  rpc AcceptUnmatched(UnmatchedIdRequest) returns (AcceptUnmatchedResponse);
+  rpc IgnoreUnmatched(UnmatchedIdRequest) returns (Empty);
+  rpc LinkUnmatched(LinkUnmatchedRequest) returns (AcceptUnmatchedResponse);
+
+  // --- Data Quality ---
+  rpc ListDataQuality(DataQualityRequest) returns (DataQualityResponse);
+  rpc ReEnrich(TitleIdRequest) returns (Empty);
+  rpc DeleteTitle(TitleIdRequest) returns (Empty);
+  rpc UpdateTitleMetadata(UpdateTitleMetadataRequest) returns (Empty);
+
+  // --- Purchase Wishes ---
+  rpc ListPurchaseWishes(Empty) returns (PurchaseWishListResponse);
+  rpc UpdatePurchaseWishStatus(UpdatePurchaseWishStatusRequest) returns (Empty);
+
+  // --- Rip Backlog ---
+  rpc ListRipBacklog(PaginationRequest) returns (RipBacklogResponse);
+
+  // --- Tags ---
+  rpc ListTags(Empty) returns (AdminTagListResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc UpdateTag(UpdateTagRequest) returns (Empty);
+  rpc DeleteTag(TagIdRequest) returns (Empty);
+
+  // --- User Management ---
+  rpc ListUsers(Empty) returns (UserListResponse);
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc UpdateUserRole(UpdateUserRoleRequest) returns (Empty);
+  rpc UpdateUserRatingCeiling(UpdateUserRatingCeilingRequest) returns (Empty);
+  rpc UnlockUser(UserIdRequest) returns (Empty);
+  rpc ForcePasswordChange(UserIdRequest) returns (Empty);
+  rpc ResetPassword(ResetPasswordRequest) returns (Empty);
+  rpc DeleteUser(UserIdRequest) returns (Empty);
+
+  // --- Settings ---
+  rpc GetSettings(Empty) returns (SettingsResponse);
+  rpc UpdateSetting(UpdateSettingRequest) returns (Empty);
+}
+
+// --- ID Requests ---
+
+message UnmatchedIdRequest {
+  int64 unmatched_id = 1;
+}
+
+message UserIdRequest {
+  int64 user_id = 1;
+}
+
+// --- Transcode Status ---
+
+enum LeaseStatus {
+  LEASE_STATUS_UNKNOWN = 0;
+  LEASE_STATUS_CLAIMED = 1;
+  LEASE_STATUS_IN_PROGRESS = 2;
+  LEASE_STATUS_COMPLETED = 3;
+  LEASE_STATUS_FAILED = 4;
+  LEASE_STATUS_EXPIRED = 5;
+}
+
+enum LeaseType {
+  LEASE_TYPE_UNKNOWN = 0;
+  LEASE_TYPE_TRANSCODE = 1;
+  LEASE_TYPE_THUMBNAILS = 2;
+  LEASE_TYPE_SUBTITLES = 3;
+  LEASE_TYPE_CHAPTERS = 4;
+  LEASE_TYPE_LOW_STORAGE_TRANSCODE = 5;
+}
+
+message TranscodeStatusResponse {
+  int32 pending_transcode = 1;
+  int32 pending_thumbnails = 2;
+  int32 pending_subtitles = 3;
+  int32 pending_chapters = 4;
+  int32 pending_low_storage = 5;
+  int32 poison_pills = 6;
+  repeated ActiveLease active_leases = 7;
+}
+
+message ActiveLease {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseType lease_type = 4;
+  LeaseStatus status = 5;
+  int32 progress_percent = 6;
+  optional string encoder = 7;
+  optional Timestamp claimed_at = 8;
+  optional Timestamp expires_at = 9;
+}
+
+message BuddyStatusResponse {
+  repeated BuddyInfo buddies = 1;
+  repeated RecentLease recent_leases = 2;
+}
+
+message BuddyInfo {
+  string name = 1;
+  int32 active_leases = 2;
+  optional Timestamp last_seen = 3;
+}
+
+message RecentLease {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseType lease_type = 4;
+  LeaseStatus status = 5;
+  int32 progress_percent = 6;
+  optional Timestamp completed_at = 7;
+}
+
+message ClearFailuresResponse {
+  int32 cleared = 1;
+}
+
+// --- Live Transcode Progress (server-streaming) ---
+
+message TranscodeProgressEvent {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseStatus status = 4;
+  int32 progress_percent = 5;
+  optional string encoder = 6;
+  LeaseType lease_type = 7;
+}
+
+// --- Linked Transcodes ---
+
+message LinkedTranscodeResponse {
+  repeated LinkedTranscodeItem transcodes = 1;
+  PaginationInfo pagination = 2;
+}
+
+enum MatchMethod {
+  MATCH_METHOD_UNKNOWN = 0;
+  MATCH_METHOD_AUTO_EXACT = 1;
+  MATCH_METHOD_AUTO_NORMALIZED = 2;
+  MATCH_METHOD_MANUAL = 3;
+}
+
+message LinkedTranscodeItem {
+  int64 transcode_id = 1;
+  string title_name = 2;
+  int64 title_id = 3;
+  optional string file_path = 4;
+  MediaFormat media_format = 5;
+  MatchMethod match_method = 6;
+  bool file_exists = 7;
+  bool high_quality_transcode_available = 8;
+  bool low_storage_transcode_available = 9;
+}
+
+// --- Unmatched Files ---
+
+message UnmatchedResponse {
+  repeated UnmatchedFile unmatched = 1;
+  int32 total = 2;
+}
+
+message UnmatchedFile {
+  int64 id = 1;
+  string file_path = 2;
+  optional string suggested_title = 3;
+  optional int64 suggested_title_id = 4;
+  optional double match_score = 5;
+}
+
+message LinkUnmatchedRequest {
+  int64 unmatched_id = 1;
+  int64 title_id = 2;
+}
+
+message AcceptUnmatchedResponse {
+  bool linked = 1;
+  optional string title_name = 2;
+}
+
+// --- Data Quality ---
+
+enum EnrichmentStatus {
+  ENRICHMENT_STATUS_UNKNOWN = 0;
+  ENRICHMENT_STATUS_PENDING = 1;
+  ENRICHMENT_STATUS_ENRICHED = 2;
+  ENRICHMENT_STATUS_SKIPPED = 3;
+  ENRICHMENT_STATUS_FAILED = 4;
+  ENRICHMENT_STATUS_REASSIGNMENT_REQUESTED = 5;
+  ENRICHMENT_STATUS_ABANDONED = 6;
+}
+
+enum DataQualityIssue {
+  DATA_QUALITY_ISSUE_UNKNOWN = 0;
+  DATA_QUALITY_ISSUE_NO_POSTER = 1;
+  DATA_QUALITY_ISSUE_NO_DESCRIPTION = 2;
+  DATA_QUALITY_ISSUE_NO_TMDB_ID = 3;
+  DATA_QUALITY_ISSUE_NO_YEAR = 4;
+  DATA_QUALITY_ISSUE_NO_CONTENT_RATING = 5;
+  DATA_QUALITY_ISSUE_NO_BACKDROP = 6;
+  DATA_QUALITY_ISSUE_NO_CAST = 7;
+  DATA_QUALITY_ISSUE_NO_GENRES = 8;
+  DATA_QUALITY_ISSUE_ENRICHMENT_FAILED = 9;
+  DATA_QUALITY_ISSUE_ENRICHMENT_ABANDONED = 10;
+}
+
+message DataQualityRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional EnrichmentStatus status = 3;
+}
+
+message DataQualityResponse {
+  repeated DataQualityItem items = 1;
+  PaginationInfo pagination = 2;
+}
+
+message DataQualityItem {
+  int64 title_id = 1;
+  string name = 2;
+  EnrichmentStatus enrichment_status = 3;
+  MediaType media_type = 4;
+  optional string poster_url = 5;
+  repeated DataQualityIssue issues = 6;
+}
+
+message UpdateTitleMetadataRequest {
+  int64 title_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional int32 release_year = 4;
+}
+
+// --- Purchase Wishes ---
+
+message PurchaseWishListResponse {
+  repeated PurchaseWish wishes = 1;
+}
+
+message PurchaseWish {
+  int32 tmdb_id = 1;
+  MediaType media_type = 2;
+  string title = 3;
+  optional string poster_url = 4;
+  optional int32 release_year = 5;
+  int32 vote_count = 6;
+  repeated string voters = 7;
+  AcquisitionStatus acquisition_status = 8;
+}
+
+message UpdatePurchaseWishStatusRequest {
+  int32 tmdb_id = 1;
+  AcquisitionStatus status = 2;
+}
+
+// --- Rip Backlog ---
+
+message RipBacklogResponse {
+  repeated RipBacklogItem items = 1;
+  PaginationInfo pagination = 2;
+}
+
+message RipBacklogItem {
+  int64 title_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  MediaType media_type = 4;
+  optional int32 year = 5;
+  int32 wish_count = 6;
+}
+
+// --- Tags ---
+
+message AdminTagListResponse {
+  repeated AdminTagListItem tags = 1;
+}
+
+message AdminTagListItem {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+  int32 title_count = 4;
+}
+
+message CreateTagRequest {
+  string name = 1;
+  Color color = 2;
+}
+
+enum CreateTagResult {
+  CREATE_TAG_RESULT_UNKNOWN = 0;
+  CREATE_TAG_RESULT_CREATED = 1;
+  CREATE_TAG_RESULT_DUPLICATE = 2;   // name collision; id points to the existing tag
+}
+
+message CreateTagResponse {
+  CreateTagResult result = 1;
+  int64 id = 2;   // new tag id on CREATED, existing tag id on DUPLICATE
+}
+
+message UpdateTagRequest {
+  int64 tag_id = 1;
+  optional string name = 2;
+  optional Color color = 3;
+}
+
+// --- User Management ---
+
+message UserListResponse {
+  repeated UserInfo users = 1;
+}
+
+message UserInfo {
+  int64 id = 1;
+  string username = 2;
+  optional string display_name = 3;
+  AccessLevel access_level = 4;
+  bool locked = 5;
+  bool must_change_password = 6;
+  optional RatingLevel rating_ceiling = 7;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  optional string display_name = 3;
+  bool force_change = 4;
+}
+
+message CreateUserResponse {
+  int64 id = 1;
+  string username = 2;
+}
+
+message UpdateUserRoleRequest {
+  int64 user_id = 1;
+  AccessLevel access_level = 2;
+}
+
+message UpdateUserRatingCeilingRequest {
+  int64 user_id = 1;
+  optional RatingLevel ceiling = 2;  // omit to remove ceiling (unrestricted)
+}
+
+message ResetPasswordRequest {
+  int64 user_id = 1;
+  string new_password = 2;
+  bool force_change = 3;
+}
+
+// --- Settings ---
+
+// Enumerated setting keys. Each corresponds to an app_config row in the database.
+enum SettingKey {
+  SETTING_KEY_UNKNOWN = 0;
+
+  // Paths
+  SETTING_KEY_NAS_ROOT_PATH = 1;
+  SETTING_KEY_FFMPEG_PATH = 2;
+  SETTING_KEY_GO2RTC_PATH = 3;
+
+  // Networking
+  SETTING_KEY_ROKU_BASE_URL = 4;
+  SETTING_KEY_GO2RTC_API_PORT = 5;
+
+  // Feature toggles
+  SETTING_KEY_PERSONAL_VIDEO_ENABLED = 6;
+  SETTING_KEY_FOR_MOBILE_ENABLED = 7;
+  SETTING_KEY_KEEPA_ENABLED = 8;
+
+  // Personal video
+  SETTING_KEY_PERSONAL_VIDEO_NAS_DIR = 9;
+
+  // Transcode buddy
+  SETTING_KEY_BUDDY_LEASE_DURATION_MINUTES = 10;
+
+  // Keepa (Amazon price tracking)
+  SETTING_KEY_KEEPA_API_KEY = 11;
+  SETTING_KEY_KEEPA_TOKENS_PER_MINUTE = 12;
+
+  // Live TV
+  SETTING_KEY_LIVE_TV_MIN_RATING = 13;
+  SETTING_KEY_LIVE_TV_MAX_STREAMS = 14;
+  SETTING_KEY_LIVE_TV_IDLE_TIMEOUT_SECONDS = 15;
+}
+
+message Setting {
+  SettingKey key = 1;
+  string value = 2;
+}
+
+message SettingsResponse {
+  repeated Setting settings = 1;
+}
+
+message UpdateSettingRequest {
+  SettingKey key = 1;
+  string value = 2;
+}

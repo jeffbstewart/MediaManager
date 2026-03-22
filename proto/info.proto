@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+
+// Server discovery and info.
+service InfoService {
+  // Unauthenticated — used for initial client bootstrap.
+  rpc Discover(Empty) returns (DiscoverResponse);
+
+  // Authenticated — server capabilities + current user info.
+  rpc GetInfo(Empty) returns (InfoResponse);
+}
+
+enum AuthMethod {
+  AUTH_METHOD_UNKNOWN = 0;
+  AUTH_METHOD_JWT = 1;
+}
+
+// Server capabilities advertised after authentication.
+// Clients use these to show/hide UI features.
+enum Capability {
+  CAPABILITY_UNKNOWN = 0;
+  CAPABILITY_CATALOG = 1;
+  CAPABILITY_STREAMING = 2;
+  CAPABILITY_WISHLIST = 3;
+  CAPABILITY_PLAYBACK_PROGRESS = 4;
+  CAPABILITY_DOWNLOADS = 5;
+}
+
+message DiscoverResponse {
+  repeated int32 api_versions = 1;
+  repeated AuthMethod auth_methods = 2;
+  string server_fingerprint = 3;
+  optional string secure_url = 4;
+}
+
+message ServerUserInfo {
+  int64 id = 1;
+  string username = 2;
+  optional string display_name = 3;
+  bool is_admin = 4;
+}
+
+message InfoResponse {
+  string server_version = 1;
+  repeated Capability capabilities = 2;
+  int32 title_count = 3;
+  ServerUserInfo user = 4;
+}

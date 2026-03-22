@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+// Month enum for structured dates. Avoids locale-dependent string parsing.
+enum Month {
+  MONTH_UNKNOWN = 0;
+  MONTH_JANUARY = 1;
+  MONTH_FEBRUARY = 2;
+  MONTH_MARCH = 3;
+  MONTH_APRIL = 4;
+  MONTH_MAY = 5;
+  MONTH_JUNE = 6;
+  MONTH_JULY = 7;
+  MONTH_AUGUST = 8;
+  MONTH_SEPTEMBER = 9;
+  MONTH_OCTOBER = 10;
+  MONTH_NOVEMBER = 11;
+  MONTH_DECEMBER = 12;
+}
+
+// Structured date for locale-independent display (e.g. actor birthdays).
+// Clients format this according to the user's locale preferences.
+message CalendarDate {
+  int32 year = 1;
+  Month month = 2;
+  int32 day = 3;
+}
+
+// Point-in-time timestamp. All gRPC timestamps use this message rather than
+// formatted strings so that clients can render in the user's local timezone.
+message Timestamp {
+  int64 seconds_since_epoch = 1;  // Unix epoch (UTC)
+}
+
+// Offset from the beginning of a media item, in fractional seconds.
+// Used for playback position, chapter boundaries, skip regions, and durations.
+message PlaybackOffset {
+  double seconds = 1;
+}

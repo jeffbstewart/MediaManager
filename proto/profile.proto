@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+service ProfileService {
+  rpc GetProfile(Empty) returns (ProfileResponse);
+  rpc UpdateTvQuality(UpdateTvQualityRequest) returns (Empty);
+
+  // Session management
+  rpc ListSessions(Empty) returns (SessionListResponse);
+  rpc DeleteSession(DeleteSessionRequest) returns (Empty);
+  rpc DeleteOtherSessions(Empty) returns (Empty);
+}
+
+message ProfileResponse {
+  int64 id = 1;
+  string username = 2;
+  optional string display_name = 3;
+  bool is_admin = 4;
+  optional RatingLevel rating_ceiling = 5;
+  optional string rating_ceiling_label = 6;
+  Quality live_tv_min_quality = 7;
+  bool subtitles_enabled = 8;
+  bool must_change_password = 9;
+}
+
+message UpdateTvQualityRequest {
+  Quality min_quality = 1;
+}
+
+enum SessionType {
+  SESSION_TYPE_UNKNOWN = 0;
+  SESSION_TYPE_BROWSER = 1;
+  SESSION_TYPE_APP = 2;
+  SESSION_TYPE_DEVICE = 3;
+}
+
+message SessionInfo {
+  int64 id = 1;
+  SessionType type = 2;
+  optional string device_name = 3;
+  bool is_current = 4;
+  optional Timestamp created_at = 5;
+  optional Timestamp expires_at = 6;
+  optional Timestamp last_used_at = 7;
+}
+
+message SessionListResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message DeleteSessionRequest {
+  int64 session_id = 1;
+  SessionType type = 2;
+}

@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+
+service CatalogService {
+  // --- Home Feed ---
+  rpc HomeFeed(Empty) returns (HomeFeedResponse);
+  rpc DismissContinueWatching(TitleIdRequest) returns (Empty);
+  rpc DismissMissingSeason(DismissMissingSeasonRequest) returns (Empty);
+
+  // --- Title Browsing ---
+  rpc ListTitles(ListTitlesRequest) returns (TitlePageResponse);
+  rpc GetTitleDetail(TitleIdRequest) returns (TitleDetail);
+  rpc Search(SearchRequest) returns (SearchResponse);
+
+  // --- TV ---
+  rpc ListSeasons(TitleIdRequest) returns (SeasonsResponse);
+  rpc ListEpisodes(ListEpisodesRequest) returns (EpisodesResponse);
+
+  // --- Browse Pages ---
+  rpc GetActorDetail(ActorIdRequest) returns (ActorDetail);
+  rpc ListCollections(Empty) returns (CollectionListResponse);
+  rpc GetCollectionDetail(CollectionIdRequest) returns (CollectionDetail);
+  rpc ListTags(Empty) returns (TagListResponse);
+  rpc GetTagDetail(TagIdRequest) returns (TagDetail);
+  rpc GetGenreDetail(GenreIdRequest) returns (GenreDetail);
+
+  // --- Title Actions ---
+  rpc SetFavorite(SetFlagRequest) returns (Empty);
+  rpc SetHidden(SetFlagRequest) returns (Empty);
+  rpc RequestRetranscode(TitleIdRequest) returns (QueuedResponse);
+  rpc RequestLowStorageTranscode(TitleIdRequest) returns (QueuedResponse);
+}
+
+// --- Requests ---
+
+message ListTitlesRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string sort = 3;         // "popularity", "name", "year", "recent"
+  MediaType type = 4;               // MEDIA_TYPE_UNKNOWN means no filter
+  optional string genre = 5;
+  optional string tag = 6;
+  optional string q = 7;            // free-text search filter
+  bool playable_only = 8;
+}
+
+message SearchRequest {
+  string query = 1;
+}
+
+message ListEpisodesRequest {
+  int64 title_id = 1;
+  int32 season_number = 2;
+}
+
+message ActorIdRequest {
+  int32 tmdb_person_id = 1;
+}
+
+message CollectionIdRequest {
+  int32 tmdb_collection_id = 1;
+}
+
+message SetFlagRequest {
+  int64 title_id = 1;
+  bool value = 2;                   // true = set, false = clear
+}
+
+message DismissMissingSeasonRequest {
+  int64 title_id = 1;
+  optional int32 season_number = 2; // omit to dismiss all seasons
+}
+
+// --- Responses ---
+
+message HomeFeedResponse {
+  repeated Carousel carousels = 1;
+  repeated MissingSeason missing_seasons = 2;
+}
+
+message TitlePageResponse {
+  repeated Title titles = 1;
+  PaginationInfo pagination = 2;
+}
+
+message SearchResponse {
+  string query = 1;
+  repeated SearchResult results = 2;
+  map<string, int32> counts = 3;    // result_type -> count
+}
+
+message SeasonsResponse {
+  repeated Season seasons = 1;
+}
+
+message EpisodesResponse {
+  repeated Episode episodes = 1;
+}
+
+message CollectionListResponse {
+  repeated CollectionListItem collections = 1;
+}
+
+message TagListResponse {
+  repeated TagListItem tags = 1;
+}
+
+message QueuedResponse {
+  bool queued = 1;
+  int32 count = 2;
+}
