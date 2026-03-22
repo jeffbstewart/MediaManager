@@ -267,7 +267,8 @@ final class AuthManager {
         do {
             let protoInfo = try await grpcClient.getInfo()
             serverInfo = ServerInfo(proto: protoInfo)
-            passwordChangeRequired = false  // TODO: extract from profile or server info
+            // password_change_required is set during login (from TokenResponse).
+            // The server blocks gated RPCs with PERMISSION_DENIED if must_change_password is set.
             // Check if user needs password change from profile
             if let caps = serverInfo?.capabilities {
                 UserDefaults.standard.set(caps, forKey: "cachedCapabilities")

@@ -40,7 +40,7 @@ struct MediaManagerApp: App {
                 .environment(dataModel)
                 .onAppear {
                     appDelegate.downloadManager = downloadManager
-                    downloadManager.configure(apiClient: authManager.apiClient)
+                    downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
                 }
         }
     }

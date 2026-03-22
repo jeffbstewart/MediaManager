@@ -278,7 +278,10 @@ final class OnlineDataModel: DataModel {
     }
 
     func warmUpStream(path: String) async throws {
-        try await grpcClient.warmUpStream(path: path)
+        // Camera and live TV warmup hit HTTP HLS endpoints that block until
+        // segments are ready. Use HTTP for these since gRPC WarmUpStream is
+        // a metadata trigger, not an HLS blocking call.
+        try await apiClient.warmUpStream(path)
     }
 
     // MARK: - AdminDataModel

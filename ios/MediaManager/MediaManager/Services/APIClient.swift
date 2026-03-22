@@ -79,38 +79,6 @@ actor APIClient {
         return data
     }
 
-    /// Generic GET with JWT auth and JSON decoding (used by DownloadManager for manifests).
-    func get<T: Decodable>(_ path: String) async throws -> T {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        guard let url = URL(string: baseURL.absoluteString + "/" + path) else {
-            throw APIClientError.invalidURL
-        }
-        var request = URLRequest(url: url)
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
-
-    /// POST with JWT auth (used by DownloadManager for progress sync).
-    func post(_ path: String, body: [String: Any]) async throws {
-        guard let baseURL else { throw APIClientError.noServerURL }
-        guard let url = URL(string: baseURL.absoluteString + "/" + path) else {
-            throw APIClientError.invalidURL
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response, data: data)
-    }
-
     /// Build the full download URL for a transcode (used by DownloadManager).
     func downloadURL(for transcodeId: Int) -> URL? {
         guard let baseURL else { return nil }

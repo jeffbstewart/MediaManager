@@ -131,7 +131,7 @@ struct LiveStreamView: View {
             warmupPath = streamPath.replacingOccurrences(of: "stream.m3u8", with: "hls/live.m3u8")
         }
         do {
-            try await dataModel.apiClient.warmUpStream(warmupPath)
+            try await dataModel.warmUpStream(path: warmupPath)
         } catch {
             self.error = "Stream not available: \(error.localizedDescription)"
             return

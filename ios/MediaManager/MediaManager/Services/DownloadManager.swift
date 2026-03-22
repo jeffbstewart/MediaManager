@@ -23,6 +23,7 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     private var backgroundSession: URLSession!
     private var apiClient: APIClient?
+    private var grpcClient: GrpcClient?
     private var cachedBaseURL: URL?
     private var activeTaskMap: [Int: TranscodeID] = [:]  // URLSessionTask.taskIdentifier → transcodeId
     private var backgroundCompletionHandler: (() -> Void)?
@@ -62,11 +63,11 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         startNetworkMonitor()
     }
 
-    func configure(apiClient: APIClient) {
+    func configure(apiClient: APIClient, grpcClient: GrpcClient) {
         self.apiClient = apiClient
+        self.grpcClient = grpcClient
         Task {
             self.cachedBaseURL = await apiClient.getBaseURL()
-            // Flush any queued progress updates now that we have an API client
             if !isEffectivelyOffline {
                 await flushPendingProgress()
             }
@@ -227,8 +228,11 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     /// Load cached title detail from disk.
     func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
-        // TODO: Implement protobuf-based cache (JSON cache removed in gRPC migration)
-        return nil
+        guard let dir = titleCacheDir(for: titleId) else { return nil }
+        let file = dir.appendingPathComponent("detail.pb")
+        guard let data = try? Data(contentsOf: file),
+              let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
+        return ApiTitleDetail(proto: proto)
     }
 
     /// Load cached seasons from disk.
@@ -264,16 +268,15 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     /// Flush all pending progress updates to the server.
     func flushPendingProgress() async {
-        guard let apiClient, !pendingProgress.isEmpty else { return }
+        guard let grpcClient, !pendingProgress.isEmpty else { return }
 
         var remaining: [PendingProgressUpdate] = []
         for update in pendingProgress {
-            nonisolated(unsafe) var body: [String: Any] = ["position": update.position]
-            if let dur = update.duration {
-                body["duration"] = dur
-            }
             do {
-                try await apiClient.post("playback/progress/\(update.transcodeId.rawValue)", body: body)
+                try await grpcClient.reportProgress(
+                    transcodeId: Int64(update.transcodeId.rawValue),
+                    position: update.position,
+                    duration: update.duration)
             } catch {
                 remaining.append(update)
             }
@@ -387,11 +390,15 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        // Fetch manifest
+        // Fetch manifest via gRPC
         do {
-            let manifest: ApiDownloadManifest = try await apiClient.get("downloads/manifest/\(tcId.rawValue)")
+            guard let grpcClient else { throw GrpcClientError.notConfigured }
+            let manifest = try await grpcClient.getManifest(transcodeId: Int64(tcId.rawValue))
             guard let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
             items[index].fileSizeBytes = manifest.fileSizeBytes
+            items[index].hasSubtitles = manifest.hasSubtitles_p
+            items[index].hasThumbnails = manifest.hasThumbnails_p
+            items[index].hasChapters = manifest.hasChapters_p
         } catch {
             markFailed(transcodeId: tcId, error: "Failed to fetch manifest: \(error.localizedDescription)")
             return
@@ -462,10 +469,13 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
             }
         }
 
-        // Chapters/skip segments
-        if let data = try? await apiClient.getRaw("api/v1/stream/\(tcRaw)/chapters") {
-            if (try? JSONDecoder().decode(ChaptersResponse.self, from: data)) != nil {
-                try? data.write(to: dir.appendingPathComponent("chapters.json"))
+        // Chapters/skip segments via gRPC
+        if let grpcClient,
+           let response = try? await grpcClient.getChapters(transcodeId: Int64(tcRaw)),
+           !response.chapters.isEmpty || !response.skipSegments.isEmpty {
+            // Serialize as JSON for offline SkipSegmentController compatibility
+            if let jsonData = try? response.jsonUTF8Data() {
+                try? jsonData.write(to: dir.appendingPathComponent("chapters.json"))
                 if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
                     items[index].hasChapters = true
                 }
@@ -478,10 +488,31 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - Private: Title Cache
 
     /// Cache title detail, images, seasons, and episodes for offline use.
-    /// TODO: Migrate to gRPC-based caching (REST endpoint no longer available).
     private func cacheTitleData(titleId: TitleID) async {
-        // Stubbed out during gRPC migration — cache will be rebuilt when
-        // DownloadManager is fully migrated to use gRPC for metadata.
+        guard let grpcClient, let apiClient else { return }
+        let dir = DownloadItem.titleCacheDir(for: titleId)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        // Title detail via gRPC — cache as protobuf binary
+        do {
+            let detail = try await grpcClient.getTitleDetail(id: titleId.protoValue)
+            let data = try detail.serializedData()
+            try data.write(to: dir.appendingPathComponent("detail.pb"), options: .atomic)
+
+            // Poster image (HTTP binary)
+            let wrapped = ApiTitleDetail(proto: detail)
+            if let posterUrl = wrapped.posterUrl {
+                if let imgData = try? await apiClient.getRaw(posterUrl) {
+                    try? imgData.write(to: dir.appendingPathComponent("poster.jpg"))
+                }
+            }
+        } catch {
+            // Title detail fetch failed — don't block on this
+        }
+
+        // Update cache timestamp
+        titleCacheEntries[titleId] = TitleCacheEntry(titleId: titleId, lastUpdated: Date())
+        persistTitleCacheEntries()
     }
 
     /// Refresh title cache only if stale (older than 24 hours).

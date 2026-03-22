@@ -38,11 +38,7 @@ fi
 PROJECT="$PROJECT_ROOT/ios/MediaManager/MediaManager.xcodeproj"
 
 echo "=== Building MediaManager for device ==="
-xcodebuild -project "$PROJECT" \
-    -scheme MediaManager \
-    -destination "platform=iOS,id=$IOS_DEVICE_ID" \
-    -configuration Debug \
-    build 2>&1 | tail -5
+"$SCRIPT_DIR/ios-build.sh" --device "$IOS_DEVICE_ID"
 
 echo ""
 echo "=== Installing on device $IOS_DEVICE_ID ==="
