@@ -1,7 +1,10 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, admin, profile
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, profile
+    // Admin tabs
+    case adminStatus, adminUsers, adminPurchaseWishes, adminDataQuality
+    case adminTags, adminSettings, adminTranscodes, adminUnmatched
 }
 
 struct ContentView: View {
@@ -36,7 +39,21 @@ struct ContentView: View {
                 if authManager.serverInfo?.user?.isAdmin == true {
                     Section("Admin") {
                         Label("Transcode Status", systemImage: "gearshape.2")
-                            .tag(Tab.admin)
+                            .tag(Tab.adminStatus)
+                        Label("Users", systemImage: "person.2")
+                            .tag(Tab.adminUsers)
+                        Label("Purchase Wishes", systemImage: "cart")
+                            .tag(Tab.adminPurchaseWishes)
+                        Label("Data Quality", systemImage: "exclamationmark.triangle")
+                            .tag(Tab.adminDataQuality)
+                        Label("Tags", systemImage: "tag")
+                            .tag(Tab.adminTags)
+                        Label("Transcodes", systemImage: "film.stack")
+                            .tag(Tab.adminTranscodes)
+                        Label("Unmatched Files", systemImage: "questionmark.folder")
+                            .tag(Tab.adminUnmatched)
+                        Label("Settings", systemImage: "gear")
+                            .tag(Tab.adminSettings)
                     }
                 }
 
@@ -101,8 +118,22 @@ struct ContentView: View {
                         LiveTvView()
                     case .profile:
                         ProfileView()
-                    case .admin:
+                    case .adminStatus:
                         AdminView()
+                    case .adminUsers:
+                        AdminUsersView()
+                    case .adminPurchaseWishes:
+                        AdminPurchaseWishesView()
+                    case .adminDataQuality:
+                        AdminDataQualityView()
+                    case .adminTags:
+                        AdminTagsView()
+                    case .adminTranscodes:
+                        AdminTranscodesView()
+                    case .adminUnmatched:
+                        AdminUnmatchedView()
+                    case .adminSettings:
+                        AdminSettingsView()
                     case .search:
                         SearchView()
                     case .wishList:

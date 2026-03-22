@@ -5,6 +5,9 @@ struct AdminView: View {
     @State private var transcodeStatus: TranscodeStatusResponse?
     @State private var buddyStatus: BuddyStatusResponse?
     @State private var loading = true
+    @State private var scanning = false
+    @State private var clearing = false
+    @State private var statusMessage: String?
 
     var body: some View {
         Group {
@@ -81,6 +84,41 @@ struct AdminView: View {
                         }
                     }
 
+                    // Actions
+                    Section("Actions") {
+                        Button {
+                            Task { await scanNas() }
+                        } label: {
+                            HStack {
+                                Label("Scan NAS", systemImage: "externaldrive")
+                                Spacer()
+                                if scanning {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(scanning)
+
+                        Button {
+                            Task { await clearFailures() }
+                        } label: {
+                            HStack {
+                                Label("Clear Failures", systemImage: "trash")
+                                Spacer()
+                                if clearing {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(clearing)
+
+                        if let statusMessage {
+                            Text(statusMessage)
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+
                     // Recent activity
                     if let recent = buddyStatus?.recentLeases, !recent.isEmpty {
                         Section("Recent Activity") {
@@ -139,6 +177,36 @@ struct AdminView: View {
         transcodeStatus = await t
         buddyStatus = await b
         loading = false
+    }
+
+    private func scanNas() async {
+        scanning = true
+        statusMessage = nil
+        do {
+            try await authManager.apiClient.post("admin/scan-nas", body: [:])
+            statusMessage = "NAS scan started"
+        } catch {
+            statusMessage = "Scan failed"
+        }
+        scanning = false
+        dismissStatusAfterDelay()
+    }
+
+    private func clearFailures() async {
+        clearing = true
+        statusMessage = nil
+        try? await authManager.apiClient.post("admin/clear-failures", body: [:])
+        statusMessage = "Failures cleared"
+        clearing = false
+        dismissStatusAfterDelay()
+        await loadStatus()
+    }
+
+    private func dismissStatusAfterDelay() {
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            statusMessage = nil
+        }
     }
 
     private func typeLabel(_ type: String) -> String {

@@ -35,6 +35,7 @@ object UserManagementHandler {
 
         when {
             path.isEmpty() && method == "GET" -> handleList(resp, mapper)
+            path.isEmpty() && method == "POST" -> handleCreate(req, resp, mapper, adminUser)
             else -> {
                 val actionMatch = USER_ACTION.matchEntire(path)
                 val idMatch = USER_ID.matchEntire(path)
@@ -92,6 +93,52 @@ object UserManagementHandler {
 
         ApiV1Servlet.sendJson(resp, 200, mapOf("users" to items), mapper)
         MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
+
+    private fun handleCreate(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, adminUser: AppUser) {
+        val body = try { mapper.readTree(req.reader) } catch (_: Exception) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request"); MetricsRegistry.countHttpResponse("api_v1", 400); return
+        }
+        val username = body.get("username")?.asText()?.trim()?.take(100)
+        val displayName = body.get("display_name")?.asText()?.trim()?.take(200)
+        val password = body.get("password")?.asText()
+
+        if (username.isNullOrBlank() || displayName.isNullOrBlank() || password.isNullOrBlank()) {
+            ApiV1Servlet.sendError(resp, 400, "invalid_request")
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        // Check username uniqueness
+        if (AppUser.findAll().any { it.username.equals(username, ignoreCase = true) }) {
+            ApiV1Servlet.sendError(resp, 409, "username_taken")
+            MetricsRegistry.countHttpResponse("api_v1", 409)
+            return
+        }
+
+        val violations = PasswordService.validate(password, username)
+        if (violations.isNotEmpty()) {
+            ApiV1Servlet.sendError(resp, 400, "validation_failed", mapOf("detail" to violations.first()))
+            MetricsRegistry.countHttpResponse("api_v1", 400)
+            return
+        }
+
+        val forceChange = body.get("force_change")?.asBoolean() ?: true
+        val now = LocalDateTime.now()
+        val user = AppUser(
+            username = username,
+            display_name = displayName,
+            password_hash = PasswordService.hash(password),
+            access_level = 1,
+            must_change_password = forceChange,
+            created_at = now,
+            updated_at = now
+        )
+        user.save()
+
+        log.info("AUDIT: Admin '{}' created user '{}' (force_pw_change={})", adminUser.username, username, forceChange)
+        ApiV1Servlet.sendJson(resp, 201, mapOf("id" to user.id, "username" to username), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 201)
     }
 
     private fun handleSetRole(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper, adminUser: AppUser, userId: Long) {

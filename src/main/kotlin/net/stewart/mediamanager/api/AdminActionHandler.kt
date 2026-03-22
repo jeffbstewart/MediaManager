@@ -40,6 +40,7 @@ object AdminActionHandler {
             path == "data-quality" && method == "GET" -> handleDataQuality(req, resp, mapper)
             path == "settings" && method == "GET" -> handleGetSettings(resp, mapper)
             path == "settings" && method == "PUT" -> handleUpdateSettings(req, resp, mapper)
+            path == "tags" && method == "GET" -> handleListTags(resp, mapper)
             path == "tags" && method == "POST" -> handleCreateTag(req, resp, mapper)
             else -> {
                 val metadataMatch = TITLE_METADATA.matchEntire(path)
@@ -263,6 +264,23 @@ object AdminActionHandler {
     }
 
     // --- Tags ---
+
+    private fun handleListTags(resp: HttpServletResponse, mapper: ObjectMapper) {
+        val allTags = Tag.findAll().sortedBy { it.name.lowercase() }
+        val titleTags = TitleTag.findAll()
+        val countByTag = titleTags.groupBy { it.tag_id }.mapValues { (_, tts) -> tts.size }
+
+        val apiTags = allTags.map { tag ->
+            mapOf(
+                "id" to tag.id,
+                "name" to tag.name,
+                "color" to tag.bg_color,
+                "title_count" to (countByTag[tag.id] ?: 0)
+            )
+        }
+        ApiV1Servlet.sendJson(resp, 200, mapOf("tags" to apiTags), mapper)
+        MetricsRegistry.countHttpResponse("api_v1", 200)
+    }
 
     private fun handleCreateTag(req: HttpServletRequest, resp: HttpServletResponse, mapper: ObjectMapper) {
         val body = try { mapper.readTree(req.reader) } catch (_: Exception) {
