@@ -165,14 +165,23 @@ fun main(args: Array<String>) {
 
     val boot = object : VaadinBoot() {
         override fun onStarted(context: org.eclipse.jetty.ee10.webapp.WebAppContext) {
-            // Increase Jetty's idle timeout from 30s (default) to 5 minutes.
-            // Roku streaming requests can have long pauses between range fetches;
-            // the default 30s timeout kills the connection mid-playback.
             val server = context.server
             for (connector in server.connectors) {
-                if (connector is org.eclipse.jetty.server.AbstractConnector) {
+                if (connector is org.eclipse.jetty.server.ServerConnector) {
+                    // Increase idle timeout from 30s (default) to 5 minutes.
+                    // Roku streaming requests can have long pauses between range fetches;
+                    // the default 30s timeout kills the connection mid-playback.
                     connector.idleTimeout = 300_000 // 5 minutes
                     log.info("Jetty connector idle timeout set to {}ms", connector.idleTimeout)
+
+                    // Add HTTP/2 cleartext (h2c) support alongside HTTP/1.1.
+                    // This lets gRPC clients (iOS, Android) use native HTTP/2 on the LAN
+                    // without TLS, while existing HTTP/1.1 clients (Vaadin, Roku, browsers)
+                    // continue working on the same port.
+                    val httpConfig = org.eclipse.jetty.server.HttpConfiguration()
+                    val h2c = org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory(httpConfig)
+                    connector.addConnectionFactory(h2c)
+                    log.info("HTTP/2 cleartext (h2c) enabled on port {}", connector.port)
                 }
             }
         }

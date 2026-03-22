@@ -25,6 +25,7 @@ java-jwt = "com.auth0:java-jwt:4.4.0"
 openpdf = "com.github.librepdf:openpdf:2.0.3"
 zxing-core = "com.google.zxing:core:3.5.3"
 zxing-javase = "com.google.zxing:javase:3.5.3"
+jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.1.6"
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-kotlin-stub = "io.grpc:grpc-kotlin-stub:1.4.1"
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }

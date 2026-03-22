@@ -47,6 +47,9 @@ dependencies {
     implementation(libs.zxing.javase)
     implementation(project(":transcode-common"))
 
+    // Jetty HTTP/2 cleartext (h2c) for gRPC native transport
+    implementation(libs.jetty.http2.server)
+
     // gRPC + Protobuf
     implementation(libs.grpc.stub)
     implementation(libs.grpc.kotlin.stub)
