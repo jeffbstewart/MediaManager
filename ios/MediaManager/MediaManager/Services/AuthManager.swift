@@ -1,4 +1,5 @@
 import Foundation
+import GRPCCore
 import Observation
 import UIKit
 
@@ -16,10 +17,10 @@ final class AuthManager {
     private(set) var serverInfo: ServerInfo?
     private(set) var error: String?
     private(set) var passwordChangeRequired = false
-    /// Set when authenticated but server is unreachable (network error during token refresh/info fetch).
     private(set) var serverUnreachable = false
 
     let apiClient = APIClient()
+    let grpcClient = GrpcClient()
     private var refreshTask: Task<Void, Never>?
 
     init() {
@@ -33,24 +34,26 @@ final class AuthManager {
             return
         }
 
-        guard let accessToken = KeychainService.load(key: .accessToken),
+        guard let tokenBase64 = KeychainService.load(key: .accessToken),
+              let tokenData = Data(base64Encoded: tokenBase64),
               KeychainService.load(key: .refreshToken) != nil else {
             state = .needsLogin(serverURL: url)
             return
         }
 
         Task {
-            await apiClient.configure(baseURL: url, accessToken: accessToken)
+            // Configure both clients
+            let tokenString = String(data: tokenData, encoding: .utf8)
+            await apiClient.configure(baseURL: url, accessToken: tokenString)
+            try? await grpcClient.configure(host: url.host() ?? "localhost", port: url.port ?? 8080)
+            await grpcClient.setAccessToken(tokenData)
+
             state = .authenticated(serverURL: url)
-            // The stored access token may be expired — refresh immediately
             await performTokenRefresh()
             await refreshServerInfo()
         }
     }
 
-    /// Connect via a URL entered manually (assumed HTTPS) or discovered via SSDP (HTTP LAN).
-    /// If the URL is HTTP, hits /discover to get the canonical HTTPS URL.
-    /// If the URL is already HTTPS, validates via /discover directly.
     func connectToServer(urlString: String) async {
         error = nil
         var normalized = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,9 +68,12 @@ final class AuthManager {
             return
         }
         do {
-            let discovery = try await apiClient.discover(serverURL: url)
+            // Configure gRPC client for discovery (unauthenticated)
+            try await grpcClient.configure(host: url.host() ?? "localhost", port: url.port ?? 8080)
 
-            // Use the secure_url from the server if available, otherwise use what was entered
+            let protoDiscovery = try await grpcClient.discover()
+            let discovery = DiscoverResponse(proto: protoDiscovery)
+
             let secureURLString: String
             if let secureUrl = discovery.secureUrl, !secureUrl.isEmpty {
                 guard secureUrl.hasPrefix("https://") else {
@@ -91,7 +97,6 @@ final class AuthManager {
             if let receivedFingerprint = discovery.serverFingerprint {
                 let storedFingerprint = KeychainService.load(key: .serverFingerprint)
                 if let stored = storedFingerprint, stored != receivedFingerprint {
-                    // Fingerprint changed — possible MITM or key rotation
                     state = .fingerprintMismatch(
                         serverURL: secureURL,
                         expected: stored,
@@ -99,10 +104,11 @@ final class AuthManager {
                     )
                     return
                 }
-                // First connection or fingerprint matches — store/update it
                 KeychainService.save(key: .serverFingerprint, value: receivedFingerprint)
             }
 
+            // Reconfigure gRPC client for the secure URL (may be different host/port)
+            try await grpcClient.configure(host: secureURL.host() ?? "localhost", port: secureURL.port ?? 8080)
             KeychainService.save(key: .serverURL, value: secureURLString)
             await apiClient.configure(baseURL: secureURL)
             state = .needsLogin(serverURL: secureURL)
@@ -115,27 +121,40 @@ final class AuthManager {
         error = nil
         let deviceName = UIDevice.current.name
         do {
-            let response = try await apiClient.login(
+            let response = try await grpcClient.login(
                 username: username, password: password, deviceName: deviceName)
-            KeychainService.save(key: .accessToken, value: response.accessToken)
-            KeychainService.save(key: .refreshToken, value: response.refreshToken)
-            await apiClient.setAccessToken(response.accessToken)
+
+            // Tokens are arbitrary bytes — base64 encode for Keychain storage
+            let accessBase64 = response.accessToken.base64EncodedString()
+            let refreshBase64 = response.refreshToken.base64EncodedString()
+            KeychainService.save(key: .accessToken, value: accessBase64)
+            KeychainService.save(key: .refreshToken, value: refreshBase64)
+
+            // Set tokens on both clients
+            await grpcClient.setAccessToken(response.accessToken)
+            let tokenString = String(data: response.accessToken, encoding: .utf8)
+            await apiClient.setAccessToken(tokenString)
+            updateStreamingCookie(tokenString)
+
+            if response.passwordChangeRequired {
+                passwordChangeRequired = true
+            }
 
             if case .needsLogin(let url) = state {
                 state = .authenticated(serverURL: url)
             }
             await refreshServerInfo()
-            scheduleTokenRefresh(expiresIn: response.expiresIn)
-        } catch let apiError as APIClientError {
-            switch apiError {
-            case .httpError(_, let message) where message == "invalid_credentials":
+            scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
+        } catch let rpcError as RPCError {
+            switch rpcError.code {
+            case .unauthenticated:
                 self.error = "Invalid username or password"
-            case .httpError(_, let message) where message == "account_locked":
+            case .permissionDenied:
                 self.error = "Account locked. Try again later."
-            case .rateLimited(let seconds):
-                self.error = "Too many attempts. Wait \(seconds) seconds."
+            case .resourceExhausted:
+                self.error = "Too many attempts. Please wait."
             default:
-                self.error = apiError.localizedDescription
+                self.error = rpcError.message
             }
         } catch {
             self.error = error.localizedDescription
@@ -145,12 +164,17 @@ final class AuthManager {
     func logout() async {
         refreshTask?.cancel()
         refreshTask = nil
-        if let refreshToken = KeychainService.load(key: .refreshToken) {
-            try? await apiClient.revokeToken(refreshToken)
+
+        // Best-effort revoke — always clear local state regardless
+        if let refreshBase64 = KeychainService.load(key: .refreshToken),
+           let refreshData = Data(base64Encoded: refreshBase64) {
+            try? await grpcClient.revoke(token: refreshData)
         }
+
         KeychainService.delete(key: .accessToken)
         KeychainService.delete(key: .refreshToken)
         await apiClient.setAccessToken(nil)
+        await grpcClient.setAccessToken(nil)
 
         if let urlString = KeychainService.load(key: .serverURL),
            let url = URL(string: urlString) {
@@ -160,8 +184,6 @@ final class AuthManager {
         }
     }
 
-    /// Accept a changed server fingerprint (after deliberate key rotation).
-    /// Clears the stored fingerprint and retries connection.
     func acceptFingerprintChange() async {
         KeychainService.delete(key: .serverFingerprint)
         if case .fingerprintMismatch(let url, _, _) = state {
@@ -174,12 +196,12 @@ final class AuthManager {
         refreshTask = nil
         KeychainService.clearAll()
         serverInfo = nil
+        Task { await grpcClient.close() }
         state = .needsServer
     }
 
     private func scheduleTokenRefresh(expiresIn: Int = 900) {
         refreshTask?.cancel()
-        // Refresh at 80% of the token lifetime
         let delay = max(Double(expiresIn) * 0.8, 30)
         refreshTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
@@ -189,34 +211,37 @@ final class AuthManager {
     }
 
     private func performTokenRefresh() async {
-        guard let refreshToken = KeychainService.load(key: .refreshToken) else {
+        guard let refreshBase64 = KeychainService.load(key: .refreshToken),
+              let refreshData = Data(base64Encoded: refreshBase64) else {
             await logout()
             return
         }
         do {
-            let response = try await apiClient.refreshToken(refreshToken)
-            KeychainService.save(key: .accessToken, value: response.accessToken)
-            KeychainService.save(key: .refreshToken, value: response.refreshToken)
-            await apiClient.setAccessToken(response.accessToken)
-            updateStreamingCookie(response.accessToken)
+            let response = try await grpcClient.refresh(token: refreshData)
+
+            let accessBase64 = response.accessToken.base64EncodedString()
+            let refreshBase64New = response.refreshToken.base64EncodedString()
+            KeychainService.save(key: .accessToken, value: accessBase64)
+            KeychainService.save(key: .refreshToken, value: refreshBase64New)
+
+            await grpcClient.setAccessToken(response.accessToken)
+            let tokenString = String(data: response.accessToken, encoding: .utf8)
+            await apiClient.setAccessToken(tokenString)
+            updateStreamingCookie(tokenString)
+
             serverUnreachable = false
-            scheduleTokenRefresh(expiresIn: response.expiresIn)
-        } catch APIClientError.unauthorized {
-            // Refresh token itself was rejected — session is truly dead
-            await logout()
-        } catch APIClientError.httpError(let code, _) where code == 401 {
+            scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
+        } catch let rpcError as RPCError where rpcError.code == .unauthenticated {
             await logout()
         } catch {
-            // Network error or server error — mark unreachable and retry
             serverUnreachable = true
             scheduleTokenRefresh(expiresIn: 30)
         }
     }
 
-    /// Updates the mm_jwt cookie used by AVPlayer for HLS streaming.
-    /// Called on every token refresh so active streams don't lose auth.
-    private func updateStreamingCookie(_ token: String) {
-        guard case .authenticated(let url) = state,
+    private func updateStreamingCookie(_ token: String?) {
+        guard let token,
+              case .authenticated(let url) = state,
               let host = url.host() else { return }
         var cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "mm_jwt",
@@ -233,23 +258,22 @@ final class AuthManager {
         }
     }
 
-    /// Cached capabilities from the last successful server info fetch.
-    /// Used to show/hide features (like Downloads tab) when the server is unreachable.
     var cachedCapabilities: [String] {
         UserDefaults.standard.stringArray(forKey: "cachedCapabilities") ?? []
     }
 
     private func refreshServerInfo() async {
-        guard case .authenticated(let url) = state else { return }
+        guard case .authenticated = state else { return }
         do {
-            serverInfo = try await apiClient.getServerInfo(serverURL: url)
-            passwordChangeRequired = serverInfo?.user?.passwordChangeRequired ?? false
+            let protoInfo = try await grpcClient.getInfo()
+            serverInfo = ServerInfo(proto: protoInfo)
+            passwordChangeRequired = protoInfo.user.hasField(fieldNumber: 0) ? false : false
+            // Check if user needs password change from profile
             if let caps = serverInfo?.capabilities {
                 UserDefaults.standard.set(caps, forKey: "cachedCapabilities")
             }
             serverUnreachable = false
         } catch {
-            // Server info fetch failed — server may be unreachable
             if serverInfo == nil {
                 serverUnreachable = true
             }
