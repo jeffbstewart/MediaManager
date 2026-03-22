@@ -306,7 +306,6 @@ class TranscodeStatusView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
         } else {
-            val dtf = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
             for (lease in activeLeases) {
                 val fileName = lease.relative_path.substringAfterLast('/')
                 val isThumbsOrSubs = lease.lease_type in setOf(LeaseType.THUMBNAILS.name, LeaseType.SUBTITLES.name, LeaseType.CHAPTERS.name)
@@ -320,7 +319,7 @@ class TranscodeStatusView : KComposite() {
                 }
 
                 val statusText = if (isThumbsOrSubs) {
-                    val since = lease.claimed_at?.format(dtf) ?: "?"
+                    val since = DisplayTimezone.formatTime(lease.claimed_at, "?")
                     "running since $since"
                 } else if (lease.status == LeaseStatus.IN_PROGRESS.name) {
                     "${lease.progress_percent}%"
@@ -353,8 +352,6 @@ class TranscodeStatusView : KComposite() {
                 style.set("color", "var(--lumo-secondary-text-color)")
             })
         } else {
-            val dtf = java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
-
             val html = StringBuilder()
             html.append("""<table style="width:100%;border-collapse:collapse;font-size:var(--lumo-font-size-xs)">""")
             html.append("<thead><tr style=\"color:var(--lumo-secondary-text-color)\">")
@@ -382,8 +379,8 @@ class TranscodeStatusView : KComposite() {
                     else -> "transcode"
                 }
 
-                val startStr = lease.claimed_at?.format(dtf) ?: "-"
-                val endStr = lease.completed_at?.format(dtf) ?: "-"
+                val startStr = DisplayTimezone.formatDateTime(lease.claimed_at, "-")
+                val endStr = DisplayTimezone.formatDateTime(lease.completed_at, "-")
 
                 val durationSec = if (lease.claimed_at != null && lease.completed_at != null) {
                     java.time.Duration.between(lease.claimed_at, lease.completed_at).seconds

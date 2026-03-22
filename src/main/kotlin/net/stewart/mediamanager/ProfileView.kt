@@ -23,6 +23,7 @@ import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.ContentRating
 import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.DisplayTimezone
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PasswordService
 import org.slf4j.LoggerFactory
@@ -45,7 +46,7 @@ private data class ProfileSessionItem(
 class ProfileView : KComposite(), BeforeEnterObserver {
 
     private val log = LoggerFactory.getLogger(ProfileView::class.java)
-    private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    @Suppress("unused") private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     private lateinit var sessionGrid: Grid<ProfileSessionItem>
     private var passwordAttempts = 0
     private val maxPasswordAttempts = 5
@@ -294,14 +295,14 @@ class ProfileView : KComposite(), BeforeEnterObserver {
                     }
                 }.setHeader("Device / Browser").setFlexGrow(1)
 
-                addColumn { it.createdAt?.format(dateFmt) ?: "" }
+                addColumn { DisplayTimezone.formatFull(it.createdAt) }
                     .setHeader("Created").setFlexGrow(0).setWidth("160px")
 
-                addColumn { it.lastUsedAt?.format(dateFmt) ?: "" }
+                addColumn { DisplayTimezone.formatFull(it.lastUsedAt) }
                     .setHeader("Last Used").setFlexGrow(0).setWidth("160px")
 
                 addColumn { item ->
-                    item.expiresAt?.format(dateFmt) ?: "Never"
+                    DisplayTimezone.formatFull(item.expiresAt, "Never")
                 }.setHeader("Expires").setFlexGrow(0).setWidth("160px")
 
                 addComponentColumn { item ->
