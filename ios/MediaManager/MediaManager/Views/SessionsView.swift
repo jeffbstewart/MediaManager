@@ -5,14 +5,18 @@ struct ApiSession: Codable, Identifiable {
     let sessionId: Int
     let type: String
     let deviceName: String?
-    let lastActive: String?
+    let createdAt: String?
+    let lastUsedAt: String?
+    let expiresAt: String?
     let isCurrent: Bool
 
     enum CodingKeys: String, CodingKey {
         case type
-        case sessionId = "session_id"
+        case sessionId = "id"
         case deviceName = "device_name"
-        case lastActive = "last_active"
+        case createdAt = "created_at"
+        case lastUsedAt = "last_used_at"
+        case expiresAt = "expires_at"
         case isCurrent = "is_current"
     }
 }
@@ -55,8 +59,8 @@ struct SessionsView: View {
                                                 .clipShape(Capsule())
                                         }
                                     }
-                                    if let lastActive = session.lastActive {
-                                        Text(lastActive)
+                                    if let lastUsed = session.lastUsedAt {
+                                        Text(formatDate(lastUsed))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -108,6 +112,24 @@ struct SessionsView: View {
         case "device": "tv"
         default: "questionmark.circle"
         }
+    }
+
+    private func formatDate(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) {
+            let relative = RelativeDateTimeFormatter()
+            relative.unitsStyle = .abbreviated
+            return relative.localizedString(for: date, relativeTo: Date())
+        }
+        // Try without fractional seconds
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: iso) {
+            let relative = RelativeDateTimeFormatter()
+            relative.unitsStyle = .abbreviated
+            return relative.localizedString(for: date, relativeTo: Date())
+        }
+        return iso
     }
 
     private func loadSessions() async {

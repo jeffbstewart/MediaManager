@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct ProfileResponse: Codable {
-    let username: String
-    let displayName: String
-    let isAdmin: Bool
+    let username: String?
+    let displayName: String?
+    let isAdmin: Bool?
     let ratingCeiling: Int?
     let ratingCeilingLabel: String?
-    let liveTvMinQuality: Int
+    let liveTvMinQuality: Int?
+    let subtitlesEnabled: Bool?
+    let mustChangePassword: Bool?
 
     enum CodingKeys: String, CodingKey {
         case username
@@ -15,9 +17,11 @@ struct ProfileResponse: Codable {
         case ratingCeiling = "rating_ceiling"
         case ratingCeilingLabel = "rating_ceiling_label"
         case liveTvMinQuality = "live_tv_min_quality"
+        case subtitlesEnabled = "subtitles_enabled"
+        case mustChangePassword = "must_change_password"
     }
 
-    var roleDisplay: String { isAdmin ? "Admin" : "Viewer" }
+    var roleDisplay: String { (isAdmin ?? false) ? "Admin" : "Viewer" }
 }
 
 struct ProfileView: View {
@@ -27,6 +31,7 @@ struct ProfileView: View {
     @State private var showChangePassword = false
     @State private var showSessions = false
     @State private var tvQuality: Int = 1
+    @State private var loadTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -35,8 +40,8 @@ struct ProfileView: View {
             } else if let profile {
                 List {
                     Section("Account") {
-                        LabeledContent("Username", value: profile.username)
-                        LabeledContent("Display Name", value: profile.displayName)
+                        LabeledContent("Username", value: profile.username ?? "-")
+                        LabeledContent("Display Name", value: profile.displayName ?? "-")
                         LabeledContent("Role", value: profile.roleDisplay)
                         if let ceiling = profile.ratingCeilingLabel {
                             LabeledContent("Rating Limit", value: ceiling)
@@ -75,8 +80,13 @@ struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
-        .task {
-            await loadProfile()
+        .onAppear {
+            guard profile == nil else { return }
+            loadTask = Task { await loadProfile() }
+        }
+        .onDisappear {
+            loadTask?.cancel()
+            loadTask = nil
         }
         .sheet(isPresented: $showChangePassword) {
             ChangePasswordView()
@@ -88,7 +98,16 @@ struct ProfileView: View {
 
     private func loadProfile() async {
         loading = true
-        profile = try? await authManager.apiClient.get("profile")
+        do {
+            let result: ProfileResponse = try await authManager.apiClient.get("profile")
+            guard !Task.isCancelled else { return }
+            profile = result
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            NSLog("MMAPP profile load failed: %@", error.localizedDescription)
+        }
         tvQuality = profile?.liveTvMinQuality ?? 1
         loading = false
     }
@@ -110,24 +129,35 @@ struct ChangePasswordView: View {
     var body: some View {
         NavigationStack {
             Form {
-                SecureField("Current Password", text: $currentPassword)
-                    .textContentType(.password)
-                SecureField("New Password", text: $newPassword)
-                    .textContentType(.newPassword)
-                SecureField("Confirm New Password", text: $confirmPassword)
-                    .textContentType(.newPassword)
+                Section {
+                    SecureField("Current Password", text: $currentPassword)
+                        .textContentType(.password)
+                    SecureField("New Password", text: $newPassword)
+                        .textContentType(.newPassword)
+                    SecureField("Confirm New Password", text: $confirmPassword)
+                        .textContentType(.newPassword)
+                }
 
                 if let error {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.callout)
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                    }
                 }
 
-                Button(saving ? "Saving..." : "Change Password") {
-                    Task { await changePassword() }
+                Section {
+                    Button(saving ? "Saving..." : "Change Password") {
+                        Task { await changePassword() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .disabled(currentPassword.isEmpty || newPassword.isEmpty ||
+                              newPassword != confirmPassword || saving)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
-                .disabled(currentPassword.isEmpty || newPassword.isEmpty ||
-                          newPassword != confirmPassword || saving)
             }
             .navigationTitle("Change Password")
             .navigationBarTitleDisplayMode(.inline)
