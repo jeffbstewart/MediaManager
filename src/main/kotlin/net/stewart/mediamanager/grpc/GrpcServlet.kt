@@ -25,13 +25,16 @@ class MediaManagerGrpcServlet : HttpServlet() {
     private val delegate by lazy { buildDelegate() }
 
     private fun buildDelegate(): io.grpc.servlet.jakarta.ServletAdapter {
-        val interceptor = AuthInterceptor()
+        // Interceptor order: logging is outermost (sees final status including auth failures),
+        // auth is inner (runs after logging starts, before service method).
+        val loggingInterceptor = LoggingInterceptor()
+        val authInterceptor = AuthInterceptor()
 
         val builder = ServletServerBuilder()
             .maxInboundMessageSize(64 * 1024)   // 64KB — protects unauthenticated endpoints
             .maxInboundMetadataSize(8 * 1024)    // 8KB
 
-        // Register all 9 services with the auth interceptor
+        // Register all 9 services with both interceptors
         val services = listOf(
             AuthGrpcService(),
             InfoGrpcService(),
@@ -45,7 +48,9 @@ class MediaManagerGrpcServlet : HttpServlet() {
         )
 
         for (service in services) {
-            builder.addService(ServerInterceptors.intercept(service, interceptor))
+            builder.addService(
+                ServerInterceptors.intercept(service, loggingInterceptor, authInterceptor)
+            )
         }
 
         val adapter = builder.buildServletAdapter()
