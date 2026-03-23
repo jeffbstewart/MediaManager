@@ -10,4 +10,5 @@ import Foundation
     func dismissWish(id: WishID) async throws
     func deleteTranscodeWish(titleId: TitleID) async throws
     func searchTmdb(query: String) async throws -> TmdbSearchResponse
+    func searchTmdb(query: String, type: MMMediaType) async throws -> MMTmdbSearchResponse
 }

@@ -1025,6 +1025,46 @@ extension MMEnrichmentStatus {
     }
 }
 
+extension MMScanStatus {
+    var displayString: String {
+        switch self {
+        case .submitted: "Submitted"
+        case .upcFound: "Found"
+        case .upcNotFound: "Not Found"
+        case .enriching: "Enriching..."
+        case .enriched: "Ready"
+        case .enrichmentFailed: "Enrichment Failed"
+        case .noMatch: "No Match"
+        case .unknown, .UNRECOGNIZED: "Unknown"
+        }
+    }
+
+    var isTerminal: Bool {
+        switch self {
+        case .upcNotFound, .enriched, .enrichmentFailed, .noMatch: true
+        default: false
+        }
+    }
+
+    var needsTmdbAction: Bool {
+        switch self {
+        case .noMatch, .enrichmentFailed: true
+        default: false
+        }
+    }
+}
+
+extension MMSubmitBarcodeResult {
+    var displayString: String {
+        switch self {
+        case .created: "Created"
+        case .duplicate: "Duplicate"
+        case .invalid: "Invalid"
+        case .unknown, .UNRECOGNIZED: "Unknown"
+        }
+    }
+}
+
 extension MMSettingKey {
     var configKey: String? {
         switch self {

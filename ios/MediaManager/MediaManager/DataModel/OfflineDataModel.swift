@@ -147,6 +147,7 @@ final class OfflineDataModel: DataModel {
     func dismissWish(id: WishID) async throws { throw DataModelError.offline }
     func deleteTranscodeWish(titleId: TitleID) async throws { throw DataModelError.offline }
     func searchTmdb(query: String) async throws -> TmdbSearchResponse { throw DataModelError.offline }
+    func searchTmdb(query: String, type: MMMediaType) async throws -> MMTmdbSearchResponse { throw DataModelError.offline }
 
     // MARK: - ProfileDataModel
 
@@ -167,6 +168,14 @@ final class OfflineDataModel: DataModel {
 
     func transcodeStatus() async throws -> TranscodeStatusResponse { throw DataModelError.offline }
     func buddyStatus() async throws -> BuddyStatusResponse { throw DataModelError.offline }
+    func monitorTranscodeStatus(onUpdate: @Sendable @escaping (MMTranscodeStatusUpdate) async -> Void) async throws { throw DataModelError.offline }
+    func submitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse { throw DataModelError.offline }
+    func monitorScanProgress(onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void) async throws { throw DataModelError.offline }
+    func getScanDetail(scanId: Int64) async throws -> MMScanDetailResponse { throw DataModelError.offline }
+    func assignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse { throw DataModelError.offline }
+    func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws { throw DataModelError.offline }
+    func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse { throw DataModelError.offline }
+    func deleteOwnershipPhoto(photoId: String) async throws { throw DataModelError.offline }
     func scanNas() async throws { throw DataModelError.offline }
     func clearFailures() async throws { throw DataModelError.offline }
     func adminSettings() async throws -> AdminSettingsResponse { throw DataModelError.offline }

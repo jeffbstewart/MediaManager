@@ -3,7 +3,7 @@ import SwiftUI
 enum Tab: Hashable {
     case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile
     // Admin tabs
-    case adminStatus, adminUsers, adminPurchaseWishes, adminDataQuality
+    case adminScan, adminStatus, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched
 }
 
@@ -49,6 +49,8 @@ struct ContentView: View {
 
                     if dataModel.userInfo?.isAdmin == true {
                         Section("Admin") {
+                            Label("Scan", systemImage: "barcode.viewfinder")
+                                .tag(Tab.adminScan)
                             Label("Transcode Status", systemImage: "gearshape.2")
                                 .tag(Tab.adminStatus)
                             Label("Users", systemImage: "person.2")
@@ -194,6 +196,8 @@ struct ContentView: View {
                         LiveTvView()
                     case .profile:
                         ProfileView()
+                    case .adminScan:
+                        BarcodeScanView()
                     case .adminStatus:
                         AdminView()
                     case .adminUsers:

@@ -3,6 +3,7 @@ import Foundation
 @MainActor protocol AdminDataModel {
     func transcodeStatus() async throws -> TranscodeStatusResponse
     func buddyStatus() async throws -> BuddyStatusResponse
+    func monitorTranscodeStatus(onUpdate: @Sendable @escaping (MMTranscodeStatusUpdate) async -> Void) async throws
     func scanNas() async throws
     func clearFailures() async throws
     func adminSettings() async throws -> AdminSettingsResponse
@@ -26,6 +27,13 @@ import Foundation
     func forcePasswordChange(id: UserID) async throws
     func resetPassword(id: UserID, newPassword: String) async throws
     func deleteUser(id: UserID) async throws
+    func submitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse
+    func monitorScanProgress(onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void) async throws
+    func getScanDetail(scanId: Int64) async throws -> MMScanDetailResponse
+    func assignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse
+    func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws
+    func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse
+    func deleteOwnershipPhoto(photoId: String) async throws
     func unmatchedFiles() async throws -> AdminUnmatchedResponse
     func acceptUnmatched(id: UnmatchedFileID) async throws
     func ignoreUnmatched(id: UnmatchedFileID) async throws

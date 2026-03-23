@@ -25,8 +25,14 @@ import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.entity.Transcode as TranscodeEntity
 import net.stewart.mediamanager.linkDiscoveredFileToTitle
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.BarcodeScanService
 import net.stewart.mediamanager.service.Broadcaster
+import net.stewart.mediamanager.entity.OwnershipPhoto
+import net.stewart.mediamanager.service.OwnershipPhotoService
+import net.stewart.mediamanager.service.ScanDetailService
 import net.stewart.mediamanager.service.BuddyProgressEvent
+import net.stewart.mediamanager.service.ScanUpdateEvent
+import net.stewart.mediamanager.service.TitleUpdateEvent
 import net.stewart.mediamanager.service.FuzzyMatchService
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.PasswordService
@@ -107,6 +113,202 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         }
         Broadcaster.registerBuddyListener(listener)
         awaitClose { Broadcaster.unregisterBuddyListener(listener) }
+    }
+
+    override fun monitorTranscodeStatus(request: Empty): Flow<TranscodeStatusUpdate> = callbackFlow {
+        // Send initial snapshot
+        trySend(transcodeStatusUpdate {
+            snapshot = getTranscodeStatus(request)
+        })
+
+        val listener: (BuddyProgressEvent) -> Unit = { event ->
+            // Send the delta event
+            trySend(transcodeStatusUpdate {
+                this.event = event.toProtoProgressEvent()
+            })
+
+            // On terminal states, send a refreshed snapshot so pending counts stay accurate
+            if (event.status in listOf("COMPLETED", "FAILED", "EXPIRED")) {
+                try {
+                    trySend(transcodeStatusUpdate {
+                        snapshot = kotlinx.coroutines.runBlocking { getTranscodeStatus(request) }
+                    })
+                } catch (e: Exception) {
+                    log.warn("MonitorTranscodeStatus: failed to send post-completion snapshot", e)
+                }
+            }
+        }
+        Broadcaster.registerBuddyListener(listener)
+        awaitClose { Broadcaster.unregisterBuddyListener(listener) }
+    }
+
+    // ========================================================================
+    // Barcode Scanning
+    // ========================================================================
+
+    override suspend fun submitBarcode(request: SubmitBarcodeRequest): SubmitBarcodeResponse {
+        return when (val result = BarcodeScanService.submit(request.upc)) {
+            is BarcodeScanService.SubmitResult.Created -> submitBarcodeResponse {
+                this.result = SubmitBarcodeResult.SUBMIT_BARCODE_RESULT_CREATED
+                scanId = result.scanId
+                message = "Scanned: ${result.upc}"
+            }
+            is BarcodeScanService.SubmitResult.Duplicate -> submitBarcodeResponse {
+                this.result = SubmitBarcodeResult.SUBMIT_BARCODE_RESULT_DUPLICATE
+                titleName = result.titleName
+                message = "Already scanned: ${result.upc} (${result.titleName})"
+            }
+            is BarcodeScanService.SubmitResult.Invalid -> submitBarcodeResponse {
+                this.result = SubmitBarcodeResult.SUBMIT_BARCODE_RESULT_INVALID
+                message = result.reason
+            }
+        }
+    }
+
+    override suspend fun listRecentScans(request: Empty): RecentScansResponse {
+        return recentScansResponse {
+            scans.addAll(BarcodeScanService.getRecentScans().map { it.toProtoRecentScan() })
+        }
+    }
+
+    override fun monitorScanProgress(request: Empty): Flow<ScanProgressUpdate> = callbackFlow {
+        // Send initial snapshot
+        trySend(scanProgressUpdate {
+            snapshot = recentScansResponse {
+                scans.addAll(BarcodeScanService.getRecentScans().map { it.toProtoRecentScan() })
+            }
+        })
+
+        val scanListener: (ScanUpdateEvent) -> Unit = { event ->
+            // Look up full scan info to get title data
+            val scanInfo = try {
+                val scan = net.stewart.mediamanager.entity.BarcodeScan.findAll()
+                    .firstOrNull { it.id == event.scanId }
+                scan?.let { BarcodeScanService.scanToInfo(it) }
+            } catch (e: Exception) {
+                log.warn("MonitorScanProgress: failed to look up scan {}", event.scanId, e)
+                null
+            }
+
+            trySend(scanProgressUpdate {
+                this.event = scanProgressEvent {
+                    scanId = event.scanId
+                    upc = event.upc
+                    status = scanInfo?.status?.toProtoScanStatus() ?: ScanStatus.SCAN_STATUS_UNKNOWN
+                    scanInfo?.titleName?.let { titleName = it }
+                    scanInfo?.posterUrl?.let { posterUrl = it }
+                    scanInfo?.titleId?.let { titleId = it }
+                }
+            })
+        }
+
+        val titleListener: (TitleUpdateEvent) -> Unit = { event ->
+            // Find the scan(s) linked to this title to send updates
+            try {
+                val scans = net.stewart.mediamanager.entity.BarcodeScan.findAll()
+                for (scan in scans) {
+                    val info = BarcodeScanService.scanToInfo(scan)
+                    if (info.titleId == event.titleId) {
+                        trySend(scanProgressUpdate {
+                            this.event = scanProgressEvent {
+                                scanId = info.scanId
+                                upc = info.upc
+                                status = info.status.toProtoScanStatus()
+                                info.titleName?.let { titleName = it }
+                                info.posterUrl?.let { posterUrl = it }
+                                info.titleId?.let { titleId = it }
+                            }
+                        })
+                    }
+                }
+            } catch (e: Exception) {
+                log.warn("MonitorScanProgress: failed to handle title update for {}", event.titleId, e)
+            }
+        }
+
+        Broadcaster.register(scanListener)
+        Broadcaster.registerTitleListener(titleListener)
+        awaitClose {
+            Broadcaster.unregister(scanListener)
+            Broadcaster.unregisterTitleListener(titleListener)
+        }
+    }
+
+    // ========================================================================
+    // Scan Detail
+    // ========================================================================
+
+    override suspend fun getScanDetail(request: ScanIdRequest): ScanDetailResponse {
+        val detail = ScanDetailService.getDetail(request.scanId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Scan not found: ${request.scanId}"))
+
+        return scanDetailResponse {
+            scanId = detail.scan.id!!
+            upc = detail.scan.upc
+            status = detail.status.toProtoScanStatus()
+            detail.mediaItem?.product_name?.let { productName = it }
+            mediaFormat = (detail.mediaItem?.media_format ?: "DVD").toProtoMediaFormat()
+            detail.title?.id?.let { titleId = it }
+            detail.title?.name?.let { titleName = it }
+            detail.title?.posterUrl(net.stewart.mediamanager.entity.PosterSize.FULL)?.let { posterUrl = it }
+            detail.title?.release_year?.let { releaseYear = it }
+            detail.title?.description?.let { description = it }
+            enrichmentStatus = (detail.title?.enrichment_status ?: "PENDING").toProtoEnrichmentStatus()
+            detail.mediaItem?.purchase_place?.let { purchasePlace = it }
+            detail.mediaItem?.purchase_date?.let { purchaseDate = it.toProtoCalendarDate() }
+            detail.mediaItem?.purchase_price?.let { purchasePrice = it.toDouble() }
+            photos.addAll(detail.photos.map { it.toProtoPhotoInfo() })
+        }
+    }
+
+    override suspend fun assignTmdb(request: AssignTmdbRequest): AssignTmdbResponse {
+        val mediaType = when (request.mediaType) {
+            MediaType.MEDIA_TYPE_TV -> "TV"
+            else -> "MOVIE"
+        }
+        return when (val result = ScanDetailService.assignTmdb(request.titleId, request.tmdbId, mediaType)) {
+            is ScanDetailService.AssignResult.Assigned -> assignTmdbResponse {
+                merged = false
+            }
+            is ScanDetailService.AssignResult.Merged -> assignTmdbResponse {
+                merged = true
+                mergedTitleName = result.mergedTitleName
+            }
+            is ScanDetailService.AssignResult.NotFound -> throw StatusException(
+                Status.NOT_FOUND.withDescription(result.message)
+            )
+        }
+    }
+
+    override suspend fun updatePurchaseInfo(request: UpdatePurchaseInfoRequest): Empty {
+        val date = if (request.hasPurchaseDate()) {
+            java.time.LocalDate.of(request.purchaseDate.year, request.purchaseDate.month.number, request.purchaseDate.day)
+        } else null
+        val price = if (request.hasPurchasePrice()) {
+            java.math.BigDecimal.valueOf(request.purchasePrice)
+        } else null
+        val place = if (request.hasPurchasePlace()) request.purchasePlace else null
+
+        ScanDetailService.updatePurchaseInfo(request.scanId, place, date, price)
+        return empty {}
+    }
+
+    override suspend fun uploadOwnershipPhoto(request: UploadOwnershipPhotoRequest): UploadOwnershipPhotoResponse {
+        val scan = net.stewart.mediamanager.entity.BarcodeScan.findById(request.scanId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Scan not found: ${request.scanId}"))
+
+        val photoId = if (scan.media_item_id != null) {
+            OwnershipPhotoService.store(request.photoData.toByteArray(), request.contentType, scan.media_item_id!!)
+        } else {
+            OwnershipPhotoService.storeForUpc(request.photoData.toByteArray(), request.contentType, scan.upc)
+        }
+
+        return uploadOwnershipPhotoResponse { this.photoId = photoId }
+    }
+
+    override suspend fun deleteOwnershipPhoto(request: DeleteOwnershipPhotoRequest): Empty {
+        OwnershipPhotoService.delete(request.photoId)
+        return empty {}
     }
 
     // ========================================================================

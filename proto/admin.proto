@@ -20,6 +20,23 @@ service AdminService {
   // Server-streaming: live transcode progress pushed to client.
   rpc WatchTranscodeProgress(Empty) returns (stream TranscodeProgressEvent);
 
+  // Server-streaming: initial snapshot + live delta updates.
+  rpc MonitorTranscodeStatus(Empty) returns (stream TranscodeStatusUpdate);
+
+  // --- Barcode Scanning ---
+  rpc SubmitBarcode(SubmitBarcodeRequest) returns (SubmitBarcodeResponse);
+  rpc ListRecentScans(Empty) returns (RecentScansResponse);
+
+  // Server-streaming: initial snapshot of recent scans + live progress updates.
+  rpc MonitorScanProgress(Empty) returns (stream ScanProgressUpdate);
+
+  // --- Scan Detail ---
+  rpc GetScanDetail(ScanIdRequest) returns (ScanDetailResponse);
+  rpc AssignTmdb(AssignTmdbRequest) returns (AssignTmdbResponse);
+  rpc UpdatePurchaseInfo(UpdatePurchaseInfoRequest) returns (Empty);
+  rpc UploadOwnershipPhoto(UploadOwnershipPhotoRequest) returns (UploadOwnershipPhotoResponse);
+  rpc DeleteOwnershipPhoto(DeleteOwnershipPhotoRequest) returns (Empty);
+
   // --- Transcode Management ---
   rpc ListLinkedTranscodes(PaginationRequest) returns (LinkedTranscodeResponse);
   rpc UnlinkTranscode(TranscodeIdRequest) returns (Empty);
@@ -149,6 +166,138 @@ message TranscodeProgressEvent {
   int32 progress_percent = 5;
   optional string encoder = 6;
   LeaseType lease_type = 7;
+}
+
+// --- Transcode Status Monitor (server-streaming with initial snapshot) ---
+
+message TranscodeStatusUpdate {
+  oneof update {
+    TranscodeStatusResponse snapshot = 1;
+    TranscodeProgressEvent event = 2;
+  }
+}
+
+// --- Barcode Scanning ---
+
+enum ScanStatus {
+  SCAN_STATUS_UNKNOWN = 0;
+  SCAN_STATUS_SUBMITTED = 1;
+  SCAN_STATUS_UPC_FOUND = 2;
+  SCAN_STATUS_UPC_NOT_FOUND = 3;
+  SCAN_STATUS_ENRICHING = 4;
+  SCAN_STATUS_ENRICHED = 5;
+  SCAN_STATUS_ENRICHMENT_FAILED = 6;
+  SCAN_STATUS_NO_MATCH = 7;
+}
+
+enum SubmitBarcodeResult {
+  SUBMIT_BARCODE_RESULT_UNKNOWN = 0;
+  SUBMIT_BARCODE_RESULT_CREATED = 1;
+  SUBMIT_BARCODE_RESULT_DUPLICATE = 2;
+  SUBMIT_BARCODE_RESULT_INVALID = 3;
+}
+
+message SubmitBarcodeRequest {
+  string upc = 1;
+}
+
+message SubmitBarcodeResponse {
+  SubmitBarcodeResult result = 1;
+  int64 scan_id = 2;
+  optional string title_name = 3;
+  optional string message = 4;
+}
+
+message RecentScan {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string title_name = 4;
+  optional string poster_url = 5;
+  optional int64 title_id = 6;
+  optional Timestamp scanned_at = 7;
+}
+
+message RecentScansResponse {
+  repeated RecentScan scans = 1;
+}
+
+message ScanProgressUpdate {
+  oneof update {
+    RecentScansResponse snapshot = 1;
+    ScanProgressEvent event = 2;
+  }
+}
+
+message ScanProgressEvent {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string title_name = 4;
+  optional string poster_url = 5;
+  optional int64 title_id = 6;
+}
+
+// --- Scan Detail ---
+
+message ScanIdRequest {
+  int64 scan_id = 1;
+}
+
+message ScanDetailResponse {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string product_name = 4;
+  MediaFormat media_format = 5;
+  optional int64 title_id = 6;
+  optional string title_name = 7;
+  optional string poster_url = 8;
+  optional int32 release_year = 9;
+  optional string description = 10;
+  EnrichmentStatus enrichment_status = 11;
+  optional string purchase_place = 12;
+  optional CalendarDate purchase_date = 13;
+  optional double purchase_price = 14;
+  repeated OwnershipPhotoInfo photos = 15;
+}
+
+message OwnershipPhotoInfo {
+  string photo_id = 1;
+  string url = 2;
+  optional Timestamp captured_at = 3;
+}
+
+message AssignTmdbRequest {
+  int64 title_id = 1;
+  int32 tmdb_id = 2;
+  MediaType media_type = 3;
+}
+
+message AssignTmdbResponse {
+  bool merged = 1;
+  optional string merged_title_name = 2;
+}
+
+message UpdatePurchaseInfoRequest {
+  int64 scan_id = 1;
+  optional string purchase_place = 2;
+  optional CalendarDate purchase_date = 3;
+  optional double purchase_price = 4;
+}
+
+message UploadOwnershipPhotoRequest {
+  int64 scan_id = 1;
+  bytes photo_data = 2;
+  string content_type = 3;
+}
+
+message UploadOwnershipPhotoResponse {
+  string photo_id = 1;
+}
+
+message DeleteOwnershipPhotoRequest {
+  string photo_id = 1;
 }
 
 // --- Linked Transcodes ---

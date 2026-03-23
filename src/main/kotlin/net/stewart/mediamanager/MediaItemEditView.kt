@@ -27,6 +27,7 @@ import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.AmazonImportService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.MissingSeasonService
+import net.stewart.mediamanager.service.ScanDetailService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TitleCleanerService
 import net.stewart.mediamanager.service.TmdbSearchResult
@@ -424,51 +425,24 @@ class MediaItemEditView : VerticalLayout(), BeforeEnterObserver {
     }
 
     private fun applyTmdbSelection(title: Title, result: TmdbSearchResult) {
-        val fresh = Title.findById(title.id!!) ?: return
-        val newMediaType = if (result.mediaType == "TV") MediaType.TV.name else MediaType.MOVIE.name
-
-        // Check if another title already has this (tmdb_id, media_type) — merge if so
-        val existing = Title.findAll().firstOrNull {
-            it.id != fresh.id && it.tmdb_id == result.tmdbId && it.media_type == newMediaType
+        val tmdbId = result.tmdbId ?: return
+        val mediaType = result.mediaType ?: return
+        when (val outcome = ScanDetailService.assignTmdb(title.id!!, tmdbId, mediaType)) {
+            is ScanDetailService.AssignResult.Merged -> {
+                Notification.show("Merged into existing title: ${outcome.mergedTitleName}",
+                    3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            }
+            is ScanDetailService.AssignResult.Assigned -> {
+                Notification.show("TMDB match set — re-enrichment queued",
+                    2000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            }
+            is ScanDetailService.AssignResult.NotFound -> {
+                Notification.show(outcome.message, 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            }
         }
-        if (existing != null) {
-            // Merge: move MediaItemTitle links from fresh → existing
-            val freshJoins = MediaItemTitle.findAll().filter { it.title_id == fresh.id }
-            for (join in freshJoins) {
-                val alreadyLinked = MediaItemTitle.findAll().any {
-                    it.title_id == existing.id && it.media_item_id == join.media_item_id
-                }
-                if (alreadyLinked) join.delete()
-                else { join.title_id = existing.id!!; join.save() }
-            }
-            // Reassign transcodes
-            Transcode.findAll().filter { it.title_id == fresh.id }.forEach {
-                it.title_id = existing.id!!; it.save()
-            }
-            // Delete cast, genres, enrichment attempts for the duplicate
-            CastMember.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
-            TitleGenre.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
-            EnrichmentAttempt.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
-            Episode.findAll().filter { it.title_id == fresh.id }.forEach { it.delete() }
-            DiscoveredFile.findAll().filter { it.matched_title_id == fresh.id }.forEach {
-                it.matched_title_id = existing.id!!; it.save()
-            }
-            fresh.delete()
-            SearchIndexService.onTitleChanged(existing.id!!)
-            Notification.show("Merged into existing title: ${existing.name}",
-                3000, Notification.Position.BOTTOM_START)
-                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
-            return
-        }
-
-        fresh.tmdb_id = result.tmdbId
-        fresh.media_type = newMediaType
-        fresh.enrichment_status = EnrichmentStatus.REASSIGNMENT_REQUESTED.name
-        fresh.save()
-        SearchIndexService.onTitleChanged(fresh.id!!)
-        Notification.show("TMDB match set — re-enrichment queued",
-            2000, Notification.Position.BOTTOM_START)
-            .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
     }
 
     private fun showSaved() {

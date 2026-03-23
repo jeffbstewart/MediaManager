@@ -33,7 +33,7 @@ object GrpcServer {
         )
 
         val builder = NettyServerBuilder.forPort(port)
-            .maxInboundMessageSize(64 * 1024)    // 64KB
+            .maxInboundMessageSize(16 * 1024 * 1024)  // 16MB (ownership photos)
             .maxInboundMetadataSize(8 * 1024)     // 8KB
 
         for (service in services) {

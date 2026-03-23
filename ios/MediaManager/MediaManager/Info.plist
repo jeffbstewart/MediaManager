@@ -38,6 +38,8 @@
 	<array>
 		<string>processing</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is needed to scan barcodes on disc packaging.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

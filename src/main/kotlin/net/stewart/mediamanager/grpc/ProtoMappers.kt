@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.grpc
 
 import com.google.protobuf.ByteString
+import net.stewart.mediamanager.service.BarcodeScanService
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.DeviceToken
 import net.stewart.mediamanager.entity.LiveTvChannel
@@ -438,3 +439,33 @@ fun net.stewart.mediamanager.service.BuddyProgressEvent.toProtoProgressEvent(): 
         progressPercent = this@toProtoProgressEvent.progressPercent
         this@toProtoProgressEvent.encoder?.let { encoder = it }
     }
+
+// ============================================================================
+// Barcode scan mappers
+// ============================================================================
+
+fun BarcodeScanService.ScanInfo.toProtoRecentScan(): RecentScan = recentScan {
+    scanId = this@toProtoRecentScan.scanId
+    upc = this@toProtoRecentScan.upc
+    status = this@toProtoRecentScan.status.toProtoScanStatus()
+    this@toProtoRecentScan.titleName?.let { titleName = it }
+    this@toProtoRecentScan.posterUrl?.let { posterUrl = it }
+    this@toProtoRecentScan.titleId?.let { titleId = it }
+    this@toProtoRecentScan.scannedAt?.let { scannedAt = it.toProtoTimestamp() }
+}
+
+fun BarcodeScanService.CompositeStatus.toProtoScanStatus(): ScanStatus = when (this) {
+    BarcodeScanService.CompositeStatus.SUBMITTED -> ScanStatus.SCAN_STATUS_SUBMITTED
+    BarcodeScanService.CompositeStatus.UPC_FOUND -> ScanStatus.SCAN_STATUS_UPC_FOUND
+    BarcodeScanService.CompositeStatus.UPC_NOT_FOUND -> ScanStatus.SCAN_STATUS_UPC_NOT_FOUND
+    BarcodeScanService.CompositeStatus.ENRICHING -> ScanStatus.SCAN_STATUS_ENRICHING
+    BarcodeScanService.CompositeStatus.ENRICHED -> ScanStatus.SCAN_STATUS_ENRICHED
+    BarcodeScanService.CompositeStatus.ENRICHMENT_FAILED -> ScanStatus.SCAN_STATUS_ENRICHMENT_FAILED
+    BarcodeScanService.CompositeStatus.NO_MATCH -> ScanStatus.SCAN_STATUS_NO_MATCH
+}
+
+fun net.stewart.mediamanager.entity.OwnershipPhoto.toProtoPhotoInfo(): OwnershipPhotoInfo = ownershipPhotoInfo {
+    photoId = this@toProtoPhotoInfo.id!!
+    url = "/ownership-photos/${this@toProtoPhotoInfo.id}"
+    this@toProtoPhotoInfo.captured_at?.let { capturedAt = it.toProtoTimestamp() }
+}

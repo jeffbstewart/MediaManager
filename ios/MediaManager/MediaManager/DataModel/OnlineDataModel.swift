@@ -227,6 +227,10 @@ final class OnlineDataModel: DataModel {
         return TmdbSearchResponse(proto: response)
     }
 
+    func searchTmdb(query: String, type: MMMediaType) async throws -> MMTmdbSearchResponse {
+        try await grpcClient.searchTmdb(query: query, type: type)
+    }
+
     // MARK: - ProfileDataModel
 
     func profile() async throws -> ProfileResponse {
@@ -291,9 +295,41 @@ final class OnlineDataModel: DataModel {
         return TranscodeStatusResponse(proto: response)
     }
 
+    func monitorTranscodeStatus(onUpdate: @Sendable @escaping (MMTranscodeStatusUpdate) async -> Void) async throws {
+        try await grpcClient.adminMonitorTranscodeStatus(onUpdate: onUpdate)
+    }
+
     func buddyStatus() async throws -> BuddyStatusResponse {
         let response = try await grpcClient.adminBuddyStatus()
         return BuddyStatusResponse(proto: response)
+    }
+
+    func submitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse {
+        try await grpcClient.adminSubmitBarcode(upc: upc)
+    }
+
+    func monitorScanProgress(onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void) async throws {
+        try await grpcClient.adminMonitorScanProgress(onUpdate: onUpdate)
+    }
+
+    func getScanDetail(scanId: Int64) async throws -> MMScanDetailResponse {
+        try await grpcClient.adminGetScanDetail(scanId: scanId)
+    }
+
+    func assignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse {
+        try await grpcClient.adminAssignTmdb(titleId: titleId, tmdbId: tmdbId, mediaType: mediaType)
+    }
+
+    func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws {
+        try await grpcClient.adminUpdatePurchaseInfo(scanId: scanId, place: place, date: date, price: price)
+    }
+
+    func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse {
+        try await grpcClient.adminUploadOwnershipPhoto(scanId: scanId, photoData: photoData, contentType: contentType)
+    }
+
+    func deleteOwnershipPhoto(photoId: String) async throws {
+        try await grpcClient.adminDeleteOwnershipPhoto(photoId: photoId)
     }
 
     func scanNas() async throws {

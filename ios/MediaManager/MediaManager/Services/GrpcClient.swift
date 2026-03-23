@@ -415,8 +415,89 @@ actor GrpcClient {
         try await adminService.getTranscodeStatus(MMEmpty(), metadata: authMetadata())
     }
 
+    /// Server-streaming: initial snapshot + live delta updates.
+    /// The closure receives each `MMTranscodeStatusUpdate` as it arrives.
+    func adminMonitorTranscodeStatus(
+        onUpdate: @Sendable @escaping (MMTranscodeStatusUpdate) async -> Void
+    ) async throws {
+        let metadata = authMetadata()
+        try await adminService.monitorTranscodeStatus(
+            MMEmpty(),
+            metadata: metadata
+        ) { response in
+            for try await message in response.messages {
+                await onUpdate(message)
+            }
+        }
+    }
+
     func adminBuddyStatus() async throws -> MMBuddyStatusResponse {
         try await adminService.getBuddyStatus(MMEmpty(), metadata: authMetadata())
+    }
+
+    // MARK: - Barcode Scanning RPCs
+
+    func adminSubmitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse {
+        var request = MMSubmitBarcodeRequest()
+        request.upc = upc
+        return try await adminService.submitBarcode(request, metadata: authMetadata())
+    }
+
+    func adminListRecentScans() async throws -> MMRecentScansResponse {
+        try await adminService.listRecentScans(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminMonitorScanProgress(
+        onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void
+    ) async throws {
+        let metadata = authMetadata()
+        try await adminService.monitorScanProgress(
+            MMEmpty(),
+            metadata: metadata
+        ) { response in
+            for try await message in response.messages {
+                await onUpdate(message)
+            }
+        }
+    }
+
+    // MARK: - Scan Detail RPCs
+
+    func adminGetScanDetail(scanId: Int64) async throws -> MMScanDetailResponse {
+        var request = MMScanIdRequest()
+        request.scanID = scanId
+        return try await adminService.getScanDetail(request, metadata: authMetadata())
+    }
+
+    func adminAssignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse {
+        var request = MMAssignTmdbRequest()
+        request.titleID = titleId
+        request.tmdbID = tmdbId
+        request.mediaType = mediaType
+        return try await adminService.assignTmdb(request, metadata: authMetadata())
+    }
+
+    func adminUpdatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws {
+        var request = MMUpdatePurchaseInfoRequest()
+        request.scanID = scanId
+        if let place { request.purchasePlace = place }
+        if let date { request.purchaseDate = date }
+        if let price { request.purchasePrice = price }
+        _ = try await adminService.updatePurchaseInfo(request, metadata: authMetadata())
+    }
+
+    func adminUploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse {
+        var request = MMUploadOwnershipPhotoRequest()
+        request.scanID = scanId
+        request.photoData = photoData
+        request.contentType = contentType
+        return try await adminService.uploadOwnershipPhoto(request, metadata: authMetadata())
+    }
+
+    func adminDeleteOwnershipPhoto(photoId: String) async throws {
+        var request = MMDeleteOwnershipPhotoRequest()
+        request.photoID = photoId
+        _ = try await adminService.deleteOwnershipPhoto(request, metadata: authMetadata())
     }
 
     func adminScanNas() async throws {

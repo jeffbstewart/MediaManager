@@ -507,36 +507,20 @@ class AddItemView : KComposite(), AfterNavigationObserver {
             return
         }
 
-        if (upc.length < 8 || upc.length > 14) {
-            showError("Invalid UPC length: must be 8\u201314 digits (got ${upc.length})")
-            upcField.clear()
-            upcField.focus()
-            return
-        }
-
         try {
-            val existingScan = BarcodeScan.findAll().firstOrNull { it.upc == upc }
-            if (existingScan != null) {
-                val titleName = findTitleForScan(existingScan)
-                if (titleName != null) {
-                    Notification.show("Already scanned: $upc ($titleName)", 3000, Notification.Position.BOTTOM_START)
-                    upcField.clear()
-                    upcField.focus()
-                    return
+            when (val result = BarcodeScanService.submit(upc)) {
+                is BarcodeScanService.SubmitResult.Created -> {
+                    showSuccess("Scanned: ${result.upc}")
+                    refreshItemsGrid()
+                    refreshQuota()
                 }
-                // Orphaned scan — media item was unlinked. Delete stale record and allow re-scan.
-                existingScan.delete()
+                is BarcodeScanService.SubmitResult.Duplicate -> {
+                    Notification.show("Already scanned: ${result.upc} (${result.titleName})", 3000, Notification.Position.BOTTOM_START)
+                }
+                is BarcodeScanService.SubmitResult.Invalid -> {
+                    showError(result.reason)
+                }
             }
-
-            BarcodeScan(
-                upc = upc,
-                scanned_at = LocalDateTime.now(),
-                lookup_status = LookupStatus.NOT_LOOKED_UP.name
-            ).save()
-
-            showSuccess("Scanned: $upc")
-            refreshItemsGrid()
-            refreshQuota()
         } catch (e: Exception) {
             showError("Database error: ${e.message}")
         }
@@ -550,11 +534,6 @@ class AddItemView : KComposite(), AfterNavigationObserver {
         quotaLabel.text = "UPC Lookups today: ${status.used} / ${status.limit} (${status.remaining} remaining)"
     }
 
-    private fun findTitleForScan(scan: BarcodeScan): String? {
-        val mediaItemId = scan.media_item_id ?: return null
-        val join = MediaItemTitle.findAll().firstOrNull { it.media_item_id == mediaItemId } ?: return null
-        return Title.findById(join.title_id)?.name
-    }
 
     // ==================== Zone 1: Search Tab ====================
 

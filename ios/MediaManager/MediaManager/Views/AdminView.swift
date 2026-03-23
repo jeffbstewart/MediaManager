@@ -2,12 +2,14 @@ import SwiftUI
 
 struct AdminView: View {
     @Environment(OnlineDataModel.self) private var dataModel
-    @State private var transcodeStatus: TranscodeStatusResponse?
+    @State private var pendingWork: PendingWork?
+    @State private var activeLeases: [ActiveLeaseInfo] = []
     @State private var buddyStatus: BuddyStatusResponse?
     @State private var loading = true
     @State private var scanning = false
     @State private var clearing = false
     @State private var statusMessage: String?
+    @State private var monitorTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -16,7 +18,7 @@ struct AdminView: View {
             } else {
                 List {
                     // Pending work
-                    if let pending = transcodeStatus?.pending, pending.total > 0 {
+                    if let pending = pendingWork, pending.total > 0 {
                         Section("Pending Work") {
                             if pending.transcodes > 0 {
                                 Label("\(pending.transcodes) transcodes", systemImage: "film")
@@ -42,9 +44,9 @@ struct AdminView: View {
                     }
 
                     // Active work
-                    if let leases = transcodeStatus?.activeLeases, !leases.isEmpty {
+                    if !activeLeases.isEmpty {
                         Section("Active Transcodes") {
-                            ForEach(leases) { lease in
+                            ForEach(activeLeases) { lease in
                                 LeaseRow(
                                     path: lease.relativePath,
                                     type: lease.leaseType,
@@ -163,20 +165,95 @@ struct AdminView: View {
         }
         .navigationTitle("Admin")
         .task {
-            await loadStatus()
+            // Fetch buddy status (one-shot) while starting the monitor stream
+            async let b = try? dataModel.buddyStatus()
+            startMonitor()
+            buddyStatus = await b
+        }
+        .onDisappear {
+            monitorTask?.cancel()
+            monitorTask = nil
         }
         .refreshable {
-            await loadStatus()
+            // Cancel existing monitor and restart
+            monitorTask?.cancel()
+            monitorTask = nil
+            async let b = try? dataModel.buddyStatus()
+            startMonitor()
+            buddyStatus = await b
         }
     }
 
-    private func loadStatus() async {
-        loading = transcodeStatus == nil
-        async let t = try? dataModel.transcodeStatus()
-        async let b = try? dataModel.buddyStatus()
-        transcodeStatus = await t
-        buddyStatus = await b
+    private func startMonitor() {
+        monitorTask = Task {
+            do {
+                try await dataModel.monitorTranscodeStatus { update in
+                    await MainActor.run {
+                        handleUpdate(update)
+                    }
+                }
+            } catch is CancellationError {
+                // Normal — view disappeared or refresh triggered
+            } catch {
+                // Stream ended or failed — fall back to one-shot fetch
+                if !Task.isCancelled {
+                    let status = try? await dataModel.transcodeStatus()
+                    await MainActor.run {
+                        if let status {
+                            applySnapshot(status)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleUpdate(_ update: MMTranscodeStatusUpdate) {
+        switch update.update {
+        case .snapshot(let proto):
+            let status = TranscodeStatusResponse(proto: proto)
+            applySnapshot(status)
+        case .event(let event):
+            applyEvent(event)
+        case nil:
+            break
+        }
+    }
+
+    private func applySnapshot(_ status: TranscodeStatusResponse) {
+        pendingWork = status.pending
+        activeLeases = status.activeLeases.map { ActiveLeaseInfo(from: $0) }
         loading = false
+    }
+
+    private func applyEvent(_ event: MMTranscodeProgressEvent) {
+        let leaseId = event.leaseID
+        let statusStr = event.status.displayString
+
+        switch event.status {
+        case .claimed:
+            // New lease — add if not already present
+            if !activeLeases.contains(where: { $0.id == leaseId }) {
+                activeLeases.append(ActiveLeaseInfo(from: event))
+            }
+        case .inProgress:
+            // Update progress on existing lease
+            if let idx = activeLeases.firstIndex(where: { $0.id == leaseId }) {
+                activeLeases[idx].progressPercent = Int(event.progressPercent)
+                if event.hasEncoder {
+                    activeLeases[idx].encoder = event.encoder
+                }
+                activeLeases[idx].status = statusStr
+            } else {
+                // Lease appeared mid-stream (e.g. monitor started after claim)
+                activeLeases.append(ActiveLeaseInfo(from: event))
+            }
+        case .completed, .failed, .expired:
+            // Remove from active — a snapshot follows immediately with updated pending counts
+            activeLeases.removeAll { $0.id == leaseId }
+        default:
+            break
+        }
     }
 
     private func scanNas() async {
@@ -199,7 +276,9 @@ struct AdminView: View {
         statusMessage = "Failures cleared"
         clearing = false
         dismissStatusAfterDelay()
-        await loadStatus()
+        // Restart monitor to get fresh snapshot
+        monitorTask?.cancel()
+        startMonitor()
     }
 
     private func dismissStatusAfterDelay() {
@@ -211,15 +290,49 @@ struct AdminView: View {
 
     private func typeLabel(_ type: String) -> String {
         switch type {
-        case "BROWSER_TRANSCODE": "Browser"
+        case "TRANSCODE": "Browser"
         case "MOBILE_TRANSCODE": "Mobile"
-        case "THUMBNAIL": "Thumbs"
-        case "SUBTITLE": "Subs"
-        case "CHAPTER": "Chapters"
+        case "THUMBNAILS": "Thumbs"
+        case "SUBTITLES": "Subs"
+        case "CHAPTERS": "Chapters"
         default: type
         }
     }
 }
+
+// MARK: - Mutable lease state for live updates
+
+struct ActiveLeaseInfo: Identifiable {
+    var id: Int64
+    var buddyName: String?
+    var relativePath: String?
+    var leaseType: String?
+    var status: String?
+    var progressPercent: Int
+    var encoder: String?
+
+    init(from lease: TranscodeLease) {
+        self.id = lease.leaseId.protoValue
+        self.buddyName = lease.buddyName
+        self.relativePath = lease.relativePath
+        self.leaseType = lease.leaseType
+        self.status = lease.status
+        self.progressPercent = lease.progressPercent ?? 0
+        self.encoder = lease.encoder
+    }
+
+    init(from event: MMTranscodeProgressEvent) {
+        self.id = event.leaseID
+        self.buddyName = event.buddyName.isEmpty ? nil : event.buddyName
+        self.relativePath = event.relativePath.isEmpty ? nil : event.relativePath
+        self.leaseType = event.leaseType.displayString
+        self.status = event.status.displayString
+        self.progressPercent = Int(event.progressPercent)
+        self.encoder = event.hasEncoder ? event.encoder : nil
+    }
+}
+
+// MARK: - Lease Row
 
 struct LeaseRow: View {
     let path: String?
@@ -262,11 +375,11 @@ struct LeaseRow: View {
 
     private func typeLabel(_ type: String) -> String {
         switch type {
-        case "BROWSER_TRANSCODE": "Browser"
+        case "TRANSCODE": "Browser"
         case "MOBILE_TRANSCODE": "Mobile"
-        case "THUMBNAIL": "Thumbs"
-        case "SUBTITLE": "Subs"
-        case "CHAPTER": "Chapters"
+        case "THUMBNAILS": "Thumbs"
+        case "SUBTITLES": "Subs"
+        case "CHAPTERS": "Chapters"
         default: type
         }
     }
