@@ -332,6 +332,26 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.adminDeleteOwnershipPhoto(photoId: photoId)
     }
 
+    func adminListCameras() async throws -> MMAdminCameraListResponse {
+        try await grpcClient.adminListCameras()
+    }
+
+    func adminCreateCamera(name: String, rtspUrl: String, snapshotUrl: String, streamName: String?, enabled: Bool) async throws -> MMAdminCamera {
+        try await grpcClient.adminCreateCamera(name: name, rtspUrl: rtspUrl, snapshotUrl: snapshotUrl, streamName: streamName, enabled: enabled)
+    }
+
+    func adminUpdateCamera(id: Int64, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Bool) async throws -> MMAdminCamera {
+        try await grpcClient.adminUpdateCamera(id: id, name: name, rtspUrl: rtspUrl, snapshotUrl: snapshotUrl, streamName: streamName, enabled: enabled)
+    }
+
+    func adminDeleteCamera(id: Int64) async throws {
+        try await grpcClient.adminDeleteCamera(id: id)
+    }
+
+    func adminReorderCameras(ids: [Int64]) async throws {
+        try await grpcClient.adminReorderCameras(ids: ids)
+    }
+
     func scanNas() async throws {
         try await grpcClient.adminScanNas()
     }

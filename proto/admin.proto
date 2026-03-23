@@ -77,6 +77,13 @@ service AdminService {
   // --- Settings ---
   rpc GetSettings(Empty) returns (SettingsResponse);
   rpc UpdateSetting(UpdateSettingRequest) returns (Empty);
+
+  // --- Camera Admin ---
+  rpc ListAdminCameras(Empty) returns (AdminCameraListResponse);
+  rpc CreateCamera(CreateCameraRequest) returns (AdminCamera);
+  rpc UpdateCamera(UpdateCameraRequest) returns (AdminCamera);
+  rpc DeleteCamera(CameraIdRequest) returns (Empty);
+  rpc ReorderCameras(ReorderCamerasRequest) returns (Empty);
 }
 
 // --- ID Requests ---
@@ -574,4 +581,45 @@ message SettingsResponse {
 message UpdateSettingRequest {
   SettingKey key = 1;
   string value = 2;
+}
+
+// --- Camera Admin ---
+
+message CameraIdRequest {
+  int64 camera_id = 1;
+}
+
+message AdminCamera {
+  int64 id = 1;
+  string name = 2;
+  string rtsp_url = 3;         // credentials redacted as ***:***
+  string snapshot_url = 4;     // credentials redacted
+  string stream_name = 5;     // go2rtc identifier
+  bool enabled = 6;
+  int32 display_order = 7;
+}
+
+message AdminCameraListResponse {
+  repeated AdminCamera cameras = 1;
+}
+
+message CreateCameraRequest {
+  string name = 1;
+  string rtsp_url = 2;        // full URL with credentials
+  string snapshot_url = 3;
+  optional string stream_name = 4;
+  bool enabled = 5;
+}
+
+message UpdateCameraRequest {
+  int64 camera_id = 1;
+  string name = 2;
+  string rtsp_url = 3;        // redacted = preserve, new = replace
+  string snapshot_url = 4;
+  string stream_name = 5;
+  bool enabled = 6;
+}
+
+message ReorderCamerasRequest {
+  repeated int64 camera_ids = 1;
 }

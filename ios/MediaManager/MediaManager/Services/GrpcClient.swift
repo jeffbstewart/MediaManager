@@ -500,6 +500,45 @@ actor GrpcClient {
         _ = try await adminService.deleteOwnershipPhoto(request, metadata: authMetadata())
     }
 
+    // MARK: - Camera Admin RPCs
+
+    func adminListCameras() async throws -> MMAdminCameraListResponse {
+        try await adminService.listAdminCameras(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminCreateCamera(name: String, rtspUrl: String, snapshotUrl: String, streamName: String?, enabled: Bool) async throws -> MMAdminCamera {
+        var request = MMCreateCameraRequest()
+        request.name = name
+        request.rtspURL = rtspUrl
+        request.snapshotURL = snapshotUrl
+        if let streamName { request.streamName = streamName }
+        request.enabled = enabled
+        return try await adminService.createCamera(request, metadata: authMetadata())
+    }
+
+    func adminUpdateCamera(id: Int64, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Bool) async throws -> MMAdminCamera {
+        var request = MMUpdateCameraRequest()
+        request.cameraID = id
+        request.name = name
+        request.rtspURL = rtspUrl
+        request.snapshotURL = snapshotUrl
+        request.streamName = streamName
+        request.enabled = enabled
+        return try await adminService.updateCamera(request, metadata: authMetadata())
+    }
+
+    func adminDeleteCamera(id: Int64) async throws {
+        var request = MMCameraIdRequest()
+        request.cameraID = id
+        _ = try await adminService.deleteCamera(request, metadata: authMetadata())
+    }
+
+    func adminReorderCameras(ids: [Int64]) async throws {
+        var request = MMReorderCamerasRequest()
+        request.cameraIds = ids
+        _ = try await adminService.reorderCameras(request, metadata: authMetadata())
+    }
+
     func adminScanNas() async throws {
         _ = try await adminService.scanNas(MMEmpty(), metadata: authMetadata())
     }

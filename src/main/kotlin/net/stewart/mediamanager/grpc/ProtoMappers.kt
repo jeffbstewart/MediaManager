@@ -464,6 +464,20 @@ fun BarcodeScanService.CompositeStatus.toProtoScanStatus(): ScanStatus = when (t
     BarcodeScanService.CompositeStatus.NO_MATCH -> ScanStatus.SCAN_STATUS_NO_MATCH
 }
 
+// ============================================================================
+// Camera admin mappers
+// ============================================================================
+
+fun net.stewart.mediamanager.entity.Camera.toAdminProto(): AdminCamera = adminCamera {
+    id = this@toAdminProto.id!!
+    name = this@toAdminProto.name
+    rtspUrl = net.stewart.mediamanager.service.UriCredentialRedactor.redact(this@toAdminProto.rtsp_url)
+    snapshotUrl = net.stewart.mediamanager.service.UriCredentialRedactor.redact(this@toAdminProto.snapshot_url)
+    streamName = this@toAdminProto.go2rtc_name
+    enabled = this@toAdminProto.enabled
+    displayOrder = this@toAdminProto.display_order
+}
+
 fun net.stewart.mediamanager.entity.OwnershipPhoto.toProtoPhotoInfo(): OwnershipPhotoInfo = ownershipPhotoInfo {
     photoId = this@toProtoPhotoInfo.id!!
     url = "/ownership-photos/${this@toProtoPhotoInfo.id}"

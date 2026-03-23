@@ -27,6 +27,8 @@ import net.stewart.mediamanager.linkDiscoveredFileToTitle
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.BarcodeScanService
 import net.stewart.mediamanager.service.Broadcaster
+import net.stewart.mediamanager.service.CameraAdminService
+import net.stewart.mediamanager.service.UriCredentialRedactor
 import net.stewart.mediamanager.entity.OwnershipPhoto
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.ScanDetailService
@@ -1016,6 +1018,51 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             ).save()
         }
 
+        return empty {}
+    }
+
+    // ========================================================================
+    // Camera Admin
+    // ========================================================================
+
+    override suspend fun listAdminCameras(request: Empty): AdminCameraListResponse {
+        return adminCameraListResponse {
+            cameras.addAll(CameraAdminService.listAll().map { it.toAdminProto() })
+        }
+    }
+
+    override suspend fun createCamera(request: CreateCameraRequest): AdminCamera {
+        val streamName = if (request.hasStreamName()) request.streamName
+            else CameraAdminService.generateStreamName(request.name)
+        val camera = CameraAdminService.create(
+            name = request.name,
+            rtspUrl = request.rtspUrl,
+            snapshotUrl = request.snapshotUrl,
+            streamName = streamName,
+            enabled = request.enabled
+        )
+        return camera.toAdminProto()
+    }
+
+    override suspend fun updateCamera(request: UpdateCameraRequest): AdminCamera {
+        val camera = CameraAdminService.update(
+            id = request.cameraId,
+            name = request.name,
+            rtspUrl = request.rtspUrl,
+            snapshotUrl = request.snapshotUrl,
+            streamName = request.streamName,
+            enabled = request.enabled
+        )
+        return camera.toAdminProto()
+    }
+
+    override suspend fun deleteCamera(request: CameraIdRequest): Empty {
+        CameraAdminService.delete(request.cameraId)
+        return empty {}
+    }
+
+    override suspend fun reorderCameras(request: ReorderCamerasRequest): Empty {
+        CameraAdminService.reorder(request.cameraIdsList)
         return empty {}
     }
 }

@@ -176,6 +176,11 @@ final class OfflineDataModel: DataModel {
     func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws { throw DataModelError.offline }
     func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse { throw DataModelError.offline }
     func deleteOwnershipPhoto(photoId: String) async throws { throw DataModelError.offline }
+    func adminListCameras() async throws -> MMAdminCameraListResponse { throw DataModelError.offline }
+    func adminCreateCamera(name: String, rtspUrl: String, snapshotUrl: String, streamName: String?, enabled: Bool) async throws -> MMAdminCamera { throw DataModelError.offline }
+    func adminUpdateCamera(id: Int64, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Bool) async throws -> MMAdminCamera { throw DataModelError.offline }
+    func adminDeleteCamera(id: Int64) async throws { throw DataModelError.offline }
+    func adminReorderCameras(ids: [Int64]) async throws { throw DataModelError.offline }
     func scanNas() async throws { throw DataModelError.offline }
     func clearFailures() async throws { throw DataModelError.offline }
     func adminSettings() async throws -> AdminSettingsResponse { throw DataModelError.offline }

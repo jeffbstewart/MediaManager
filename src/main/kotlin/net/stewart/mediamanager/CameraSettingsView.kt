@@ -21,6 +21,7 @@ import com.vaadin.flow.router.PageTitle
 import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Camera
+import net.stewart.mediamanager.service.CameraAdminService
 import net.stewart.mediamanager.service.Go2rtcAgent
 import net.stewart.mediamanager.service.UriCredentialRedactor
 import java.io.File
@@ -132,7 +133,7 @@ class CameraSettingsView : KComposite() {
     }
 
     private fun refreshGrid() {
-        cameraGrid.setItems(Camera.findAll().sortedBy { it.display_order })
+        cameraGrid.setItems(CameraAdminService.listAll())
     }
 
     private fun createActionButtons(camera: Camera): HorizontalLayout {
@@ -189,8 +190,8 @@ class CameraSettingsView : KComposite() {
 
         // Auto-generate stream name from camera name
         nameField.addValueChangeListener { event ->
-            if (streamNameField.value.isBlank() || streamNameField.value == generateStreamName(event.oldValue)) {
-                streamNameField.value = generateStreamName(event.value)
+            if (streamNameField.value.isBlank() || streamNameField.value == CameraAdminService.generateStreamName(event.oldValue)) {
+                streamNameField.value = CameraAdminService.generateStreamName(event.value)
             }
         }
 
@@ -202,37 +203,22 @@ class CameraSettingsView : KComposite() {
         dialog.footer.add(
             Button("Cancel") { dialog.close() },
             Button("Save") {
-                if (nameField.value.isBlank()) {
-                    Notification.show("Name is required", 3000, Notification.Position.BOTTOM_START)
+                try {
+                    val camera = CameraAdminService.create(
+                        name = nameField.value,
+                        rtspUrl = rtspUrlField.value,
+                        snapshotUrl = snapshotUrlField.value,
+                        streamName = streamNameField.value.ifBlank { CameraAdminService.generateStreamName(nameField.value) },
+                        enabled = enabledCheck.value
+                    )
+                    refreshGrid()
+                    dialog.close()
+                    Notification.show("Camera '${camera.name}' added", 3000, Notification.Position.BOTTOM_START)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                } catch (e: IllegalArgumentException) {
+                    Notification.show(e.message ?: "Validation error", 3000, Notification.Position.BOTTOM_START)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
                 }
-                if (rtspUrlField.value.isBlank()) {
-                    Notification.show("RTSP URL is required", 3000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
-                }
-                if (!validateUrlScheme(rtspUrlField.value)) {
-                    Notification.show("RTSP URL must start with rtsp://", 3000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
-                }
-
-                val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
-                val camera = Camera(
-                    name = nameField.value.trim(),
-                    rtsp_url = rtspUrlField.value.trim(),
-                    snapshot_url = snapshotUrlField.value.trim(),
-                    go2rtc_name = streamNameField.value.trim().ifBlank { generateStreamName(nameField.value) },
-                    enabled = enabledCheck.value,
-                    display_order = maxOrder + 1
-                )
-                camera.save()
-                Go2rtcAgent.instance?.reconfigure()
-                refreshGrid()
-                dialog.close()
-                Notification.show("Camera '${camera.name}' added", 3000, Notification.Position.BOTTOM_START)
-                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY) }
         )
 
@@ -247,17 +233,15 @@ class CameraSettingsView : KComposite() {
             initialStreamName = camera.go2rtc_name,
             initialEnabled = camera.enabled,
         ) { name, rtspUrl, snapshotUrl, streamName, enabled ->
-            val fresh = Camera.findById(camera.id!!) ?: return@showCameraUrlDialog
-            fresh.name = name
-            fresh.rtsp_url = rtspUrl
-            fresh.snapshot_url = snapshotUrl
-            fresh.go2rtc_name = streamName
-            fresh.enabled = enabled
-            fresh.save()
-            Go2rtcAgent.instance?.reconfigure()
-            refreshGrid()
-            Notification.show("Camera '${fresh.name}' updated", 3000, Notification.Position.BOTTOM_START)
-                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            try {
+                val updated = CameraAdminService.update(camera.id!!, name, rtspUrl, snapshotUrl, streamName, enabled)
+                refreshGrid()
+                Notification.show("Camera '${updated.name}' updated", 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            } catch (e: IllegalArgumentException) {
+                Notification.show(e.message ?: "Validation error", 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            }
         }
     }
 
@@ -266,23 +250,19 @@ class CameraSettingsView : KComposite() {
             title = "Duplicate Camera: ${camera.name}",
             sourceCamera = camera,
             initialName = "${camera.name} (copy)",
-            initialStreamName = generateStreamName("${camera.name} (copy)"),
+            initialStreamName = CameraAdminService.generateStreamName("${camera.name} (copy)"),
             initialEnabled = camera.enabled,
         ) { name, rtspUrl, snapshotUrl, streamName, enabled ->
-            val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
-            val newCamera = Camera(
-                name = name,
-                rtsp_url = rtspUrl,
-                snapshot_url = snapshotUrl,
-                go2rtc_name = streamName.ifBlank { generateStreamName(name) },
-                enabled = enabled,
-                display_order = maxOrder + 1
-            )
-            newCamera.save()
-            Go2rtcAgent.instance?.reconfigure()
-            refreshGrid()
-            Notification.show("Camera '${newCamera.name}' created", 3000, Notification.Position.BOTTOM_START)
-                .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            try {
+                val newCamera = CameraAdminService.create(name, rtspUrl, snapshotUrl,
+                    streamName.ifBlank { CameraAdminService.generateStreamName(name) }, enabled)
+                refreshGrid()
+                Notification.show("Camera '${newCamera.name}' created", 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+            } catch (e: IllegalArgumentException) {
+                Notification.show(e.message ?: "Validation error", 3000, Notification.Position.BOTTOM_START)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR)
+            }
         }
     }
 
@@ -326,8 +306,8 @@ class CameraSettingsView : KComposite() {
         val enabledCheck = Checkbox("Enabled").apply { value = initialEnabled }
 
         nameField.addValueChangeListener { event ->
-            if (streamNameField.value == generateStreamName(event.oldValue)) {
-                streamNameField.value = generateStreamName(event.value)
+            if (streamNameField.value == CameraAdminService.generateStreamName(event.oldValue)) {
+                streamNameField.value = CameraAdminService.generateStreamName(event.value)
             }
         }
 
@@ -344,44 +324,19 @@ class CameraSettingsView : KComposite() {
                         .addThemeVariants(NotificationVariant.LUMO_ERROR)
                     return@Button
                 }
-                val editedRtsp = rtspUrlField.value.trim()
-                if (editedRtsp.isBlank()) {
-                    Notification.show("RTSP URL is required", 3000, Notification.Position.BOTTOM_START)
+                try {
+                    onSave(
+                        nameField.value.trim(),
+                        rtspUrlField.value.trim(),
+                        snapshotUrlField.value.trim(),
+                        streamNameField.value.trim(),
+                        enabledCheck.value
+                    )
+                    dialog.close()
+                } catch (e: IllegalArgumentException) {
+                    Notification.show(e.message ?: "Validation error", 5000, Notification.Position.BOTTOM_START)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
                 }
-                if (!validateUrlScheme(editedRtsp)) {
-                    Notification.show("RTSP URL must start with rtsp://", 3000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
-                }
-
-                // Restore credentials from source if ***:*** placeholder present and host matches
-                val resolvedRtsp = UriCredentialRedactor.restoreCredentials(editedRtsp, sourceCamera.rtsp_url)
-                if (resolvedRtsp.contains("***:***")) {
-                    Notification.show("Cannot restore credentials — host/port changed. Enter full URL with credentials.", 5000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
-                }
-
-                val editedSnapshot = snapshotUrlField.value.trim()
-                val resolvedSnapshot = if (editedSnapshot.isNotBlank()) {
-                    UriCredentialRedactor.restoreCredentials(editedSnapshot, sourceCamera.snapshot_url)
-                } else ""
-                if (resolvedSnapshot.contains("***:***")) {
-                    Notification.show("Cannot restore snapshot credentials — host/port changed. Enter full URL with credentials.", 5000, Notification.Position.BOTTOM_START)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR)
-                    return@Button
-                }
-
-                onSave(
-                    nameField.value.trim(),
-                    resolvedRtsp,
-                    resolvedSnapshot,
-                    streamNameField.value.trim(),
-                    enabledCheck.value
-                )
-                dialog.close()
             }.apply { addThemeVariants(ButtonVariant.LUMO_PRIMARY) }
         )
 
@@ -408,19 +363,13 @@ class CameraSettingsView : KComposite() {
     }
 
     private fun moveCamera(camera: Camera, direction: Int) {
-        val cameras = Camera.findAll().sortedBy { it.display_order }.toMutableList()
+        val cameras = CameraAdminService.listAll().toMutableList()
         val index = cameras.indexOfFirst { it.id == camera.id }
         if (index < 0) return
         val newIndex = index + direction
         if (newIndex < 0 || newIndex >= cameras.size) return
-
-        // Swap display orders
-        val other = cameras[newIndex]
-        val tempOrder = camera.display_order
-        camera.display_order = other.display_order
-        other.display_order = tempOrder
-        camera.save()
-        other.save()
+        cameras.add(newIndex, cameras.removeAt(index))
+        CameraAdminService.reorder(cameras.mapNotNull { it.id })
         refreshGrid()
     }
 
@@ -431,8 +380,7 @@ class CameraSettingsView : KComposite() {
         dialog.footer.add(
             Button("Cancel") { dialog.close() },
             Button("Delete") {
-                camera.delete()
-                Go2rtcAgent.instance?.reconfigure()
+                CameraAdminService.delete(camera.id!!)
                 refreshGrid()
                 dialog.close()
                 Notification.show("Camera '${camera.name}' deleted", 3000, Notification.Position.BOTTOM_START)
@@ -442,12 +390,8 @@ class CameraSettingsView : KComposite() {
         dialog.open()
     }
 
-    private fun generateStreamName(name: String): String {
+    private fun CameraAdminService.generateStreamName(name: String): String {
         return name.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-    }
-
-    private fun validateUrlScheme(url: String): Boolean {
-        return url.startsWith("rtsp://", ignoreCase = true)
     }
 
     private fun saveConfig(key: String, value: String, description: String) {

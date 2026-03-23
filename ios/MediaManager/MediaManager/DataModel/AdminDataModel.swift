@@ -34,6 +34,11 @@ import Foundation
     func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws
     func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse
     func deleteOwnershipPhoto(photoId: String) async throws
+    func adminListCameras() async throws -> MMAdminCameraListResponse
+    func adminCreateCamera(name: String, rtspUrl: String, snapshotUrl: String, streamName: String?, enabled: Bool) async throws -> MMAdminCamera
+    func adminUpdateCamera(id: Int64, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Bool) async throws -> MMAdminCamera
+    func adminDeleteCamera(id: Int64) async throws
+    func adminReorderCameras(ids: [Int64]) async throws
     func unmatchedFiles() async throws -> AdminUnmatchedResponse
     func acceptUnmatched(id: UnmatchedFileID) async throws
     func ignoreUnmatched(id: UnmatchedFileID) async throws
