@@ -236,12 +236,12 @@ docker inspect --format='{{.Architecture}}' 172.16.4.12:15000/mediamanager:lates
 
 ### iOS app development
 
-The iOS app is a separate Xcode project that consumes the `/api/v1/` REST API. During development, point the iOS app at:
+The iOS app is a separate Xcode project that uses gRPC for app data and HTTP for binary content such as images, video streaming, and downloads. During development, point the iOS app at:
 
-- **Local server**: `http://localhost:8080` (Mac running the server via Gradle)
-- **NAS server**: `https://your-domain:8080` (production, requires HTTPS)
+- **Local server**: `http://localhost` for HTTP and `http://localhost:9090` for gRPC when running locally
+- **NAS server**: `https://your-domain` for HTTP and the matching gRPC endpoint exposed through your reverse proxy
 
-The API uses JWT Bearer authentication. See `docs/IOS_PLAN.md` for the full endpoint reference.
+Proto definitions live in `proto/`, and the Xcode project generates Swift types and service stubs during the build.
 
 ---
 

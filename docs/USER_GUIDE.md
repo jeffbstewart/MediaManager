@@ -264,7 +264,7 @@ Media Manager includes a custom Roku channel for TV playback. See the [Roku Setu
 
 ## iOS App
 
-Media Manager has a native iOS app for iPhone and iPad. The app connects to your server over HTTPS and provides the same browsing, searching, and playback experience as the browser, plus offline downloads for watching without a network connection.
+Media Manager has a native iOS app for iPhone and iPad. The app connects to your server's gRPC and HTTP endpoints and provides the same browsing, searching, and playback experience as the browser, plus offline downloads for watching without a network connection.
 
 ### Getting Connected
 

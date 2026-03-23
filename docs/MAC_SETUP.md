@@ -126,7 +126,7 @@ Or build from the command line:
 xcodebuild -project ios/MediaManager/MediaManager.xcodeproj -scheme MediaManager -sdk iphonesimulator build
 ```
 
-The app communicates with the server via the `/api/v1/` REST API. Point it at your NAS during development — there's no need to run the server locally.
+The app communicates with the server via gRPC for app data and via HTTP for binary content such as images, video streaming, and downloads. Point it at your NAS during development — there's no need to run the server locally.
 
 ### Code Signing
 
