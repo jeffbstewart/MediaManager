@@ -33,7 +33,7 @@ lifecycle/presubmit-personal-patterns.txt
 xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+*.xcodeproj/project.xcworkspace/
 DerivedData/
 *.ipa
 
