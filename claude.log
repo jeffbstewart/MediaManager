@@ -3886,3 +3886,26 @@ Documentation:
 - iOS: CatalogDataModel protocol + implementations for requestMobileTranscode
 - All server tests pass, both server and iOS build successfully
 ===
+
+=== 2026-03-22 10:00–21:00 — gRPC Migration: Server + iOS Client ===
+- Designed and reviewed proto definitions (11 files, 9 services, 71 RPCs)
+- Implemented all 9 server-side gRPC services (Auth, Info, Catalog, Playback,
+  Download, WishList, Profile, Live, Admin) with auth interceptor, logging
+  interceptor, and security audit fixes
+- Deleted entire REST API (/api/v1, 21 files, 4,411 lines)
+- Added server integration tests (45 tests across 4 test files)
+- Migrated iOS app from REST to gRPC: GrpcClient, ProtoAdapters (~40 wrapper
+  structs), AuthManager, OnlineDataModel (60 method rewrites)
+- Resolved Docker build issues (protoc cross-compilation, OOM, Kotlin compiler
+  memory, gradle.properties not copied)
+- Discovered grpc-servlet-jakarta doesn't work through reverse proxies (HTTP/2
+  trailer framing issues with Synology Nginx)
+- Replaced servlet-based gRPC with standalone Netty gRPC server on its own port
+- Set up HAProxy on pfSense for TLS termination with LetsEncrypt wildcard certs
+- Implemented dual-endpoint architecture: gRPC endpoint (HAProxy:8443 → NAS:grpc_port)
+  and HTTP endpoint (existing reverse proxy for images/video/streaming)
+- iOS app stores both URLs separately in Keychain
+- Verified end-to-end: login, home feed with posters, TV streaming, live TV
+- Files created: ~25 new files (server grpc/, iOS GrpcClient, ProtoAdapters, etc.)
+- Files deleted: 26 files (REST API, old iOS Codable models)
+===
