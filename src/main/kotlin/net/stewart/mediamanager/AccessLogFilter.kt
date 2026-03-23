@@ -23,7 +23,7 @@ import java.util.Locale
  * URI are replaced with [REDACTED], and the username is resolved from the
  * session cookie or device token.
  */
-@WebFilter(urlPatterns = ["/*"])
+@WebFilter(urlPatterns = ["/*"], asyncSupported = true)
 class AccessLogFilter : Filter {
 
     companion object {

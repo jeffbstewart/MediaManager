@@ -13,7 +13,7 @@ import jakarta.servlet.http.HttpServletResponse
  *
  * Not adding HSTS (reverse proxy's responsibility) or CSP (Vaadin uses inline scripts/styles).
  */
-@WebFilter(urlPatterns = ["/*"])
+@WebFilter(urlPatterns = ["/*"], asyncSupported = true)
 class SecurityHeaderFilter : Filter {
 
     override fun init(filterConfig: FilterConfig?) {}

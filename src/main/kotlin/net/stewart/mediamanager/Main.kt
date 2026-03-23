@@ -29,6 +29,7 @@ object CommandLineFlags {
     var developerMode: Boolean = false
     var listenOnAllInterfaces: Boolean = false
     var port: Int = 8080
+    var grpcPort: Int = 9090
     var h2ConsolePort: Int = 8082
     var maxTranscodeDeletes: Int = 25
     var disableLocalTranscoding: Boolean = false
@@ -41,6 +42,7 @@ object CommandLineFlags {
         args.forEachIndexed { i, arg ->
             when (arg) {
                 "--port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { port = it }
+                "--grpc_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { grpcPort = it }
                 "--h2_console_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { h2ConsolePort = it }
                 "--max_transcode_deletes" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { maxTranscodeDeletes = it }
                 "--internal_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { internalPort = it }
@@ -149,6 +151,10 @@ fun main(args: Array<String>) {
     val internalServer = startInternalServer(CommandLineFlags.internalPort)
     Runtime.getRuntime().addShutdownHook(Thread { internalServer.stop() })
 
+    // Standalone gRPC server on its own port (native HTTP/2, no servlet container)
+    net.stewart.mediamanager.grpc.GrpcServer.start(CommandLineFlags.grpcPort)
+    Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.GrpcServer.stop() })
+
     // SSDP responder for Roku device discovery
     val ssdpResponder = SsdpResponder(CommandLineFlags.port)
     ssdpResponder.start()
@@ -173,21 +179,6 @@ fun main(args: Array<String>) {
                     // the default 30s timeout kills the connection mid-playback.
                     connector.idleTimeout = 300_000 // 5 minutes
                     log.info("Jetty connector idle timeout set to {}ms", connector.idleTimeout)
-
-                    // Add HTTP/2 cleartext (h2c) support alongside HTTP/1.1.
-                    // Must stop connector before adding factories, then restart.
-                    try {
-                        connector.stop()
-                        val httpConfig = org.eclipse.jetty.server.HttpConfiguration()
-                        val h2c = org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory(httpConfig)
-                        connector.addConnectionFactory(h2c)
-                        connector.start()
-                        log.info("HTTP/2 cleartext (h2c) enabled on port {}", connector.port)
-                    } catch (e: Exception) {
-                        log.error("Failed to enable h2c — gRPC native transport will not work", e)
-                        // Fatal: gRPC clients won't be able to connect without h2c
-                        throw e
-                    }
                 }
             }
         }

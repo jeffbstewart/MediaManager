@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
  * Only activates when the MM_BEHIND_PROXY environment variable is "true".
  * This prevents clients from spoofing these headers on direct connections.
  */
-@WebFilter(urlPatterns = ["/*"])
+@WebFilter(urlPatterns = ["/*"], asyncSupported = true)
 class ProxyHeaderFilter : Filter {
 
     private val log = LoggerFactory.getLogger(ProxyHeaderFilter::class.java)

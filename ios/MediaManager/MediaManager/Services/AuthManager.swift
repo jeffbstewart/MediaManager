@@ -2,6 +2,9 @@ import Foundation
 import GRPCCore
 import Observation
 import UIKit
+import os.log
+
+private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "AuthManager")
 
 @Observable
 @MainActor
@@ -28,24 +31,39 @@ final class AuthManager {
     }
 
     private func restoreSession() {
+        logger.info("restoreSession: checking keychain")
         guard let urlString = KeychainService.load(key: .serverURL),
               let url = URL(string: urlString) else {
+            logger.info("restoreSession: no server URL, needsServer")
             state = .needsServer
             return
+        }
+        logger.info("restoreSession: server URL = \(urlString)")
+
+        // Configure gRPC client from the stored server URL (what the user entered)
+        let grpcHost = url.host() ?? "localhost"
+        let grpcPort = url.port ?? (url.scheme == "https" ? 443 : 8080)
+        // Configure HTTP client from the stored HTTP base URL (from Discover's secure_url)
+        let httpURLString = KeychainService.load(key: .httpBaseURL) ?? urlString
+        let httpURL = URL(string: httpURLString) ?? url
+        Task {
+            logger.info("restoreSession: gRPC=\(grpcHost):\(grpcPort), HTTP=\(httpURLString)")
+            await apiClient.configure(baseURL: httpURL)
+            try? await grpcClient.configure(host: grpcHost, port: grpcPort, useTLS: url.scheme == "https")
         }
 
         guard let tokenBase64 = KeychainService.load(key: .accessToken),
               let tokenData = Data(base64Encoded: tokenBase64),
               KeychainService.load(key: .refreshToken) != nil else {
+            logger.info("restoreSession: no tokens, needsLogin")
             state = .needsLogin(serverURL: url)
             return
         }
+        logger.info("restoreSession: found tokens, setting access token")
 
         Task {
-            // Configure both clients
             let tokenString = String(data: tokenData, encoding: .utf8)
-            await apiClient.configure(baseURL: url, accessToken: tokenString)
-            try? await grpcClient.configure(host: url.host() ?? "localhost", port: url.port ?? 8080)
+            await apiClient.setAccessToken(tokenString)
             await grpcClient.setAccessToken(tokenData)
 
             state = .authenticated(serverURL: url)
@@ -55,6 +73,7 @@ final class AuthManager {
     }
 
     func connectToServer(urlString: String) async {
+        logger.info("connectToServer: '\(urlString)'")
         error = nil
         var normalized = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalized.hasPrefix("http://") && !normalized.hasPrefix("https://") {
@@ -69,7 +88,10 @@ final class AuthManager {
         }
         do {
             // Configure gRPC client for discovery (unauthenticated)
-            try await grpcClient.configure(host: url.host() ?? "localhost", port: url.port ?? 8080)
+            let discHost = url.host() ?? "localhost"
+            let discPort = url.port ?? (url.scheme == "https" ? 443 : 8080)
+            logger.info("connectToServer: configuring gRPC for discovery at \(discHost):\(discPort)")
+            try await grpcClient.configure(host: discHost, port: discPort, useTLS: url.scheme == "https")
 
             let protoDiscovery = try await grpcClient.discover()
             let discovery = DiscoverResponse(proto: protoDiscovery)
@@ -107,17 +129,20 @@ final class AuthManager {
                 KeychainService.save(key: .serverFingerprint, value: receivedFingerprint)
             }
 
-            // Reconfigure gRPC client for the secure URL (may be different host/port)
-            try await grpcClient.configure(host: secureURL.host() ?? "localhost", port: secureURL.port ?? 8080)
-            KeychainService.save(key: .serverURL, value: secureURLString)
+            // gRPC client stays on the URL the user entered — don't reconfigure it.
+            // APIClient uses the secure_url from Discover for HTTP operations (images, streaming).
+            KeychainService.save(key: .serverURL, value: normalized)
+            KeychainService.save(key: .httpBaseURL, value: secureURLString)
             await apiClient.configure(baseURL: secureURL)
-            state = .needsLogin(serverURL: secureURL)
+            logger.info("connectToServer: success — gRPC=\(normalized), HTTP=\(secureURLString)")
+            state = .needsLogin(serverURL: url)
         } catch {
             self.error = "Cannot reach server: \(error.localizedDescription)"
         }
     }
 
     func login(username: String, password: String) async {
+        logger.info("login: starting for user (redacted)")
         error = nil
         let deviceName = UIDevice.current.name
         do {

@@ -5,7 +5,8 @@ enum KeychainService {
     private static let serviceName = "net.stewart.mediamanager"
 
     enum Key: String {
-        case serverURL = "server_url"
+        case serverURL = "server_url"          // gRPC endpoint (what the user entered)
+        case httpBaseURL = "http_base_url"     // HTTP endpoint (from Discover secure_url)
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case serverFingerprint = "server_fingerprint"
@@ -52,7 +53,7 @@ enum KeychainService {
     }
 
     static func clearAll() {
-        for key in [Key.serverURL, .accessToken, .refreshToken, .serverFingerprint] {
+        for key in [Key.serverURL, .httpBaseURL, .accessToken, .refreshToken, .serverFingerprint] {
             delete(key: key)
         }
     }

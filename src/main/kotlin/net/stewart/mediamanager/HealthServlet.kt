@@ -4,6 +4,7 @@ import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import jakarta.servlet.annotation.WebServlet
 import net.stewart.mediamanager.service.MetricsRegistry
 
 /**
@@ -11,9 +12,10 @@ import net.stewart.mediamanager.service.MetricsRegistry
  * Returns 200 with JSON body when the app and database are healthy.
  * Returns 503 if the database connection is broken.
  *
- * Served on the internal-only port (not the main app port) so it is
- * not exposed to the internet. Mounted manually in [startInternalServer].
+ * Available on both the main port (8080, for HAProxy health checks) and
+ * the internal-only port (8081, mounted manually in [startInternalServer]).
  */
+@WebServlet(urlPatterns = ["/health"], asyncSupported = true)
 class HealthServlet : HttpServlet() {
 
     override fun doGet(req: HttpServletRequest, resp: HttpServletResponse) {

@@ -104,6 +104,49 @@ Once the server is running and you've created your admin account:
 
 ---
 
+## iOS App Development
+
+The iOS app communicates with the server via gRPC. Building the app requires protobuf tooling.
+
+### Prerequisites
+
+```bash
+brew install protobuf swift-protobuf protoc-gen-grpc-swift
+```
+
+This installs:
+- `protoc` — Protocol Buffer compiler
+- `protoc-gen-swift` — Swift message code generator
+- `protoc-gen-grpc-swift-2` — Swift gRPC service stub generator (v2)
+
+### Building
+
+```bash
+./lifecycle/ios-build.sh                # Build for device (generic iOS)
+./lifecycle/ios-build.sh --simulator    # Build for iOS Simulator
+./lifecycle/ios-build.sh --release      # Release configuration
+```
+
+The build script handles proto code generation automatically (two-pass build: first pass generates `.pb.swift` and `.grpc.swift` files, second pass compiles them).
+
+### Xcode SPM Dependencies
+
+The Xcode project includes these Swift Package Manager dependencies (resolved automatically):
+- `apple/swift-protobuf` — Protobuf runtime
+- `grpc/grpc-swift-2` — gRPC core
+- `grpc/grpc-swift-nio-transport` — HTTP/2 transport
+- `grpc/grpc-swift-protobuf` — gRPC protobuf integration
+
+### Network Setup for iOS
+
+The iOS app connects to two server endpoints:
+- **gRPC** (port 9090 default) — all data operations via HTTP/2
+- **HTTP** (port 8080 default) — images, video streaming, file downloads
+
+In production, HAProxy on pfSense terminates TLS (LetsEncrypt wildcard cert) and forwards to these ports. See the Network Architecture section in CLAUDE.md.
+
+---
+
 ## Mac Development
 
 For building the server and developing the iOS app on macOS, see [Mac Development Setup](MAC_SETUP.md).

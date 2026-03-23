@@ -13,7 +13,7 @@ import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.PairingService
 
-@WebFilter(urlPatterns = ["/posters/*", "/headshots/*", "/stream/*", "/backdrops/*", "/playback-progress/*", "/local-images/*", "/ownership-photos/*", "/collection-posters/*", "/cam/*", "/live-tv-stream/*"])
+@WebFilter(urlPatterns = ["/posters/*", "/headshots/*", "/stream/*", "/backdrops/*", "/playback-progress/*", "/local-images/*", "/ownership-photos/*", "/collection-posters/*", "/cam/*", "/live-tv-stream/*"], asyncSupported = true)
 class AuthFilter : Filter {
 
     companion object {

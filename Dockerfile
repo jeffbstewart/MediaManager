@@ -27,7 +27,7 @@ WORKDIR /app
 COPY --from=builder --chown=app:users /build/build/install/mediaManager/ ./
 RUN mkdir -p /cache && chown app:users /cache && ln -s /cache /app/data
 USER app
-EXPOSE 8080 8081
+EXPOSE 8080 8081 9090
 CMD [ \
     "./bin/mediaManager", \
     "--listen_on_all_interfaces", \

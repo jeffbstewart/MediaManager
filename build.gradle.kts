@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.grpc.kotlin.stub)
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.servlet.jakarta)
+    implementation(libs.grpc.netty.shaded)
     implementation(libs.protobuf.kotlin)
     implementation(libs.kotlinx.coroutines.core)
 

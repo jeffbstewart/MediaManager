@@ -46,6 +46,7 @@ For Watchtower config, health/metrics server, and Prometheus setup, see `docs/AD
 - **UI Framework:** Vaadin 25 via Vaadin-on-Kotlin (VoK) — server-side rendered, no JavaScript
 - **UI DSL:** Karibu-DSL for type-safe Kotlin Vaadin component building
 - **Server:** Embedded Jetty via vaadin-boot (started from `main()`, no app server deployment)
+- **gRPC:** Standalone Netty-based gRPC server on separate port (default 9090, `--grpc_port`). 9 services, 71 RPCs. Proto definitions in `proto/`. iOS app communicates via gRPC; web UI uses Vaadin.
 - **Database:** H2 in file mode (`./data/mediamanager.mv.db`)
 - **Connection Pool:** HikariCP
 - **Migrations:** Flyway — SQL files in `src/main/resources/db/migration/`, naming convention `V{NNN}__{description}.sql`
@@ -90,7 +91,43 @@ Programmatic data updates that need Kotlin code (API calls, computation). Flyway
 
 ### CLI Flags
 
-See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N`, `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N`.
+See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N`, `--grpc_port N` (default 9090), `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N`.
+
+### Network Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     pfSense Router                          │
+│                                                             │
+│  ┌─────────────────────────────────────┐                    │
+│  │           HAProxy                   │                    │
+│  │                                     │                    │
+│  │  https://grpc.domain:8443 ──────────┼──► NAS:9090 (gRPC) │
+│  │  https://mm.domain:8443 ────────────┼──► NAS:8080 (HTTP) │
+│  │     (LetsEncrypt wildcard cert)     │                    │
+│  └─────────────────────────────────────┘                    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│              NAS (Docker)               │
+│                                         │
+│  ┌───────────────┐  ┌───────────────┐   │
+│  │ Jetty :8080   │  │ gRPC :9090    │   │
+│  │ (Vaadin, HTTP │  │ (Netty, h2c)  │   │
+│  │  servlets)    │  │ 9 services    │   │
+│  └───────────────┘  └───────────────┘   │
+│                                         │
+│  Health: :8080/health (HAProxy checks)  │
+│  Metrics: :8081/metrics (Prometheus)    │
+└─────────────────────────────────────────┘
+```
+
+**HAProxy** terminates TLS (LetsEncrypt wildcard cert) and forwards to the NAS:
+- **gRPC endpoint:** HTTP/2 (`proto h2`) to port 9090. Health check via HTTP/1.1 GET `/health` on port 8080 (`check port 8080 check-proto h1`).
+- **HTTP endpoint:** HTTP/1.1 to port 8080 for Vaadin web UI, images, video streaming.
+- Both endpoints use `timeout tunnel 1h` for long-lived connections (streaming RPCs, WebSocket).
+
+**iOS app** connects to the gRPC endpoint for all data operations, and to the HTTP endpoint for binary operations (images, video streaming, file downloads).
 
 ### Decisions Made
 
@@ -107,6 +144,9 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 - **Schema updater framework** — Flyway handles DDL only; SchemaUpdater interface + runner handles programmatic data updates (API calls, computation) with version tracking for re-runnability.
 - **Roku JSON feed over Direct Publisher** — Direct Publisher was sunset January 2024. Custom sideloaded BrightScript channel consumes `/roku/feed.json`. API key auth (UUID in `app_config`) for stateless device authentication.
 - **Sideloaded Roku channel over beta channel** — Beta channels expire after 120 days. Sideloading via Developer Mode has no expiration and requires no certification review.
+- **Standalone gRPC server over servlet-based** — `grpc-servlet-jakarta` inside Jetty had async support issues with servlet filters and couldn't handle HTTP/2 end-to-end through reverse proxies. Standalone Netty gRPC server on its own port avoids all servlet container constraints.
+- **HAProxy over Synology reverse proxy** — Synology's Nginx-based proxy doesn't support gRPC (no `grpc_pass`). HAProxy handles HTTP/2 natively with proper trailer framing for gRPC. LetsEncrypt wildcard certs on pfSense.
+- **gRPC over REST API** — Type-safe protobuf wire format, server-streaming RPCs for live updates, multi-platform code generation from `.proto` files. REST API (`/api/v1/*`) removed.
 
 ## Coding Rules
 

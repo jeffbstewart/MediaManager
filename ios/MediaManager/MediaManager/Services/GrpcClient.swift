@@ -2,6 +2,9 @@ import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
 import GRPCProtobuf
+import os.log
+
+private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "GrpcClient")
 
 /// gRPC client that manages the connection to the MediaManager server.
 /// Analogous to APIClient but speaks gRPC over HTTP/2 cleartext (h2c).
@@ -11,14 +14,27 @@ import GRPCProtobuf
 actor GrpcClient {
     private var grpcClient: GRPCClient<HTTP2ClientTransport.Posix>?
     private var accessToken: Data?
+    private var configuredHost: String?
+    private var configuredPort: Int?
 
     // MARK: - Configuration
 
     /// Create the gRPC channel to the given server.
-    func configure(host: String, port: Int) throws {
+    func configure(host: String, port: Int, useTLS: Bool = false) throws {
+        logger.info("configure: host=\(host) port=\(port) tls=\(useTLS)")
+
+        // Shut down previous client if reconfiguring
+        if let old = grpcClient {
+            logger.info("configure: shutting down previous client")
+            old.beginGracefulShutdown()
+        }
+
+        // Use DNS resolution (not .ipv4 which requires a numeric IP address).
+        // TLS for HTTPS reverse proxies (port 443); plaintext h2c for direct LAN.
+        let security: HTTP2ClientTransport.Posix.TransportSecurity = useTLS ? .tls : .plaintext
         let transport = try HTTP2ClientTransport.Posix(
-            target: .ipv4(host: host, port: port),
-            transportSecurity: .plaintext
+            target: .dns(host: host, port: port),
+            transportSecurity: security
         )
         let client = GRPCClient(transport: transport)
 
@@ -26,13 +42,19 @@ actor GrpcClient {
         Task { try await client.runConnections() }
 
         self.grpcClient = client
+        self.configuredHost = host
+        self.configuredPort = port
+        logger.info("configure: client created and running for \(host):\(port)")
     }
 
     func setAccessToken(_ token: Data?) {
+        let hasToken = token != nil
+        logger.info("setAccessToken: hasToken=\(hasToken)")
         self.accessToken = token
     }
 
     func close() {
+        logger.info("close: shutting down")
         grpcClient?.beginGracefulShutdown()
     }
 
@@ -50,6 +72,7 @@ actor GrpcClient {
 
     private func requireClient() throws -> GRPCClient<HTTP2ClientTransport.Posix> {
         guard let client = grpcClient else {
+            logger.error("requireClient: FAILED — grpcClient is nil (host=\(self.configuredHost ?? "never configured"), port=\(self.configuredPort ?? -1))")
             throw GrpcClientError.notConfigured
         }
         return client
@@ -94,14 +117,19 @@ actor GrpcClient {
     // MARK: - Auth RPCs (unauthenticated)
 
     func discover() async throws -> MMDiscoverResponse {
-        try await infoService.discover(MMEmpty())
+        logger.info("discover: calling InfoService.Discover")
+        let result = try await infoService.discover(MMEmpty())
+        logger.info("discover: success, fingerprint=\(result.serverFingerprint)")
+        return result
     }
 
     func getInfo() async throws -> MMInfoResponse {
-        try await infoService.getInfo(MMEmpty(), metadata: authMetadata())
+        logger.info("getInfo: calling InfoService.GetInfo")
+        return try await infoService.getInfo(MMEmpty(), metadata: authMetadata())
     }
 
     func login(username: String, password: String, deviceName: String) async throws -> MMTokenResponse {
+        logger.info("login: calling AuthService.Login for device=\(deviceName)")
         var request = MMLoginRequest()
         request.username = username
         request.password = password

@@ -18,7 +18,10 @@ import org.slf4j.LoggerFactory
  * - Max inbound message: 64KB (matches REST API body limit, protects against decompression bombs)
  * - Max inbound metadata: 8KB
  */
-@WebServlet(urlPatterns = ["/grpc/*"], asyncSupported = true)
+// No @WebServlet — gRPC is served by the standalone GrpcServer (Netty), not Jetty.
+// This class is retained for the test infrastructure (GrpcTestBase) which uses
+// the ServletAdapter for in-process testing.
+// @WebServlet — REMOVED: was catching gRPC requests on Jetty's HTTP port
 class MediaManagerGrpcServlet : HttpServlet() {
 
     private val log = LoggerFactory.getLogger(MediaManagerGrpcServlet::class.java)
@@ -59,11 +62,15 @@ class MediaManagerGrpcServlet : HttpServlet() {
     }
 
     override fun doGet(req: HttpServletRequest, resp: HttpServletResponse) {
-        delegate.doGet(req, resp)
+        log.warn("gRPC request hit SERVLET (port {}) instead of standalone server: {} {} content-type={}",
+            req.localPort, req.method, req.requestURI, req.contentType)
+        resp.sendError(421, "gRPC requests should be routed to the standalone gRPC port, not the Jetty servlet port")
     }
 
     override fun doPost(req: HttpServletRequest, resp: HttpServletResponse) {
-        delegate.doPost(req, resp)
+        log.warn("gRPC request hit SERVLET (port {}) instead of standalone server: {} {} content-type={}",
+            req.localPort, req.method, req.requestURI, req.contentType)
+        resp.sendError(421, "gRPC requests should be routed to the standalone gRPC port, not the Jetty servlet port")
     }
 
     override fun destroy() {
