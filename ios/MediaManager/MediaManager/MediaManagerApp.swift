@@ -18,6 +18,7 @@ struct MediaManagerApp: App {
     @State private var authManager = AuthManager()
     @State private var downloadManager = DownloadManager()
     @State private var dataModel: OnlineDataModel
+    @State private var imageProvider: ImageProvider
 
     init() {
         // Configure audio session for media playback — plays through speakers
@@ -30,6 +31,7 @@ struct MediaManagerApp: App {
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
         _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
+        _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
     }
 
     var body: some Scene {
@@ -38,6 +40,7 @@ struct MediaManagerApp: App {
                 .environment(authManager)
                 .environment(downloadManager)
                 .environment(dataModel)
+                .environment(imageProvider)
                 .onAppear {
                     appDelegate.downloadManager = downloadManager
                     downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)

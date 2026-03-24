@@ -114,6 +114,15 @@ actor GrpcClient {
         get throws { MMAdminService.Client(wrapping: try requireClient()) }
     }
 
+    var imageService: MMImageService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMImageService.Client(wrapping: try requireClient()) }
+    }
+
+    /// Auth metadata for long-lived streams (ImageStreamClient needs this).
+    func authMetadataForImageStream() -> Metadata {
+        return authMetadata()
+    }
+
     // MARK: - Auth RPCs (unauthenticated)
 
     func discover() async throws -> MMDiscoverResponse {

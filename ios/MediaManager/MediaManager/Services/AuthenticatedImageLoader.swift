@@ -81,3 +81,49 @@ struct AuthenticatedImage: View {
         }
     }
 }
+
+/// SwiftUI view that loads images via gRPC ImageService with disk caching.
+/// Uses typed ImageRef instead of URL path strings.
+struct CachedImage: View {
+    let ref: MMImageRef?
+    @Environment(ImageProvider.self) private var imageProvider
+    var cornerRadius: CGFloat = 8
+    var contentMode: ContentMode = .fill
+
+    @State private var image: UIImage?
+    @State private var loading = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: contentMode)
+            } else {
+                Rectangle()
+                    .fill(.quaternary)
+                    .overlay {
+                        if loading {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "film")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+            }
+        }
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .task(id: refKey) {
+            guard let ref else { return }
+            loading = true
+            image = await imageProvider.image(for: ref)
+            loading = false
+        }
+    }
+
+    private var refKey: String {
+        guard let ref else { return "" }
+        return "\(ref.type.rawValue)-\(ref.titleID)-\(ref.tmdbPersonID)-\(ref.tmdbCollectionID)-\(ref.uuid)-\(ref.cameraID)"
+    }
+}
