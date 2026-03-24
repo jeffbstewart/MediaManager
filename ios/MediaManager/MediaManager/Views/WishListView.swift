@@ -16,12 +16,12 @@ struct WishListView: View {
                     description: Text("Tap + to search for movies and TV shows to add."))
             } else {
                 List {
-                    let fulfilled = wishes.filter { $0.isFulfilled }
-                    let active = wishes.filter { !$0.isFulfilled }
+                    let ready = wishes.filter { $0.isReadyToWatch }
+                    let active = wishes.filter { !$0.isReadyToWatch }
 
-                    if !fulfilled.isEmpty {
+                    if !ready.isEmpty {
                         Section {
-                            ForEach(fulfilled) { wish in
+                            ForEach(ready) { wish in
                                 FulfilledWishRow(wish: wish) {
                                     await dismissWish(wish)
                                 }
@@ -33,7 +33,7 @@ struct WishListView: View {
                     }
 
                     if !active.isEmpty {
-                        Section(fulfilled.isEmpty ? "" : "Wishes") {
+                        Section(ready.isEmpty ? "" : "Wishes") {
                             ForEach(active) { wish in
                                 WishRow(wish: wish) {
                                     await toggleVote(wish)
@@ -168,11 +168,11 @@ struct WishRow: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let status = wish.acquisitionStatus, status != "none" {
-                    Text(acquisitionLabel(status))
+                if let stage = wish.lifecycleStage {
+                    Text(stage.displayLabel)
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(lifecycleColor(stage))
                 }
             }
 
@@ -201,12 +201,14 @@ struct WishRow: View {
         .padding(.vertical, 4)
     }
 
-    private func acquisitionLabel(_ status: String) -> String {
-        switch status {
-        case "ordered": "Ordered"
-        case "shipped": "Shipped"
-        case "arrived": "Arrived"
-        default: status.capitalized
+    private func lifecycleColor(_ stage: WishLifecycleStage) -> Color {
+        switch stage {
+        case .readyToWatch: .green
+        case .onNasPendingDesktop, .ordered: .blue
+        case .inHousePendingNas: .teal
+        case .needsAssistance: .orange
+        case .notFeasible, .wontOrder: .red
+        case .wishedFor: .secondary
         }
     }
 }
@@ -248,7 +250,7 @@ struct FulfilledWishRow: View {
                 }
                 .font(.caption)
 
-                Text("Now in your collection!")
+                Text(wish.lifecycleStage?.displayLabel ?? "Ready to watch")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundStyle(.green)

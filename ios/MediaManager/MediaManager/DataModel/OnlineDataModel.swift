@@ -361,8 +361,13 @@ final class OnlineDataModel: DataModel {
         return AdminPurchaseWishListResponse(proto: response)
     }
 
-    func updatePurchaseWishStatus(tmdbId: TmdbID, status: AcquisitionStatus) async throws {
-        try await grpcClient.adminUpdatePurchaseWishStatus(tmdbId: tmdbId.protoValue, status: status)
+    func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws {
+        try await grpcClient.adminUpdatePurchaseWishStatus(
+            tmdbId: tmdbId.protoValue,
+            mediaType: mediaType,
+            seasonNumber: seasonNumber.map { Int32($0) },
+            status: status
+        )
     }
 
     func adminUsers() async throws -> AdminUserListResponse {

@@ -50,6 +50,8 @@ class EnrichmentIntegrationTest {
     fun cleanTables() {
         // Delete in FK-safe order
         EnrichmentAttempt.deleteAll()
+        MediaItemTitleSeason.deleteAll()
+        TitleSeason.deleteAll()
         MediaItemTitle.deleteAll()
         BarcodeScan.deleteAll()
         MediaItem.deleteAll()

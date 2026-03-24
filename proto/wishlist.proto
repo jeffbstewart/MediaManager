@@ -69,6 +69,8 @@ message WishItem {
   AcquisitionStatus acquisition_status = 11;
   repeated string voters = 12;
   optional Timestamp created_at = 13;
+  WishLifecycleStage lifecycle_stage = 14;
+  optional int64 title_id = 15;
 }
 
 message WishListResponse {

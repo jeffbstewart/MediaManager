@@ -38,6 +38,7 @@ import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.UserTitleFlagService
+import net.stewart.mediamanager.service.WishListService
 
 /** Wrapper for search results that can be a Title, Actor, or Collection. */
 private sealed class SearchItem(val displayName: String, val popularity: Double) {
@@ -947,11 +948,7 @@ class MainLayout : AppLayout(), AfterNavigationObserver {
 
     fun refreshWishListBadge(user: net.stewart.mediamanager.entity.AppUser? = AuthService.getCurrentUser()) {
         if (user != null) {
-            val count = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-                handle.createQuery(
-                    "SELECT COUNT(*) FROM wish_list_item WHERE user_id = :userId AND wish_type = 'MEDIA' AND status = 'FULFILLED'"
-                ).bind("userId", user.id).mapTo(Int::class.java).one()
-            }
+            val count = WishListService.getReadyToWatchWishCountForUser(user.id!!)
             wishListBadge.text = count.toString()
             wishListBadge.isVisible = count > 0
         } else {

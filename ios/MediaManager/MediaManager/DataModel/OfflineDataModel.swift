@@ -181,7 +181,7 @@ final class OfflineDataModel: DataModel {
     func reEnrich(titleId: TitleID) async throws { throw DataModelError.offline }
     func deleteTitle(id: TitleID) async throws { throw DataModelError.offline }
     func purchaseWishes() async throws -> AdminPurchaseWishListResponse { throw DataModelError.offline }
-    func updatePurchaseWishStatus(tmdbId: TmdbID, status: AcquisitionStatus) async throws { throw DataModelError.offline }
+    func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws { throw DataModelError.offline }
     func adminUsers() async throws -> AdminUserListResponse { throw DataModelError.offline }
     func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws { throw DataModelError.offline }
     func updateUserRole(id: UserID, accessLevel: Int) async throws { throw DataModelError.offline }

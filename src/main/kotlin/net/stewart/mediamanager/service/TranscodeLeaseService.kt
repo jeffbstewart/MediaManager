@@ -99,7 +99,7 @@ object TranscodeLeaseService {
 
         val titles = Title.findAll().associateBy { it.id }
         val hiddenTitleIds = titles.values.filter { it.hidden }.map { it.id }.toSet()
-        val wishedTitleIds = WishListService.getTranscodeWishedTitleIds()
+        val priorityCounts = WishListService.getDesktopTranscodePriorityCounts()
 
         val workItems = mutableListOf<WorkItem>()
 
@@ -169,10 +169,11 @@ object TranscodeLeaseService {
 
         if (workItems.isEmpty()) return null
 
-        // Unified sort: wished first, then mobile-requested first, then popularity, then work type within title
+        // Unified sort: lifecycle/transcode-priority count first, then mobile-requested first,
+        // then popularity, then work type within title.
         val sorted = workItems.sortedWith(
             compareByDescending<WorkItem> {
-                if (it.titleId in wishedTitleIds) 1 else 0
+                priorityCounts[it.titleId] ?: 0
             }.thenByDescending {
                 if (it.leaseType == LeaseType.MOBILE_TRANSCODE && it.transcode.for_mobile_requested) 1 else 0
             }.thenByDescending {

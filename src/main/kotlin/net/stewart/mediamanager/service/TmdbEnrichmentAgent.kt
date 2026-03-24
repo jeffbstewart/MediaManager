@@ -194,6 +194,7 @@ class TmdbEnrichmentAgent(
             title.enrichment_status = EnrichmentStatus.ENRICHED.name
             title.retry_after = null
             title.save()
+            WishListService.syncPhysicalOwnership(title.id!!)
             logAttempt(title.id!!, true, null)
             countEnrichment("enriched")
             if (tmdbKey != null) WishListService.fulfillMediaWishes(tmdbKey)
@@ -274,6 +275,7 @@ class TmdbEnrichmentAgent(
             title.retry_after = null
             title.updated_at = now
             title.save()
+            WishListService.syncPhysicalOwnership(title.id!!)
             logAttempt(title.id!!, true, null)
             countEnrichment("enriched")
             WishListService.fulfillMediaWishes(tmdbKey)

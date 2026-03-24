@@ -311,7 +311,7 @@ class WishListView : VerticalLayout() {
     }
 
     private fun refreshMediaWishes() {
-        val wishes = WishListService.getVisibleMediaWishes()
+        val wishes = WishListService.getVisibleMediaWishSummaries()
 
         mediaWishGrid.removeAll()
         mediaEmptyState.isVisible = wishes.isEmpty()
@@ -320,11 +320,15 @@ class WishListView : VerticalLayout() {
         for (wish in wishes) {
             mediaWishGrid.add(buildMediaWishCard(wish))
         }
+
+        refreshWishListBadge()
     }
 
-    private fun buildMediaWishCard(wish: WishListItem): VerticalLayout {
-        val isFulfilled = wish.status == WishStatus.FULFILLED.name
-        val acqStatus = WishListService.getAcquisitionStatus(wish)
+    private fun buildMediaWishCard(summary: UserMediaWishSummary): VerticalLayout {
+        val wish = summary.wish
+        val lifecycleStage = summary.lifecycleStage
+        val titleId = summary.titleId
+        val dismissible = lifecycleStage == WishLifecycleStage.READY_TO_WATCH
 
         return VerticalLayout().apply {
             isPadding = false
@@ -333,13 +337,12 @@ class WishListView : VerticalLayout() {
             style.set("position", "relative")
 
             // Poster container with cancel overlay
-            val titleId = lookupTitleId(wish)
             val posterContainer = Div().apply {
                 style.set("position", "relative")
                 style.set("width", "130px")
                 style.set("height", "195px")
                 style.set("flex-shrink", "0")
-                if (isFulfilled && titleId != null) style.set("cursor", "pointer")
+                if (dismissible && titleId != null) style.set("cursor", "pointer")
 
                 if (wish.tmdb_poster_path != null) {
                     add(Image("https://image.tmdb.org/t/p/w185${wish.tmdb_poster_path}",
@@ -348,7 +351,7 @@ class WishListView : VerticalLayout() {
                         height = "195px"
                         style.set("border-radius", "8px")
                         style.set("object-fit", "cover")
-                        if (isFulfilled) style.set("opacity", "0.6")
+                        if (dismissible) style.set("opacity", "0.75")
                     })
                 } else {
                     add(Div().apply {
@@ -366,16 +369,14 @@ class WishListView : VerticalLayout() {
                     })
                 }
 
-                // Fulfilled: clicking poster navigates to title detail and dismisses
-                if (isFulfilled && titleId != null) {
+                if (dismissible && titleId != null) {
                     element.addEventListener("click") {
                         WishListService.dismissWish(wish.id!!)
                         ui.ifPresent { it.navigate("title/$titleId") }
                     }
                 }
 
-                // Cancel button overlaid on poster (active wishes only)
-                if (!isFulfilled) {
+                if (!dismissible) {
                     add(Button(VaadinIcon.CLOSE_SMALL.create()).apply {
                         addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ICON)
                         style.set("position", "absolute")
@@ -400,15 +401,13 @@ class WishListView : VerticalLayout() {
             }
             add(posterContainer)
 
-            // Title (as link for fulfilled wishes so clicking navigates to title detail)
-            if (isFulfilled && titleId != null) {
+            if (dismissible && titleId != null) {
                 add(Anchor("title/$titleId", wish.tmdb_title ?: "Unknown").apply {
                     style.set("color", "#FFFFFF")
                     style.set("font-size", "var(--lumo-font-size-xs)")
                     style.set("text-align", "center")
                     style.set("margin-top", "var(--lumo-space-xs)")
                     style.set("text-decoration", "none")
-                    // Clicking through to title detail dismisses the fulfilled wish
                     element.addEventListener("click") {
                         WishListService.dismissWish(wish.id!!)
                     }
@@ -444,36 +443,8 @@ class WishListView : VerticalLayout() {
                 })
             }
 
-            // Status badge or action button
-            if (isFulfilled) {
-                // Check if there's actually a playable transcode
-                val nasRoot = TranscoderAgent.getNasRoot()
-                val isPlayable = if (titleId != null) {
-                    val transcodes = Transcode.findAll().filter {
-                        it.title_id == titleId && it.file_path != null
-                    }
-                    transcodes.isNotEmpty() && transcodes.any { tc ->
-                        if (TranscoderAgent.needsTranscoding(tc.file_path!!)) {
-                            nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, tc.file_path!!)
-                        } else true
-                    }
-                } else false
-
-                if (isPlayable) {
-                    add(Span("Ready to watch!").apply {
-                        style.set("color", "var(--lumo-success-color)")
-                        style.set("font-size", "var(--lumo-font-size-xs)")
-                        style.set("font-weight", "600")
-                        style.set("margin-top", "var(--lumo-space-xs)")
-                    })
-                } else {
-                    add(Span("Added to collection").apply {
-                        style.set("color", "var(--lumo-primary-color)")
-                        style.set("font-size", "var(--lumo-font-size-xs)")
-                        style.set("font-weight", "600")
-                        style.set("margin-top", "var(--lumo-space-xs)")
-                    })
-                }
+            add(buildLifecycleBadge(lifecycleStage))
+            if (dismissible) {
                 add(Button("Dismiss", VaadinIcon.CHECK.create()).apply {
                     addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY)
                     addClickListener {
@@ -481,44 +452,37 @@ class WishListView : VerticalLayout() {
                         refreshMediaWishes()
                     }
                 })
-            } else {
-                // Acquisition status badge
-                when (acqStatus) {
-                    AcquisitionStatus.ORDERED.name -> {
-                        add(Span("Ordered!").apply {
-                            style.set("color", "var(--lumo-primary-color)")
-                            style.set("font-size", "var(--lumo-font-size-xs)")
-                            style.set("font-weight", "600")
-                            style.set("margin-top", "var(--lumo-space-xs)")
-                        })
-                    }
-                    AcquisitionStatus.REJECTED.name -> {
-                        add(Span("Won't be purchased").apply {
-                            style.set("color", "var(--lumo-error-text-color)")
-                            style.set("font-size", "var(--lumo-font-size-xs)")
-                            style.set("margin-top", "var(--lumo-space-xs)")
-                        })
-                    }
-                    AcquisitionStatus.NOT_AVAILABLE.name -> {
-                        add(Span("Not yet available").apply {
-                            style.set("color", "rgba(255,255,255,0.5)")
-                            style.set("font-size", "var(--lumo-font-size-xs)")
-                            style.set("font-style", "italic")
-                            style.set("margin-top", "var(--lumo-space-xs)")
-                        })
-                    }
-                }
-
             }
         }
     }
 
-    /** Look up the internal title ID for a wish's TMDB reference. */
-    private fun lookupTitleId(wish: WishListItem): Long? {
-        val tmdbKey = wish.tmdbKey() ?: return null
-        return Title.findAll().firstOrNull {
-            it.tmdb_id == tmdbKey.id && it.media_type == tmdbKey.typeString
-        }?.id
+    private fun buildLifecycleBadge(stage: WishLifecycleStage): Span {
+        val (textColor, fontWeight, italic) = when (stage) {
+            WishLifecycleStage.READY_TO_WATCH -> Triple("var(--lumo-success-color)", "600", false)
+            WishLifecycleStage.ON_NAS_PENDING_DESKTOP -> Triple("var(--lumo-primary-color)", "600", false)
+            WishLifecycleStage.IN_HOUSE_PENDING_NAS -> Triple("var(--lumo-primary-text-color)", "600", false)
+            WishLifecycleStage.ORDERED -> Triple("var(--lumo-primary-color)", "600", false)
+            WishLifecycleStage.NOT_FEASIBLE,
+            WishLifecycleStage.WONT_ORDER -> Triple("var(--lumo-error-text-color)", "500", false)
+            WishLifecycleStage.NEEDS_ASSISTANCE -> Triple("#FFA500", "500", false)
+            WishLifecycleStage.WISHED_FOR -> Triple("rgba(255,255,255,0.6)", "500", true)
+        }
+
+        return Span(stage.displayLabel()).apply {
+            style.set("color", textColor)
+            style.set("font-size", "var(--lumo-font-size-xs)")
+            style.set("font-weight", fontWeight)
+            style.set("margin-top", "var(--lumo-space-xs)")
+            if (italic) style.set("font-style", "italic")
+        }
+    }
+
+    private fun refreshWishListBadge() {
+        (ui.orElse(null)?.children
+            ?.filter { it is MainLayout }
+            ?.findFirst()
+            ?.orElse(null) as? MainLayout)
+            ?.refreshWishListBadge()
     }
 
     private fun refreshTranscodeWishes() {
@@ -620,8 +584,8 @@ class WishListView : VerticalLayout() {
                         style.set("flex-shrink", "0")
                     })
                 } else {
-                    add(Span("Queued").apply {
-                        style.set("color", "rgba(255,255,255,0.5)")
+                    add(Span("On NAS, pending desktop").apply {
+                        style.set("color", "var(--lumo-primary-color)")
                         style.set("font-size", "var(--lumo-font-size-s)")
                         style.set("flex-shrink", "0")
                     })

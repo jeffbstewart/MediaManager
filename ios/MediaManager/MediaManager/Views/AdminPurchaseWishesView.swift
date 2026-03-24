@@ -5,7 +5,7 @@ struct AdminPurchaseWishesView: View {
     @State private var wishes: [AdminPurchaseWish] = []
     @State private var loading = true
 
-    private let statuses = ["NONE", "ORDERED", "SHIPPED", "ARRIVED", "RIPPED", "RETURNED"]
+    private let statuses: [AcquisitionStatus] = [.ordered, .needsAssistance, .notAvailable, .rejected, .owned]
 
     var body: some View {
         Group {
@@ -55,22 +55,29 @@ struct AdminPurchaseWishesView: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
+
+                                if let lifecycle = wish.lifecycleStage {
+                                    Text(lifecycle.displayLabel)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(statusColor(lifecycle))
+                                }
                             }
 
                             Spacer()
 
                             Menu {
                                 ForEach(statuses, id: \.self) { status in
-                                    Button(status.capitalized) {
+                                    Button(status.displayLabel) {
                                         Task { await updateStatus(wish, status: status) }
                                     }
                                 }
                             } label: {
-                                Text(wish.acquisitionStatus?.capitalized ?? "None")
+                                Text(wish.acquisitionStatus?.displayLabel ?? "Wished for")
                                     .font(.caption)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
-                                    .background(statusColor(wish.acquisitionStatus))
+                                    .background(decisionColor(wish.acquisitionStatus))
                                     .foregroundStyle(.white)
                                     .clipShape(Capsule())
                             }
@@ -91,24 +98,35 @@ struct AdminPurchaseWishesView: View {
         loading = false
     }
 
-    private func updateStatus(_ wish: AdminPurchaseWish, status: String) async {
-        // Find the first wish item to get its ID for the PUT
-        // The API expects a wish ID, but our model has aggregated data.
-        // We need to pass the tmdb_id + media_type to identify the wish group.
-        if let acqStatus = AcquisitionStatus(rawValue: status) {
-            try? await dataModel.updatePurchaseWishStatus(tmdbId: wish.tmdbId, status: acqStatus)
-        }
+    private func updateStatus(_ wish: AdminPurchaseWish, status: AcquisitionStatus) async {
+        try? await dataModel.updatePurchaseWishStatus(
+            tmdbId: wish.tmdbId,
+            mediaType: wish.mediaType,
+            seasonNumber: wish.seasonNumber,
+            status: status
+        )
         await loadWishes()
     }
 
-    private func statusColor(_ status: String?) -> Color {
+    private func decisionColor(_ status: AcquisitionStatus?) -> Color {
         switch status {
-        case "ORDERED": .blue
-        case "SHIPPED": .purple
-        case "ARRIVED": .green
-        case "RIPPED": .mint
-        case "RETURNED": .red
+        case .ordered: .blue
+        case .needsAssistance: .orange
+        case .owned: .green
+        case .notAvailable: .gray
+        case .rejected: .red
         default: .gray
+        }
+    }
+
+    private func statusColor(_ stage: WishLifecycleStage) -> Color {
+        switch stage {
+        case .readyToWatch: .green
+        case .onNasPendingDesktop, .ordered: .blue
+        case .inHousePendingNas: .teal
+        case .needsAssistance: .orange
+        case .notFeasible, .wontOrder: .red
+        case .wishedFor: .secondary
         }
     }
 }

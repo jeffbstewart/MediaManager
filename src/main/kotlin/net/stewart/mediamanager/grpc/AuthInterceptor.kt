@@ -42,10 +42,19 @@ class AuthInterceptor : ServerInterceptor {
         next: ServerCallHandler<ReqT, RespT>
     ): ServerCall.Listener<ReqT> {
         val method = call.methodDescriptor.fullMethodName
+        val transport = GrpcRequestContext.resolve(headers, call)
+        if (transport == null) {
+            call.close(
+                Status.PERMISSION_DENIED.withDescription("gRPC requires HTTPS via trusted reverse proxy"),
+                Metadata()
+            )
+            return noop()
+        }
 
         // Category 1: Unauthenticated RPCs — no token needed
         if (method in UNAUTHENTICATED_METHODS) {
-            return next.startCall(call, headers)
+            val ctx = Context.current().withValue(CLIENT_IP_CONTEXT_KEY, transport.clientIp)
+            return Contexts.interceptCall(ctx, call, headers, next)
         }
 
         // All other RPCs require a valid Bearer token
@@ -77,7 +86,9 @@ class AuthInterceptor : ServerInterceptor {
         }
 
         // Attach user to context and proceed
-        val ctx = Context.current().withValue(USER_CONTEXT_KEY, user)
+        val ctx = Context.current()
+            .withValue(USER_CONTEXT_KEY, user)
+            .withValue(CLIENT_IP_CONTEXT_KEY, transport.clientIp)
         return Contexts.interceptCall(ctx, call, headers, next)
     }
 

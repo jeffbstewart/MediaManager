@@ -83,14 +83,30 @@ extension MMSearchResultType {
 }
 
 extension MMAcquisitionStatus {
-    var displayString: String? {
+    var appStatus: AcquisitionStatus? {
         switch self {
-        case .notAvailable: return "not_available"
-        case .rejected: return "rejected"
-        case .ordered: return "ordered"
-        case .owned: return "owned"
-        case .needsAssistance: return "needs_assistance"
         case .unknown, .UNRECOGNIZED: return nil
+        case .notAvailable: return .notAvailable
+        case .rejected: return .rejected
+        case .ordered: return .ordered
+        case .owned: return .owned
+        case .needsAssistance: return .needsAssistance
+        }
+    }
+}
+
+extension MMWishLifecycleStage {
+    var appStage: WishLifecycleStage? {
+        switch self {
+        case .unknown, .UNRECOGNIZED: return nil
+        case .wishedFor: return .wishedFor
+        case .notFeasible: return .notFeasible
+        case .wontOrder: return .wontOrder
+        case .needsAssistance: return .needsAssistance
+        case .ordered: return .ordered
+        case .inHousePendingNas: return .inHousePendingNas
+        case .onNasPendingDesktop: return .onNasPendingDesktop
+        case .readyToWatch: return .readyToWatch
         }
     }
 }
@@ -597,7 +613,7 @@ struct ApiWish: Identifiable, Sendable {
     let proto: MMWishItem
 
     var id: String {
-        "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")-\(seasonNumber ?? 0)-\(status ?? "")"
+        wishId.map { "\($0.rawValue)" } ?? "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")-\(seasonNumber ?? 0)"
     }
     var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
@@ -609,11 +625,12 @@ struct ApiWish: Identifiable, Sendable {
     var voters: [String] { proto.voters }
     var voted: Bool { proto.userVoted }
     var wishId: WishID? { proto.id != 0 ? WishID(proto: proto.id) : nil }
-    var acquisitionStatus: String? { proto.acquisitionStatus.displayString }
+    var acquisitionStatus: AcquisitionStatus? { proto.acquisitionStatus.appStatus }
+    var lifecycleStage: WishLifecycleStage? { proto.lifecycleStage.appStage }
     var status: String? { proto.status.displayString }
-    var titleId: TitleID? { nil }
+    var titleId: TitleID? { proto.hasTitleID ? TitleID(proto: proto.titleID) : nil }
 
-    var isFulfilled: Bool { proto.status == .fulfilled }
+    var isReadyToWatch: Bool { lifecycleStage == .readyToWatch }
 }
 
 struct ApiWishListResponse: Sendable {
@@ -839,16 +856,18 @@ struct AdminUserListResponse: Sendable {
 struct AdminPurchaseWish: Identifiable, Sendable {
     let proto: MMPurchaseWish
 
-    var id: String { "\(proto.tmdbID)-\(proto.mediaType.rawValue)" }
+    var id: String { "\(proto.tmdbID)-\(proto.mediaType.rawValue)-\(seasonNumber ?? 0)" }
     var tmdbId: TmdbID { TmdbID(proto: proto.tmdbID) }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var title: String { proto.title }
     var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
-    var seasonNumber: Int? { nil }
+    var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     var voteCount: Int { Int(proto.voteCount) }
     var voters: [String] { proto.voters }
-    var acquisitionStatus: String? { proto.acquisitionStatus.displayString }
+    var acquisitionStatus: AcquisitionStatus? { proto.acquisitionStatus.appStatus }
+    var lifecycleStage: WishLifecycleStage? { proto.lifecycleStage.appStage }
+    var titleId: TitleID? { proto.hasTitleID ? TitleID(proto: proto.titleID) : nil }
 }
 
 struct AdminPurchaseWishListResponse: Sendable {
@@ -1034,12 +1053,12 @@ extension MMSettingKey {
 extension AcquisitionStatus {
     var protoValue: MMAcquisitionStatus {
         switch self {
+        case .unknown: .unknown
+        case .notAvailable: .notAvailable
+        case .rejected: .rejected
         case .ordered: .ordered
-        case .shipped: .ordered  // no proto equivalent, map to ordered
-        case .arrived: .owned
-        case .ripped: .owned
-        case .returned: .rejected
-        case .none: .unknown
+        case .owned: .owned
+        case .needsAssistance: .needsAssistance
         }
     }
 }

@@ -500,9 +500,15 @@ actor GrpcClient {
         try await adminService.listPurchaseWishes(MMEmpty(), metadata: authMetadata())
     }
 
-    func adminUpdatePurchaseWishStatus(tmdbId: Int32, status: AcquisitionStatus) async throws {
+    func adminUpdatePurchaseWishStatus(tmdbId: Int32, mediaType: MediaType, seasonNumber: Int32?, status: AcquisitionStatus) async throws {
         var request = MMUpdatePurchaseWishStatusRequest()
         request.tmdbID = tmdbId
+        request.mediaType = switch mediaType {
+        case .movie: .movie
+        case .tv: .tv
+        case .personal: .personal
+        }
+        if let seasonNumber { request.seasonNumber = seasonNumber }
         request.status = status.protoValue
         _ = try await adminService.updatePurchaseWishStatus(request, metadata: authMetadata())
     }

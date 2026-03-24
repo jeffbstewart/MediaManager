@@ -415,6 +415,9 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                     voteCount = agg.voteCount
                     voters.addAll(agg.voters)
                     acquisitionStatus = agg.acquisitionStatus.toProtoAcquisitionStatus()
+                    agg.seasonNumber?.let { seasonNumber = it }
+                    lifecycleStage = agg.lifecycleStage.toProtoWishLifecycleStage()
+                    agg.titleId?.let { titleId = it }
                 }
             })
         }
@@ -423,8 +426,22 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     override suspend fun updatePurchaseWishStatus(request: UpdatePurchaseWishStatusRequest): Empty {
         // Find the matching aggregate to pass to WishListService
         val aggregates = WishListService.getMediaWishVoteCounts()
-        val agg = aggregates.firstOrNull { it.tmdbId == request.tmdbId }
-            ?: throw StatusException(Status.NOT_FOUND.withDescription("No active wish found for tmdb_id=${request.tmdbId}"))
+        val requestedSeason = if (request.hasSeasonNumber()) request.seasonNumber else null
+        val requestedMediaType = when (request.mediaType) {
+            MediaType.MEDIA_TYPE_MOVIE -> net.stewart.mediamanager.entity.MediaType.MOVIE.name
+            MediaType.MEDIA_TYPE_TV -> net.stewart.mediamanager.entity.MediaType.TV.name
+            MediaType.MEDIA_TYPE_PERSONAL -> net.stewart.mediamanager.entity.MediaType.PERSONAL.name
+            else -> null
+        }
+        val agg = aggregates.firstOrNull {
+            it.tmdbId == request.tmdbId &&
+                it.tmdbMediaType == requestedMediaType &&
+                it.seasonNumber == requestedSeason
+        } ?: throw StatusException(
+            Status.NOT_FOUND.withDescription(
+                "No visible wish found for tmdb_id=${request.tmdbId} media_type=$requestedMediaType season=$requestedSeason"
+            )
+        )
 
         val entityStatus = when (request.status) {
             AcquisitionStatus.ACQUISITION_STATUS_UNKNOWN -> net.stewart.mediamanager.entity.AcquisitionStatus.UNKNOWN
@@ -464,7 +481,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                 title.id !in titlesWithLinkedFile
         }
 
-        val wishCounts = WishListService.getTranscodeWishCounts()
+        val wishCounts = WishListService.getRipPriorityCounts()
 
         // Sort by wish count desc, then by name
         val sorted = backlogTitles.sortedWith(

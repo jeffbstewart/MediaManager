@@ -17,7 +17,7 @@ import Foundation
     func reEnrich(titleId: TitleID) async throws
     func deleteTitle(id: TitleID) async throws
     func purchaseWishes() async throws -> AdminPurchaseWishListResponse
-    func updatePurchaseWishStatus(tmdbId: TmdbID, status: AcquisitionStatus) async throws
+    func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws
     func adminUsers() async throws -> AdminUserListResponse
     func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws
     func updateUserRole(id: UserID, accessLevel: Int) async throws

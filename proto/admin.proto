@@ -270,11 +270,16 @@ message PurchaseWish {
   int32 vote_count = 6;
   repeated string voters = 7;
   AcquisitionStatus acquisition_status = 8;
+  optional int32 season_number = 9;
+  WishLifecycleStage lifecycle_stage = 10;
+  optional int64 title_id = 11;
 }
 
 message UpdatePurchaseWishStatusRequest {
   int32 tmdb_id = 1;
-  AcquisitionStatus status = 2;
+  MediaType media_type = 2;
+  AcquisitionStatus status = 3;
+  optional int32 season_number = 4;
 }
 
 // --- Rip Backlog ---

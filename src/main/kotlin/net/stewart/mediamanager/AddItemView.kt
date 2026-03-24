@@ -615,16 +615,16 @@ class AddItemView : KComposite(), AfterNavigationObserver {
         )
         mediaItem.save()
 
-        MediaItemTitle(
+        val join = MediaItemTitle(
             media_item_id = mediaItem.id!!,
             title_id = title.id!!,
             disc_number = 1,
             seasons = seasonsValue
-        ).save()
+        )
+        join.save()
 
-        if (isNewTitle) {
-            WishListService.fulfillMediaWishes(tmdbKey)
-        }
+        WishListService.syncPhysicalOwnership(title.id!!)
+        WishListService.fulfillMediaWishes(tmdbKey)
 
         val yearStr = result.releaseYear?.let { " ($it)" } ?: ""
         showSuccess("Added: ${result.title}$yearStr as ${format.name}")
@@ -869,12 +869,13 @@ class AddItemView : KComposite(), AfterNavigationObserver {
         mediaItem.save()
 
         // Link media item to title
-        MediaItemTitle(
+        val join = MediaItemTitle(
             media_item_id = mediaItem.id!!,
             title_id = title.id!!,
             disc_number = 1,
             seasons = seasonsValue
-        ).save()
+        )
+        join.save()
 
         // Update barcode scan
         scan.lookup_status = LookupStatus.FOUND.name
@@ -885,11 +886,10 @@ class AddItemView : KComposite(), AfterNavigationObserver {
         // Link orphaned ownership photos
         OwnershipPhotoService.resolveOrphans(scan.upc, mediaItem.id!!)
 
-        // Update search index and fulfill wishes
+        // Update search index and refresh any matching legacy fulfilled wishes
         SearchIndexService.onTitleChanged(title.id!!)
-        if (isNewTitle) {
-            WishListService.fulfillMediaWishes(tmdbKey)
-        }
+        WishListService.syncPhysicalOwnership(title.id!!)
+        WishListService.fulfillMediaWishes(tmdbKey)
 
         val yearStr = result.releaseYear?.let { " ($it)" } ?: ""
         showSuccess("Linked UPC ${scan.upc} to ${result.title}$yearStr")

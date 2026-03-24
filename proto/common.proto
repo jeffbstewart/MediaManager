@@ -108,6 +108,21 @@ enum AcquisitionStatus {
   ACQUISITION_STATUS_NEEDS_ASSISTANCE = 5;
 }
 
+// User-facing lifecycle stage for a wishlist item. This is derived on the
+// server from acquisition decision + physical ownership + NAS link + desktop
+// playability, and is intentionally separate from admin acquisition status.
+enum WishLifecycleStage {
+  WISH_LIFECYCLE_STAGE_UNKNOWN = 0;
+  WISH_LIFECYCLE_STAGE_WISHED_FOR = 1;
+  WISH_LIFECYCLE_STAGE_NOT_FEASIBLE = 2;
+  WISH_LIFECYCLE_STAGE_WONT_ORDER = 3;
+  WISH_LIFECYCLE_STAGE_NEEDS_ASSISTANCE = 4;
+  WISH_LIFECYCLE_STAGE_ORDERED = 5;
+  WISH_LIFECYCLE_STAGE_IN_HOUSE_PENDING_NAS = 6;
+  WISH_LIFECYCLE_STAGE_ON_NAS_PENDING_DESKTOP = 7;
+  WISH_LIFECYCLE_STAGE_READY_TO_WATCH = 8;
+}
+
 // ============================================================================
 // Shared scalar types
 // ============================================================================

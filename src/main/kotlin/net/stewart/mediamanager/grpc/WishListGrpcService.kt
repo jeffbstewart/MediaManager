@@ -9,40 +9,38 @@ import net.stewart.mediamanager.entity.WishType
 import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.entity.MediaType as MediaTypeEnum
 import net.stewart.mediamanager.service.TmdbService
+import net.stewart.mediamanager.service.WishListService
 import java.time.LocalDateTime
 
 class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBase() {
 
     override suspend fun listWishes(request: Empty): WishListResponse {
         val user = currentUser()
-        val wishes = WishListItem.findAll()
-            .filter { it.wish_type == WishType.MEDIA.name && it.status != "CANCELLED" }
-
-        val grouped = wishes.groupBy { "${it.tmdb_id}:${it.tmdb_media_type}" }
+        val wishes = WishListService.getVisibleMediaWishSummariesForUser(user.id!!)
 
         return wishListResponse {
-            this.wishes.addAll(grouped.values.mapNotNull { items ->
-                val first = items.first()
-                val userVoted = items.any { it.user_id == user.id }
+            this.wishes.addAll(wishes.map { summary ->
+                val wish = summary.wish
                 wishItem {
-                    id = first.id!!
-                    first.tmdb_id?.let { tmdbId = it }
-                    mediaType = first.tmdb_media_type.toProtoMediaType()
-                    title = first.tmdb_title ?: ""
-                    first.tmdb_poster_path?.let { posterUrl = "https://image.tmdb.org/t/p/w500$it" }
-                    first.tmdb_release_year?.let { releaseYear = it }
-                    first.season_number?.let { seasonNumber = it }
-                    status = when (first.status) {
+                    id = wish.id!!
+                    wish.tmdb_id?.let { tmdbId = it }
+                    mediaType = wish.tmdb_media_type.toProtoMediaType()
+                    title = wish.tmdb_title ?: ""
+                    wish.tmdb_poster_path?.let { posterUrl = "https://image.tmdb.org/t/p/w500$it" }
+                    wish.tmdb_release_year?.let { releaseYear = it }
+                    wish.season_number?.let { seasonNumber = it }
+                    status = when (wish.status) {
                         "ACTIVE" -> WishStatus.WISH_STATUS_ACTIVE
                         "FULFILLED" -> WishStatus.WISH_STATUS_FULFILLED
                         else -> WishStatus.WISH_STATUS_UNKNOWN
                     }
-                    voteCount = items.size
-                    this.userVoted = userVoted
-                    voters.addAll(items.mapNotNull { wish ->
-                        AppUser.findById(wish.user_id)?.username
-                    })
-                    first.created_at?.let { createdAt = it.toProtoTimestamp() }
+                    voteCount = summary.voteCount
+                    userVoted = true
+                    voters.addAll(summary.voters)
+                    acquisitionStatus = summary.acquisitionStatus.toProtoAcquisitionStatus()
+                    lifecycleStage = summary.lifecycleStage.toProtoWishLifecycleStage()
+                    summary.titleId?.let { titleId = it }
+                    wish.created_at?.let { createdAt = it.toProtoTimestamp() }
                 }
             })
         }
@@ -50,24 +48,21 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
 
     override suspend fun addWish(request: AddWishRequest): AddWishResponse {
         val user = currentUser()
-        val item = WishListItem(
-            user_id = user.id!!,
-            tmdb_id = request.tmdbId,
-            tmdb_media_type = when (request.mediaType) {
-                MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE.name
-                MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV.name
-                else -> MediaTypeEnum.MOVIE.name
-            },
-            tmdb_title = request.title,
-            tmdb_poster_path = if (request.hasPosterPath()) request.posterPath else null,
-            tmdb_release_year = if (request.hasReleaseYear()) request.releaseYear else null,
-            tmdb_popularity = if (request.hasPopularity()) request.popularity else null,
-            season_number = if (request.hasSeasonNumber()) request.seasonNumber else null,
-            wish_type = WishType.MEDIA.name,
-            status = "ACTIVE",
-            created_at = LocalDateTime.now()
-        )
-        item.save()
+        val mediaType = when (request.mediaType) {
+            MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE
+            MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV
+            MediaType.MEDIA_TYPE_PERSONAL -> MediaTypeEnum.PERSONAL
+            else -> MediaTypeEnum.MOVIE
+        }
+        val item = WishListService.addMediaWishForUser(
+            userId = user.id!!,
+            tmdbId = net.stewart.mediamanager.entity.TmdbId(request.tmdbId, mediaType),
+            title = request.title,
+            posterPath = if (request.hasPosterPath()) request.posterPath else null,
+            releaseYear = if (request.hasReleaseYear()) request.releaseYear else null,
+            popularity = if (request.hasPopularity()) request.popularity else null,
+            seasonNumber = if (request.hasSeasonNumber()) request.seasonNumber else null
+        ) ?: throw StatusException(Status.ALREADY_EXISTS.withDescription("Wish already exists"))
         return addWishResponse { id = item.id!! }
     }
 
@@ -86,10 +81,12 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
         val wish = WishListItem.findById(request.wishId) ?: return Empty.getDefaultInstance()
 
         if (request.vote) {
-            // Add a vote (create a new wish for the same tmdb_id/media_type from this user)
+            // Add a vote (create a new wish for the same tmdb/media/season from this user).
             val existing = WishListItem.findAll().firstOrNull {
                 it.user_id == user.id && it.tmdb_id == wish.tmdb_id &&
-                    it.tmdb_media_type == wish.tmdb_media_type && it.status == "ACTIVE"
+                    it.tmdb_media_type == wish.tmdb_media_type &&
+                    (it.season_number ?: 0) == (wish.season_number ?: 0) &&
+                    it.status == "ACTIVE"
             }
             if (existing == null) {
                 WishListItem(
@@ -100,17 +97,20 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
                     tmdb_poster_path = wish.tmdb_poster_path,
                     tmdb_release_year = wish.tmdb_release_year,
                     tmdb_popularity = wish.tmdb_popularity,
+                    season_number = wish.season_number,
                     wish_type = WishType.MEDIA.name,
                     status = "ACTIVE",
                     created_at = LocalDateTime.now()
                 ).save()
             }
         } else {
-            // Remove vote (cancel this user's wish for the same tmdb_id/media_type)
+            // Remove vote (cancel this user's wish for the same tmdb/media/season).
             WishListItem.findAll()
                 .filter {
                     it.user_id == user.id && it.tmdb_id == wish.tmdb_id &&
-                        it.tmdb_media_type == wish.tmdb_media_type && it.status == "ACTIVE"
+                        it.tmdb_media_type == wish.tmdb_media_type &&
+                        (it.season_number ?: 0) == (wish.season_number ?: 0) &&
+                        it.status == "ACTIVE"
                 }
                 .forEach { it.status = "CANCELLED"; it.save() }
         }
@@ -128,8 +128,9 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
     }
 
     override suspend fun listTranscodeWishes(request: Empty): TranscodeWishListResponse {
+        val user = currentUser()
         val wishes = WishListItem.findAll()
-            .filter { it.wish_type == WishType.TRANSCODE.name && it.status == "ACTIVE" }
+            .filter { it.user_id == user.id && it.wish_type == WishType.TRANSCODE.name && it.status == "ACTIVE" }
         val titleIds = wishes.mapNotNull { it.title_id }.toSet()
         val titles = TitleEntity.findAll().filter { it.id in titleIds }.associateBy { it.id }
 
@@ -148,22 +149,14 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
 
     override suspend fun addTranscodeWish(request: TitleIdRequest): AddWishResponse {
         val user = currentUser()
-        val item = WishListItem(
-            user_id = user.id!!,
-            title_id = request.titleId,
-            wish_type = WishType.TRANSCODE.name,
-            status = "ACTIVE",
-            created_at = LocalDateTime.now()
-        )
-        item.save()
+        val item = WishListService.addTranscodeWishForUser(user.id!!, request.titleId)
+            ?: throw StatusException(Status.ALREADY_EXISTS.withDescription("Transcode wish already exists"))
         return addWishResponse { id = item.id!! }
     }
 
     override suspend fun removeTranscodeWish(request: TitleIdRequest): Empty {
         val user = currentUser()
-        WishListItem.findAll()
-            .filter { it.user_id == user.id && it.title_id == request.titleId && it.wish_type == WishType.TRANSCODE.name }
-            .forEach { it.delete() }
+        WishListService.removeTranscodeWishForUser(user.id!!, request.titleId)
         return Empty.getDefaultInstance()
     }
 

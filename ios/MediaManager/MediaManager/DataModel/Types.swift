@@ -278,12 +278,47 @@ enum SearchResultType: String, Codable, Sendable {
 }
 
 enum AcquisitionStatus: String, Codable, Sendable {
-    case none = "NONE"
+    case unknown = "UNKNOWN"
+    case notAvailable = "NOT_AVAILABLE"
+    case rejected = "REJECTED"
     case ordered = "ORDERED"
-    case shipped = "SHIPPED"
-    case arrived = "ARRIVED"
-    case ripped = "RIPPED"
-    case returned = "RETURNED"
+    case owned = "OWNED"
+    case needsAssistance = "NEEDS_ASSISTANCE"
+
+    var displayLabel: String {
+        switch self {
+        case .unknown: "Wished for"
+        case .notAvailable: "Not feasible"
+        case .rejected: "Won't order"
+        case .ordered: "Ordered"
+        case .owned: "Owned"
+        case .needsAssistance: "Needs assistance"
+        }
+    }
+}
+
+enum WishLifecycleStage: String, Codable, Sendable {
+    case wishedFor = "WISHED_FOR"
+    case notFeasible = "NOT_FEASIBLE"
+    case wontOrder = "WONT_ORDER"
+    case needsAssistance = "NEEDS_ASSISTANCE"
+    case ordered = "ORDERED"
+    case inHousePendingNas = "IN_HOUSE_PENDING_NAS"
+    case onNasPendingDesktop = "ON_NAS_PENDING_DESKTOP"
+    case readyToWatch = "READY_TO_WATCH"
+
+    var displayLabel: String {
+        switch self {
+        case .wishedFor: "Wished for"
+        case .notFeasible: "Not feasible"
+        case .wontOrder: "Won't order"
+        case .needsAssistance: "Needs assistance"
+        case .ordered: "Ordered"
+        case .inHousePendingNas: "In house, pending NAS"
+        case .onNasPendingDesktop: "On NAS, pending desktop"
+        case .readyToWatch: "Ready to watch"
+        }
+    }
 }
 
 enum EnrichmentStatus: String, Codable, Sendable {

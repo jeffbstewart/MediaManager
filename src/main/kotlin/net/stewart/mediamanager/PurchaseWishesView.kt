@@ -21,6 +21,8 @@ import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.AcquisitionStatus
 import net.stewart.mediamanager.service.MediaWishAggregate
 import net.stewart.mediamanager.service.WishListService
+import net.stewart.mediamanager.service.WishLifecycleStage
+import net.stewart.mediamanager.service.displayLabel
 
 @Route(value = "purchase-wishes", layout = MainLayout::class)
 @PageTitle("Purchase Wishes")
@@ -83,7 +85,7 @@ class PurchaseWishesView : VerticalLayout() {
             addColumn { it.voters.joinToString(", ") }.setHeader("Requested by").setFlexGrow(1)
 
             addColumn(ComponentRenderer { agg -> buildStatusCell(agg) })
-                .setHeader("Status").setWidth("200px").setFlexGrow(0)
+                .setHeader("Lifecycle").setWidth("220px").setFlexGrow(0)
         }
         add(grid)
 
@@ -99,15 +101,17 @@ class PurchaseWishesView : VerticalLayout() {
             })
         } else {
             val statusOrder = mapOf(
-                null to 0, "UNKNOWN" to 0,
-                "OWNED" to 1,
-                "ORDERED" to 2,
-                "NOT_AVAILABLE" to 3,
-                "NEEDS_ASSISTANCE" to 4,
-                "REJECTED" to 5
+                WishLifecycleStage.WISHED_FOR to 0,
+                WishLifecycleStage.ORDERED to 1,
+                WishLifecycleStage.NEEDS_ASSISTANCE to 2,
+                WishLifecycleStage.IN_HOUSE_PENDING_NAS to 3,
+                WishLifecycleStage.ON_NAS_PENDING_DESKTOP to 4,
+                WishLifecycleStage.READY_TO_WATCH to 5,
+                WishLifecycleStage.NOT_FEASIBLE to 6,
+                WishLifecycleStage.WONT_ORDER to 7
             )
             val sorted = aggregates.sortedWith(
-                compareBy<MediaWishAggregate> { statusOrder[it.acquisitionStatus] ?: 99 }
+                compareBy<MediaWishAggregate> { statusOrder[it.lifecycleStage] ?: 99 }
                     .thenBy { it.tmdbTitle.lowercase() }
             )
             grid.setItems(sorted)
@@ -115,18 +119,15 @@ class PurchaseWishesView : VerticalLayout() {
     }
 
     private fun buildStatusCell(agg: MediaWishAggregate): Div {
-        val status = try {
-            agg.acquisitionStatus?.let { AcquisitionStatus.valueOf(it) }
-        } catch (_: Exception) { null }
-
-        val (bgColor, textColor, label) = when (status) {
-            AcquisitionStatus.OWNED -> Triple("rgba(0,200,83,0.2)", "var(--lumo-success-color)", "Owned")
-            AcquisitionStatus.ORDERED -> Triple("rgba(30,136,229,0.2)", "var(--lumo-primary-color)", "Ordered")
-            AcquisitionStatus.REJECTED -> Triple("rgba(244,67,54,0.15)", "var(--lumo-error-color)", "Rejected")
-            AcquisitionStatus.NOT_AVAILABLE -> Triple("rgba(158,158,158,0.2)", "rgba(255,255,255,0.6)", "Not Available")
-            AcquisitionStatus.NEEDS_ASSISTANCE -> Triple("rgba(255,165,0,0.2)", "#FFA500", "Needs Help")
-            AcquisitionStatus.UNKNOWN -> Triple("rgba(255,193,7,0.15)", "#FFD54F", "Unreviewed")
-            null -> Triple("rgba(255,193,7,0.15)", "#FFD54F", "Unreviewed")
+        val (bgColor, textColor, label) = when (agg.lifecycleStage) {
+            WishLifecycleStage.READY_TO_WATCH -> Triple("rgba(0,200,83,0.2)", "var(--lumo-success-color)", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.ON_NAS_PENDING_DESKTOP -> Triple("rgba(30,136,229,0.2)", "var(--lumo-primary-color)", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.IN_HOUSE_PENDING_NAS -> Triple("rgba(33,150,243,0.15)", "var(--lumo-primary-text-color)", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.ORDERED -> Triple("rgba(30,136,229,0.2)", "var(--lumo-primary-color)", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.NOT_FEASIBLE, WishLifecycleStage.WONT_ORDER ->
+                Triple("rgba(244,67,54,0.15)", "var(--lumo-error-color)", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.NEEDS_ASSISTANCE -> Triple("rgba(255,165,0,0.2)", "#FFA500", agg.lifecycleStage.displayLabel())
+            WishLifecycleStage.WISHED_FOR -> Triple("rgba(255,193,7,0.15)", "#FFD54F", agg.lifecycleStage.displayLabel())
         }
 
         return Div().apply {
@@ -144,7 +145,7 @@ class PurchaseWishesView : VerticalLayout() {
                 style.set("font-weight", "500")
             })
 
-            element.setAttribute("title", "Click to change status")
+            element.setAttribute("title", "Click to change acquisition decision")
             element.addEventListener("click") {
                 openStatusDialog(agg)
             }
@@ -159,6 +160,7 @@ class PurchaseWishesView : VerticalLayout() {
 
         val statusOptions = listOf(
             AcquisitionStatus.ORDERED,
+            AcquisitionStatus.NEEDS_ASSISTANCE,
             AcquisitionStatus.NOT_AVAILABLE,
             AcquisitionStatus.REJECTED,
             AcquisitionStatus.OWNED
@@ -173,6 +175,7 @@ class PurchaseWishesView : VerticalLayout() {
             setItemLabelGenerator {
                 when (it) {
                     AcquisitionStatus.ORDERED -> "Ordered"
+                    AcquisitionStatus.NEEDS_ASSISTANCE -> "Needs assistance"
                     AcquisitionStatus.NOT_AVAILABLE -> "Not Available"
                     AcquisitionStatus.REJECTED -> "Rejected"
                     AcquisitionStatus.OWNED -> "Owned"

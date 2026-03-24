@@ -24,6 +24,7 @@ import net.stewart.mediamanager.entity.MatchMethod as MatchMethodEnum
 import net.stewart.mediamanager.entity.AcquisitionStatus as AcquisitionStatusEnum
 import net.stewart.mediamanager.entity.LeaseStatus as LeaseStatusEnum
 import net.stewart.mediamanager.entity.LeaseType as LeaseTypeEnum
+import net.stewart.mediamanager.service.WishLifecycleStage
 import net.stewart.mediamanager.service.TranscoderAgent
 import java.io.File
 import java.time.LocalDate
@@ -121,6 +122,17 @@ fun String?.toProtoAcquisitionStatus(): AcquisitionStatus = when (this) {
     AcquisitionStatusEnum.OWNED.name -> AcquisitionStatus.ACQUISITION_STATUS_OWNED
     AcquisitionStatusEnum.NEEDS_ASSISTANCE.name -> AcquisitionStatus.ACQUISITION_STATUS_NEEDS_ASSISTANCE
     else -> AcquisitionStatus.ACQUISITION_STATUS_UNKNOWN
+}
+
+fun WishLifecycleStage.toProtoWishLifecycleStage(): net.stewart.mediamanager.grpc.WishLifecycleStage = when (this) {
+    WishLifecycleStage.WISHED_FOR -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_WISHED_FOR
+    WishLifecycleStage.NOT_FEASIBLE -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_NOT_FEASIBLE
+    WishLifecycleStage.WONT_ORDER -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_WONT_ORDER
+    WishLifecycleStage.NEEDS_ASSISTANCE -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_NEEDS_ASSISTANCE
+    WishLifecycleStage.ORDERED -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_ORDERED
+    WishLifecycleStage.IN_HOUSE_PENDING_NAS -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_IN_HOUSE_PENDING_NAS
+    WishLifecycleStage.ON_NAS_PENDING_DESKTOP -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_ON_NAS_PENDING_DESKTOP
+    WishLifecycleStage.READY_TO_WATCH -> net.stewart.mediamanager.grpc.WishLifecycleStage.WISH_LIFECYCLE_STAGE_READY_TO_WATCH
 }
 
 fun String?.toProtoLeaseStatus(): LeaseStatus = when (this) {

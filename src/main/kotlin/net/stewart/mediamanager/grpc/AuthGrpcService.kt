@@ -21,9 +21,7 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("Username and password required"))
         }
 
-        // IP extraction: gRPC-Web over HTTP/1.1, IP not directly available in gRPC context.
-        // Use "unknown" for now; the interceptor could extract it from transport attributes.
-        val ip = "unknown"
+        val ip = currentClientIp()
 
         when (val result = AuthService.login(request.username, request.password, ip)) {
             is LoginResult.Success -> {

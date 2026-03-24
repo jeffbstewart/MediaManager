@@ -110,7 +110,7 @@ class TranscodeBacklogView : KComposite() {
     private fun refreshBacklogGrid() {
         val titles = Title.findAll()
         val transcodes = Transcode.findAll()
-        val wishCounts = WishListService.getTranscodeWishCounts()
+        val wishCounts = WishListService.getRipPriorityCounts()
 
         // Title IDs that have at least one transcode with a file_path
         val titlesWithTranscodes = transcodes
