@@ -29,7 +29,8 @@ object GrpcServer {
             WishListGrpcService(),
             ProfileGrpcService(),
             LiveGrpcService(),
-            AdminGrpcService()
+            AdminGrpcService(),
+            ImageGrpcService()
         )
 
         val builder = NettyServerBuilder.forPort(port)

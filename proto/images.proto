@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+// Bidirectional streaming image channel.
+//
+// The client sends ImageRequest messages as images are needed (e.g. as
+// views appear or the user scrolls). The server streams back ImageResponse
+// messages with the image data, cache validation results, or errors.
+//
+// The client may send CancelStale requests to discard pending work for
+// images that are no longer visible (e.g. after navigating away).
+//
+// Authentication: requires any valid JWT. Admin-only image types
+// (OWNERSHIP_PHOTO) are rejected with PERMISSION_DENIED for non-admin users.
+service ImageService {
+  rpc StreamImages(stream ImageRequest) returns (stream ImageResponse);
+}
+
+// --- Image identification ---
+
+enum ImageType {
+  IMAGE_TYPE_UNKNOWN = 0;
+  IMAGE_TYPE_POSTER_THUMBNAIL = 1;   // w185 poster
+  IMAGE_TYPE_POSTER_FULL = 2;        // w500 poster
+  IMAGE_TYPE_BACKDROP = 3;           // w1280 backdrop
+  IMAGE_TYPE_HEADSHOT = 4;           // w185 actor headshot
+  IMAGE_TYPE_COLLECTION_POSTER = 5;  // w500 collection poster
+  IMAGE_TYPE_LOCAL_IMAGE = 6;        // personal video hero, user upload
+  IMAGE_TYPE_OWNERSHIP_PHOTO = 7;    // disc ownership documentation (admin only)
+  IMAGE_TYPE_CAMERA_SNAPSHOT = 8;    // live camera frame (not cacheable)
+}
+
+// Identifies a specific image by type + type-specific key.
+//
+// Design note: we use separate fields with ImageType as discriminator rather
+// than a proto oneof. Proto3 oneof cannot distinguish "not set" from default
+// values (0 for int, "" for string), making it impossible to tell whether
+// a field was intentionally set to its zero value. The ImageType enum
+// unambiguously declares which field to read, and unused fields cost zero
+// bytes on the wire (proto3 omits default-valued fields).
+message ImageRef {
+  ImageType type = 1;
+  int64 title_id = 2;              // POSTER_THUMBNAIL, POSTER_FULL, BACKDROP
+  int32 tmdb_person_id = 3;        // HEADSHOT
+  int32 tmdb_collection_id = 4;    // COLLECTION_POSTER
+  string uuid = 5;                 // LOCAL_IMAGE, OWNERSHIP_PHOTO
+  int64 camera_id = 6;             // CAMERA_SNAPSHOT
+}
+
+// --- Client -> Server messages ---
+
+message ImageRequest {
+  oneof request {
+    FetchImage fetch = 1;
+    CancelStale cancel_stale = 2;
+  }
+}
+
+// Request a single image. The server responds with an ImageResponse
+// carrying the same request_id.
+message FetchImage {
+  // Client-assigned tag for correlating responses. Typically an
+  // incrementing integer. Required -- the client uses this to route
+  // the response to the UI element that needs it.
+  int32 request_id = 1;
+  ImageRef ref = 2;
+
+  // Conditional fetch: if set, the server returns ImageNotModified
+  // instead of re-sending bytes when the image hasn't changed.
+  // The client obtains this value from a previous ImageData.etag.
+  optional string if_none_match = 3;
+}
+
+// Tells the server to drop any queued responses with request_id
+// less than or equal to the given watermark. Sent when the user
+// navigates away from a view -- images for the old view are no
+// longer needed and shouldn't consume bandwidth.
+//
+// Responses already in flight (written to the wire) may still
+// arrive; the client ignores them by request_id.
+message CancelStale {
+  int32 before_request_id = 1;
+}
+
+// --- Server -> Client messages ---
+
+message ImageResponse {
+  int32 request_id = 1;
+  ImageRef ref = 2;
+
+  oneof result {
+    ImageData data = 3;
+    ImageNotFound not_found = 4;
+    ImageNotModified not_modified = 5;
+    ImagePermissionDenied permission_denied = 6;
+  }
+}
+
+// The image bytes with cache metadata.
+message ImageData {
+  bytes content = 1;
+  string content_type = 2;    // "image/jpeg", "image/png", etc.
+
+  // Opaque cache token. The client stores this alongside the cached
+  // image and sends it back as if_none_match on future requests.
+  // The server derives this from poster_cache_id, file hash, or
+  // similar -- it changes when the underlying image changes.
+  string etag = 3;
+}
+
+// The requested image does not exist (title has no poster, etc.)
+message ImageNotFound {}
+
+// The etag is still valid -- client should use its cached copy.
+message ImageNotModified {}
+
+// The authenticated user lacks permission for this image type
+// (e.g. non-admin requesting OWNERSHIP_PHOTO).
+message ImagePermissionDenied {}
