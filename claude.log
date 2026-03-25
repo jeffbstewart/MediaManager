@@ -3939,3 +3939,25 @@ Documentation:
 - TODO next session: migrate ~20 AuthenticatedImage call sites to CachedImage/ImageRef
 - 5 commits ahead of origin, not pushed
 ===
+
+=== 2026-03-24 22:00 — gRPC Image Streaming Migration ===
+- Merged upstream changes (wishlist lifecycle, iOS docs)
+- Completed full migration of all 16 AuthenticatedImage call sites to
+  CachedImage with typed ImageRef — zero URL construction in views
+- Added IMAGE_TYPE_TMDB_POSTER with TmdbMediaId composite key for
+  unowned titles (wishes, collection items); server proxies TMDB CDN
+- Fixed personal/family hero images: poster_path null check was
+  blocking the personal video branch in ImageGrpcService
+- Fixed ImageStreamClient race condition: multiple CachedImage views
+  calling ensureStream() simultaneously cancelled each other's streams.
+  Now uses connecting flag + continuation list for proper serialization.
+- Added 15-second keepalive pings to prevent HAProxy idle timeout
+- Added ImageDiskCache (500-image LRU with JSON manifest), 
+  ImageStreamClient (bidi stream with reconnect), ImageProvider
+  (cache+stream abstraction), CachedImage SwiftUI view
+- Removed apiClient parameter from PosterCard, ScanRow, CameraAdminRow,
+  PhotoThumbnail — no longer needed with gRPC image delivery
+- Server: ImageGrpcService handles all 9 image types including
+  TMDB poster proxy for unowned titles
+- 7 commits pushed to GitHub
+===
