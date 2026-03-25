@@ -153,7 +153,7 @@ final class OnlineDataModel: DataModel {
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {
         // Prefer local file for offline or downloaded content
-        if let localURL = downloads.localFileURL(for: transcodeId) {
+        if let localURL = downloads.localVideoURL(for: transcodeId.protoValue) {
             return AVURLAsset(url: localURL)
         }
         if !isOnline { return nil }
@@ -172,7 +172,7 @@ final class OnlineDataModel: DataModel {
 
     func reportProgress(transcodeId: TranscodeID, position: Double, duration: Double?) async {
         if !isOnline {
-            downloads.queueProgressUpdate(transcodeId: transcodeId, position: position, duration: duration)
+            downloads.queueProgressUpdate(transcodeId: transcodeId.protoValue, position: position, duration: duration)
             return
         }
         try? await grpcClient.reportProgress(transcodeId: transcodeId.protoValue, position: position, duration: duration)

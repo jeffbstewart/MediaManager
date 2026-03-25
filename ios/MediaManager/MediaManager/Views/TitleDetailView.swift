@@ -16,23 +16,21 @@ struct TitleDetailView: View {
             if loading {
                 ProgressView("Loading...")
             } else if let detail {
+                detailContent(detail)
+            } else {
+                ContentUnavailableView("Title not found", systemImage: "film")
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadDetail() }
+    }
+
+    @ViewBuilder
+    private func detailContent(_ detail: ApiTitleDetail) -> some View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        // Hero image — use backdrop, or poster for personal videos
-                        if isOffline {
-                            offlineImage(titleId: detail.id, name: "backdrop.jpg", fallback: "poster.jpg")
-                                .frame(height: 220)
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            CachedImage(
-                                ref: detail.backdropUrl != nil
-                                    ? .backdrop(titleId: detail.id.protoValue)
-                                    : .posterFull(titleId: detail.id.protoValue),
-                                cornerRadius: 0
-                            )
-                            .frame(height: 220)
-                            .frame(maxWidth: .infinity)
-                        }
+                        heroImage(detail: detail)
 
                         VStack(alignment: .leading, spacing: 12) {
                             // Title + metadata
@@ -108,7 +106,7 @@ struct TitleDetailView: View {
                             if detail.playable, detail.mediaType != .tv, let tcId = detail.transcodeId {
                                 let tcHasSubs = detail.transcodes.first(where: { $0.id == tcId })?.hasSubtitles ?? false
                                 // In offline mode, only show play if we have the local file
-                                if !isOffline || dataModel.downloads.localFileURL(for: tcId) != nil {
+                                if !isOffline || dataModel.downloads.localVideoURL(for: tcId.protoValue) != nil {
                                     NavigationLink(value: PlaybackRoute(
                                         transcodeId: tcId, titleName: detail.name, episodeName: nil,
                                         hasSubtitles: tcHasSubs
@@ -304,15 +302,6 @@ struct TitleDetailView: View {
                         .padding(.horizontal)
                     }
                 }
-            } else {
-                ContentUnavailableView("Not found", systemImage: "questionmark.circle")
-            }
-        }
-        .navigationTitle(detail?.name ?? "")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await loadDetail()
-        }
     }
 
     private func loadDetail() async {
@@ -359,50 +348,69 @@ struct TitleDetailView: View {
 
     @ViewBuilder
     private func downloadButton(detail: ApiTitleDetail, transcodeId: TranscodeID) -> some View {
-        let dlState = dataModel.downloads.state(for: transcodeId)
+        let dlState = dataModel.downloads.state(for: transcodeId.protoValue)
 
         switch dlState {
         case .completed:
             Label("Downloaded", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .downloading, .fetchingMetadata:
-            if let item = dataModel.downloads.item(for: transcodeId) {
+            if let entry = dataModel.downloads.entries.first(where: { $0.transcodeID == transcodeId.protoValue }) {
                 HStack(spacing: 4) {
-                    ProgressView(value: item.progress)
+                    ProgressView(value: entry.progress)
                         .frame(width: 40)
-                    Text("\(Int(item.progress * 100))%")
+                    Text("\(Int(entry.progress * 100))%")
                         .font(.caption2)
                 }
                 .foregroundStyle(.blue)
             }
         case .paused:
             Button {
-                dataModel.downloads.resumeDownload(transcodeId: transcodeId)
+                dataModel.downloads.resumeDownload(transcodeId: transcodeId.protoValue)
             } label: {
                 Label("Resume", systemImage: "arrow.down.circle")
                     .foregroundStyle(.orange)
             }
         case .failed:
             Button {
-                dataModel.downloads.resumeDownload(transcodeId: transcodeId)
+                dataModel.downloads.resumeDownload(transcodeId: transcodeId.protoValue)
             } label: {
                 Label("Retry", systemImage: "arrow.clockwise.circle")
                     .foregroundStyle(.red)
             }
-        case nil:
+        case .unknown, .queued, .UNRECOGNIZED:
             Button {
                 dataModel.downloads.startDownload(
-                    transcodeId: transcodeId,
-                    titleId: detail.id,
+                    transcodeId: transcodeId.protoValue,
+                    titleId: detail.id.protoValue,
                     titleName: detail.name,
-                    posterUrl: detail.posterUrl,
-                    quality: detail.quality,
-                    year: detail.year
+                    quality: .unknown,
+                    year: Int32(detail.year ?? 0),
+                    mediaType: detail.mediaType == .tv ? .tv : .movie,
+                    contentRating: .unknown
                 )
             } label: {
                 Label("Download", systemImage: "arrow.down.circle")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func heroImage(detail: ApiTitleDetail) -> some View {
+        if isOffline {
+            offlineImage(titleId: detail.id, name: "backdrop.jpg", fallback: "poster.jpg")
+                .frame(height: 220)
+                .frame(maxWidth: .infinity)
+        } else {
+            CachedImage(
+                ref: detail.backdropUrl != nil
+                    ? .backdrop(titleId: detail.id.protoValue)
+                    : .posterFull(titleId: detail.id.protoValue),
+                cornerRadius: 0
+            )
+            .frame(height: 220)
+            .frame(maxWidth: .infinity)
         }
     }
 

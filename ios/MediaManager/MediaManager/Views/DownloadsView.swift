@@ -7,10 +7,11 @@ struct DownloadsView: View {
 
     var body: some View {
         List {
-            let active = dataModel.downloads.items.filter {
+            let items = dataModel.downloads.entries.map { DownloadItem(entry: $0) }
+            let active = items.filter {
                 $0.state == .fetchingMetadata || $0.state == .downloading || $0.state == .paused || $0.state == .failed
             }
-            let completed = dataModel.downloads.items.filter { $0.state == .completed }
+            let completed = items.filter { $0.state == .completed }
 
             // Group completed downloads by title
             let titleGroups = Dictionary(grouping: completed) { $0.titleId }
@@ -81,7 +82,7 @@ struct DownloadsView: View {
                         Text(item.errorMessage ?? "Failed")
                             .font(.caption)
                             .foregroundStyle(.red)
-                    case .completed:
+                    case .completed, .queued, .unknown, .UNRECOGNIZED:
                         EmptyView()
                     }
                 }
@@ -90,13 +91,13 @@ struct DownloadsView: View {
 
                 switch item.state {
                 case .downloading:
-                    Button { dataModel.downloads.pauseDownload(transcodeId: item.transcodeId) } label: {
+                    Button { dataModel.downloads.pauseDownload(transcodeId: item.transcodeId.protoValue) } label: {
                         Image(systemName: "pause.circle.fill")
                             .font(.title2)
                             .frame(minWidth: 44, minHeight: 44)
                     }
                 case .paused, .failed:
-                    Button { dataModel.downloads.resumeDownload(transcodeId: item.transcodeId) } label: {
+                    Button { dataModel.downloads.resumeDownload(transcodeId: item.transcodeId.protoValue) } label: {
                         Image(systemName: "arrow.clockwise.circle.fill")
                             .font(.title2)
                             .frame(minWidth: 44, minHeight: 44)
@@ -105,7 +106,7 @@ struct DownloadsView: View {
                     EmptyView()
                 }
 
-                Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId) } label: {
+                Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId.protoValue) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
                         .foregroundStyle(.red.opacity(0.7))
@@ -122,66 +123,19 @@ struct DownloadsView: View {
         .padding(.vertical, 4)
     }
 
-    @ViewBuilder
     private func titleRow(_ item: DownloadItem, episodeCount: Int) -> some View {
-        // Navigate to title detail for richer browsing (works offline via cache)
-        NavigationLink(value: ApiTitle(
-            id: item.titleId,
-            name: item.titleName,
-            mediaType: episodeCount > 1 ? .tv : .movie,
-            year: item.year,
-            description: nil,
-            posterUrl: item.posterUrl,
-            backdropUrl: nil,
-            contentRating: nil,
-            popularity: nil,
-            quality: item.quality,
-            playable: true,
-            transcodeId: episodeCount == 1 ? item.transcodeId : nil,
-            tmdbId: nil,
-            tmdbCollectionId: nil,
-            tmdbCollectionName: nil,
-            familyMembers: nil,
-            forMobileAvailable: nil
-        )) {
-            HStack {
-                posterImage(item)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.titleName)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    HStack(spacing: 8) {
-                        if let year = item.year {
-                            Text(String(year))
-                        }
-                        if let quality = item.quality {
-                            Text(quality)
-                        }
-                        if episodeCount > 1 {
-                            Text("\(episodeCount) episodes")
-                        } else if let size = item.fileSizeBytes {
-                            Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
+        let title = makeTitleForNavigation(item: item, episodeCount: episodeCount)
+        return NavigationLink(value: title) {
+            titleRowContent(item: item, episodeCount: episodeCount)
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                // Delete all downloads for this title
                 let titleId = item.titleId
-                let toDelete = dataModel.downloads.items.filter { $0.titleId == titleId && $0.state == .completed }
+                let toDelete = dataModel.downloads.entries.filter {
+                    $0.titleID == titleId.protoValue && $0.state == .completed
+                }
                 for dl in toDelete {
-                    dataModel.downloads.deleteDownload(transcodeId: dl.transcodeId)
+                    dataModel.downloads.deleteDownload(transcodeId: dl.transcodeID)
                 }
             } label: {
                 Label("Delete", systemImage: "trash")
@@ -228,6 +182,40 @@ struct DownloadsView: View {
         }
     }
 
+    @ViewBuilder
+    private func titleRowContent(item: DownloadItem, episodeCount: Int) -> some View {
+        HStack {
+            posterImage(item)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.titleName)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    if let year = item.year {
+                        Text(String(year))
+                    }
+                    if let quality = item.quality {
+                        Text(quality)
+                    }
+                    if episodeCount > 1 {
+                        Text("\(episodeCount) episodes")
+                    } else if let size = item.fileSizeBytes {
+                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        }
+    }
+
     private func downloadProgressText(_ item: DownloadItem) -> String {
         let downloaded = ByteCountFormatter.string(fromByteCount: item.bytesDownloaded, countStyle: .file)
         if let total = item.fileSizeBytes {
@@ -235,5 +223,16 @@ struct DownloadsView: View {
             return "\(downloaded) / \(totalStr)"
         }
         return downloaded
+    }
+
+    private func makeTitleForNavigation(item: DownloadItem, episodeCount: Int) -> ApiTitle {
+        var proto = MMTitle()
+        proto.id = item.titleId.protoValue
+        proto.name = item.titleName
+        proto.mediaType = item.entry.mediaType
+        if let year = item.year { proto.year = Int32(year) }
+        proto.playable = true
+        if episodeCount == 1 { proto.transcodeID = item.transcodeId.protoValue }
+        return ApiTitle(proto: proto)
     }
 }

@@ -16,7 +16,7 @@ struct EpisodesView: View {
     private var downloadableEpisodes: [ApiEpisode] {
         episodes.filter { ep in
             guard ep.forMobileAvailable == true, let tcId = ep.transcodeId else { return false }
-            return dataModel.downloads.state(for: tcId) == nil
+            return dataModel.downloads.state(for: tcId.protoValue) == .unknown
         }
     }
 
@@ -45,7 +45,7 @@ struct EpisodesView: View {
                     Section {
                         ForEach(Array(episodes.enumerated()), id: \.element.episodeId) { index, episode in
                             let isPlayable = isOffline
-                                ? (episode.transcodeId.flatMap { dataModel.downloads.localFileURL(for: $0) } != nil)
+                                ? (episode.transcodeId.flatMap { dataModel.downloads.localVideoURL(for: $0.protoValue) } != nil)
                                 : (episode.playable && episode.transcodeId != nil)
 
                             if isPlayable, let tcId = episode.transcodeId {
@@ -91,12 +91,16 @@ struct EpisodesView: View {
         for ep in downloadableEpisodes {
             guard let tcId = ep.transcodeId else { continue }
             dataModel.downloads.startDownload(
-                transcodeId: tcId,
-                titleId: route.titleId,
+                transcodeId: tcId.protoValue,
+                titleId: route.titleId.protoValue,
                 titleName: route.titleName,
-                posterUrl: route.posterUrl,
-                quality: ep.quality,
-                year: nil
+                quality: .unknown,
+                year: 0,
+                mediaType: .tv,
+                contentRating: .unknown,
+                seasonNumber: Int32(ep.seasonNumber),
+                episodeNumber: Int32(ep.episodeNumber),
+                episodeTitle: ep.name ?? ""
             )
         }
     }
@@ -107,7 +111,7 @@ struct EpisodesView: View {
             guard let tcId = ep.transcodeId else { continue }
 
             let playable = isOffline
-                ? (dataModel.downloads.localFileURL(for: tcId) != nil)
+                ? (dataModel.downloads.localVideoURL(for: tcId.protoValue) != nil)
                 : ep.playable
 
             if playable {
@@ -217,7 +221,7 @@ struct EpisodeRow: View {
 
     @ViewBuilder
     private func episodeDownloadIndicator(transcodeId: TranscodeID) -> some View {
-        let dlState = dataModel.downloads.state(for: transcodeId)
+        let dlState = dataModel.downloads.state(for: transcodeId.protoValue)
 
         if dlState == .completed {
             Image(systemName: "checkmark.circle.fill")
@@ -237,12 +241,16 @@ struct EpisodeRow: View {
         } else if episode.forMobileAvailable == true {
             Button {
                 dataModel.downloads.startDownload(
-                    transcodeId: transcodeId,
-                    titleId: titleId,
+                    transcodeId: transcodeId.protoValue,
+                    titleId: titleId.protoValue,
                     titleName: titleName,
-                    posterUrl: posterUrl,
-                    quality: episode.quality,
-                    year: nil
+                    quality: .unknown,
+                    year: 0,
+                    mediaType: .tv,
+                    contentRating: .unknown,
+                    seasonNumber: Int32(episode.seasonNumber),
+                    episodeNumber: Int32(episode.episodeNumber),
+                    episodeTitle: episode.name ?? ""
                 )
             } label: {
                 Image(systemName: "arrow.down.circle")

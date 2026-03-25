@@ -141,6 +141,26 @@ class VideoStreamServlet : HttpServlet() {
             return
         }
 
+        // ?quality=mobile → serve ForMobile transcode (for downloads)
+        val isMobileQuality = req.getParameter("quality") == "mobile"
+        if (isMobileQuality) {
+            if (nasRoot == null) {
+                log.warn("NAS root not configured for mobile quality, id={}", transcodeId)
+                resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+                MetricsRegistry.countHttpResponse("stream", 503)
+                return
+            }
+            val forMobileFile = TranscoderAgent.getForMobilePath(nasRoot, transcode.file_path!!)
+            if (!forMobileFile.exists()) {
+                log.info("ForMobile file not yet available: {}", forMobileFile.absolutePath)
+                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Mobile transcode not available")
+                MetricsRegistry.countHttpResponse("stream", 404)
+                return
+            }
+            streamFile(forMobileFile, req, resp)
+            return
+        }
+
         val ext = sourceFile.extension.lowercase()
         when {
             ext in directExtensions -> streamFile(sourceFile, req, resp)

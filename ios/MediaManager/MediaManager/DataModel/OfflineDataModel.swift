@@ -46,25 +46,17 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
 
+    // TODO: Offline title detail from cached protobuf — needs separate implementation
     func titleDetail(id: TitleID) async throws -> ApiTitleDetail {
-        guard let detail = downloads.loadCachedTitleDetail(for: id) else {
-            throw DataModelError.notFound
-        }
-        return detail
+        throw DataModelError.offline
     }
 
     func seasons(titleId: TitleID) async throws -> [ApiSeason] {
-        guard let seasons = downloads.loadCachedSeasons(for: titleId) else {
-            throw DataModelError.notFound
-        }
-        return seasons
+        throw DataModelError.offline
     }
 
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode] {
-        guard let episodes = downloads.loadCachedEpisodes(for: titleId, season: season) else {
-            throw DataModelError.notFound
-        }
-        return episodes
+        throw DataModelError.offline
     }
 
     func search(query: String) async throws -> ApiSearchResponse {
@@ -122,7 +114,7 @@ final class OfflineDataModel: DataModel {
     // MARK: - PlaybackDataModel (offline: local files + queued progress)
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {
-        guard let localURL = downloads.localFileURL(for: transcodeId) else { return nil }
+        guard let localURL = downloads.localVideoURL(for: transcodeId.protoValue) else { return nil }
         return AVURLAsset(url: localURL)
     }
 
@@ -133,7 +125,7 @@ final class OfflineDataModel: DataModel {
 
     func reportProgress(transcodeId: TranscodeID, position: Double, duration: Double?) async {
         // Queue for later sync
-        downloads.queueProgressUpdate(transcodeId: transcodeId, position: position, duration: duration)
+        downloads.queueProgressUpdate(transcodeId: transcodeId.protoValue, position: position, duration: duration)
     }
 
     // MARK: - WishListDataModel

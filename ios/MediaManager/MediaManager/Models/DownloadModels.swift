@@ -1,146 +1,53 @@
 import Foundation
 
-enum DownloadState: String, Codable {
-    case fetchingMetadata
-    case downloading
-    case paused
-    case completed
-    case failed
-}
+// Download state and metadata are now defined in proto/download_meta.proto
+// (MMDownloadDatabase, MMDownloadEntry, MMDownloadState, MMDownloadQuality).
+// This file retains only the view-layer helpers and adapters.
 
-struct DownloadItem: Codable, Identifiable {
-    var id: TranscodeID { transcodeId }
-    let transcodeId: TranscodeID
-    let titleId: TitleID
-    let titleName: String
-    let posterUrl: String?
-    let quality: String?
-    let year: Int?
-    var state: DownloadState
-    var fileSizeBytes: Int64?
-    var bytesDownloaded: Int64
-    var hasSubtitles: Bool
-    var hasThumbnails: Bool
-    var hasChapters: Bool
-    var resumeData: Data?
-    var errorMessage: String?
-    let addedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case transcodeId = "transcode_id"
-        case titleId = "title_id"
-        case titleName = "title_name"
-        case posterUrl = "poster_url"
-        case quality, year, state
-        case fileSizeBytes = "file_size_bytes"
-        case bytesDownloaded = "bytes_downloaded"
-        case hasSubtitles = "has_subtitles"
-        case hasThumbnails = "has_thumbnails"
-        case hasChapters = "has_chapters"
-        case resumeData = "resume_data"
-        case errorMessage = "error_message"
-        case addedAt = "added_at"
-    }
+extension MMDownloadEntry: Identifiable {
+    public var id: Int64 { transcodeID }
 
     var progress: Double {
-        guard let total = fileSizeBytes, total > 0 else { return 0 }
-        return Double(bytesDownloaded) / Double(total)
+        guard fileSizeBytes > 0 else { return 0 }
+        return Double(bytesDownloaded) / Double(fileSizeBytes)
     }
 
-    var localDir: URL {
-        DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId.rawValue)")
+    var qualityLabel: String {
+        switch quality {
+        case .sd: "SD"
+        case .fhd: "FHD"
+        case .uhd: "UHD"
+        default: ""
+        }
     }
 
-    var videoFileURL: URL {
-        localDir.appendingPathComponent("video.mp4")
-    }
-
-    static var downloadsRoot: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Downloads")
-    }
-
-    static var transcodesRoot: URL {
-        downloadsRoot.appendingPathComponent("transcodes")
-    }
-
-    static var titlesRoot: URL {
-        downloadsRoot.appendingPathComponent("titles")
-    }
-
-    static func titleCacheDir(for titleId: TitleID) -> URL {
-        titlesRoot.appendingPathComponent("\(titleId.rawValue)")
+    var isActive: Bool {
+        state == .fetchingMetadata || state == .downloading
     }
 }
 
-// MARK: - Title Cache
+// MARK: - Download Item Adapter (for DownloadsView compatibility)
 
-/// Tracks when a title's offline cache was last refreshed.
-struct TitleCacheEntry: Codable {
-    let titleId: TitleID
-    var lastUpdated: Date
+/// Lightweight wrapper used by DownloadsView where it previously expected DownloadItem.
+struct DownloadItem: Identifiable {
+    let entry: MMDownloadEntry
 
-    enum CodingKeys: String, CodingKey {
-        case titleId = "title_id"
-        case lastUpdated = "last_updated"
-    }
-}
-
-// MARK: - Pending Progress Updates
-
-/// Queued progress report for syncing to server when connectivity returns.
-struct PendingProgressUpdate: Codable {
-    let transcodeId: TranscodeID
-    let position: Double
-    let duration: Double?
-    let timestamp: Date
-
-    enum CodingKeys: String, CodingKey {
-        case transcodeId = "transcode_id"
-        case position, duration, timestamp
-    }
-}
-
-// MARK: - API Response Structs
-
-struct ApiDownloadAvailable: Codable, Identifiable {
-    var id: TranscodeID { transcodeId }
-    let transcodeId: TranscodeID
-    let titleId: TitleID
-    let titleName: String
-    let posterUrl: String?
-    let quality: String?
-    let year: Int?
-    let fileSizeBytes: Int64
-    let mediaType: MediaType
-
-    enum CodingKeys: String, CodingKey {
-        case quality, year
-        case transcodeId = "transcode_id"
-        case titleId = "title_id"
-        case titleName = "title_name"
-        case posterUrl = "poster_url"
-        case fileSizeBytes = "file_size_bytes"
-        case mediaType = "media_type"
-    }
-}
-
-struct ApiDownloadManifest: Codable {
-    let transcodeId: TranscodeID
-    let titleId: TitleID
-    let titleName: String
-    let fileSizeBytes: Int64
-    let hasSubtitles: Bool
-    let hasThumbnails: Bool
-    let hasChapters: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case transcodeId = "transcode_id"
-        case titleId = "title_id"
-        case titleName = "title_name"
-        case fileSizeBytes = "file_size_bytes"
-        case hasSubtitles = "has_subtitles"
-        case hasThumbnails = "has_thumbnails"
-        case hasChapters = "has_chapters"
-    }
+    var id: Int64 { entry.transcodeID }
+    var transcodeId: TranscodeID { TranscodeID(rawValue: Int(entry.transcodeID)) }
+    var titleId: TitleID { TitleID(rawValue: Int(entry.titleID)) }
+    var titleName: String { entry.titleName }
+    var posterUrl: String? { nil } // posters now via ImageProvider
+    var quality: String? { entry.qualityLabel.isEmpty ? nil : entry.qualityLabel }
+    var year: Int? { entry.year > 0 ? Int(entry.year) : nil }
+    var state: MMDownloadState { entry.state }
+    var fileSizeBytes: Int64? { entry.fileSizeBytes > 0 ? entry.fileSizeBytes : nil }
+    var bytesDownloaded: Int64 { entry.bytesDownloaded }
+    var progress: Double { entry.progress }
+    var hasSubtitles: Bool { entry.hasSubtitles_p }
+    var errorMessage: String? { entry.errorMessage.isEmpty ? nil : entry.errorMessage }
+    var addedAt: Date { Date(timeIntervalSince1970: TimeInterval(entry.addedAt.secondsSinceEpoch)) }
+    var mediaType: MediaType { entry.mediaType == .tv ? .tv : .movie }
+    var seasonNumber: Int? { entry.seasonNumber > 0 ? Int(entry.seasonNumber) : nil }
+    var episodeNumber: Int? { entry.episodeNumber > 0 ? Int(entry.episodeNumber) : nil }
+    var episodeTitle: String? { entry.episodeTitle.isEmpty ? nil : entry.episodeTitle }
 }

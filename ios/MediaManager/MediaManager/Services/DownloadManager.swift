@@ -5,48 +5,27 @@ import Observation
 @Observable
 @MainActor
 final class DownloadManager: NSObject, URLSessionDownloadDelegate {
-    private(set) var items: [DownloadItem] = []
+
+    private(set) var entries: [MMDownloadEntry] = []
     var isOfflineMode: Bool {
         didSet { UserDefaults.standard.set(isOfflineMode, forKey: "offlineMode") }
     }
     private(set) var hasNetworkConnectivity = true
 
-    /// True when forced offline or actually disconnected.
-    var isEffectivelyOffline: Bool {
-        isOfflineMode || !hasNetworkConnectivity
-    }
-
-    /// Whether any completed downloads exist (used for UI visibility decisions).
-    var hasCompletedDownloads: Bool {
-        items.contains { $0.state == .completed }
-    }
+    var isEffectivelyOffline: Bool { isOfflineMode || !hasNetworkConnectivity }
+    var hasCompletedDownloads: Bool { entries.contains { $0.state == .completed } }
 
     private var backgroundSession: URLSession!
     private var apiClient: APIClient?
     private var grpcClient: GrpcClient?
     private var cachedBaseURL: URL?
-    private var activeTaskMap: [Int: TranscodeID] = [:]  // URLSessionTask.taskIdentifier → transcodeId
+    private var activeTaskMap: [Int: Int64] = [:]  // URLSession taskId → transcodeId
     private var backgroundCompletionHandler: (() -> Void)?
     private var networkMonitor: NWPathMonitor?
-    private var titleCacheEntries: [TitleID: TitleCacheEntry] = [:]  // titleId → entry
-    private var pendingProgress: [PendingProgressUpdate] = []
+    private let store = DownloadStore.shared
 
     private static let sessionIdentifier = "net.stewart.mediamanager.downloads"
-    private static let persistenceFile: URL = {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("downloads.json")
-    }()
-    private static let titleCacheFile: URL = {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("downloads_title_cache.json")
-    }()
-    private static let progressQueueFile: URL = {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("downloads_progress_queue.json")
-    }()
-
-    /// How long before a title cache is considered stale (24 hours).
-    private static let cacheStaleInterval: TimeInterval = 24 * 60 * 60
+    private static let maxConcurrentDownloads = 3
 
     override init() {
         self.isOfflineMode = UserDefaults.standard.bool(forKey: "offlineMode")
@@ -56,10 +35,11 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         config.sessionSendsLaunchEvents = true
         config.httpCookieStorage = .shared
         backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: .main)
-        loadPersistedItems()
-        loadTitleCacheEntries()
-        loadPendingProgress()
-        reconcileTasks()
+        Task {
+            await reloadEntries()
+            await store.cleanOrphans()
+            reconcileTasks()
+        }
         startNetworkMonitor()
     }
 
@@ -76,51 +56,51 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - Public API
 
-    func startDownload(transcodeId: TranscodeID, titleId: TitleID, titleName: String,
-                       posterUrl: String?, quality: String?, year: Int?) {
-        guard item(for: transcodeId) == nil else { return }
-
-        let download = DownloadItem(
-            transcodeId: transcodeId,
-            titleId: titleId,
-            titleName: titleName,
-            posterUrl: posterUrl,
-            quality: quality,
-            year: year,
-            state: .fetchingMetadata,
-            fileSizeBytes: nil,
-            bytesDownloaded: 0,
-            hasSubtitles: false,
-            hasThumbnails: false,
-            hasChapters: false,
-            resumeData: nil,
-            errorMessage: nil,
-            addedAt: Date()
-        )
-
-        items.append(download)
-        persist()
-
+    func startDownload(transcodeId: Int64, titleId: Int64, titleName: String,
+                       quality: MMDownloadQuality, year: Int32, mediaType: MMMediaType,
+                       contentRating: MMContentRating,
+                       seasonNumber: Int32 = 0, episodeNumber: Int32 = 0, episodeTitle: String = "") {
         Task {
-            await performDownload(transcodeId: transcodeId)
+            guard await store.entry(for: transcodeId) == nil else { return }
+
+            var entry = MMDownloadEntry()
+            entry.transcodeID = transcodeId
+            entry.titleID = titleId
+            entry.titleName = titleName
+            entry.quality = quality
+            entry.year = year
+            entry.mediaType = mediaType
+            entry.contentRating = contentRating
+            entry.seasonNumber = seasonNumber
+            entry.episodeNumber = episodeNumber
+            entry.episodeTitle = episodeTitle
+            entry.contentType = "video/mp4"
+            entry.state = .fetchingMetadata
+            entry.addedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
+
+            let assigned = await store.addEntry(entry)
+            await reloadEntries()
+
+            await performDownload(transcodeId: transcodeId, sequence: assigned.sequence)
         }
     }
 
-    func pauseDownload(transcodeId: TranscodeID) {
-        guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }),
-              items[index].state == .downloading else { return }
+    func pauseDownload(transcodeId: Int64) {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
+              entry.state == .downloading else { return }
 
         if let taskId = activeTaskMap.first(where: { $0.value == transcodeId })?.key {
             backgroundSession.getAllTasks { [weak self] tasks in
                 if let task = tasks.first(where: { $0.taskIdentifier == taskId }) as? URLSessionDownloadTask {
                     task.cancel(byProducingResumeData: { data in
                         Task { @MainActor [weak self] in
-                            guard let self,
-                                  let idx = self.items.firstIndex(where: { $0.transcodeId == transcodeId }) else { return }
-                            self.items[idx].resumeData = data
-                            self.items[idx].state = .paused
+                            guard let self else { return }
+                            await self.store.updateEntry(transcodeId: transcodeId) { e in
+                                e.resumeData = data ?? Data()
+                                e.state = .paused
+                            }
                             self.activeTaskMap.removeValue(forKey: taskId)
-                            self.persist()
+                            await self.reloadEntries()
                         }
                     })
                 }
@@ -128,37 +108,37 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    func resumeDownload(transcodeId: TranscodeID) {
-        guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }),
-              items[index].state == .paused || items[index].state == .failed else { return }
+    func resumeDownload(transcodeId: Int64) {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
+              entry.state == .paused || entry.state == .failed else { return }
 
-        items[index].state = .downloading
-        items[index].errorMessage = nil
-
-        if let resumeData = items[index].resumeData {
-            let task = backgroundSession.downloadTask(withResumeData: resumeData)
-            activeTaskMap[task.taskIdentifier] = transcodeId
-            task.resume()
-            items[index].resumeData = nil
-        } else {
-            guard let url = downloadURL(for: transcodeId) else {
-                items[index].state = .failed
-                items[index].errorMessage = "Cannot build download URL"
-                persist()
-                return
+        Task {
+            await store.updateEntry(transcodeId: transcodeId) { e in
+                e.state = .downloading
+                e.errorMessage = ""
             }
-            let task = backgroundSession.downloadTask(with: url)
-            activeTaskMap[task.taskIdentifier] = transcodeId
-            task.resume()
+            await reloadEntries()
+
+            if let entry = await store.entry(for: transcodeId), !entry.resumeData.isEmpty {
+                let task = backgroundSession.downloadTask(withResumeData: entry.resumeData)
+                activeTaskMap[task.taskIdentifier] = transcodeId
+                task.resume()
+                await store.updateEntry(transcodeId: transcodeId) { e in
+                    e.resumeData = Data()
+                }
+            } else {
+                guard let url = downloadURL(for: transcodeId) else {
+                    await markFailed(transcodeId: transcodeId, error: "Cannot build download URL")
+                    return
+                }
+                let task = backgroundSession.downloadTask(with: url)
+                activeTaskMap[task.taskIdentifier] = transcodeId
+                task.resume()
+            }
         }
-        persist()
     }
 
-    func deleteDownload(transcodeId: TranscodeID) {
-        guard let item = item(for: transcodeId) else { return }
-        let titleId = item.titleId
-
-        // Cancel any active task
+    func deleteDownload(transcodeId: Int64) {
         if let taskId = activeTaskMap.first(where: { $0.value == transcodeId })?.key {
             backgroundSession.getAllTasks { tasks in
                 tasks.first(where: { $0.taskIdentifier == taskId })?.cancel()
@@ -166,126 +146,70 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
             activeTaskMap.removeValue(forKey: taskId)
         }
 
-        // Remove transcode directory
-        let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(transcodeId.rawValue)")
-        try? FileManager.default.removeItem(at: dir)
-
-        items.removeAll { $0.transcodeId == transcodeId }
-        persist()
-
-        // Clean up title cache if no more downloads for this title
-        cleanupTitleCacheIfOrphaned(titleId: titleId)
+        Task {
+            await store.removeEntry(transcodeId: transcodeId)
+            await reloadEntries()
+        }
     }
 
-    func localFileURL(for transcodeId: TranscodeID) -> URL? {
-        guard let item = item(for: transcodeId),
-              item.state == .completed else { return nil }
-        let url = item.videoFileURL
+    func localVideoURL(for transcodeId: Int64) -> URL? {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
+              entry.state == .completed else { return nil }
+        // Synchronous — can't call actor method here, compute path directly
+        let seq = String(format: "%07d.mp4", entry.sequence)
+        let url = DownloadStore.shared.downloadsDir.appendingPathComponent(seq)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    func localDir(for transcodeId: TranscodeID) -> URL? {
-        guard let item = item(for: transcodeId),
-              item.state == .completed else { return nil }
-        let url = item.localDir
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue ? url : nil
-    }
-
-    func state(for transcodeId: TranscodeID) -> DownloadState? {
-        item(for: transcodeId)?.state
-    }
-
-    func item(for transcodeId: TranscodeID) -> DownloadItem? {
-        items.first { $0.transcodeId == transcodeId }
+    func state(for transcodeId: Int64) -> MMDownloadState {
+        entries.first(where: { $0.transcodeID == transcodeId })?.state ?? .unknown
     }
 
     var activeDownloadCount: Int {
-        items.filter { $0.state == .fetchingMetadata || $0.state == .downloading }.count
+        entries.filter { $0.state == .fetchingMetadata || $0.state == .downloading }.count
     }
 
     var totalStorageUsed: Int64 {
-        items.filter { $0.state == .completed }.compactMap { $0.fileSizeBytes }.reduce(0, +)
+        entries.filter { $0.state == .completed }.map { $0.fileSizeBytes }.reduce(0, +)
     }
 
-    // MARK: - Offline Mode
-
-    /// Set of unique title IDs that have at least one completed download.
-    var offlineTitleIds: Set<TitleID> {
-        Set(items.filter { $0.state == .completed }.map { $0.titleId })
-    }
-
-    // MARK: - Title Cache
-
-    /// Returns the title cache directory for a given title, or nil if no cache exists.
-    func titleCacheDir(for titleId: TitleID) -> URL? {
-        let dir = DownloadItem.titleCacheDir(for: titleId)
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir),
-              isDir.boolValue else { return nil }
-        return dir
-    }
-
-    /// Load cached title detail from disk.
-    func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
-        guard let dir = titleCacheDir(for: titleId) else { return nil }
-        let file = dir.appendingPathComponent("detail.pb")
-        guard let data = try? Data(contentsOf: file),
-              let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
-        return ApiTitleDetail(proto: proto)
-    }
-
-    /// Load cached seasons from disk.
-    func loadCachedSeasons(for titleId: TitleID) -> [ApiSeason]? {
-        return nil
-    }
-
-    /// Load cached episodes for a season from disk.
-    func loadCachedEpisodes(for titleId: TitleID, season: Int) -> [ApiEpisode]? {
-        return nil
-    }
-
-    /// Load a cached image (poster, backdrop, headshot) from the title cache.
-    func loadCachedImage(for titleId: TitleID, name: String) -> Data? {
-        guard let dir = titleCacheDir(for: titleId) else { return nil }
-        return try? Data(contentsOf: dir.appendingPathComponent(name))
+    var offlineTitleIds: Set<Int64> {
+        Set(entries.filter { $0.state == .completed }.map { $0.titleID })
     }
 
     // MARK: - Progress Queue
 
-    /// Queue a progress update for later sync (used when offline).
-    func queueProgressUpdate(transcodeId: TranscodeID, position: Double, duration: Double?) {
-        // Replace any existing entry for this transcode (only latest matters)
-        pendingProgress.removeAll { $0.transcodeId == transcodeId }
-        pendingProgress.append(PendingProgressUpdate(
-            transcodeId: transcodeId,
-            position: position,
-            duration: duration,
-            timestamp: Date()
-        ))
-        persistPendingProgress()
-    }
-
-    /// Flush all pending progress updates to the server.
-    func flushPendingProgress() async {
-        guard let grpcClient, !pendingProgress.isEmpty else { return }
-
-        var remaining: [PendingProgressUpdate] = []
-        for update in pendingProgress {
-            do {
-                try await grpcClient.reportProgress(
-                    transcodeId: Int64(update.transcodeId.rawValue),
-                    position: update.position,
-                    duration: update.duration)
-            } catch {
-                remaining.append(update)
+    func queueProgressUpdate(transcodeId: Int64, position: Double, duration: Double?) {
+        Task {
+            await store.updateEntry(transcodeId: transcodeId) { e in
+                e.playbackPosition = MMPlaybackOffset.with { $0.seconds = position }
+                if let duration { e.duration = MMPlaybackOffset.with { $0.seconds = duration } }
+                e.positionUpdatedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
+                e.positionSynced = false
             }
         }
-        pendingProgress = remaining
-        persistPendingProgress()
     }
 
-    // MARK: - Background Session Handling
+    func flushPendingProgress() async {
+        guard let grpcClient else { return }
+        let unsynced = await store.entries.filter { !$0.positionSynced && $0.playbackPosition.seconds > 0 }
+        for entry in unsynced {
+            do {
+                try await grpcClient.reportProgress(
+                    transcodeId: entry.transcodeID,
+                    position: entry.playbackPosition.seconds,
+                    duration: entry.duration.seconds > 0 ? entry.duration.seconds : nil
+                )
+                await store.updateEntry(transcodeId: entry.transcodeID) { e in
+                    e.positionSynced = true
+                }
+            } catch {
+                // Will retry next flush
+            }
+        }
+    }
+
+    // MARK: - Background Session
 
     func handleBackgroundSessionEvent(completionHandler: @escaping () -> Void) {
         backgroundCompletionHandler = completionHandler
@@ -299,45 +223,53 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
                                 totalBytesExpectedToWrite: Int64) {
         let taskId = downloadTask.taskIdentifier
         Task { @MainActor in
-            guard let tcId = activeTaskMap[taskId],
-                  let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
-            items[index].bytesDownloaded = totalBytesWritten
-            if totalBytesExpectedToWrite > 0 {
-                items[index].fileSizeBytes = totalBytesExpectedToWrite
+            guard let tcId = activeTaskMap[taskId] else { return }
+            await store.updateEntry(transcodeId: tcId) { e in
+                e.bytesDownloaded = totalBytesWritten
+                if totalBytesExpectedToWrite > 0 { e.fileSizeBytes = totalBytesExpectedToWrite }
             }
+            await reloadEntries()
         }
     }
 
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                                 didFinishDownloadingTo location: URL) {
         let taskId = downloadTask.taskIdentifier
-        let tempURL = location
-        let fm = FileManager.default
 
         MainActor.assumeIsolated {
             guard let tcId = activeTaskMap[taskId] else { return }
 
-            let dir = DownloadItem.transcodesRoot.appendingPathComponent("\(tcId.rawValue)")
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            let dest = dir.appendingPathComponent("video.mp4")
-            try? fm.removeItem(at: dest)
-            do {
-                try fm.moveItem(at: tempURL, to: dest)
-            } catch {
-                markFailed(transcodeId: tcId, error: "Failed to save video: \(error.localizedDescription)")
-                return
-            }
-
-            guard let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
-            items[index].state = .completed
-            items[index].bytesDownloaded = items[index].fileSizeBytes ?? 0
-            activeTaskMap.removeValue(forKey: taskId)
-            persist()
-
-            // Cache title data now that a download completed
-            let titleId = items[index].titleId
             Task {
-                await cacheTitleData(titleId: titleId)
+                guard let entry = await store.entry(for: tcId) else { return }
+
+                // Move temp file to staging path (.downloading)
+                let stagingPath = await store.videoPath(for: entry, downloading: true)
+                try? FileManager.default.removeItem(at: stagingPath)
+                do {
+                    try FileManager.default.moveItem(at: location, to: stagingPath)
+                } catch {
+                    await markFailed(transcodeId: tcId, error: "Failed to save: \(error.localizedDescription)")
+                    return
+                }
+
+                // Rename staging → final
+                do {
+                    try await store.finalizeVideo(for: entry)
+                } catch {
+                    await markFailed(transcodeId: tcId, error: "Failed to finalize: \(error.localizedDescription)")
+                    return
+                }
+
+                await store.updateEntry(transcodeId: tcId) { e in
+                    e.state = .completed
+                    e.bytesDownloaded = e.fileSizeBytes
+                    e.completedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
+                }
+                activeTaskMap.removeValue(forKey: taskId)
+                await reloadEntries()
+
+                // Start next queued download
+                startNextQueued()
             }
         }
     }
@@ -349,24 +281,21 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         let nsError = error as NSError
 
         Task { @MainActor in
-            guard let tcId = activeTaskMap[taskId],
-                  let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
+            guard let tcId = activeTaskMap[taskId] else { return }
 
-            if let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data {
-                items[index].resumeData = resumeData
-            }
-
-            if nsError.code == NSURLErrorCancelled {
-                if items[index].state != .paused {
-                    items[index].state = .paused
+            await store.updateEntry(transcodeId: tcId) { e in
+                if let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data {
+                    e.resumeData = resumeData
                 }
-            } else {
-                items[index].state = .failed
-                items[index].errorMessage = error.localizedDescription
+                if nsError.code == NSURLErrorCancelled {
+                    if e.state != .paused { e.state = .paused }
+                } else {
+                    e.state = .failed
+                    e.errorMessage = error.localizedDescription
+                }
             }
-
             activeTaskMap.removeValue(forKey: taskId)
-            persist()
+            await reloadEntries()
         }
     }
 
@@ -379,159 +308,115 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - Private: Download Flow
 
-    private func performDownload(transcodeId tcId: TranscodeID) async {
-        guard let apiClient else {
-            markFailed(transcodeId: tcId, error: "Not configured")
+    private func performDownload(transcodeId: Int64, sequence: Int32) async {
+        guard let grpcClient else {
+            await markFailed(transcodeId: transcodeId, error: "Not configured")
             return
         }
 
-        guard let download = item(for: tcId) else { return }
-        let dir = download.localDir
-
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // Fetch manifest via gRPC
+        // Fetch manifest
         do {
-            guard let grpcClient else { throw GrpcClientError.notConfigured }
-            let manifest = try await grpcClient.getManifest(transcodeId: Int64(tcId.rawValue))
-            guard let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
-            items[index].fileSizeBytes = manifest.fileSizeBytes
-            items[index].hasSubtitles = manifest.hasSubtitles_p
-            items[index].hasThumbnails = manifest.hasThumbnails_p
-            items[index].hasChapters = manifest.hasChapters_p
+            let manifest = try await grpcClient.getManifest(transcodeId: transcodeId)
+            await store.updateEntry(transcodeId: transcodeId) { e in
+                e.fileSizeBytes = manifest.fileSizeBytes
+                e.hasSubtitles_p = manifest.hasSubtitles_p
+                e.hasThumbnails_p = manifest.hasThumbnails_p
+                e.hasChapters_p = manifest.hasChapters_p
+            }
         } catch {
-            markFailed(transcodeId: tcId, error: "Failed to fetch manifest: \(error.localizedDescription)")
+            await markFailed(transcodeId: transcodeId, error: "Manifest fetch failed: \(error.localizedDescription)")
             return
         }
 
         // Check disk space
-        if let index = items.firstIndex(where: { $0.transcodeId == tcId }),
-           let fileSize = items[index].fileSizeBytes {
-            let requiredSpace = fileSize + 500_000_000
-            if let freeSpace = try? FileManager.default.attributesOfFileSystem(
-                forPath: NSHomeDirectory())[.systemFreeSize] as? Int64,
-               freeSpace < requiredSpace {
-                markFailed(transcodeId: tcId, error: "Not enough disk space. Need \(ByteCountFormatter.string(fromByteCount: requiredSpace, countStyle: .file)), have \(ByteCountFormatter.string(fromByteCount: freeSpace, countStyle: .file))")
+        if let entry = await store.entry(for: transcodeId) {
+            let required = entry.fileSizeBytes + 500_000_000
+            if let free = try? FileManager.default.attributesOfFileSystem(
+                forPath: NSHomeDirectory())[.systemFreeSize] as? Int64, free < required {
+                await markFailed(transcodeId: transcodeId, error: "Not enough space")
                 return
             }
         }
 
         // Download supporting files
-        await downloadSupportingFiles(transcodeId: tcId, dir: dir)
-
-        // Cache title data (refresh if stale)
-        if let download = item(for: tcId) {
-            await cacheTitleDataIfStale(titleId: download.titleId)
+        if let entry = await store.entry(for: transcodeId) {
+            await downloadSupportingFiles(entry: entry)
         }
 
-        // Start MP4 download
-        guard let url = downloadURL(for: tcId) else {
-            markFailed(transcodeId: tcId, error: "Cannot build download URL")
+        // Build download URL and start
+        guard let url = downloadURL(for: transcodeId) else {
+            await markFailed(transcodeId: transcodeId, error: "Cannot build download URL")
             return
         }
 
-        guard let index = items.firstIndex(where: { $0.transcodeId == tcId }) else { return }
-        items[index].state = .downloading
-        persist()
+        await store.updateEntry(transcodeId: transcodeId) { e in
+            e.state = .downloading
+        }
+        await reloadEntries()
 
         let task = backgroundSession.downloadTask(with: url)
-        activeTaskMap[task.taskIdentifier] = tcId
+        activeTaskMap[task.taskIdentifier] = transcodeId
         task.resume()
     }
 
-    private func downloadSupportingFiles(transcodeId: TranscodeID, dir: URL) async {
+    private func downloadSupportingFiles(entry: MMDownloadEntry) async {
         guard let apiClient else { return }
-        let tcRaw = transcodeId.rawValue
+        let tcId = entry.transcodeID
 
         // Subtitles
-        if let data = try? await apiClient.getRaw("stream/\(tcRaw)/subs.vtt"),
+        if let data = try? await apiClient.getRaw("stream/\(tcId)/subs.vtt"),
            let content = String(data: data, encoding: .utf8), content.contains("-->") {
-            try? data.write(to: dir.appendingPathComponent("subs.vtt"))
-            if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
-                items[index].hasSubtitles = true
-            }
+            let path = await store.subtitlesPath(for: entry)
+            try? data.write(to: path)
+            await store.updateEntry(transcodeId: tcId) { $0.hasSubtitles_p = true }
         }
 
-        // Thumbnails VTT
-        if let data = try? await apiClient.getRaw("stream/\(tcRaw)/thumbs.vtt"),
-           let content = String(data: data, encoding: .utf8), content.contains("-->") {
-            try? data.write(to: dir.appendingPathComponent("thumbs.vtt"))
-
-            let sheetIndices = parseSpriteSheetIndices(from: content)
-            for sheetIndex in sheetIndices {
-                if let imgData = try? await apiClient.getRaw("stream/\(tcRaw)/thumbs_\(sheetIndex).jpg") {
-                    try? imgData.write(to: dir.appendingPathComponent("thumbs_\(sheetIndex).jpg"))
-                }
-            }
-
-            if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
-                items[index].hasThumbnails = true
-            }
-        }
-
-        // Chapters/skip segments via gRPC
+        // Chapters
         if let grpcClient,
-           let response = try? await grpcClient.getChapters(transcodeId: Int64(tcRaw)),
+           let response = try? await grpcClient.getChapters(transcodeId: tcId),
            !response.chapters.isEmpty || !response.skipSegments.isEmpty {
-            // Serialize as JSON for offline SkipSegmentController compatibility
             if let jsonData = try? response.jsonUTF8Data() {
-                try? jsonData.write(to: dir.appendingPathComponent("chapters.json"))
-                if let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) {
-                    items[index].hasChapters = true
-                }
+                let path = await store.chaptersPath(for: entry)
+                try? jsonData.write(to: path)
+                await store.updateEntry(transcodeId: tcId) { $0.hasChapters_p = true }
             }
         }
 
-        persist()
+        // Poster via ImageProvider (will be cached by image system)
+        // Save a local copy for offline display
+        if let apiClient = self.apiClient,
+           let posterData = try? await apiClient.getRaw("/posters/w185/\(entry.titleID)") {
+            let path = await store.posterPath(for: entry)
+            try? posterData.write(to: path)
+            await store.updateEntry(transcodeId: tcId) { $0.hasPoster_p = true }
+        }
     }
 
-    // MARK: - Private: Title Cache
+    // MARK: - Private: Helpers
 
-    /// Cache title detail, images, seasons, and episodes for offline use.
-    private func cacheTitleData(titleId: TitleID) async {
-        guard let grpcClient, let apiClient else { return }
-        let dir = DownloadItem.titleCacheDir(for: titleId)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    private func downloadURL(for transcodeId: Int64) -> URL? {
+        guard let baseURL = cachedBaseURL else { return nil }
+        return URL(string: baseURL.absoluteString + "/stream/\(transcodeId)?quality=mobile")
+    }
 
-        // Title detail via gRPC — cache as protobuf binary
-        do {
-            let detail = try await grpcClient.getTitleDetail(id: titleId.protoValue)
-            let data = try detail.serializedData()
-            try data.write(to: dir.appendingPathComponent("detail.pb"), options: .atomic)
+    private func markFailed(transcodeId: Int64, error: String) async {
+        await store.updateEntry(transcodeId: transcodeId) { e in
+            e.state = .failed
+            e.errorMessage = error
+        }
+        await reloadEntries()
+    }
 
-            // Poster image (HTTP binary)
-            let wrapped = ApiTitleDetail(proto: detail)
-            if let posterUrl = wrapped.posterUrl {
-                if let imgData = try? await apiClient.getRaw(posterUrl) {
-                    try? imgData.write(to: dir.appendingPathComponent("poster.jpg"))
-                }
+    private func reloadEntries() async {
+        entries = await store.entries
+    }
+
+    private func startNextQueued() {
+        guard activeDownloadCount < Self.maxConcurrentDownloads else { return }
+        if let next = entries.first(where: { $0.state == .queued }) {
+            Task {
+                await performDownload(transcodeId: next.transcodeID, sequence: next.sequence)
             }
-        } catch {
-            // Title detail fetch failed — don't block on this
-        }
-
-        // Update cache timestamp
-        titleCacheEntries[titleId] = TitleCacheEntry(titleId: titleId, lastUpdated: Date())
-        persistTitleCacheEntries()
-    }
-
-    /// Refresh title cache only if stale (older than 24 hours).
-    private func cacheTitleDataIfStale(titleId: TitleID) async {
-        if let entry = titleCacheEntries[titleId],
-           Date().timeIntervalSince(entry.lastUpdated) < Self.cacheStaleInterval {
-            return // Still fresh
-        }
-        await cacheTitleData(titleId: titleId)
-    }
-
-    /// Remove title cache directory if no downloads remain for that title.
-    private func cleanupTitleCacheIfOrphaned(titleId: TitleID) {
-        let hasRemainingDownloads = items.contains { $0.titleId == titleId }
-        if !hasRemainingDownloads {
-            let dir = DownloadItem.titleCacheDir(for: titleId)
-            try? FileManager.default.removeItem(at: dir)
-            titleCacheEntries.removeValue(forKey: titleId)
-            persistTitleCacheEntries()
         }
     }
 
@@ -544,7 +429,6 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
                 guard let self else { return }
                 let wasOffline = self.isEffectivelyOffline
                 self.hasNetworkConnectivity = (path.status == .satisfied)
-                // Connectivity restored — flush queued progress
                 if wasOffline && !self.isEffectivelyOffline {
                     await self.flushPendingProgress()
                 }
@@ -554,104 +438,58 @@ final class DownloadManager: NSObject, URLSessionDownloadDelegate {
         networkMonitor = monitor
     }
 
-    // MARK: - Private: Helpers
-
-    private func parseSpriteSheetIndices(from vttContent: String) -> Set<Int> {
-        var indices = Set<Int>()
-        let pattern = try? NSRegularExpression(pattern: #"thumbs_(\d+)\.jpg"#)
-        let range = NSRange(vttContent.startIndex..., in: vttContent)
-        pattern?.enumerateMatches(in: vttContent, range: range) { match, _, _ in
-            if let match, let numRange = Range(match.range(at: 1), in: vttContent) {
-                if let num = Int(vttContent[numRange]) {
-                    indices.insert(num)
-                }
-            }
-        }
-        return indices
-    }
-
-    private func downloadURL(for transcodeId: TranscodeID) -> URL? {
-        guard let baseURL = cachedBaseURL else { return nil }
-        return URL(string: baseURL.absoluteString + "/api/v1/downloads/\(transcodeId.rawValue)")
-    }
-
-    private func markFailed(transcodeId: TranscodeID, error: String) {
-        guard let index = items.firstIndex(where: { $0.transcodeId == transcodeId }) else { return }
-        items[index].state = .failed
-        items[index].errorMessage = error
-        persist()
-    }
-
-    // MARK: - Persistence
-
-    private func persist() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(items) else { return }
-        try? data.write(to: Self.persistenceFile, options: .atomic)
-    }
-
-    private func loadPersistedItems() {
-        guard let data = try? Data(contentsOf: Self.persistenceFile) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        items = (try? decoder.decode([DownloadItem].self, from: data)) ?? []
-    }
-
-    private func persistTitleCacheEntries() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let entries = Array(titleCacheEntries.values)
-        guard let data = try? encoder.encode(entries) else { return }
-        try? data.write(to: Self.titleCacheFile, options: .atomic)
-    }
-
-    private func loadTitleCacheEntries() {
-        guard let data = try? Data(contentsOf: Self.titleCacheFile) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        if let entries = try? decoder.decode([TitleCacheEntry].self, from: data) {
-            titleCacheEntries = Dictionary(uniqueKeysWithValues: entries.map { ($0.titleId, $0) })
-        }
-    }
-
-    private func persistPendingProgress() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(pendingProgress) else { return }
-        try? data.write(to: Self.progressQueueFile, options: .atomic)
-    }
-
-    private func loadPendingProgress() {
-        guard let data = try? Data(contentsOf: Self.progressQueueFile) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        pendingProgress = (try? decoder.decode([PendingProgressUpdate].self, from: data)) ?? []
-    }
+    // MARK: - Private: Task Reconciliation
 
     private func reconcileTasks() {
         backgroundSession.getAllTasks { [weak self] tasks in
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                for i in self.items.indices {
-                    if self.items[i].state == .downloading || self.items[i].state == .fetchingMetadata {
+                for entry in self.entries {
+                    if entry.state == .downloading || entry.state == .fetchingMetadata {
                         let hasActiveTask = tasks.contains { task in
                             if let url = task.originalRequest?.url?.absoluteString,
-                               url.contains("/downloads/\(self.items[i].transcodeId.rawValue)") {
-                                self.activeTaskMap[task.taskIdentifier] = self.items[i].transcodeId
+                               url.contains("/stream/\(entry.transcodeID)") {
+                                self.activeTaskMap[task.taskIdentifier] = entry.transcodeID
                                 return true
                             }
                             return false
                         }
                         if !hasActiveTask {
-                            self.items[i].state = .failed
-                            self.items[i].errorMessage = "Download interrupted"
+                            await self.store.updateEntry(transcodeId: entry.transcodeID) { e in
+                                e.state = .failed
+                                e.errorMessage = "Download interrupted"
+                            }
                         }
                     }
                 }
-                self.persist()
+                await self.reloadEntries()
             }
         }
+    }
+
+    /// Returns the downloads directory for a transcode — subtitles/chapters/thumbnails
+    /// are stored as {seq}.subs.vtt etc. The caller can resolve specific files using the sequence.
+    func localDir(for transcodeId: TranscodeID) -> URL? {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+              entry.state == .completed else { return nil }
+        return store.downloadsDir
+    }
+
+    /// Returns the sequence prefix for a downloaded transcode (e.g., "0000001").
+    func sequencePrefix(for transcodeId: TranscodeID) -> String? {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+              entry.state == .completed else { return nil }
+        return String(format: "%07d", entry.sequence)
+    }
+
+    // MARK: - Offline Image Cache
+
+    func loadCachedImage(for titleId: TitleID, name: String) -> Data? {
+        // Check posters directory for the download's poster
+        let entry = entries.first { $0.titleID == titleId.protoValue && $0.hasPoster_p }
+        guard let entry else { return nil }
+        let path = store.downloadsDir.appendingPathComponent("posters/\(String(format: "%07d", entry.sequence)).jpg")
+        return try? Data(contentsOf: path)
     }
 }

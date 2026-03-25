@@ -68,7 +68,7 @@ actor DownloadStore {
     }
 
     /// Update an existing entry by transcode ID.
-    func updateEntry(transcodeId: Int64, _ mutate: (inout MMDownloadEntry) -> Void) {
+    func updateEntry(transcodeId: Int64, _ mutate: @Sendable (inout MMDownloadEntry) -> Void) {
         guard let idx = db.entries.firstIndex(where: { $0.transcodeID == transcodeId }) else { return }
         mutate(&db.entries[idx])
         save()
