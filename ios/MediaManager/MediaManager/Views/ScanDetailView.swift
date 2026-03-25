@@ -25,8 +25,8 @@ struct ScanDetailView: View {
                     // Header
                     Section {
                         HStack(spacing: 16) {
-                            if detail.hasPosterURL {
-                                AuthenticatedImage(path: detail.posterURL, apiClient: dataModel.apiClient, cornerRadius: 8)
+                            if detail.hasTitleID {
+                                CachedImage(ref: .posterFull(titleId: detail.titleID), cornerRadius: 8)
                                     .frame(width: 80, height: 120)
                             }
 
@@ -100,7 +100,7 @@ struct ScanDetailView: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
                                     ForEach(detail.photos, id: \.photoID) { photo in
-                                        PhotoThumbnail(photo: photo, apiClient: dataModel.apiClient) {
+                                        PhotoThumbnail(photo: photo) {
                                             deletePhoto(photoId: photo.photoID)
                                         }
                                     }
@@ -259,12 +259,11 @@ struct ScanDetailView: View {
 
 struct PhotoThumbnail: View {
     let photo: MMOwnershipPhotoInfo
-    let apiClient: APIClient
     let onDelete: () -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            AuthenticatedImage(path: photo.url, apiClient: apiClient, cornerRadius: 6, contentMode: .fill)
+            CachedImage(ref: .ownershipPhoto(uuid: photo.photoID), cornerRadius: 6, contentMode: .fill)
                 .frame(width: 80, height: 80)
                 .clipped()
 

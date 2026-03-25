@@ -102,20 +102,10 @@ struct CollectionDetailView: View {
 
     @ViewBuilder
     private func posterImage(_ item: ApiCollectionItem) -> some View {
-        if let posterUrl = item.posterUrl {
-            if posterUrl.hasPrefix("http") {
-                AsyncImage(url: URL(string: posterUrl)) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(.quaternary)
-                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                }
-            } else {
-                AuthenticatedImage(path: posterUrl, apiClient: dataModel.apiClient)
-            }
+        if let titleId = item.titleId {
+            CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
         } else {
-            Rectangle().fill(.quaternary)
-                .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+            CachedImage(ref: .tmdbPoster(tmdbId: item.tmdbMovieId.protoValue, mediaType: .movie))
         }
     }
 

@@ -3909,3 +3909,33 @@ Documentation:
 - Files created: ~25 new files (server grpc/, iOS GrpcClient, ProtoAdapters, etc.)
 - Files deleted: 26 files (REST API, old iOS Codable models)
 ===
+
+=== 2026-03-23 20:30 — iOS Admin Views, Barcode Scanning, Camera Admin, gRPC Image Streaming ===
+- Fixed MonitorTranscodeStatus streaming RPC for live transcode progress on iOS AdminView
+- Built complete barcode scanning flow:
+  - SubmitBarcode, ListRecentScans, MonitorScanProgress (streaming) RPCs
+  - Shared BarcodeScanService extracted from AddItemView (no duplicated logic)
+  - iOS: BarcodeScanView with manual entry, VisionKit camera scanner, BT scanner auto-detect
+  - Live status progression via streaming RPC
+- Built scan detail workflow:
+  - GetScanDetail, AssignTmdb, UpdatePurchaseInfo, UploadOwnershipPhoto, DeleteOwnershipPhoto RPCs
+  - ScanDetailService shared between web and gRPC
+  - iOS: ScanDetailView with TMDB search sheet, purchase info, ownership photos
+  - Fixed SKIPPED→NO_MATCH status mapping bug
+  - Fixed photo upload (64KB→16MB gRPC message limit)
+  - Added live monitor to detail view for enrichment status updates
+- Built camera admin:
+  - ListAdminCameras, CreateCamera, UpdateCamera, DeleteCamera, ReorderCameras RPCs
+  - CameraAdminService shared between web and gRPC
+  - Credentials never transmitted to clients (redacted in responses)
+  - iOS: AdminCamerasView with drag-to-reorder, add/edit sheets, swipe-to-delete
+- Designed and implemented gRPC image streaming (proto/images.proto):
+  - Bidirectional streaming ImageService.StreamImages
+  - Typed ImageRef replaces fragile URL construction
+  - CancelStale watermark for navigation-away cleanup
+  - Per-response errors (NotFound, NotModified, PermissionDenied)
+  - Server: ImageGrpcService resolving all 8 image types
+  - iOS infrastructure: ImageDiskCache (500 LRU), ImageStreamClient (bidi stream with reconnect), ImageProvider (cache+stream abstraction), CachedImage SwiftUI view
+- TODO next session: migrate ~20 AuthenticatedImage call sites to CachedImage/ImageRef
+- 5 commits ahead of origin, not pushed
+===

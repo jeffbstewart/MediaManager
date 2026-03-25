@@ -18,10 +18,7 @@ struct AdminDataQualityView: View {
                 List {
                     ForEach(titles) { title in
                         HStack(spacing: 12) {
-                            AuthenticatedImage(
-                                path: title.posterUrl,
-                                apiClient: dataModel.apiClient
-                            )
+                            CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
                             .frame(width: 50, height: 75)
 
                             VStack(alignment: .leading, spacing: 4) {

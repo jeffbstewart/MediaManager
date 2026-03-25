@@ -19,7 +19,7 @@ struct AdminCamerasView: View {
             } else {
                 List {
                     ForEach(cameras, id: \.id) { camera in
-                        CameraAdminRow(camera: camera, apiClient: dataModel.apiClient)
+                        CameraAdminRow(camera: camera)
                             .contentShape(Rectangle())
                             .onTapGesture { editingCamera = camera }
                             .swipeActions(edge: .trailing) {
@@ -112,14 +112,12 @@ struct AdminCamerasView: View {
 
 struct CameraAdminRow: View {
     let camera: MMAdminCamera
-    let apiClient: APIClient
 
     var body: some View {
         HStack(spacing: 12) {
             // Snapshot thumbnail
-            AuthenticatedImage(
-                path: "/cam/\(camera.id)/snapshot.jpg",
-                apiClient: apiClient,
+            CachedImage(
+                ref: .cameraSnapshot(cameraId: camera.id),
                 cornerRadius: 6,
                 contentMode: .fill
             )

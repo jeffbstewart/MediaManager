@@ -67,9 +67,8 @@ struct ActorView: View {
     @ViewBuilder
     private func heroSection(_ detail: ApiActorDetail) -> some View {
         VStack(spacing: 12) {
-            AuthenticatedImage(
-                path: detail.headshotUrl,
-                apiClient: dataModel.apiClient,
+            CachedImage(
+                ref: .headshot(tmdbPersonId: route.tmdbPersonId.protoValue),
                 cornerRadius: 60,
                 contentMode: .fit
             )
@@ -119,7 +118,7 @@ struct ActorView: View {
     @ViewBuilder
     private func ownedCard(_ owned: ApiOwnedCredit) -> some View {
         VStack(alignment: .center, spacing: 4) {
-            AuthenticatedImage(path: owned.title.posterUrl, apiClient: dataModel.apiClient)
+            CachedImage(ref: .posterThumbnail(titleId: owned.title.id.protoValue))
                 .frame(width: 120, height: 180)
 
             Text(owned.title.name)

@@ -20,7 +20,7 @@ struct CollectionsListView: View {
                 List(collections) { collection in
                     NavigationLink(value: CollectionRoute(tmdbCollectionId: collection.tmdbCollectionId, name: collection.name)) {
                         HStack(spacing: 12) {
-                            AuthenticatedImage(path: collection.posterUrl, apiClient: dataModel.apiClient)
+                            CachedImage(ref: .collectionPoster(tmdbCollectionId: collection.tmdbCollectionId.protoValue))
                                 .frame(width: 50, height: 75)
 
                             VStack(alignment: .leading, spacing: 4) {

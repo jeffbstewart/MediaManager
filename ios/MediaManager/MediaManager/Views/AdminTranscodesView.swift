@@ -17,10 +17,7 @@ struct AdminTranscodesView: View {
                 List {
                     ForEach(transcodes) { tc in
                         HStack(spacing: 12) {
-                            AuthenticatedImage(
-                                path: tc.posterUrl,
-                                apiClient: dataModel.apiClient
-                            )
+                            CachedImage(ref: .posterThumbnail(titleId: tc.titleId.protoValue))
                             .frame(width: 40, height: 60)
 
                             VStack(alignment: .leading, spacing: 4) {

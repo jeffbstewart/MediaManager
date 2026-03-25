@@ -13,6 +13,7 @@ actor ImageStreamClient {
 
     private let grpcClient: GrpcClient
     private var writer: (RPCWriter<MMImageRequest>)?
+    private var writerContinuations: [CheckedContinuation<Void, Never>] = []
     private var pendingResponses: [Int32: CheckedContinuation<MMImageResponse?, Never>] = [:]
     private var nextRequestId: Int32 = 1
     private var streamTask: Task<Void, Never>?
@@ -90,8 +91,21 @@ actor ImageStreamClient {
 
     // MARK: - Stream Management
 
+    private var connecting = false
+
     private func ensureStream() async {
-        guard streamTask == nil || writer == nil else { return }
+        // Already connected
+        if writer != nil { return }
+
+        // Another caller is already connecting — wait for it
+        if connecting {
+            await withCheckedContinuation { continuation in
+                writerContinuations.append(continuation)
+            }
+            return
+        }
+
+        connecting = true
 
         // Backoff: if stream failed recently, wait
         if let lastFail = lastStreamFailTime,
@@ -99,8 +113,13 @@ actor ImageStreamClient {
             try? await Task.sleep(for: .seconds(2))
         }
 
-        streamTask?.cancel()
         startStream()
+
+        // Wait for the writer to be set by the requestProducer closure
+        await withCheckedContinuation { continuation in
+            writerContinuations.append(continuation)
+        }
+        connecting = false
     }
 
     private func startStream() {
@@ -108,16 +127,25 @@ actor ImageStreamClient {
             guard let self else { return }
 
             do {
+                logger.info("Opening image stream...")
                 let service = try await self.grpcClient.imageService
                 let metadata = await self.grpcClient.authMetadataForImageStream()
+                logger.info("Got service + metadata, calling streamImages")
 
                 try await service.streamImages(
                     metadata: metadata,
                     requestProducer: { writer in
                         await self.setWriter(writer)
-                        // Keep the request stream open until cancelled
+                        // Keep the request stream alive with periodic no-op pings.
+                        // HAProxy and gRPC have idle timeouts; a CancelStale with
+                        // watermark 0 is effectively a no-op keepalive.
                         while !Task.isCancelled {
-                            try await Task.sleep(for: .seconds(60))
+                            try await Task.sleep(for: .seconds(15))
+                            var ping = MMImageRequest()
+                            var cancel = MMCancelStale()
+                            cancel.beforeRequestID = 0
+                            ping.cancelStale = cancel
+                            try await writer.write(ping)
                         }
                     },
                     onResponse: { response in
@@ -127,9 +155,9 @@ actor ImageStreamClient {
                     }
                 )
             } catch is CancellationError {
-                // Normal shutdown
+                logger.info("Image stream cancelled")
             } catch {
-                logger.warning("Image stream ended: \(error.localizedDescription)")
+                logger.error("Image stream failed: \(String(describing: error))")
             }
 
             // Stream ended — clean up
@@ -138,7 +166,11 @@ actor ImageStreamClient {
     }
 
     private func setWriter(_ w: RPCWriter<MMImageRequest>) {
+        logger.info("Image stream writer ready")
         self.writer = w
+        let waiting = writerContinuations
+        writerContinuations.removeAll()
+        for c in waiting { c.resume() }
     }
 
     private func handleResponse(_ response: MMImageResponse) {
@@ -158,6 +190,10 @@ actor ImageStreamClient {
         lastStreamFailTime = Date()
         writer = nil
         streamTask = nil
+        connecting = false
+        let waiting = writerContinuations
+        writerContinuations.removeAll()
+        for c in waiting { c.resume() }
         failAllPending()
     }
 

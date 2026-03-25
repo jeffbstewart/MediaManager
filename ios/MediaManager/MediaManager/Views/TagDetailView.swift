@@ -19,7 +19,7 @@ struct TagDetailView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(detail.titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title, apiClient: dataModel.apiClient)
+                                PosterCard(title: title)
                             }
                             .buttonStyle(.plain)
                         }

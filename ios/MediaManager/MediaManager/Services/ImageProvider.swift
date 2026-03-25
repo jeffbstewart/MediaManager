@@ -144,4 +144,14 @@ extension MMImageRef {
         ref.cameraID = cameraId
         return ref
     }
+
+    static func tmdbPoster(tmdbId: Int32, mediaType: MMMediaType) -> MMImageRef {
+        var ref = MMImageRef()
+        ref.type = .tmdbPoster
+        var media = MMTmdbMediaId()
+        media.tmdbID = tmdbId
+        media.mediaType = mediaType
+        ref.tmdbMedia = media
+        return ref
+    }
 }

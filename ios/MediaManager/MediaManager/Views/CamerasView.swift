@@ -21,9 +21,8 @@ struct CamerasView: View {
                     } label: {
                         HStack(spacing: 12) {
                             // Snapshot preview
-                            AuthenticatedImage(
-                                path: camera.snapshotUrl,
-                                apiClient: dataModel.apiClient,
+                            CachedImage(
+                                ref: .cameraSnapshot(cameraId: camera.id.protoValue),
                                 cornerRadius: 6
                             )
                             .frame(width: 80, height: 45)

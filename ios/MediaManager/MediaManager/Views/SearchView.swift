@@ -123,11 +123,11 @@ struct SearchResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if result.resultType == "actor" {
-                AuthenticatedImage(path: result.headshotUrl, apiClient: apiClient, cornerRadius: 20)
+            if result.resultType == "actor", let personId = result.tmdbPersonId {
+                CachedImage(ref: .headshot(tmdbPersonId: personId.protoValue), cornerRadius: 20)
                     .frame(width: 40, height: 40)
-            } else {
-                AuthenticatedImage(path: result.posterUrl, apiClient: apiClient)
+            } else if let titleId = result.titleId {
+                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
                     .frame(width: 40, height: 60)
             }
 

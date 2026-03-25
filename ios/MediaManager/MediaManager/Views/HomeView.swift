@@ -25,7 +25,7 @@ struct HomeView: View {
 
                                 ForEach(missing) { ms in
                                     HStack(spacing: 12) {
-                                        AuthenticatedImage(path: ms.posterUrl, apiClient: dataModel.apiClient)
+                                        CachedImage(ref: .posterThumbnail(titleId: ms.titleId.protoValue))
                                             .frame(width: 50, height: 75)
 
                                         VStack(alignment: .leading, spacing: 4) {
@@ -155,7 +155,7 @@ struct CarouselView: View {
                     ForEach(carousel.items) { title in
                         ZStack(alignment: .topTrailing) {
                             NavigationLink(value: title) {
-                                PosterCard(title: title, apiClient: apiClient)
+                                PosterCard(title: title)
                             }
                             .buttonStyle(.plain)
 
@@ -181,11 +181,10 @@ struct CarouselView: View {
 
 struct PosterCard: View {
     let title: ApiTitle
-    let apiClient: APIClient
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            AuthenticatedImage(path: title.posterUrl, apiClient: apiClient)
+            CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
                 .frame(width: 120, height: 180)
                 .clipped()
                 .opacity(title.playable ? 1.0 : 0.5)

@@ -24,9 +24,10 @@ struct TitleDetailView: View {
                                 .frame(height: 220)
                                 .frame(maxWidth: .infinity)
                         } else {
-                            AuthenticatedImage(
-                                path: detail.backdropUrl ?? detail.posterUrl,
-                                apiClient: dataModel.apiClient,
+                            CachedImage(
+                                ref: detail.backdropUrl != nil
+                                    ? .backdrop(titleId: detail.id.protoValue)
+                                    : .posterFull(titleId: detail.id.protoValue),
                                 cornerRadius: 0
                             )
                             .frame(height: 220)
@@ -263,9 +264,8 @@ struct TitleDetailView: View {
                                                     offlineHeadshot(titleId: detail.id, personId: member.tmdbPersonId)
                                                         .frame(width: 80, height: 80)
                                                 } else {
-                                                    AuthenticatedImage(
-                                                        path: member.headshotUrl,
-                                                        apiClient: dataModel.apiClient,
+                                                    CachedImage(
+                                                        ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue),
                                                         cornerRadius: 40,
                                                         contentMode: .fit
                                                     )

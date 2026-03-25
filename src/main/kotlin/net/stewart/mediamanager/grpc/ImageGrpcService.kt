@@ -8,6 +8,7 @@ import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TmdbCollection
+import net.stewart.mediamanager.entity.WishListItem
 import net.stewart.mediamanager.service.BackdropCacheService
 import net.stewart.mediamanager.service.CollectionPosterCacheService
 import net.stewart.mediamanager.service.HeadshotCacheService
@@ -114,25 +115,27 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
             ImageType.IMAGE_TYPE_LOCAL_IMAGE -> resolveLocalImage(ref.uuid, ifNoneMatch)
             ImageType.IMAGE_TYPE_OWNERSHIP_PHOTO -> resolveOwnershipPhoto(ref.uuid, ifNoneMatch)
             ImageType.IMAGE_TYPE_CAMERA_SNAPSHOT -> resolveCameraSnapshot(ref.cameraId)
+            ImageType.IMAGE_TYPE_TMDB_POSTER -> resolveTmdbPoster(ref.tmdbMedia, ifNoneMatch)
             else -> ImageResult.NotFound
         }
     }
 
     private fun resolvePoster(titleId: Long, size: PosterSize, ifNoneMatch: String?): ImageResult {
         val title = Title.findById(titleId) ?: return ImageResult.NotFound
-        if (title.poster_path == null) return ImageResult.NotFound
 
         // Check content rating against user
         val user = currentUser()
         if (!user.canSeeRating(title.content_rating)) return ImageResult.NotFound
 
-        val etag = title.poster_cache_id ?: title.poster_path!!
-        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
-
-        // For personal videos with local images
+        // Personal videos use local images (hero frames), not TMDB posters
         if (title.media_type == "PERSONAL" && title.poster_cache_id != null) {
             return resolveLocalImage(title.poster_cache_id!!, ifNoneMatch)
         }
+
+        if (title.poster_path == null) return ImageResult.NotFound
+
+        val etag = title.poster_cache_id ?: title.poster_path!!
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
 
         val path = PosterCacheService.cacheAndServe(title, size) ?: return ImageResult.NotFound
         if (!Files.exists(path)) return ImageResult.NotFound
@@ -199,6 +202,62 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
         if (!file.exists()) return ImageResult.NotFound
         val contentType = OwnershipPhotoService.getContentType(uuid) ?: "image/jpeg"
         return ImageResult.Found(file.readBytes(), contentType, etag)
+    }
+
+    private fun resolveTmdbPoster(tmdbMedia: TmdbMediaId, ifNoneMatch: String?): ImageResult {
+        val tmdbId = tmdbMedia.tmdbId
+        if (tmdbId == 0) return ImageResult.NotFound
+
+        val etag = "tmdb-${tmdbMedia.mediaType.number}-$tmdbId"
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+        // Try to find poster_path from local data first
+        val mediaTypeStr = when (tmdbMedia.mediaType) {
+            MediaType.MEDIA_TYPE_TV -> "TV"
+            else -> "MOVIE"
+        }
+        val posterPath = findTmdbPosterPath(tmdbId, mediaTypeStr)
+            ?: return ImageResult.NotFound
+
+        // Fetch from TMDB CDN
+        return try {
+            val url = "https://image.tmdb.org/t/p/w500$posterPath"
+            val conn = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 10_000
+            if (conn.responseCode !in 200..299) {
+                conn.disconnect()
+                return ImageResult.NotFound
+            }
+            val bytes = conn.inputStream.use { it.readBytes() }
+            conn.disconnect()
+            ImageResult.Found(bytes, "image/jpeg", etag)
+        } catch (e: Exception) {
+            log.warn("TMDB poster fetch failed for tmdb_id={}: {}", tmdbId, e.message)
+            ImageResult.NotFound
+        }
+    }
+
+    /** Find a TMDB poster_path from local data — checks Title table, then WishListItem. */
+    private fun findTmdbPosterPath(tmdbId: Int, mediaType: String): String? {
+        // Check owned titles first
+        val title = Title.findAll().firstOrNull { it.tmdb_id == tmdbId && it.media_type == mediaType }
+        if (title?.poster_path != null) return title.poster_path
+
+        // Check wish list items
+        val wish = WishListItem.findAll().firstOrNull { it.tmdb_id == tmdbId }
+        if (wish?.tmdb_poster_path != null) return wish.tmdb_poster_path
+
+        // Check TMDB collection parts (for collection detail posters)
+        val collPart = net.stewart.mediamanager.entity.TmdbCollectionPart.findAll()
+            .firstOrNull { it.tmdb_movie_id == tmdbId }
+        if (collPart != null) {
+            // Look up the title for this collection part
+            val partTitle = Title.findAll().firstOrNull { it.tmdb_id == tmdbId && it.media_type == "MOVIE" }
+            if (partTitle?.poster_path != null) return partTitle.poster_path
+        }
+
+        return null
     }
 
     // TODO: Camera.snapshot_url field exists but isn't used — snapshots currently

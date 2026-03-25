@@ -57,7 +57,7 @@ struct BarcodeScanView: View {
                 Section("Recent Scans") {
                     ForEach(recentScans) { scan in
                         NavigationLink(value: scan.id) {
-                            ScanRow(scan: scan, apiClient: dataModel.apiClient)
+                            ScanRow(scan: scan)
                         }
                     }
                 }
@@ -249,13 +249,12 @@ struct ScanItem: Identifiable {
 
 struct ScanRow: View {
     let scan: ScanItem
-    let apiClient: APIClient
 
     var body: some View {
         HStack(spacing: 12) {
             // Poster thumbnail (if available)
-            if scan.posterUrl != nil {
-                AuthenticatedImage(path: scan.posterUrl, apiClient: apiClient, cornerRadius: 4)
+            if let titleId = scan.titleId {
+                CachedImage(ref: .posterThumbnail(titleId: titleId), cornerRadius: 4)
                     .frame(width: 40, height: 56)
             }
 

@@ -199,24 +199,10 @@ struct DownloadsView: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 44, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else if let posterUrl = item.posterUrl {
-            AuthenticatedImage(
-                path: posterUrl,
-                apiClient: dataModel.apiClient,
-                cornerRadius: 4,
-                contentMode: .fill
-            )
-            .frame(width: 44, height: 64)
-            .clipped()
         } else {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(.quaternary)
+            CachedImage(ref: .posterThumbnail(titleId: item.titleId.protoValue), cornerRadius: 4, contentMode: .fill)
                 .frame(width: 44, height: 64)
-                .overlay {
-                    Image(systemName: "film")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
+                .clipped()
         }
     }
 

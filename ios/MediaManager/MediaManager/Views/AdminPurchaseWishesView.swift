@@ -17,11 +17,18 @@ struct AdminPurchaseWishesView: View {
                 List {
                     ForEach(wishes) { wish in
                         HStack(spacing: 12) {
-                            AuthenticatedImage(
-                                path: wish.posterUrl,
-                                apiClient: dataModel.apiClient
-                            )
+                            Group {
+                                if let titleId = wish.titleId {
+                                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
+                                } else {
+                                    CachedImage(ref: .tmdbPoster(
+                                        tmdbId: wish.tmdbId.protoValue,
+                                        mediaType: wish.mediaType == .tv ? .tv : .movie
+                                    ))
+                                }
+                            }
                             .frame(width: 50, height: 75)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(wish.title)

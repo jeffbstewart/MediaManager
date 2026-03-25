@@ -46,7 +46,7 @@ struct WishListView: View {
                         Section("Transcode Requests") {
                             ForEach(transcodeWishes) { wish in
                                 HStack(spacing: 12) {
-                                    AuthenticatedImage(path: wish.posterUrl, apiClient: dataModel.apiClient)
+                                    CachedImage(ref: .posterThumbnail(titleId: wish.titleId.protoValue))
                                         .frame(width: 40, height: 60)
 
                                     VStack(alignment: .leading, spacing: 2) {
