@@ -3961,3 +3961,35 @@ Documentation:
   TMDB poster proxy for unowned titles
 - 7 commits pushed to GitHub
 ===
+
+=== 2026-03-24/25 — Download System, gRPC Image Streaming, View Migration ===
+Session 1 (Mar 24):
+- Merged upstream changes, all builds clean
+- Migrated all 16 AuthenticatedImage call sites to CachedImage with typed
+  ImageRef — zero URL construction in iOS views
+- Added IMAGE_TYPE_TMDB_POSTER with TmdbMediaId composite key for unowned titles
+- Fixed personal/family hero images (poster_path null check order)
+- Fixed ImageStreamClient race condition (multiple concurrent stream opens)
+- Added 15-second keepalive pings for HAProxy idle timeout
+- Created download storage schema: proto/download_meta.proto with protobuf
+  metadata, atomic write protocol, sequential filenames, Chrome-style staging
+- Created DownloadStore actor with LRU cleanup and orphan reconciliation
+
+Session 2 (Mar 25):
+- Added gRPC DownloadFile server-streaming RPC (replaces failed URLSession approach)
+- Server streams ~1MB chunks from ForMobile transcode files
+- 4MB HTTP/2 flow control window for download throughput
+- Prometheus metrics: mm_download_bytes_total, mm_download_files_total
+- Fixed Long.toInt() overflow for files >2.1GB (IndexOutOfBoundsException)
+- Auto-retry on all download errors with 2s backoff (up to 50 retries)
+- Download concurrency limit: max 3 active, rest queued
+- Resume on app restart: prioritize entries with most progress
+- Reconcile bytesDownloaded against actual file size on disk at startup
+- Downloads UI: queued section, TV show DisclosureGroups, individual
+  episode delete buttons, pending storage display
+- Offline mode: tappable Go Online/Go Offline button (was invisible toggle)
+- Play directly from downloads page (both online and offline)
+- Fixed offline subtitles: correct {seq}.subs.vtt path
+- Renamed "Request Download" → "Request Transcode for Download"
+- Verified end-to-end: download, offline playback, subtitles all working
+===
