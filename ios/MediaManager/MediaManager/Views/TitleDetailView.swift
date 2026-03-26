@@ -384,10 +384,10 @@ struct TitleDetailView: View {
                     transcodeId: transcodeId.protoValue,
                     titleId: detail.id.protoValue,
                     titleName: detail.name,
-                    quality: .unknown,
+                    quality: detail.proto.title.quality.downloadQuality,
                     year: Int32(detail.year ?? 0),
-                    mediaType: detail.mediaType == .tv ? .tv : .movie,
-                    contentRating: .unknown
+                    mediaType: detail.proto.title.mediaType,
+                    contentRating: detail.proto.title.contentRating
                 )
             } label: {
                 Label("Download", systemImage: "arrow.down.circle")

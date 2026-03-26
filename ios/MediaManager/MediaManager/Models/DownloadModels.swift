@@ -4,6 +4,17 @@ import Foundation
 // (MMDownloadDatabase, MMDownloadEntry, MMDownloadState, MMDownloadQuality).
 // This file retains only the view-layer helpers and adapters.
 
+extension MMQuality {
+    var downloadQuality: MMDownloadQuality {
+        switch self {
+        case .sd: .sd
+        case .fhd: .fhd
+        case .uhd: .uhd
+        default: .unknown
+        }
+    }
+}
+
 extension MMDownloadEntry: Identifiable {
     public var id: Int64 { transcodeID }
 
