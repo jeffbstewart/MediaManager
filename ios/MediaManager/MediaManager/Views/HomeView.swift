@@ -184,16 +184,48 @@ struct PosterCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
-                .frame(width: 120, height: 180)
-                .clipped()
-                .opacity(title.playable ? 1.0 : 0.5)
+            ZStack(alignment: .bottom) {
+                CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
+                    .frame(width: 120, height: 180)
+                    .clipped()
+                    .opacity(title.playable ? 1.0 : 0.5)
+
+                // Resume progress bar
+                if let progress = title.resumeProgress, progress > 0 {
+                    GeometryReader { geo in
+                        VStack {
+                            Spacer()
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(.black.opacity(0.5))
+                                    .frame(height: 3)
+                                Rectangle()
+                                    .fill(.blue)
+                                    .frame(width: geo.size.width * progress, height: 3)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: 120, height: 180)
 
             Text(title.name)
                 .font(.caption)
                 .lineLimit(2)
 
-            if let year = title.year {
+            // Episode context for TV resume
+            if let s = title.resumeSeasonNumber, let e = title.resumeEpisodeNumber {
+                HStack(spacing: 2) {
+                    Text("S\(s)E\(e)")
+                        .fontWeight(.medium)
+                    if let name = title.resumeEpisodeName {
+                        Text(name)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            } else if let year = title.year {
                 Text(String(year))
                     .font(.caption2)
                     .foregroundStyle(.secondary)

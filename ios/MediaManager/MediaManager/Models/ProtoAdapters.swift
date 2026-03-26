@@ -192,6 +192,18 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     var familyMembers: [String]? { proto.familyMembers.isEmpty ? nil : proto.familyMembers }
     var forMobileAvailable: Bool? { proto.lowStorageTranscodeAvailable }
 
+    // Resume Playing fields (populated only in "Resume Playing" carousel)
+    var resumePositionSeconds: Double? { proto.hasResumePosition ? proto.resumePosition.seconds : nil }
+    var resumeDurationSeconds: Double? { proto.hasResumeDuration ? proto.resumeDuration.seconds : nil }
+    var resumeSeasonNumber: Int? { proto.hasResumeSeasonNumber ? Int(proto.resumeSeasonNumber) : nil }
+    var resumeEpisodeNumber: Int? { proto.hasResumeEpisodeNumber ? Int(proto.resumeEpisodeNumber) : nil }
+    var resumeEpisodeName: String? { proto.hasResumeEpisodeName ? proto.resumeEpisodeName : nil }
+
+    var resumeProgress: Double? {
+        guard let pos = resumePositionSeconds, let dur = resumeDurationSeconds, dur > 0 else { return nil }
+        return pos / dur
+    }
+
     /// Convenience init for constructing ApiTitle from fields (used by views like DownloadsView).
     init(id: TitleID, name: String, mediaType: MediaType, year: Int? = nil,
          description: String? = nil, posterUrl: String? = nil, backdropUrl: String? = nil,

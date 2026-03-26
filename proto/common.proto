@@ -191,6 +191,13 @@ message Title {
   repeated string family_members = 16;
   bool high_quality_transcode_available = 17;
   bool low_storage_transcode_available = 18;
+
+  // Populated only in "Resume Playing" carousel items
+  optional PlaybackOffset resume_position = 19;
+  optional PlaybackOffset resume_duration = 20;
+  optional int32 resume_season_number = 21;
+  optional int32 resume_episode_number = 22;
+  optional string resume_episode_name = 23;
 }
 
 // Full title detail. Embeds Title to avoid field duplication, then adds

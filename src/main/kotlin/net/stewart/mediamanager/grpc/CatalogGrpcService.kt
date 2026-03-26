@@ -58,7 +58,8 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val titlesById: Map<Long?, TitleEntity>,
         val playableTitles: List<TitleEntity>,
         val playableTranscodes: List<TranscodeEntity>,
-        val playableByTitle: Map<Long, List<TranscodeEntity>>
+        val playableByTitle: Map<Long, List<TranscodeEntity>>,
+        val episodesById: Map<Long, EpisodeEntity>
     )
 
     private fun loadCatalog(user: AppUser, nasRoot: String?): CatalogData {
@@ -81,7 +82,9 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
         }
 
-        return CatalogData(allTitles, titlesById, playableTitles, playableTranscodes, playableByTitle)
+        val episodesById = EpisodeEntity.findAll().associateBy { it.id!! }
+
+        return CatalogData(allTitles, titlesById, playableTitles, playableTranscodes, playableByTitle, episodesById)
     }
 
     private fun loadFamilyMemberNames(): Map<Long, List<String>> {
@@ -126,7 +129,23 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             carousels.add(carousel {
                 name = "Resume Playing"
                 items.addAll(indices.map { i ->
-                    resumeItems[i].first.toProto(resumeItems[i].second, nasRoot, familyNames[resumeItems[i].first.id])
+                    val (titleEntity, transcodeEntity) = resumeItems[i]
+                    val progress = resumeProgress[i]
+                    val base = titleEntity.toProto(transcodeEntity, nasRoot, familyNames[titleEntity.id])
+                    // Augment with resume progress and episode info
+                    base.toBuilder().apply {
+                        resumePosition = progress.position_seconds.toPlaybackOffset()
+                        progress.duration_seconds?.let { resumeDuration = it.toPlaybackOffset() }
+                        // For TV episodes, add season/episode context
+                        transcodeEntity.episode_id?.let { epId ->
+                            val episode = catalog.episodesById[epId]
+                            if (episode != null) {
+                                resumeSeasonNumber = episode.season_number
+                                resumeEpisodeNumber = episode.episode_number
+                                episode.name?.let { resumeEpisodeName = it }
+                            }
+                        }
+                    }.build()
                 })
             })
         }
