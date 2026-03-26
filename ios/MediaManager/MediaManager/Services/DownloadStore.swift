@@ -156,10 +156,25 @@ actor DownloadStore {
                     db.entries[i].errorMessage = "File missing from disk"
                     changed = true
                 }
-            } else if entry.state == .downloading || entry.state == .paused {
-                // Clear resume data if .downloading file is gone
+            } else if entry.state == .downloading || entry.state == .paused || entry.state == .fetchingMetadata || entry.state == .queued {
                 let path = videoPath(for: entry, downloading: true)
-                if !fm.fileExists(atPath: path.path) && !entry.resumeData.isEmpty {
+                if fm.fileExists(atPath: path.path) {
+                    // Reconcile bytesDownloaded with actual file size on disk
+                    let attrs = try? fm.attributesOfItem(atPath: path.path)
+                    let actualSize = (attrs?[.size] as? Int64) ?? 0
+                    if actualSize != entry.bytesDownloaded {
+                        logger.info("Reconciling download \(entry.sequence): stored=\(entry.bytesDownloaded) actual=\(actualSize)")
+                        db.entries[i].bytesDownloaded = actualSize
+                        changed = true
+                    }
+                } else {
+                    // No .downloading file — reset progress
+                    if entry.bytesDownloaded > 0 {
+                        db.entries[i].bytesDownloaded = 0
+                        changed = true
+                    }
+                }
+                if !entry.resumeData.isEmpty && !fm.fileExists(atPath: path.path) {
                     db.entries[i].resumeData = Data()
                     changed = true
                 }

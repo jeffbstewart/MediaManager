@@ -44,6 +44,25 @@ final class DownloadManager {
         if !isEffectivelyOffline {
             Task { await flushPendingProgress() }
         }
+        // Resume any downloads that were in progress when the app was killed
+        resumeInterruptedDownloads()
+    }
+
+    /// Restart downloads that were active or queued before the app was killed.
+    private func resumeInterruptedDownloads() {
+        Task {
+            // Ensure entries are loaded from disk first
+            await reloadEntries()
+            await store.cleanOrphans()
+            await reloadEntries()
+
+            // Re-queue any that were mid-download — they'll resume from saved offset
+            for entry in entries where entry.state == .downloading || entry.state == .fetchingMetadata {
+                await store.updateEntry(transcodeId: entry.transcodeID) { $0.state = .queued }
+            }
+            await reloadEntries()
+            startNextQueued()
+        }
     }
 
     // MARK: - Public API
@@ -67,13 +86,15 @@ final class DownloadManager {
             entry.episodeNumber = episodeNumber
             entry.episodeTitle = episodeTitle
             entry.contentType = "video/mp4"
-            entry.state = .fetchingMetadata
+            // Always queue — startNextQueued will pick up slots
+            entry.state = .queued
             entry.addedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
 
-            let assigned = await store.addEntry(entry)
+            _ = await store.addEntry(entry)
             await reloadEntries()
 
-            beginDownload(transcodeId: transcodeId, sequence: assigned.sequence)
+            // Kick the queue (synchronous check + start, no suspension between check and start)
+            startNextQueued()
         }
     }
 
@@ -124,7 +145,7 @@ final class DownloadManager {
     }
 
     var activeDownloadCount: Int {
-        entries.filter { $0.state == .fetchingMetadata || $0.state == .downloading }.count
+        downloadTasks.count
     }
 
     var totalStorageUsed: Int64 {
@@ -196,6 +217,9 @@ final class DownloadManager {
 
     private func performDownload(transcodeId: Int64, sequence: Int32) async {
         logger.error("performDownload: transcodeId=\(transcodeId) seq=\(sequence)")
+        await store.updateEntry(transcodeId: transcodeId) { $0.state = .fetchingMetadata }
+        await reloadEntries()
+
         guard let grpcClient else {
             await markFailed(transcodeId: transcodeId, error: "Not configured")
             return
@@ -243,6 +267,7 @@ final class DownloadManager {
         let filePath = await store.videoPath(for: entry, downloading: true)
         logger.error("Starting gRPC download: offset=\(resumeOffset) -> \(filePath.lastPathComponent)")
 
+        let progress = DownloadProgress(initial: resumeOffset)
         do {
             // Open file for writing (append if resuming)
             if resumeOffset > 0 {
@@ -259,9 +284,6 @@ final class DownloadManager {
             if resumeOffset > 0 {
                 try fileHandle.seek(toOffset: UInt64(resumeOffset))
             }
-
-            // Use a simple counter actor to track progress from the @Sendable closure
-            let progress = DownloadProgress(initial: resumeOffset)
 
             try await grpcClient.downloadFile(transcodeId: transcodeId, offset: resumeOffset) { chunk in
                 let data = chunk.data
@@ -295,11 +317,32 @@ final class DownloadManager {
             startNextQueued()
 
         } catch is CancellationError {
-            // Paused or cancelled — bytesDownloaded already saved periodically
-            logger.error("Download cancelled/paused: transcodeId=\(transcodeId)")
+            // User-initiated pause — bytesDownloaded already saved periodically
+            logger.error("Download paused: transcodeId=\(transcodeId)")
+            let saved = await progress.total
+            await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = saved }
         } catch {
-            logger.error("Download failed: \(error.localizedDescription)")
-            await markFailed(transcodeId: transcodeId, error: error.localizedDescription)
+            let saved = await progress.total
+            await store.updateEntry(transcodeId: transcodeId) { e in
+                e.bytesDownloaded = saved
+                e.retryCount += 1
+            }
+
+            let entry = await store.entry(for: transcodeId)
+            let retries = entry?.retryCount ?? 0
+
+            if retries > 50 {
+                // Too many retries — give up
+                logger.error("Download failed after \(retries) retries: \(error)")
+                await markFailed(transcodeId: transcodeId, error: "Failed after \(retries) retries")
+            } else {
+                // Auto-retry with backoff — connection drops are expected through HAProxy
+                logger.error("Download interrupted (retry \(retries)): \(String(describing: error))")
+                try? await Task.sleep(for: .seconds(2))
+                if !Task.isCancelled {
+                    await performDownload(transcodeId: transcodeId, sequence: sequence)
+                }
+            }
         }
     }
 
@@ -349,9 +392,18 @@ final class DownloadManager {
         entries = await store.entries
     }
 
+    /// Start queued downloads up to the concurrency limit.
+    /// Prioritizes entries that already have progress (were interrupted mid-download).
+    /// IMPORTANT: This is synchronous (no await) between the count check
+    /// and beginDownload to prevent races.
     private func startNextQueued() {
-        guard activeDownloadCount < Self.maxConcurrentDownloads else { return }
-        if let next = entries.first(where: { $0.state == .queued }) {
+        let queued = entries
+            .filter { $0.state == .queued }
+            .sorted { $0.bytesDownloaded > $1.bytesDownloaded } // resume in-progress first
+        for next in queued {
+            guard downloadTasks.count < Self.maxConcurrentDownloads else { break }
+            // beginDownload synchronously sets downloadTasks[id], so the
+            // count check on the next iteration sees the updated value.
             beginDownload(transcodeId: next.transcodeID, sequence: next.sequence)
         }
     }
