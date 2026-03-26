@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.service
 
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
+import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics
@@ -39,6 +40,25 @@ object MetricsRegistry {
     /** Increment bytes proxied for a camera stream type (mjpeg, hls, snapshot). */
     fun countCameraStreamBytes(type: String, bytes: Long) {
         registry.counter("mm_camera_stream_bytes_total", "type", type).increment(bytes.toDouble())
+    }
+
+    // Cached download counters — getOrPut lambda runs only on first call per key,
+    // subsequent calls hit the ConcurrentHashMap directly (no registry lookup).
+    private val downloadBytesCounters = java.util.concurrent.ConcurrentHashMap<String, Counter>()
+    private val downloadFileCounters = java.util.concurrent.ConcurrentHashMap<String, Counter>()
+
+    /** Increment bytes streamed for a gRPC file download. */
+    fun countDownloadBytes(quality: String, bytes: Long) {
+        downloadBytesCounters.getOrPut(quality) {
+            registry.counter("mm_download_bytes_total", "quality", quality)
+        }.increment(bytes.toDouble())
+    }
+
+    /** Increment completed/cancelled/errored download file counter. */
+    fun countDownloadFile(status: String) {
+        downloadFileCounters.getOrPut(status) {
+            registry.counter("mm_download_files_total", "status", status)
+        }.increment()
     }
 
     /** Track active MJPEG stream count (long-lived connections). */

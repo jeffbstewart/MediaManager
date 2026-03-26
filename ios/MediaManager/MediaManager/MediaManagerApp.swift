@@ -5,11 +5,7 @@ import AVFoundation
 class AppDelegate: NSObject, UIApplicationDelegate {
     var downloadManager: DownloadManager?
 
-    func application(_ application: UIApplication,
-                     handleEventsForBackgroundURLSession identifier: String,
-                     completionHandler: @escaping () -> Void) {
-        downloadManager?.handleBackgroundSessionEvent(completionHandler: completionHandler)
-    }
+    // Background URLSession no longer used — downloads go via gRPC streaming.
 }
 
 @main
@@ -42,7 +38,6 @@ struct MediaManagerApp: App {
                 .environment(dataModel)
                 .environment(imageProvider)
                 .onAppear {
-                    appDelegate.downloadManager = downloadManager
                     downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
                 }
         }

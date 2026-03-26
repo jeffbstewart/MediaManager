@@ -8,8 +8,7 @@ option swift_prefix = "MM";
 
 import "common.proto";
 
-// Low-storage (ForMobile) download metadata.
-// Actual file download stays as HTTP (Range requests, resumable binary transfer).
+// Low-storage (ForMobile) download metadata and file streaming.
 service DownloadService {
   // List all titles with low-storage transcode files ready.
   rpc ListAvailable(Empty) returns (DownloadAvailableResponse);
@@ -19,6 +18,10 @@ service DownloadService {
 
   // Get manifests for multiple transcodes at once.
   rpc BatchManifest(BatchManifestRequest) returns (BatchManifestResponse);
+
+  // Server-streaming file download. Streams the ForMobile transcode
+  // file in ~1MB chunks. Supports resume via offset parameter.
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadChunk);
 }
 
 message ManifestRequest {
@@ -57,4 +60,23 @@ message DownloadManifest {
 
 message BatchManifestResponse {
   repeated DownloadManifest manifests = 1;
+}
+
+// --- File download streaming ---
+
+message DownloadFileRequest {
+  int64 transcode_id = 1;
+
+  // Resume from byte offset. Zero means start from beginning.
+  int64 offset = 2;
+
+  // Max bytes to return. Zero means stream to end of file.
+  int64 length = 3;
+}
+
+message DownloadChunk {
+  bytes data = 1;               // file content (~1MB per chunk)
+  int64 offset = 2;             // byte offset of this chunk in the file
+  int64 total_size = 3;         // total file size
+  bool is_last = 4;             // true on the final chunk
 }

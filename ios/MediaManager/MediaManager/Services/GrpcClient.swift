@@ -365,6 +365,25 @@ actor GrpcClient {
         return try await downloadService.batchManifest(request, metadata: authMetadata())
     }
 
+    /// Server-streaming file download. Calls onChunk for each ~1MB chunk received.
+    func downloadFile(
+        transcodeId: Int64,
+        offset: Int64 = 0,
+        onChunk: @Sendable @escaping (MMDownloadChunk) async -> Void
+    ) async throws {
+        var request = MMDownloadFileRequest()
+        request.transcodeID = transcodeId
+        request.offset = offset
+        try await downloadService.downloadFile(
+            request,
+            metadata: authMetadata()
+        ) { response in
+            for try await chunk in response.messages {
+                await onChunk(chunk)
+            }
+        }
+    }
+
     // MARK: - WishList RPCs
 
     func wishList() async throws -> MMWishListResponse {
