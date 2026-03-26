@@ -90,7 +90,7 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
             var totalBytesStreamed = 0L
 
             while (position < endOffset) {
-                val remaining = (endOffset - position).toInt().coerceAtMost(CHUNK_SIZE)
+                val remaining = (endOffset - position).coerceAtMost(CHUNK_SIZE.toLong()).toInt()
                 val bytesRead = raf.read(buffer, 0, remaining)
                 if (bytesRead <= 0) break
 
@@ -111,7 +111,7 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
             log.info("Download complete: transcode={} bytes={}", request.transcodeId, totalBytesStreamed)
         } catch (e: Exception) {
             MetricsRegistry.countDownloadFile("error")
-            log.warn("Download failed: transcode={} error={}", request.transcodeId, e.message)
+            log.warn("Download failed: transcode={} error={} type={}", request.transcodeId, e.message, e.javaClass.simpleName, e)
             throw e
         } finally {
             raf.close()

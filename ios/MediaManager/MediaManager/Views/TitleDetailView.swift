@@ -174,7 +174,7 @@ struct TitleDetailView: View {
                                             Button {
                                                 Task { await requestMobileTranscode(detail.id) }
                                             } label: {
-                                                Label("Request Download", systemImage: "arrow.down.circle")
+                                                Label("Request Transcode for Download", systemImage: "gearshape.arrow.triangle.2.circlepath")
                                                     .foregroundStyle(.secondary)
                                             }
                                         }

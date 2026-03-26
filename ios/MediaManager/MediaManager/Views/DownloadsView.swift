@@ -249,8 +249,8 @@ struct DownloadsView: View {
     }
 
     private func completedRow(_ item: DownloadItem) -> some View {
-        let title = makeTitleForNavigation(item: item, episodeCount: 1)
-        return NavigationLink(value: title) {
+        let route = playbackRoute(for: item)
+        return NavigationLink(value: route) {
             HStack {
                 posterImage(item)
 
@@ -306,6 +306,8 @@ struct DownloadsView: View {
     }
 
     private func completedEpisodeRow(_ item: DownloadItem) -> some View {
+        let route = playbackRoute(for: item)
+        return NavigationLink(value: route) {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 if let s = item.seasonNumber, let e = item.episodeNumber {
@@ -342,6 +344,18 @@ struct DownloadsView: View {
             }
             .buttonStyle(.plain)
         }
+        }
+    }
+
+    private func playbackRoute(for item: DownloadItem) -> PlaybackRoute {
+        PlaybackRoute(
+            transcodeId: item.transcodeId,
+            titleName: item.titleName,
+            episodeName: item.episodeTitle,
+            hasSubtitles: item.hasSubtitles,
+            seasonNumber: item.seasonNumber,
+            episodeNumber: item.episodeNumber
+        )
     }
 
     private func deleteSwipeAction(_ item: DownloadItem) -> some View {

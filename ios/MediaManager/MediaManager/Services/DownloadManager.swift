@@ -198,6 +198,14 @@ final class DownloadManager {
         }
     }
 
+    /// Returns the local subtitle file URL for a downloaded transcode, if it exists.
+    func localSubtitleURL(for transcodeId: TranscodeID) -> URL? {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+              entry.hasSubtitles_p else { return nil }
+        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.subs.vtt", entry.sequence))
+        return FileManager.default.fileExists(atPath: path.path) ? path : nil
+    }
+
     // MARK: - Offline Image Cache
 
     func loadCachedImage(for titleId: TitleID, name: String) -> Data? {
@@ -287,10 +295,16 @@ final class DownloadManager {
 
             try await grpcClient.downloadFile(transcodeId: transcodeId, offset: resumeOffset) { chunk in
                 let data = chunk.data
+                if data.isEmpty {
+                    return // skip empty chunks
+                }
                 fileHandle.write(data)
                 let (newTotal, shouldPersist) = await progress.add(Int64(data.count))
 
                 if shouldPersist {
+                    // Flush to disk before persisting metadata so the file size
+                    // matches bytesDownloaded on crash/cancel recovery
+                    try? fileHandle.synchronize()
                     await self.store.updateEntry(transcodeId: transcodeId) { e in
                         e.bytesDownloaded = newTotal
                     }
@@ -298,6 +312,7 @@ final class DownloadManager {
                 }
             }
 
+            try fileHandle.synchronize()
             try fileHandle.close()
 
             let finalBytes = await progress.total
@@ -323,13 +338,16 @@ final class DownloadManager {
             await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = saved }
         } catch {
             let saved = await progress.total
+            logger.error("Saving progress before retry: \(saved) bytes")
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.bytesDownloaded = saved
                 e.retryCount += 1
             }
 
+            // Verify the save took
             let entry = await store.entry(for: transcodeId)
             let retries = entry?.retryCount ?? 0
+            logger.error("Verified saved: bytesDownloaded=\(entry?.bytesDownloaded ?? -1) retries=\(retries)")
 
             if retries > 50 {
                 // Too many retries — give up
@@ -430,18 +448,19 @@ final class DownloadManager {
 /// Thread-safe progress counter for use in @Sendable download closures.
 private actor DownloadProgress {
     private(set) var total: Int64
-    private var chunksSinceLastPersist = 0
+    private var chunkCount = 0
 
     init(initial: Int64) {
         self.total = initial
     }
 
     /// Add bytes, returns (newTotal, shouldPersist).
+    /// Persists on first chunk and every 10th chunk thereafter.
     func add(_ bytes: Int64) -> (Int64, Bool) {
         total += bytes
-        chunksSinceLastPersist += 1
-        if chunksSinceLastPersist >= 10 {
-            chunksSinceLastPersist = 0
+        chunkCount += 1
+        // Always persist first chunk, then every 10
+        if chunkCount == 1 || chunkCount % 10 == 0 {
             return (total, true)
         }
         return (total, false)

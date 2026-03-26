@@ -13,12 +13,13 @@ final class SubtitleController {
     private var cues: [SubtitleCue] = []
     private var timeObserver: Any?
 
-    func load(transcodeId: Int, apiClient: APIClient, localDir: URL? = nil) async {
-        // Try local file first
-        if let localDir {
-            let localURL = localDir.appendingPathComponent("subs.vtt")
+    func load(transcodeId: Int, apiClient: APIClient, localDir: URL? = nil, localSubtitleFile: URL? = nil) async {
+        // Try local file first (specific path or legacy subs.vtt)
+        let localCandidates = [localSubtitleFile, localDir?.appendingPathComponent("subs.vtt")].compactMap { $0 }
+        for localURL in localCandidates {
             if let data = try? Data(contentsOf: localURL),
-               let content = String(data: data, encoding: .utf8) {
+               let content = String(data: data, encoding: .utf8),
+               content.contains("-->") {
                 let parsed = SubtitleParser.parseVTT(content)
                 cues = parsed
                 cueCount = parsed.count

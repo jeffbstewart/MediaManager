@@ -123,26 +123,15 @@ struct ContentView: View {
             .navigationTitle("Media Manager")
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    VStack(spacing: 8) {
-                        // Offline mode toggle
-                        @Bindable var dm = dataModel.downloads
-                        Toggle(isOn: $dm.isOfflineMode) {
-                            Label(
-                                dataModel.downloads.isOfflineMode ? "Offline Mode" : "Online",
-                                systemImage: dataModel.downloads.isEffectivelyOffline
-                                    ? "wifi.slash" : "wifi"
-                            )
-                            .font(.callout)
-                        }
-                        .toggleStyle(.switch)
-                        .tint(.orange)
-                        .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
-                            if newValue {
-                                // When going offline, redirect from online-only tabs to Downloads
+                    VStack(spacing: 4) {
+                        Button {
+                            dataModel.downloads.isOfflineMode.toggle()
+                            if dataModel.downloads.isOfflineMode {
                                 let onlineOnlyTabs: Set<Tab> = [
                                     .home, .movies, .tvShows, .collections, .tags, .family,
                                     .cameras, .liveTv, .search, .wishList, .profile,
-                                    .adminStatus, .adminUsers, .adminPurchaseWishes,
+                                    .adminScan, .adminStatus, .adminCameras,
+                                    .adminUsers, .adminPurchaseWishes,
                                     .adminDataQuality, .adminTags, .adminTranscodes,
                                     .adminUnmatched, .adminSettings
                                 ]
@@ -151,6 +140,14 @@ struct ContentView: View {
                                 }
                                 navigationPath = NavigationPath()
                             }
+                        } label: {
+                            Label(
+                                dataModel.downloads.isEffectivelyOffline ? "Go Online" : "Go Offline",
+                                systemImage: dataModel.downloads.isEffectivelyOffline
+                                    ? "wifi.slash" : "wifi"
+                            )
+                            .font(.callout)
+                            .foregroundStyle(dataModel.downloads.isEffectivelyOffline ? .orange : .primary)
                         }
 
                         if isOffline && !dataModel.downloads.isOfflineMode {
