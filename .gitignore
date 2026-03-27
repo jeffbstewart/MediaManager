@@ -22,6 +22,7 @@ roku-channel.zip
 
 # iOS / Xcode (local developer config)
 Developer.xcconfig
+Branding.xcconfig
 lifecycle/presubmit-personal-patterns.txt
 
 # iOS / Xcode

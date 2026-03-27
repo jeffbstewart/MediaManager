@@ -50,10 +50,17 @@ struct ProfileView: View {
                         }
                     }
 
-                    if let privacyURL = PrivacyPolicy.url {
-                        Section {
-                            Link(destination: privacyURL) {
-                                Label("Privacy Policy", systemImage: "hand.raised")
+                    if LegalDocuments.isConfigured {
+                        Section("Legal") {
+                            if let url = LegalDocuments.privacyPolicyURL {
+                                Link(destination: url) {
+                                    Label("Privacy Policy", systemImage: "hand.raised")
+                                }
+                            }
+                            if let url = LegalDocuments.termsOfUseURL {
+                                Link(destination: url) {
+                                    Label("Terms of Use", systemImage: "doc.text")
+                                }
                             }
                         }
                     }

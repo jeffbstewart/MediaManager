@@ -1,0 +1,23 @@
+// Copy this file to Branding.xcconfig and fill in your values.
+// Branding.xcconfig is gitignored — your branding stays local.
+//
+// Note: use $()/ to escape // in URLs (xcconfig treats // as comments)
+
+// --- Legal ---
+
+// Privacy policy URL and version (REQUIRED).
+// Generate one for free at https://www.termsfeed.com/privacy-policy-generator/
+// Increment the version number each time you update the policy text.
+PRIVACY_POLICY_URL = https:/$()/YOUR_PRIVACY_POLICY_URL_HERE
+PRIVACY_POLICY_VERSION = 1
+
+// Terms of use URL and version (REQUIRED).
+// Generate one for free at https://www.termsfeed.com/terms-of-use-generator/
+// Increment the version number each time you update the terms.
+TERMS_OF_USE_URL = https:/$()/YOUR_TERMS_OF_USE_URL_HERE
+TERMS_OF_USE_VERSION = 1
+
+// --- App Identity ---
+
+// Display name shown under the app icon and in the system.
+APP_DISPLAY_NAME = Media Manager

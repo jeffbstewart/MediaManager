@@ -129,15 +129,13 @@ cp ios/MediaManager/Developer.xcconfig.example ios/MediaManager/Developer.xcconf
 # Edit and set your Apple Developer Team ID
 ```
 
-**2. iOS secrets** (privacy policy):
+**2. Branding.xcconfig** (legal and identity):
 ```bash
-cp secrets/example.ios.env secrets/ios.agent_visible_env
-# Edit and set:
-#   DEVELOPMENT_TEAM=your_team_id
-#   PRIVACY_POLICY_URL=https://your-privacy-policy-url
+cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig
+# Edit and set your privacy policy and terms of use URLs
 ```
 
-You need a hosted privacy policy URL. Generate one for free at [termsfeed.com](https://www.termsfeed.com/privacy-policy-generator/) and host it on GitHub Pages, your own site, or any public URL.
+You need hosted privacy policy and terms of use URLs. Generate them for free at [termsfeed.com](https://www.termsfeed.com/) and host on GitHub Pages, your own site, or any public URL. Both are required — the build will fail without them.
 
 ### Building
 

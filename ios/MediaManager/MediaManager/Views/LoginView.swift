@@ -36,7 +36,7 @@ struct LoginView: View {
                         .textContentType(.password)
                         .onSubmit { login() }
 
-                    if let privacyURL = PrivacyPolicy.url {
+                    if LegalDocuments.isConfigured {
                         HStack {
                             Button {
                                 agreedToPrivacy.toggle()
@@ -47,9 +47,19 @@ struct LoginView: View {
                             }
                             .buttonStyle(.plain)
 
-                            HStack(spacing: 4) {
-                                Text("I agree to the")
-                                Link("Privacy Policy", destination: privacyURL)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text("I agree to the")
+                                    if let url = LegalDocuments.privacyPolicyURL {
+                                        Link("Privacy Policy", destination: url)
+                                    }
+                                }
+                                HStack(spacing: 4) {
+                                    Text("and the")
+                                    if let url = LegalDocuments.termsOfUseURL {
+                                        Link("Terms of Use", destination: url)
+                                    }
+                                }
                             }
                             .font(.callout)
                         }
@@ -66,7 +76,7 @@ struct LoginView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (PrivacyPolicy.url != nil && !agreedToPrivacy))
+                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (LegalDocuments.isConfigured && !agreedToPrivacy))
                 }
                 .padding(.horizontal)
 
@@ -86,13 +96,16 @@ struct LoginView: View {
                     }
                     .font(.callout)
 
-                    if let privacyURL = PrivacyPolicy.url {
-                        Link(destination: privacyURL) {
-                            Label("Privacy Policy", systemImage: "hand.raised")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    HStack(spacing: 16) {
+                        if let url = LegalDocuments.privacyPolicyURL {
+                            Link("Privacy Policy", destination: url)
+                        }
+                        if let url = LegalDocuments.termsOfUseURL {
+                            Link("Terms of Use", destination: url)
                         }
                     }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 .padding(.bottom)
             }

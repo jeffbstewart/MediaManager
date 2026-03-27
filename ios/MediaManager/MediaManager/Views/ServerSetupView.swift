@@ -86,13 +86,16 @@ struct ServerSetupView: View {
 
                 Spacer()
 
-                if let privacyURL = PrivacyPolicy.url {
-                    Link(destination: privacyURL) {
-                        Label("Privacy Policy", systemImage: "hand.raised")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                HStack(spacing: 16) {
+                    if let url = LegalDocuments.privacyPolicyURL {
+                        Link("Privacy Policy", destination: url)
+                    }
+                    if let url = LegalDocuments.termsOfUseURL {
+                        Link("Terms of Use", destination: url)
                     }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 Spacer()
             }

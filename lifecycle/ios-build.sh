@@ -45,38 +45,35 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Verify Developer.xcconfig exists
+# Verify configuration files exist
 XCCONFIG="$PROJECT_ROOT/ios/MediaManager/Developer.xcconfig"
+BRANDING="$PROJECT_ROOT/ios/MediaManager/Branding.xcconfig"
 if [ ! -f "$XCCONFIG" ]; then
-    echo "ERROR: $XCCONFIG not found. Copy from Developer.xcconfig.example and fill in your Team ID."
+    echo "ERROR: $XCCONFIG not found."
+    echo "  cp ios/MediaManager/Developer.xcconfig.example ios/MediaManager/Developer.xcconfig"
+    exit 1
+fi
+if [ ! -f "$BRANDING" ]; then
+    echo "ERROR: $BRANDING not found."
+    echo "  cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig"
+    echo "  Then fill in your privacy policy and terms of use URLs"
     exit 1
 fi
 
-# Load iOS secrets
-IOS_ENV="$PROJECT_ROOT/secrets/ios.agent_visible_env"
-if [ ! -f "$IOS_ENV" ]; then
-    echo "ERROR: $IOS_ENV not found."
-    echo "  cp secrets/example.ios.env secrets/ios.agent_visible_env"
-    echo "  Then fill in DEVELOPMENT_TEAM and PRIVACY_POLICY_URL"
+# Validate branding values aren't placeholders
+if grep -q 'YOUR_TEAM_ID_HERE' "$XCCONFIG"; then
+    echo "ERROR: DEVELOPMENT_TEAM not configured in $XCCONFIG"
+    echo "  Replace YOUR_TEAM_ID_HERE with your Apple Developer Team ID"
     exit 1
 fi
-while IFS='=' read -r key value; do
-    key="${key//$'\r'/}"
-    value="${value//$'\r'/}"
-    [[ -z "$key" || "$key" =~ ^# ]] && continue
-    export "$key"="$value"
-done < "$IOS_ENV"
-
-# Validate required values
-if [ -z "${DEVELOPMENT_TEAM:-}" ] || [[ "$DEVELOPMENT_TEAM" == *"YOUR_TEAM_ID_HERE"* ]]; then
-    echo "ERROR: DEVELOPMENT_TEAM not set in $IOS_ENV"
-    echo "  Find your Team ID in the Apple Developer portal under Membership"
-    exit 1
-fi
-if [ -z "${PRIVACY_POLICY_URL:-}" ] || [[ "$PRIVACY_POLICY_URL" == *"YOUR_PRIVACY_POLICY_URL_HERE"* ]]; then
-    echo "ERROR: PRIVACY_POLICY_URL not set in $IOS_ENV"
+if grep -q 'YOUR_PRIVACY_POLICY_URL_HERE' "$BRANDING"; then
+    echo "ERROR: PRIVACY_POLICY_URL not configured in $BRANDING"
     echo "  Generate a privacy policy at https://www.termsfeed.com/privacy-policy-generator/"
-    echo "  Then set PRIVACY_POLICY_URL in secrets/ios.agent_visible_env"
+    exit 1
+fi
+if grep -q 'YOUR_TERMS_OF_USE_URL_HERE' "$BRANDING"; then
+    echo "ERROR: TERMS_OF_USE_URL not configured in $BRANDING"
+    echo "  Generate terms of use at https://www.termsfeed.com/terms-of-use-generator/"
     exit 1
 fi
 
@@ -100,7 +97,6 @@ BUILD_CMD=(
     -scheme MediaManager
     -destination "$DESTINATION"
     -configuration "$CONFIGURATION"
-    "PRIVACY_POLICY_URL=$PRIVACY_POLICY_URL"
     ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
     build
 )

@@ -1,4 +1,6 @@
 // Copy this file to Developer.xcconfig and fill in your Team ID.
 // Developer.xcconfig is gitignored — your Team ID stays local.
+// Also copy Branding.xcconfig.example to Branding.xcconfig.
 
+#include "Branding.xcconfig"
 DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
