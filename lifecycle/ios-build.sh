@@ -45,6 +45,41 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Verify Developer.xcconfig exists
+XCCONFIG="$PROJECT_ROOT/ios/MediaManager/Developer.xcconfig"
+if [ ! -f "$XCCONFIG" ]; then
+    echo "ERROR: $XCCONFIG not found. Copy from Developer.xcconfig.example and fill in your Team ID."
+    exit 1
+fi
+
+# Load iOS secrets
+IOS_ENV="$PROJECT_ROOT/secrets/ios.agent_visible_env"
+if [ ! -f "$IOS_ENV" ]; then
+    echo "ERROR: $IOS_ENV not found."
+    echo "  cp secrets/example.ios.env secrets/ios.agent_visible_env"
+    echo "  Then fill in DEVELOPMENT_TEAM and PRIVACY_POLICY_URL"
+    exit 1
+fi
+while IFS='=' read -r key value; do
+    key="${key//$'\r'/}"
+    value="${value//$'\r'/}"
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    export "$key"="$value"
+done < "$IOS_ENV"
+
+# Validate required values
+if [ -z "${DEVELOPMENT_TEAM:-}" ] || [[ "$DEVELOPMENT_TEAM" == *"YOUR_TEAM_ID_HERE"* ]]; then
+    echo "ERROR: DEVELOPMENT_TEAM not set in $IOS_ENV"
+    echo "  Find your Team ID in the Apple Developer portal under Membership"
+    exit 1
+fi
+if [ -z "${PRIVACY_POLICY_URL:-}" ] || [[ "$PRIVACY_POLICY_URL" == *"YOUR_PRIVACY_POLICY_URL_HERE"* ]]; then
+    echo "ERROR: PRIVACY_POLICY_URL not set in $IOS_ENV"
+    echo "  Generate a privacy policy at https://www.termsfeed.com/privacy-policy-generator/"
+    echo "  Then set PRIVACY_POLICY_URL in secrets/ios.agent_visible_env"
+    exit 1
+fi
+
 # Verify protoc is available
 if ! command -v protoc &>/dev/null; then
     echo "ERROR: protoc not found. Install with: brew install protobuf"
@@ -65,6 +100,7 @@ BUILD_CMD=(
     -scheme MediaManager
     -destination "$DESTINATION"
     -configuration "$CONFIGURATION"
+    "PRIVACY_POLICY_URL=$PRIVACY_POLICY_URL"
     ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
     build
 )

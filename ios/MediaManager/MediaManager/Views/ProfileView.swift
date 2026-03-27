@@ -50,6 +50,14 @@ struct ProfileView: View {
                         }
                     }
 
+                    if let privacyURL = PrivacyPolicy.url {
+                        Section {
+                            Link(destination: privacyURL) {
+                                Label("Privacy Policy", systemImage: "hand.raised")
+                            }
+                        }
+                    }
+
                     Section {
                         Button("Sign Out", role: .destructive) {
                             Task { await authManager.logout() }

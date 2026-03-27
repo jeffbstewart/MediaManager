@@ -119,6 +119,26 @@ This installs:
 - `protoc-gen-swift` — Swift message code generator
 - `protoc-gen-grpc-swift-2` — Swift gRPC service stub generator (v2)
 
+### Configuration
+
+Two config files are required before building:
+
+**1. Developer.xcconfig** (code signing):
+```bash
+cp ios/MediaManager/Developer.xcconfig.example ios/MediaManager/Developer.xcconfig
+# Edit and set your Apple Developer Team ID
+```
+
+**2. iOS secrets** (privacy policy):
+```bash
+cp secrets/example.ios.env secrets/ios.agent_visible_env
+# Edit and set:
+#   DEVELOPMENT_TEAM=your_team_id
+#   PRIVACY_POLICY_URL=https://your-privacy-policy-url
+```
+
+You need a hosted privacy policy URL. Generate one for free at [termsfeed.com](https://www.termsfeed.com/privacy-policy-generator/) and host it on GitHub Pages, your own site, or any public URL.
+
 ### Building
 
 ```bash

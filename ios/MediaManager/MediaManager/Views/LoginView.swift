@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var isLoggingIn = false
+    @State private var agreedToPrivacy = false
 
     var body: some View {
         NavigationStack {
@@ -35,6 +36,25 @@ struct LoginView: View {
                         .textContentType(.password)
                         .onSubmit { login() }
 
+                    if let privacyURL = PrivacyPolicy.url {
+                        HStack {
+                            Button {
+                                agreedToPrivacy.toggle()
+                            } label: {
+                                Image(systemName: agreedToPrivacy ? "checkmark.square.fill" : "square")
+                                    .foregroundStyle(agreedToPrivacy ? .blue : .secondary)
+                                    .font(.title3)
+                            }
+                            .buttonStyle(.plain)
+
+                            HStack(spacing: 4) {
+                                Text("I agree to the")
+                                Link("Privacy Policy", destination: privacyURL)
+                            }
+                            .font(.callout)
+                        }
+                    }
+
                     Button(action: login) {
                         if isLoggingIn {
                             ProgressView()
@@ -46,7 +66,7 @@ struct LoginView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn)
+                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (PrivacyPolicy.url != nil && !agreedToPrivacy))
                 }
                 .padding(.horizontal)
 
@@ -60,10 +80,20 @@ struct LoginView: View {
 
                 Spacer()
 
-                Button("Use a different server") {
-                    authManager.disconnectServer()
+                VStack(spacing: 12) {
+                    Button("Use a different server") {
+                        authManager.disconnectServer()
+                    }
+                    .font(.callout)
+
+                    if let privacyURL = PrivacyPolicy.url {
+                        Link(destination: privacyURL) {
+                            Label("Privacy Policy", systemImage: "hand.raised")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .font(.callout)
                 .padding(.bottom)
             }
             .padding()

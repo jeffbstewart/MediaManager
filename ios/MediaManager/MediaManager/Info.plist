@@ -38,6 +38,8 @@
 	<array>
 		<string>processing</string>
 	</array>
+	<key>PrivacyPolicyURL</key>
+	<string>$(PRIVACY_POLICY_URL)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan barcodes on disc packaging.</string>
 	<key>NSAppTransportSecurity</key>

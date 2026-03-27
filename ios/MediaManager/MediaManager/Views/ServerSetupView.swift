@@ -85,6 +85,15 @@ struct ServerSetupView: View {
                 }
 
                 Spacer()
+
+                if let privacyURL = PrivacyPolicy.url {
+                    Link(destination: privacyURL) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Spacer()
             }
             .padding()
