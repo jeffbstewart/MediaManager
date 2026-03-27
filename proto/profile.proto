@@ -29,6 +29,12 @@ message ProfileResponse {
   Quality live_tv_min_quality = 7;
   bool subtitles_enabled = 8;
   bool must_change_password = 9;
+
+  // Legal agreement tracking
+  optional int32 privacy_policy_version = 10;
+  optional Timestamp privacy_policy_accepted_at = 11;
+  optional int32 terms_of_use_version = 12;
+  optional Timestamp terms_of_use_accepted_at = 13;
 }
 
 message UpdateTvQualityRequest {

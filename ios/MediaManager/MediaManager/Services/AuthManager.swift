@@ -146,8 +146,11 @@ final class AuthManager {
         error = nil
         let deviceName = UIDevice.current.name
         do {
+            let ppVersion = LegalDocuments.isConfigured ? Int32(LegalDocuments.privacyPolicyVersion) : nil
+            let touVersion = LegalDocuments.isConfigured ? Int32(LegalDocuments.termsOfUseVersion) : nil
             let response = try await grpcClient.login(
-                username: username, password: password, deviceName: deviceName)
+                username: username, password: password, deviceName: deviceName,
+                privacyPolicyVersion: ppVersion, termsOfUseVersion: touVersion)
 
             // Tokens are arbitrary bytes — base64 encode for Keychain storage
             let accessBase64 = response.accessToken.base64EncodedString()

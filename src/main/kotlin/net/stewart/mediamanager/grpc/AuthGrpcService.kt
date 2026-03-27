@@ -25,6 +25,27 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
 
         when (val result = AuthService.login(request.username, request.password, ip)) {
             is LoginResult.Success -> {
+                // Record legal agreement if versions provided
+                val now = java.time.LocalDateTime.now()
+                if (request.hasPrivacyPolicyVersion()) {
+                    val user = result.user
+                    val newVersion = request.privacyPolicyVersion
+                    if (user.privacy_policy_version == null || newVersion > user.privacy_policy_version!!) {
+                        user.privacy_policy_version = newVersion
+                        user.privacy_policy_accepted_at = now
+                        user.save()
+                    }
+                }
+                if (request.hasTermsOfUseVersion()) {
+                    val user = result.user
+                    val newVersion = request.termsOfUseVersion
+                    if (user.terms_of_use_version == null || newVersion > user.terms_of_use_version!!) {
+                        user.terms_of_use_version = newVersion
+                        user.terms_of_use_accepted_at = now
+                        user.save()
+                    }
+                }
+
                 val deviceName = if (request.hasDeviceName()) request.deviceName else ""
                 val pair = JwtService.createTokenPair(result.user, deviceName)
                 return tokenResponse {

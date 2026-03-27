@@ -137,12 +137,15 @@ actor GrpcClient {
         return try await infoService.getInfo(MMEmpty(), metadata: authMetadata())
     }
 
-    func login(username: String, password: String, deviceName: String) async throws -> MMTokenResponse {
+    func login(username: String, password: String, deviceName: String,
+                privacyPolicyVersion: Int32? = nil, termsOfUseVersion: Int32? = nil) async throws -> MMTokenResponse {
         logger.info("login: calling AuthService.Login for device=\(deviceName)")
         var request = MMLoginRequest()
         request.username = username
         request.password = password
         request.deviceName = deviceName
+        if let v = privacyPolicyVersion { request.privacyPolicyVersion = v }
+        if let v = termsOfUseVersion { request.termsOfUseVersion = v }
         return try await authService.login(request)
     }
 

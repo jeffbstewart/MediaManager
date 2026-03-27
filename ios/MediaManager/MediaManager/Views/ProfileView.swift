@@ -53,13 +53,29 @@ struct ProfileView: View {
                     if LegalDocuments.isConfigured {
                         Section("Legal") {
                             if let url = LegalDocuments.privacyPolicyURL {
-                                Link(destination: url) {
-                                    Label("Privacy Policy", systemImage: "hand.raised")
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Link(destination: url) {
+                                        Label("Privacy Policy", systemImage: "hand.raised")
+                                    }
+                                    if let version = profile.privacyPolicyVersion,
+                                       let date = profile.privacyPolicyAcceptedAt {
+                                        Text("Agreed to version \(version) on \(date.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                             if let url = LegalDocuments.termsOfUseURL {
-                                Link(destination: url) {
-                                    Label("Terms of Use", systemImage: "doc.text")
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Link(destination: url) {
+                                        Label("Terms of Use", systemImage: "doc.text")
+                                    }
+                                    if let version = profile.termsOfUseVersion,
+                                       let date = profile.termsOfUseAcceptedAt {
+                                        Text("Agreed to version \(version) on \(date.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }

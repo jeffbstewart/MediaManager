@@ -736,6 +736,15 @@ struct ProfileResponse: Sendable {
     var subtitlesEnabled: Bool? { proto.subtitlesEnabled }
     var mustChangePassword: Bool? { proto.mustChangePassword }
     var roleDisplay: String { (proto.isAdmin) ? "Admin" : "Viewer" }
+
+    var privacyPolicyVersion: Int? { proto.hasPrivacyPolicyVersion ? Int(proto.privacyPolicyVersion) : nil }
+    var privacyPolicyAcceptedAt: Date? {
+        proto.hasPrivacyPolicyAcceptedAt ? Date(timeIntervalSince1970: TimeInterval(proto.privacyPolicyAcceptedAt.secondsSinceEpoch)) : nil
+    }
+    var termsOfUseVersion: Int? { proto.hasTermsOfUseVersion ? Int(proto.termsOfUseVersion) : nil }
+    var termsOfUseAcceptedAt: Date? {
+        proto.hasTermsOfUseAcceptedAt ? Date(timeIntervalSince1970: TimeInterval(proto.termsOfUseAcceptedAt.secondsSinceEpoch)) : nil
+    }
 }
 
 struct ApiSession: Identifiable, Sendable {

@@ -333,6 +333,10 @@ fun AppUser.toProfileResponse(): ProfileResponse = profileResponse {
     }
     subtitlesEnabled = this@toProfileResponse.subtitles_enabled
     mustChangePassword = this@toProfileResponse.must_change_password
+    this@toProfileResponse.privacy_policy_version?.let { privacyPolicyVersion = it }
+    this@toProfileResponse.privacy_policy_accepted_at?.let { privacyPolicyAcceptedAt = it.toProtoTimestamp() }
+    this@toProfileResponse.terms_of_use_version?.let { termsOfUseVersion = it }
+    this@toProfileResponse.terms_of_use_accepted_at?.let { termsOfUseAcceptedAt = it.toProtoTimestamp() }
 }
 
 fun AppUser.toUserInfo(): UserInfo = userInfo {

@@ -32,6 +32,11 @@ message LoginRequest {
   string username = 1;
   string password = 2;
   optional string device_name = 3;  // e.g. "Jeff's iPad"
+
+  // Legal agreement versions accepted by the user at login time.
+  // Server records these on the user record with the current timestamp.
+  optional int32 privacy_policy_version = 4;
+  optional int32 terms_of_use_version = 5;
 }
 
 message TokenResponse {
