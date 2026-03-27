@@ -98,6 +98,21 @@ fun String?.toProtoMediaFormat(): MediaFormat = when (this) {
     else -> MediaFormat.MEDIA_FORMAT_UNKNOWN
 }
 
+fun MediaType.toEntityMediaType(): MediaTypeEnum = when (this) {
+    MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE
+    MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV
+    MediaType.MEDIA_TYPE_PERSONAL -> MediaTypeEnum.PERSONAL
+    else -> MediaTypeEnum.MOVIE
+}
+
+fun MediaFormat.toEntityMediaFormat(): MediaFormatEnum = when (this) {
+    MediaFormat.MEDIA_FORMAT_DVD -> MediaFormatEnum.DVD
+    MediaFormat.MEDIA_FORMAT_BLURAY -> MediaFormatEnum.BLURAY
+    MediaFormat.MEDIA_FORMAT_UHD_BLURAY -> MediaFormatEnum.UHD_BLURAY
+    MediaFormat.MEDIA_FORMAT_HD_DVD -> MediaFormatEnum.HD_DVD
+    else -> MediaFormatEnum.BLURAY
+}
+
 fun String?.toProtoMatchMethod(): net.stewart.mediamanager.grpc.MatchMethod = when (this) {
     MatchMethodEnum.AUTO_EXACT.name -> net.stewart.mediamanager.grpc.MatchMethod.MATCH_METHOD_AUTO_EXACT
     MatchMethodEnum.AUTO_NORMALIZED.name -> net.stewart.mediamanager.grpc.MatchMethod.MATCH_METHOD_AUTO_NORMALIZED

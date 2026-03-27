@@ -170,6 +170,16 @@ actor GrpcClient {
         return try await authService.changePassword(request, metadata: authMetadata())
     }
 
+    func createFirstUser(username: String, password: String, displayName: String, deviceName: String) async throws -> MMTokenResponse {
+        logger.info("createFirstUser: calling AuthService.CreateFirstUser")
+        var request = MMCreateFirstUserRequest()
+        request.username = username
+        request.password = password
+        request.displayName = displayName
+        request.deviceName = deviceName
+        return try await authService.createFirstUser(request)
+    }
+
     // MARK: - Catalog RPCs
 
     func homeFeed() async throws -> MMHomeFeedResponse {
@@ -531,6 +541,15 @@ actor GrpcClient {
         var request = MMDeleteOwnershipPhotoRequest()
         request.photoID = photoId
         _ = try await adminService.deleteOwnershipPhoto(request, metadata: authMetadata())
+    }
+
+    func adminAddTitle(tmdbId: Int32, mediaType: MMMediaType, mediaFormat: MMMediaFormat, seasons: String? = nil) async throws -> MMAddTitleResponse {
+        var request = MMAddTitleRequest()
+        request.tmdbID = tmdbId
+        request.mediaType = mediaType
+        request.mediaFormat = mediaFormat
+        if let s = seasons { request.seasons = s }
+        return try await adminService.addTitle(request, metadata: authMetadata())
     }
 
     // MARK: - Camera Admin RPCs

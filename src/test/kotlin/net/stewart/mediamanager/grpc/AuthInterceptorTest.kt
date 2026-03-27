@@ -64,6 +64,66 @@ class AuthInterceptorTest : GrpcTestBase() {
     }
 
     // ========================================================================
+    // CreateFirstUser — setup flow
+    // ========================================================================
+
+    @Test
+    fun `CreateFirstUser succeeds on empty database`() = runBlocking {
+        val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
+        val response = stub.createFirstUser(createFirstUserRequest {
+            username = "firstadmin"
+            password = "Test1234!@#\$"
+            displayName = "First Admin"
+            deviceName = "Test Device"
+        })
+        assertFalse(response.accessToken.isEmpty)
+        assertFalse(response.refreshToken.isEmpty)
+        assertEquals(TokenType.TOKEN_TYPE_BEARER, response.tokenType)
+    }
+
+    @Test
+    fun `CreateFirstUser fails when users already exist`() = runBlocking {
+        createAdminUser()
+        val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
+        val ex = assertFailsWith<StatusException> {
+            stub.createFirstUser(createFirstUserRequest {
+                username = "secondadmin"
+                password = "Test1234!@#\$"
+                displayName = "Second Admin"
+            })
+        }
+        assertEquals(io.grpc.Status.ALREADY_EXISTS.code, ex.status.code)
+    }
+
+    @Test
+    fun `CreateFirstUser validates password`() = runBlocking {
+        val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
+        val ex = assertFailsWith<StatusException> {
+            stub.createFirstUser(createFirstUserRequest {
+                username = "admin"
+                password = "short"
+                displayName = "Admin"
+            })
+        }
+        assertEquals(io.grpc.Status.INVALID_ARGUMENT.code, ex.status.code)
+    }
+
+    @Test
+    fun `Discover returns setup_required when no users exist`() = runBlocking {
+        val stub = InfoServiceGrpcKt.InfoServiceCoroutineStub(channel)
+        val response = stub.discover(DiscoverRequest.getDefaultInstance())
+        assertTrue(response.setupRequired)
+    }
+
+    @Test
+    fun `Discover returns setup_required false when users exist`() = runBlocking {
+        createAdminUser()
+        val stub = InfoServiceGrpcKt.InfoServiceCoroutineStub(channel)
+        val response = stub.discover(DiscoverRequest.getDefaultInstance())
+        assertFalse(response.setupRequired)
+    }
+
+    // ========================================================================
     // Authenticated RPCs should reject unauthenticated calls
     // ========================================================================
 

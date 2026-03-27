@@ -2,6 +2,7 @@ package net.stewart.mediamanager.grpc
 
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 
 class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
@@ -10,6 +11,7 @@ class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
         apiVersions.add(1)
         authMethods.add(AuthMethod.AUTH_METHOD_JWT)
         serverFingerprint = JwtService.getSigningKeyFingerprint()
+        setupRequired = !AuthService.hasUsers()
 
         val configs = AppConfig.findAll().associateBy { it.config_key }
         configs["roku_base_url"]?.config_val?.takeIf { it.isNotBlank() }?.let { secureUrl = it }

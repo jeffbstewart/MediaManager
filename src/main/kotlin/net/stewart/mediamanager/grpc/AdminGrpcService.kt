@@ -282,6 +282,34 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         }
     }
 
+    override suspend fun addTitle(request: AddTitleRequest): AddTitleResponse {
+        if (request.tmdbId == 0) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("TMDB ID required"))
+        }
+        if (request.mediaType == MediaType.MEDIA_TYPE_UNKNOWN) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Media type required"))
+        }
+        if (request.mediaFormat == MediaFormat.MEDIA_FORMAT_UNKNOWN) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Media format required"))
+        }
+
+        val entityMediaType = request.mediaType.toEntityMediaType()
+        val entityFormat = request.mediaFormat.toEntityMediaFormat()
+
+        val result = net.stewart.mediamanager.service.AddTitleService.addFromTmdb(
+            tmdbId = request.tmdbId,
+            mediaType = entityMediaType,
+            mediaFormat = entityFormat,
+            seasonsInput = if (request.hasSeasons()) request.seasons else null
+        )
+
+        return addTitleResponse {
+            titleId = result.titleId
+            titleName = result.titleName
+            alreadyExisted = result.alreadyExisted
+        }
+    }
+
     override suspend fun updatePurchaseInfo(request: UpdatePurchaseInfoRequest): Empty {
         val date = if (request.hasPurchaseDate()) {
             java.time.LocalDate.of(request.purchaseDate.year, request.purchaseDate.month.number, request.purchaseDate.day)

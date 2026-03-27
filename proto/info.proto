@@ -50,6 +50,8 @@ message DiscoverResponse {
   string server_fingerprint = 3;
   optional string secure_url = 4;
   optional LegalDocumentInfo legal = 5;
+  // True when no users exist — client should show first-user setup flow.
+  bool setup_required = 6;
 }
 
 // Legal document URLs and versions served by the server.

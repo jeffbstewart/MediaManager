@@ -126,6 +126,7 @@ class AuthInterceptor : ServerInterceptor {
             "mediamanager.AuthService/Login",
             "mediamanager.AuthService/Refresh",
             "mediamanager.AuthService/Revoke",
+            "mediamanager.AuthService/CreateFirstUser",
             "mediamanager.InfoService/Discover"
         )
 

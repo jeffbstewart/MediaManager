@@ -37,6 +37,10 @@ service AdminService {
   rpc UploadOwnershipPhoto(UploadOwnershipPhotoRequest) returns (UploadOwnershipPhotoResponse);
   rpc DeleteOwnershipPhoto(DeleteOwnershipPhotoRequest) returns (Empty);
 
+  // --- Add Title ---
+  // Create a title + media item from a TMDB search result.
+  rpc AddTitle(AddTitleRequest) returns (AddTitleResponse);
+
   // --- Transcode Management ---
   rpc ListLinkedTranscodes(PaginationRequest) returns (LinkedTranscodeResponse);
   rpc UnlinkTranscode(TranscodeIdRequest) returns (Empty);
@@ -284,6 +288,21 @@ message AssignTmdbRequest {
 message AssignTmdbResponse {
   bool merged = 1;
   optional string merged_title_name = 2;
+}
+
+message AddTitleRequest {
+  int32 tmdb_id = 1;
+  MediaType media_type = 2;
+  MediaFormat media_format = 3;
+  // For TV shows: which seasons to create (e.g., "1,2,3" or "1-3").
+  // Omit for movies.
+  optional string seasons = 4;
+}
+
+message AddTitleResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  bool already_existed = 3;
 }
 
 message UpdatePurchaseInfoRequest {

@@ -9,6 +9,8 @@ struct RootView: View {
         switch authManager.state {
         case .needsServer:
             ServerSetupView()
+        case .needsSetup(let serverURL):
+            SetupAccountView(serverURL: serverURL)
         case .needsLogin(let serverURL):
             LoginView(serverURL: serverURL)
         case .authenticated:

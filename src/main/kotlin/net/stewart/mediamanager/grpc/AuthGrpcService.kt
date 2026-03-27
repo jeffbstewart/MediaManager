@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.grpc
 
+import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import com.google.protobuf.ByteString
 import io.grpc.Status
 import io.grpc.StatusException
@@ -148,6 +149,49 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
         val pair = JwtService.createTokenPair(fresh, "")
         log.info("AUDIT: gRPC password changed by user '{}' — all sessions invalidated", fresh.username)
 
+        return tokenResponse {
+            accessToken = ByteString.copyFromUtf8(pair.accessToken)
+            refreshToken = ByteString.copyFromUtf8(pair.refreshToken)
+            expiresIn = pair.expiresIn
+            tokenType = TokenType.TOKEN_TYPE_BEARER
+        }
+    }
+
+    override suspend fun createFirstUser(request: CreateFirstUserRequest): TokenResponse {
+        if (request.username.isBlank() || request.password.isBlank() || request.displayName.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Username, password, and display name required"))
+        }
+
+        val violations = PasswordService.validate(request.password, request.username)
+        if (violations.isNotEmpty()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription(violations.first()))
+        }
+
+        val now = LocalDateTime.now()
+        val user = try {
+            JdbiOrm.jdbi().inTransaction<AppUser, Exception> { handle ->
+                val count = handle.createQuery("SELECT COUNT(*) FROM app_user")
+                    .mapTo(Int::class.java).one()
+                if (count > 0) throw IllegalStateException("Setup already complete")
+                val u = AppUser(
+                    username = request.username,
+                    display_name = request.displayName,
+                    password_hash = PasswordService.hash(request.password),
+                    access_level = 2, // Admin
+                    created_at = now,
+                    updated_at = now
+                )
+                u.save()
+                u
+            }
+        } catch (_: IllegalStateException) {
+            throw StatusException(Status.ALREADY_EXISTS.withDescription("Setup already complete — users exist"))
+        }
+
+        log.info("AUDIT: First admin '{}' created via gRPC setup", request.username)
+
+        val deviceName = if (request.hasDeviceName()) request.deviceName else ""
+        val pair = JwtService.createTokenPair(user, deviceName)
         return tokenResponse {
             accessToken = ByteString.copyFromUtf8(pair.accessToken)
             refreshToken = ByteString.copyFromUtf8(pair.refreshToken)

@@ -4,7 +4,7 @@ enum Tab: Hashable {
     case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
-    case adminTags, adminSettings, adminTranscodes, adminUnmatched
+    case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
 }
 
 struct ContentView: View {
@@ -49,6 +49,8 @@ struct ContentView: View {
 
                     if dataModel.userInfo?.isAdmin == true {
                         Section("Admin") {
+                            Label("Add Title", systemImage: "plus.rectangle")
+                                .tag(Tab.adminAddTitle)
                             Label("Scan", systemImage: "barcode.viewfinder")
                                 .tag(Tab.adminScan)
                             Label("Transcode Status", systemImage: "gearshape.2")
@@ -135,7 +137,7 @@ struct ContentView: View {
                                 let onlineOnlyTabs: Set<Tab> = [
                                     .home, .movies, .tvShows, .collections, .tags, .family,
                                     .cameras, .liveTv, .search, .wishList, .profile,
-                                    .adminScan, .adminStatus, .adminCameras,
+                                    .adminAddTitle, .adminScan, .adminStatus, .adminCameras,
                                     .adminUsers, .adminPurchaseWishes,
                                     .adminDataQuality, .adminTags, .adminTranscodes,
                                     .adminUnmatched, .adminSettings
@@ -200,6 +202,8 @@ struct ContentView: View {
                         LiveTvView()
                     case .profile:
                         ProfileView()
+                    case .adminAddTitle:
+                        AddTitleView()
                     case .adminScan:
                         BarcodeScanView()
                     case .adminStatus:

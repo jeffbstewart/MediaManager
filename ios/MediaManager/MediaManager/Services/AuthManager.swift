@@ -11,6 +11,7 @@ private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "Au
 final class AuthManager {
     enum State: Equatable {
         case needsServer
+        case needsSetup(serverURL: URL)
         case needsLogin(serverURL: URL)
         case authenticated(serverURL: URL)
         case fingerprintMismatch(serverURL: URL, expected: String, received: String)
@@ -147,10 +148,56 @@ final class AuthManager {
                 legalDocs = protoDiscovery.legal
                 persistLegalDocs(legalDocs)
             }
-            logger.info("connectToServer: success — gRPC=\(normalized), HTTP=\(secureURLString)")
-            state = .needsLogin(serverURL: url)
+            logger.info("connectToServer: success — gRPC=\(normalized), HTTP=\(secureURLString), setupRequired=\(protoDiscovery.setupRequired)")
+            if protoDiscovery.setupRequired {
+                state = .needsSetup(serverURL: url)
+            } else {
+                state = .needsLogin(serverURL: url)
+            }
         } catch {
             self.error = "Cannot reach server: \(error.localizedDescription)"
+        }
+    }
+
+    func createFirstUser(username: String, password: String, displayName: String) async {
+        logger.info("createFirstUser: creating admin account")
+        error = nil
+        let deviceName = UIDevice.current.name
+        do {
+            let response = try await grpcClient.createFirstUser(
+                username: username, password: password,
+                displayName: displayName, deviceName: deviceName)
+
+            let accessBase64 = response.accessToken.base64EncodedString()
+            let refreshBase64 = response.refreshToken.base64EncodedString()
+            KeychainService.save(key: .accessToken, value: accessBase64)
+            KeychainService.save(key: .refreshToken, value: refreshBase64)
+
+            await grpcClient.setAccessToken(response.accessToken)
+            let tokenString = String(data: response.accessToken, encoding: .utf8)
+            await apiClient.setAccessToken(tokenString)
+            updateStreamingCookie(tokenString)
+
+            if case .needsSetup(let url) = state {
+                state = .authenticated(serverURL: url)
+            }
+            scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
+            await refreshServerInfo()
+        } catch let rpcError as RPCError {
+            switch rpcError.code {
+            case .alreadyExists:
+                self.error = "Setup already complete — an account already exists"
+                // Transition to login since users exist
+                if case .needsSetup(let url) = state {
+                    state = .needsLogin(serverURL: url)
+                }
+            case .invalidArgument:
+                self.error = rpcError.message
+            default:
+                self.error = rpcError.message
+            }
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 
