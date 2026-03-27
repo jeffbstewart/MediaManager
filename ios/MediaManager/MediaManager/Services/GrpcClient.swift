@@ -762,6 +762,81 @@ actor GrpcClient {
         request.titleID = titleId
         _ = try await adminService.linkUnmatched(request, metadata: authMetadata())
     }
+
+    // MARK: - Amazon Import RPCs
+
+    func adminImportAmazonOrders(csvData: Data, filename: String) async throws -> MMImportAmazonOrdersResponse {
+        var request = MMImportAmazonOrdersRequest()
+        request.csvData = csvData
+        request.filename = filename
+        return try await adminService.importAmazonOrders(request, metadata: authMetadata())
+    }
+
+    func adminSearchAmazonOrders(query: String = "", mediaOnly: Bool = true, unlinkedOnly: Bool = true, hideCancelled: Bool = true, limit: Int32 = 200) async throws -> MMSearchAmazonOrdersResponse {
+        var request = MMSearchAmazonOrdersRequest()
+        request.query = query
+        request.mediaOnly = mediaOnly
+        request.unlinkedOnly = unlinkedOnly
+        request.hideCancelled = hideCancelled
+        request.limit = limit
+        return try await adminService.searchAmazonOrders(request, metadata: authMetadata())
+    }
+
+    func adminLinkAmazonOrder(amazonOrderId: Int64, mediaItemId: Int64) async throws {
+        var request = MMLinkAmazonOrderRequest()
+        request.amazonOrderID = amazonOrderId
+        request.mediaItemID = mediaItemId
+        _ = try await adminService.linkAmazonOrder(request, metadata: authMetadata())
+    }
+
+    func adminUnlinkAmazonOrder(amazonOrderId: Int64) async throws {
+        var request = MMAmazonOrderIdRequest()
+        request.amazonOrderID = amazonOrderId
+        _ = try await adminService.unlinkAmazonOrder(request, metadata: authMetadata())
+    }
+
+    func adminGetAmazonOrderSummary() async throws -> MMAmazonOrderSummaryResponse {
+        try await adminService.getAmazonOrderSummary(MMEmpty(), metadata: authMetadata())
+    }
+
+    // MARK: - Expand Multi-Pack RPCs
+
+    func adminListPendingExpansions() async throws -> MMPendingExpansionsResponse {
+        try await adminService.listPendingExpansions(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminGetExpansionDetail(mediaItemId: Int64) async throws -> MMExpansionDetailResponse {
+        var request = MMMediaItemIdRequest()
+        request.mediaItemID = mediaItemId
+        return try await adminService.getExpansionDetail(request, metadata: authMetadata())
+    }
+
+    func adminAddTitleToExpansion(mediaItemId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAddTitleToExpansionResponse {
+        var request = MMAddTitleToExpansionRequest()
+        request.mediaItemID = mediaItemId
+        request.tmdbID = tmdbId
+        request.mediaType = mediaType
+        return try await adminService.addTitleToExpansion(request, metadata: authMetadata())
+    }
+
+    func adminRemoveTitleFromExpansion(mediaItemId: Int64, titleId: Int64) async throws {
+        var request = MMRemoveTitleFromExpansionRequest()
+        request.mediaItemID = mediaItemId
+        request.titleID = titleId
+        _ = try await adminService.removeTitleFromExpansion(request, metadata: authMetadata())
+    }
+
+    func adminMarkExpanded(mediaItemId: Int64) async throws {
+        var request = MMMediaItemIdRequest()
+        request.mediaItemID = mediaItemId
+        _ = try await adminService.markExpanded(request, metadata: authMetadata())
+    }
+
+    func adminMarkNotMultiPack(mediaItemId: Int64) async throws {
+        var request = MMMediaItemIdRequest()
+        request.mediaItemID = mediaItemId
+        _ = try await adminService.markNotMultiPack(request, metadata: authMetadata())
+    }
 }
 
 // MARK: - Error type

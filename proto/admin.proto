@@ -88,6 +88,21 @@ service AdminService {
   rpc UpdateCamera(UpdateCameraRequest) returns (AdminCamera);
   rpc DeleteCamera(CameraIdRequest) returns (Empty);
   rpc ReorderCameras(ReorderCamerasRequest) returns (Empty);
+
+  // --- Amazon Import ---
+  rpc ImportAmazonOrders(ImportAmazonOrdersRequest) returns (ImportAmazonOrdersResponse);
+  rpc SearchAmazonOrders(SearchAmazonOrdersRequest) returns (SearchAmazonOrdersResponse);
+  rpc LinkAmazonOrder(LinkAmazonOrderRequest) returns (Empty);
+  rpc UnlinkAmazonOrder(AmazonOrderIdRequest) returns (Empty);
+  rpc GetAmazonOrderSummary(Empty) returns (AmazonOrderSummaryResponse);
+
+  // --- Expand Multi-Packs ---
+  rpc ListPendingExpansions(Empty) returns (PendingExpansionsResponse);
+  rpc GetExpansionDetail(MediaItemIdRequest) returns (ExpansionDetailResponse);
+  rpc AddTitleToExpansion(AddTitleToExpansionRequest) returns (AddTitleToExpansionResponse);
+  rpc RemoveTitleFromExpansion(RemoveTitleFromExpansionRequest) returns (Empty);
+  rpc MarkExpanded(MediaItemIdRequest) returns (Empty);
+  rpc MarkNotMultiPack(MediaItemIdRequest) returns (Empty);
 }
 
 // --- ID Requests ---
@@ -647,4 +662,110 @@ message UpdateCameraRequest {
 
 message ReorderCamerasRequest {
   repeated int64 camera_ids = 1;
+}
+
+// --- Amazon Import Messages ---
+
+message ImportAmazonOrdersRequest {
+  bytes csv_data = 1;
+  string filename = 2;  // hint for ZIP vs CSV detection
+}
+
+message ImportAmazonOrdersResponse {
+  int32 imported = 1;
+  int32 skipped = 2;
+  optional string error = 3;
+}
+
+message SearchAmazonOrdersRequest {
+  optional string query = 1;
+  bool media_only = 2;
+  bool unlinked_only = 3;
+  bool hide_cancelled = 4;
+  int32 limit = 5;
+}
+
+message AmazonOrder {
+  int64 id = 1;
+  string order_id = 2;
+  string asin = 3;
+  string product_name = 4;
+  optional string order_date = 5;     // ISO date string
+  optional double unit_price = 6;
+  optional string product_condition = 7;
+  optional string order_status = 8;
+  optional int64 linked_media_item_id = 9;
+  optional string linked_title_name = 10;
+}
+
+message SearchAmazonOrdersResponse {
+  repeated AmazonOrder orders = 1;
+}
+
+message LinkAmazonOrderRequest {
+  int64 amazon_order_id = 1;
+  int64 media_item_id = 2;
+}
+
+message AmazonOrderIdRequest {
+  int64 amazon_order_id = 1;
+}
+
+message AmazonOrderSummaryResponse {
+  int32 total = 1;
+  int32 media_related = 2;
+  int32 linked = 3;
+}
+
+message MediaItemIdRequest {
+  int64 media_item_id = 1;
+}
+
+// --- Expand Multi-Pack Messages ---
+
+message PendingExpansionItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  MediaFormat media_format = 4;
+  int32 estimated_title_count = 5;
+}
+
+message PendingExpansionsResponse {
+  repeated PendingExpansionItem items = 1;
+}
+
+message ExpansionLinkedTitle {
+  int64 join_id = 1;
+  int64 title_id = 2;
+  string name = 3;
+  optional int32 release_year = 4;
+  optional string poster_path = 5;
+  int32 disc_number = 6;
+}
+
+message ExpansionDetailResponse {
+  int64 media_item_id = 1;
+  string product_name = 2;
+  MediaFormat media_format = 3;
+  int32 estimated_title_count = 4;
+  repeated ExpansionLinkedTitle linked_titles = 5;
+}
+
+message AddTitleToExpansionRequest {
+  int64 media_item_id = 1;
+  int32 tmdb_id = 2;
+  MediaType media_type = 3;
+}
+
+message AddTitleToExpansionResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  int32 disc_number = 3;
+  bool already_existed = 4;
+}
+
+message RemoveTitleFromExpansionRequest {
+  int64 media_item_id = 1;
+  int64 title_id = 2;
 }

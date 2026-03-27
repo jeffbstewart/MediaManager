@@ -5,6 +5,7 @@ enum Tab: Hashable {
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
+    case adminAmazonImport, adminExpand
 }
 
 struct ContentView: View {
@@ -51,6 +52,10 @@ struct ContentView: View {
                         Section("Admin") {
                             Label("Add Title", systemImage: "plus.rectangle")
                                 .tag(Tab.adminAddTitle)
+                            Label("Amazon Import", systemImage: "shippingbox")
+                                .tag(Tab.adminAmazonImport)
+                            Label("Expand", systemImage: "rectangle.expand.vertical")
+                                .tag(Tab.adminExpand)
                             Label("Scan", systemImage: "barcode.viewfinder")
                                 .tag(Tab.adminScan)
                             Label("Transcode Status", systemImage: "gearshape.2")
@@ -137,7 +142,8 @@ struct ContentView: View {
                                 let onlineOnlyTabs: Set<Tab> = [
                                     .home, .movies, .tvShows, .collections, .tags, .family,
                                     .cameras, .liveTv, .search, .wishList, .profile,
-                                    .adminAddTitle, .adminScan, .adminStatus, .adminCameras,
+                                    .adminAddTitle, .adminAmazonImport, .adminExpand,
+                                    .adminScan, .adminStatus, .adminCameras,
                                     .adminUsers, .adminPurchaseWishes,
                                     .adminDataQuality, .adminTags, .adminTranscodes,
                                     .adminUnmatched, .adminSettings
@@ -204,6 +210,10 @@ struct ContentView: View {
                         ProfileView()
                     case .adminAddTitle:
                         AddTitleView()
+                    case .adminAmazonImport:
+                        AmazonImportView()
+                    case .adminExpand:
+                        ExpandView()
                     case .adminScan:
                         BarcodeScanView()
                     case .adminStatus:

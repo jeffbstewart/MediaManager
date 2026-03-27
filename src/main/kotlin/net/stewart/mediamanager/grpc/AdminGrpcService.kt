@@ -41,6 +41,7 @@ import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.TranscodeLeaseService
+import net.stewart.mediamanager.service.AmazonImportService
 import net.stewart.mediamanager.service.WishListService
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -1099,6 +1100,260 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
     override suspend fun reorderCameras(request: ReorderCamerasRequest): Empty {
         CameraAdminService.reorder(request.cameraIdsList)
+        return empty {}
+    }
+
+    // ========================================================================
+    // Amazon Import
+    // ========================================================================
+
+    override suspend fun importAmazonOrders(request: ImportAmazonOrdersRequest): ImportAmazonOrdersResponse {
+        val user = currentUser()
+        return try {
+            val rows = if (request.filename.endsWith(".zip", ignoreCase = true)) {
+                AmazonImportService.parseZip(request.csvData.newInput())
+            } else {
+                AmazonImportService.parseCsv(request.csvData.newInput())
+            }
+            val result = AmazonImportService.importRows(user.id!!, rows)
+            importAmazonOrdersResponse {
+                imported = result.inserted
+                skipped = result.skipped
+            }
+        } catch (e: Exception) {
+            importAmazonOrdersResponse {
+                error = e.message ?: "Import failed"
+            }
+        }
+    }
+
+    override suspend fun searchAmazonOrders(request: SearchAmazonOrdersRequest): SearchAmazonOrdersResponse {
+        val user = currentUser()
+        val query = if (request.hasQuery()) request.query else ""
+        val limit = if (request.limit > 0) request.limit else 200
+        val orders = AmazonImportService.searchOrders(
+            userId = user.id!!,
+            query = query,
+            mediaOnly = request.mediaOnly,
+            unlinkedOnly = request.unlinkedOnly,
+            hideCancelled = request.hideCancelled,
+            limit = limit
+        )
+        return searchAmazonOrdersResponse {
+            this.orders.addAll(orders.map { it.toProto() })
+        }
+    }
+
+    override suspend fun linkAmazonOrder(request: LinkAmazonOrderRequest): Empty {
+        AmazonImportService.linkToMediaItem(request.amazonOrderId, request.mediaItemId)
+        return empty {}
+    }
+
+    override suspend fun unlinkAmazonOrder(request: AmazonOrderIdRequest): Empty {
+        AmazonImportService.unlinkFromMediaItem(request.amazonOrderId)
+        return empty {}
+    }
+
+    override suspend fun getAmazonOrderSummary(request: Empty): AmazonOrderSummaryResponse {
+        val user = currentUser()
+        val (total, _, linked) = AmazonImportService.countOrders(user.id!!)
+        // Count media-related separately
+        val allOrders = AmazonImportService.searchOrders(user.id!!, "", mediaOnly = true, unlinkedOnly = false, hideCancelled = false, limit = 100000)
+        return amazonOrderSummaryResponse {
+            this.total = total
+            this.mediaRelated = allOrders.size
+            this.linked = linked
+        }
+    }
+
+    private fun net.stewart.mediamanager.entity.AmazonOrder.toProto(): AmazonOrder = amazonOrder {
+        id = this@toProto.id!!
+        orderId = this@toProto.order_id
+        asin = this@toProto.asin
+        productName = this@toProto.product_name
+        this@toProto.order_date?.let { orderDate = it.toLocalDate().toString() }
+        this@toProto.unit_price?.let { unitPrice = it.toDouble() }
+        this@toProto.product_condition?.let { productCondition = it }
+        this@toProto.order_status?.let { orderStatus = it }
+        this@toProto.linked_media_item_id?.let { linkedMediaItemId = it }
+        // Look up linked title name
+        this@toProto.linked_media_item_id?.let { mediaItemId ->
+            val joins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+                .filter { it.media_item_id == mediaItemId }
+            val titleId = joins.firstOrNull()?.title_id
+            titleId?.let { tid ->
+                net.stewart.mediamanager.entity.Title.findById(tid)?.let { linkedTitleName = it.name }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Expand Multi-Packs
+    // ========================================================================
+
+    override suspend fun listPendingExpansions(request: Empty): PendingExpansionsResponse {
+        val items = net.stewart.mediamanager.entity.MediaItem.findAll()
+            .filter { it.expansion_status == net.stewart.mediamanager.entity.ExpansionStatus.NEEDS_EXPANSION.name }
+        return pendingExpansionsResponse {
+            this.items.addAll(items.map { item ->
+                pendingExpansionItem {
+                    mediaItemId = item.id!!
+                    item.upc?.let { upc = it }
+                    productName = item.product_name ?: ""
+                    mediaFormat = item.media_format.toProtoMediaFormat()
+                    estimatedTitleCount = item.title_count ?: 2
+                }
+            })
+        }
+    }
+
+    override suspend fun getExpansionDetail(request: MediaItemIdRequest): ExpansionDetailResponse {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        val joins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .filter { it.media_item_id == item.id!! }
+            .sortedBy { it.disc_number }
+        return expansionDetailResponse {
+            mediaItemId = item.id!!
+            productName = item.product_name ?: ""
+            mediaFormat = item.media_format.toProtoMediaFormat()
+            estimatedTitleCount = item.title_count ?: 2
+            linkedTitles.addAll(joins.mapNotNull { join ->
+                val title = net.stewart.mediamanager.entity.Title.findById(join.title_id) ?: return@mapNotNull null
+                expansionLinkedTitle {
+                    joinId = join.id!!
+                    titleId = title.id!!
+                    name = title.name
+                    title.release_year?.let { releaseYear = it }
+                    title.poster_path?.let { posterPath = it }
+                    discNumber = join.disc_number ?: 1
+                }
+            })
+        }
+    }
+
+    override suspend fun addTitleToExpansion(request: AddTitleToExpansionRequest): AddTitleToExpansionResponse {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        val mediaType = request.mediaType.toEntityMediaType()
+        val tmdbKey = net.stewart.mediamanager.entity.TmdbId(request.tmdbId, mediaType)
+        val tmdbService = net.stewart.mediamanager.service.TmdbService()
+        val details = try { tmdbService.getDetails(tmdbKey) } catch (_: Exception) { null }
+
+        val now = java.time.LocalDateTime.now()
+        var title = net.stewart.mediamanager.entity.Title.findAll().firstOrNull { it.tmdbKey() == tmdbKey }
+        val alreadyExisted = title != null
+        if (title == null) {
+            title = net.stewart.mediamanager.entity.Title(
+                name = details?.title ?: "Unknown",
+                media_type = tmdbKey.typeString,
+                tmdb_id = tmdbKey.id,
+                release_year = details?.releaseYear,
+                description = details?.overview,
+                poster_path = details?.posterPath,
+                enrichment_status = net.stewart.mediamanager.entity.EnrichmentStatus.REASSIGNMENT_REQUESTED.name,
+                created_at = now,
+                updated_at = now
+            )
+            title.save()
+            net.stewart.mediamanager.service.SearchIndexService.onTitleChanged(title.id!!)
+        }
+
+        // Next disc number
+        val existingJoins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .filter { it.media_item_id == item.id!! }
+        val nextDisc = (existingJoins.maxOfOrNull { it.disc_number ?: 0 } ?: 0) + 1
+
+        val join = net.stewart.mediamanager.entity.MediaItemTitle(
+            media_item_id = item.id!!,
+            title_id = title.id!!,
+            disc_number = nextDisc
+        )
+        join.save()
+
+        net.stewart.mediamanager.service.WishListService.syncPhysicalOwnership(title.id!!)
+        net.stewart.mediamanager.service.WishListService.fulfillMediaWishes(tmdbKey)
+
+        return addTitleToExpansionResponse {
+            titleId = title.id!!
+            titleName = title.name
+            discNumber = nextDisc
+            this.alreadyExisted = alreadyExisted
+        }
+    }
+
+    override suspend fun removeTitleFromExpansion(request: RemoveTitleFromExpansionRequest): Empty {
+        val join = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .firstOrNull { it.media_item_id == request.mediaItemId && it.title_id == request.titleId }
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Title not linked to this item"))
+        join.delete()
+
+        // If title has no TMDB ID and no other links, delete it
+        val title = net.stewart.mediamanager.entity.Title.findById(request.titleId)
+        if (title != null && title.tmdb_id == null) {
+            val otherLinks = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+                .any { it.title_id == request.titleId }
+            if (!otherLinks) {
+                title.delete()
+            }
+        }
+        return empty {}
+    }
+
+    override suspend fun markExpanded(request: MediaItemIdRequest): Empty {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        val joins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .filter { it.media_item_id == item.id!! }
+
+        // Retire placeholder titles (those without tmdb_id that were created during scan)
+        val placeholders = joins.mapNotNull { join ->
+            val t = net.stewart.mediamanager.entity.Title.findById(join.title_id)
+            if (t != null && t.tmdb_id == null && t.enrichment_status == net.stewart.mediamanager.entity.EnrichmentStatus.SKIPPED.name) t else null
+        }
+        for (ph in placeholders) {
+            // Unlink placeholder from this media item
+            net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+                .filter { it.media_item_id == item.id!! && it.title_id == ph.id!! }
+                .forEach { it.delete() }
+            // If orphaned, delete
+            val otherLinks = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+                .any { it.title_id == ph.id!! }
+            if (!otherLinks) {
+                ph.delete()
+            }
+        }
+
+        // Count remaining linked titles
+        val remaining = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .count { it.media_item_id == item.id!! }
+
+        item.expansion_status = net.stewart.mediamanager.entity.ExpansionStatus.EXPANDED.name
+        item.title_count = remaining
+        item.updated_at = java.time.LocalDateTime.now()
+        item.save()
+        return empty {}
+    }
+
+    override suspend fun markNotMultiPack(request: MediaItemIdRequest): Empty {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        item.expansion_status = net.stewart.mediamanager.entity.ExpansionStatus.SINGLE.name
+        item.title_count = 1
+        item.updated_at = java.time.LocalDateTime.now()
+        item.save()
+
+        // Reset placeholder title to PENDING so it gets enriched
+        val joins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .filter { it.media_item_id == item.id!! }
+        for (join in joins) {
+            val title = net.stewart.mediamanager.entity.Title.findById(join.title_id)
+            if (title != null && title.enrichment_status == net.stewart.mediamanager.entity.EnrichmentStatus.SKIPPED.name) {
+                title.enrichment_status = net.stewart.mediamanager.entity.EnrichmentStatus.PENDING.name
+                title.updated_at = java.time.LocalDateTime.now()
+                title.save()
+            }
+        }
         return empty {}
     }
 }
