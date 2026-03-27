@@ -4018,3 +4018,20 @@ Session 2 (Mar 25):
 - Removed dead ?quality=mobile from VideoStreamServlet
 - Removed legacy loadCachedImage method (replaced by pinned CachedImage)
 ===
+
+=== 2026-03-26 (continued) — Cleanup, Distribution Planning ===
+- Fixed offline chapters path (localChaptersFile parameter)
+- Cleaned up debug logging (error→info/debug levels)
+- Removed dead code: unused VideoStreamServlet parameter,
+  legacy loadCachedImage method, old posterImage offline fallback
+- Updated docs/OFFLINE_PLAYBACK.md to match actual implementation
+- Researched TestFlight distribution: internal testing (no review,
+  100 testers) vs external (Beta App Review, 24-48h)
+- Researched competitor privacy policies for App Store precedent
+- Brainstormed app names for potential rebranding
+- Branding strategy discussed: display new name user-facing, keep
+  internal package/proto/bundle names unchanged
+- Researched Apple developer privacy: individual accounts expose
+  legal name; LLC needed to publish under business name
+- Decision deferred on branding, LLC, and distribution timeline
+===
