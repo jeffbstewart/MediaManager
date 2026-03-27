@@ -5,18 +5,7 @@ struct AdminSettingsView: View {
     @State private var settings: [String: String] = [:]
     @State private var buddyKeys: [AdminBuddyKey] = []
     @State private var loading = true
-    @State private var saving = false
-
-    private let settingLabels: [(key: String, label: String)] = [
-        ("nas_root_path", "NAS Root Path"),
-        ("roku_base_url", "Roku Base URL"),
-        ("personal_video_enabled", "Personal Videos Enabled"),
-        ("personal_video_directory", "Personal Video Directory"),
-        ("lease_duration_minutes", "Lease Duration (minutes)"),
-        ("for_mobile_enabled", "ForMobile Enabled"),
-        ("keepa_enabled", "Keepa Enabled"),
-        ("keepa_tokens_per_minute", "Keepa Tokens/Minute"),
-    ]
+    @State private var statusMessage: String?
 
     var body: some View {
         Group {
@@ -24,14 +13,34 @@ struct AdminSettingsView: View {
                 ProgressView("Loading...")
             } else {
                 List {
-                    Section("Server Settings") {
-                        ForEach(settingLabels, id: \.key) { item in
-                            if isBoolSetting(item.key) {
-                                Toggle(item.label, isOn: boolBinding(for: item.key))
-                            } else {
-                                LabeledContent(item.label, value: settings[item.key] ?? "-")
-                            }
-                        }
+                    Section("Paths") {
+                        settingField("nas_root_path", label: "NAS Root Path")
+                        settingField("ffmpeg_path", label: "FFmpeg Path")
+                        settingField("roku_base_url", label: "Roku Base URL")
+                    }
+
+                    Section("Personal Videos") {
+                        settingToggle("personal_video_enabled", label: "Enable Personal Videos")
+                        settingField("personal_video_nas_dir", label: "Personal Video Directory")
+                    }
+
+                    Section("Transcode Buddy") {
+                        settingField("buddy_lease_duration_minutes", label: "Lease Duration (min)")
+                    }
+
+                    Section("Keepa Price Lookup") {
+                        settingToggle("keepa_enabled", label: "Enable Keepa")
+                        settingField("keepa_api_key", label: "Keepa API Key", secure: true)
+                        settingField("keepa_tokens_per_minute", label: "Tokens/Minute")
+                    }
+
+                    Section("Legal Documents") {
+                        settingField("privacy_policy_url", label: "Privacy Policy URL")
+                        settingField("privacy_policy_version", label: "Privacy Policy Version")
+                        settingField("ios_terms_of_use_url", label: "iOS Terms of Use URL")
+                        settingField("ios_terms_of_use_version", label: "iOS Terms Version")
+                        settingField("web_terms_of_use_url", label: "Web Terms of Use URL")
+                        settingField("web_terms_of_use_version", label: "Web Terms Version")
                     }
 
                     if !buddyKeys.isEmpty {
@@ -49,6 +58,14 @@ struct AdminSettingsView: View {
                             }
                         }
                     }
+
+                    if let statusMessage {
+                        Section {
+                            Text(statusMessage)
+                                .font(.callout)
+                                .foregroundStyle(.green)
+                        }
+                    }
                 }
             }
         }
@@ -57,18 +74,36 @@ struct AdminSettingsView: View {
         .refreshable { await loadSettings() }
     }
 
-    private func isBoolSetting(_ key: String) -> Bool {
-        ["personal_video_enabled", "for_mobile_enabled", "keepa_enabled"].contains(key)
+    @ViewBuilder
+    private func settingField(_ key: String, label: String, secure: Bool = false) -> some View {
+        let binding = Binding<String>(
+            get: { settings[key] ?? "" },
+            set: { newValue in
+                settings[key] = newValue
+            }
+        )
+        HStack {
+            if secure {
+                SecureField(label, text: binding)
+                    .onSubmit { Task { await saveSetting(key) } }
+            } else {
+                TextField(label, text: binding)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { Task { await saveSetting(key) } }
+            }
+        }
     }
 
-    private func boolBinding(for key: String) -> Binding<Bool> {
-        Binding(
+    @ViewBuilder
+    private func settingToggle(_ key: String, label: String) -> some View {
+        Toggle(label, isOn: Binding(
             get: { settings[key] == "true" },
             set: { newValue in
                 settings[key] = newValue ? "true" : "false"
-                Task { await saveSetting(key, value: newValue ? "true" : "false") }
+                Task { await saveSetting(key) }
             }
-        )
+        ))
     }
 
     private func loadSettings() async {
@@ -81,7 +116,10 @@ struct AdminSettingsView: View {
         loading = false
     }
 
-    private func saveSetting(_ key: String, value: String) async {
-        try? await dataModel.updateSetting(key: key, value: value)
+    private func saveSetting(_ key: String) async {
+        try? await dataModel.updateSetting(key: key, value: settings[key] ?? "")
+        statusMessage = "Saved"
+        try? await Task.sleep(for: .seconds(2))
+        statusMessage = nil
     }
 }

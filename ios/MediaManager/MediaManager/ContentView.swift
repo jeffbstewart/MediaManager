@@ -50,39 +50,45 @@ struct ContentView: View {
                     }
 
                     if dataModel.userInfo?.isAdmin == true {
-                        Section("Admin") {
+                        Section("Catalog") {
                             Label("Add Title", systemImage: "plus.rectangle")
                                 .tag(Tab.adminAddTitle)
+                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                                .tag(Tab.adminScan)
                             Label("Amazon Import", systemImage: "shippingbox")
                                 .tag(Tab.adminAmazonImport)
-                            Label("Expand", systemImage: "rectangle.expand.vertical")
+                            Label("Expand Packs", systemImage: "rectangle.expand.vertical")
                                 .tag(Tab.adminExpand)
-                            Label("Scan", systemImage: "barcode.viewfinder")
-                                .tag(Tab.adminScan)
-                            Label("Transcode Status", systemImage: "gearshape.2")
-                                .tag(Tab.adminStatus)
-                            Label("Cameras", systemImage: "web.camera")
-                                .tag(Tab.adminCameras)
-                            Label("Users", systemImage: "person.2")
-                                .tag(Tab.adminUsers)
-                            Label("Purchase Wishes", systemImage: "cart")
-                                .tag(Tab.adminPurchaseWishes)
                             Label("Data Quality", systemImage: "exclamationmark.triangle")
                                 .tag(Tab.adminDataQuality)
                             Label("Tags", systemImage: "tag")
                                 .tag(Tab.adminTags)
-                            Label("Transcodes", systemImage: "film.stack")
+                        }
+                        Section("Transcodes") {
+                            Label("Transcode Status", systemImage: "gearshape.2")
+                                .tag(Tab.adminStatus)
+                            Label("Linked Files", systemImage: "film.stack")
                                 .tag(Tab.adminTranscodes)
+                            Label("Unmatched Files", systemImage: "questionmark.folder")
+                                .tag(Tab.adminUnmatched)
+                        }
+                        Section("Purchases") {
+                            Label("Purchase Wishes", systemImage: "cart")
+                                .tag(Tab.adminPurchaseWishes)
                             Label("Valuation", systemImage: "dollarsign.circle")
                                 .tag(Tab.adminValuation)
                             Label("Inventory Report", systemImage: "doc.text")
                                 .tag(Tab.adminReport)
+                        }
+                        Section("System") {
+                            Label("Users", systemImage: "person.2")
+                                .tag(Tab.adminUsers)
                             Label("Family Members", systemImage: "figure.2.and.child.holdinghands")
                                 .tag(Tab.adminFamilyMembers)
+                            Label("Cameras", systemImage: "web.camera")
+                                .tag(Tab.adminCameras)
                             Label("Live TV Settings", systemImage: "antenna.radiowaves.left.and.right")
                                 .tag(Tab.adminLiveTvSettings)
-                            Label("Unmatched Files", systemImage: "questionmark.folder")
-                                .tag(Tab.adminUnmatched)
                             Label("Settings", systemImage: "gear")
                                 .tag(Tab.adminSettings)
                         }

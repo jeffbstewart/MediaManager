@@ -232,12 +232,7 @@ struct TitleDetailView: View {
                                 HStack {
                                     FlowLayout(spacing: 6) {
                                         ForEach(detail.tags) { tag in
-                                            Text(tag.name)
-                                                .font(.caption)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(.tint.opacity(0.15))
-                                                .clipShape(Capsule())
+                                            TagChip(name: tag.name, hexColor: tag.color)
                                         }
                                     }
                                     if isAdmin {
@@ -426,6 +421,22 @@ struct TitleDetailView: View {
 
     // MARK: - Offline Image Helpers
 
+}
+
+struct TagChip: View {
+    let name: String
+    let hexColor: String
+
+    var body: some View {
+        let tagColor: Color = Color(hex: hexColor) ?? .blue
+        Text(name)
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tagColor.opacity(0.2))
+            .foregroundStyle(tagColor)
+            .clipShape(Capsule())
+    }
 }
 
 /// Simple flow layout for tags/genres that wraps to the next line.
