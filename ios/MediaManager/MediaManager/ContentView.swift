@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile
+    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched
@@ -94,7 +94,12 @@ struct ContentView: View {
                         .tag(Tab.wishList)
                     }
 
-                    if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
+                    if isOffline && dataModel.downloads.hasCompletedDownloads {
+                    Label("Library", systemImage: "books.vertical")
+                        .tag(Tab.offlineLibrary)
+                }
+
+                if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
                         HStack {
                             Label("Downloads", systemImage: "arrow.down.circle")
                             if dataModel.downloads.activeDownloadCount > 0 {
@@ -221,6 +226,8 @@ struct ContentView: View {
                         WishListView()
                     case .downloads:
                         DownloadsView()
+                    case .offlineLibrary:
+                        OfflineLibraryView()
                     case nil:
                         if isOffline && dataModel.downloads.hasCompletedDownloads {
                             DownloadsView()

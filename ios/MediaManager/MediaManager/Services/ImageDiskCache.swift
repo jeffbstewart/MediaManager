@@ -18,6 +18,7 @@ actor ImageDiskCache {
     /// In-memory manifest: cache_key → (etag, contentType, fileURL)
     private var manifest: [String: CacheEntry] = [:]
     private var accessOrder: [String] = [] // most recent at end
+    private var pinnedKeys: Set<String> = [] // never evicted
 
     struct CacheEntry {
         let etag: String
@@ -109,6 +110,18 @@ actor ImageDiskCache {
         saveManifest()
     }
 
+    // MARK: - Pinning (prevents eviction for downloaded content)
+
+    /// Pin an image ref so it won't be evicted from cache.
+    func pin(ref: MMImageRef) {
+        pinnedKeys.insert(cacheKey(for: ref))
+    }
+
+    /// Unpin an image ref, allowing normal LRU eviction.
+    func unpin(ref: MMImageRef) {
+        pinnedKeys.remove(cacheKey(for: ref))
+    }
+
     // MARK: - Cache Key
 
     private func cacheKey(for ref: MMImageRef) -> String {
@@ -134,8 +147,9 @@ actor ImageDiskCache {
 
     private func evictIfNeeded() {
         while manifest.count > maxCount {
-            guard let oldest = accessOrder.first else { break }
-            accessOrder.removeFirst()
+            // Find oldest non-pinned entry
+            guard let idx = accessOrder.firstIndex(where: { !pinnedKeys.contains($0) }) else { break }
+            let oldest = accessOrder.remove(at: idx)
             if let entry = manifest.removeValue(forKey: oldest) {
                 try? FileManager.default.removeItem(at: entry.fileURL)
                 memoryCache.removeObject(forKey: oldest as NSString)

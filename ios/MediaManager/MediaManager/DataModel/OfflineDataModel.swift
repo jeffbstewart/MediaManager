@@ -46,17 +46,51 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
 
-    // TODO: Offline title detail from cached protobuf — needs separate implementation
     func titleDetail(id: TitleID) async throws -> ApiTitleDetail {
-        throw DataModelError.offline
+        guard let detail = downloads.loadCachedTitleDetail(for: id) else {
+            throw DataModelError.offline
+        }
+        return detail
     }
 
     func seasons(titleId: TitleID) async throws -> [ApiSeason] {
-        throw DataModelError.offline
+        // Derive seasons from downloaded episodes
+        let entries = downloads.entries.filter {
+            $0.titleID == titleId.protoValue && $0.state == .completed && $0.seasonNumber > 0
+        }
+        let seasonNumbers = Set(entries.map { Int($0.seasonNumber) }).sorted()
+        if seasonNumbers.isEmpty { throw DataModelError.offline }
+        return seasonNumbers.map { num in
+            var proto = MMSeason()
+            proto.seasonNumber = Int32(num)
+            proto.name = "Season \(num)"
+            proto.episodeCount = Int32(entries.filter { Int($0.seasonNumber) == num }.count)
+            return ApiSeason(proto: proto)
+        }
     }
 
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode] {
-        throw DataModelError.offline
+        // Build episodes from downloaded entries for this season
+        let entries = downloads.entries.filter {
+            $0.titleID == titleId.protoValue && $0.state == .completed && Int($0.seasonNumber) == season
+        }.sorted { $0.episodeNumber < $1.episodeNumber }
+        if entries.isEmpty { throw DataModelError.offline }
+        return entries.map { entry in
+            var proto = MMEpisode()
+            proto.episodeID = entry.transcodeID  // use transcodeId as stand-in for episodeId
+            proto.transcodeID = entry.transcodeID
+            proto.seasonNumber = entry.seasonNumber
+            proto.episodeNumber = entry.episodeNumber
+            if !entry.episodeTitle.isEmpty { proto.name = entry.episodeTitle }
+            proto.playable = true
+            switch entry.quality {
+            case .fhd: proto.quality = .fhd
+            case .uhd: proto.quality = .uhd
+            case .sd: proto.quality = .sd
+            default: proto.quality = .unknown
+            }
+            return ApiEpisode(proto: proto)
+        }
     }
 
     func search(query: String) async throws -> ApiSearchResponse {

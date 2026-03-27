@@ -126,6 +126,16 @@ final class DownloadManager {
     func deleteDownload(transcodeId: Int64) {
         downloadTasks[transcodeId]?.cancel()
         downloadTasks.removeValue(forKey: transcodeId)
+
+        // Unpin images if no other downloads remain for this title
+        if let entry = entries.first(where: { $0.transcodeID == transcodeId }) {
+            let titleId = entry.titleID
+            let remainingForTitle = entries.filter { $0.titleID == titleId && $0.transcodeID != transcodeId }
+            if remainingForTitle.isEmpty {
+                Task { await unpinImagesForTitle(titleId) }
+            }
+        }
+
         Task {
             await store.removeEntry(transcodeId: transcodeId)
             await reloadEntries()
@@ -196,6 +206,45 @@ final class DownloadManager {
                 }
             } catch { }
         }
+    }
+
+    /// Pin images for a downloaded title so they survive cache eviction.
+    func pinImagesForTitle(_ titleId: Int64) async {
+        let cache = ImageDiskCache.shared
+        await cache.pin(ref: .posterThumbnail(titleId: titleId))
+        await cache.pin(ref: .posterFull(titleId: titleId))
+        await cache.pin(ref: .backdrop(titleId: titleId))
+
+        // Pin cast headshots from cached detail
+        if let detail = loadCachedTitleDetail(for: TitleID(rawValue: Int(titleId))) {
+            for member in detail.cast {
+                await cache.pin(ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue))
+            }
+        }
+    }
+
+    /// Unpin images for a title being deleted.
+    func unpinImagesForTitle(_ titleId: Int64) async {
+        let cache = ImageDiskCache.shared
+        await cache.unpin(ref: .posterThumbnail(titleId: titleId))
+        await cache.unpin(ref: .posterFull(titleId: titleId))
+        await cache.unpin(ref: .backdrop(titleId: titleId))
+
+        if let detail = loadCachedTitleDetail(for: TitleID(rawValue: Int(titleId))) {
+            for member in detail.cast {
+                await cache.unpin(ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue))
+            }
+        }
+    }
+
+    /// Load cached title detail protobuf for offline browse.
+    func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
+        // Find any download entry for this title that has a cached detail
+        guard let entry = entries.first(where: { $0.titleID == titleId.protoValue }) else { return nil }
+        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.detail.pb", entry.sequence))
+        guard let data = try? Data(contentsOf: path),
+              let proto = try? MMTitleDetail(serializedData: data) else { return nil }
+        return ApiTitleDetail(proto: proto)
     }
 
     /// Returns the local subtitle file URL for a downloaded transcode, if it exists.
@@ -329,6 +378,9 @@ final class DownloadManager {
             downloadTasks.removeValue(forKey: transcodeId)
             logger.error("Download complete: \(finalBytes) bytes")
 
+            // Pin images so they survive cache eviction for offline browse
+            await pinImagesForTitle(entry.titleID)
+
             startNextQueued()
 
         } catch is CancellationError {
@@ -392,6 +444,18 @@ final class DownloadManager {
             let path = await store.posterPath(for: entry)
             try? posterData.write(to: path)
             await store.updateEntry(transcodeId: tcId) { $0.hasPoster_p = true }
+        }
+
+        // Title detail (for offline browse)
+        if let grpcClient {
+            do {
+                let detail = try await grpcClient.getTitleDetail(id: entry.titleID)
+                let data = try detail.serializedData()
+                let path = await store.detailPath(for: entry)
+                try data.write(to: path)
+            } catch {
+                // Non-critical — offline browse won't work for this title
+            }
         }
     }
 

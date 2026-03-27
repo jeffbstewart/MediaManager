@@ -116,6 +116,10 @@ actor DownloadStore {
         postersDir.appendingPathComponent(String(format: "%07d.jpg", entry.sequence))
     }
 
+    func detailPath(for entry: MMDownloadEntry) -> URL {
+        downloadsDir.appendingPathComponent(String(format: "%07d.detail.pb", entry.sequence))
+    }
+
     /// Rename .downloading → .mp4 on completion.
     func finalizeVideo(for entry: MMDownloadEntry) throws {
         let downloading = videoPath(for: entry, downloading: true)
@@ -228,6 +232,7 @@ actor DownloadStore {
             chaptersPath(for: entry),
             thumbnailsPath(for: entry),
             posterPath(for: entry),
+            detailPath(for: entry),
         ]
         for path in paths {
             try? fm.removeItem(at: path)
@@ -243,6 +248,7 @@ actor DownloadStore {
             known.insert("\(seq).subs.vtt")
             known.insert("\(seq).chapters.json")
             known.insert("\(seq).thumbs.vtt")
+            known.insert("\(seq).detail.pb")
         }
         return known
     }

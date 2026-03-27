@@ -258,17 +258,12 @@ struct TitleDetailView: View {
                                     LazyHStack(alignment: .top, spacing: 16) {
                                         ForEach(detail.cast.prefix(20)) { member in
                                             let castContent = VStack(spacing: 6) {
-                                                if isOffline {
-                                                    offlineHeadshot(titleId: detail.id, personId: member.tmdbPersonId)
-                                                        .frame(width: 80, height: 80)
-                                                } else {
-                                                    CachedImage(
-                                                        ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue),
-                                                        cornerRadius: 40,
-                                                        contentMode: .fit
-                                                    )
-                                                    .frame(width: 80, height: 80)
-                                                }
+                                                CachedImage(
+                                                    ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue),
+                                                    cornerRadius: 40,
+                                                    contentMode: .fit
+                                                )
+                                                .frame(width: 80, height: 80)
 
                                                 Text(member.name)
                                                     .font(.caption)
@@ -398,66 +393,18 @@ struct TitleDetailView: View {
 
     @ViewBuilder
     private func heroImage(detail: ApiTitleDetail) -> some View {
-        if isOffline {
-            offlineImage(titleId: detail.id, name: "backdrop.jpg", fallback: "poster.jpg")
-                .frame(height: 220)
-                .frame(maxWidth: .infinity)
-        } else {
-            CachedImage(
-                ref: detail.backdropUrl != nil
-                    ? .backdrop(titleId: detail.id.protoValue)
-                    : .posterFull(titleId: detail.id.protoValue),
-                cornerRadius: 0
-            )
-            .frame(height: 220)
-            .frame(maxWidth: .infinity)
-        }
+        CachedImage(
+            ref: detail.backdropUrl != nil
+                ? .backdrop(titleId: detail.id.protoValue)
+                : .posterFull(titleId: detail.id.protoValue),
+            cornerRadius: 0
+        )
+        .frame(height: 220)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Offline Image Helpers
 
-    @ViewBuilder
-    private func offlineImage(titleId: TitleID, name: String, fallback: String? = nil) -> some View {
-        if let data = dataModel.downloads.loadCachedImage(for: titleId, name: name),
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .clipped()
-        } else if let fallback,
-                  let data = dataModel.downloads.loadCachedImage(for: titleId, name: fallback),
-                  let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .clipped()
-        } else {
-            Rectangle()
-                .fill(.quaternary)
-                .overlay {
-                    Image(systemName: "film")
-                        .foregroundStyle(.secondary)
-                }
-        }
-    }
-
-    @ViewBuilder
-    private func offlineHeadshot(titleId: TitleID, personId: TmdbPersonID) -> some View {
-        if let data = dataModel.downloads.loadCachedImage(for: titleId, name: "headshots/\(personId.rawValue).jpg"),
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .clipShape(Circle())
-        } else {
-            Circle()
-                .fill(.quaternary)
-                .overlay {
-                    Image(systemName: "person")
-                        .foregroundStyle(.secondary)
-                }
-        }
-    }
 }
 
 /// Simple flow layout for tags/genres that wraps to the next line.
