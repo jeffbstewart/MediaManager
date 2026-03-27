@@ -33,6 +33,8 @@ final class SkipSegmentController {
     private(set) var showSkipIntro = false
     private(set) var showUpNext = false
     private(set) var upNextCountdown: Int = 0
+    private(set) var chapters: [ChapterData] = []
+    private(set) var currentChapterTitle: String?
 
     private var introSegment: SkipSegmentData?
     private var creditsSegment: SkipSegmentData?
@@ -47,16 +49,26 @@ final class SkipSegmentController {
             let localFile = localDir.appendingPathComponent("chapters.json")
             if let data = try? Data(contentsOf: localFile),
                let response = try? JSONDecoder().decode(ChaptersResponse.self, from: data) {
+                chapters = response.chapters.sorted { $0.number < $1.number }
                 for seg in response.skipSegments {
                     if seg.type == "INTRO" { introSegment = seg }
                     if seg.type == "END_CREDITS" { creditsSegment = seg }
                 }
+                suppressAutoIntroIfChaptered()
                 return
             }
         }
 
         do {
             let response = try await grpcClient.getChapters(transcodeId: Int64(transcodeId))
+            chapters = response.chapters.enumerated().map { (index, ch) in
+                ChapterData(
+                    number: index + 1,
+                    start: ch.start.seconds,
+                    end: ch.end.seconds,
+                    title: ch.title.isEmpty ? nil : ch.title
+                )
+            }
             for seg in response.skipSegments {
                 let type = seg.segmentType
                 let data = SkipSegmentData(
@@ -68,13 +80,14 @@ final class SkipSegmentController {
                 if type == .intro { introSegment = data }
                 if type == .credits { creditsSegment = data }
             }
+            suppressAutoIntroIfChaptered()
         } catch {
             // No chapters/skip data available
         }
     }
 
     func startObserving(player: AVPlayer) {
-        guard introSegment != nil || creditsSegment != nil else {
+        guard introSegment != nil || creditsSegment != nil || !chapters.isEmpty else {
             return
         }
 
@@ -104,6 +117,9 @@ final class SkipSegmentController {
                 }
             }
         }
+
+        // Current chapter title
+        updateCurrentChapter(at: seconds)
     }
 
     /// Skip past the intro segment.
@@ -134,6 +150,11 @@ final class SkipSegmentController {
         countdownTimer = nil
     }
 
+    /// Seek to a chapter by index.
+    func seekToChapter(_ chapter: ChapterData, player: AVPlayer?) {
+        player?.seek(to: CMTime(seconds: chapter.start, preferredTimescale: 600))
+    }
+
     func stop(player: AVPlayer?) {
         if let timeObserver, let player {
             player.removeTimeObserver(timeObserver)
@@ -143,5 +164,25 @@ final class SkipSegmentController {
         countdownTimer = nil
         showSkipIntro = false
         showUpNext = false
+        chapters = []
+        currentChapterTitle = nil
+    }
+
+    /// If chapters are available, suppress the auto-detected intro skip.
+    /// The user can navigate via chapter list instead.
+    private func suppressAutoIntroIfChaptered() {
+        if !chapters.isEmpty, let intro = introSegment {
+            // Only suppress auto-detected (CHAPTER method), not manually created
+            if intro.method == "CHAPTER" {
+                introSegment = nil
+            }
+        }
+    }
+
+    /// Update current chapter title based on playback position.
+    func updateCurrentChapter(at seconds: Double) {
+        guard !chapters.isEmpty else { return }
+        let current = chapters.last { $0.start <= seconds }
+        currentChapterTitle = current?.title
     }
 }

@@ -52,6 +52,7 @@ struct CustomPlayerView: View {
 
     // Controls state
     @State private var showControls = true
+    @State private var showChapterList = false
     @State private var hideTask: Task<Void, Never>?
     @State private var timeObserver: Any?
     @State private var playbackSpeed: Float = 1.0
@@ -201,6 +202,12 @@ struct CustomPlayerView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             cleanup()
         }
+        .sheet(isPresented: $showChapterList) {
+            ChapterListSheet(chapters: skipController.chapters, currentPosition: ps.currentTime) { chapter in
+                skipController.seekToChapter(chapter, player: player)
+                showChapterList = false
+            }
+        }
     }
 
     // MARK: - Controls Overlay
@@ -260,50 +267,59 @@ struct CustomPlayerView: View {
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
                 }
-            }
-
-            Spacer()
-
-            // CC toggle
-            if subtitles.cueCount > 0 {
-                Button { subtitles.enabled.toggle(); resetHideTimer() } label: {
-                    Text("CC")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(subtitles.enabled ? .black : .white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(subtitles.enabled ? .yellow : .white.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                if let chapterTitle = skipController.currentChapterTitle {
+                    Text(chapterTitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
                 }
             }
+            .layoutPriority(-1) // yield space to buttons
 
-            // Playback speed
-            Menu {
-                ForEach(speeds, id: \.self) { speed in
-                    Button {
-                        playbackSpeed = speed
-                        player?.rate = speed
-                        resetHideTimer()
-                    } label: {
-                        Label(
-                            speed == 1.0 ? "Normal" : "\(speed, specifier: "%.2g")×",
-                            systemImage: speed == playbackSpeed ? "checkmark" : ""
-                        )
+            Spacer(minLength: 8)
+
+            // Player option buttons — compact row
+            HStack(spacing: 12) {
+                if subtitles.cueCount > 0 {
+                    Button { subtitles.enabled.toggle(); resetHideTimer() } label: {
+                        Image(systemName: subtitles.enabled ? "captions.bubble.fill" : "captions.bubble")
+                            .font(.system(size: 18))
+                            .foregroundStyle(subtitles.enabled ? .yellow : .white)
                     }
                 }
-            } label: {
-                Text("\(playbackSpeed, specifier: "%.2g")×")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.3))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
 
-            // AirPlay
-            AirPlayButton()
-                .frame(width: 44, height: 44)
+                if !skipController.chapters.isEmpty {
+                    Button { showChapterList = true; resetHideTimer() } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.white)
+                    }
+                }
+
+                // Playback speed
+                Menu {
+                    ForEach(speeds, id: \.self) { speed in
+                        Button {
+                            playbackSpeed = speed
+                            player?.rate = speed
+                            resetHideTimer()
+                        } label: {
+                            Label(
+                                speed == 1.0 ? "Normal" : "\(speed, specifier: "%.2g")×",
+                                systemImage: speed == playbackSpeed ? "checkmark" : ""
+                            )
+                        }
+                    }
+                } label: {
+                    Text("\(playbackSpeed, specifier: "%.2g")×")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                // AirPlay
+                AirPlayButton()
+                    .frame(width: 24, height: 24)
+            }
         }
     }
 
