@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TitleDetailView: View {
+    @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel
     let titleId: TitleID
     @State private var detail: ApiTitleDetail?
@@ -8,8 +9,10 @@ struct TitleDetailView: View {
     @State private var isFavorite = false
     @State private var isHidden = false
     @State private var mobileRequested = false
+    @State private var showEditTags = false
 
     private var isOffline: Bool { !dataModel.isOnline }
+    private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
 
     var body: some View {
         Group {
@@ -24,6 +27,13 @@ struct TitleDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadDetail() }
+        .sheet(isPresented: $showEditTags) {
+            if let detail {
+                EditTagsSheet(titleId: detail.id.protoValue, currentTags: detail.tags) {
+                    Task { await loadDetail() }
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -217,16 +227,27 @@ struct TitleDetailView: View {
                                     .font(.body)
                             }
 
-                            // Tags (display only)
-                            if !detail.tags.isEmpty {
-                                FlowLayout(spacing: 6) {
-                                    ForEach(detail.tags) { tag in
-                                        Text(tag.name)
-                                            .font(.caption)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(.tint.opacity(0.15))
-                                            .clipShape(Capsule())
+                            // Tags
+                            if !detail.tags.isEmpty || isAdmin {
+                                HStack {
+                                    FlowLayout(spacing: 6) {
+                                        ForEach(detail.tags) { tag in
+                                            Text(tag.name)
+                                                .font(.caption)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(.tint.opacity(0.15))
+                                                .clipShape(Capsule())
+                                        }
+                                    }
+                                    if isAdmin {
+                                        Spacer()
+                                        Button {
+                                            showEditTags = true
+                                        } label: {
+                                            Image(systemName: "pencil.circle")
+                                                .font(.title3)
+                                        }
                                     }
                                 }
                             }

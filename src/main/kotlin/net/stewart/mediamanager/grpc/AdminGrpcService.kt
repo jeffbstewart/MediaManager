@@ -824,6 +824,16 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         return empty {}
     }
 
+    override suspend fun addTagToTitle(request: TagTitleRequest): Empty {
+        TagService.addTagToTitle(request.titleId, request.tagId)
+        return empty {}
+    }
+
+    override suspend fun removeTagFromTitle(request: TagTitleRequest): Empty {
+        TagService.removeTagFromTitle(request.titleId, request.tagId)
+        return empty {}
+    }
+
     // ========================================================================
     // User Management
     // ========================================================================

@@ -67,6 +67,8 @@ service AdminService {
   rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
   rpc UpdateTag(UpdateTagRequest) returns (Empty);
   rpc DeleteTag(TagIdRequest) returns (Empty);
+  rpc AddTagToTitle(TagTitleRequest) returns (Empty);
+  rpc RemoveTagFromTitle(TagTitleRequest) returns (Empty);
 
   // --- User Management ---
   rpc ListUsers(Empty) returns (UserListResponse);

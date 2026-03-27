@@ -649,6 +649,20 @@ actor GrpcClient {
         _ = try await adminService.deleteTag(request, metadata: authMetadata())
     }
 
+    func adminAddTagToTitle(tagId: Int64, titleId: Int64) async throws {
+        var request = MMTagTitleRequest()
+        request.tagID = tagId
+        request.titleID = titleId
+        _ = try await adminService.addTagToTitle(request, metadata: authMetadata())
+    }
+
+    func adminRemoveTagFromTitle(tagId: Int64, titleId: Int64) async throws {
+        var request = MMTagTitleRequest()
+        request.tagID = tagId
+        request.titleID = titleId
+        _ = try await adminService.removeTagFromTitle(request, metadata: authMetadata())
+    }
+
     func adminListDataQuality(page: Int32) async throws -> MMDataQualityResponse {
         var request = MMDataQualityRequest()
         request.page = page
