@@ -1,8 +1,6 @@
 package net.stewart.mediamanager
 
 import com.github.mvysny.vaadinboot.VaadinBoot
-import org.eclipse.jetty.ee10.servlet.ServletContextHandler
-import org.eclipse.jetty.ee10.servlet.ServletHolder
 import org.eclipse.jetty.server.ServerConnector
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.DatabaseBackupService
@@ -149,12 +147,11 @@ fun main(args: Array<String>) {
     }, 3, TimeUnit.MINUTES)
     Runtime.getRuntime().addShutdownHook(Thread { scheduler.shutdownNow() })
 
-    // Internal-only server for /health and /metrics (not exposed to internet)
-    val internalServer = startInternalServer(CommandLineFlags.internalPort)
-    Runtime.getRuntime().addShutdownHook(Thread { internalServer.stop() })
-
-    // Armeria gRPC server on its own port (native HTTP/2, will later also serve HTTP)
-    net.stewart.mediamanager.grpc.ArmeriaServer.start(CommandLineFlags.grpcPort)
+    // Armeria server: gRPC on main port + monitoring on internal port
+    net.stewart.mediamanager.grpc.ArmeriaServer.start(
+        port = CommandLineFlags.grpcPort,
+        internalPort = CommandLineFlags.internalPort
+    )
     Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.ArmeriaServer.stop() })
 
     // SSDP responder for Roku device discovery
@@ -195,26 +192,3 @@ fun main(args: Array<String>) {
     boot.run()
 }
 
-/**
- * Starts a lightweight Jetty server on [port] serving /health, /metrics, /admin/logs, and /admin/requests.
- * Binds to all interfaces so Docker healthcheck and LAN Prometheus can reach it,
- * but the port is not forwarded through the router so it's not internet-accessible.
- */
-fun startInternalServer(port: Int): org.eclipse.jetty.server.Server {
-    val log = LoggerFactory.getLogger("net.stewart.mediamanager.InternalServer")
-    val server = org.eclipse.jetty.server.Server()
-    val connector = ServerConnector(server).apply { this.port = port }
-    server.addConnector(connector)
-
-    val context = ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    context.contextPath = "/"
-    context.addServlet(ServletHolder(HealthServlet()), "/health")
-    context.addServlet(ServletHolder(MetricsServlet()), "/metrics")
-    context.addServlet(ServletHolder(AppLogServlet()), "/admin/logs")
-    context.addServlet(ServletHolder(RequestLogServlet()), "/admin/requests")
-    server.handler = context
-
-    server.start()
-    log.info("Internal server started on port {} (health + metrics)", port)
-    return server
-}
