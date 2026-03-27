@@ -2,6 +2,11 @@
 
 Last updated: 2026-03-27
 
+## Status: Phases 1-5 Complete
+
+All 10 missing features have been implemented. The iOS app now has full admin parity
+with the web UI. See execution plan below for details.
+
 This document tracks features available in the web UI that are missing from the iOS app,
 along with a phased execution plan to close those gaps.
 
