@@ -86,17 +86,6 @@ struct ServerSetupView: View {
 
                 Spacer()
 
-                HStack(spacing: 16) {
-                    if let url = LegalDocuments.privacyPolicyURL {
-                        Link("Privacy Policy", destination: url)
-                    }
-                    if let url = LegalDocuments.termsOfUseURL {
-                        Link("Terms of Use", destination: url)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
                 Spacer()
             }
             .padding()

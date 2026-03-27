@@ -56,7 +56,6 @@ fi
 if [ ! -f "$BRANDING" ]; then
     echo "ERROR: $BRANDING not found."
     echo "  cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig"
-    echo "  Then fill in your privacy policy and terms of use URLs"
     exit 1
 fi
 
@@ -64,16 +63,6 @@ fi
 if grep -q 'YOUR_TEAM_ID_HERE' "$XCCONFIG"; then
     echo "ERROR: DEVELOPMENT_TEAM not configured in $XCCONFIG"
     echo "  Replace YOUR_TEAM_ID_HERE with your Apple Developer Team ID"
-    exit 1
-fi
-if grep -q 'YOUR_PRIVACY_POLICY_URL_HERE' "$BRANDING"; then
-    echo "ERROR: PRIVACY_POLICY_URL not configured in $BRANDING"
-    echo "  Generate a privacy policy at https://www.termsfeed.com/privacy-policy-generator/"
-    exit 1
-fi
-if grep -q 'YOUR_TERMS_OF_USE_URL_HERE' "$BRANDING"; then
-    echo "ERROR: TERMS_OF_USE_URL not configured in $BRANDING"
-    echo "  Generate terms of use at https://www.termsfeed.com/terms-of-use-generator/"
     exit 1
 fi
 

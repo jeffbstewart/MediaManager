@@ -127,7 +127,9 @@ actor GrpcClient {
 
     func discover() async throws -> MMDiscoverResponse {
         logger.info("discover: calling InfoService.Discover")
-        let result = try await infoService.discover(MMEmpty())
+        var request = MMDiscoverRequest()
+        request.platform = .ios
+        let result = try await infoService.discover(request)
         logger.info("discover: success, fingerprint=\(result.serverFingerprint)")
         return result
     }

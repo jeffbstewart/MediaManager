@@ -22,6 +22,7 @@ import com.vaadin.flow.router.Route
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.BuddyApiKey
 import net.stewart.mediamanager.service.BuddyKeyService
+import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.TranscoderAgent
 import java.time.format.DateTimeFormatter
 
@@ -178,6 +179,69 @@ class SettingsView : KComposite() {
                 }
                 add(keepaTokensField)
 
+                // --- Legal Documents Section ---
+                hr()
+                add(Span("Legal Documents").apply {
+                    style.set("font-weight", "bold")
+                    style.set("font-size", "var(--lumo-font-size-l)")
+                })
+                add(Span("Privacy policy and terms of use URLs shown to users during login. " +
+                    "Terms of use are per-platform (iOS app vs web UI). " +
+                    "Bumping a version number invalidates all existing sessions.").apply {
+                    style.set("color", "var(--lumo-secondary-text-color)")
+                    style.set("font-size", "var(--lumo-font-size-s)")
+                    style.set("margin-bottom", "var(--lumo-space-s)")
+                })
+
+                val ppUrlField = textField("Privacy Policy URL") {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "privacy_policy_url" }?.config_val ?: ""
+                    placeholder = "https://example.com/privacy"
+                    helperText = "Required before non-admin users can log in"
+                }
+                val ppVersionField = NumberField("Privacy Policy Version").apply {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "privacy_policy_version" }?.config_val?.toDoubleOrNull() ?: 0.0
+                    min = 0.0
+                    step = 1.0
+                    helperText = "Increment when the policy text changes"
+                }
+                add(ppVersionField)
+
+                add(Span("iOS Terms of Use").apply {
+                    style.set("font-weight", "500")
+                    style.set("margin-top", "var(--lumo-space-s)")
+                })
+                val iosTouUrlField = textField("iOS Terms of Use URL") {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "ios_terms_of_use_url" }?.config_val ?: ""
+                    placeholder = "https://example.com/ios-terms"
+                }
+                val iosTouVersionField = NumberField("iOS Terms of Use Version").apply {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "ios_terms_of_use_version" }?.config_val?.toDoubleOrNull() ?: 0.0
+                    min = 0.0
+                    step = 1.0
+                }
+                add(iosTouVersionField)
+
+                add(Span("Web Terms of Use").apply {
+                    style.set("font-weight", "500")
+                    style.set("margin-top", "var(--lumo-space-s)")
+                })
+                val webTouUrlField = textField("Web Terms of Use URL") {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "web_terms_of_use_url" }?.config_val ?: ""
+                    placeholder = "https://example.com/web-terms"
+                }
+                val webTouVersionField = NumberField("Web Terms of Use Version").apply {
+                    width = "100%"
+                    value = configs.firstOrNull { it.config_key == "web_terms_of_use_version" }?.config_val?.toDoubleOrNull() ?: 0.0
+                    min = 0.0
+                    step = 1.0
+                }
+                add(webTouVersionField)
+
                 // Save button
                 button("Save") {
                     addThemeVariants(ButtonVariant.LUMO_PRIMARY)
@@ -193,6 +257,14 @@ class SettingsView : KComposite() {
                         saveConfig("keepa_enabled", if (keepaEnabledCheck.value) "true" else "false")
                         saveConfig("keepa_api_key", keepaApiKeyField.value.trim())
                         saveConfig("keepa_tokens_per_minute", keepaTokensField.value?.toInt()?.toString() ?: "20")
+                        // Legal documents
+                        saveConfig("privacy_policy_url", ppUrlField.value.trim())
+                        saveConfig("privacy_policy_version", ppVersionField.value?.toInt()?.toString() ?: "0")
+                        saveConfig("ios_terms_of_use_url", iosTouUrlField.value.trim())
+                        saveConfig("ios_terms_of_use_version", iosTouVersionField.value?.toInt()?.toString() ?: "0")
+                        saveConfig("web_terms_of_use_url", webTouUrlField.value.trim())
+                        saveConfig("web_terms_of_use_version", webTouVersionField.value?.toInt()?.toString() ?: "0")
+                        LegalRequirements.refresh()
                         Notification.show("Settings saved", 2000, Notification.Position.BOTTOM_START)
                             .addThemeVariants(NotificationVariant.LUMO_SUCCESS)
                     }

@@ -21,12 +21,16 @@ final class AuthManager {
     private(set) var error: String?
     private(set) var passwordChangeRequired = false
     private(set) var serverUnreachable = false
+    private(set) var legalDocs: MMLegalDocumentInfo?
 
     let apiClient = APIClient()
     let grpcClient = GrpcClient()
     private var refreshTask: Task<Void, Never>?
 
+    private static let legalDocsKey = "cachedLegalDocs"
+
     init() {
+        restoreLegalDocs()
         restoreSession()
     }
 
@@ -50,6 +54,10 @@ final class AuthManager {
             logger.info("restoreSession: gRPC=\(grpcHost):\(grpcPort), HTTP=\(httpURLString)")
             await apiClient.configure(baseURL: httpURL)
             try? await grpcClient.configure(host: grpcHost, port: grpcPort, useTLS: url.scheme == "https")
+            // Refresh legal docs from server if not cached locally
+            if legalDocs == nil {
+                await refreshLegalDocs()
+            }
         }
 
         guard let tokenBase64 = KeychainService.load(key: .accessToken),
@@ -134,6 +142,11 @@ final class AuthManager {
             KeychainService.save(key: .serverURL, value: normalized)
             KeychainService.save(key: .httpBaseURL, value: secureURLString)
             await apiClient.configure(baseURL: secureURL)
+            // Store legal document info from server
+            if protoDiscovery.hasLegal {
+                legalDocs = protoDiscovery.legal
+                persistLegalDocs(legalDocs)
+            }
             logger.info("connectToServer: success — gRPC=\(normalized), HTTP=\(secureURLString)")
             state = .needsLogin(serverURL: url)
         } catch {
@@ -146,8 +159,8 @@ final class AuthManager {
         error = nil
         let deviceName = UIDevice.current.name
         do {
-            let ppVersion = LegalDocuments.isConfigured ? Int32(LegalDocuments.privacyPolicyVersion) : nil
-            let touVersion = LegalDocuments.isConfigured ? Int32(LegalDocuments.termsOfUseVersion) : nil
+            let ppVersion = legalDocs?.hasPrivacyPolicyVersion == true ? legalDocs!.privacyPolicyVersion : nil
+            let touVersion = legalDocs?.hasTermsOfUseVersion == true ? legalDocs!.termsOfUseVersion : nil
             let response = try await grpcClient.login(
                 username: username, password: password, deviceName: deviceName,
                 privacyPolicyVersion: ppVersion, termsOfUseVersion: touVersion)
@@ -224,6 +237,8 @@ final class AuthManager {
         refreshTask = nil
         KeychainService.clearAll()
         serverInfo = nil
+        legalDocs = nil
+        persistLegalDocs(nil)
         Task { await grpcClient.close() }
         state = .needsServer
     }
@@ -311,5 +326,31 @@ final class AuthManager {
 
     func clearPasswordChangeRequired() {
         passwordChangeRequired = false
+    }
+
+    private func refreshLegalDocs() async {
+        do {
+            let protoDiscovery = try await grpcClient.discover()
+            if protoDiscovery.hasLegal {
+                legalDocs = protoDiscovery.legal
+                persistLegalDocs(legalDocs)
+                logger.info("restoreSession: refreshed legal docs from server")
+            }
+        } catch {
+            logger.warning("restoreSession: failed to refresh legal docs: \(error.localizedDescription)")
+        }
+    }
+
+    private func restoreLegalDocs() {
+        guard let data = UserDefaults.standard.data(forKey: Self.legalDocsKey) else { return }
+        legalDocs = try? MMLegalDocumentInfo(serializedData: data)
+    }
+
+    private func persistLegalDocs(_ docs: MMLegalDocumentInfo?) {
+        if let docs, let data = try? docs.serializedData() {
+            UserDefaults.standard.set(data, forKey: Self.legalDocsKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.legalDocsKey)
+        }
     }
 }

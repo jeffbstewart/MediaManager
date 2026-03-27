@@ -8,6 +8,9 @@ struct LoginView: View {
     @State private var isLoggingIn = false
     @State private var agreedToPrivacy = false
 
+    private var legal: MMLegalDocumentInfo? { authManager.legalDocs }
+    private var legalConfigured: Bool { legal?.isConfigured == true }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 32) {
@@ -36,7 +39,7 @@ struct LoginView: View {
                         .textContentType(.password)
                         .onSubmit { login() }
 
-                    if LegalDocuments.isConfigured {
+                    if legalConfigured, let legal {
                         HStack {
                             Button {
                                 agreedToPrivacy.toggle()
@@ -50,13 +53,13 @@ struct LoginView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
                                     Text("I agree to the")
-                                    if let url = LegalDocuments.privacyPolicyURL {
+                                    if let url = legal.privacyPolicyURL_resolved {
                                         Link("Privacy Policy", destination: url)
                                     }
                                 }
                                 HStack(spacing: 4) {
                                     Text("and the")
-                                    if let url = LegalDocuments.termsOfUseURL {
+                                    if let url = legal.termsOfUseURL_resolved {
                                         Link("Terms of Use", destination: url)
                                     }
                                 }
@@ -76,7 +79,7 @@ struct LoginView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (LegalDocuments.isConfigured && !agreedToPrivacy))
+                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (legalConfigured && !agreedToPrivacy))
                 }
                 .padding(.horizontal)
 
@@ -97,10 +100,10 @@ struct LoginView: View {
                     .font(.callout)
 
                     HStack(spacing: 16) {
-                        if let url = LegalDocuments.privacyPolicyURL {
+                        if let url = legal?.privacyPolicyURL_resolved {
                             Link("Privacy Policy", destination: url)
                         }
-                        if let url = LegalDocuments.termsOfUseURL {
+                        if let url = legal?.termsOfUseURL_resolved {
                             Link("Terms of Use", destination: url)
                         }
                     }

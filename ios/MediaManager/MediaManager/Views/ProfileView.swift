@@ -50,9 +50,9 @@ struct ProfileView: View {
                         }
                     }
 
-                    if LegalDocuments.isConfigured {
+                    if let legal = authManager.legalDocs, legal.isConfigured {
                         Section("Legal") {
-                            if let url = LegalDocuments.privacyPolicyURL {
+                            if let url = legal.privacyPolicyURL_resolved {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Link(destination: url) {
                                         Label("Privacy Policy", systemImage: "hand.raised")
@@ -65,7 +65,7 @@ struct ProfileView: View {
                                     }
                                 }
                             }
-                            if let url = LegalDocuments.termsOfUseURL {
+                            if let url = legal.termsOfUseURL_resolved {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Link(destination: url) {
                                         Label("Terms of Use", systemImage: "doc.text")
