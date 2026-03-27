@@ -1356,4 +1356,356 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         }
         return empty {}
     }
+
+    // ========================================================================
+    // Valuation
+    // ========================================================================
+
+    override suspend fun listValuations(request: ValuationRequest): ValuationResponse {
+        val pageSize = if (request.pageSize > 0) request.pageSize.toInt() else 50
+        val query = if (request.hasQuery()) request.query.lowercase() else null
+
+        var items = net.stewart.mediamanager.entity.MediaItem.findAll()
+        if (query != null) {
+            items = items.filter { it.product_name?.lowercase()?.contains(query) == true }
+        }
+        if (request.unpricedOnly) {
+            items = items.filter { it.purchase_price == null }
+        }
+        items = items.sortedBy { it.product_name?.lowercase() }
+
+        val total = items.size
+        val paged = items.drop(request.page * pageSize).take(pageSize)
+
+        val allItems = net.stewart.mediamanager.entity.MediaItem.findAll()
+        val totalPurchase = allItems.mapNotNull { it.purchase_price?.toDouble() }.sum()
+        val totalReplacement = allItems.mapNotNull { it.replacement_value?.toDouble() }.sum()
+
+        return valuationResponse {
+            this.items.addAll(paged.map { it.toValuationProto() })
+            totalCount = total
+            totalItems = allItems.size
+            totalPurchaseValue = totalPurchase
+            totalReplacementValue = totalReplacement
+        }
+    }
+
+    private fun net.stewart.mediamanager.entity.MediaItem.toValuationProto(): ValuationItem {
+        val joins = MediaItemTitle.findAll().filter { it.media_item_id == this.id!! }
+        val titleNames = joins.mapNotNull { join ->
+            net.stewart.mediamanager.entity.Title.findById(join.title_id)?.name
+        }
+        val photoCount = OwnershipPhoto.findAll().count { it.media_item_id == this.id!! }
+        return valuationItem {
+            mediaItemId = this@toValuationProto.id!!
+            this@toValuationProto.upc?.let { upc = it }
+            productName = this@toValuationProto.product_name ?: ""
+            this.titleNames.addAll(titleNames)
+            mediaFormat = this@toValuationProto.media_format.toProtoMediaFormat()
+            this@toValuationProto.purchase_place?.let { purchasePlace = it }
+            this@toValuationProto.purchase_date?.let { purchaseDate = it.toString() }
+            this@toValuationProto.purchase_price?.let { purchasePrice = it.toDouble() }
+            this@toValuationProto.replacement_value?.let { replacementValue = it.toDouble() }
+            this@toValuationProto.replacement_value_updated_at?.let { replacementValueDate = it.toLocalDate().toString() }
+            this@toValuationProto.override_asin?.let { overrideAsin = it }
+            this.photoCount = photoCount
+        }
+    }
+
+    override suspend fun updateMediaItem(request: UpdateMediaItemRequest): Empty {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        if (request.hasPurchasePlace()) item.purchase_place = request.purchasePlace.ifBlank { null }
+        if (request.hasPurchaseDate()) item.purchase_date = try { java.time.LocalDate.parse(request.purchaseDate) } catch (_: Exception) { null }
+        if (request.hasPurchasePrice()) item.purchase_price = java.math.BigDecimal.valueOf(request.purchasePrice)
+        if (request.hasReplacementValue()) item.replacement_value = java.math.BigDecimal.valueOf(request.replacementValue)
+        if (request.hasOverrideAsin()) item.override_asin = request.overrideAsin.ifBlank { null }
+        item.updated_at = LocalDateTime.now()
+        item.save()
+        return empty {}
+    }
+
+    override suspend fun triggerKeepaLookup(request: MediaItemIdRequest): Empty {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        // Queue for Keepa lookup by clearing the replacement value date
+        item.replacement_value_updated_at = null
+        item.updated_at = LocalDateTime.now()
+        item.save()
+        return empty {}
+    }
+
+    // ========================================================================
+    // Document Ownership
+    // ========================================================================
+
+    override suspend fun listUndocumentedItems(request: PaginationRequest): UndocumentedItemsResponse {
+        val allPhotos = OwnershipPhoto.findAll()
+        val documentedItemIds = allPhotos.map { it.media_item_id }.toSet()
+        val undocumented = net.stewart.mediamanager.entity.MediaItem.findAll()
+            .filter { it.id!! !in documentedItemIds }
+            .sortedBy { it.product_name?.lowercase() }
+
+        val pageSize = if (request.limit > 0) request.limit else 50
+        val paged = undocumented.drop((request.page - 1).coerceAtLeast(0) * pageSize).take(pageSize)
+
+        return undocumentedItemsResponse {
+            items.addAll(paged.map { item ->
+                val joins = MediaItemTitle.findAll().filter { it.media_item_id == item.id!! }
+                val titleNames = joins.mapNotNull { join ->
+                    net.stewart.mediamanager.entity.Title.findById(join.title_id)?.name
+                }
+                undocumentedItem {
+                    mediaItemId = item.id!!
+                    item.upc?.let { upc = it }
+                    productName = item.product_name ?: ""
+                    this.titleNames.addAll(titleNames)
+                    mediaFormat = item.media_format.toProtoMediaFormat()
+                }
+            })
+            totalCount = undocumented.size
+        }
+    }
+
+    // ========================================================================
+    // Family Members
+    // ========================================================================
+
+    override suspend fun listFamilyMembers(request: Empty): FamilyMemberListResponse {
+        val members = net.stewart.mediamanager.entity.FamilyMember.findAll().sortedBy { it.name }
+        return familyMemberListResponse {
+            this.members.addAll(members.map { it.toProto() })
+        }
+    }
+
+    private fun net.stewart.mediamanager.entity.FamilyMember.toProto(): FamilyMemberResponse {
+        val videoCount = net.stewart.mediamanager.entity.TitleFamilyMember.findAll()
+            .count { it.family_member_id == this.id!! }
+        return familyMemberResponse {
+            id = this@toProto.id!!
+            name = this@toProto.name
+            this@toProto.birth_date?.let { birthDate = it.toString() }
+            this@toProto.notes?.let { notes = it }
+            this.videoCount = videoCount
+        }
+    }
+
+    override suspend fun createFamilyMember(request: CreateFamilyMemberRequest): FamilyMemberResponse {
+        if (request.name.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Name is required"))
+        }
+        val existing = net.stewart.mediamanager.entity.FamilyMember.findAll()
+            .any { it.name.equals(request.name, ignoreCase = true) }
+        if (existing) {
+            throw StatusException(Status.ALREADY_EXISTS.withDescription("A family member with that name already exists"))
+        }
+        val member = net.stewart.mediamanager.entity.FamilyMember(
+            name = request.name.trim(),
+            birth_date = if (request.hasBirthDate()) try { java.time.LocalDate.parse(request.birthDate) } catch (_: Exception) { null } else null,
+            notes = if (request.hasNotes()) request.notes.takeIf { it.isNotBlank() } else null,
+            created_at = LocalDateTime.now()
+        )
+        member.save()
+        return member.toProto()
+    }
+
+    override suspend fun updateFamilyMember(request: UpdateFamilyMemberRequest): Empty {
+        val member = net.stewart.mediamanager.entity.FamilyMember.findById(request.familyMemberId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Family member not found"))
+        if (request.name.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Name is required"))
+        }
+        val nameConflict = net.stewart.mediamanager.entity.FamilyMember.findAll()
+            .any { it.id != member.id && it.name.equals(request.name, ignoreCase = true) }
+        if (nameConflict) {
+            throw StatusException(Status.ALREADY_EXISTS.withDescription("Name already in use"))
+        }
+        member.name = request.name.trim()
+        member.birth_date = if (request.hasBirthDate()) try { java.time.LocalDate.parse(request.birthDate) } catch (_: Exception) { null } else null
+        member.notes = if (request.hasNotes()) request.notes.takeIf { it.isNotBlank() } else null
+        member.save()
+        return empty {}
+    }
+
+    override suspend fun deleteFamilyMember(request: FamilyMemberIdRequest): Empty {
+        val member = net.stewart.mediamanager.entity.FamilyMember.findById(request.familyMemberId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Family member not found"))
+        // Remove all title associations
+        net.stewart.mediamanager.entity.TitleFamilyMember.findAll()
+            .filter { it.family_member_id == member.id!! }
+            .forEach { it.delete() }
+        member.delete()
+        return empty {}
+    }
+
+    // ========================================================================
+    // Live TV Settings
+    // ========================================================================
+
+    override suspend fun getLiveTvSettings(request: Empty): LiveTvSettingsResponse {
+        val configs = AppConfig.findAll().associateBy { it.config_key }
+        val activeStreams = net.stewart.mediamanager.service.LiveTvStreamManager.activeStreamCount()
+        val activeTuners = net.stewart.mediamanager.entity.LiveTvTuner.findAll().count { it.enabled }
+        return liveTvSettingsResponse {
+            configs["live_tv_min_rating"]?.config_val?.let { minContentRating = it }
+            maxStreams = configs["live_tv_max_streams"]?.config_val?.toIntOrNull() ?: 4
+            idleTimeoutSeconds = configs["live_tv_idle_timeout_seconds"]?.config_val?.toIntOrNull() ?: 60
+            activeTunerCount = activeTuners
+            activeStreamCount = activeStreams
+        }
+    }
+
+    override suspend fun updateLiveTvSettings(request: UpdateLiveTvSettingsRequest): Empty {
+        if (request.hasMinContentRating()) saveConfig("live_tv_min_rating", request.minContentRating)
+        if (request.maxStreams > 0) saveConfig("live_tv_max_streams", request.maxStreams.toString())
+        if (request.idleTimeoutSeconds > 0) saveConfig("live_tv_idle_timeout_seconds", request.idleTimeoutSeconds.toString())
+        return empty {}
+    }
+
+    override suspend fun listTuners(request: Empty): TunerListResponse {
+        val tuners = net.stewart.mediamanager.entity.LiveTvTuner.findAll()
+        return tunerListResponse {
+            this.tuners.addAll(tuners.map { tuner ->
+                val channelCount = net.stewart.mediamanager.entity.LiveTvChannel.findAll()
+                    .count { it.tuner_id == tuner.id!! }
+                tunerResponse {
+                    id = tuner.id!!
+                    name = tuner.name ?: ""
+                    ipAddress = tuner.ip_address
+                    tuner.device_id?.let { deviceId = it }
+                    tuner.model_number?.let { modelNumber = it }
+                    tunerCount = tuner.tuner_count ?: 0
+                    enabled = tuner.enabled
+                    this.channelCount = channelCount
+                }
+            })
+        }
+    }
+
+    override suspend fun addTuner(request: AddTunerRequest): TunerResponse {
+        if (request.ipAddress.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("IP address required"))
+        }
+        val tuner = net.stewart.mediamanager.entity.LiveTvTuner(
+            name = if (request.hasName()) request.name else "HDHomeRun",
+            ip_address = request.ipAddress.trim(),
+            enabled = true,
+            created_at = LocalDateTime.now()
+        )
+        tuner.save()
+        return tunerResponse {
+            id = tuner.id!!
+            name = tuner.name ?: ""
+            ipAddress = tuner.ip_address
+            enabled = true
+            channelCount = 0
+        }
+    }
+
+    override suspend fun updateTuner(request: UpdateTunerRequest): Empty {
+        val tuner = net.stewart.mediamanager.entity.LiveTvTuner.findById(request.tunerId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Tuner not found"))
+        tuner.name = request.name
+        tuner.enabled = request.enabled
+        tuner.save()
+        return empty {}
+    }
+
+    override suspend fun deleteTuner(request: TunerIdRequest): Empty {
+        // Delete all channels first
+        net.stewart.mediamanager.entity.LiveTvChannel.findAll()
+            .filter { it.tuner_id == request.tunerId }
+            .forEach { it.delete() }
+        net.stewart.mediamanager.entity.LiveTvTuner.findById(request.tunerId)?.delete()
+        return empty {}
+    }
+
+    override suspend fun refreshTunerChannels(request: TunerIdRequest): RefreshChannelsResponse {
+        val tuner = net.stewart.mediamanager.entity.LiveTvTuner.findById(request.tunerId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Tuner not found"))
+        val result = net.stewart.mediamanager.service.HdHomeRunService.syncChannels(tuner.id!!, tuner.ip_address)
+            ?: throw StatusException(Status.UNAVAILABLE.withDescription("Failed to sync channels from ${tuner.ip_address}"))
+        return refreshChannelsResponse {
+            channelsFound = result.added + result.updated
+            channelsAdded = result.added
+        }
+    }
+
+    override suspend fun listAdminChannels(request: TunerIdRequest): AdminChannelListResponse {
+        val channels = net.stewart.mediamanager.entity.LiveTvChannel.findAll()
+            .filter { it.tuner_id == request.tunerId }
+            .sortedWith(compareBy({ it.display_order }, { it.guide_number.toDoubleOrNull() ?: 9999.0 }))
+        return adminChannelListResponse {
+            this.channels.addAll(channels.map { ch ->
+                adminChannelResponse {
+                    id = ch.id!!
+                    guideNumber = ch.guide_number
+                    guideName = ch.guide_name
+                    ch.network_affiliation?.let { networkAffiliation = it }
+                    receptionQuality = ch.reception_quality
+                    enabled = ch.enabled
+                    displayOrder = ch.display_order
+                }
+            })
+        }
+    }
+
+    override suspend fun updateChannel(request: UpdateChannelRequest): Empty {
+        val ch = net.stewart.mediamanager.entity.LiveTvChannel.findById(request.channelId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Channel not found"))
+        if (request.hasNetworkAffiliation()) ch.network_affiliation = request.networkAffiliation.ifBlank { null }
+        ch.reception_quality = request.receptionQuality
+        ch.enabled = request.enabled
+        ch.save()
+        return empty {}
+    }
+
+    // ========================================================================
+    // Inventory Report
+    // ========================================================================
+
+    override suspend fun generateInventoryReport(request: InventoryReportRequest): InventoryReportResponse {
+        val items = net.stewart.mediamanager.entity.MediaItem.findAll()
+            .sortedBy { it.product_name?.lowercase() }
+        var totalPurchase = 0.0
+        var totalReplacement = 0.0
+
+        val rows = items.map { item ->
+            val joins = MediaItemTitle.findAll().filter { it.media_item_id == item.id!! }
+            val titleNames = joins.mapNotNull { join ->
+                net.stewart.mediamanager.entity.Title.findById(join.title_id)?.name
+            }
+            val photoCount = OwnershipPhoto.findAll().count { it.media_item_id == item.id!! }
+            item.purchase_price?.toDouble()?.let { totalPurchase += it }
+            item.replacement_value?.toDouble()?.let { totalReplacement += it }
+            inventoryReportRow {
+                this.titleNames = titleNames.joinToString(", ").ifEmpty { item.product_name ?: "" }
+                mediaFormat = item.media_format ?: ""
+                item.upc?.let { upc = it }
+                item.purchase_date?.let { purchaseDate = it.toString() }
+                item.purchase_place?.let { purchasePlace = it }
+                item.purchase_price?.let { purchasePrice = it.toDouble() }
+                item.replacement_value?.let { replacementValue = it.toDouble() }
+                item.replacement_value_updated_at?.let { replacementValueDate = it.toLocalDate().toString() }
+                this.photoCount = photoCount
+            }
+        }
+
+        return inventoryReportResponse {
+            this.rows.addAll(rows)
+            totalItems = items.size
+            totalPurchaseValue = totalPurchase
+            totalReplacementValue = totalReplacement
+        }
+    }
+
+    private fun saveConfig(key: String, value: String) {
+        val existing = AppConfig.findAll().firstOrNull { it.config_key == key }
+        if (existing != null) {
+            existing.config_val = value.ifBlank { null }
+            existing.save()
+        } else if (value.isNotBlank()) {
+            AppConfig(config_key = key, config_val = value).save()
+        }
+    }
 }

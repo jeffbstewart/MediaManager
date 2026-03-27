@@ -837,6 +837,132 @@ actor GrpcClient {
         request.mediaItemID = mediaItemId
         _ = try await adminService.markNotMultiPack(request, metadata: authMetadata())
     }
+
+    // MARK: - Valuation RPCs
+
+    func adminListValuations(page: Int32 = 0, pageSize: Int32 = 50, query: String = "", unpricedOnly: Bool = false) async throws -> MMValuationResponse {
+        var request = MMValuationRequest()
+        request.page = page
+        request.pageSize = pageSize
+        if !query.isEmpty { request.query = query }
+        request.unpricedOnly = unpricedOnly
+        return try await adminService.listValuations(request, metadata: authMetadata())
+    }
+
+    func adminUpdateMediaItem(id: Int64, place: String?, date: String?, price: Double?, replacementValue: Double?, asin: String?) async throws {
+        var request = MMUpdateMediaItemRequest()
+        request.mediaItemID = id
+        if let p = place { request.purchasePlace = p }
+        if let d = date { request.purchaseDate = d }
+        if let p = price { request.purchasePrice = p }
+        if let r = replacementValue { request.replacementValue = r }
+        if let a = asin { request.overrideAsin = a }
+        _ = try await adminService.updateMediaItem(request, metadata: authMetadata())
+    }
+
+    func adminListUndocumentedItems(page: Int32 = 1, limit: Int32 = 50) async throws -> MMUndocumentedItemsResponse {
+        var request = MMPaginationRequest()
+        request.page = page
+        request.limit = limit
+        return try await adminService.listUndocumentedItems(request, metadata: authMetadata())
+    }
+
+    // MARK: - Family Member RPCs
+
+    func adminListFamilyMembers() async throws -> MMFamilyMemberListResponse {
+        try await adminService.listFamilyMembers(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminCreateFamilyMember(name: String, birthDate: String?, notes: String?) async throws -> MMFamilyMemberResponse {
+        var request = MMCreateFamilyMemberRequest()
+        request.name = name
+        if let b = birthDate { request.birthDate = b }
+        if let n = notes { request.notes = n }
+        return try await adminService.createFamilyMember(request, metadata: authMetadata())
+    }
+
+    func adminUpdateFamilyMember(id: Int64, name: String, birthDate: String?, notes: String?) async throws {
+        var request = MMUpdateFamilyMemberRequest()
+        request.familyMemberID = id
+        request.name = name
+        if let b = birthDate { request.birthDate = b }
+        if let n = notes { request.notes = n }
+        _ = try await adminService.updateFamilyMember(request, metadata: authMetadata())
+    }
+
+    func adminDeleteFamilyMember(id: Int64) async throws {
+        var request = MMFamilyMemberIdRequest()
+        request.familyMemberID = id
+        _ = try await adminService.deleteFamilyMember(request, metadata: authMetadata())
+    }
+
+    // MARK: - Live TV Settings RPCs
+
+    func adminGetLiveTvSettings() async throws -> MMLiveTvSettingsResponse {
+        try await adminService.getLiveTvSettings(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminUpdateLiveTvSettings(minRating: String?, maxStreams: Int32, idleTimeout: Int32) async throws {
+        var request = MMUpdateLiveTvSettingsRequest()
+        if let r = minRating { request.minContentRating = r }
+        request.maxStreams = maxStreams
+        request.idleTimeoutSeconds = idleTimeout
+        _ = try await adminService.updateLiveTvSettings(request, metadata: authMetadata())
+    }
+
+    func adminListTuners() async throws -> MMTunerListResponse {
+        try await adminService.listTuners(MMEmpty(), metadata: authMetadata())
+    }
+
+    func adminAddTuner(ipAddress: String, name: String?) async throws -> MMTunerResponse {
+        var request = MMAddTunerRequest()
+        request.ipAddress = ipAddress
+        if let n = name { request.name = n }
+        return try await adminService.addTuner(request, metadata: authMetadata())
+    }
+
+    func adminUpdateTuner(id: Int64, name: String, enabled: Bool) async throws {
+        var request = MMUpdateTunerRequest()
+        request.tunerID = id
+        request.name = name
+        request.enabled = enabled
+        _ = try await adminService.updateTuner(request, metadata: authMetadata())
+    }
+
+    func adminDeleteTuner(id: Int64) async throws {
+        var request = MMTunerIdRequest()
+        request.tunerID = id
+        _ = try await adminService.deleteTuner(request, metadata: authMetadata())
+    }
+
+    func adminRefreshTunerChannels(tunerId: Int64) async throws -> MMRefreshChannelsResponse {
+        var request = MMTunerIdRequest()
+        request.tunerID = tunerId
+        return try await adminService.refreshTunerChannels(request, metadata: authMetadata())
+    }
+
+    func adminListAdminChannels(tunerId: Int64) async throws -> MMAdminChannelListResponse {
+        var request = MMTunerIdRequest()
+        request.tunerID = tunerId
+        return try await adminService.listAdminChannels(request, metadata: authMetadata())
+    }
+
+    func adminUpdateChannel(id: Int64, networkAffiliation: String?, quality: Int32, enabled: Bool) async throws {
+        var request = MMUpdateChannelRequest()
+        request.channelID = id
+        if let n = networkAffiliation { request.networkAffiliation = n }
+        request.receptionQuality = quality
+        request.enabled = enabled
+        _ = try await adminService.updateChannel(request, metadata: authMetadata())
+    }
+
+    // MARK: - Inventory Report RPCs
+
+    func adminGenerateInventoryReport(includePhotos: Bool = false) async throws -> MMInventoryReportResponse {
+        var request = MMInventoryReportRequest()
+        request.includePhotos = includePhotos
+        return try await adminService.generateInventoryReport(request, metadata: authMetadata())
+    }
 }
 
 // MARK: - Error type

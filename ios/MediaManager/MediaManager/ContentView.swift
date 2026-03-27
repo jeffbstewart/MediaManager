@@ -6,6 +6,7 @@ enum Tab: Hashable {
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
     case adminAmazonImport, adminExpand
+    case adminValuation, adminReport, adminFamilyMembers, adminLiveTvSettings
 }
 
 struct ContentView: View {
@@ -72,6 +73,14 @@ struct ContentView: View {
                                 .tag(Tab.adminTags)
                             Label("Transcodes", systemImage: "film.stack")
                                 .tag(Tab.adminTranscodes)
+                            Label("Valuation", systemImage: "dollarsign.circle")
+                                .tag(Tab.adminValuation)
+                            Label("Inventory Report", systemImage: "doc.text")
+                                .tag(Tab.adminReport)
+                            Label("Family Members", systemImage: "figure.2.and.child.holdinghands")
+                                .tag(Tab.adminFamilyMembers)
+                            Label("Live TV Settings", systemImage: "antenna.radiowaves.left.and.right")
+                                .tag(Tab.adminLiveTvSettings)
                             Label("Unmatched Files", systemImage: "questionmark.folder")
                                 .tag(Tab.adminUnmatched)
                             Label("Settings", systemImage: "gear")
@@ -143,7 +152,8 @@ struct ContentView: View {
                                     .home, .movies, .tvShows, .collections, .tags, .family,
                                     .cameras, .liveTv, .search, .wishList, .profile,
                                     .adminAddTitle, .adminAmazonImport, .adminExpand,
-                                    .adminScan, .adminStatus, .adminCameras,
+                                    .adminValuation, .adminReport, .adminFamilyMembers,
+                                    .adminLiveTvSettings, .adminScan, .adminStatus, .adminCameras,
                                     .adminUsers, .adminPurchaseWishes,
                                     .adminDataQuality, .adminTags, .adminTranscodes,
                                     .adminUnmatched, .adminSettings
@@ -230,6 +240,14 @@ struct ContentView: View {
                         AdminTagsView()
                     case .adminTranscodes:
                         AdminTranscodesView()
+                    case .adminValuation:
+                        ValuationView()
+                    case .adminReport:
+                        InventoryReportView()
+                    case .adminFamilyMembers:
+                        FamilyMembersView()
+                    case .adminLiveTvSettings:
+                        LiveTvSettingsView()
                     case .adminUnmatched:
                         AdminUnmatchedView()
                     case .adminSettings:

@@ -103,6 +103,34 @@ service AdminService {
   rpc RemoveTitleFromExpansion(RemoveTitleFromExpansionRequest) returns (Empty);
   rpc MarkExpanded(MediaItemIdRequest) returns (Empty);
   rpc MarkNotMultiPack(MediaItemIdRequest) returns (Empty);
+
+  // --- Valuation ---
+  rpc ListValuations(ValuationRequest) returns (ValuationResponse);
+  rpc UpdateMediaItem(UpdateMediaItemRequest) returns (Empty);
+  rpc TriggerKeepaLookup(MediaItemIdRequest) returns (Empty);
+
+  // --- Document Ownership ---
+  rpc ListUndocumentedItems(PaginationRequest) returns (UndocumentedItemsResponse);
+
+  // --- Family Members ---
+  rpc ListFamilyMembers(Empty) returns (FamilyMemberListResponse);
+  rpc CreateFamilyMember(CreateFamilyMemberRequest) returns (FamilyMemberResponse);
+  rpc UpdateFamilyMember(UpdateFamilyMemberRequest) returns (Empty);
+  rpc DeleteFamilyMember(FamilyMemberIdRequest) returns (Empty);
+
+  // --- Live TV Settings ---
+  rpc GetLiveTvSettings(Empty) returns (LiveTvSettingsResponse);
+  rpc UpdateLiveTvSettings(UpdateLiveTvSettingsRequest) returns (Empty);
+  rpc ListTuners(Empty) returns (TunerListResponse);
+  rpc AddTuner(AddTunerRequest) returns (TunerResponse);
+  rpc UpdateTuner(UpdateTunerRequest) returns (Empty);
+  rpc DeleteTuner(TunerIdRequest) returns (Empty);
+  rpc RefreshTunerChannels(TunerIdRequest) returns (RefreshChannelsResponse);
+  rpc ListAdminChannels(TunerIdRequest) returns (AdminChannelListResponse);
+  rpc UpdateChannel(UpdateChannelRequest) returns (Empty);
+
+  // --- Inventory Report ---
+  rpc GenerateInventoryReport(InventoryReportRequest) returns (InventoryReportResponse);
 }
 
 // --- ID Requests ---
@@ -768,4 +796,188 @@ message AddTitleToExpansionResponse {
 message RemoveTitleFromExpansionRequest {
   int64 media_item_id = 1;
   int64 title_id = 2;
+}
+
+// --- Valuation Messages ---
+
+message ValuationRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  optional string query = 3;
+  bool unpriced_only = 4;
+}
+
+message ValuationItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  repeated string title_names = 4;
+  MediaFormat media_format = 5;
+  optional string purchase_place = 6;
+  optional string purchase_date = 7;
+  optional double purchase_price = 8;
+  optional double replacement_value = 9;
+  optional string replacement_value_date = 10;
+  optional string override_asin = 11;
+  int32 photo_count = 12;
+}
+
+message ValuationResponse {
+  repeated ValuationItem items = 1;
+  int32 total_count = 2;
+  int32 total_items = 3;
+  double total_purchase_value = 4;
+  double total_replacement_value = 5;
+}
+
+message UpdateMediaItemRequest {
+  int64 media_item_id = 1;
+  optional string purchase_place = 2;
+  optional string purchase_date = 3;    // ISO date
+  optional double purchase_price = 4;
+  optional double replacement_value = 5;
+  optional string override_asin = 6;
+}
+
+// --- Document Ownership Messages ---
+
+message UndocumentedItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  repeated string title_names = 4;
+  MediaFormat media_format = 5;
+}
+
+message UndocumentedItemsResponse {
+  repeated UndocumentedItem items = 1;
+  int32 total_count = 2;
+}
+
+// --- Family Member Messages ---
+
+message FamilyMemberIdRequest {
+  int64 family_member_id = 1;
+}
+
+message FamilyMemberResponse {
+  int64 id = 1;
+  string name = 2;
+  optional string birth_date = 3;
+  optional string notes = 4;
+  int32 video_count = 5;
+}
+
+message FamilyMemberListResponse {
+  repeated FamilyMemberResponse members = 1;
+}
+
+message CreateFamilyMemberRequest {
+  string name = 1;
+  optional string birth_date = 2;
+  optional string notes = 3;
+}
+
+message UpdateFamilyMemberRequest {
+  int64 family_member_id = 1;
+  string name = 2;
+  optional string birth_date = 3;
+  optional string notes = 4;
+}
+
+// --- Live TV Settings Messages ---
+
+message LiveTvSettingsResponse {
+  optional string min_content_rating = 1;
+  int32 max_streams = 2;
+  int32 idle_timeout_seconds = 3;
+  int32 active_tuner_count = 4;
+  int32 active_stream_count = 5;
+}
+
+message UpdateLiveTvSettingsRequest {
+  optional string min_content_rating = 1;
+  int32 max_streams = 2;
+  int32 idle_timeout_seconds = 3;
+}
+
+message TunerIdRequest {
+  int64 tuner_id = 1;
+}
+
+message TunerResponse {
+  int64 id = 1;
+  string name = 2;
+  string ip_address = 3;
+  optional string device_id = 4;
+  optional string model_number = 5;
+  int32 tuner_count = 6;
+  bool enabled = 7;
+  int32 channel_count = 8;
+}
+
+message TunerListResponse {
+  repeated TunerResponse tuners = 1;
+}
+
+message AddTunerRequest {
+  string ip_address = 1;
+  optional string name = 2;
+}
+
+message UpdateTunerRequest {
+  int64 tuner_id = 1;
+  string name = 2;
+  bool enabled = 3;
+}
+
+message RefreshChannelsResponse {
+  int32 channels_found = 1;
+  int32 channels_added = 2;
+}
+
+message AdminChannelResponse {
+  int64 id = 1;
+  string guide_number = 2;
+  string guide_name = 3;
+  optional string network_affiliation = 4;
+  int32 reception_quality = 5;
+  bool enabled = 6;
+  int32 display_order = 7;
+}
+
+message AdminChannelListResponse {
+  repeated AdminChannelResponse channels = 1;
+}
+
+message UpdateChannelRequest {
+  int64 channel_id = 1;
+  optional string network_affiliation = 2;
+  int32 reception_quality = 3;
+  bool enabled = 4;
+}
+
+// --- Inventory Report Messages ---
+
+message InventoryReportRequest {
+  bool include_photos = 1;
+}
+
+message InventoryReportRow {
+  string title_names = 1;
+  string media_format = 2;
+  optional string upc = 3;
+  optional string purchase_date = 4;
+  optional string purchase_place = 5;
+  optional double purchase_price = 6;
+  optional double replacement_value = 7;
+  optional string replacement_value_date = 8;
+  int32 photo_count = 9;
+}
+
+message InventoryReportResponse {
+  repeated InventoryReportRow rows = 1;
+  int32 total_items = 2;
+  double total_purchase_value = 3;
+  double total_replacement_value = 4;
 }
