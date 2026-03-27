@@ -129,13 +129,13 @@ cp ios/MediaManager/Developer.xcconfig.example ios/MediaManager/Developer.xcconf
 # Edit and set your Apple Developer Team ID
 ```
 
-**2. Branding.xcconfig** (legal and identity):
+**2. Branding.xcconfig** (app identity):
 ```bash
 cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig
-# Edit and set your privacy policy and terms of use URLs
+# Edit APP_DISPLAY_NAME if you want a custom name under the app icon
 ```
 
-You need hosted privacy policy and terms of use URLs. Generate them for free at [termsfeed.com](https://www.termsfeed.com/) and host on GitHub Pages, your own site, or any public URL. Both are required — the build will fail without them.
+Privacy policy and terms of use URLs are configured on the server (admin Settings page), not in the iOS build. Configure them after first login.
 
 ### Building
 

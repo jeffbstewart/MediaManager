@@ -46,7 +46,7 @@ For Watchtower config, health/metrics server, and Prometheus setup, see `docs/AD
 - **UI Framework:** Vaadin 25 via Vaadin-on-Kotlin (VoK) — server-side rendered, no JavaScript
 - **UI DSL:** Karibu-DSL for type-safe Kotlin Vaadin component building
 - **Server:** Embedded Jetty via vaadin-boot (started from `main()`, no app server deployment)
-- **gRPC:** Standalone Netty-based gRPC server on separate port (default 9090, `--grpc_port`). 9 services, 71 RPCs. Proto definitions in `proto/`. iOS app communicates via gRPC; web UI uses Vaadin.
+- **gRPC:** Standalone Netty-based gRPC server on separate port (default 9090, `--grpc_port`). 10 services, ~130 RPCs. Proto definitions in `proto/`. iOS app communicates via gRPC; web UI uses Vaadin.
 - **Database:** H2 in file mode (`./data/mediamanager.mv.db`)
 - **Connection Pool:** HikariCP
 - **Migrations:** Flyway — SQL files in `src/main/resources/db/migration/`, naming convention `V{NNN}__{description}.sql`

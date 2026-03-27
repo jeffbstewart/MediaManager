@@ -1155,11 +1155,23 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     }
 
     override suspend fun linkAmazonOrder(request: LinkAmazonOrderRequest): Empty {
+        val user = currentUser()
+        val order = net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Order not found"))
+        if (order.user_id != user.id) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("Not your order"))
+        }
         AmazonImportService.linkToMediaItem(request.amazonOrderId, request.mediaItemId)
         return empty {}
     }
 
     override suspend fun unlinkAmazonOrder(request: AmazonOrderIdRequest): Empty {
+        val user = currentUser()
+        val order = net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Order not found"))
+        if (order.user_id != user.id) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("Not your order"))
+        }
         AmazonImportService.unlinkFromMediaItem(request.amazonOrderId)
         return empty {}
     }
@@ -1245,6 +1257,12 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     override suspend fun addTitleToExpansion(request: AddTitleToExpansionRequest): AddTitleToExpansionResponse {
         val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        // Limit titles per expansion to prevent abuse
+        val existingCount = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .count { it.media_item_id == item.id!! }
+        if (existingCount >= 50) {
+            throw StatusException(Status.RESOURCE_EXHAUSTED.withDescription("Maximum 50 titles per multi-pack"))
+        }
         val mediaType = request.mediaType.toEntityMediaType()
         val tmdbKey = net.stewart.mediamanager.entity.TmdbId(request.tmdbId, mediaType)
         val tmdbService = net.stewart.mediamanager.service.TmdbService()
@@ -1504,6 +1522,9 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         if (request.name.isBlank()) {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("Name is required"))
         }
+        if (request.name.length > 100) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Name too long (max 100 characters)"))
+        }
         val existing = net.stewart.mediamanager.entity.FamilyMember.findAll()
             .any { it.name.equals(request.name, ignoreCase = true) }
         if (existing) {
@@ -1593,8 +1614,12 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     }
 
     override suspend fun addTuner(request: AddTunerRequest): TunerResponse {
-        if (request.ipAddress.isBlank()) {
+        val ip = request.ipAddress.trim()
+        if (ip.isBlank()) {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("IP address required"))
+        }
+        if (!Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$""").matches(ip)) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Invalid IPv4 address"))
         }
         val tuner = net.stewart.mediamanager.entity.LiveTvTuner(
             name = if (request.hasName()) request.name else "HDHomeRun",
