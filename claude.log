@@ -3993,3 +3993,28 @@ Session 2 (Mar 25):
 - Renamed "Request Download" → "Request Transcode for Download"
 - Verified end-to-end: download, offline playback, subtitles all working
 ===
+
+=== 2026-03-26 — Playback Position, Continue Watching, Offline Browse, Chapters ===
+- Resume Playing carousel: added resume_position, resume_duration,
+  resume_season/episode fields to Title proto; server populates from
+  PlaybackProgress; PosterCard shows progress bar + episode context
+- Chapter navigation: chapter list button in player opens half-sheet
+  with all chapters + timestamps, tap to seek; current chapter title
+  shown in overlay; auto-detected INTRO skip suppressed when chapters
+  available (user navigates via chapter list)
+- Compact player controls: CC/chapters/speed/AirPlay in tight HStack,
+  CC uses system icon, speed text-only; fixes portrait phone overlap
+- Offline browse: Library tab lists downloaded titles; TitleDetailView
+  loads from cached {seq}.detail.pb; seasons/episodes derived from
+  DownloadEntry metadata; full drill-down to playback
+- Image cache pinning: poster/backdrop/headshots for downloads pinned
+  in ImageDiskCache (never evicted); unified online/offline rendering
+  (removed separate offlineImage/offlineHeadshot code paths)
+- Offline playback position: tracks changes while offline, syncs to
+  server on reconnect via flushPendingProgress
+- Fixed offline chapters path ({seq}.chapters.json)
+- Fixed offline subtitles path ({seq}.subs.vtt)
+- Cleaned up debug logging (error→info/debug)
+- Removed dead ?quality=mobile from VideoStreamServlet
+- Removed legacy loadCachedImage method (replaced by pinned CachedImage)
+===

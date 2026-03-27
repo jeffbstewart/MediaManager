@@ -368,19 +368,9 @@ struct DownloadsView: View {
 
     @ViewBuilder
     private func posterImage(_ item: DownloadItem) -> some View {
-        // Try cached poster first (works offline), fall back to authenticated fetch
-        if let data = dataModel.downloads.loadCachedImage(for: item.titleId, name: "poster.jpg"),
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 44, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else {
-            CachedImage(ref: .posterThumbnail(titleId: item.titleId.protoValue), cornerRadius: 4, contentMode: .fill)
-                .frame(width: 44, height: 64)
-                .clipped()
-        }
+        CachedImage(ref: .posterThumbnail(titleId: item.titleId.protoValue), cornerRadius: 4, contentMode: .fill)
+            .frame(width: 44, height: 64)
+            .clipped()
     }
 
     private func storageRow(items: [DownloadItem]) -> some View {

@@ -30,7 +30,7 @@ final class DownloadManager {
 
     init() {
         self.isOfflineMode = UserDefaults.standard.bool(forKey: "offlineMode")
-        logger.error("DownloadManager initialized")
+        logger.info("DownloadManager initialized")
         Task {
             await reloadEntries()
             await store.cleanOrphans()
@@ -247,6 +247,14 @@ final class DownloadManager {
         return ApiTitleDetail(proto: proto)
     }
 
+    /// Returns the local chapters file URL for a downloaded transcode, if it exists.
+    func localChaptersURL(for transcodeId: TranscodeID) -> URL? {
+        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+              entry.hasChapters_p else { return nil }
+        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.chapters.json", entry.sequence))
+        return FileManager.default.fileExists(atPath: path.path) ? path : nil
+    }
+
     /// Returns the local subtitle file URL for a downloaded transcode, if it exists.
     func localSubtitleURL(for transcodeId: TranscodeID) -> URL? {
         guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
@@ -255,14 +263,7 @@ final class DownloadManager {
         return FileManager.default.fileExists(atPath: path.path) ? path : nil
     }
 
-    // MARK: - Offline Image Cache
 
-    func loadCachedImage(for titleId: TitleID, name: String) -> Data? {
-        let entry = entries.first { $0.titleID == titleId.protoValue && $0.hasPoster_p }
-        guard let entry else { return nil }
-        let path = store.downloadsDir.appendingPathComponent("posters/\(String(format: "%07d", entry.sequence)).jpg")
-        return try? Data(contentsOf: path)
-    }
 
     // MARK: - Private: Download Flow
 
@@ -273,7 +274,7 @@ final class DownloadManager {
     }
 
     private func performDownload(transcodeId: Int64, sequence: Int32) async {
-        logger.error("performDownload: transcodeId=\(transcodeId) seq=\(sequence)")
+        logger.info("performDownload: transcodeId=\(transcodeId) seq=\(sequence)")
         await store.updateEntry(transcodeId: transcodeId) { $0.state = .fetchingMetadata }
         await reloadEntries()
 
@@ -291,7 +292,7 @@ final class DownloadManager {
                 e.hasThumbnails_p = manifest.hasThumbnails_p
                 e.hasChapters_p = manifest.hasChapters_p
             }
-            logger.error("Manifest fetched: \(manifest.fileSizeBytes) bytes")
+            logger.info("Manifest fetched: \(manifest.fileSizeBytes) bytes")
         } catch {
             await markFailed(transcodeId: transcodeId, error: "Manifest failed: \(error.localizedDescription)")
             return
@@ -322,7 +323,7 @@ final class DownloadManager {
         await reloadEntries()
 
         let filePath = await store.videoPath(for: entry, downloading: true)
-        logger.error("Starting gRPC download: offset=\(resumeOffset) -> \(filePath.lastPathComponent)")
+        logger.info("Starting gRPC download: offset=\(resumeOffset) -> \(filePath.lastPathComponent)")
 
         let progress = DownloadProgress(initial: resumeOffset)
         do {
@@ -376,7 +377,7 @@ final class DownloadManager {
             }
             await reloadEntries()
             downloadTasks.removeValue(forKey: transcodeId)
-            logger.error("Download complete: \(finalBytes) bytes")
+            logger.info("Download complete: \(finalBytes) bytes")
 
             // Pin images so they survive cache eviction for offline browse
             await pinImagesForTitle(entry.titleID)
@@ -385,12 +386,12 @@ final class DownloadManager {
 
         } catch is CancellationError {
             // User-initiated pause — bytesDownloaded already saved periodically
-            logger.error("Download paused: transcodeId=\(transcodeId)")
+            logger.info("Download paused: transcodeId=\(transcodeId)")
             let saved = await progress.total
             await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = saved }
         } catch {
             let saved = await progress.total
-            logger.error("Saving progress before retry: \(saved) bytes")
+            logger.info("Saving progress before retry: \(saved) bytes")
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.bytesDownloaded = saved
                 e.retryCount += 1
@@ -399,7 +400,7 @@ final class DownloadManager {
             // Verify the save took
             let entry = await store.entry(for: transcodeId)
             let retries = entry?.retryCount ?? 0
-            logger.error("Verified saved: bytesDownloaded=\(entry?.bytesDownloaded ?? -1) retries=\(retries)")
+            logger.debug("Verified saved: bytesDownloaded=\(entry?.bytesDownloaded ?? -1) retries=\(retries)")
 
             if retries > 50 {
                 // Too many retries — give up
@@ -407,7 +408,7 @@ final class DownloadManager {
                 await markFailed(transcodeId: transcodeId, error: "Failed after \(retries) retries")
             } else {
                 // Auto-retry with backoff — connection drops are expected through HAProxy
-                logger.error("Download interrupted (retry \(retries)): \(String(describing: error))")
+                logger.info("Download interrupted (retry \(retries)): \(String(describing: error))")
                 try? await Task.sleep(for: .seconds(2))
                 if !Task.isCancelled {
                     await performDownload(transcodeId: transcodeId, sequence: sequence)

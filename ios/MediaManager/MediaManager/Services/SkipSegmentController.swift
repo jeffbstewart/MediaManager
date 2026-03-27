@@ -43,10 +43,10 @@ final class SkipSegmentController {
     private var hasSkippedIntro = false
     private var hasTriggeredUpNext = false
 
-    func load(transcodeId: Int, grpcClient: GrpcClient, localDir: URL? = nil) async {
-        // Try local file first
-        if let localDir {
-            let localFile = localDir.appendingPathComponent("chapters.json")
+    func load(transcodeId: Int, grpcClient: GrpcClient, localDir: URL? = nil, localChaptersFile: URL? = nil) async {
+        // Try local file first (specific path or legacy chapters.json)
+        let candidates = [localChaptersFile, localDir?.appendingPathComponent("chapters.json")].compactMap { $0 }
+        for localFile in candidates {
             if let data = try? Data(contentsOf: localFile),
                let response = try? JSONDecoder().decode(ChaptersResponse.self, from: data) {
                 chapters = response.chapters.sorted { $0.number < $1.number }

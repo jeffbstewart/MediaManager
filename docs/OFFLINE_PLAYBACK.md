@@ -1,217 +1,130 @@
 # Offline Playback Architecture
 
-Design document for downloading media and playing it back from the local filesystem on iOS.
+How downloading and offline playback works on iOS.
 
 ## Storage Layout
 
-Downloaded media lives in `Library/Application Support/Downloads/{titleId}/` with `isExcludedFromBackup = true` on each file.
+All downloads live in `Library/Application Support/Downloads/` with `isExcludedFromBackup = true`. Files use sequential 7-digit names, not title-based paths.
 
 ```
 Library/Application Support/Downloads/
-  {titleId}/
-    video.mp4          — pre-transcoded ForBrowser MP4 (H.264 + AAC)
-    metadata.json      — title name, transcode ID, duration, chapters, subtitle paths
-    poster.jpg         — cached poster for offline display
-    subtitles.vtt      — WebVTT subtitles (if available)
+├── downloads.meta.db              — protobuf metadata (primary)
+├── downloads.meta.db.backup       — previous version (crash recovery)
+├── 0000001.mp4                    — completed download (ForMobile transcode)
+├── 0000001.subs.vtt               — WebVTT subtitles
+├── 0000001.chapters.json          — chapters + skip segments
+├── 0000001.detail.pb              — cached TitleDetail protobuf (offline browse)
+├── 0000002.mp4.downloading        — in-progress download (renamed on completion)
+├── 0000003.mp4                    — another completed download
+├── posters/
+│   ├── 0000001.jpg                — cached poster for offline display
+│   └── 0000003.jpg
 ```
+
+### Why sequential filenames?
+
+- No path encoding issues from title names with special characters
+- Simple collision-free allocation via `next_sequence` counter
+- `.downloading` suffix for Chrome-style staging (atomic rename on completion)
+- `.mp4` extension for AVPlayer compatibility and OS thumbnail generation
 
 ### Why Application Support?
 
-| Location | Backed Up | Purged by iOS | Visible in Files | Use |
-|----------|-----------|---------------|------------------|-----|
-| `Documents/` | Yes | No | Yes | User-visible files only |
-| `Library/Application Support/` | Yes (opt-out per file) | No | No | App-managed persistent data |
-| `Library/Caches/` | No | **Yes** | No | Re-downloadable content |
-| `tmp/` | No | **Aggressively** | No | Truly temporary |
+Persists across app launches (unlike `Caches/` which iOS purges under storage pressure), doesn't show in Files app, and `isExcludedFromBackup` prevents iCloud backup of multi-GB video files.
 
-`Library/Application Support/` persists across app launches (unlike Caches, which iOS purges under storage pressure), doesn't show in the Files app (unlike Documents), and counts toward "Documents & Data" in Settings so users can see storage usage. Setting `isExcludedFromBackup = true` prevents multi-GB video files from bloating iCloud backups.
+## Metadata: `downloads.meta.db`
 
-### Storage Space Check
+Protobuf-encoded `DownloadDatabase` containing all download state (defined in `proto/download_meta.proto`). Single file, not per-download.
 
-Before starting a download, check available space:
+### Atomic Write Protocol
 
-```swift
-let url = URL(fileURLWithPath: NSHomeDirectory())
-let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-let availableBytes = values.volumeAvailableCapacityForImportantUsage ?? 0
-```
+1. If both `.db` and `.backup` exist, delete `.backup`
+2. If `.db` exists, rename `.db` → `.backup`
+3. Write new `.db`
+
+On startup: try `.db` → `.backup` → wipe directory and start fresh.
+
+### Orphan Cleanup
+
+On startup, `DownloadStore.cleanOrphans()`:
+- Deletes files not referenced by any metadata entry
+- Reconciles `bytesDownloaded` against actual `.downloading` file size on disk
+- Marks completed entries as failed if their `.mp4` file is missing
 
 ## Download Engine
 
-Use `URLSession` with a **background configuration** (`URLSessionConfiguration.background(withIdentifier:)`). This allows downloads to continue when the app is suspended or even terminated — the system wakes the app when downloads complete.
+Downloads use **gRPC server-streaming** via `DownloadService.DownloadFile`. The server streams ~1MB chunks from the ForMobile transcode file. HTTP/2 flow control (4MB window) handles backpressure.
 
-The existing HTTP endpoint `/stream/{transcodeId}` supports `Accept-Ranges` and `Content-Length` headers, enabling:
+### Flow
 
-- **Progress tracking** via `URLSessionDownloadDelegate`
-- **Resume** via `cancelByProducingResumeData` / `downloadTask(withResumeData:)`
-- **Background completion** via `application(_:handleEventsForBackgroundURLSession:completionHandler:)` in AppDelegate
+1. User taps Download → `DownloadManager.startDownload()` → entry created as `QUEUED`
+2. `startNextQueued()` picks up to 3 entries (concurrency limit)
+3. `performDownload()`:
+   - Fetches manifest via `GetManifest` gRPC (file size, aux file flags)
+   - Checks disk space (requires 500MB buffer)
+   - Downloads supporting files (subtitles, chapters, poster, title detail)
+   - Opens `DownloadFile` gRPC stream with `offset = bytesDownloaded`
+   - Writes each chunk to `{seq}.mp4.downloading` via `FileHandle`
+   - Persists progress every 10 chunks (first chunk always persisted)
+   - Flushes `FileHandle` before persisting metadata
+4. On completion: rename `.downloading` → `.mp4`, pin images in cache
+5. On error: auto-retry with 2-second backoff (up to 50 retries)
 
-### Download State Machine
+### Resume
 
-```
-idle → queued → downloading(progress) → complete
-                     ↓
-                   paused → downloading(progress)
-                     ↓
-                  cancelled
-                     ↓
-                   error → queued (retry)
-```
+The client tracks `bytesDownloaded` in the protobuf entry. On resume (manual or auto-retry), it opens a new `DownloadFile` RPC with `offset = bytesDownloaded`. The server seeks to that position and streams from there. The client appends to the existing `.downloading` file.
 
-Track state with `@Published` properties for SwiftUI observation. Persist download state across app launches so interrupted downloads can resume.
+### HAProxy Connection Drops
+
+The gRPC download stream is interrupted by HAProxy every ~30-45 seconds. The auto-retry mechanism handles this transparently — the download progresses in bursts, resuming from the last saved offset each time.
 
 ## Video Player
 
-**AVPlayer via AVPlayerViewController** — the same player component for both streaming and local playback. The only difference is the URL:
+**AVPlayer via CustomPlayerView** — same player for streaming and local playback. The `OnlineDataModel.streamAsset()` returns a local file URL when a download exists, or a remote HTTP URL for streaming.
 
-```swift
-// Streaming
-let url = URL(string: "https://server/stream/\(transcodeId)")!
+### Subtitles
 
-// Local (downloaded)
-let url = downloadDir.appendingPathComponent("video.mp4")
-```
+Downloaded as `{seq}.subs.vtt`. The `SubtitleController` checks the local file first (via `localSubtitleFile` parameter), then falls back to the server endpoint.
 
-ForBrowser transcodes are MP4 with H.264 video + AAC audio, which AVPlayer handles natively. No VLC, FFmpeg, or third-party codec dependencies needed.
+### Chapters
 
-### Background Audio
+Downloaded as `{seq}.chapters.json` (JSON-encoded `ChaptersResponse`). The `SkipSegmentController` loads from the local file (via `localChaptersFile` parameter), then falls back to gRPC `GetChapters`. Chapter navigation available via list button in player controls.
 
-Three requirements (already partially configured):
+### Skip Segments
 
-1. **Info.plist**: "Audio, AirPlay and Picture in Picture" background mode (already enabled)
-2. **Audio session**: `.playback` category with `.moviePlayback` mode (already configured in `MediaManagerApp.init()`)
-3. **On background**: Detach the player from its view layer so only audio continues
-
-### Picture-in-Picture
-
-`AVPlayerViewController` supports PiP natively with `allowsPictureInPicturePlayback = true`.
-
-**PiP vs. background audio gotcha**: Both lock screen and PiP trigger `sceneDidEnterBackground`. If PiP is active, do NOT detach the player from the view (PiP needs the video layer). If PiP is NOT active (user locked screen or switched apps without PiP), detach for audio-only background. Detect PiP state via `AVPictureInPictureControllerDelegate`.
-
-## Subtitles
-
-AVPlayer has no native SRT support. Two approaches:
-
-### Option A: Local HLS Manifest (Recommended)
-
-Download the subtitle file as WebVTT alongside the video. Generate a local `.m3u8` manifest that references both:
-
-```m3u8
-#EXTM3U
-#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="subtitles.vtt"
-#EXT-X-STREAM-INF:SUBTITLES="subs"
-video.mp4
-```
-
-AVPlayer plays this natively with subtitle selection in the transport controls.
-
-### Option B: SRT Parser + Overlay
-
-Parse SRT files and overlay text using a timer synced to `player.currentTime()`. More work, but avoids generating manifest files.
-
-## Chapter Markers
-
-Download chapter data in `metadata.json` and apply via `AVPlayerItem.navigationMarkerGroups`:
-
-```swift
-let chapters: [AVTimedMetadataGroup] = chapterData.map { chapter in
-    let titleItem = AVMutableMetadataItem()
-    titleItem.identifier = .commonIdentifierTitle
-    titleItem.value = chapter.title as NSString
-    titleItem.extendedLanguageTag = "und"
-    let timeRange = CMTimeRange(start: chapter.startTime, duration: chapter.duration)
-    return AVTimedMetadataGroup(items: [titleItem], timeRange: timeRange)
-}
-playerItem.navigationMarkerGroups = [AVNavigationMarkersGroup(title: nil, timedNavigationMarkers: chapters)]
-```
-
-AVPlayerViewController displays these as a chapter list in its transport controls.
+Auto-detected INTRO skip segments (created from Chapter 1 when < 5 minutes) are suppressed when chapter navigation is available — the user navigates via the chapter list instead.
 
 ## Playback Position Tracking
 
-### Local Storage
+### Online
 
-A `PlaybackProgress` record per downloaded item:
+Player reports position every 10 seconds via `PlaybackService.ReportProgress` gRPC. On re-open, player seeks to saved position from `GetProgress`.
 
-```
-transcodeId: Int64
-position: Double        — seconds from start
-duration: Double        — total duration
-updatedAt: Date
-synced: Bool            — has this been sent to the server?
-```
+### Offline
 
-Save position:
-- Every 10 seconds during playback (via `addPeriodicTimeObserver`)
-- On pause
-- On app backgrounding
-- On playback end
+Position stored in `DownloadEntry.playback_position` with `positionSynced = false`. When connectivity returns, `DownloadManager.flushPendingProgress()` batch-syncs all unsynced positions to the server.
 
-### Sync to Server
+### Auto-Clear
 
-When network connectivity returns, batch-sync unsynced records to the server via the existing `PlaybackService.ReportProgress` gRPC RPC.
+Server auto-clears progress at ≥95% watched or ≤120 seconds remaining. Sets VIEWED flag at >25% watched.
 
-```swift
-let monitor = NWPathMonitor()
-monitor.pathUpdateHandler = { path in
-    if path.status == .satisfied {
-        syncPendingPlaybackPositions()
-    }
-}
-monitor.start(queue: .global())
-```
+## Offline Browse
 
-The server uses **last-write-wins**: if another device reported a newer position, the server keeps the newer one. Synced records are marked `synced = true` or deleted.
+When offline, the sidebar shows:
+- **Library** — lists downloaded titles with poster, episode count, quality
+- **Downloads** — download management (active, queued, completed)
 
-## Download Management UI
+Tapping a title in Library navigates to `TitleDetailView` which loads from cached `{seq}.detail.pb` (protobuf `TitleDetail`). For TV shows, seasons and episodes are derived from `DownloadEntry` metadata.
 
-Users need to see and manage their downloads:
+### Image Cache Pinning
 
-- **Total storage used** (sum of all downloaded files)
-- **Per-item storage** (file size)
-- **Delete individual downloads** (swipe-to-delete)
-- **Delete all downloads** (settings action)
-- **Download progress** (progress bar, pause/resume/cancel)
-- **Storage warning** when device is low on space
+Images (poster, backdrop, cast headshots) for downloaded titles are pinned in `ImageDiskCache` — they are never evicted by LRU, ensuring offline display works. Pins are removed when all downloads for a title are deleted.
 
-This is critical for App Store acceptance and user trust — Netflix, Disney+, Plex, and Jellyfin all provide this.
+## Continue Watching
 
-## Metadata for Offline Browse
+The Home feed "Resume Playing" carousel shows:
+- Progress bar overlay on poster (blue, proportional to watch position)
+- Episode context for TV: "S1E5 · Episode Name" below title
+- Dismiss button (X) to clear progress
 
-When offline, the app needs enough metadata to display the download list without server access:
-
-```json
-{
-  "titleId": 42,
-  "transcodeId": 17,
-  "titleName": "The Matrix",
-  "mediaType": "MOVIE",
-  "year": 1999,
-  "duration": 8160.0,
-  "contentRating": "R",
-  "quality": "FHD",
-  "chapters": [
-    {"title": "Opening", "startSeconds": 0},
-    {"title": "The Red Pill", "startSeconds": 1842}
-  ],
-  "subtitleFile": "subtitles.vtt",
-  "downloadedAt": "2026-03-24T20:00:00Z",
-  "fileSize": 4294967296
-}
-```
-
-The poster image is cached alongside the video so it displays without network.
-
-## What's NOT Changing
-
-- **Streaming playback** continues to work via HTTP `/stream/{transcodeId}` — no changes needed
-- **Server-side transcoding** is unchanged — ForBrowser MP4 files are already the right format
-- **The web UI** is unaffected — downloads are iOS-only
-- **gRPC PlaybackService** is unchanged — the same `ReportProgress` RPC handles both streaming and offline position reports
-
-## Open Questions
-
-- **TV episodes**: Download individual episodes or entire seasons? Probably individual episodes with a "Download Season" batch action.
-- **Low-storage transcodes**: Should ForMobile (smaller) transcodes be preferred for downloads? Could save significant space.
-- **Auto-cleanup**: Should completed-and-watched downloads be auto-deleted after some period? Or always manual?
-- **Concurrent downloads**: How many simultaneous downloads? Plex limits to 1-3. More than 3 tends to saturate bandwidth and slow everything down.
+Server populates `resume_position`, `resume_duration`, and `resume_season_number`/`resume_episode_number`/`resume_episode_name` fields on `Title` proto for carousel items.
