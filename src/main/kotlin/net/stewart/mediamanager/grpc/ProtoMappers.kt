@@ -419,7 +419,13 @@ private val SETTING_KEY_TO_CONFIG = mapOf(
     SettingKey.SETTING_KEY_KEEPA_TOKENS_PER_MINUTE to "keepa_tokens_per_minute",
     SettingKey.SETTING_KEY_LIVE_TV_MIN_RATING to "live_tv_min_rating",
     SettingKey.SETTING_KEY_LIVE_TV_MAX_STREAMS to "live_tv_max_streams",
-    SettingKey.SETTING_KEY_LIVE_TV_IDLE_TIMEOUT_SECONDS to "live_tv_idle_timeout_seconds"
+    SettingKey.SETTING_KEY_LIVE_TV_IDLE_TIMEOUT_SECONDS to "live_tv_idle_timeout_seconds",
+    SettingKey.SETTING_KEY_PRIVACY_POLICY_URL to "privacy_policy_url",
+    SettingKey.SETTING_KEY_PRIVACY_POLICY_VERSION to "privacy_policy_version",
+    SettingKey.SETTING_KEY_IOS_TERMS_OF_USE_URL to "ios_terms_of_use_url",
+    SettingKey.SETTING_KEY_IOS_TERMS_OF_USE_VERSION to "ios_terms_of_use_version",
+    SettingKey.SETTING_KEY_WEB_TERMS_OF_USE_URL to "web_terms_of_use_url",
+    SettingKey.SETTING_KEY_WEB_TERMS_OF_USE_VERSION to "web_terms_of_use_version"
 )
 
 private val CONFIG_TO_SETTING_KEY = SETTING_KEY_TO_CONFIG.entries.associate { (k, v) -> v to k }

@@ -1018,6 +1018,14 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             ).save()
         }
 
+        // Refresh legal requirements cache if a legal setting was changed
+        val legalKeys = setOf("privacy_policy_url", "privacy_policy_version",
+            "ios_terms_of_use_url", "ios_terms_of_use_version",
+            "web_terms_of_use_url", "web_terms_of_use_version")
+        if (configKey in legalKeys) {
+            net.stewart.mediamanager.service.LegalRequirements.refresh()
+        }
+
         return empty {}
     }
 

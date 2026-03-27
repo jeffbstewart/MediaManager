@@ -76,6 +76,16 @@ class AuthInterceptor : ServerInterceptor {
             return noop()
         }
 
+        // Legal compliance: block if user hasn't agreed to current terms
+        // (admins are exempt — they need access to configure the URLs)
+        if (!net.stewart.mediamanager.service.LegalRequirements.isCompliant(user.id!!, user.isAdmin()) && !isGateExempt(method)) {
+            call.close(
+                Status.PERMISSION_DENIED.withDescription("legal_agreement_required"),
+                Metadata()
+            )
+            return noop()
+        }
+
         // Category 3 (gated): block if must_change_password, unless gate-exempt
         if (user.must_change_password && !isGateExempt(method)) {
             call.close(

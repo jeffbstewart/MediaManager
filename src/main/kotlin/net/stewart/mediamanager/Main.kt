@@ -9,6 +9,7 @@ import net.stewart.mediamanager.service.DatabaseBackupService
 import net.stewart.mediamanager.service.ForBrowserValidator
 import net.stewart.mediamanager.service.ForMobileService
 import net.stewart.mediamanager.service.NasScannerService
+import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
 import net.stewart.mediamanager.service.JwtService
@@ -56,6 +57,7 @@ fun main(args: Array<String>) {
     CommandLineFlags.parseFlags(args)
 
     Bootstrap.init()
+    LegalRequirements.refresh()
     MetricsRegistry.registerEntityGauges()
 
     val lookupAgent = UpcLookupAgent()

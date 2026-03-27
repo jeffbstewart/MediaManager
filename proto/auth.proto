@@ -6,6 +6,8 @@ option java_package = "net.stewart.mediamanager.grpc";
 option java_multiple_files = true;
 option swift_prefix = "MM";
 
+import "info.proto";
+
 // Authentication service.
 // This is the only service accessible without a valid session token.
 // All other services require a Bearer token obtained from Login or Refresh.
@@ -33,10 +35,13 @@ message LoginRequest {
   string password = 2;
   optional string device_name = 3;  // e.g. "Jeff's iPad"
 
+  // Client platform — determines which terms of use to enforce.
+  ClientPlatform platform = 4;
+
   // Legal agreement versions accepted by the user at login time.
   // Server records these on the user record with the current timestamp.
-  optional int32 privacy_policy_version = 4;
-  optional int32 terms_of_use_version = 5;
+  optional int32 privacy_policy_version = 5;
+  optional int32 terms_of_use_version = 6;
 }
 
 message TokenResponse {

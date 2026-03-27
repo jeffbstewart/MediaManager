@@ -7,11 +7,12 @@ option java_multiple_files = true;
 option swift_prefix = "MM";
 
 import "common.proto";
+import "time.proto";
 
 // Server discovery and info.
 service InfoService {
   // Unauthenticated — used for initial client bootstrap.
-  rpc Discover(Empty) returns (DiscoverResponse);
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
 
   // Authenticated — server capabilities + current user info.
   rpc GetInfo(Empty) returns (InfoResponse);
@@ -20,6 +21,12 @@ service InfoService {
 enum AuthMethod {
   AUTH_METHOD_UNKNOWN = 0;
   AUTH_METHOD_JWT = 1;
+}
+
+enum ClientPlatform {
+  CLIENT_PLATFORM_UNKNOWN = 0;
+  CLIENT_PLATFORM_IOS = 1;
+  CLIENT_PLATFORM_WEB = 2;
 }
 
 // Server capabilities advertised after authentication.
@@ -33,11 +40,26 @@ enum Capability {
   CAPABILITY_DOWNLOADS = 5;
 }
 
+message DiscoverRequest {
+  ClientPlatform platform = 1;
+}
+
 message DiscoverResponse {
   repeated int32 api_versions = 1;
   repeated AuthMethod auth_methods = 2;
   string server_fingerprint = 3;
   optional string secure_url = 4;
+  optional LegalDocumentInfo legal = 5;
+}
+
+// Legal document URLs and versions served by the server.
+// The terms_of_use fields are platform-specific — the server
+// returns the appropriate URLs based on DiscoverRequest.platform.
+message LegalDocumentInfo {
+  optional string privacy_policy_url = 1;
+  optional int32 privacy_policy_version = 2;
+  optional string terms_of_use_url = 3;
+  optional int32 terms_of_use_version = 4;
 }
 
 message ServerUserInfo {

@@ -22,7 +22,7 @@ class AuthInterceptorTest : GrpcTestBase() {
     @Test
     fun `Discover works without authentication`() = runBlocking {
         val stub = InfoServiceGrpcKt.InfoServiceCoroutineStub(channel)
-        val response = stub.discover(Empty.getDefaultInstance())
+        val response = stub.discover(DiscoverRequest.getDefaultInstance())
         assertTrue(response.apiVersionsList.isNotEmpty())
         assertEquals(AuthMethod.AUTH_METHOD_JWT, response.authMethodsList.first())
         assertTrue(response.serverFingerprint.isNotBlank())

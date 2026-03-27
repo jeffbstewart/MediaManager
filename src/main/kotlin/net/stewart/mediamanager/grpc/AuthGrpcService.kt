@@ -45,6 +45,12 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
                         user.save()
                     }
                 }
+                // Update legal compliance cache
+                net.stewart.mediamanager.service.LegalRequirements.recordAgreement(
+                    result.user.id!!,
+                    result.user.privacy_policy_version,
+                    result.user.terms_of_use_version
+                )
 
                 val deviceName = if (request.hasDeviceName()) request.deviceName else ""
                 val pair = JwtService.createTokenPair(result.user, deviceName)
