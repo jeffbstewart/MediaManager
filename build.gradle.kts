@@ -47,15 +47,11 @@ dependencies {
     implementation(libs.zxing.javase)
     implementation(project(":transcode-common"))
 
-    // Jetty HTTP/2 cleartext (h2c) for gRPC native transport
-    implementation(libs.jetty.http2.server)
-
-    // gRPC + Protobuf
+    // gRPC + Protobuf (Armeria provides the HTTP/2 transport)
     implementation(libs.grpc.stub)
     implementation(libs.grpc.kotlin.stub)
     implementation(libs.grpc.protobuf)
-    implementation(libs.grpc.servlet.jakarta)
-    implementation(libs.grpc.netty.shaded)
+    implementation(libs.armeria.grpc)
     implementation(libs.protobuf.kotlin)
     implementation(libs.kotlinx.coroutines.core)
 

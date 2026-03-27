@@ -4,8 +4,9 @@ vok = "0.18.1"
 kotlin = "2.3.10"
 slf4j = "2.0.17"
 micrometer = "1.14.4"
-grpc = "1.70.0"
+grpc = "1.78.0"
 protobuf = "4.29.3"
+armeria = "1.37.0"
 
 [libraries]
 vaadin-core = { module = "com.vaadin:vaadin-core", version.ref = "vaadin" }
@@ -31,6 +32,7 @@ grpc-kotlin-stub = "io.grpc:grpc-kotlin-stub:1.4.1"
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-servlet-jakarta = { module = "io.grpc:grpc-servlet-jakarta", version.ref = "grpc" }
 grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
+armeria-grpc = { module = "com.linecorp.armeria:armeria-grpc", version.ref = "armeria" }
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
 grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
 grpc-testing = { module = "io.grpc:grpc-testing", version.ref = "grpc" }

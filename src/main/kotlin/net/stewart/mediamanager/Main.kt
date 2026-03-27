@@ -153,9 +153,9 @@ fun main(args: Array<String>) {
     val internalServer = startInternalServer(CommandLineFlags.internalPort)
     Runtime.getRuntime().addShutdownHook(Thread { internalServer.stop() })
 
-    // Standalone gRPC server on its own port (native HTTP/2, no servlet container)
-    net.stewart.mediamanager.grpc.GrpcServer.start(CommandLineFlags.grpcPort)
-    Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.GrpcServer.stop() })
+    // Armeria gRPC server on its own port (native HTTP/2, will later also serve HTTP)
+    net.stewart.mediamanager.grpc.ArmeriaServer.start(CommandLineFlags.grpcPort)
+    Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.ArmeriaServer.stop() })
 
     // SSDP responder for Roku device discovery
     val ssdpResponder = SsdpResponder(CommandLineFlags.port)
