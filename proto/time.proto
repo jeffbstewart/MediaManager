@@ -42,3 +42,8 @@ message Timestamp {
 message PlaybackOffset {
   double seconds = 1;
 }
+
+// A length of time. Used for configuration intervals, timeouts, and grace periods.
+message Duration {
+  int64 nanos = 1;
+}

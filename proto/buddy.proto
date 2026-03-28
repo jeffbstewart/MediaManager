@@ -1,0 +1,279 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+
+import "common.proto";
+import "time.proto";
+
+// ============================================================================
+// Transcode Buddy Service
+//
+// Distributed work system for media transcoding. Buddies connect via a
+// long-lived bidirectional stream, receive work assignments, and report
+// progress. The server monitors buddy health and reclaims work from
+// unresponsive buddies.
+//
+// Lifecycle:
+//   1. Buddy opens WorkStream, sends Connect (with API key)
+//   2. Server validates key, replies with Connected (config + resumable leases)
+//   3. Buddy sends RequestWork when ready
+//   4. Server replies with WorkAssignment or NoWork
+//   5. Buddy sends Progress/Complete/Failure as work proceeds
+//   6. Buddy sends Heartbeat at regular intervals (server-specified)
+//   7. If no buddy message within idle_timeout, server closes the stream
+//   8. After disconnect, leases expire after reconnect_grace unless the
+//      buddy reconnects and sends a new Connect
+//
+// Auth: API key in the Connect message (first message on the stream).
+// For unary RPCs, API key sent as "x-buddy-key" gRPC metadata header.
+// ============================================================================
+service BuddyService {
+  // Core work loop — bidirectional streaming.
+  rpc WorkStream(stream BuddyMessage) returns (stream ServerMessage);
+
+  // Check which transcode IDs from a list still have pending work.
+  // Used by buddies to prune local file caches.
+  rpc CheckPending(CheckPendingRequest) returns (CheckPendingResponse);
+
+  // Clear all FAILED/EXPIRED leases (reset poison pills).
+  rpc ClearFailures(BuddyClearFailuresRequest) returns (BuddyClearFailuresResponse);
+
+  // Reclassify a transcode's media format (moves file on disk, clears leases).
+  rpc Reclassify(ReclassifyRequest) returns (ReclassifyResponse);
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum BuddyLeaseType {
+  BUDDY_LEASE_TYPE_UNKNOWN = 0;
+  BUDDY_LEASE_TYPE_TRANSCODE = 1;              // ForBrowser MP4 from source
+  BUDDY_LEASE_TYPE_THUMBNAILS = 2;             // Sprite sheet from source
+  BUDDY_LEASE_TYPE_SUBTITLES = 3;              // Whisper speech-to-text
+  BUDDY_LEASE_TYPE_CHAPTERS = 4;               // Chapter extraction from MP4
+  BUDDY_LEASE_TYPE_LOW_STORAGE_TRANSCODE = 5;  // Re-encoded 1080p variant
+}
+
+enum ProbeStreamType {
+  PROBE_STREAM_TYPE_UNKNOWN = 0;
+  PROBE_STREAM_TYPE_VIDEO = 1;
+  PROBE_STREAM_TYPE_AUDIO = 2;
+  PROBE_STREAM_TYPE_SUBTITLE = 3;
+  PROBE_STREAM_TYPE_DATA = 4;       // ffprobe "data" streams (timecodes, etc.)
+}
+
+enum BuddyErrorCode {
+  BUDDY_ERROR_CODE_UNKNOWN = 0;
+  BUDDY_ERROR_CODE_AUTH_FAILED = 1;
+  BUDDY_ERROR_CODE_NOT_CONNECTED = 2;    // Message sent before Connect
+  BUDDY_ERROR_CODE_INVALID_LEASE = 3;    // Lease ID not found or not active
+  BUDDY_ERROR_CODE_BUNDLE_LIMIT = 4;     // Buddy at max concurrent bundles
+}
+
+// ============================================================================
+// Bidirectional stream envelopes
+// ============================================================================
+
+// Buddy → Server
+message BuddyMessage {
+  oneof message {
+    Connect connect = 1;
+    RequestWork request_work = 2;
+    ReportProgress report_progress = 3;
+    ReportComplete report_complete = 4;
+    ReportFailure report_failure = 5;
+    Heartbeat heartbeat = 6;
+  }
+}
+
+// Server → Buddy
+message ServerMessage {
+  oneof message {
+    Connected connected = 1;
+    WorkAssignment work_assignment = 2;
+    NoWork no_work = 3;
+    LeaseExpiring lease_expiring = 4;
+    ServerError error = 5;
+  }
+}
+
+// ============================================================================
+// Buddy → Server messages
+// ============================================================================
+
+// First message on the stream. Must be sent before any other message.
+// On reconnect, send Connect again with the same buddy_name; the server
+// restores active leases if they haven't expired.
+message Connect {
+  string api_key = 1;
+  string buddy_name = 2;
+  repeated BuddyLeaseType skip_types = 3;
+  repeated int64 cached_transcode_ids = 4;
+}
+
+// Request a new work bundle. Server responds with WorkAssignment or NoWork.
+message RequestWork {
+  // Updated cache list. If empty, server uses the list from Connect.
+  repeated int64 cached_transcode_ids = 1;
+}
+
+// Progress update on a lease. Implicitly renews the lease.
+message ReportProgress {
+  int64 lease_id = 1;
+  int32 percent = 2;       // 0–100
+  string encoder = 3;      // FFmpeg encoder name (e.g., "libx265")
+}
+
+// Work completed successfully.
+message ReportComplete {
+  int64 lease_id = 1;
+  string encoder = 2;
+
+  // For CHAPTERS: extracted chapter metadata
+  repeated ChapterData chapters = 3;
+
+  // For TRANSCODE/LOW_STORAGE_TRANSCODE: probe results from output file
+  ProbeData probe = 4;
+}
+
+// Work failed.
+message ReportFailure {
+  int64 lease_id = 1;
+  string error_message = 2;
+}
+
+// Keep-alive. Implicitly renews all active leases for this buddy.
+// Must be sent at least once per idle_timeout to prevent disconnect.
+message Heartbeat {}
+
+// ============================================================================
+// Server → Buddy messages
+// ============================================================================
+
+// Sent after successful Connect authentication.
+message Connected {
+  string server_version = 1;
+
+  // Timing configuration
+  Duration heartbeat_interval = 2;   // Recommended buddy heartbeat interval
+  Duration idle_timeout = 3;         // Server disconnects after this without a message
+  Duration reconnect_grace = 4;      // Leases survive this long after disconnect
+
+  // Active leases from a previous session, if reconnecting within the
+  // grace period. Buddy can resume work without re-requesting.
+  repeated ResumableLease resumable_leases = 5;
+
+  // Current server workload snapshot
+  int32 pending_count = 6;
+}
+
+message ResumableLease {
+  int64 lease_id = 1;
+  int64 transcode_id = 2;
+  BuddyLeaseType lease_type = 3;
+  string relative_path = 4;
+  int64 file_size_bytes = 5;
+  int32 progress_percent = 6;
+}
+
+// A bundle of work: all outstanding work types for one source file.
+message WorkAssignment {
+  int64 transcode_id = 1;
+  string relative_path = 2;
+  int64 file_size_bytes = 3;
+  repeated WorkLease leases = 4;
+}
+
+message WorkLease {
+  int64 lease_id = 1;
+  BuddyLeaseType lease_type = 2;
+}
+
+// No work available. Buddy should wait before sending another RequestWork.
+message NoWork {
+  Duration retry_after = 1;
+  int32 pending_count = 2;
+}
+
+// A lease is being reclaimed (admin action, timeout, or server shutdown).
+// Buddy should stop work on this lease.
+message LeaseExpiring {
+  int64 lease_id = 1;
+  string reason = 2;
+}
+
+// Error response to a buddy message.
+message ServerError {
+  BuddyErrorCode code = 1;
+  string message = 2;
+}
+
+// ============================================================================
+// Data types for ReportComplete
+// ============================================================================
+
+message ChapterData {
+  int32 number = 1;
+  PlaybackOffset start = 2;
+  PlaybackOffset end = 3;
+  string title = 4;
+}
+
+message ProbeData {
+  PlaybackOffset duration = 1;
+  int64 file_size_bytes = 2;
+  repeated ProbeStream streams = 3;
+  string raw_output = 4;
+}
+
+message ProbeStream {
+  int32 index = 1;
+  ProbeStreamType type = 2;
+  string codec = 3;
+  int32 width = 4;
+  int32 height = 5;
+  int32 sar_num = 6;
+  int32 sar_den = 7;
+  double fps = 8;
+  int32 channels = 9;
+  string channel_layout = 10;
+  int32 sample_rate = 11;
+  int32 bitrate_kbps = 12;
+  string raw_line = 13;
+}
+
+// ============================================================================
+// Unary RPC messages
+// ============================================================================
+
+message CheckPendingRequest {
+  repeated int64 transcode_ids = 1;
+}
+
+message CheckPendingResponse {
+  repeated int64 pending_ids = 1;
+}
+
+message BuddyClearFailuresRequest {}
+
+message BuddyClearFailuresResponse {
+  int32 cleared = 1;
+}
+
+message ReclassifyRequest {
+  int64 transcode_id = 1;
+  MediaFormat target_format = 2;
+}
+
+message ReclassifyResponse {
+  string old_path = 1;
+  string new_path = 2;
+  MediaFormat old_format = 3;
+  MediaFormat new_format = 4;
+  bool forbrowser_deleted = 5;
+  int32 leases_cleared = 6;
+}
