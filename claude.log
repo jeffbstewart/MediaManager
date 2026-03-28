@@ -4035,3 +4035,37 @@ Session 2 (Mar 25):
   legal name; LLC needed to publish under business name
 - Decision deferred on branding, LLC, and distribution timeline
 ===
+
+=== 2026-03-27 16:00 — Armeria migration: single-port architecture ===
+- Pulled 30+ commits from GitHub (iOS features, legal docs, security fixes)
+- Researched gRPC-from-browser landscape: gRPC-Web, Connect protocol,
+  browser limitations (no HTTP/2 trailers, no bidi streaming)
+- Decided: web SPA will use JSON REST (not gRPC-Web), Angular 19 + Material
+- Decided: Armeria replaces both Netty gRPC and Jetty for single-port serving
+- Created docs/ANGULAR_MIGRATION.md with full 5-phase migration plan
+- Phase 0 complete: replaced standalone Netty gRPC with Armeria 1.37.0
+  - Bumped grpc-java 1.70.0 → 1.78.0 (Armeria's bundled version)
+  - Created ArmeriaServer.kt, deleted GrpcServer.kt and dead GrpcServlet.kt
+  - Removed grpc-netty-shaded, grpc-servlet-jakarta, jetty-http2-server deps
+  - Deployed to Docker, verified iOS gRPC still works
+- Phase 1 Tier 0: ported internal monitoring to Armeria
+  - /health on both ports (9090 for HAProxy, 8081 for LAN)
+  - /metrics, /admin/logs, /admin/requests on internal port only
+  - Decorator checks local port to restrict access
+  - Removed startInternalServer() Jetty code from Main.kt
+- Phase 1 Tier 1: ported image and progress endpoints
+  - ArmeriaAuthDecorator replicating AuthFilter's 4-method auth chain
+  - Added AuthService.validateCookieToken() public accessor
+  - Poster, headshot, backdrop, collection poster, local image,
+    ownership photo, playback progress — all with auth decorator
+  - Fixed Armeria annotatedService() varargs ambiguity: must use builder
+    API (.annotatedService().decorator().build()) not varargs overload
+  - Added ArmeriaServerStartupTest to catch decorator wiring issues
+- Phase 1 Tier 2: ported Roku and pairing endpoints
+  - RokuFeedHttpService: 11 endpoints with own auth (device token + cookie)
+  - PairingHttpService: 3 unauthenticated endpoints with rate limiting
+- Remaining for Phase 1: Tier 3 (streaming: video, camera, live TV)
+  and Tier 4 (buddy API) — saved for next session
+- Created docs/TODO_IOS.md for multicast networking entitlement setup
+  (Apple granted the capability; needs entitlements file + Info.plist)
+===
