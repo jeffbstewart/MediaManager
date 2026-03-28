@@ -19,6 +19,7 @@ import net.stewart.mediamanager.armeria.PairingHttpService
 import net.stewart.mediamanager.armeria.PlaybackProgressHttpService
 import net.stewart.mediamanager.armeria.PosterHttpService
 import net.stewart.mediamanager.armeria.RequestLogHttpService
+import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.RokuFeedHttpService
 import net.stewart.mediamanager.armeria.VideoStreamHttpService
 import net.stewart.mediamanager.armeria.CameraStreamHttpService
@@ -97,6 +98,9 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(VideoStreamHttpService())
         sb.annotatedService().decorator(authDecorator).build(CameraStreamHttpService())
         sb.annotatedService().decorator(authDecorator).build(LiveTvStreamHttpService())
+
+        // REST API auth (unauthenticated — own proxy validation + rate limiting)
+        sb.annotatedService(AuthRestService())
 
         // Roku endpoints (own auth: device token + cookie fallback, no ArmeriaAuthDecorator)
         sb.annotatedService(RokuFeedHttpService())
