@@ -1,0 +1,79 @@
+<div class="setup-container">
+  <mat-card class="setup-card">
+    <mat-card-header>
+      <mat-card-title>Configure New Server</mat-card-title>
+      <mat-card-subtitle>Create the first admin account and configure server policies.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        <h3>Admin Account</h3>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Username</mat-label>
+          <input matInput formControlName="username" autocomplete="username" />
+          @if (form.controls.username.hasError('required') && form.controls.username.touched) {
+            <mat-error>Username is required</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Password</mat-label>
+          <input matInput type="password" formControlName="password"
+                 autocomplete="new-password" />
+          @if (form.controls.password.hasError('required') && form.controls.password.touched) {
+            <mat-error>Password is required</mat-error>
+          } @else if (form.controls.password.hasError('minlength') && form.controls.password.touched) {
+            <mat-error>Password must be at least 8 characters</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Confirm Password</mat-label>
+          <input matInput type="password" formControlName="confirmPassword"
+                 autocomplete="new-password" />
+          @if (form.controls.confirmPassword.hasError('required') && form.controls.confirmPassword.touched) {
+            <mat-error>Please confirm your password</mat-error>
+          } @else if (form.controls.confirmPassword.hasError('passwordMismatch') && form.controls.confirmPassword.touched) {
+            <mat-error>Passwords do not match</mat-error>
+          }
+        </mat-form-field>
+
+        <h3>Legal Documents</h3>
+        <p class="legal-hint">
+          Enter the URLs for your privacy policy and terms of use.
+          Leave as <code>about:blank</code> to configure later.
+        </p>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Privacy Policy URL</mat-label>
+          <input matInput formControlName="privacyPolicyUrl" />
+          @if (form.controls.privacyPolicyUrl.hasError('pattern') && form.controls.privacyPolicyUrl.touched) {
+            <mat-error>Must be an https:// URL or about:blank</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Terms of Use URL</mat-label>
+          <input matInput formControlName="termsOfUseUrl" />
+          @if (form.controls.termsOfUseUrl.hasError('pattern') && form.controls.termsOfUseUrl.touched) {
+            <mat-error>Must be an https:// URL or about:blank</mat-error>
+          }
+        </mat-form-field>
+
+        @if (error()) {
+          <p class="error-message">{{ error() }}</p>
+        }
+
+        <button mat-flat-button color="primary" type="submit"
+                class="full-width"
+                [disabled]="submitting() || !form.valid">
+          @if (submitting()) {
+            <mat-spinner diameter="20" />
+          } @else {
+            Create Server
+          }
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

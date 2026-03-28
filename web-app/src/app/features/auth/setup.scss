@@ -1,0 +1,46 @@
+.setup-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.setup-card {
+  max-width: 500px;
+  width: 100%;
+}
+
+.full-width {
+  width: 100%;
+}
+
+h3 {
+  margin: 1rem 0 0.5rem;
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+mat-form-field {
+  margin-bottom: 0.5rem;
+}
+
+.legal-hint {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+
+  code {
+    font-family: monospace;
+    background: var(--mat-sys-surface-variant);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+  }
+}
+
+.error-message {
+  color: var(--mat-sys-error);
+  margin-bottom: 0.75rem;
+}

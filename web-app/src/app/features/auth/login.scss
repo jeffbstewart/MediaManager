@@ -1,0 +1,50 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.login-card {
+  max-width: 400px;
+  width: 100%;
+}
+
+.full-width {
+  width: 100%;
+}
+
+mat-form-field {
+  margin-bottom: 0.5rem;
+}
+
+.legal-section {
+  margin-bottom: 1rem;
+
+  mat-checkbox {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+}
+
+.legal-changed-warning {
+  color: var(--mat-sys-error);
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+}
+
+.error-message,
+.field-error {
+  color: var(--mat-sys-error);
+  font-size: 0.8rem;
+  margin: 0 0 0.5rem;
+}
+
+.error-message {
+  margin-bottom: 0.75rem;
+}
