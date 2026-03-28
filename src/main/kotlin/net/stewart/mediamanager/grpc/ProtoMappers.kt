@@ -336,9 +336,9 @@ fun AppUser.toProfileResponse(): ProfileResponse = profileResponse {
     username = this@toProfileResponse.username
     this@toProfileResponse.display_name.takeIf { it.isNotBlank() }?.let { displayName = it }
     isAdmin = this@toProfileResponse.isAdmin()
-    this@toProfileResponse.rating_ceiling?.let {
-        ratingCeiling = it.toProtoRatingLevel()
-        ratingCeilingLabel = ContentRatingEnum.ceilingLabel(it)
+    this@toProfileResponse.ratingCeilingValue?.let {
+        ratingCeiling = it.ordinalLevel.toProtoRatingLevel()
+        ratingCeilingLabel = it.label
     }
     liveTvMinQuality = when (this@toProfileResponse.live_tv_min_quality) {
         1 -> Quality.QUALITY_SD
@@ -361,7 +361,7 @@ fun AppUser.toUserInfo(): UserInfo = userInfo {
     accessLevel = this@toUserInfo.access_level.toProtoAccessLevel()
     locked = this@toUserInfo.locked
     mustChangePassword = this@toUserInfo.must_change_password
-    this@toUserInfo.rating_ceiling?.let { ratingCeiling = it.toProtoRatingLevel() }
+    this@toUserInfo.ratingCeilingValue?.let { ratingCeiling = it.ordinalLevel.toProtoRatingLevel() }
 }
 
 // ============================================================================

@@ -219,7 +219,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                                 status = info.status.toProtoScanStatus()
                                 info.titleName?.let { titleName = it }
                                 info.posterUrl?.let { posterUrl = it }
-                                info.titleId?.let { titleId = it }
+                                titleId = info.titleId
                             }
                         })
                     }
@@ -1223,7 +1223,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                     item.upc?.let { upc = it }
                     productName = item.product_name ?: ""
                     mediaFormat = item.media_format.toProtoMediaFormat()
-                    estimatedTitleCount = item.title_count ?: 2
+                    estimatedTitleCount = item.title_count
                 }
             })
         }
@@ -1239,7 +1239,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             mediaItemId = item.id!!
             productName = item.product_name ?: ""
             mediaFormat = item.media_format.toProtoMediaFormat()
-            estimatedTitleCount = item.title_count ?: 2
+            estimatedTitleCount = item.title_count
             linkedTitles.addAll(joins.mapNotNull { join ->
                 val title = net.stewart.mediamanager.entity.Title.findById(join.title_id) ?: return@mapNotNull null
                 expansionLinkedTitle {
@@ -1248,7 +1248,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                     name = title.name
                     title.release_year?.let { releaseYear = it }
                     title.poster_path?.let { posterPath = it }
-                    discNumber = join.disc_number ?: 1
+                    discNumber = join.disc_number
                 }
             })
         }
@@ -1290,7 +1290,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         // Next disc number
         val existingJoins = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
             .filter { it.media_item_id == item.id!! }
-        val nextDisc = (existingJoins.maxOfOrNull { it.disc_number ?: 0 } ?: 0) + 1
+        val nextDisc = (existingJoins.maxOfOrNull { it.disc_number } ?: 0) + 1
 
         val join = net.stewart.mediamanager.entity.MediaItemTitle(
             media_item_id = item.id!!,
@@ -1390,7 +1390,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     // ========================================================================
 
     override suspend fun listValuations(request: ValuationRequest): ValuationResponse {
-        val pageSize = if (request.pageSize > 0) request.pageSize.toInt() else 50
+        val pageSize = if (request.pageSize > 0) request.pageSize else 50
         val query = if (request.hasQuery()) request.query.lowercase() else null
 
         var items = net.stewart.mediamanager.entity.MediaItem.findAll()
@@ -1601,11 +1601,11 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                     .count { it.tuner_id == tuner.id!! }
                 tunerResponse {
                     id = tuner.id!!
-                    name = tuner.name ?: ""
+                    name = tuner.name
                     ipAddress = tuner.ip_address
-                    tuner.device_id?.let { deviceId = it }
-                    tuner.model_number?.let { modelNumber = it }
-                    tunerCount = tuner.tuner_count ?: 0
+                    deviceId = tuner.device_id
+                    modelNumber = tuner.model_number
+                    tunerCount = tuner.tuner_count
                     enabled = tuner.enabled
                     this.channelCount = channelCount
                 }
@@ -1630,7 +1630,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         tuner.save()
         return tunerResponse {
             id = tuner.id!!
-            name = tuner.name ?: ""
+            name = tuner.name
             ipAddress = tuner.ip_address
             enabled = true
             channelCount = 0
@@ -1715,7 +1715,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             item.replacement_value?.toDouble()?.let { totalReplacement += it }
             inventoryReportRow {
                 this.titleNames = titleNames.joinToString(", ").ifEmpty { item.product_name ?: "" }
-                mediaFormat = item.media_format ?: ""
+                mediaFormat = item.media_format
                 item.upc?.let { upc = it }
                 item.purchase_date?.let { purchaseDate = it.toString() }
                 item.purchase_place?.let { purchasePlace = it }

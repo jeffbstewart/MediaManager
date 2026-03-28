@@ -91,13 +91,13 @@ class ProfileView : KComposite(), BeforeEnterObserver {
             }
 
             // Content rating ceiling (read-only, admin-enforced)
-            val ceilingLevel = user?.rating_ceiling
+            val ceiling = user?.ratingCeilingValue
             horizontalLayout {
                 isSpacing = true
                 defaultVerticalComponentAlignment = FlexComponent.Alignment.BASELINE
 
                 span("Content Rating Limit: ") { style.set("color", "var(--lumo-secondary-text-color)") }
-                val label = if (ceilingLevel == null) "Unrestricted" else ContentRating.ceilingLabel(ceilingLevel)
+                val label = ceiling?.label ?: "Unrestricted"
                 span(label) { style.set("font-weight", "500") }
                 span("(set by admin)") {
                     style.set("color", "var(--lumo-tertiary-text-color)")

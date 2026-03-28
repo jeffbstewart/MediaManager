@@ -351,7 +351,7 @@ class AuthRestService {
         val forwardedFor = headers.get("x-forwarded-for")
 
         if (proto == null || forwardedFor == null) {
-            val remoteAddr = ctx.remoteAddress()?.address?.hostAddress ?: "unknown"
+            val remoteAddr = ctx.remoteAddress().address?.hostAddress ?: "unknown"
             log.warn("Auth request rejected: missing proxy headers " +
                 "(x-forwarded-proto={}, x-forwarded-for={}, remote={})",
                 proto ?: "<absent>", forwardedFor ?: "<absent>", remoteAddr)

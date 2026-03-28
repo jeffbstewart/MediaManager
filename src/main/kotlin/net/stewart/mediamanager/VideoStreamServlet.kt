@@ -94,7 +94,7 @@ class VideoStreamServlet : HttpServlet() {
         val title = Title.findById(transcode.title_id) ?: return true
         if (!user.canSeeRating(title.content_rating)) {
             log.warn("Rating restricted on sub-resource: user='{}' ceiling={} title='{}' rating={}",
-                user.username, user.rating_ceiling, title.name, title.content_rating)
+                user.username, user.ratingCeilingValue?.label, title.name, title.content_rating)
             resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Content restricted by parental controls")
             MetricsRegistry.countHttpResponse("stream", 403)
             return false
@@ -117,7 +117,7 @@ class VideoStreamServlet : HttpServlet() {
             val title = Title.findById(transcode.title_id)
             if (title != null && !user.canSeeRating(title.content_rating)) {
                 log.warn("Rating restricted: user='{}' ceiling={} title='{}' rating={}",
-                    user.username, user.rating_ceiling, title.name, title.content_rating)
+                    user.username, user.ratingCeilingValue?.label, title.name, title.content_rating)
                 resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Content restricted by parental controls")
                 MetricsRegistry.countHttpResponse("stream", 403)
                 return

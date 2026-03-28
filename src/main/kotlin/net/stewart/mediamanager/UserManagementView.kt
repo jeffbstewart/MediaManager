@@ -91,7 +91,7 @@ class UserManagementView : KComposite() {
                 }.setHeader("Access Level").setSortable(true)
                 addColumn { user ->
                     if (user.isAdmin()) "—"
-                    else user.rating_ceiling?.let { ContentRating.ceilingLabel(it) } ?: "Unrestricted"
+                    else user.ratingCeilingValue?.label ?: "Unrestricted"
                 }.setHeader("Rating Ceiling").setSortable(false)
                 addColumn { it.created_at?.format(dateFmt) ?: "" }.setHeader("Created").setSortable(true)
 

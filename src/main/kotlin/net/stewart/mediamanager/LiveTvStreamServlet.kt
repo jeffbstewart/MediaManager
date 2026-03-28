@@ -224,11 +224,11 @@ class LiveTvStreamServlet : HttpServlet() {
          */
         fun canAccessLiveTv(user: AppUser): Boolean {
             if (user.isAdmin()) return true
-            val ceiling = user.rating_ceiling ?: return true // unrestricted
+            val ceiling = user.ratingCeilingValue ?: return true // unrestricted
             val minLevel = AppConfig.findAll()
                 .firstOrNull { it.config_key == "live_tv_min_rating" }
                 ?.config_val?.toIntOrNull() ?: 4
-            return ceiling >= minLevel
+            return ceiling.ordinalLevel >= minLevel
         }
     }
 }

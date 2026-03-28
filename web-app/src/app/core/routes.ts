@@ -1,0 +1,39 @@
+/** Centralized client-side route paths. All components should use these instead of hardcoding paths. */
+export const AppRoutes = {
+  home: () => '/',
+  login: () => '/login',
+  setup: () => '/setup',
+
+  // Viewer
+  catalog: () => '/catalog',
+  title: (titleId: number) => `/title/${titleId}`,
+  actor: (personId: number) => `/actor/${personId}`,
+  search: (query?: string) => query ? `/search?q=${encodeURIComponent(query)}` : '/search',
+  movies: () => '/content/movies',
+  tvShows: () => '/content/tv',
+  collections: () => '/content/collections',
+  collection: (collectionId: number) => `/content/collection/${collectionId}`,
+  tags: () => '/content/tags',
+  tag: (tagId: number) => `/tag/${tagId}`,
+  personalVideos: () => '/content/family',
+  wishlist: () => '/wishlist',
+  cameras: () => '/cameras',
+  liveTv: () => '/live-tv',
+  profile: () => '/profile',
+
+  // Admin
+  adminAdd: () => '/admin/add',
+  adminTranscodes: () => '/admin/transcodes',
+  adminUsers: () => '/admin/users',
+  adminSettings: () => '/admin/settings',
+  adminValuation: () => '/admin/valuation',
+  adminDataQuality: () => '/admin/data-quality',
+  adminInventory: () => '/admin/inventory',
+  adminSessions: () => '/admin/sessions',
+  adminCameras: () => '/admin/cameras',
+  adminLiveTv: () => '/admin/live-tv',
+  adminTags: () => '/admin/tags',
+  adminImport: () => '/admin/import',
+  adminExpand: () => '/admin/expand',
+  adminDocumentOwnership: () => '/admin/document-ownership',
+} as const;

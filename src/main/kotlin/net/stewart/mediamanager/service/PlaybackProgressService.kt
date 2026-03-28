@@ -125,7 +125,11 @@ object PlaybackProgressService {
      */
     fun getContinueWatching(limit: Int = 5): List<ContinueWatchingItem> {
         val userId = currentUserId() ?: return emptyList()
+        return getContinueWatchingForUser(userId, limit)
+    }
 
+    /** Returns in-progress titles for an explicit user ID. */
+    fun getContinueWatchingForUser(userId: Long, limit: Int = 5): List<ContinueWatchingItem> {
         val progressList = PlaybackProgress.findAll()
             .filter { it.user_id == userId }
             .sortedByDescending { it.updated_at }
@@ -225,6 +229,11 @@ object PlaybackProgressService {
      */
     fun getRecentlyWatched(limit: Int = 10): List<Title> {
         val userId = currentUserId() ?: return emptyList()
+        return getRecentlyWatchedForUser(userId, limit)
+    }
+
+    /** Returns recently watched titles for an explicit user ID. */
+    fun getRecentlyWatchedForUser(userId: Long, limit: Int = 10): List<Title> {
         val viewedFlags = UserTitleFlag.findAll()
             .filter { it.user_id == userId && it.flag == UserFlagType.VIEWED.name }
             .sortedByDescending { it.created_at }
@@ -255,7 +264,11 @@ object PlaybackProgressService {
      */
     fun getRecentlyAdded(limit: Int = 10): List<Pair<Title, Transcode>> {
         val user = AuthService.getCurrentUser()
+        return getRecentlyAddedForUser(user, limit)
+    }
 
+    /** Returns recently added titles for an explicit user (used for rating/hidden filtering). */
+    fun getRecentlyAddedForUser(user: AppUser?, limit: Int = 10): List<Pair<Title, Transcode>> {
         // Get unique titles from most recent transcodes
         val recentTranscodes = Transcode.findAll()
             .filter { it.file_path != null && it.created_at != null }

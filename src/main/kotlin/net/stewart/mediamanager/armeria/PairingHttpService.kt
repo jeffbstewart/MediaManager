@@ -41,7 +41,7 @@ class PairingHttpService {
     }
 
     private fun getClientIp(ctx: ServiceRequestContext): String {
-        return ctx.remoteAddress()?.address?.hostAddress ?: "unknown"
+        return ctx.remoteAddress().address?.hostAddress ?: "unknown"
     }
 
     private fun isRateLimited(

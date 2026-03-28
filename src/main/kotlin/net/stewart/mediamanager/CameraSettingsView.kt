@@ -390,10 +390,6 @@ class CameraSettingsView : KComposite() {
         dialog.open()
     }
 
-    private fun CameraAdminService.generateStreamName(name: String): String {
-        return name.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-    }
-
     private fun saveConfig(key: String, value: String, description: String) {
         val trimmed = value.trim()
         val configs = AppConfig.findAll()

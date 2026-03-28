@@ -75,7 +75,7 @@ class VideoStreamHttpService {
                 val title = Title.findById(transcode.title_id)
                 if (title != null && !user.canSeeRating(title.content_rating)) {
                     log.warn("Rating restricted: user='{}' ceiling={} title='{}' rating={}",
-                        user.username, user.rating_ceiling, title.name, title.content_rating)
+                        user.username, user.ratingCeilingValue?.label, title.name, title.content_rating)
                     writer.write(ResponseHeaders.of(HttpStatus.FORBIDDEN))
                     MetricsRegistry.countHttpResponse("stream", 403)
                     writer.close()
@@ -241,7 +241,7 @@ class VideoStreamHttpService {
         val title = Title.findById(transcode.title_id) ?: return true
         if (!user.canSeeRating(title.content_rating)) {
             log.warn("Rating restricted on sub-resource: user='{}' ceiling={} title='{}' rating={}",
-                user.username, user.rating_ceiling, title.name, title.content_rating)
+                user.username, user.ratingCeilingValue?.label, title.name, title.content_rating)
             MetricsRegistry.countHttpResponse("stream", 403)
             return false
         }

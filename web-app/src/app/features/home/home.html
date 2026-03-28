@@ -1,0 +1,109 @@
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner diameter="40" />
+  </div>
+} @else if (error()) {
+  <div class="error-container">
+    <p>{{ error() }}</p>
+  </div>
+} @else if (feed(); as feed) {
+  <div class="home-container">
+    @if (feed.continue_watching.length > 0) {
+      <section class="carousel-section">
+        <h2>Continue Watching</h2>
+        <div class="carousel-row">
+          @for (item of feed.continue_watching; track item.transcode_id) {
+            <a class="poster-card continue-card" [routerLink]="routes.title(item.title_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+                <div class="progress-track">
+                  <div class="progress-fill" [style.width.%]="item.progress_fraction * 100"></div>
+                </div>
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              @if (item.is_episode && item.episode_label) {
+                <span class="poster-subtitle">{{ item.episode_label }}</span>
+              }
+              <span class="poster-meta">{{ item.time_remaining }}</span>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (feed.recently_added.length > 0) {
+      <section class="carousel-section">
+        <h2>Recently Added</h2>
+        <div class="carousel-row">
+          @for (item of feed.recently_added; track item.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              @if (item.release_year) {
+                <span class="poster-meta">{{ item.release_year }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (feed.recently_watched.length > 0) {
+      <section class="carousel-section">
+        <h2>Recently Watched</h2>
+        <div class="carousel-row">
+          @for (item of feed.recently_watched; track item.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              @if (item.release_year) {
+                <span class="poster-meta">{{ item.release_year }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (feed.missing_seasons.length > 0) {
+      <section class="carousel-section">
+        <h2>New Seasons Available</h2>
+        <div class="carousel-row">
+          @for (item of feed.missing_seasons; track item.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              <span class="poster-subtitle">
+                @for (s of item.missing_seasons; track s.season_number; let last = $last) {
+                  S{{ s.season_number }}@if (!last) {, }
+                }
+              </span>
+            </a>
+          }
+        </div>
+      </section>
+    }
+  </div>
+}

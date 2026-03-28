@@ -130,3 +130,25 @@ enum class ContentRating(val displayLabel: String, val ordinalLevel: Int) {
             ceilingChoices().firstOrNull { it.first == ordinalLevel }?.second ?: "Unknown"
     }
 }
+
+/**
+ * Type-safe wrapper for a user's content rating ceiling (max ordinal level they can see).
+ *
+ * Stored as an integer in the DB (`app_user.rating_ceiling`) but wrapped here to avoid
+ * confusing bare ints with ordinal levels. Provides [allows] to check whether a content
+ * rating passes the ceiling, and [label] for display.
+ */
+@JvmInline
+value class RatingCeiling(val ordinalLevel: Int) {
+
+    /** Returns true if the given [ContentRating] is at or below this ceiling. */
+    fun allows(rating: ContentRating): Boolean = rating.ordinalLevel <= ordinalLevel
+
+    /** Display label for this ceiling level (e.g. "PG-13 / TV-14"). */
+    val label: String get() = ContentRating.ceilingLabel(ordinalLevel)
+
+    companion object {
+        /** Wraps a nullable DB integer into a [RatingCeiling], or null if unrestricted. */
+        fun fromDb(ordinalLevel: Int?): RatingCeiling? = ordinalLevel?.let { RatingCeiling(it) }
+    }
+}
