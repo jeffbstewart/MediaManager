@@ -57,6 +57,18 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
         Thread(r, "buddy-timeout").apply { isDaemon = true }
     }
 
+    init {
+        // Periodically expire stale leases (catches orphans from crashed buddies
+        // whose grace timer didn't fire, e.g., server restart).
+        scheduler.scheduleAtFixedRate({
+            try {
+                TranscodeLeaseService.expireStaleLeases()
+            } catch (e: Exception) {
+                log.warn("Error expiring stale leases: {}", e.message)
+            }
+        }, 30, 30, TimeUnit.SECONDS)
+    }
+
     // ========================================================================
     // WorkStream — bidirectional streaming RPC
     // ========================================================================
@@ -258,6 +270,11 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
 
         // -- Lease renewal --
 
+        /** Lease expiry window for gRPC-connected buddies: 2 minutes.
+         *  Short because the bidi stream gives real-time disconnect detection;
+         *  this is just a safety net for expireStaleLeases() to catch orphans. */
+        private val GRPC_LEASE_DURATION_MINUTES = 2L
+
         private fun renewLeases() {
             val name = buddyName ?: return
             val activeIds = TranscodeLease.findAll()
@@ -267,7 +284,7 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
                 }
                 .mapNotNull { it.id }
             if (activeIds.isNotEmpty()) {
-                TranscodeLeaseService.heartbeatMultiple(activeIds)
+                TranscodeLeaseService.heartbeatMultiple(activeIds, GRPC_LEASE_DURATION_MINUTES)
             }
         }
 

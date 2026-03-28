@@ -617,7 +617,7 @@ class TranscoderAgent(
         }
 
         // Report complete — chapter data is sent via a separate mechanism for the local agent.
-        // The BuddyApiServlet handleComplete processes chapters from the buddy; for local agent,
+        // BuddyGrpcService handles chapters from remote buddies; for local agent,
         // we store chapters directly.
         try {
             if (chapters.isNotEmpty()) {

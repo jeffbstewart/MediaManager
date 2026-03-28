@@ -12,6 +12,21 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
+/** A single lease within a bundle. */
+data class LeaseInfo(
+    val leaseId: Long,
+    val leaseType: String,
+    val expiresAt: String?
+)
+
+/** Bundle response: all outstanding work for one file. */
+data class BundleResponse(
+    val transcodeId: Long,
+    val relativePath: String,
+    val fileSizeBytes: Long,
+    val leases: List<LeaseInfo>
+)
+
 /**
  * gRPC client for the buddy bidirectional streaming protocol.
  *

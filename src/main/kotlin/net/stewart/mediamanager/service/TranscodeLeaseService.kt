@@ -349,28 +349,43 @@ object TranscodeLeaseService {
 
     /**
      * Heartbeat to renew lease expiry without changing progress.
+     * Uses the configured lease duration (default 10 minutes).
      */
-    fun heartbeat(leaseId: Long): TranscodeLease? {
+    fun heartbeat(leaseId: Long): TranscodeLease? =
+        heartbeat(leaseId, getLeaseDurationMinutes())
+
+    /**
+     * Heartbeat with an explicit duration in minutes.
+     * Used by the gRPC buddy service to set shorter lease windows (e.g., 2 minutes)
+     * since the bidi stream provides real-time disconnect detection.
+     */
+    fun heartbeat(leaseId: Long, durationMinutes: Long): TranscodeLease? {
         val lease = TranscodeLease.findById(leaseId) ?: return null
         if (lease.status != LeaseStatus.CLAIMED.name && lease.status != LeaseStatus.IN_PROGRESS.name) return null
 
-        lease.expires_at = LocalDateTime.now().plusMinutes(getLeaseDurationMinutes())
+        lease.expires_at = LocalDateTime.now().plusMinutes(durationMinutes)
         lease.last_progress_at = LocalDateTime.now()
         lease.save()
 
-        log.debug("Heartbeat for lease {} (buddy='{}', file={})", leaseId, lease.buddy_name, lease.relative_path)
+        log.debug("Heartbeat for lease {} (buddy='{}', file={}, duration={}min)",
+            leaseId, lease.buddy_name, lease.relative_path, durationMinutes)
 
         return lease
     }
 
     /**
-     * Heartbeat for multiple lease IDs at once. Used by buddies to keep all
-     * leases in a bundle alive while processing one at a time.
+     * Heartbeat for multiple lease IDs at once. Uses configured lease duration.
      */
-    fun heartbeatMultiple(leaseIds: List<Long>): Int {
+    fun heartbeatMultiple(leaseIds: List<Long>): Int =
+        heartbeatMultiple(leaseIds, getLeaseDurationMinutes())
+
+    /**
+     * Heartbeat for multiple lease IDs with an explicit duration in minutes.
+     */
+    fun heartbeatMultiple(leaseIds: List<Long>, durationMinutes: Long): Int {
         var renewed = 0
         for (id in leaseIds) {
-            if (heartbeat(id) != null) renewed++
+            if (heartbeat(id, durationMinutes) != null) renewed++
         }
         return renewed
     }
