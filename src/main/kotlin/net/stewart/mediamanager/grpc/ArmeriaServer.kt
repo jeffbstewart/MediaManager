@@ -15,9 +15,11 @@ import net.stewart.mediamanager.armeria.HealthHttpService
 import net.stewart.mediamanager.armeria.LocalImageHttpService
 import net.stewart.mediamanager.armeria.MetricsHttpService
 import net.stewart.mediamanager.armeria.OwnershipPhotoHttpService
+import net.stewart.mediamanager.armeria.PairingHttpService
 import net.stewart.mediamanager.armeria.PlaybackProgressHttpService
 import net.stewart.mediamanager.armeria.PosterHttpService
 import net.stewart.mediamanager.armeria.RequestLogHttpService
+import net.stewart.mediamanager.armeria.RokuFeedHttpService
 import org.slf4j.LoggerFactory
 
 /**
@@ -80,6 +82,11 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(LocalImageHttpService())
         sb.annotatedService().decorator(authDecorator).build(OwnershipPhotoHttpService())
         sb.annotatedService().decorator(authDecorator).build(PlaybackProgressHttpService())
+
+        // Roku endpoints (own auth: device token + cookie fallback, no ArmeriaAuthDecorator)
+        sb.annotatedService(RokuFeedHttpService())
+        // Device pairing (unauthenticated, has its own rate limiting)
+        sb.annotatedService(PairingHttpService())
 
         if (internalPort > 0) {
             sb.http(internalPort)
