@@ -11,11 +11,15 @@ import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.AppConfig
+import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.LoginResult
+import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.RefreshResult
+import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -84,6 +88,106 @@ class AuthRestService {
             "legal" to legal.ifEmpty { null }
         )
         return jsonResponse(HttpStatus.OK, responseBody)
+    }
+
+    /**
+     * Initial server setup: creates the first admin user and configures legal document URLs.
+     * Only works when no users exist (setup_required=true from discover).
+     */
+    private val setupRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+
+    @Post("/api/v2/auth/setup")
+    fun setup(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(setupRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf("error" to "Too many requests"))
+        }
+
+        val body = parseBody(ctx) ?: return badRequest("Invalid request body")
+
+        val username = body.get("username")?.asString
+        val password = body.get("password")?.asString
+        if (username.isNullOrBlank() || password.isNullOrBlank()) {
+            return badRequest("username and password are required")
+        }
+
+        val violations = PasswordService.validate(password, username)
+        if (violations.isNotEmpty()) {
+            return jsonResponse(HttpStatus.BAD_REQUEST, mapOf("error" to violations.first()))
+        }
+
+        // Create first user in a transaction (rejects if users already exist)
+        val user = try {
+            JdbiOrm.jdbi().inTransaction<AppUser, Exception> { handle ->
+                val count = handle.createQuery("SELECT COUNT(*) FROM app_user")
+                    .mapTo(Int::class.java).one()
+                if (count > 0) throw IllegalStateException("Setup already complete")
+                val now = java.time.LocalDateTime.now()
+                val u = AppUser(
+                    username = username,
+                    display_name = "TOBEREMOVED",
+                    password_hash = PasswordService.hash(password),
+                    access_level = 2, // Admin
+                    created_at = now,
+                    updated_at = now
+                )
+                u.save()
+                u
+            }
+        } catch (_: IllegalStateException) {
+            return jsonResponse(HttpStatus.CONFLICT, mapOf("error" to "Setup already complete — users exist"))
+        }
+
+        // Save legal document URLs (seed with about:blank if not provided)
+        val privacyPolicyUrl = body.get("privacy_policy_url")?.asString?.ifBlank { null } ?: "about:blank"
+        val termsOfUseUrl = body.get("terms_of_use_url")?.asString?.ifBlank { null } ?: "about:blank"
+
+        if (!isValidLegalUrl(privacyPolicyUrl) || !isValidLegalUrl(termsOfUseUrl)) {
+            return badRequest("Legal URLs must be https:// or about:blank")
+        }
+
+        saveConfig("privacy_policy_url", privacyPolicyUrl)
+        saveConfig("privacy_policy_version", "1")
+        saveConfig("web_terms_of_use_url", termsOfUseUrl)
+        saveConfig("web_terms_of_use_version", "1")
+        LegalRequirements.refresh()
+
+        // Record the user's agreement to the initial versions
+        user.privacy_policy_version = 1
+        user.terms_of_use_version = 1
+        user.privacy_policy_accepted_at = java.time.LocalDateTime.now()
+        user.terms_of_use_accepted_at = java.time.LocalDateTime.now()
+        user.save()
+
+        // Issue tokens so the user is logged in immediately after setup
+        val tokenPair = JwtService.createTokenPair(user, "web")
+        val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+
+        val responseBody = mapOf(
+            "access_token" to tokenPair.accessToken,
+            "expires_in" to tokenPair.expiresIn
+        )
+
+        val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .add("Content-Security-Policy", API_CSP)
+            .cookie(refreshCookie)
+            .build()
+        return HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+    }
+
+    private fun isValidLegalUrl(url: String): Boolean =
+        url == "about:blank" || url.startsWith("https://")
+
+    private fun saveConfig(key: String, value: String) {
+        val existing = AppConfig.findAll().firstOrNull { it.config_key == key }
+        if (existing != null) {
+            existing.config_val = value
+            existing.save()
+        } else {
+            AppConfig(config_key = key, config_val = value).save()
+        }
     }
 
     @Post("/api/v2/auth/login")
