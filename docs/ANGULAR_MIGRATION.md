@@ -43,7 +43,7 @@ This requires two different HAProxy backends on two different hostnames, which i
 
 ### Auth decorator
 Create `ArmeriaAuthDecorator` — an Armeria `DecoratingHttpServiceFunction` replicating `AuthFilter` logic:
-- Cookie session auth (`mm_session` cookie → `session_token` table)
+- Cookie session auth (`mm_auth` cookie → `session_token` table)
 - JWT Bearer header (`Authorization: Bearer <token>`)
 - JWT cookie (`mm_jwt` for HLS sub-requests)
 - Device token (`?key=` parameter for Roku)

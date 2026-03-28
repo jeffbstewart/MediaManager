@@ -333,6 +333,11 @@ object AuthService {
         return validateToken(cookieValue)
     }
 
+    /**
+     * Validates a session cookie token string directly (for Armeria auth decorator).
+     */
+    fun validateCookieToken(token: String): AppUser? = validateToken(token)
+
     private fun validateToken(token: String): AppUser? {
         val hash = hashToken(token)
         data class TokenLookup(val id: Long, val userId: Long)

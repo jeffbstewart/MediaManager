@@ -7,8 +7,16 @@ import com.linecorp.armeria.server.Server
 import com.linecorp.armeria.server.grpc.GrpcService
 import io.grpc.ServerInterceptors
 import net.stewart.mediamanager.armeria.AppLogHttpService
+import net.stewart.mediamanager.armeria.ArmeriaAuthDecorator
+import net.stewart.mediamanager.armeria.BackdropHttpService
+import net.stewart.mediamanager.armeria.CollectionPosterHttpService
+import net.stewart.mediamanager.armeria.HeadshotHttpService
 import net.stewart.mediamanager.armeria.HealthHttpService
+import net.stewart.mediamanager.armeria.LocalImageHttpService
 import net.stewart.mediamanager.armeria.MetricsHttpService
+import net.stewart.mediamanager.armeria.OwnershipPhotoHttpService
+import net.stewart.mediamanager.armeria.PlaybackProgressHttpService
+import net.stewart.mediamanager.armeria.PosterHttpService
 import net.stewart.mediamanager.armeria.RequestLogHttpService
 import org.slf4j.LoggerFactory
 
@@ -53,24 +61,34 @@ object ArmeriaServer {
         }
 
         val grpcService = grpcServiceBuilder.build()
+        val authDecorator = ArmeriaAuthDecorator()
 
+        // Use the builder API (.annotatedService().decorator().build()) to avoid
+        // varargs ambiguity with annotatedService(Object, Object...) which interprets
+        // Function/DecoratingHttpServiceFunction as exception handlers instead of decorators.
         val sb = Server.builder()
             .http(port)
             .service(grpcService)
-            // Health check on the main port for HAProxy
+            // Health check on the main port for HAProxy (no auth)
             .annotatedService(HealthHttpService())
+
+        // Authenticated image/data endpoints
+        sb.annotatedService().decorator(authDecorator).build(PosterHttpService())
+        sb.annotatedService().decorator(authDecorator).build(HeadshotHttpService())
+        sb.annotatedService().decorator(authDecorator).build(BackdropHttpService())
+        sb.annotatedService().decorator(authDecorator).build(CollectionPosterHttpService())
+        sb.annotatedService().decorator(authDecorator).build(LocalImageHttpService())
+        sb.annotatedService().decorator(authDecorator).build(OwnershipPhotoHttpService())
+        sb.annotatedService().decorator(authDecorator).build(PlaybackProgressHttpService())
 
         if (internalPort > 0) {
             sb.http(internalPort)
 
             // Restrict monitoring endpoints to the internal port only
             val internalOnly = internalOnlyDecorator(internalPort)
-            sb.annotatedService("/metrics", MetricsHttpService(),
-                DecoratingHttpServiceFunction { delegate, ctx, req -> internalOnly.serve(delegate, ctx, req) })
-            sb.annotatedService("/admin/logs", AppLogHttpService(),
-                DecoratingHttpServiceFunction { delegate, ctx, req -> internalOnly.serve(delegate, ctx, req) })
-            sb.annotatedService("/admin/requests", RequestLogHttpService(),
-                DecoratingHttpServiceFunction { delegate, ctx, req -> internalOnly.serve(delegate, ctx, req) })
+            sb.annotatedService().decorator(internalOnly).build(MetricsHttpService())
+            sb.annotatedService().decorator(internalOnly).build(AppLogHttpService())
+            sb.annotatedService().decorator(internalOnly).build(RequestLogHttpService())
         }
 
         server = sb.build()
