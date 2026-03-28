@@ -52,6 +52,10 @@ secrets/*.agent_visible_env
 src/main/bundles/
 src/main/frontend/
 
+# Angular SPA
+web-app/node_modules/
+web-app/.angular/
+
 # Transcode buddy local config
 transcode-buddy/buddy.properties
 .DS_Store
