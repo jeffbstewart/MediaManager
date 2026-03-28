@@ -1,6 +1,14 @@
-# Stage 1: Build (glibc-based image for protoc plugin compatibility)
+# Stage 1a: Build Angular SPA (official Node image, no curl)
+FROM --platform=$BUILDPLATFORM node:22-alpine AS angular-builder
+WORKDIR /build
+COPY web-app/package.json web-app/package-lock.json ./
+RUN npm ci
+COPY web-app/ ./
+RUN npx ng build --base-href="/app/"
+
+# Stage 1b: Build server (glibc-based image for protoc plugin compatibility)
 FROM --platform=$BUILDPLATFORM amazoncorretto:25 AS builder
-RUN yum install -y nodejs npm findutils && yum clean all
+RUN yum install -y findutils && yum clean all
 WORKDIR /build
 COPY gradlew gradlew.bat ./
 COPY gradle/ gradle/
@@ -25,6 +33,7 @@ RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
 RUN addgroup -g 100 -S users 2>/dev/null; adduser -u 1046 -G users -S app
 WORKDIR /app
 COPY --from=builder --chown=app:users /build/build/install/mediaManager/ ./
+COPY --from=angular-builder --chown=app:users /build/dist/media-manager/browser/ ./spa/
 RUN mkdir -p /cache && chown app:users /cache && ln -s /cache /app/data
 USER app
 EXPOSE 8080 8081 9090
