@@ -65,6 +65,13 @@ object ArmeriaServer {
             )
         }
 
+        // Buddy service: own auth (in-stream API key for bidi, metadata for unary).
+        // Not behind AuthInterceptor — uses BuddyAuthInterceptor for context setup only.
+        val buddyAuthInterceptor = BuddyAuthInterceptor()
+        grpcServiceBuilder.addService(
+            ServerInterceptors.intercept(BuddyGrpcService(), loggingInterceptor, buddyAuthInterceptor)
+        )
+
         val grpcService = grpcServiceBuilder.build()
         val authDecorator = ArmeriaAuthDecorator()
 

@@ -109,7 +109,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(result), 0)
     }
 
-    @Get("/roku/title/{titleId}.json")
+    @Get("regex:^/roku/title/(?<titleId>\\d+)\\.json$")
     fun titleDetail(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "title-detail")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -122,7 +122,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
-    @Get("/roku/collection/{collectionId}.json")
+    @Get("regex:^/roku/collection/(?<collectionId>\\d+)\\.json$")
     fun collection(ctx: ServiceRequestContext, @Param("collectionId") collectionId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "collection")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -135,7 +135,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
-    @Get("/roku/tag/{tagId}.json")
+    @Get("regex:^/roku/tag/(?<tagId>\\d+)\\.json$")
     fun tag(ctx: ServiceRequestContext, @Param("tagId") tagId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "tag")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -148,7 +148,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
-    @Get("/roku/genre/{genreId}.json")
+    @Get("regex:^/roku/genre/(?<genreId>\\d+)\\.json$")
     fun genre(ctx: ServiceRequestContext, @Param("genreId") genreId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "genre")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -161,7 +161,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
-    @Get("/roku/actor/{personId}.json")
+    @Get("regex:^/roku/actor/(?<personId>\\d+)\\.json$")
     fun actor(ctx: ServiceRequestContext, @Param("personId") personId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "actor")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)

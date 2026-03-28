@@ -5,7 +5,6 @@ package mediamanager;
 option java_package = "net.stewart.mediamanager.grpc";
 option java_multiple_files = true;
 
-import "common.proto";
 import "time.proto";
 
 // ============================================================================
@@ -37,12 +36,6 @@ service BuddyService {
   // Check which transcode IDs from a list still have pending work.
   // Used by buddies to prune local file caches.
   rpc CheckPending(CheckPendingRequest) returns (CheckPendingResponse);
-
-  // Clear all FAILED/EXPIRED leases (reset poison pills).
-  rpc ClearFailures(BuddyClearFailuresRequest) returns (BuddyClearFailuresResponse);
-
-  // Reclassify a transcode's media format (moves file on disk, clears leases).
-  rpc Reclassify(ReclassifyRequest) returns (ReclassifyResponse);
 }
 
 // ============================================================================
@@ -256,24 +249,4 @@ message CheckPendingRequest {
 
 message CheckPendingResponse {
   repeated int64 pending_ids = 1;
-}
-
-message BuddyClearFailuresRequest {}
-
-message BuddyClearFailuresResponse {
-  int32 cleared = 1;
-}
-
-message ReclassifyRequest {
-  int64 transcode_id = 1;
-  MediaFormat target_format = 2;
-}
-
-message ReclassifyResponse {
-  string old_path = 1;
-  string new_path = 2;
-  MediaFormat old_format = 3;
-  MediaFormat new_format = 4;
-  bool forbrowser_deleted = 5;
-  int32 leases_cleared = 6;
 }
