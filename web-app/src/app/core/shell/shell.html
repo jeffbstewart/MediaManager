@@ -1,0 +1,161 @@
+<mat-sidenav-container class="shell-container">
+  <mat-sidenav #drawer mode="side" [opened]="true" class="shell-drawer">
+    <mat-nav-list>
+      <!-- Main section -->
+      <a mat-list-item [routerLink]="routes.home()" routerLinkActive="active-link"
+         [routerLinkActiveOptions]="{ exact: true }">
+        <mat-icon matListItemIcon>home</mat-icon>
+        <span matListItemTitle>Home</span>
+      </a>
+
+      <!-- Content collapsible group -->
+      <button mat-list-item (click)="toggleContent()">
+        <mat-icon matListItemIcon>grid_view</mat-icon>
+        <span matListItemTitle>Content</span>
+        <mat-icon class="expand-icon" [class.expanded]="contentOpen()">expand_more</mat-icon>
+      </button>
+      @if (contentOpen()) {
+        <a mat-list-item class="nested-item" [routerLink]="routes.movies()" routerLinkActive="active-link">
+          <span matListItemTitle>Movies</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.tvShows()" routerLinkActive="active-link">
+          <span matListItemTitle>TV Shows</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.collections()" routerLinkActive="active-link">
+          <span matListItemTitle>Collections</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.tags()" routerLinkActive="active-link">
+          <span matListItemTitle>Tags</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.personalVideos()" routerLinkActive="active-link">
+          <span matListItemTitle>Family</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.cameras()" routerLinkActive="active-link">
+          <span matListItemTitle>Cameras</span>
+        </a>
+        <a mat-list-item class="nested-item" [routerLink]="routes.liveTv()" routerLinkActive="active-link">
+          <span matListItemTitle>Live TV</span>
+        </a>
+      }
+
+      <a mat-list-item [routerLink]="routes.wishlist()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>favorite</mat-icon>
+        <span matListItemTitle>My Wish List</span>
+      </a>
+
+      <!-- Admin section -->
+      @if (isAdmin()) {
+        <mat-divider />
+        <div class="section-header">MANAGE</div>
+
+        <a mat-list-item [routerLink]="routes.adminDataQuality()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>build</mat-icon>
+          <span matListItemTitle>Data Quality</span>
+        </a>
+        <a mat-list-item [routerLink]="routes.adminAdd()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>add</mat-icon>
+          <span matListItemTitle>Add Item</span>
+        </a>
+        <a mat-list-item [routerLink]="routes.adminCameras()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>videocam</mat-icon>
+          <span matListItemTitle>Cameras</span>
+        </a>
+        <a mat-list-item [routerLink]="routes.adminLiveTv()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>desktop_windows</mat-icon>
+          <span matListItemTitle>Live TV</span>
+        </a>
+
+        <!-- Purchases collapsible group -->
+        <button mat-list-item (click)="togglePurchases()">
+          <mat-icon matListItemIcon>shopping_cart</mat-icon>
+          <span matListItemTitle>Purchases</span>
+          <mat-icon class="expand-icon" [class.expanded]="purchasesOpen()">expand_more</mat-icon>
+        </button>
+        @if (purchasesOpen()) {
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminImport()" routerLinkActive="active-link">
+            <span matListItemTitle>Amazon Order Import</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminExpand()" routerLinkActive="active-link">
+            <span matListItemTitle>Expand</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminValuation()" routerLinkActive="active-link">
+            <span matListItemTitle>Valuation</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminPurchaseWishes()" routerLinkActive="active-link">
+            <span matListItemTitle>User Wishes</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminDocumentOwnership()" routerLinkActive="active-link">
+            <span matListItemTitle>Document Ownership</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminInventory()" routerLinkActive="active-link">
+            <span matListItemTitle>Report</span>
+          </a>
+        }
+
+        <a mat-list-item [routerLink]="routes.adminSettings()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>settings</mat-icon>
+          <span matListItemTitle>Settings</span>
+        </a>
+        <a mat-list-item [routerLink]="routes.adminTags()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>bookmark</mat-icon>
+          <span matListItemTitle>Tags</span>
+        </a>
+
+        <!-- Transcodes collapsible group -->
+        <button mat-list-item (click)="toggleTranscodes()">
+          <mat-icon matListItemIcon>movie</mat-icon>
+          <span matListItemTitle>Transcodes</span>
+          <mat-icon class="expand-icon" [class.expanded]="transcodesOpen()">expand_more</mat-icon>
+        </button>
+        @if (transcodesOpen()) {
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeStatus()" routerLinkActive="active-link">
+            <span matListItemTitle>Status</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeUnmatched()" routerLinkActive="active-link">
+            <span matListItemTitle>Unmatched</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeLinked()" routerLinkActive="active-link">
+            <span matListItemTitle>Linked</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeBacklog()" routerLinkActive="active-link">
+            <span matListItemTitle>Backlog</span>
+          </a>
+        }
+
+        <a mat-list-item [routerLink]="routes.adminUsers()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>people</mat-icon>
+          <span matListItemTitle>Users</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="shell-content">
+    <mat-toolbar class="top-toolbar">
+      <button mat-icon-button (click)="drawer.toggle()" aria-label="Toggle navigation">
+        <mat-icon>menu</mat-icon>
+      </button>
+      <span class="app-title">Media Manager</span>
+
+      <span class="spacer"></span>
+
+      <button mat-icon-button [matMenuTriggerFor]="profileMenu" aria-label="Profile menu">
+        <mat-icon>account_circle</mat-icon>
+      </button>
+      <mat-menu #profileMenu="matMenu">
+        <a mat-menu-item [routerLink]="routes.profile()">
+          <mat-icon>person</mat-icon>
+          <span>Profile</span>
+        </a>
+        <button mat-menu-item (click)="onLogout()">
+          <mat-icon>logout</mat-icon>
+          <span>Sign Out</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <div class="page-content">
+      <router-outlet />
+    </div>
+  </mat-sidenav-content>
+</mat-sidenav-container>

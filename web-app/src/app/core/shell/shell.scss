@@ -1,0 +1,53 @@
+.shell-container {
+  height: 100vh;
+}
+
+.shell-drawer {
+  width: 260px;
+
+  .section-header {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    opacity: 0.4;
+    padding: 12px 16px 4px;
+  }
+
+  .nested-item {
+    padding-left: 56px !important;
+  }
+
+  .expand-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+
+    &.expanded {
+      transform: rotate(180deg);
+    }
+  }
+
+  .active-link {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.top-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.app-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.page-content {
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+}

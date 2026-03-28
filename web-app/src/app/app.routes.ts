@@ -17,6 +17,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [authGuard],
+    loadComponent: () => import('./core/shell/shell').then(m => m.ShellComponent),
     children: [
       { path: '', loadComponent: () => import('./features/home/home').then(m => m.HomeComponent) },
       { path: 'catalog', loadComponent: placeholder, data: { title: 'Catalog' } },
@@ -37,9 +38,14 @@ export const routes: Routes = [
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
+      { path: 'admin/transcodes/status', loadComponent: placeholder, data: { title: 'Transcode Status' } },
+      { path: 'admin/transcodes/unmatched', loadComponent: placeholder, data: { title: 'Unmatched Transcodes' } },
+      { path: 'admin/transcodes/linked', loadComponent: placeholder, data: { title: 'Linked Transcodes' } },
+      { path: 'admin/transcodes/backlog', loadComponent: placeholder, data: { title: 'Transcode Backlog' } },
       { path: 'admin/users', loadComponent: placeholder, data: { title: 'Users' } },
       { path: 'admin/settings', loadComponent: placeholder, data: { title: 'Settings' } },
       { path: 'admin/valuation', loadComponent: placeholder, data: { title: 'Valuation' } },
+      { path: 'admin/purchase-wishes', loadComponent: placeholder, data: { title: 'User Wishes' } },
       { path: 'admin/data-quality', loadComponent: placeholder, data: { title: 'Data Quality' } },
       { path: 'admin/inventory', loadComponent: placeholder, data: { title: 'Inventory Report' } },
       { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },
