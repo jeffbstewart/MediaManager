@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class TranscodeWorker(
     private val config: BuddyConfig,
-    private val apiClient: BuddyApiClient,
+    private val apiClient: BuddyGrpcClient,
     private val pathTranslator: PathTranslator,
     private val encoder: EncoderProfile,
     private val workerIndex: Int,

@@ -51,30 +51,26 @@ fun main(args: Array<String>) {
     val encoder = EncoderDetector.detectBestEncoder(config.ffmpegPath, config.encoderPreference)
     log.info("Selected encoder: {} ({})", encoder.name, encoder.ffmpegEncoder)
 
-    // Test server connectivity
-    val apiClient = BuddyApiClient(config)
-    val status = apiClient.getStatus()
-    if (status == null) {
-        log.error("Cannot reach server at {}", config.serverUrl)
-        System.err.println("Error: Cannot connect to server at ${config.serverUrl}")
-        System.err.println("Check server_url and api_key in your config file")
+    // Connect to server via gRPC
+    val grpcClient = BuddyGrpcClient(config)
+    log.info("Connecting to gRPC server at {}", config.grpcAddress)
+    val connected = grpcClient.connect()
+    if (connected == null) {
+        log.error("Cannot connect to server at {}", config.grpcAddress)
+        System.err.println("Error: Cannot connect to gRPC server at ${config.grpcAddress}")
+        System.err.println("Check grpc_address and api_key in your config file")
+        grpcClient.shutdown()
         System.exit(1)
         return
     }
-    log.info("Server connected: {} pending, {} active leases, {} completed today",
-        status.get("pending"), status.get("active_leases"), status.get("completed_today"))
-
-    // Release any stale leases from a previous run of this buddy
-    val released = apiClient.releaseLeases()
-    if (released > 0) {
-        log.info("Released {} stale lease(s) from previous session", released)
-    }
+    log.info("Server connected: {} pending, {} resumable leases",
+        connected.pendingCount, connected.resumableLeasesCount)
 
     // Initialize local file cache if configured
     val localCache = if (config.localTempDir != null) {
         val tempDir = File(config.localTempDir)
         log.info("Local file cache: {}", tempDir.absolutePath)
-        val cache = LocalFileCache(tempDir, apiClient)
+        val cache = LocalFileCache(tempDir, grpcClient)
         cache.startupCleanup()
         cache
     } else {
@@ -91,6 +87,7 @@ fun main(args: Array<String>) {
         log.info("Shutting down...")
         running.set(false)
         SleepInhibitor.shutdown()
+        grpcClient.shutdown()
         executor.shutdownNow()
         executor.awaitTermination(10, TimeUnit.SECONDS)
         log.info("Shutdown complete")
@@ -98,7 +95,7 @@ fun main(args: Array<String>) {
 
     // Start workers
     for (i in 0 until config.workerCount) {
-        val worker = TranscodeWorker(config, apiClient, pathTranslator, encoder, i, running, localCache)
+        val worker = TranscodeWorker(config, grpcClient, pathTranslator, encoder, i, running, localCache)
         executor.submit(worker)
     }
 

@@ -5,6 +5,8 @@ import java.util.Properties
 
 data class BuddyConfig(
     val serverUrl: String,
+    val grpcAddress: String,
+    val grpcUseTls: Boolean,
     val apiKey: String,
     val buddyName: String,
     val nasRoot: String,
@@ -31,8 +33,23 @@ data class BuddyConfig(
             val props = Properties()
             file.inputStream().use { props.load(it) }
 
+            val serverUrl = requireProp(props, "server_url").trimEnd('/')
+            val grpcAddress = props.getProperty("grpc_address")
+                ?: run {
+                    // Derive from server_url: same host and port
+                    val uri = java.net.URI(serverUrl)
+                    val host = uri.host ?: "localhost"
+                    val port = if (uri.port > 0) uri.port else if (uri.scheme == "https") 443 else 80
+                    "$host:$port"
+                }
+
+            val grpcUseTls = props.getProperty("grpc_use_tls")?.toBoolean()
+                ?: java.net.URI(serverUrl).scheme.equals("https", ignoreCase = true)
+
             return BuddyConfig(
-                serverUrl = requireProp(props, "server_url").trimEnd('/'),
+                serverUrl = serverUrl,
+                grpcAddress = grpcAddress,
+                grpcUseTls = grpcUseTls,
                 apiKey = requireProp(props, "api_key"),
                 buddyName = requireProp(props, "buddy_name"),
                 nasRoot = requireProp(props, "nas_root"),

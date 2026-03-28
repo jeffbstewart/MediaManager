@@ -19,7 +19,7 @@ import java.nio.file.StandardCopyOption
  */
 class LocalFileCache(
     private val tempDir: File,
-    private val apiClient: BuddyApiClient
+    private val apiClient: BuddyGrpcClient
 ) {
 
     private val log = LoggerFactory.getLogger(LocalFileCache::class.java)
