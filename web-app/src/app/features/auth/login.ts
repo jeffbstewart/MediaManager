@@ -89,8 +89,14 @@ export class LoginComponent implements OnInit {
       this.router.navigate(['/']);
     } catch (e: unknown) {
       const httpError = e as { error?: { error?: string; retry_after?: number } };
-      this.error.set(httpError.error?.error ?? 'Login failed');
-      this.submitting.set(false);
+      const retryAfter = httpError.error?.retry_after;
+      if (retryAfter && retryAfter > 0) {
+        this.error.set(`Too many attempts. Try again in ${retryAfter} seconds.`);
+        setTimeout(() => this.submitting.set(false), retryAfter * 1000);
+      } else {
+        this.error.set(httpError.error?.error ?? 'Login failed');
+        this.submitting.set(false);
+      }
     }
   }
 }
