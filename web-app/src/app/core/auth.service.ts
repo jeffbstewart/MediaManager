@@ -104,15 +104,34 @@ export class AuthService {
 
   private setAccessToken(token: string, expiresInSeconds: number): void {
     this.accessToken.set(token);
+    this.setJwtCookie(token, expiresInSeconds);
     this.scheduleRefresh(expiresInSeconds);
   }
 
   private clearAccessToken(): void {
     this.accessToken.set(null);
+    this.clearJwtCookie();
     if (this.refreshTimerId) {
       clearTimeout(this.refreshTimerId);
       this.refreshTimerId = null;
     }
+  }
+
+  /**
+   * Sets the access token as an mm_jwt cookie so browser-initiated requests
+   * (<img>, <video>) carry auth automatically. The ArmeriaAuthDecorator
+   * accepts this cookie as auth method #3.
+   *
+   * TODO: Pair with HttpOnly mm_jwt_bind cookie for off-origin theft
+   * protection (see issue #59).
+   */
+  private setJwtCookie(token: string, expiresInSeconds: number): void {
+    const expires = new Date(Date.now() + expiresInSeconds * 1000).toUTCString();
+    document.cookie = `mm_jwt=${token}; path=/; expires=${expires}; SameSite=Lax`;
+  }
+
+  private clearJwtCookie(): void {
+    document.cookie = 'mm_jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   }
 
   /** Schedule a token refresh at 80% of the token lifetime. */
