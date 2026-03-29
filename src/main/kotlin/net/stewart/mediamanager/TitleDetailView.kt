@@ -677,8 +677,65 @@ class TitleDetailView : VerticalLayout(), BeforeEnterObserver {
 
         val seasons = allEpisodes.map { it.season_number }.distinct().sorted()
 
-        container.add(H3("Watch from these locations").apply {
+        // Count episodes pending download (mobile) transcoding
+        val pendingDownloadCount = transcodes.count { !it.for_mobile_available }
+
+        container.add(HorizontalLayout().apply {
+            defaultVerticalComponentAlignment = FlexComponent.Alignment.CENTER
+            isSpacing = true
             style.set("margin-bottom", "var(--lumo-space-s)")
+            isWrap = true
+
+            add(H3("Watch from these locations").apply {
+                style.set("margin", "0")
+            })
+
+            // Rush Download Transcoding button — visible when episodes are pending download transcoding
+            if (pendingDownloadCount > 0) {
+                val allRequested = transcodes.filter { !it.for_mobile_available }.all { it.for_mobile_requested }
+                val isPrioritized = title.transcode_priority > 0 && allRequested
+                add(Button(if (isPrioritized) "Downloads Prioritized" else "Rush Downloads ($pendingDownloadCount pending)").apply {
+                    addThemeVariants(ButtonVariant.LUMO_SMALL)
+                    if (isPrioritized) {
+                        addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+                        icon = VaadinIcon.CHECK.create()
+                    } else {
+                        icon = VaadinIcon.DOWNLOAD.create()
+                    }
+                    addClickListener {
+                        val fresh = Title.findById(title.id!!) ?: return@addClickListener
+                        val titleTranscodes = Transcode.findAll().filter { it.title_id == title.id }
+                        if (isPrioritized) {
+                            // Remove priority and un-request
+                            fresh.transcode_priority = 0
+                            fresh.save()
+                            titleTranscodes.filter { it.for_mobile_requested && !it.for_mobile_available }.forEach {
+                                it.for_mobile_requested = false
+                                it.save()
+                            }
+                            text = "Rush Downloads ($pendingDownloadCount pending)"
+                            icon = VaadinIcon.DOWNLOAD.create()
+                            removeThemeVariants(ButtonVariant.LUMO_PRIMARY)
+                            Notification.show("Download priority removed", 3000, Notification.Position.BOTTOM_START)
+                        } else {
+                            // Set priority and request download on all episodes
+                            fresh.transcode_priority = 100
+                            fresh.save()
+                            titleTranscodes.filter { !it.for_mobile_available }.forEach {
+                                it.for_mobile_requested = true
+                                it.save()
+                            }
+                            text = "Downloads Prioritized"
+                            icon = VaadinIcon.CHECK.create()
+                            addThemeVariants(ButtonVariant.LUMO_PRIMARY)
+                            Notification.show(
+                                "All $pendingDownloadCount episodes queued for download transcoding",
+                                3000, Notification.Position.BOTTOM_START
+                            ).addThemeVariants(NotificationVariant.LUMO_SUCCESS)
+                        }
+                    }
+                })
+            }
         })
 
         val episodeGrid = Grid<EpisodeRow>(EpisodeRow::class.java, false).apply {

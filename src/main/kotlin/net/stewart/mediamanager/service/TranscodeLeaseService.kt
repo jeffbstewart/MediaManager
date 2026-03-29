@@ -99,7 +99,12 @@ object TranscodeLeaseService {
 
         val titles = Title.findAll().associateBy { it.id }
         val hiddenTitleIds = titles.values.filter { it.hidden }.map { it.id }.toSet()
-        val priorityCounts = WishListService.getDesktopTranscodePriorityCounts()
+        val wishPriorityCounts = WishListService.getDesktopTranscodePriorityCounts()
+        // Merge wish votes with per-title transcode_priority boost
+        val priorityCounts = titles.values.associate { title ->
+            val wishVotes = wishPriorityCounts[title.id] ?: 0
+            title.id!! to (wishVotes + title.transcode_priority)
+        }.filterValues { it > 0 }
 
         val workItems = mutableListOf<WorkItem>()
 
