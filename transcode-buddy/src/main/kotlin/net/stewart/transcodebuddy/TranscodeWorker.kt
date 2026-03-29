@@ -49,12 +49,30 @@ class TranscodeWorker(
         "SUBTITLES" to 4
     )
 
+    private val reconnectIntervalMs = 30_000L // retry reconnection every 30s
+
     override fun run() {
         log.info("Worker-{} started (encoder: {} / {})", workerIndex, encoder.name, encoder.ffmpegEncoder)
         var holdingSleep = false
 
         while (running.get()) {
             try {
+                // If the gRPC stream is down (server restart, network blip), attempt
+                // reconnection before entering the work polling loop. This prevents
+                // the "no work" backoff from growing to 1 hour when the real problem
+                // is a dead connection, not an empty queue.
+                if (!apiClient.isConnected()) {
+                    log.info("Worker-{} stream disconnected, attempting reconnection...", workerIndex)
+                    val reconnected = apiClient.connect()
+                    if (reconnected == null) {
+                        log.warn("Worker-{} reconnection failed, retrying in {}s", workerIndex, reconnectIntervalMs / 1000)
+                        Thread.sleep(reconnectIntervalMs)
+                        continue
+                    }
+                    log.info("Worker-{} reconnected to server ({} pending)", workerIndex, reconnected.pendingCount)
+                    currentIntervalMs = baseIntervalMs // reset backoff on reconnect
+                }
+
                 val didWork = processBundle()
                 if (didWork) {
                     currentIntervalMs = baseIntervalMs // reset backoff on success
