@@ -15,14 +15,19 @@ object SimilarTitlesService {
      * shared top-5 cast members (+3 each). Excludes hidden titles for the current user.
      */
     fun getSimilarTitles(title: Title, limit: Int = 12): List<Title> {
+        val currentUser = AuthService.getCurrentUser()
+        return getSimilarTitlesForUser(title, currentUser?.id, limit, currentUser)
+    }
+
+    /** Returns similar titles for an explicit user ID. */
+    fun getSimilarTitlesForUser(title: Title, userId: Long?, limit: Int = 12, user: AppUser? = null): List<Title> {
         val titleId = title.id ?: return emptyList()
         val tmdbKey = title.tmdbKey()
 
-        // All enriched, non-hidden catalog titles (excluding self)
-        val currentUser = AuthService.getCurrentUser()
-        val hiddenIds = if (currentUser != null) {
+        val resolvedUser = user ?: userId?.let { AppUser.findById(it) }
+        val hiddenIds = if (userId != null) {
             UserTitleFlag.findAll()
-                .filter { it.user_id == currentUser.id && it.flag == UserFlagType.HIDDEN.name }
+                .filter { it.user_id == userId && it.flag == UserFlagType.HIDDEN.name }
                 .map { it.title_id }
                 .toSet()
         } else emptySet()
@@ -84,8 +89,8 @@ object SimilarTitlesService {
         }
 
         // Rating enforcement
-        val ratingFilter: (Title) -> Boolean = if (currentUser != null) {
-            { t -> currentUser.canSeeRating(t.content_rating) }
+        val ratingFilter: (Title) -> Boolean = if (resolvedUser != null) {
+            { t -> resolvedUser.canSeeRating(t.content_rating) }
         } else {
             { true }
         }

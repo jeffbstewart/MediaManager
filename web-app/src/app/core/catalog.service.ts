@@ -67,6 +67,61 @@ export interface FeatureFlags {
   is_admin: boolean;
 }
 
+export interface TitleDetail {
+  title_id: number;
+  title_name: string;
+  media_type: string;
+  release_year: number | null;
+  description: string | null;
+  content_rating: string | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
+  event_date: string | null;
+  is_starred: boolean;
+  is_hidden: boolean;
+  genres: string[];
+  tags: { id: number; name: string; bg_color: string; text_color: string }[];
+  formats: string[];
+  transcodes: TranscodeInfo[];
+  cast: CastInfo[];
+  episodes: EpisodeInfo[];
+  seasons: { season_number: number; acquisition_status: string }[];
+  family_members: { id: number; name: string }[];
+  similar_titles: CarouselTitle[];
+  collection: { id: number; name: string } | null;
+}
+
+export interface TranscodeInfo {
+  transcode_id: number;
+  file_name: string;
+  playable: boolean;
+  media_format: string | null;
+  position_seconds?: number;
+  duration_seconds?: number;
+  season_number?: number;
+  episode_number?: number;
+  episode_name?: string;
+}
+
+export interface CastInfo {
+  id: number;
+  name: string;
+  character_name: string | null;
+  headshot_url: string | null;
+  tmdb_person_id: number;
+}
+
+export interface EpisodeInfo {
+  id: number;
+  season_number: number;
+  episode_number: number;
+  name: string | null;
+  transcode_id: number | null;
+  playable: boolean;
+  position_seconds: number | null;
+  duration_seconds: number | null;
+}
+
 export interface HomeFeed {
   continue_watching: ContinueWatchingItem[];
   recently_added: CarouselTitle[];
@@ -81,6 +136,10 @@ export class CatalogService {
 
   async getHomeFeed(): Promise<HomeFeed> {
     return firstValueFrom(this.http.get<HomeFeed>('/api/v2/catalog/home'));
+  }
+
+  async getTitleDetail(titleId: number): Promise<TitleDetail> {
+    return firstValueFrom(this.http.get<TitleDetail>(`/api/v2/catalog/titles/${titleId}`));
   }
 
   async getTitles(params: TitleListParams): Promise<TitleListResponse> {

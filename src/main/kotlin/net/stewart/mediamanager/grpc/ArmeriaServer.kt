@@ -25,6 +25,7 @@ import net.stewart.mediamanager.armeria.PosterHttpService
 import net.stewart.mediamanager.armeria.RequestLogHttpService
 import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.HomeFeedHttpService
+import net.stewart.mediamanager.armeria.TitleDetailHttpService
 import net.stewart.mediamanager.armeria.TitleListHttpService
 import net.stewart.mediamanager.armeria.RokuFeedHttpService
 import net.stewart.mediamanager.armeria.VideoStreamHttpService
@@ -173,6 +174,7 @@ object ArmeriaServer {
         // REST API — authenticated catalog endpoints
         sb.annotatedService().decorator(authDecorator).build(HomeFeedHttpService())
         sb.annotatedService().decorator(authDecorator).build(TitleListHttpService())
+        sb.annotatedService().decorator(authDecorator).build(TitleDetailHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

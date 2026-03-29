@@ -1,0 +1,215 @@
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner diameter="40" />
+  </div>
+} @else if (error()) {
+  <div class="error-container">
+    <p>{{ error() }}</p>
+  </div>
+} @else if (title(); as t) {
+  <div class="detail-container">
+    <!-- Hero section -->
+    <div class="hero">
+      @if (t.backdrop_url) {
+        <img [src]="t.backdrop_url" class="hero-backdrop" alt="" />
+      }
+      <div class="hero-content">
+        @if (t.poster_url) {
+          <img [src]="t.poster_url" [alt]="t.title_name" class="hero-poster" />
+        }
+        <div class="hero-info">
+          <div class="title-row">
+            <h1>{{ t.title_name }}</h1>
+            <button mat-icon-button class="star-btn" [class.starred]="t.is_starred"
+                    aria-label="Star">
+              <mat-icon>{{ t.is_starred ? 'star' : 'star_border' }}</mat-icon>
+            </button>
+          </div>
+
+          <!-- Metadata -->
+          <div class="meta-row">
+            @if (!isPersonal) {
+              @if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.content_rating) {
+                <span class="rating-badge">{{ t.content_rating }}</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else {
+              @if (t.event_date) {
+                <span>{{ t.event_date }}</span>
+              }
+              <span>Family Video</span>
+            }
+          </div>
+
+          <!-- Format badges -->
+          @if (t.formats.length > 0) {
+            <div class="format-row">
+              @for (fmt of t.formats; track fmt) {
+                <span class="format-badge">{{ fmt }}</span>
+              }
+            </div>
+          }
+
+          <!-- Tags -->
+          @if (t.tags.length > 0) {
+            <div class="tag-row">
+              @for (tag of t.tags; track tag.id) {
+                <a class="tag-badge" [routerLink]="routes.tag(tag.id)"
+                   [style.background-color]="tag.bg_color" [style.color]="tag.text_color">
+                  {{ tag.name }}
+                </a>
+              }
+            </div>
+          }
+
+          <!-- Collection -->
+          @if (t.collection) {
+            <div class="collection-link">
+              Part of
+              <a [routerLink]="routes.collection(t.collection.id)">{{ t.collection.name }}</a>
+            </div>
+          }
+
+          <!-- Description -->
+          @if (t.description) {
+            <p class="description">{{ t.description }}</p>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Family members (personal only) -->
+    @if (isPersonal && t.family_members.length > 0) {
+      <section class="section">
+        <h3>People in this Video</h3>
+        <div class="family-row">
+          @for (member of t.family_members; track member.id) {
+            <div class="family-card">
+              <div class="family-initial">{{ member.name.charAt(0) }}</div>
+              <span class="family-name">{{ member.name }}</span>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Seasons (TV only) -->
+    @if (isTv && t.seasons.length > 0) {
+      <section class="section">
+        <h3>Seasons</h3>
+        <div class="season-chips">
+          @for (s of t.seasons; track s.season_number) {
+            <span class="season-chip" [attr.data-status]="s.acquisition_status">
+              S{{ s.season_number }} {{ s.acquisition_status }}
+            </span>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Episodes (TV only) -->
+    @if (isTv && t.episodes.length > 0) {
+      <section class="section">
+        <h3>Episodes</h3>
+        <div class="season-selector">
+          @for (s of availableSeasons; track s) {
+            <button mat-stroked-button [class.active]="selectedSeason() === s"
+                    (click)="selectSeason(s)">
+              {{ seasonLabel(s) }}
+            </button>
+          }
+        </div>
+        <div class="episode-list">
+          @for (ep of filteredEpisodes; track ep.id) {
+            <div class="episode-row">
+              <span class="ep-number">{{ ep.episode_number }}</span>
+              <span class="ep-name">{{ ep.name ?? 'Episode ' + ep.episode_number }}</span>
+              <span class="ep-spacer"></span>
+              @if (ep.position_seconds; as pos) {
+                <span class="ep-resume">{{ formatResume(pos, ep.duration_seconds) }}</span>
+              }
+              @if (ep.playable) {
+                <mat-icon class="ep-play">play_circle</mat-icon>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Transcodes / Watch -->
+    @if (t.transcodes.length > 0) {
+      <section class="section">
+        <h3>{{ isTv ? '' : 'Watch' }}</h3>
+        @for (tc of t.transcodes; track tc.transcode_id) {
+          @if (!isTv || !tc.season_number) {
+            <div class="transcode-row">
+              @if (tc.media_format) {
+                <span class="format-badge small">{{ tc.media_format }}</span>
+              }
+              <span class="tc-filename">{{ tc.file_name }}</span>
+              <span class="tc-spacer"></span>
+              @if (formatResume(tc.position_seconds, tc.duration_seconds); as resume) {
+                <span class="tc-resume">{{ resume }}</span>
+              }
+              @if (tc.playable) {
+                <mat-icon class="tc-play">play_circle</mat-icon>
+              }
+            </div>
+          }
+        }
+      </section>
+    }
+
+    <!-- Cast (non-personal) -->
+    @if (!isPersonal && t.cast.length > 0) {
+      <section class="section">
+        <h3>Cast</h3>
+        <div class="cast-row">
+          @for (member of t.cast; track member.id) {
+            <a class="cast-card" [routerLink]="routes.actor(member.tmdb_person_id)">
+              @if (member.headshot_url) {
+                <img [src]="member.headshot_url" [alt]="member.name" class="cast-img" />
+              } @else {
+                <div class="cast-placeholder">{{ member.name.charAt(0) }}</div>
+              }
+              <span class="cast-name">{{ member.name }}</span>
+              @if (member.character_name) {
+                <span class="cast-character">{{ member.character_name }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Similar titles (non-personal) -->
+    @if (!isPersonal && t.similar_titles.length > 0) {
+      <section class="section">
+        <h3>Similar Titles</h3>
+        <div class="similar-row">
+          @for (item of t.similar_titles; track item.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              @if (item.release_year) {
+                <span class="poster-meta">{{ item.release_year }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+  </div>
+}
