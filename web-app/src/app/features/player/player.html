@@ -28,7 +28,7 @@
      tabindex="0">
 
   <video #videoEl
-         [src]="'/stream/' + transcodeId"
+         [src]="videoSrc()"
          (click)="togglePlay()"
          playsinline>
   </video>

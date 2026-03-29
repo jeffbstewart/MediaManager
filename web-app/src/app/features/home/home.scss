@@ -39,17 +39,18 @@
   flex-direction: column;
   min-width: 120px;
   width: 120px;
-  text-decoration: none;
+  position: relative;
   color: inherit;
-  cursor: pointer;
 
 }
 
 .poster-wrapper {
   position: relative;
+  display: block;
   border-radius: 6px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
+  text-decoration: none;
 }
 
 .poster-img {
@@ -62,6 +63,28 @@
 .poster-placeholder {
   width: 100%;
   aspect-ratio: 2 / 3;
+}
+
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  mat-icon {
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+    color: white;
+  }
+}
+
+.poster-wrapper:hover .play-overlay {
+  opacity: 1;
 }
 
 .dismiss-btn {
@@ -99,6 +122,20 @@
 .progress-fill {
   height: 100%;
   background: var(--mat-sys-primary, #bb86fc);
+}
+
+a.poster-title {
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+  color: inherit;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 .poster-title {

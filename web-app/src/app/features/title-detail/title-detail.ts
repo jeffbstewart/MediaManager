@@ -37,6 +37,28 @@ export class TitleDetailComponent implements OnInit {
   get isPersonal(): boolean { return this.title()?.media_type === 'PERSONAL'; }
   get isTv(): boolean { return this.title()?.media_type === 'TV'; }
 
+  /** The transcode with saved progress (for resume button). */
+  get resumeTranscode() {
+    const t = this.title();
+    if (!t) return null;
+    const withProgress = t.transcodes.filter(tc => tc.position_seconds && tc.position_seconds > 10);
+    if (withProgress.length === 0) return null;
+    return withProgress[0];
+  }
+
+  resumeLabel(tc: { position_seconds?: number; season_number?: number; episode_number?: number; episode_name?: string }): string {
+    const parts: string[] = [];
+    if (tc.season_number != null && tc.episode_number != null) {
+      parts.push(`S${String(tc.season_number).padStart(2, '0')}E${String(tc.episode_number).padStart(2, '0')}`);
+      if (tc.episode_name) parts.push(tc.episode_name);
+      parts.push('·');
+    }
+    if (tc.position_seconds) {
+      parts.push(`Resume from ${this.formatResume(tc.position_seconds, null)}`);
+    }
+    return parts.join(' ');
+  }
+
   get availableSeasons(): number[] {
     const t = this.title();
     if (!t) return [];

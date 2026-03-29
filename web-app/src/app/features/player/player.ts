@@ -43,6 +43,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   titleName = '';
 
   // State signals
+  readonly videoSrc = signal('');
   readonly loading = signal(true);
   readonly loadingText = signal('Starting playback...');
   readonly paused = signal(true);
@@ -122,9 +123,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
       this.resumePosition = progressResult.value.position;
       this.showResume.set(true);
       this.loading.set(false);
-      return; // Wait for user to choose resume/start over
+      return; // Wait for user to choose resume/start over — video src not set yet
     }
 
+    this.startPlayback();
     this.loading.set(false);
   }
 
@@ -139,18 +141,28 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   onResume(): void {
     this.showResume.set(false);
+    this.startPlayback();
     const video = this.videoRef()?.nativeElement;
     if (video) {
-      video.currentTime = this.resumePosition;
-      video.play();
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = this.resumePosition;
+        video.play();
+      }, { once: true });
     }
   }
 
   onStartOver(): void {
     this.showResume.set(false);
     this.reportClear();
+    this.startPlayback();
     const video = this.videoRef()?.nativeElement;
-    if (video) video.play();
+    if (video) {
+      video.addEventListener('canplay', () => video.play(), { once: true });
+    }
+  }
+
+  private startPlayback(): void {
+    this.videoSrc.set(`/stream/${this.transcodeId}`);
   }
 
   // --- Video event listeners ---

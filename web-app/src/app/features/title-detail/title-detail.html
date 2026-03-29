@@ -79,6 +79,15 @@
           @if (t.description) {
             <p class="description">{{ t.description }}</p>
           }
+
+          <!-- Resume / Play button -->
+          @if (resumeTranscode; as rc) {
+            <a class="resume-btn" mat-flat-button
+               [routerLink]="routes.play(rc.transcode_id)" [queryParams]="{ title: t.title_name }">
+              <mat-icon>play_arrow</mat-icon>
+              {{ resumeLabel(rc) }}
+            </a>
+          }
         </div>
       </div>
     </div>
@@ -130,8 +139,8 @@
               <span class="ep-number">{{ ep.episode_number }}</span>
               <span class="ep-name">{{ ep.name ?? 'Episode ' + ep.episode_number }}</span>
               <span class="ep-spacer"></span>
-              @if (ep.position_seconds; as pos) {
-                <span class="ep-resume">{{ formatResume(pos, ep.duration_seconds) }}</span>
+              @if (formatResume(ep.position_seconds, ep.duration_seconds); as resume) {
+                <span class="ep-resume">{{ resume }}</span>
               }
               @if (ep.playable && ep.transcode_id) {
                 <a [routerLink]="routes.play(ep.transcode_id)" [queryParams]="{ title: t.title_name }"

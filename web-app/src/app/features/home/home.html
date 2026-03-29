@@ -13,28 +13,30 @@
         <h2>Continue Watching</h2>
         <div class="carousel-row">
           @for (item of feed.continue_watching; track item.transcode_id) {
-            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
-              <div class="poster-wrapper">
+            <div class="poster-card">
+              <a class="poster-wrapper" [routerLink]="routes.play(item.transcode_id)"
+                 [queryParams]="{ title: item.title_name }">
                 @if (item.poster_url) {
                   <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
                 } @else {
                   <div class="poster-placeholder"></div>
                 }
+                <div class="play-overlay"><mat-icon>play_arrow</mat-icon></div>
                 <div class="progress-track">
                   <div class="progress-fill" [style.width.%]="item.progress_fraction * 100"></div>
                 </div>
-                <button class="dismiss-btn" mat-icon-button
-                        aria-label="Dismiss"
-                        (click)="dismissProgress($event, item.transcode_id)">
-                  <mat-icon>close</mat-icon>
-                </button>
-              </div>
-              <span class="poster-title">{{ item.title_name }}</span>
+              </a>
+              <button class="dismiss-btn" mat-icon-button
+                      aria-label="Dismiss"
+                      (click)="dismissProgress($event, item.transcode_id)">
+                <mat-icon>close</mat-icon>
+              </button>
+              <a class="poster-title" [routerLink]="routes.title(item.title_id)">{{ item.title_name }}</a>
               @if (item.is_episode && item.episode_label) {
                 <span class="poster-subtitle">{{ item.episode_label }}</span>
               }
               <span class="poster-meta">{{ item.time_remaining }}</span>
-            </a>
+            </div>
           }
         </div>
       </section>
