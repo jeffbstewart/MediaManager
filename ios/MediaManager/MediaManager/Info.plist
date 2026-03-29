@@ -34,11 +34,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>processing</string>
-	</array>
-	<key>CFBundleDisplayName</key>
+<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
 <key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan barcodes on disc packaging.</string>
