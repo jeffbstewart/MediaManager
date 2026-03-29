@@ -42,6 +42,17 @@ export class LoginComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    // If already authenticated, redirect to home
+    if (this.auth.isAuthenticated()) {
+      this.router.navigate(['/']);
+      return;
+    }
+    // Try silent refresh — user may have a valid refresh cookie
+    if (await this.auth.tryRefresh()) {
+      this.router.navigate(['/']);
+      return;
+    }
+
     try {
       const discover = await this.auth.discover();
       if (discover.setup_required) {

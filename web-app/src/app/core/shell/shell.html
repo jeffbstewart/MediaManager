@@ -8,32 +8,37 @@
         <span matListItemTitle>Home</span>
       </a>
 
-      <!-- Content collapsible group -->
-      <button mat-list-item (click)="toggleContent()">
-        <mat-icon matListItemIcon>grid_view</mat-icon>
-        <span matListItemTitle>Content</span>
-        <mat-icon class="expand-icon" [class.expanded]="contentOpen()">expand_more</mat-icon>
-      </button>
-      @if (contentOpen()) {
-        <a mat-list-item class="nested-item" [routerLink]="routes.movies()" routerLinkActive="active-link">
-          <span matListItemTitle>Movies</span>
-        </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.tvShows()" routerLinkActive="active-link">
-          <span matListItemTitle>TV Shows</span>
-        </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.collections()" routerLinkActive="active-link">
-          <span matListItemTitle>Collections</span>
-        </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.tags()" routerLinkActive="active-link">
-          <span matListItemTitle>Tags</span>
-        </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.personalVideos()" routerLinkActive="active-link">
+      <a mat-list-item [routerLink]="routes.movies()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>movie</mat-icon>
+        <span matListItemTitle>Movies</span>
+      </a>
+      <a mat-list-item [routerLink]="routes.tvShows()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>tv</mat-icon>
+        <span matListItemTitle>TV Shows</span>
+      </a>
+      <a mat-list-item [routerLink]="routes.collections()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>collections_bookmark</mat-icon>
+        <span matListItemTitle>Collections</span>
+      </a>
+      <a mat-list-item [routerLink]="routes.tags()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>label</mat-icon>
+        <span matListItemTitle>Tags</span>
+      </a>
+      @if (features.hasPersonalVideos()) {
+        <a mat-list-item [routerLink]="routes.personalVideos()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>family_restroom</mat-icon>
           <span matListItemTitle>Family</span>
         </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.cameras()" routerLinkActive="active-link">
+      }
+      @if (features.hasCameras()) {
+        <a mat-list-item [routerLink]="routes.cameras()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>videocam</mat-icon>
           <span matListItemTitle>Cameras</span>
         </a>
-        <a mat-list-item class="nested-item" [routerLink]="routes.liveTv()" routerLinkActive="active-link">
+      }
+      @if (features.hasLiveTv()) {
+        <a mat-list-item [routerLink]="routes.liveTv()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>live_tv</mat-icon>
           <span matListItemTitle>Live TV</span>
         </a>
       }
@@ -44,7 +49,7 @@
       </a>
 
       <!-- Admin section -->
-      @if (isAdmin()) {
+      @if (features.isAdmin()) {
         <mat-divider />
         <div class="section-header">MANAGE</div>
 

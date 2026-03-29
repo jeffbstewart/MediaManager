@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
+import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import net.stewart.mediamanager.service.RequestLogBuffer
@@ -15,20 +16,20 @@ class RequestLogHttpService {
 
     @Get("/admin/requests")
     fun requests(
-        @Param("ua") ua: String?,
-        @Param("path") path: String?,
-        @Param("status") status: String?,
-        @Param("format") format: String?
+        @Param("ua") @Default("") ua: String,
+        @Param("path") @Default("") path: String,
+        @Param("status") @Default("") status: String,
+        @Param("format") @Default("") format: String
     ): HttpResponse {
         var entries = RequestLogBuffer.getAll().reversed()
 
-        if (ua != null) {
+        if (ua.isNotEmpty()) {
             entries = entries.filter { it.userAgent.contains(ua, ignoreCase = true) }
         }
-        if (path != null) {
+        if (path.isNotEmpty()) {
             entries = entries.filter { it.uri.startsWith(path) }
         }
-        if (status != null) {
+        if (status.isNotEmpty()) {
             entries = filterByStatus(entries, status)
         }
 

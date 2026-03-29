@@ -7,6 +7,7 @@ import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
@@ -98,10 +99,10 @@ class RokuFeedHttpService {
     }
 
     @Get("/roku/search.json")
-    fun search(ctx: ServiceRequestContext, @Param("q") q: String?): HttpResponse {
+    fun search(ctx: ServiceRequestContext, @Param("q") @Default("") q: String): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "search")
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
-        if (q.isNullOrBlank()) {
+        if (q.isBlank()) {
             MetricsRegistry.countHttpResponse("roku", 400)
             return HttpResponse.of(HttpStatus.BAD_REQUEST)
         }

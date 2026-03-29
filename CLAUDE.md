@@ -152,6 +152,8 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 
 - **Always use `Clock.sleep()` instead of `Thread.sleep` directly.** The `Clock` interface (in `service/Clock.kt`) abstracts time operations for testability. All production code should inject `clock: Clock = SystemClock` and call `clock.sleep(duration)`. Direct `Thread.sleep` calls make code untestable.
 
+- **Armeria `@Param` annotations must use `@Default` for optional parameters.** Kotlin nullable types (`String?`, `Boolean?`) are **not** treated as optional by Armeria — they cause `IllegalArgumentException: Mandatory parameter is missing` at runtime. Always pair `@Param("name")` with `@Default("value")` and use a non-nullable type. For example: `@Param("sort") @Default("name") sort: String`. The `AnnotatedServiceRegistrationTest` catches wiring issues at test time.
+
 ## Philosophy
 
 **"Debugging sucks, Testing Rocks."** — Write integration and unit tests before unleashing code on real data. If something can be tested with mocked dependencies and an in-memory database, it should be.

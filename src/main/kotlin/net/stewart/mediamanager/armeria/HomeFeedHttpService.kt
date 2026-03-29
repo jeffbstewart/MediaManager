@@ -12,6 +12,9 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.Camera
+import net.stewart.mediamanager.entity.LiveTvTuner
+import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.ContinueWatchingItem
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.PlaybackProgressService
@@ -57,11 +60,19 @@ class HomeFeedHttpService {
                 )
             }
 
+        val features = mapOf(
+            "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_cameras" to Camera.findAll().any { it.enabled },
+            "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
+            "is_admin" to user.isAdmin()
+        )
+
         val feed = mapOf(
             "continue_watching" to continueWatching,
             "recently_added" to recentlyAdded,
             "recently_watched" to recentlyWatched,
-            "missing_seasons" to missingSeasons
+            "missing_seasons" to missingSeasons,
+            "features" to features
         )
 
         return HttpResponse.builder()

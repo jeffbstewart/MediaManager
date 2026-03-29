@@ -1,0 +1,67 @@
+<div class="filter-bar">
+  <!-- Playable toggle -->
+  <mat-chip-set>
+    <mat-chip [highlighted]="playableOnly()" (click)="togglePlayable()">Playable</mat-chip>
+  </mat-chip-set>
+
+  <!-- Rating chips -->
+  @if (availableRatings().length > 0) {
+    <span class="chip-separator">&middot;</span>
+    <mat-chip-set>
+      <mat-chip [highlighted]="selectedRatings().size === 0" (click)="clearRatings()">All Ratings</mat-chip>
+      @for (rating of availableRatings(); track rating) {
+        <mat-chip [highlighted]="selectedRatings().has(rating)" (click)="toggleRating(rating)">
+          {{ rating }}
+        </mat-chip>
+      }
+    </mat-chip-set>
+  }
+
+  <!-- Sort chips -->
+  <span class="chip-separator">&middot;</span>
+  <mat-chip-set>
+    @for (opt of sortOptions; track opt.value) {
+      <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
+        {{ opt.label }}
+      </mat-chip>
+    }
+  </mat-chip-set>
+</div>
+
+@if (loading() && titles().length === 0) {
+  <div class="loading-container">
+    <mat-spinner diameter="40" />
+  </div>
+} @else if (error()) {
+  <p class="error-message">{{ error() }}</p>
+} @else {
+  <span class="status-label">{{ total() }} {{ label() }}</span>
+
+  <div class="poster-grid">
+    @for (title of titles(); track title.title_id) {
+      <a class="poster-card" [routerLink]="routes.title(title.title_id)">
+        <div class="poster-wrapper">
+          @if (title.poster_url) {
+            <img [src]="title.poster_url" [alt]="title.title_name" class="poster-img" />
+          } @else {
+            <div class="poster-placeholder"></div>
+          }
+          @if (title.playable) {
+            <div class="playable-badge">
+              <div class="play-triangle"></div>
+            </div>
+          }
+          @if (title.progress_fraction) {
+            <div class="progress-track">
+              <div class="progress-fill" [style.width.%]="title.progress_fraction * 100"></div>
+            </div>
+          }
+        </div>
+        <span class="poster-title">{{ title.title_name }}</span>
+        @if (title.release_year) {
+          <span class="poster-meta">{{ title.release_year }}</span>
+        }
+      </a>
+    }
+  </div>
+}

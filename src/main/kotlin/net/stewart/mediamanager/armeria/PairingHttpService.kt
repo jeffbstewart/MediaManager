@@ -8,6 +8,7 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
@@ -103,7 +104,7 @@ class PairingHttpService {
     }
 
     @Get("/api/pair/status")
-    fun status(ctx: ServiceRequestContext, @Param("code") code: String?): HttpResponse {
+    fun status(ctx: ServiceRequestContext, @Param("code") @Default("") code: String): HttpResponse {
         val ip = getClientIp(ctx)
         if (isRateLimited(rateLimitStatus, ip, STATUS_MAX_PER_MINUTE)) {
             log.warn("Rate limit exceeded for /status from IP {}", ip)
@@ -111,7 +112,7 @@ class PairingHttpService {
                 mapOf("error" to "Too many requests. Slow down polling."))
         }
 
-        if (code.isNullOrBlank()) {
+        if (code.isBlank()) {
             return jsonResponse(HttpStatus.BAD_REQUEST, mapOf("error" to "code parameter required"))
         }
 
@@ -136,14 +137,14 @@ class PairingHttpService {
     }
 
     @Get("/api/pair/qr")
-    fun qr(ctx: ServiceRequestContext, @Param("code") code: String?): HttpResponse {
+    fun qr(ctx: ServiceRequestContext, @Param("code") @Default("") code: String): HttpResponse {
         val ip = getClientIp(ctx)
         if (isRateLimited(rateLimitQr, ip, QR_MAX_PER_MINUTE)) {
             log.warn("Rate limit exceeded for /qr from IP {}", ip)
             return HttpResponse.of(HttpStatus.TOO_MANY_REQUESTS)
         }
 
-        if (code.isNullOrBlank()) {
+        if (code.isBlank()) {
             return HttpResponse.of(HttpStatus.BAD_REQUEST)
         }
 

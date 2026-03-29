@@ -8,6 +8,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { AuthService } from '../auth.service';
+import { FeatureService } from '../feature.service';
 import { AppRoutes } from '../routes';
 
 @Component({
@@ -30,18 +31,11 @@ import { AppRoutes } from '../routes';
 })
 export class ShellComponent {
   private readonly auth = inject(AuthService);
+  readonly features = inject(FeatureService);
 
   readonly routes = AppRoutes;
-  readonly contentOpen = signal(false);
   readonly purchasesOpen = signal(false);
   readonly transcodesOpen = signal(false);
-
-  // TODO: Derive from user access_level once profile endpoint exists
-  readonly isAdmin = signal(true);
-
-  toggleContent(): void {
-    this.contentOpen.update(v => !v);
-  }
 
   togglePurchases(): void {
     this.purchasesOpen.update(v => !v);

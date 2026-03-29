@@ -4,6 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppRoutes } from '../../core/routes';
+import { FeatureService } from '../../core/feature.service';
 import {
   CatalogService,
   HomeFeed,
@@ -23,6 +24,7 @@ import {
 })
 export class HomeComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
+  private readonly features = inject(FeatureService);
 
   readonly routes = AppRoutes;
   readonly loading = signal(true);
@@ -33,6 +35,7 @@ export class HomeComponent implements OnInit {
     try {
       const data = await this.catalog.getHomeFeed();
       this.feed.set(data);
+      this.features.update(data.features);
     } catch {
       this.error.set('Failed to load home feed');
     } finally {

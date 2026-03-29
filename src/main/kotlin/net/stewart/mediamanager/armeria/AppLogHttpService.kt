@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
+import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import net.stewart.mediamanager.service.AppLogBuffer
@@ -15,18 +16,18 @@ class AppLogHttpService {
 
     @Get("/admin/logs")
     fun logs(
-        @Param("level") level: String?,
-        @Param("logger") logger: String?,
-        @Param("format") format: String?
+        @Param("level") @Default("") level: String,
+        @Param("logger") @Default("") logger: String,
+        @Param("format") @Default("") format: String
     ): HttpResponse {
-        var entries = when (level?.uppercase()) {
+        var entries = when (level.uppercase()) {
             "ERROR" -> AppLogBuffer.getErrors().reversed()
             "WARN" -> (AppLogBuffer.getErrors() + AppLogBuffer.getWarnings())
                 .sortedByDescending { it.timestamp }
             else -> AppLogBuffer.getAll()
         }
 
-        if (logger != null) {
+        if (logger.isNotEmpty()) {
             entries = entries.filter { it.loggerName.contains(logger, ignoreCase = true) }
         }
 

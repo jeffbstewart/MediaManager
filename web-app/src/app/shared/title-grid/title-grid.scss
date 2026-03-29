@@ -1,0 +1,118 @@
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  row-gap: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.chip-separator {
+  opacity: 0.3;
+  margin: 0 4px;
+}
+
+.status-label {
+  display: block;
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  margin-bottom: 0.75rem;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error, #f44336);
+  text-align: center;
+  padding: 2rem;
+}
+
+.poster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.poster-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.poster-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.poster-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.poster-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.playable-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.play-triangle {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 0 5px 9px;
+  border-color: transparent transparent transparent white;
+  margin-left: 2px;
+}
+
+.progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--mat-sys-primary, #bb86fc);
+}
+
+.poster-title {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poster-meta {
+  font-size: 0.6875rem;
+  opacity: 0.5;
+}

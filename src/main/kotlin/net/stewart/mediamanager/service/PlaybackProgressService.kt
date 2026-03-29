@@ -191,6 +191,11 @@ object PlaybackProgressService {
      */
     fun getProgressByTitle(): Map<Long, PlaybackProgress> {
         val userId = currentUserId() ?: return emptyMap()
+        return getProgressByTitleForUser(userId)
+    }
+
+    /** Returns a map of title_id → PlaybackProgress for an explicit user ID. */
+    fun getProgressByTitleForUser(userId: Long): Map<Long, PlaybackProgress> {
         val allProgress = PlaybackProgress.findAll().filter { it.user_id == userId }
         if (allProgress.isEmpty()) return emptyMap()
 
