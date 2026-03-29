@@ -68,6 +68,29 @@
   aspect-ratio: 2 / 3;
 }
 
+.dismiss-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.poster-wrapper:hover .dismiss-btn {
+  opacity: 1;
+}
+
 .progress-track {
   position: absolute;
   bottom: 0;

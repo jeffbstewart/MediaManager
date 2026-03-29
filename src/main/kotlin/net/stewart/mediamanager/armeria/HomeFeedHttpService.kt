@@ -6,7 +6,10 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
+import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.service.ContinueWatchingItem
@@ -64,6 +67,30 @@ class HomeFeedHttpService {
         return HttpResponse.builder()
             .status(HttpStatus.OK)
             .content(MediaType.JSON_UTF_8, gson.toJson(feed))
+            .build()
+    }
+
+    @Delete("/api/v2/playback-progress/{transcodeId}")
+    fun clearProgress(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        PlaybackProgressService.deleteProgressForUser(user.id!!, transcodeId)
+        return HttpResponse.builder()
+            .status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("ok" to true)))
+            .build()
+    }
+
+    @Post("/api/v2/catalog/dismiss-missing-seasons/{titleId}")
+    fun dismissMissingSeasons(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        MissingSeasonService.dismissAllForTitle(user.id!!, titleId)
+        return HttpResponse.builder()
+            .status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("ok" to true)))
             .build()
     }
 

@@ -23,6 +23,11 @@
                 <div class="progress-track">
                   <div class="progress-fill" [style.width.%]="item.progress_fraction * 100"></div>
                 </div>
+                <button class="dismiss-btn" mat-icon-button
+                        aria-label="Dismiss"
+                        (click)="dismissProgress($event, item.transcode_id)">
+                  <mat-icon>close</mat-icon>
+                </button>
               </div>
               <span class="poster-title">{{ item.title_name }}</span>
               @if (item.is_episode && item.episode_label) {
@@ -93,6 +98,11 @@
                 } @else {
                   <div class="poster-placeholder"></div>
                 }
+                <button class="dismiss-btn" mat-icon-button
+                        aria-label="Dismiss"
+                        (click)="dismissMissingSeasons($event, item.title_id)">
+                  <mat-icon>close</mat-icon>
+                </button>
               </div>
               <span class="poster-title">{{ item.title_name }}</span>
               <span class="poster-subtitle">

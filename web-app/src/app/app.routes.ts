@@ -35,6 +35,7 @@ export const routes: Routes = [
       { path: 'cameras', loadComponent: placeholder, data: { title: 'Cameras' } },
       { path: 'live-tv', loadComponent: placeholder, data: { title: 'Live TV' } },
       { path: 'profile', loadComponent: placeholder, data: { title: 'Profile' } },
+      { path: 'help', loadComponent: placeholder, data: { title: 'Help' } },
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },

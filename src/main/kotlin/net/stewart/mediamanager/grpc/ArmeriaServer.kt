@@ -87,33 +87,8 @@ object ArmeriaServer {
         val sb = Server.builder()
             .http(port)
             .service(grpcService)
-            // Health check on the main port for HAProxy (no auth)
-            .annotatedService(HealthHttpService())
 
-        // Authenticated image/data endpoints
-        sb.annotatedService().decorator(authDecorator).build(PosterHttpService())
-        sb.annotatedService().decorator(authDecorator).build(HeadshotHttpService())
-        sb.annotatedService().decorator(authDecorator).build(BackdropHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CollectionPosterHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LocalImageHttpService())
-        sb.annotatedService().decorator(authDecorator).build(OwnershipPhotoHttpService())
-        sb.annotatedService().decorator(authDecorator).build(PlaybackProgressHttpService())
-
-        // Streaming endpoints (video, camera, live TV)
-        sb.annotatedService().decorator(authDecorator).build(VideoStreamHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CameraStreamHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LiveTvStreamHttpService())
-
-        // REST API — authenticated catalog endpoints
-        sb.annotatedService().decorator(authDecorator).build(HomeFeedHttpService())
-
-        // REST API auth (unauthenticated — own proxy validation + rate limiting)
-        sb.annotatedService(AuthRestService())
-
-        // Roku endpoints (own auth: device token + cookie fallback, no ArmeriaAuthDecorator)
-        sb.annotatedService(RokuFeedHttpService())
-        // Device pairing (unauthenticated, has its own rate limiting)
-        sb.annotatedService(PairingHttpService())
+        registerHttpServices(sb)
 
         // Angular SPA at /app/ with client-side routing fallback.
         // In production, Angular build output is at spa/ (copied by Dockerfile).
@@ -167,6 +142,43 @@ object ArmeriaServer {
     fun stop() {
         server?.stop()?.join()
         log.info("Armeria server stopped")
+    }
+
+    /**
+     * Registers all HTTP annotated services on the given [ServerBuilder].
+     * Extracted so tests can call the same registration path that production uses,
+     * catching @Param name resolution and decorator wiring issues at test time.
+     */
+    fun registerHttpServices(sb: com.linecorp.armeria.server.ServerBuilder) {
+        val authDecorator = ArmeriaAuthDecorator()
+
+        // Health check (no auth)
+        sb.annotatedService(HealthHttpService())
+
+        // Authenticated image/data endpoints
+        sb.annotatedService().decorator(authDecorator).build(PosterHttpService())
+        sb.annotatedService().decorator(authDecorator).build(HeadshotHttpService())
+        sb.annotatedService().decorator(authDecorator).build(BackdropHttpService())
+        sb.annotatedService().decorator(authDecorator).build(CollectionPosterHttpService())
+        sb.annotatedService().decorator(authDecorator).build(LocalImageHttpService())
+        sb.annotatedService().decorator(authDecorator).build(OwnershipPhotoHttpService())
+        sb.annotatedService().decorator(authDecorator).build(PlaybackProgressHttpService())
+
+        // Streaming endpoints (video, camera, live TV)
+        sb.annotatedService().decorator(authDecorator).build(VideoStreamHttpService())
+        sb.annotatedService().decorator(authDecorator).build(CameraStreamHttpService())
+        sb.annotatedService().decorator(authDecorator).build(LiveTvStreamHttpService())
+
+        // REST API — authenticated catalog endpoints
+        sb.annotatedService().decorator(authDecorator).build(HomeFeedHttpService())
+
+        // REST API auth (unauthenticated — own proxy validation + rate limiting)
+        sb.annotatedService(AuthRestService())
+
+        // Roku endpoints (own auth: device token + cookie fallback, no ArmeriaAuthDecorator)
+        sb.annotatedService(RokuFeedHttpService())
+        // Device pairing (unauthenticated, has its own rate limiting)
+        sb.annotatedService(PairingHttpService())
     }
 
     /**

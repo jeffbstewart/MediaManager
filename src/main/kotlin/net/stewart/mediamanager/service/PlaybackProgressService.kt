@@ -302,7 +302,7 @@ object PlaybackProgressService {
         }
     }
 
-    private fun deleteProgressForUser(userId: Long, transcodeId: Long) {
+    fun deleteProgressForUser(userId: Long, transcodeId: Long) {
         PlaybackProgress.findAll()
             .filter { it.user_id == userId && it.transcode_id == transcodeId }
             .forEach { it.delete() }

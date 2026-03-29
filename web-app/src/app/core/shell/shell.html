@@ -147,6 +147,10 @@
           <mat-icon>person</mat-icon>
           <span>Profile</span>
         </a>
+        <a mat-menu-item [routerLink]="routes.help()">
+          <mat-icon>help_outline</mat-icon>
+          <span>Help</span>
+        </a>
         <button mat-menu-item (click)="onLogout()">
           <mat-icon>logout</mat-icon>
           <span>Sign Out</span>

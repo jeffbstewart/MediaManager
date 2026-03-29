@@ -48,4 +48,12 @@ export class CatalogService {
   async getHomeFeed(): Promise<HomeFeed> {
     return firstValueFrom(this.http.get<HomeFeed>('/api/v2/catalog/home'));
   }
+
+  async clearProgress(transcodeId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/playback-progress/${transcodeId}`));
+  }
+
+  async dismissMissingSeasons(titleId: number): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/catalog/dismiss-missing-seasons/${titleId}`, {}));
+  }
 }

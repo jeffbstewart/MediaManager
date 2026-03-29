@@ -20,6 +20,7 @@ export const AppRoutes = {
   cameras: () => '/cameras',
   liveTv: () => '/live-tv',
   profile: () => '/profile',
+  help: () => '/help',
 
   // Admin
   adminAdd: () => '/admin/add',
