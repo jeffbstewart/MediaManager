@@ -1,0 +1,26 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40" />
+    </div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (channels().length === 0) {
+    <p class="empty-message">No channels available.</p>
+  } @else {
+    <span class="status-label">{{ channels().length }} channels</span>
+    <div class="channel-grid">
+      @for (ch of channels(); track ch.id) {
+        <div class="channel-card" (click)="watchChannel(ch)">
+          <span class="channel-number">{{ ch.guide_number }}</span>
+          <div class="channel-info">
+            <span class="channel-name">{{ ch.guide_name }}</span>
+            @if (ch.network_affiliation) {
+              <span class="channel-affiliation">{{ ch.network_affiliation }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -201,6 +201,19 @@ export interface FamilyVideosResponse {
 
 export type FamilySortMode = 'date_desc' | 'date_asc' | 'name' | 'recent';
 
+export interface TvChannelInfo {
+  id: number;
+  guide_number: string;
+  guide_name: string;
+  network_affiliation: string | null;
+  reception_quality: number;
+}
+
+export interface TvChannelListResponse {
+  channels: TvChannelInfo[];
+  total: number;
+}
+
 export interface CameraInfo {
   id: number;
   name: string;
@@ -217,6 +230,10 @@ export class CatalogService {
 
   async getHomeFeed(): Promise<HomeFeed> {
     return firstValueFrom(this.http.get<HomeFeed>('/api/v2/catalog/home'));
+  }
+
+  async getFeatures(): Promise<FeatureFlags> {
+    return firstValueFrom(this.http.get<FeatureFlags>('/api/v2/catalog/features'));
   }
 
   async getTitleDetail(titleId: number): Promise<TitleDetail> {
@@ -253,6 +270,10 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async getTvChannels(): Promise<TvChannelListResponse> {
+    return firstValueFrom(this.http.get<TvChannelListResponse>('/api/v2/catalog/live-tv/channels'));
   }
 
   async getCameras(): Promise<CameraListResponse> {

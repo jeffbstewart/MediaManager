@@ -75,15 +75,21 @@ class LiveTvStreamHttpService {
             return HttpResponse.of(status)
         }
 
-        // Rewrite segment URLs to fully-qualified absolute paths.
-        // AVPlayer needs full URLs so cookies are sent on segment requests.
-        val baseUrl = getBaseUrl(ctx)
+        // Rewrite segment URLs. Roku AVPlayer needs absolute URLs so cookies are
+        // sent on segment requests. Browser clients (hls.js) need relative URLs to
+        // avoid CORS issues when the playlist host differs from the page origin.
         val keyParam = keyParam(ctx)
+        val useAbsoluteUrls = keyParam.isNotEmpty() // Device token = Roku; no token = browser
+        val baseUrl = if (useAbsoluteUrls) getBaseUrl(ctx) else ""
         val content = playlistFile.readText()
         val rewritten = content.lines().joinToString("\n") { line ->
             if (line.endsWith(".ts")) {
                 val segName = line.trim()
-                "$baseUrl/live-tv-stream/${channel.id}/segment/$segName$keyParam"
+                if (useAbsoluteUrls) {
+                    "$baseUrl/live-tv-stream/${channel.id}/segment/$segName$keyParam"
+                } else {
+                    "../segment/$segName"
+                }
             } else {
                 line
             }

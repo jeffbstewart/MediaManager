@@ -1,4 +1,4 @@
-import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -8,6 +8,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { AuthService } from '../auth.service';
+import { CatalogService } from '../catalog.service';
 import { FeatureService } from '../feature.service';
 import { AppRoutes } from '../routes';
 
@@ -29,11 +30,21 @@ import { AppRoutes } from '../routes';
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
-export class ShellComponent {
+export class ShellComponent implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly catalog = inject(CatalogService);
   readonly features = inject(FeatureService);
 
   readonly routes = AppRoutes;
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const flags = await this.catalog.getFeatures();
+      this.features.update(flags);
+    } catch {
+      // Non-fatal — nav will show minimal set until home page loads
+    }
+  }
   readonly purchasesOpen = signal(false);
   readonly transcodesOpen = signal(false);
 

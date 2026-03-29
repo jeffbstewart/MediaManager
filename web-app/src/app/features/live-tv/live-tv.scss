@@ -1,0 +1,77 @@
+.content-page {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.error-message, .empty-message {
+  text-align: center;
+  padding: 2rem;
+  opacity: 0.5;
+}
+
+.error-message {
+  color: var(--mat-sys-error, #f44336);
+}
+
+.status-label {
+  display: block;
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  margin-bottom: 0.75rem;
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.channel-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.channel-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  opacity: 0.6;
+  min-width: 2.5rem;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.channel-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.channel-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-affiliation {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}

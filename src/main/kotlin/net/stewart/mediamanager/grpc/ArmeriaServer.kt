@@ -26,6 +26,7 @@ import net.stewart.mediamanager.armeria.RequestLogHttpService
 import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.CameraListHttpService
 import net.stewart.mediamanager.armeria.CollectionHttpService
+import net.stewart.mediamanager.armeria.LiveTvListHttpService
 import net.stewart.mediamanager.armeria.FamilyVideosHttpService
 import net.stewart.mediamanager.armeria.TagHttpService
 import net.stewart.mediamanager.armeria.HomeFeedHttpService
@@ -183,6 +184,7 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(TagHttpService())
         sb.annotatedService().decorator(authDecorator).build(FamilyVideosHttpService())
         sb.annotatedService().decorator(authDecorator).build(CameraListHttpService())
+        sb.annotatedService().decorator(authDecorator).build(LiveTvListHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

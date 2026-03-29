@@ -12,4 +12,5 @@ module.exports = {
   "/stream/**": proxyConfig,
   "/playback-progress/**": proxyConfig,
   "/cam/**": proxyConfig,
+  "/live-tv-stream/**": proxyConfig,
 };

@@ -81,6 +81,24 @@ class HomeFeedHttpService {
             .build()
     }
 
+    /** Lightweight endpoint returning only feature flags for shell nav gating. */
+    @Get("/api/v2/catalog/features")
+    fun features(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val features = mapOf(
+            "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_cameras" to Camera.findAll().any { it.enabled },
+            "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
+            "is_admin" to user.isAdmin()
+        )
+        return HttpResponse.builder()
+            .status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(features))
+            .build()
+    }
+
     @Delete("/api/v2/playback-progress/{transcodeId}")
     fun clearProgress(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx)
