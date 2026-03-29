@@ -90,6 +90,7 @@ class SetupView : VerticalLayout(), BeforeEnterObserver {
                             updated_at = now
                         )
                         u.save()
+                        AuthService.invalidateHasUsersCache()
                         u
                     }
                 } catch (e: IllegalStateException) {

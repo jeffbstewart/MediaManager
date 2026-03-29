@@ -1,6 +1,6 @@
 import {
   Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy,
-  ElementRef, viewChild, afterNextRender,
+  ElementRef, viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -38,6 +38,8 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   readonly videoRef = viewChild<ElementRef<HTMLVideoElement>>('videoEl');
   readonly containerRef = viewChild<ElementRef<HTMLDivElement>>('containerEl');
+  readonly thumbRef = viewChild<ElementRef<HTMLDivElement>>('thumbEl');
+  readonly thumbImgRef = viewChild<ElementRef<HTMLImageElement>>('thumbImg');
 
   transcodeId = 0;
   titleName = '';
@@ -71,7 +73,6 @@ export class PlayerComponent implements OnInit, OnDestroy {
   // Thumbnails
   thumbCues: ThumbCue[] = [];
   readonly showThumb = signal(false);
-  readonly thumbStyle = signal({ left: '0px', backgroundImage: '', backgroundPosition: '' });
 
   // Resume
   readonly showResume = signal(false);
@@ -82,9 +83,6 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private controlsTimer: ReturnType<typeof setTimeout> | null = null;
   private lastReportedTime = 0;
 
-  constructor() {
-    afterNextRender(() => this.setupVideoListeners());
-  }
 
   async ngOnInit(): Promise<void> {
     this.transcodeId = Number(this.route.snapshot.paramMap.get('transcodeId'));
@@ -163,6 +161,8 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   private startPlayback(): void {
     this.videoSrc.set(`/stream/${this.transcodeId}`);
+    // Video element renders after signal update; set up listeners after render
+    setTimeout(() => this.setupVideoListeners(), 0);
   }
 
   // --- Video event listeners ---
@@ -205,6 +205,12 @@ export class PlayerComponent implements OnInit, OnDestroy {
       this.updateBuffered(video);
       this.checkSkipSegments(video.currentTime);
     });
+    // If the video already loaded before listeners were attached, sync state now
+    if (video.readyState >= 3) {
+      this.loading.set(false);
+      this.duration.set(video.duration);
+    }
+
     video.addEventListener('error', () => {
       this.loading.set(true);
       this.loadingText.set('Playback error');
@@ -388,11 +394,14 @@ export class PlayerComponent implements OnInit, OnDestroy {
       return;
     }
     const left = Math.max(80, Math.min(rect.width - 80, event.clientX - rect.left));
-    this.thumbStyle.set({
-      left: `${left}px`,
-      backgroundImage: `url(/stream/${this.transcodeId}/${cue.url})`,
-      backgroundPosition: `-${cue.x}px -${cue.y}px`,
-    });
+    const container = this.thumbRef()?.nativeElement;
+    const img = this.thumbImgRef()?.nativeElement;
+    if (container && img) {
+      container.style.left = `${left}px`;
+      img.src = `/stream/${this.transcodeId}/${cue.url}`;
+      img.style.left = `-${cue.x}px`;
+      img.style.top = `-${cue.y}px`;
+    }
     this.showThumb.set(true);
   }
 

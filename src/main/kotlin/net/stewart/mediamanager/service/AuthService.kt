@@ -12,8 +12,10 @@ import net.stewart.mediamanager.entity.LoginAttempt
 import net.stewart.mediamanager.entity.SessionToken
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 sealed class LoginResult {
     data class Success(val user: AppUser) : LoginResult()
@@ -47,7 +49,55 @@ object AuthService {
     private const val LOCKOUT_THRESHOLD = 20
     private const val DAILY_FAILURE_CAP = 100
 
-    fun hasUsers(): Boolean = AppUser.count() > 0
+    // --- In-memory auth token cache ---
+    // Eliminates 4 DB round-trips per servlet request (image, video, progress, etc.)
+    // by caching validated token→user for 60 seconds. Without this, 30 concurrent
+    // image requests from a single page load cause 150 DB connection checkouts against
+    // a 10-connection pool, starving the health check and other requests.
+    private const val TOKEN_CACHE_TTL_SECONDS = 60L
+    private const val LAST_USED_UPDATE_INTERVAL_SECONDS = 300L // 5 minutes
+
+    private data class CachedAuth(
+        val user: AppUser,
+        val tokenId: Long,
+        val cachedAt: Instant,
+        val lastUsedUpdatedAt: Instant,
+    )
+
+    private val tokenCache = ConcurrentHashMap<String, CachedAuth>()
+
+    /** Evict a specific token hash from the cache (on logout, revoke, password change). */
+    fun evictTokenCache(tokenHash: String) {
+        tokenCache.remove(tokenHash)
+    }
+
+    /** Evict all cached entries for a user (on password change, lock, session invalidation). */
+    fun evictTokenCacheForUser(userId: Long) {
+        tokenCache.entries.removeIf { it.value.user.id == userId }
+    }
+
+    /** Clear entire token cache (for testing or emergency). */
+    fun clearTokenCache() {
+        tokenCache.clear()
+    }
+
+    // --- Cached hasUsers() ---
+    // AppUser.count() was called on every servlet request via AuthFilter. Cache the result
+    // since it only changes when users are created or deleted.
+    @Volatile
+    private var hasUsersCache: Boolean? = null
+
+    fun hasUsers(): Boolean {
+        hasUsersCache?.let { return it }
+        val result = AppUser.count() > 0
+        hasUsersCache = result
+        return result
+    }
+
+    /** Call when a user is created or deleted to refresh the hasUsers cache. */
+    fun invalidateHasUsersCache() {
+        hasUsersCache = null
+    }
 
     fun hashToken(token: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -266,6 +316,7 @@ object AuthService {
             ?.value
         if (cookieValue != null) {
             val hash = hashToken(cookieValue)
+            evictTokenCache(hash)
             val tokenId = JdbiOrm.jdbi().withHandle<Long?, Exception> { handle ->
                 handle.createQuery("SELECT id FROM session_token WHERE token_hash = :hash LIMIT 1")
                     .bind("hash", hash)
@@ -340,6 +391,31 @@ object AuthService {
 
     private fun validateToken(token: String): AppUser? {
         val hash = hashToken(token)
+        val now = Instant.now()
+
+        // Check in-memory cache first (avoids 3 DB queries + 1 DB write per request)
+        val cached = tokenCache[hash]
+        if (cached != null && now.epochSecond - cached.cachedAt.epochSecond < TOKEN_CACHE_TTL_SECONDS) {
+            // Throttle last_used_at updates: only write to DB every 5 minutes
+            if (now.epochSecond - cached.lastUsedUpdatedAt.epochSecond >= LAST_USED_UPDATE_INTERVAL_SECONDS) {
+                try {
+                    JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+                        handle.createUpdate("UPDATE session_token SET last_used_at = :now WHERE id = :id")
+                            .bind("now", LocalDateTime.now())
+                            .bind("id", cached.tokenId)
+                            .execute()
+                    }
+                    tokenCache[hash] = cached.copy(lastUsedUpdatedAt = now)
+                } catch (_: Exception) {
+                    // Non-critical — don't fail the request over a timestamp update
+                }
+            }
+            VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, cached.user)
+            VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, hash)
+            return cached.user
+        }
+
+        // Cache miss — validate against DB
         data class TokenLookup(val id: Long, val userId: Long)
         val lookup = JdbiOrm.jdbi().withHandle<TokenLookup?, Exception> { handle ->
             handle.createQuery(
@@ -351,15 +427,24 @@ object AuthService {
                 .firstOrNull()
         } ?: return null
         val user = AppUser.findById(lookup.userId) ?: return null
-        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, user)
-        // Update last_used_at
+
+        // Populate cache
+        tokenCache[hash] = CachedAuth(
+            user = user,
+            tokenId = lookup.id,
+            cachedAt = now,
+            lastUsedUpdatedAt = now,
+        )
+
+        // Update last_used_at on initial validation
         JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
             handle.createUpdate("UPDATE session_token SET last_used_at = :now WHERE id = :id")
                 .bind("now", LocalDateTime.now())
                 .bind("id", lookup.id)
                 .execute()
         }
-        // Store current token hash in session so the view can identify "this" session
+
+        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, user)
         VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, hash)
         return user
     }
@@ -386,6 +471,7 @@ object AuthService {
      * Also revokes all device tokens. Call this when a password is changed/reset.
      */
     fun invalidateUserSessions(userId: Long) {
+        evictTokenCacheForUser(userId)
         val deleted = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
             handle.createUpdate("DELETE FROM session_token WHERE user_id = :uid")
                 .bind("uid", userId)
@@ -419,6 +505,7 @@ object AuthService {
     fun revokeSession(tokenId: Long, currentTokenHash: String?): Boolean {
         val token = SessionToken.findById(tokenId) ?: return false
         if (currentTokenHash != null && token.token_hash == currentTokenHash) return false
+        evictTokenCache(token.token_hash)
         token.delete()
         log.info("AUDIT: Session token id={} revoked for user_id={}", tokenId, token.user_id)
         return true
@@ -428,6 +515,10 @@ object AuthService {
      * Revokes all browser sessions for a user except the current one.
      */
     fun revokeAllSessionsExceptCurrent(userId: Long, currentTokenHash: String?) {
+        // Evict all cached tokens for this user except the current one
+        tokenCache.entries.removeIf { entry ->
+            entry.value.user.id == userId && entry.key != currentTokenHash
+        }
         val deleted = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
             if (currentTokenHash != null) {
                 handle.createUpdate(

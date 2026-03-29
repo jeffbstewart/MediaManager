@@ -269,13 +269,25 @@ class VideoStreamHttpService {
             return HttpResponse.of(HttpStatus.FORBIDDEN)
         }
 
+        val bytes = if (contentType == "text/vtt") {
+            // Rewrite sprite filenames in VTT to use generic names (thumbs_N.jpg)
+            // so they match the URL routing. On disk, files are named like
+            // "Canadian Bacon.thumbs_4.jpg" but the URL namespace uses "thumbs_4.jpg".
+            thumbFile.readLines().joinToString("\n") { line ->
+                val idx = line.indexOf("thumbs_")
+                if (idx > 0) line.substring(idx) else line
+            }.toByteArray(Charsets.UTF_8)
+        } else {
+            thumbFile.readBytes()
+        }
+
         val headers = ResponseHeaders.builder(HttpStatus.OK)
             .contentType(MediaType.parse(contentType))
-            .contentLength(thumbFile.length())
+            .contentLength(bytes.size.toLong())
             .add("Cache-Control", "public, max-age=86400")
             .build()
         MetricsRegistry.countHttpResponse("stream", 200)
-        return HttpResponse.of(headers, HttpData.wrap(thumbFile.readBytes()))
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
     }
 
     private fun serveBifFile(transcodeId: Long): HttpResponse {

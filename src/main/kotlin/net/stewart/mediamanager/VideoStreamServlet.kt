@@ -209,9 +209,25 @@ class VideoStreamServlet : HttpServlet() {
         }
 
         resp.contentType = contentType
-        resp.setContentLengthLong(thumbFile.length())
         resp.setHeader("Cache-Control", "public, max-age=86400")
-        thumbFile.inputStream().use { it.copyTo(resp.outputStream) }
+
+        if (contentType == "text/vtt") {
+            // Rewrite sprite filenames in VTT to use generic names (thumbs_N.jpg)
+            // so they match the server's URL routing. On disk, files are named like
+            // "Canadian Bacon.thumbs_4.jpg" but the URL namespace uses "thumbs_4.jpg".
+            // Strip everything before "thumbs_" on each line, regardless of what the
+            // title name is (avoids dependence on file_path matching VTT content).
+            val rewritten = thumbFile.readLines().joinToString("\n") { line ->
+                val idx = line.indexOf("thumbs_")
+                if (idx > 0) line.substring(idx) else line
+            }
+            val bytes = rewritten.toByteArray(Charsets.UTF_8)
+            resp.setContentLengthLong(bytes.size.toLong())
+            resp.outputStream.write(bytes)
+        } else {
+            resp.setContentLengthLong(thumbFile.length())
+            thumbFile.inputStream().use { it.copyTo(resp.outputStream) }
+        }
         MetricsRegistry.countHttpResponse("stream", 200)
     }
 

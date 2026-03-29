@@ -217,19 +217,28 @@ video {
   pointer-events: none;
 }
 
-// Thumbnail preview
+// Thumbnail preview (Plyr/Shaka approach: <img> in overflow:hidden container)
 .thumb-preview {
   position: absolute;
   bottom: 24px;
   width: 160px;
   height: 90px;
   margin-left: -80px;
-  background-size: auto;
-  background-repeat: no-repeat;
+  overflow: hidden;
   border: 2px solid white;
   border-radius: 4px;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  display: none;
+
+  &.visible {
+    display: block;
+  }
+
+  .thumb-sprite {
+    position: absolute;
+    display: block;
+  }
 }
 
 // Controls row

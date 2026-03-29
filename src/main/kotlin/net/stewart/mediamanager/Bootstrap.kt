@@ -90,6 +90,7 @@ object Bootstrap {
             jdbcUrl = dbUrl
             username = "sa"
             password = dbPassword
+            maximumPoolSize = 25
         })
 
         JdbiOrm.setDataSource(ds)

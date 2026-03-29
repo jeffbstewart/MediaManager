@@ -236,6 +236,7 @@ class UserManagementView : KComposite() {
                 val currentUser = AuthService.getCurrentUser()
                 log.info("AUDIT: User '{}' deleted by '{}'", user.username, currentUser?.username)
                 user.delete()
+                AuthService.invalidateHasUsersCache()
                 refreshGrid()
                 dialog.close()
                 ui.ifPresent { it.access {
@@ -445,6 +446,7 @@ class UserManagementView : KComposite() {
                     created_at = now,
                     updated_at = now
                 ).save()
+                AuthService.invalidateHasUsersCache()
                 val currentUser = AuthService.getCurrentUser()
                 log.info("AUDIT: User '{}' created by '{}' (force_pw_change={})", username, currentUser?.username, forcePwChange.value)
                 dialog.close()

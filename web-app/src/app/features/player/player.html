@@ -27,11 +27,13 @@
      (keydown.escape)="goBack()"
      tabindex="0">
 
-  <video #videoEl
-         [src]="videoSrc()"
-         (click)="togglePlay()"
-         playsinline>
-  </video>
+  @if (videoSrc()) {
+    <video #videoEl
+           [src]="videoSrc()"
+           (click)="togglePlay()"
+           playsinline>
+    </video>
+  }
 
   <!-- Title on pause -->
   @if (paused() && !showResume() && !loading() && titleName) {
@@ -73,14 +75,10 @@
            (mousemove)="onSeekBarHover($event)"
            (mouseleave)="onSeekBarLeave()">
 
-        <!-- Thumbnail preview -->
-        @if (showThumb()) {
-          <div class="thumb-preview"
-               [style.left]="thumbStyle().left"
-               [style.background-image]="thumbStyle().backgroundImage"
-               [style.background-position]="thumbStyle().backgroundPosition">
-          </div>
-        }
+        <!-- Thumbnail preview (Plyr/Shaka approach: <img> in overflow:hidden container) -->
+        <div #thumbEl class="thumb-preview" [class.visible]="showThumb()">
+          <img #thumbImg class="thumb-sprite" draggable="false" alt="" />
+        </div>
 
         <div class="seek-bar">
           <div class="seek-buffered" [style.width.%]="bufferedPercent"></div>

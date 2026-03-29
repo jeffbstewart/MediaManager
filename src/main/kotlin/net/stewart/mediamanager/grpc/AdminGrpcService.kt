@@ -878,6 +878,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             updated_at = now
         )
         user.save()
+        AuthService.invalidateHasUsersCache()
 
         log.info("Admin created user '{}' (id={})", user.username, user.id)
 
@@ -1002,6 +1003,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
         AuthService.invalidateUserSessions(targetId)
         user.delete()
+        AuthService.invalidateHasUsersCache()
 
         log.info("Admin deleted user '{}' (id={})", user.username, targetId)
 
