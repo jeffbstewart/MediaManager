@@ -1,0 +1,141 @@
+import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { CatalogService, CollectionDetail, CollectionPart } from '../../core/catalog.service';
+import { AppRoutes } from '../../core/routes';
+
+@Component({
+  selector: 'app-collection-detail',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, MatProgressSpinnerModule],
+  template: `
+    <div class="content-page">
+      @if (loading()) {
+        <div class="loading-container">
+          <mat-spinner diameter="40" />
+        </div>
+      } @else if (error()) {
+        <p class="error-message">{{ error() }}</p>
+      } @else if (detail(); as d) {
+        <h2 class="collection-title">{{ d.name }}</h2>
+        <span class="status-label">{{ d.owned_count }} of {{ d.total_parts }} titles in your collection</span>
+
+        <div class="poster-grid">
+          @for (part of d.parts; track part.title_name) {
+            @if (part.owned && part.title_id) {
+              <a class="poster-card" [routerLink]="routes.title(part.title_id!)">
+                <div class="poster-wrapper">
+                  @if (part.poster_url) {
+                    <img [src]="part.poster_url" [alt]="part.title_name" class="poster-img" />
+                  } @else {
+                    <div class="poster-placeholder"></div>
+                  }
+                  @if (part.playable) {
+                    <div class="playable-badge"><div class="play-triangle"></div></div>
+                  }
+                  @if (part.progress_fraction) {
+                    <div class="progress-track">
+                      <div class="progress-fill" [style.width.%]="part.progress_fraction * 100"></div>
+                    </div>
+                  }
+                </div>
+                <span class="poster-title">{{ part.title_name }}</span>
+                @if (part.release_year) {
+                  <span class="poster-meta">{{ part.release_year }}</span>
+                }
+              </a>
+            } @else {
+              <div class="poster-card unowned">
+                <div class="poster-wrapper">
+                  @if (part.poster_url) {
+                    <img [src]="part.poster_url" [alt]="part.title_name" class="poster-img" />
+                  } @else {
+                    <div class="poster-placeholder not-owned-label">Not Owned</div>
+                  }
+                </div>
+                <span class="poster-title">{{ part.title_name }}</span>
+                @if (part.release_year) {
+                  <span class="poster-meta">{{ part.release_year }}</span>
+                }
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+  `,
+  styles: `
+    .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+    .loading-container { display: flex; justify-content: center; padding: 4rem; }
+    .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
+    .collection-title { margin: 0 0 0.25rem; }
+    .status-label { display: block; font-size: 0.8125rem; opacity: 0.5; margin-bottom: 0.75rem; }
+
+    .poster-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 1rem;
+    }
+    .poster-card {
+      display: flex; flex-direction: column;
+      text-decoration: none; color: inherit; cursor: pointer; text-align: center;
+    }
+    .poster-card.unowned { opacity: 0.4; cursor: default; }
+    .poster-wrapper {
+      position: relative; width: 100%; aspect-ratio: 2/3;
+      border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05);
+    }
+    .poster-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .poster-placeholder { width: 100%; height: 100%; }
+    .not-owned-label {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; opacity: 0.5;
+    }
+    .playable-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      width: 24px; height: 24px; background: rgba(0,0,0,0.6);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }
+    .play-triangle {
+      width: 0; height: 0; border-style: solid;
+      border-width: 5px 0 5px 9px;
+      border-color: transparent transparent transparent white;
+      margin-left: 2px;
+    }
+    .progress-track {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 3px;
+      background: rgba(0,0,0,0.5);
+    }
+    .progress-fill { height: 100%; background: var(--mat-sys-primary, #bb86fc); }
+    .poster-title {
+      font-size: 0.75rem; margin-top: 0.25rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .poster-meta { font-size: 0.6875rem; opacity: 0.5; }
+  `,
+})
+export class CollectionDetailComponent implements OnInit {
+  private readonly route = inject(ActivatedRoute);
+  private readonly catalog = inject(CatalogService);
+  readonly routes = AppRoutes;
+
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly detail = signal<CollectionDetail | null>(null);
+
+  async ngOnInit(): Promise<void> {
+    const id = Number(this.route.snapshot.paramMap.get('collectionId'));
+    if (!id) {
+      this.error.set('Invalid collection ID');
+      this.loading.set(false);
+      return;
+    }
+    try {
+      this.detail.set(await this.catalog.getCollectionDetail(id));
+    } catch {
+      this.error.set('Failed to load collection');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+}

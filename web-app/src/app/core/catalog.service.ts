@@ -130,6 +130,38 @@ export interface HomeFeed {
   features: FeatureFlags;
 }
 
+export interface CollectionCard {
+  id: number;
+  name: string;
+  poster_url: string | null;
+  owned_count: number;
+  total_parts: number;
+}
+
+export interface CollectionListResponse {
+  collections: CollectionCard[];
+  total: number;
+}
+
+export interface CollectionPart {
+  title_id?: number;
+  tmdb_movie_id?: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  owned: boolean;
+  playable: boolean;
+  progress_fraction: number | null;
+}
+
+export interface CollectionDetail {
+  id: number;
+  name: string;
+  owned_count: number;
+  total_parts: number;
+  parts: CollectionPart[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -156,5 +188,13 @@ export class CatalogService {
 
   async dismissMissingSeasons(titleId: number): Promise<void> {
     await firstValueFrom(this.http.post(`/api/v2/catalog/dismiss-missing-seasons/${titleId}`, {}));
+  }
+
+  async getCollections(): Promise<CollectionListResponse> {
+    return firstValueFrom(this.http.get<CollectionListResponse>('/api/v2/catalog/collections'));
+  }
+
+  async getCollectionDetail(collectionId: number): Promise<CollectionDetail> {
+    return firstValueFrom(this.http.get<CollectionDetail>(`/api/v2/catalog/collections/${collectionId}`));
   }
 }
