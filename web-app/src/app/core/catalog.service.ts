@@ -162,6 +162,25 @@ export interface CollectionDetail {
   parts: CollectionPart[];
 }
 
+export interface TagCard {
+  id: number;
+  name: string;
+  bg_color: string;
+  text_color: string;
+  title_count: number;
+}
+
+export interface TagListResponse {
+  tags: TagCard[];
+  total: number;
+}
+
+export interface TagDetailResponse {
+  tag: TagCard;
+  titles: TitleCard[];
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -196,5 +215,13 @@ export class CatalogService {
 
   async getCollectionDetail(collectionId: number): Promise<CollectionDetail> {
     return firstValueFrom(this.http.get<CollectionDetail>(`/api/v2/catalog/collections/${collectionId}`));
+  }
+
+  async getTags(): Promise<TagListResponse> {
+    return firstValueFrom(this.http.get<TagListResponse>('/api/v2/catalog/tags'));
+  }
+
+  async getTagDetail(tagId: number): Promise<TagDetailResponse> {
+    return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
   }
 }
