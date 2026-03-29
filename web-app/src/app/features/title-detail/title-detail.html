@@ -133,8 +133,11 @@
               @if (ep.position_seconds; as pos) {
                 <span class="ep-resume">{{ formatResume(pos, ep.duration_seconds) }}</span>
               }
-              @if (ep.playable) {
-                <mat-icon class="ep-play">play_circle</mat-icon>
+              @if (ep.playable && ep.transcode_id) {
+                <a [routerLink]="routes.play(ep.transcode_id)" [queryParams]="{ title: t.title_name }"
+                   class="ep-play-link">
+                  <mat-icon class="ep-play">play_circle</mat-icon>
+                </a>
               }
             </div>
           }
@@ -158,7 +161,10 @@
                 <span class="tc-resume">{{ resume }}</span>
               }
               @if (tc.playable) {
-                <mat-icon class="tc-play">play_circle</mat-icon>
+                <a [routerLink]="routes.play(tc.transcode_id)" [queryParams]="{ title: t.title_name }"
+                   class="tc-play-link">
+                  <mat-icon class="tc-play">play_circle</mat-icon>
+                </a>
               }
             </div>
           }

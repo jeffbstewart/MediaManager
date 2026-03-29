@@ -256,6 +256,11 @@
   opacity: 0.5;
 }
 
+.ep-play-link {
+  text-decoration: none;
+  display: flex;
+}
+
 .ep-play {
   color: var(--mat-sys-primary, #bb86fc);
   cursor: pointer;
@@ -284,6 +289,12 @@
   font-size: 0.75rem;
   opacity: 0.5;
   white-space: nowrap;
+}
+
+.tc-play-link {
+  text-decoration: none;
+  display: flex;
+  flex-shrink: 0;
 }
 
 .tc-play {

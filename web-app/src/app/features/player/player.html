@@ -1,0 +1,127 @@
+<!-- Resume prompt -->
+@if (showResume()) {
+  <div class="overlay resume-overlay">
+    <div class="resume-prompt">
+      <p>Resume from {{ formatResume(resumePosition) }}?</p>
+      <div class="resume-actions">
+        <button mat-flat-button color="primary" (click)="onResume()">Resume</button>
+        <button mat-stroked-button (click)="onStartOver()">Start Over</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Loading overlay -->
+@if (loading()) {
+  <div class="overlay loading-overlay">
+    <mat-spinner diameter="40" />
+    <span class="loading-text">{{ loadingText() }}</span>
+  </div>
+}
+
+<div #containerEl class="player-container"
+     (mousemove)="onMouseMove()" (mouseleave)="onMouseLeave()"
+     (dblclick)="toggleFullscreen()"
+     (keydown.f)="toggleFullscreen()"
+     (keydown.space)="togglePlay()"
+     (keydown.escape)="goBack()"
+     tabindex="0">
+
+  <video #videoEl
+         [src]="'/stream/' + transcodeId"
+         (click)="togglePlay()"
+         playsinline>
+  </video>
+
+  <!-- Title on pause -->
+  @if (paused() && !showResume() && !loading() && titleName) {
+    <div class="title-on-pause">{{ titleName }}</div>
+  }
+
+  <!-- Skip Intro button -->
+  @if (showSkipIntro()) {
+    <button class="skip-intro-btn" (click)="skipIntro()">Skip Intro</button>
+  }
+
+  <!-- Up Next overlay -->
+  @if (showUpNext()) {
+    <div class="up-next-overlay">
+      <span class="up-next-label">Up Next</span>
+      @if (nextEpisodeLabel) {
+        <span class="up-next-episode">{{ nextEpisodeLabel }}</span>
+      }
+      <span class="up-next-countdown">Playing in {{ upNextCountdown() }}s</span>
+      <div class="up-next-actions">
+        <button mat-flat-button color="primary" (click)="playNext()">Play Now</button>
+        <button mat-button (click)="cancelUpNext()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- Custom controls -->
+  <div class="controls" [class.visible]="showControls() || paused()">
+    <!-- Back button -->
+    <button class="ctrl-btn back-btn" (click)="goBack()">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+
+    <!-- Bottom controls bar -->
+    <div class="bottom-controls">
+      <!-- Seek bar -->
+      <div class="seek-bar-container"
+           (click)="seek($event)"
+           (mousemove)="onSeekBarHover($event)"
+           (mouseleave)="onSeekBarLeave()">
+
+        <!-- Thumbnail preview -->
+        @if (showThumb()) {
+          <div class="thumb-preview"
+               [style.left]="thumbStyle().left"
+               [style.background-image]="thumbStyle().backgroundImage"
+               [style.background-position]="thumbStyle().backgroundPosition">
+          </div>
+        }
+
+        <div class="seek-bar">
+          <div class="seek-buffered" [style.width.%]="bufferedPercent"></div>
+          <div class="seek-progress" [style.width.%]="progressPercent"></div>
+
+          <!-- Chapter markers -->
+          @for (ch of chapters.chapters; track ch.number) {
+            <div class="chapter-tick" [style.left.%]="chapterPercent(ch.start)"></div>
+          }
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <!-- Left: play, skip, time -->
+        <div class="controls-left">
+          <button class="ctrl-btn" (click)="togglePlay()">
+            <mat-icon>{{ paused() ? 'play_arrow' : 'pause' }}</mat-icon>
+          </button>
+          <button class="ctrl-btn" (click)="skipBack()">
+            <mat-icon>replay_10</mat-icon>
+          </button>
+          <button class="ctrl-btn" (click)="skipForward()">
+            <mat-icon>forward_30</mat-icon>
+          </button>
+          <span class="time-display">
+            {{ formatTime(currentTime()) }} / {{ formatTime(duration()) }}
+          </span>
+        </div>
+
+        <!-- Right: subs, fullscreen -->
+        <div class="controls-right">
+          @if (subsAvailable()) {
+            <button class="ctrl-btn" [class.active]="subsEnabled()" (click)="toggleSubs()">
+              <mat-icon>{{ subsEnabled() ? 'closed_caption' : 'closed_caption_disabled' }}</mat-icon>
+            </button>
+          }
+          <button class="ctrl-btn" (click)="toggleFullscreen()">
+            <mat-icon>{{ isFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

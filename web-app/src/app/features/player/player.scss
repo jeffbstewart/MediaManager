@@ -1,0 +1,285 @@
+:host {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  overflow: hidden;
+}
+
+.player-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  outline: none;
+
+  &:fullscreen {
+    width: 100vw;
+    height: 100vh;
+  }
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+// Overlays
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 20;
+}
+
+.resume-prompt {
+  text-align: center;
+
+  p {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+}
+
+.resume-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.loading-text {
+  margin-top: 1rem;
+  opacity: 0.7;
+}
+
+// Title on pause
+.title-on-pause {
+  position: absolute;
+  top: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.25rem;
+  font-weight: 500;
+  opacity: 0.8;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+// Skip Intro
+.skip-intro-btn {
+  position: absolute;
+  bottom: 100px;
+  right: 2rem;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  z-index: 15;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(30, 136, 229, 0.8);
+  }
+}
+
+// Up Next
+.up-next-overlay {
+  position: absolute;
+  bottom: 100px;
+  right: 2rem;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 300px;
+}
+
+.up-next-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+.up-next-episode {
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.up-next-countdown {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
+}
+
+.up-next-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+// Controls
+.controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 10;
+
+  &.visible {
+    opacity: 1;
+  }
+}
+
+.back-btn {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  pointer-events: auto;
+}
+
+.bottom-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 1rem 0.75rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  pointer-events: auto;
+}
+
+// Seek bar
+.seek-bar-container {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.seek-bar {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: visible;
+
+  .seek-bar-container:hover & {
+    height: 6px;
+  }
+}
+
+.seek-buffered {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.seek-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--mat-sys-primary, #bb86fc);
+  border-radius: 2px;
+}
+
+.chapter-tick {
+  position: absolute;
+  top: -1px;
+  width: 2px;
+  height: calc(100% + 2px);
+  background: #fbbf24;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+// Thumbnail preview
+.thumb-preview {
+  position: absolute;
+  bottom: 24px;
+  width: 160px;
+  height: 90px;
+  margin-left: -80px;
+  background-size: auto;
+  background-repeat: no-repeat;
+  border: 2px solid white;
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+// Controls row
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.controls-left,
+.controls-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ctrl-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  opacity: 0.9;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+    opacity: 1;
+  }
+
+  &.active {
+    color: var(--mat-sys-primary, #bb86fc);
+  }
+
+  mat-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.time-display {
+  font-size: 0.8125rem;
+  margin-left: 8px;
+  opacity: 0.8;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}

@@ -10,4 +10,5 @@ module.exports = {
   "/collection-posters/**": proxyConfig,
   "/local-images/**": proxyConfig,
   "/stream/**": proxyConfig,
+  "/playback-progress/**": proxyConfig,
 };

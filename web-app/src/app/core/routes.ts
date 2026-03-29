@@ -19,6 +19,7 @@ export const AppRoutes = {
   wishlist: () => '/wishlist',
   cameras: () => '/cameras',
   liveTv: () => '/live-tv',
+  play: (transcodeId: number) => `/play/${transcodeId}`,
   profile: () => '/profile',
   help: () => '/help',
 

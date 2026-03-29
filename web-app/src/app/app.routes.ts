@@ -15,6 +15,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/setup').then(m => m.SetupComponent),
   },
   {
+    path: 'play/:transcodeId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/player/player').then(m => m.PlayerComponent),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./core/shell/shell').then(m => m.ShellComponent),
