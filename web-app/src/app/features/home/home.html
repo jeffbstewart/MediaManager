@@ -13,7 +13,7 @@
         <h2>Continue Watching</h2>
         <div class="carousel-row">
           @for (item of feed.continue_watching; track item.transcode_id) {
-            <a class="poster-card continue-card" [routerLink]="routes.title(item.title_id)">
+            <a class="poster-card" [routerLink]="routes.title(item.title_id)">
               <div class="poster-wrapper">
                 @if (item.poster_url) {
                   <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
