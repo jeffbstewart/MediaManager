@@ -96,11 +96,12 @@ export class PlayerComponent implements OnInit, OnDestroy {
     }
 
     // Fetch metadata in parallel
-    const [chaptersResult, thumbsResult, subsResult, progressResult] = await Promise.allSettled([
+    const [chaptersResult, thumbsResult, subsResult, progressResult, nextEpResult] = await Promise.allSettled([
       firstValueFrom(this.http.get<ChapterData>(`/stream/${this.transcodeId}/chapters.json`)),
       firstValueFrom(this.http.get(`/stream/${this.transcodeId}/thumbs.vtt`, { responseType: 'text' })),
       firstValueFrom(this.http.head(`/stream/${this.transcodeId}/subs.vtt`, { observe: 'response' })),
       firstValueFrom(this.http.get<{ position: number; duration: number }>(`/playback-progress/${this.transcodeId}`)),
+      firstValueFrom(this.http.get<{ transcodeId: number; label: string }>(`/stream/${this.transcodeId}/next-episode`)),
     ]);
 
     if (chaptersResult.status === 'fulfilled') {
@@ -115,6 +116,11 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
     if (subsResult.status === 'fulfilled' && subsResult.value.ok) {
       this.subsAvailable.set(true);
+    }
+
+    if (nextEpResult.status === 'fulfilled') {
+      this.nextTranscodeId = nextEpResult.value.transcodeId;
+      this.nextEpisodeLabel = nextEpResult.value.label;
     }
 
     if (progressResult.status === 'fulfilled' && progressResult.value.position > 10) {

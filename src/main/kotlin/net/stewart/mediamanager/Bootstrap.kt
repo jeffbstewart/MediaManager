@@ -9,6 +9,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.DiscoveredFile
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.HiddenTitleCleaner
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.PopulateActorPopularityUpdater
@@ -91,6 +92,10 @@ object Bootstrap {
             username = "sa"
             password = dbPassword
             maximumPoolSize = 25
+            poolName = "mediamanager"
+            connectionTimeout = 5000          // Fail fast (5s) instead of silently queueing for 30s
+            leakDetectionThreshold = 10000    // Log WARNING + stack trace if connection held >10s
+            metricRegistry = MetricsRegistry.registry  // Expose pool stats via Prometheus /metrics
         })
 
         JdbiOrm.setDataSource(ds)

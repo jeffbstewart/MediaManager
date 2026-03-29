@@ -12,6 +12,7 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import net.stewart.mediamanager.VideoPlayerDialog
 import net.stewart.mediamanager.entity.Chapter
 import net.stewart.mediamanager.entity.SkipSegment
 import net.stewart.mediamanager.entity.Title
@@ -228,6 +229,7 @@ class VideoStreamHttpService {
             subPath == "subs.vtt" -> serveSubtitleFile(transcodeId, asVtt = true)
             subPath == "subs.srt" -> serveSubtitleFile(transcodeId, asVtt = false)
             subPath == "chapters.json" -> serveChapters(transcodeId)
+            subPath == "next-episode" -> serveNextEpisode(transcodeId)
             else -> {
                 MetricsRegistry.countHttpResponse("stream", 404)
                 HttpResponse.of(HttpStatus.NOT_FOUND)
@@ -396,6 +398,20 @@ class VideoStreamHttpService {
             .contentType(MediaType.JSON_UTF_8)
             .contentLength(bytes.size.toLong())
             .add("Cache-Control", "public, max-age=300")
+            .build()
+        MetricsRegistry.countHttpResponse("stream", 200)
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
+    }
+
+    private fun serveNextEpisode(transcodeId: Long): HttpResponse {
+        val next = VideoPlayerDialog.findNextPlayableEpisode(transcodeId)
+            ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+
+        val json = Gson().toJson(mapOf("transcodeId" to next.transcodeId, "label" to next.label))
+        val bytes = json.toByteArray(Charsets.UTF_8)
+        val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .contentLength(bytes.size.toLong())
             .build()
         MetricsRegistry.countHttpResponse("stream", 200)
         return HttpResponse.of(headers, HttpData.wrap(bytes))

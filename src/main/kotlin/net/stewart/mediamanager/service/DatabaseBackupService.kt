@@ -1,8 +1,10 @@
 package net.stewart.mediamanager.service
 
+import com.zaxxer.hikari.HikariDataSource
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.sql.DriverManager
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -50,7 +52,11 @@ object DatabaseBackupService {
     }
 
     private fun writeBackup(file: File, filePassword: String, encrypted: Boolean) {
-        JdbiOrm.jdbi().withHandle<Unit, Exception> { handle ->
+        // Use a direct JDBC connection instead of the HikariCP pool. SCRIPT TO can
+        // take minutes for a large database; holding a pooled connection that long
+        // starves request-handling threads and triggers health check failures.
+        val hikari = JdbiOrm.getDataSource() as HikariDataSource
+        DriverManager.getConnection(hikari.jdbcUrl, hikari.username, hikari.password).use { conn ->
             val path = file.absolutePath.replace("\\", "/").replace("'", "''")
             val sql = if (encrypted) {
                 val escapedPw = filePassword.replace("'", "''")
@@ -58,7 +64,7 @@ object DatabaseBackupService {
             } else {
                 "SCRIPT TO '$path' COMPRESSION GZIP"
             }
-            handle.getConnection().createStatement().use { stmt -> stmt.execute(sql) }
+            conn.createStatement().use { stmt -> stmt.execute(sql) }
         }
     }
 }
