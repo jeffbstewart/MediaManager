@@ -11,4 +11,5 @@ module.exports = {
   "/local-images/**": proxyConfig,
   "/stream/**": proxyConfig,
   "/playback-progress/**": proxyConfig,
+  "/cam/**": proxyConfig,
 };

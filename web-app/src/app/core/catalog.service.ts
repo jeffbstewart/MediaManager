@@ -201,6 +201,16 @@ export interface FamilyVideosResponse {
 
 export type FamilySortMode = 'date_desc' | 'date_asc' | 'name' | 'recent';
 
+export interface CameraInfo {
+  id: number;
+  name: string;
+}
+
+export interface CameraListResponse {
+  cameras: CameraInfo[];
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -243,6 +253,10 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async getCameras(): Promise<CameraListResponse> {
+    return firstValueFrom(this.http.get<CameraListResponse>('/api/v2/catalog/cameras'));
   }
 
   async getFamilyVideos(params: { sort?: FamilySortMode; members?: number[]; playableOnly?: boolean } = {}): Promise<FamilyVideosResponse> {

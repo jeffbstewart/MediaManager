@@ -1,0 +1,53 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40" />
+    </div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (cameras().length === 0) {
+    <p class="empty-message">No cameras configured.</p>
+  } @else {
+    <div class="header-row">
+      <span class="page-title">Cameras</span>
+      <button class="mode-toggle" (click)="toggleMode()">
+        {{ useMjpeg() ? 'Snapshots' : 'Live' }}
+      </button>
+    </div>
+
+    <div class="camera-grid">
+      @for (cam of cameras(); track cam.id) {
+        <div class="camera-cell" (click)="openFullscreen(cam)">
+          @if (useMjpeg()) {
+            <img [src]="mjpegUrl(cam)" [alt]="cam.name" class="camera-img"
+                 (error)="$any($event.target).style.display='none'" />
+          } @else {
+            <img [src]="snapshotUrl(cam)" [alt]="cam.name" class="camera-img"
+                 [attr.data-cam-id]="cam.id"
+                 (error)="$any($event.target).style.display='none'" />
+          }
+          <span class="camera-label">{{ cam.name }}</span>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Fullscreen dialog -->
+  @if (fullscreenCamera(); as cam) {
+    <div class="fullscreen-overlay" (click)="closeFullscreen()">
+      <div class="fullscreen-content" (click)="$event.stopPropagation()">
+        <div class="fullscreen-header">
+          <span>{{ cam.name }}</span>
+          <button class="close-btn" (click)="closeFullscreen()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+        <div class="fullscreen-img-container">
+          <mat-spinner class="fullscreen-spinner" diameter="48" />
+          <img [src]="mjpegUrl(cam)" [alt]="cam.name" class="fullscreen-img"
+               (load)="$any($event.target).previousElementSibling.style.display='none'" />
+        </div>
+      </div>
+    </div>
+  }
+</div>
