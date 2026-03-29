@@ -181,6 +181,26 @@ export interface TagDetailResponse {
   total: number;
 }
 
+export interface FamilyVideoCard {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  event_date: string | null;
+  description: string | null;
+  playable: boolean;
+  progress_fraction: number | null;
+  family_members: { id: number; name: string }[];
+  tags: { id: number; name: string; bg_color: string; text_color: string }[];
+}
+
+export interface FamilyVideosResponse {
+  videos: FamilyVideoCard[];
+  total: number;
+  family_members: { id: number; name: string }[];
+}
+
+export type FamilySortMode = 'date_desc' | 'date_asc' | 'name' | 'recent';
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -223,5 +243,13 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async getFamilyVideos(params: { sort?: FamilySortMode; members?: number[]; playableOnly?: boolean } = {}): Promise<FamilyVideosResponse> {
+    const queryParams: Record<string, string> = {};
+    if (params.sort) queryParams['sort'] = params.sort;
+    if (params.members?.length) queryParams['members'] = params.members.join(',');
+    if (params.playableOnly) queryParams['playable_only'] = 'true';
+    return firstValueFrom(this.http.get<FamilyVideosResponse>('/api/v2/catalog/family-videos', { params: queryParams }));
   }
 }

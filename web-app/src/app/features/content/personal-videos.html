@@ -1,0 +1,88 @@
+<div class="content-page">
+  <div class="filter-bar">
+    <mat-chip-set>
+      <mat-chip [highlighted]="playableOnly()" (click)="togglePlayable()">Playable</mat-chip>
+    </mat-chip-set>
+
+    @if (allMembers().length > 0) {
+      <span class="chip-separator">&middot;</span>
+      <mat-chip-set>
+        <mat-chip [highlighted]="selectedMembers().size === 0" (click)="clearMembers()">All People</mat-chip>
+        @for (member of allMembers(); track member.id) {
+          <mat-chip [highlighted]="selectedMembers().has(member.id)" (click)="toggleMember(member.id)">
+            {{ member.name }}
+          </mat-chip>
+        }
+      </mat-chip-set>
+    }
+
+    <span class="chip-separator">&middot;</span>
+    <mat-chip-set>
+      @for (opt of sortOptions; track opt.value) {
+        <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
+          {{ opt.label }}
+        </mat-chip>
+      }
+    </mat-chip-set>
+  </div>
+
+  @if (loading() && videos().length === 0) {
+    <div class="loading-container">
+      <mat-spinner diameter="40" />
+    </div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else {
+    <span class="status-label">{{ total() }} family video{{ total() === 1 ? '' : 's' }}</span>
+
+    <div class="video-grid">
+      @for (video of videos(); track video.title_id) {
+        <a class="video-card" [routerLink]="routes.title(video.title_id)">
+          @if (video.poster_url) {
+            <img [src]="video.poster_url" [alt]="video.title_name" class="hero-img" />
+          }
+          <div class="card-body">
+            <div class="title-row">
+              @if (video.playable) {
+                <span class="play-icon">&#9654;</span>
+              }
+              <span class="video-title">{{ video.title_name }}</span>
+            </div>
+
+            @if (video.event_date) {
+              <span class="event-date">{{ formatDate(video.event_date) }}</span>
+            }
+
+            @if (video.description) {
+              <span class="description">{{ video.description.length > 120 ? video.description.substring(0, 120) + '...' : video.description }}</span>
+            }
+
+            @if (video.family_members.length > 0) {
+              <div class="member-chips">
+                @for (member of video.family_members; track member.id) {
+                  <span class="member-chip">{{ member.name }}</span>
+                }
+              </div>
+            }
+
+            @if (video.tags.length > 0) {
+              <div class="tag-chips">
+                @for (tag of video.tags; track tag.id) {
+                  <span class="tag-chip"
+                        [style.background-color]="tag.bg_color"
+                        [style.color]="tag.text_color">{{ tag.name }}</span>
+                }
+              </div>
+            }
+
+            @if (video.progress_fraction) {
+              <div class="progress-track">
+                <div class="progress-fill" [style.width.%]="video.progress_fraction * 100"></div>
+              </div>
+            }
+          </div>
+        </a>
+      }
+    </div>
+  }
+</div>

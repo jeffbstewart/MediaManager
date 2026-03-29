@@ -35,7 +35,7 @@ export const routes: Routes = [
       { path: 'content/collection/:collectionId', loadComponent: () => import('./features/content/collection-detail').then(m => m.CollectionDetailComponent) },
       { path: 'content/tags', loadComponent: () => import('./features/content/tags').then(m => m.TagsComponent) },
       { path: 'tag/:tagId', loadComponent: () => import('./features/content/tag-detail').then(m => m.TagDetailComponent) },
-      { path: 'content/family', loadComponent: placeholder, data: { title: 'Personal Videos' } },
+      { path: 'content/family', loadComponent: () => import('./features/content/personal-videos').then(m => m.PersonalVideosComponent) },
       { path: 'wishlist', loadComponent: placeholder, data: { title: 'Wish List' } },
       { path: 'cameras', loadComponent: placeholder, data: { title: 'Cameras' } },
       { path: 'live-tv', loadComponent: placeholder, data: { title: 'Live TV' } },
