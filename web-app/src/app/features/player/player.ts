@@ -199,7 +199,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
     video.addEventListener('ended', () => {
       this.paused.set(true);
       this.showControls.set(true);
-      if (this.nextTranscodeId && !this.showUpNext()) {
+      if (this.nextTranscodeId && !this.showUpNext() && !this.upNextDismissed) {
         this.startUpNextCountdown();
       }
     });
@@ -313,8 +313,11 @@ export class PlayerComponent implements OnInit, OnDestroy {
     });
   }
 
+  private upNextDismissed = false;
+
   cancelUpNext(): void {
     this.showUpNext.set(false);
+    this.upNextDismissed = true;
     if (this.upNextTimerId) {
       clearInterval(this.upNextTimerId);
       this.upNextTimerId = null;
@@ -421,8 +424,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (this.introSegment) {
       this.showSkipIntro.set(time >= this.introSegment.start && time < this.introSegment.end);
     }
-    if (this.creditsSegment && time >= this.creditsSegment.start && this.nextTranscodeId && !this.showUpNext()) {
-      this.startUpNextCountdown();
+    if (this.creditsSegment && time >= this.creditsSegment.start) {
+      if (!this.showUpNext() && !this.upNextDismissed && this.nextTranscodeId) {
+        this.startUpNextCountdown();
+      }
     }
   }
 
@@ -439,17 +444,15 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (!video || !video.duration || video.currentTime < 1) return;
     if (Math.abs(video.currentTime - this.lastReportedTime) < 5 && !isFinal) return;
     this.lastReportedTime = video.currentTime;
+    // Always use sendBeacon — it's non-blocking and doesn't consume browser connections.
+    // HTTP POST via HttpClient can stall on server timeouts (504) and starve the video
+    // stream's range requests since browsers limit concurrent connections per host.
     const body = JSON.stringify({ position: video.currentTime, duration: video.duration });
-    if (isFinal) {
-      navigator.sendBeacon(`/playback-progress/${this.transcodeId}`, body);
-    } else {
-      this.http.post(`/playback-progress/${this.transcodeId}`, { position: video.currentTime, duration: video.duration })
-        .subscribe();
-    }
+    navigator.sendBeacon(`/playback-progress/${this.transcodeId}`, body);
   }
 
   private reportClear(): void {
-    this.http.delete(`/playback-progress/${this.transcodeId}`).subscribe();
+    fetch(`/playback-progress/${this.transcodeId}`, { method: 'DELETE', keepalive: true });
   }
 
   // --- VTT parsing ---
