@@ -18,6 +18,7 @@ import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.ContinueWatchingItem
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.PlaybackProgressService
+import net.stewart.mediamanager.service.WishListService
 
 /**
  * REST endpoint for the Angular home page carousels.
@@ -64,7 +65,8 @@ class HomeFeedHttpService {
             "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
-            "is_admin" to user.isAdmin()
+            "is_admin" to user.isAdmin(),
+            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!)
         )
 
         val feed = mapOf(
@@ -91,7 +93,8 @@ class HomeFeedHttpService {
             "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
-            "is_admin" to user.isAdmin()
+            "is_admin" to user.isAdmin(),
+            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!)
         )
         return HttpResponse.builder()
             .status(HttpStatus.OK)

@@ -1,0 +1,123 @@
+import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import {
+  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem,
+} from '../../core/catalog.service';
+import { AppRoutes } from '../../core/routes';
+
+@Component({
+  selector: 'app-wishlist',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, MatIconModule, MatProgressSpinnerModule],
+  templateUrl: './wishlist.html',
+  styleUrl: './wishlist.scss',
+})
+export class WishListComponent implements OnInit {
+  private readonly catalog = inject(CatalogService);
+  private readonly router = inject(Router);
+  readonly routes = AppRoutes;
+
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly mediaWishes = signal<MediaWish[]>([]);
+  readonly transcodeWishes = signal<TranscodeWish[]>([]);
+  readonly hasAnyMediaWish = signal(false);
+
+  readonly searchQuery = signal('');
+  readonly searching = signal(false);
+  readonly searchResults = signal<TmdbSearchResultItem[]>([]);
+  readonly searchVisible = signal(false);
+
+  async ngOnInit(): Promise<void> {
+    await this.refresh();
+  }
+
+  async refresh(): Promise<void> {
+    this.loading.set(true);
+    try {
+      const data = await this.catalog.getWishList();
+      this.mediaWishes.set(data.media_wishes);
+      this.transcodeWishes.set(data.transcode_wishes);
+      this.hasAnyMediaWish.set(data.has_any_media_wish);
+    } catch {
+      this.error.set('Failed to load wish list');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async search(): Promise<void> {
+    const q = this.searchQuery().trim();
+    if (!q) return;
+    this.searching.set(true);
+    this.searchVisible.set(true);
+    try {
+      const data = await this.catalog.searchTmdb(q);
+      this.searchResults.set(data.results);
+    } catch {
+      this.searchResults.set([]);
+    } finally {
+      this.searching.set(false);
+    }
+  }
+
+  onSearchKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') this.search();
+  }
+
+  updateSearchQuery(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  async addWish(item: TmdbSearchResultItem): Promise<void> {
+    await this.catalog.addMediaWish({
+      tmdb_id: item.tmdb_id,
+      title: item.title,
+      media_type: item.media_type,
+      poster_path: item.poster_path,
+      release_year: item.release_year,
+      popularity: item.popularity,
+    });
+    item.already_wished = true;
+    this.searchResults.update(r => [...r]);
+    await this.refresh();
+  }
+
+  async cancelMediaWish(wish: MediaWish): Promise<void> {
+    await this.catalog.cancelWish(wish.id);
+    await this.refresh();
+  }
+
+  async dismissMediaWish(wish: MediaWish): Promise<void> {
+    await this.catalog.dismissWish(wish.id);
+    if (wish.title_id) {
+      this.router.navigate(['/title', wish.title_id]);
+    } else {
+      await this.refresh();
+    }
+  }
+
+  async removeTranscodeWish(wish: TranscodeWish): Promise<void> {
+    await this.catalog.removeTranscodeWish(wish.id);
+    await this.refresh();
+  }
+
+  posterUrl(path: string): string {
+    return `https://image.tmdb.org/t/p/w185${path}`;
+  }
+
+  lifecycleColor(stage: string): string {
+    switch (stage) {
+      case 'READY_TO_WATCH': return '#4caf50';
+      case 'ON_NAS_PENDING_DESKTOP':
+      case 'ORDERED': return 'var(--mat-sys-primary, #bb86fc)';
+      case 'IN_HOUSE_PENDING_NAS': return 'var(--mat-sys-primary, #bb86fc)';
+      case 'NOT_FEASIBLE':
+      case 'WONT_ORDER': return '#f44336';
+      case 'NEEDS_ASSISTANCE': return '#ffa500';
+      default: return 'rgba(255,255,255,0.6)';
+    }
+  }
+}

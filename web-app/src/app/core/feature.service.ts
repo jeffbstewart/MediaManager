@@ -12,12 +12,14 @@ export class FeatureService {
     has_cameras: false,
     has_live_tv: false,
     is_admin: false,
+    wish_ready_count: 0,
   });
 
   readonly hasPersonalVideos = () => this.flags().has_personal_videos;
   readonly hasCameras = () => this.flags().has_cameras;
   readonly hasLiveTv = () => this.flags().has_live_tv;
   readonly isAdmin = () => this.flags().is_admin;
+  readonly wishReadyCount = () => this.flags().wish_ready_count;
 
   update(flags: FeatureFlags): void {
     this.flags.set(flags);

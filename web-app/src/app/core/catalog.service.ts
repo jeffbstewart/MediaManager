@@ -65,6 +65,7 @@ export interface FeatureFlags {
   has_cameras: boolean;
   has_live_tv: boolean;
   is_admin: boolean;
+  wish_ready_count: number;
 }
 
 export interface TitleDetail {
@@ -224,6 +225,49 @@ export interface CameraListResponse {
   total: number;
 }
 
+export interface MediaWish {
+  id: number;
+  tmdb_id: number;
+  tmdb_title: string;
+  tmdb_media_type: string;
+  tmdb_poster_path: string | null;
+  tmdb_release_year: number | null;
+  season_number: number | null;
+  lifecycle_stage: string;
+  lifecycle_label: string;
+  title_id: number | null;
+  vote_count: number;
+  dismissible: boolean;
+}
+
+export interface TranscodeWish {
+  id: number;
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  status: 'ready' | 'pending';
+}
+
+export interface WishListResponse {
+  media_wishes: MediaWish[];
+  transcode_wishes: TranscodeWish[];
+  has_any_media_wish: boolean;
+}
+
+export interface TmdbSearchResultItem {
+  tmdb_id: number;
+  title: string;
+  media_type: string;
+  poster_path: string | null;
+  release_year: number | null;
+  popularity: number | null;
+  already_wished: boolean;
+}
+
+export interface TmdbSearchResponse {
+  results: TmdbSearchResultItem[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -270,6 +314,30 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async getWishList(): Promise<WishListResponse> {
+    return firstValueFrom(this.http.get<WishListResponse>('/api/v2/wishlist'));
+  }
+
+  async searchTmdb(query: string): Promise<TmdbSearchResponse> {
+    return firstValueFrom(this.http.get<TmdbSearchResponse>('/api/v2/wishlist/search', { params: { q: query } }));
+  }
+
+  async addMediaWish(item: { tmdb_id: number; title: string; media_type: string; poster_path: string | null; release_year: number | null; popularity: number | null }): Promise<{ ok: boolean }> {
+    return firstValueFrom(this.http.post<{ ok: boolean }>('/api/v2/wishlist/add', item));
+  }
+
+  async cancelWish(wishId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/wishlist/${wishId}`));
+  }
+
+  async dismissWish(wishId: number): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/wishlist/${wishId}/dismiss`, {}));
+  }
+
+  async removeTranscodeWish(wishId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/wishlist/transcode/${wishId}`));
   }
 
   async getTvChannels(): Promise<TvChannelListResponse> {

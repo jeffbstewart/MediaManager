@@ -1,0 +1,118 @@
+<div class="content-page">
+  <h2>My Wish List</h2>
+
+  <!-- TMDB Search -->
+  <h3>Search TMDB</h3>
+  <div class="search-bar">
+    <input class="search-input" type="text" placeholder="Search for a movie or TV show..."
+           [value]="searchQuery()" (input)="updateSearchQuery($event)" (keydown)="onSearchKeydown($event)" />
+    <button class="search-btn" (click)="search()">
+      <mat-icon>search</mat-icon> Search
+    </button>
+  </div>
+
+  @if (searchVisible()) {
+    <div class="search-results">
+      @if (searching()) {
+        <mat-spinner diameter="32" />
+      } @else if (searchResults().length === 0) {
+        <span class="empty-text">No results found.</span>
+      } @else {
+        @for (item of searchResults(); track item.tmdb_id) {
+          <div class="search-card">
+            @if (item.poster_path) {
+              <img [src]="posterUrl(item.poster_path)" [alt]="item.title" class="search-poster" />
+            } @else {
+              <div class="search-poster-placeholder">{{ item.title.charAt(0) }}</div>
+            }
+            <span class="search-title">{{ item.title }}</span>
+            <span class="search-meta">
+              {{ item.release_year ?? '' }}{{ item.release_year && item.media_type ? ' · ' : '' }}{{ item.media_type === 'TV' ? 'TV' : 'Film' }}
+            </span>
+            @if (item.already_wished) {
+              <span class="wished-label">&#9829; Wished</span>
+            } @else {
+              <button class="add-wish-btn" (click)="addWish(item)">
+                <mat-icon>favorite</mat-icon> Add
+              </button>
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- Media Wishes -->
+  <h3>Media Wishes</h3>
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="32" /></div>
+  } @else if (mediaWishes().length === 0) {
+    <span class="empty-text">No media wishes yet — search above or browse actor filmographies.</span>
+  } @else {
+    <div class="media-grid">
+      @for (wish of mediaWishes(); track wish.id) {
+        <div class="media-card" [class.dismissible]="wish.dismissible">
+          <div class="media-poster-container">
+            @if (wish.tmdb_poster_path) {
+              <img [src]="posterUrl(wish.tmdb_poster_path)" [alt]="wish.tmdb_title" class="media-poster"
+                   [class.dimmed]="wish.dismissible"
+                   (click)="wish.dismissible && wish.title_id ? dismissMediaWish(wish) : null" />
+            } @else {
+              <div class="media-poster-placeholder">{{ (wish.tmdb_title ?? '?').charAt(0) }}</div>
+            }
+            @if (!wish.dismissible) {
+              <button class="cancel-btn" (click)="cancelMediaWish(wish)">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </div>
+
+          @if (wish.dismissible && wish.title_id) {
+            <a class="media-title link" [routerLink]="routes.title(wish.title_id)" (click)="dismissMediaWish(wish)">{{ wish.tmdb_title }}</a>
+          } @else {
+            <span class="media-title">{{ wish.tmdb_title }}</span>
+          }
+
+          <span class="media-meta">
+            {{ wish.tmdb_release_year ?? '' }}{{ wish.tmdb_release_year && wish.tmdb_media_type ? ' · ' : '' }}{{ wish.tmdb_media_type === 'TV' ? 'TV' : 'Film' }}
+          </span>
+          @if (wish.season_number) {
+            <span class="season-label">Season {{ wish.season_number }}</span>
+          }
+          <span class="lifecycle-badge" [style.color]="lifecycleColor(wish.lifecycle_stage)"
+                [style.font-style]="wish.lifecycle_stage === 'WISHED_FOR' ? 'italic' : 'normal'">
+            {{ wish.lifecycle_label }}
+          </span>
+          @if (wish.dismissible) {
+            <button class="dismiss-btn" (click)="dismissMediaWish(wish)">
+              <mat-icon>check</mat-icon> Dismiss
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Transcode Wishes -->
+  <h3>Transcode Wishes</h3>
+  @if (transcodeWishes().length === 0) {
+    <span class="empty-text">No transcode wishes yet — look for the priority button on titles waiting to be transcoded.</span>
+  } @else {
+    <div class="transcode-list">
+      @for (wish of transcodeWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.poster_url) {
+            <img [src]="wish.poster_url" [alt]="wish.title_name" class="transcode-poster" />
+          }
+          <a class="transcode-title" [routerLink]="routes.title(wish.title_id)">{{ wish.title_name }}</a>
+          <span class="transcode-status" [class.ready]="wish.status === 'ready'">
+            {{ wish.status === 'ready' ? 'Ready to watch' : 'On NAS, pending desktop' }}
+          </span>
+          <button class="remove-btn" (click)="removeTranscodeWish(wish)">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

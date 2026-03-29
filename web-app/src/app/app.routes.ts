@@ -36,11 +36,11 @@ export const routes: Routes = [
       { path: 'content/tags', loadComponent: () => import('./features/content/tags').then(m => m.TagsComponent) },
       { path: 'tag/:tagId', loadComponent: () => import('./features/content/tag-detail').then(m => m.TagDetailComponent) },
       { path: 'content/family', loadComponent: () => import('./features/content/personal-videos').then(m => m.PersonalVideosComponent) },
-      { path: 'wishlist', loadComponent: placeholder, data: { title: 'Wish List' } },
+      { path: 'wishlist', loadComponent: () => import('./features/wishlist/wishlist').then(m => m.WishListComponent) },
       { path: 'cameras', loadComponent: () => import('./features/cameras/cameras').then(m => m.CamerasComponent) },
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },
       { path: 'live-tv/:channelId', loadComponent: () => import('./features/live-tv/live-tv-player').then(m => m.LiveTvPlayerComponent) },
-      { path: 'profile', loadComponent: placeholder, data: { title: 'Profile' } },
+      { path: 'profile', loadComponent: () => import('./features/profile/profile').then(m => m.ProfileComponent) },
       { path: 'help', loadComponent: placeholder, data: { title: 'Help' } },
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },

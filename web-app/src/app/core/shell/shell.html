@@ -46,6 +46,9 @@
       <a mat-list-item [routerLink]="routes.wishlist()" routerLinkActive="active-link">
         <mat-icon matListItemIcon>favorite</mat-icon>
         <span matListItemTitle>My Wish List</span>
+        @if (features.wishReadyCount() > 0) {
+          <span class="wish-badge">{{ features.wishReadyCount() }}</span>
+        }
       </a>
 
       <!-- Admin section -->

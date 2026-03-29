@@ -29,6 +29,17 @@
   .active-link {
     background-color: rgba(255, 255, 255, 0.08);
   }
+
+  .wish-badge {
+    background-color: #4caf50;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
 }
 
 .top-toolbar {

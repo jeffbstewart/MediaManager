@@ -1,0 +1,147 @@
+.content-page { padding: 1.5rem; max-width: 800px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+
+h2 { margin: 0 0 1rem; }
+h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
+
+.info-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.info-label { font-size: 0.875rem; opacity: 0.5; min-width: 160px; }
+.info-value { font-size: 0.875rem; }
+
+.quality-row {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.star-row { display: flex; gap: 2px; }
+
+.star-btn {
+  background: none; border: none; cursor: pointer;
+  color: rgba(255, 255, 255, 0.3); padding: 2px;
+
+  &.active { color: #fbbf24; }
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+.action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white; padding: 8px 16px; border-radius: 4px;
+  cursor: pointer; font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+
+  &:hover { background: rgba(255, 255, 255, 0.12); }
+  &:disabled { opacity: 0.4; cursor: default; }
+
+  &.primary {
+    background: var(--mat-sys-primary, #bb86fc);
+    border-color: transparent;
+    &:hover { opacity: 0.9; }
+  }
+
+  &.danger { color: #f44336; border-color: rgba(244, 67, 54, 0.3); }
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+// Sessions
+.sessions-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.session-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem; background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px; gap: 1rem;
+}
+
+.session-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
+
+.session-type-row { display: flex; align-items: center; gap: 0.5rem; }
+
+.session-badge {
+  font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
+  border-radius: 9999px; background: #3b82f6; color: white;
+
+  &.device { background: #8b5cf6; }
+}
+
+.current-badge {
+  font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
+  border-radius: 9999px; background: #4caf50; color: white;
+}
+
+.session-detail {
+  font-size: 0.75rem; opacity: 0.6;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.session-meta { font-size: 0.6875rem; opacity: 0.4; }
+
+.revoke-btn {
+  background: none; border: 1px solid rgba(244, 67, 54, 0.3);
+  color: #f44336; padding: 4px 12px; border-radius: 4px;
+  cursor: pointer; font-size: 0.75rem; flex-shrink: 0;
+
+  &:hover { background: rgba(244, 67, 54, 0.1); }
+}
+
+// Modal
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal-content {
+  background: #1e1e1e; border-radius: 12px;
+  padding: 1.5rem; width: 90vw; max-width: 400px;
+}
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+
+  h3 { margin: 0; }
+}
+
+.close-btn {
+  background: none; border: none; color: white; cursor: pointer;
+  padding: 4px; border-radius: 50%;
+
+  &:hover { background: rgba(255, 255, 255, 0.1); }
+}
+
+.pw-form {
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+
+.pw-label { font-size: 0.8125rem; opacity: 0.7; margin-top: 0.25rem; }
+
+.pw-input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px; color: white;
+  padding: 8px 12px; font-size: 0.875rem; outline: none;
+
+  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+}
+
+.pw-hint { font-size: 0.75rem; color: #ffa500; }
+.pw-error { font-size: 0.75rem; color: #f44336; }
+
+.pw-success {
+  display: flex; align-items: center; gap: 0.5rem;
+  color: #4caf50; margin-bottom: 1rem;
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
