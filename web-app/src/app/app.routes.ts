@@ -52,6 +52,7 @@ export const routes: Routes = [
       { path: 'admin/settings', loadComponent: () => import('./features/admin/settings').then(m => m.SettingsComponent) },
       { path: 'admin/valuation', loadComponent: () => import('./features/admin/valuation').then(m => m.ValuationComponent) },
       { path: 'admin/purchase-wishes', loadComponent: () => import('./features/admin/purchase-wishes').then(m => m.PurchaseWishesComponent) },
+      { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/data-quality', loadComponent: placeholder, data: { title: 'Data Quality' } },
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },
       { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },

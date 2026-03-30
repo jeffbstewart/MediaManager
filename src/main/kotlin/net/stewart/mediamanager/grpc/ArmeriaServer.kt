@@ -36,6 +36,7 @@ import net.stewart.mediamanager.armeria.UserManagementHttpService
 import net.stewart.mediamanager.armeria.ValuationHttpService
 import net.stewart.mediamanager.armeria.TagManagementHttpService
 import net.stewart.mediamanager.armeria.TranscodeStatusHttpService
+import net.stewart.mediamanager.armeria.AmazonImportHttpService
 import net.stewart.mediamanager.armeria.BacklogHttpService
 import net.stewart.mediamanager.armeria.InventoryReportHttpService
 import net.stewart.mediamanager.armeria.LinkedTranscodesHttpService
@@ -213,6 +214,7 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(InventoryReportHttpService())
         sb.annotatedService().decorator(authDecorator).build(PurchaseWishesHttpService())
         sb.annotatedService().decorator(authDecorator).build(ValuationHttpService())
+        sb.annotatedService().decorator(authDecorator).build(AmazonImportHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

@@ -1,0 +1,126 @@
+<div class="amazon-page">
+  <h2>Amazon Order Import</h2>
+
+  <!-- Upload section -->
+  <mat-card class="upload-card">
+    <mat-card-content>
+      <div class="upload-row">
+        <label class="upload-label">
+          <mat-icon>upload_file</mat-icon>
+          <span>Upload CSV or ZIP</span>
+          <input type="file" accept=".csv,.zip" (change)="uploadFile($event)" hidden />
+        </label>
+        @if (uploading()) { <mat-spinner diameter="24" /> }
+        @if (uploadResult()) { <span class="upload-result">{{ uploadResult() }}</span> }
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <span class="stat">{{ stats().total }} orders</span>
+    <span class="stat-sep">&middot;</span>
+    <span class="stat">{{ stats().media }} media items</span>
+    <span class="stat-sep">&middot;</span>
+    <span class="stat">{{ stats().linked }} linked</span>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <input class="search-input" type="text" placeholder="Search orders..."
+           [value]="search()" (input)="onSearch($event)" />
+    <mat-chip-set>
+      <mat-chip [highlighted]="mediaOnly()" (click)="toggleMedia()">Media only</mat-chip>
+      <mat-chip [highlighted]="unlinkedOnly()" (click)="toggleUnlinked()">Unlinked only</mat-chip>
+    </mat-chip-set>
+  </div>
+
+  @if (loading() && rows().length === 0) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (rows().length === 0) {
+    <p class="empty-text">No orders found. Upload an Amazon order history CSV to get started.</p>
+  } @else {
+    <div class="table-container">
+      <table mat-table [dataSource]="rows()" class="orders-table">
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Product</th>
+          <td mat-cell *matCellDef="let o" [title]="o.product_name">
+            <span class="product-name">{{ o.product_name }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let o">{{ o.order_date ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="price">
+          <th mat-header-cell *matHeaderCellDef>Price</th>
+          <td mat-cell *matCellDef="let o">{{ formatPrice(o.unit_price) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="condition">
+          <th mat-header-cell *matHeaderCellDef>Condition</th>
+          <td mat-cell *matCellDef="let o">{{ o.product_condition ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="linked">
+          <th mat-header-cell *matHeaderCellDef>Linked To</th>
+          <td mat-cell *matCellDef="let o">
+            @if (o.linked_title) {
+              <span class="linked-name">{{ o.linked_title }}</span>
+            } @else {
+              <span class="unlinked">—</span>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let o">
+            @if (o.linked_media_item_id) {
+              <button mat-stroked-button class="small-btn" (click)="unlink(o)">Unlink</button>
+            } @else {
+              <button mat-stroked-button color="primary" class="small-btn" (click)="openLink(o)">Link</button>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+      </table>
+    </div>
+
+    <mat-paginator [length]="total()" [pageSize]="pageSize()" [pageIndex]="page()"
+                   [pageSizeOptions]="[25, 50, 100]" (page)="onPage($event)" showFirstLastButtons />
+  }
+
+  <!-- Link dialog -->
+  @if (linkOpen() && linkOrder(); as order) {
+    <div class="modal-overlay" (click)="closeLink()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Link: {{ order.product_name.substring(0, 60) }}</h3>
+          <button class="close-btn" (click)="closeLink()"><mat-icon>close</mat-icon></button>
+        </div>
+        <input class="field-input" type="text" placeholder="Search media items..."
+               [value]="linkQuery()" (input)="searchItems($event)" />
+        @if (linkSearching()) { <mat-spinner diameter="24" /> }
+        @if (linkResults().length > 0) {
+          <div class="link-results">
+            @for (item of linkResults(); track item.id) {
+              <div class="link-row">
+                <span class="link-name">{{ item.display_name }}</span>
+                <span class="link-meta">{{ item.media_format.replace('_', ' ') }}{{ item.upc ? ' · ' + item.upc : '' }}</span>
+                <button mat-flat-button color="primary" class="small-btn" (click)="linkTo(item)">Select</button>
+              </div>
+            }
+          </div>
+        } @else if (!linkSearching() && linkQuery().length >= 2) {
+          <span class="empty-text">No matching items.</span>
+        }
+      </div>
+    </div>
+  }
+</div>
