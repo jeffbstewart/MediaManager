@@ -50,7 +50,7 @@ export const routes: Routes = [
       { path: 'admin/transcodes/backlog', loadComponent: () => import('./features/admin/transcode-backlog').then(m => m.TranscodeBacklogComponent) },
       { path: 'admin/users', loadComponent: () => import('./features/admin/users').then(m => m.UsersComponent) },
       { path: 'admin/settings', loadComponent: () => import('./features/admin/settings').then(m => m.SettingsComponent) },
-      { path: 'admin/valuation', loadComponent: placeholder, data: { title: 'Valuation' } },
+      { path: 'admin/valuation', loadComponent: () => import('./features/admin/valuation').then(m => m.ValuationComponent) },
       { path: 'admin/purchase-wishes', loadComponent: () => import('./features/admin/purchase-wishes').then(m => m.PurchaseWishesComponent) },
       { path: 'admin/data-quality', loadComponent: placeholder, data: { title: 'Data Quality' } },
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },

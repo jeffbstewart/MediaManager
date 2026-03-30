@@ -33,6 +33,7 @@ import net.stewart.mediamanager.armeria.PurchaseWishesHttpService
 import net.stewart.mediamanager.armeria.SearchHttpService
 import net.stewart.mediamanager.armeria.SettingsHttpService
 import net.stewart.mediamanager.armeria.UserManagementHttpService
+import net.stewart.mediamanager.armeria.ValuationHttpService
 import net.stewart.mediamanager.armeria.TagManagementHttpService
 import net.stewart.mediamanager.armeria.TranscodeStatusHttpService
 import net.stewart.mediamanager.armeria.BacklogHttpService
@@ -211,6 +212,7 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(UserManagementHttpService())
         sb.annotatedService().decorator(authDecorator).build(InventoryReportHttpService())
         sb.annotatedService().decorator(authDecorator).build(PurchaseWishesHttpService())
+        sb.annotatedService().decorator(authDecorator).build(ValuationHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

@@ -12,6 +12,7 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AcquisitionStatus
+import net.stewart.mediamanager.service.WishLifecycleStage
 import net.stewart.mediamanager.service.WishListService
 import net.stewart.mediamanager.service.displayLabel
 
@@ -25,7 +26,19 @@ class PurchaseWishesHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
+        val statusOrder = mapOf(
+            WishLifecycleStage.WISHED_FOR to 0,
+            WishLifecycleStage.ORDERED to 1,
+            WishLifecycleStage.NEEDS_ASSISTANCE to 2,
+            WishLifecycleStage.IN_HOUSE_PENDING_NAS to 3,
+            WishLifecycleStage.ON_NAS_PENDING_DESKTOP to 4,
+            WishLifecycleStage.READY_TO_WATCH to 5,
+            WishLifecycleStage.NOT_FEASIBLE to 6,
+            WishLifecycleStage.WONT_ORDER to 7
+        )
         val aggregates = WishListService.getMediaWishVoteCounts()
+            .sortedWith(compareBy<net.stewart.mediamanager.service.MediaWishAggregate> { statusOrder[it.lifecycleStage] ?: 99 }
+                .thenBy { it.tmdbTitle.lowercase() })
         val items = aggregates.map { agg ->
             mapOf(
                 "tmdb_id" to agg.tmdbId,

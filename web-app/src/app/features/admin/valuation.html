@@ -1,0 +1,132 @@
+<div class="valuation-page">
+  <h2>Valuation</h2>
+
+  <!-- Summary cards -->
+  <div class="summary-row">
+    <mat-card class="summary-card">
+      <mat-card-content>
+        <span class="summary-value">{{ summary().total_items | number }}</span>
+        <span class="summary-label">Total Items</span>
+      </mat-card-content>
+    </mat-card>
+    <mat-card class="summary-card">
+      <mat-card-content>
+        <span class="summary-value">{{ summary().total_purchase | currency:'USD':'symbol':'1.2-2' }}</span>
+        <span class="summary-label">Purchase Value</span>
+      </mat-card-content>
+    </mat-card>
+    <mat-card class="summary-card">
+      <mat-card-content>
+        <span class="summary-value">{{ summary().total_replacement | currency:'USD':'symbol':'1.2-2' }}</span>
+        <span class="summary-label">Replacement Value</span>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <input class="search-input" type="text" placeholder="Search items..."
+           [value]="search()" (input)="onSearch($event)" />
+    <mat-chip-set>
+      <mat-chip [highlighted]="unpricedOnly()" (click)="toggleUnpriced()">Unpriced Only</mat-chip>
+    </mat-chip-set>
+  </div>
+
+  @if (loading() && rows().length === 0) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else {
+    <div class="table-container">
+      <table mat-table [dataSource]="rows()" class="valuation-table">
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Item</th>
+          <td mat-cell *matCellDef="let r">
+            <span class="item-name">{{ r.display_name }}</span>
+            @if (r.upc) { <span class="upc-label">{{ r.upc }}</span> }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="format">
+          <th mat-header-cell *matHeaderCellDef>Format</th>
+          <td mat-cell *matCellDef="let r">{{ r.media_format.replace('_', ' ') }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="place">
+          <th mat-header-cell *matHeaderCellDef>Place</th>
+          <td mat-cell *matCellDef="let r">{{ r.purchase_place ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let r">{{ r.purchase_date ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="price">
+          <th mat-header-cell *matHeaderCellDef>Price</th>
+          <td mat-cell *matCellDef="let r">{{ formatPrice(r.purchase_price) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="replacement">
+          <th mat-header-cell *matHeaderCellDef>Replacement</th>
+          <td mat-cell *matCellDef="let r">{{ formatPrice(r.replacement_value) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="photos">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            @if (r.photo_count > 0) {
+              <mat-icon class="photo-icon" [title]="r.photo_count + ' photo(s)'">photo_camera</mat-icon>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button (click)="openEdit(r)" title="Edit">
+              <mat-icon>edit</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+      </table>
+    </div>
+
+    <mat-paginator [length]="total()" [pageSize]="pageSize()" [pageIndex]="page()"
+                   [pageSizeOptions]="[25, 50, 100]" (page)="onPage($event)" showFirstLastButtons />
+  }
+
+  <!-- Edit Dialog -->
+  @if (editOpen() && editItem(); as item) {
+    <div class="modal-overlay" (click)="closeEdit()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Edit: {{ item.display_name }}</h3>
+          <button class="close-btn" (click)="closeEdit()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="form-fields">
+          <label class="field-label">Purchase Place</label>
+          <input class="field-input" type="text" [value]="editPlace()" (input)="updateField('place', $event)" />
+
+          <label class="field-label">Purchase Date (YYYY-MM-DD)</label>
+          <input class="field-input" type="date" [value]="editDate()" (input)="updateField('date', $event)" />
+
+          <label class="field-label">Purchase Price</label>
+          <input class="field-input" type="number" step="0.01" [value]="editPrice()" (input)="updateField('price', $event)" />
+
+          <label class="field-label">Replacement Value</label>
+          <input class="field-input" type="number" step="0.01" [value]="editReplacement()" (input)="updateField('replacement', $event)" />
+
+          <label class="field-label">Override ASIN</label>
+          <input class="field-input" type="text" [value]="editAsin()" (input)="updateField('asin', $event)" placeholder="e.g., B08N5WRWNW" />
+        </div>
+        <div class="dialog-footer">
+          <button mat-button (click)="closeEdit()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="saveEdit()">Save</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
