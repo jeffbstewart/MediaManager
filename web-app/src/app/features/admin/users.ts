@@ -59,6 +59,11 @@ export class UsersComponent implements OnInit {
   readonly resetConfirm = signal('');
   readonly resetError = signal('');
 
+  // Sessions dialog
+  readonly sessionsDialogOpen = signal(false);
+  readonly sessionsUser = signal<UserRow | null>(null);
+  readonly sessions = signal<{ id: number; type: string; user_agent?: string; device_name?: string; last_used_at: string | null }[]>([]);
+
   async ngOnInit(): Promise<void> {
     await this.refresh();
   }
@@ -188,5 +193,38 @@ export class UsersComponent implements OnInit {
     } catch {
       this.resetError.set('Request failed');
     }
+  }
+
+  // Sessions dialog
+  async openSessions(user: UserRow): Promise<void> {
+    this.sessionsUser.set(user);
+    this.sessions.set([]);
+    this.sessionsDialogOpen.set(true);
+    try {
+      const data = await firstValueFrom(this.http.get<{ sessions: any[] }>(`/api/v2/admin/users/${user.id}/sessions`));
+      this.sessions.set(data.sessions);
+    } catch { /* ignore */ }
+  }
+
+  closeSessionsDialog(): void { this.sessionsDialogOpen.set(false); this.sessionsUser.set(null); }
+
+  async revokeSession(session: { id: number }): Promise<void> {
+    const user = this.sessionsUser();
+    if (!user) return;
+    await firstValueFrom(this.http.delete(`/api/v2/admin/users/${user.id}/sessions/${session.id}`));
+    this.sessions.update(s => s.filter(x => x.id !== session.id));
+  }
+
+  async revokeAllSessions(): Promise<void> {
+    const user = this.sessionsUser();
+    if (!user) return;
+    await firstValueFrom(this.http.post(`/api/v2/admin/users/${user.id}/revoke-all-sessions`, {}));
+    this.sessions.set([]);
+  }
+
+  formatSessionDate(dateStr: string | null): string {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
 }

@@ -36,6 +36,18 @@
 
 .delete-item { color: #f44336 !important; }
 .active-rating { font-weight: 700; color: var(--mat-sys-primary, #bb86fc) !important; }
+.empty-text { opacity: 0.5; font-size: 0.875rem; }
+
+// Sessions dialog
+.sessions-modal { max-width: 550px; }
+.revoke-all-btn { margin-bottom: 0.75rem; }
+.sessions-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.session-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 6px; gap: 0.75rem; }
+.session-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
+.session-badge { font-size: 0.625rem; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: #3b82f6; color: white; align-self: flex-start; &.device { background: #8b5cf6; } }
+.session-detail { font-size: 0.75rem; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-meta { font-size: 0.6875rem; opacity: 0.4; }
+.small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
 
 // Modal shared styles
 .modal-overlay {

@@ -171,6 +171,43 @@ class UserManagementHttpService {
         return jsonResponse("""{"ok":true}""")
     }
 
+    @Get("/api/v2/admin/users/{userId}/sessions")
+    fun listSessions(ctx: ServiceRequestContext, @Param("userId") userId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val browserSessions = net.stewart.mediamanager.service.PairingService.getSessionTokensForUser(userId).map { token ->
+            mapOf("id" to token.id, "type" to "browser", "user_agent" to token.user_agent,
+                "created_at" to token.created_at?.toString(), "last_used_at" to token.last_used_at?.toString(),
+                "expires_at" to token.expires_at?.toString())
+        }
+        val deviceSessions = net.stewart.mediamanager.service.PairingService.getDeviceTokensForUser(userId).map { token ->
+            mapOf("id" to token.id, "type" to "device", "device_name" to token.device_name,
+                "created_at" to token.created_at?.toString(), "last_used_at" to token.last_used_at?.toString())
+        }
+        return jsonResponse(gson.toJson(mapOf("sessions" to browserSessions + deviceSessions)))
+    }
+
+    @Delete("/api/v2/admin/users/{userId}/sessions/{sessionId}")
+    fun revokeSession(ctx: ServiceRequestContext, @Param("userId") userId: Long, @Param("sessionId") sessionId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        // Try browser session first, then device token
+        val revoked = AuthService.revokeSession(sessionId, null)
+        if (!revoked) net.stewart.mediamanager.service.PairingService.revokeToken(sessionId)
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    @Post("/api/v2/admin/users/{userId}/revoke-all-sessions")
+    fun revokeAllSessions(ctx: ServiceRequestContext, @Param("userId") userId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        AuthService.invalidateUserSessions(userId)
+        return jsonResponse("""{"ok":true}""")
+    }
+
     private fun jsonResponse(json: String): HttpResponse {
         val bytes = json.toByteArray(Charsets.UTF_8)
         val headers = ResponseHeaders.builder(HttpStatus.OK)

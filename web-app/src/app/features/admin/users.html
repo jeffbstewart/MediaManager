@@ -71,6 +71,9 @@
             <button mat-menu-item [matMenuTriggerFor]="ratingMenu">
               <mat-icon>shield</mat-icon> <span>Set Rating Ceiling</span>
             </button>
+            <button mat-menu-item (click)="openSessions(u)">
+              <mat-icon>devices</mat-icon> <span>View Sessions</span>
+            </button>
             <mat-divider />
             <button mat-menu-item class="delete-item" (click)="deleteUser(u)">
               <mat-icon>delete</mat-icon> <span>Delete User</span>
@@ -156,6 +159,39 @@
           <button mat-button (click)="closeResetDialog()">Cancel</button>
           <button mat-flat-button color="primary" (click)="submitResetPassword()" [disabled]="!resetValid()">Reset</button>
         </div>
+      </div>
+    </div>
+  }
+
+  <!-- Sessions Dialog -->
+  @if (sessionsDialogOpen() && sessionsUser(); as u) {
+    <div class="modal-overlay" (click)="closeSessionsDialog()">
+      <div class="modal-content sessions-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Sessions: {{ u.username }}</h3>
+          <button class="close-btn" (click)="closeSessionsDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+
+        @if (sessions().length > 0) {
+          <button mat-stroked-button color="warn" class="revoke-all-btn" (click)="revokeAllSessions()">
+            Revoke All Sessions
+          </button>
+          <div class="sessions-list">
+            @for (s of sessions(); track s.id) {
+              <div class="session-row">
+                <div class="session-info">
+                  <span class="session-badge" [class.device]="s.type === 'device'">{{ s.type === 'device' ? 'Device' : 'Browser' }}</span>
+                  @if (s.user_agent) { <span class="session-detail" [title]="s.user_agent">{{ s.user_agent.substring(0, 60) }}</span> }
+                  @if (s.device_name) { <span class="session-detail">{{ s.device_name }}</span> }
+                  <span class="session-meta">Last used: {{ formatSessionDate(s.last_used_at) }}</span>
+                </div>
+                <button mat-stroked-button color="warn" class="small-btn" (click)="revokeSession(s)">Revoke</button>
+              </div>
+            }
+          </div>
+        } @else {
+          <span class="empty-text">No active sessions.</span>
+        }
       </div>
     </div>
   }
