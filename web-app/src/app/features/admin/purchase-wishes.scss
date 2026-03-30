@@ -1,0 +1,66 @@
+.wishes-page { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+
+h2 { margin: 0 0 0.25rem; }
+.subtitle { font-size: 0.8125rem; opacity: 0.5; margin: 0 0 1rem; }
+.empty-text { opacity: 0.5; }
+
+.table-container { overflow-x: auto; }
+
+.wishes-table {
+  width: 100%;
+  .mat-mdc-header-cell {
+    font-size: 0.6875rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+  }
+  .mat-mdc-cell { font-size: 0.8125rem; }
+}
+
+.row-poster {
+  width: 50px;
+  height: 75px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.title-text { font-weight: 500; }
+
+.vote-badge {
+  display: inline-block;
+  background: var(--mat-sys-primary, #bb86fc);
+  color: white;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.voters-text {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 9999px;
+  padding: 3px 10px 3px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { opacity: 0.8; }
+}
+
+.status-arrow {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin: -2px -4px -2px 0;
+}

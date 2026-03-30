@@ -206,7 +206,7 @@ class InventoryReportView : KComposite() {
         downloadContainer.isVisible = true
     }
 
-    private data class ReportData(
+    internal data class ReportData(
         val allItems: List<MediaItem>,
         val linksByItem: Map<Long, List<MediaItemTitle>>,
         val allTitles: Map<Long?, Title>
@@ -218,7 +218,7 @@ class InventoryReportView : KComposite() {
                 ?: "(unlinked)"
     }
 
-    private fun loadData(): ReportData {
+    internal fun loadData(): ReportData {
         val allItems = MediaItem.findAll()
         val allLinks = MediaItemTitle.findAll()
         val allTitles = Title.findAll().associateBy { it.id }
@@ -226,7 +226,7 @@ class InventoryReportView : KComposite() {
         return ReportData(allItems, linksByItem, allTitles)
     }
 
-    private fun sortKey(titleName: String): String {
+    internal fun sortKey(titleName: String): String {
         val lower = titleName.lowercase().trim()
         return if (lower.startsWith("the ")) lower.removePrefix("the ").trim() else lower
     }
@@ -290,7 +290,7 @@ class InventoryReportView : KComposite() {
 
     // ---- PDF ----
 
-    private fun generatePdf(
+    internal fun generatePdf(
         withPhotos: Boolean = false,
         outputFile: java.io.File,
         onProgress: (current: Int, total: Int, phase: String) -> Unit = { _, _, _ -> }
@@ -627,7 +627,7 @@ class InventoryReportView : KComposite() {
         out.close()
     }
 
-    private fun createValuedTable(
+    internal fun createValuedTable(
         items: List<MediaItem>,
         data: ReportData,
         headerFont: Font,
@@ -720,7 +720,7 @@ class InventoryReportView : KComposite() {
         return table
     }
 
-    private fun createUnvaluedTable(
+    internal fun createUnvaluedTable(
         items: List<MediaItem>,
         data: ReportData,
         headerFont: Font,
@@ -773,7 +773,7 @@ class InventoryReportView : KComposite() {
         return table
     }
 
-    private fun addPhotoRow(table: PdfPTable, colCount: Int, mediaItemId: Long, bg: Color?) {
+    internal fun addPhotoRow(table: PdfPTable, colCount: Int, mediaItemId: Long, bg: Color?) {
         val photos = OwnershipPhotoService.findByMediaItem(mediaItemId)
         if (photos.isEmpty()) return
 
@@ -833,7 +833,7 @@ class InventoryReportView : KComposite() {
      * at thumbnail resolution — a 4000x3000 photo is decoded as ~300x225 without
      * ever allocating the full 36MB BufferedImage.
      */
-    private fun applyOrientation(file: java.io.File, orientation: Int): com.lowagie.text.Image {
+    internal fun applyOrientation(file: java.io.File, orientation: Int): com.lowagie.text.Image {
         val thumb = readSubsampled(file, 300)
             ?: return com.lowagie.text.Image.getInstance(file.absolutePath)
 
@@ -878,7 +878,7 @@ class InventoryReportView : KComposite() {
      * Read an image file at reduced resolution using JPEG subsampled decoding.
      * Never allocates a full-resolution BufferedImage.
      */
-    private fun readSubsampled(file: java.io.File, maxPx: Int): BufferedImage? {
+    internal fun readSubsampled(file: java.io.File, maxPx: Int): BufferedImage? {
         val stream = ImageIO.createImageInputStream(file) ?: return null
         val readers = ImageIO.getImageReaders(stream)
         if (!readers.hasNext()) { stream.close(); return null }

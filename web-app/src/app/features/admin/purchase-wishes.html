@@ -1,0 +1,75 @@
+<div class="wishes-page">
+  <h2>User Wishes</h2>
+  <p class="subtitle">Media wishes from all users, aggregated by title. Click the status badge to update acquisition status.</p>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (wishes().length === 0) {
+    <p class="empty-text">No active media wishes from any user.</p>
+  } @else {
+    <div class="table-container">
+      <table mat-table [dataSource]="wishes()" class="wishes-table">
+
+        <ng-container matColumnDef="poster">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let w">
+            @if (w.poster_path) {
+              <img [src]="posterUrl(w.poster_path)" [alt]="w.title" class="row-poster" />
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>Title</th>
+          <td mat-cell *matCellDef="let w">
+            <span class="title-text">{{ w.display_title }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="year">
+          <th mat-header-cell *matHeaderCellDef>Year</th>
+          <td mat-cell *matCellDef="let w">{{ w.release_year ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="type">
+          <th mat-header-cell *matHeaderCellDef>Type</th>
+          <td mat-cell *matCellDef="let w">{{ w.media_type === 'TV' ? 'TV' : 'Movie' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="votes">
+          <th mat-header-cell *matHeaderCellDef>Votes</th>
+          <td mat-cell *matCellDef="let w">
+            <span class="vote-badge">{{ w.vote_count }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="voters">
+          <th mat-header-cell *matHeaderCellDef>Requested By</th>
+          <td mat-cell *matCellDef="let w">
+            <span class="voters-text">{{ w.voters.join(', ') }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let w">
+            <button class="status-badge" [matMenuTriggerFor]="statusMenu"
+                    [style.color]="stageColor(w.lifecycle_stage)"
+                    title="Click to change">
+              {{ w.lifecycle_label }}
+              <mat-icon class="status-arrow">arrow_drop_down</mat-icon>
+            </button>
+            <mat-menu #statusMenu="matMenu">
+              @for (opt of statusOptions; track opt.value) {
+                <button mat-menu-item (click)="setStatus(w, opt.value)">{{ opt.label }}</button>
+              }
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+      </table>
+    </div>
+  }
+</div>
