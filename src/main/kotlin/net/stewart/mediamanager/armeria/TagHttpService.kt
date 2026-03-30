@@ -9,8 +9,13 @@ import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.Tag
+import net.stewart.mediamanager.entity.TitleTag
+import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
@@ -115,6 +120,68 @@ class TagHttpService {
         )
 
         return jsonResponse(gson.toJson(result))
+    }
+
+    /** Add a title to a tag (admin only). */
+    @Post("/api/v2/catalog/tags/{tagId}/titles/{titleId}")
+    fun addTitleToTag(
+        ctx: ServiceRequestContext,
+        @Param("tagId") tagId: Long,
+        @Param("titleId") titleId: Long
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+        Tag.findById(tagId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+
+        val exists = TitleTag.findAll().any { it.tag_id == tagId && it.title_id == titleId }
+        if (!exists) {
+            TitleTag(title_id = titleId, tag_id = tagId).save()
+            SearchIndexService.onTitleChanged(titleId)
+        }
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    /** Remove a title from a tag (admin only). */
+    @Delete("/api/v2/catalog/tags/{tagId}/titles/{titleId}")
+    fun removeTitleFromTag(
+        ctx: ServiceRequestContext,
+        @Param("tagId") tagId: Long,
+        @Param("titleId") titleId: Long
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        TitleTag.findAll()
+            .filter { it.tag_id == tagId && it.title_id == titleId }
+            .forEach { it.delete() }
+        SearchIndexService.onTitleChanged(titleId)
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    /** Search titles for adding to a tag (admin only). */
+    @Get("/api/v2/catalog/tags/{tagId}/search-titles")
+    fun searchTitlesForTag(
+        ctx: ServiceRequestContext,
+        @Param("tagId") tagId: Long,
+        @Param("q") q: String
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val taggedIds = TagService.getTitleIdsForTags(setOf(tagId))
+        val query = q.trim().lowercase()
+        if (query.length < 2) return jsonResponse("""{"results":[]}""")
+
+        val results = Title.findAll()
+            .filter { !it.hidden && it.id !in taggedIds }
+            .filter { user.canSeeRating(it.content_rating) }
+            .filter { it.name.lowercase().contains(query) }
+            .sortedBy { it.name.lowercase() }
+            .take(20)
+            .map { mapOf("title_id" to it.id, "title_name" to it.name, "release_year" to it.release_year) }
+
+        return jsonResponse(gson.toJson(mapOf("results" to results)))
     }
 
     private fun jsonResponse(json: String): HttpResponse {

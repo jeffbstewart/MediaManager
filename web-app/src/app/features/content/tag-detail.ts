@@ -1,13 +1,18 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { CatalogService, TagCard, TitleCard } from '../../core/catalog.service';
+import { FeatureService } from '../../core/feature.service';
 import { AppRoutes } from '../../core/routes';
 
 @Component({
   selector: 'app-tag-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatProgressSpinnerModule],
+  imports: [RouterLink, MatProgressSpinnerModule, MatIconModule, MatButtonModule],
   template: `
     <div class="content-page">
       @if (loading()) {
@@ -24,6 +29,24 @@ import { AppRoutes } from '../../core/routes';
           <span class="title-count">{{ total() }} title{{ total() === 1 ? '' : 's' }}</span>
         </div>
 
+        @if (features.isAdmin()) {
+          <div class="admin-add-row">
+            <input class="add-input" type="text" placeholder="Search titles to add..."
+                   [value]="searchQuery()" (input)="updateSearch($event)" (keydown.enter)="searchTitles()" />
+            @if (searchResults().length > 0) {
+              <div class="search-results">
+                @for (r of searchResults(); track r.title_id) {
+                  <div class="search-result-row">
+                    <span>{{ r.title_name }}</span>
+                    @if (r.release_year) { <span class="result-year">({{ r.release_year }})</span> }
+                    <button mat-flat-button color="primary" class="add-btn" (click)="addTitle(r.title_id)">Add</button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+
         <div class="poster-grid">
           @for (title of titles(); track title.title_id) {
             <a class="poster-card" [routerLink]="routes.title(title.title_id)">
@@ -35,6 +58,12 @@ import { AppRoutes } from '../../core/routes';
                 }
                 @if (title.playable) {
                   <div class="playable-badge"><div class="play-triangle"></div></div>
+                }
+                @if (features.isAdmin()) {
+                  <button class="remove-btn" (click)="removeTitle(title.title_id); $event.preventDefault(); $event.stopPropagation()"
+                          aria-label="Remove from tag">
+                    <mat-icon>close</mat-icon>
+                  </button>
                 }
                 @if (title.progress_fraction) {
                   <div class="progress-track">
@@ -100,11 +129,42 @@ import { AppRoutes } from '../../core/routes';
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .poster-meta { font-size: 0.6875rem; opacity: 0.5; }
+
+    .admin-add-row { margin-bottom: 1rem; position: relative; }
+    .add-input {
+      width: 100%; max-width: 400px; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
+      color: white; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
+    }
+    .add-input:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+    .add-input::placeholder { color: rgba(255,255,255,0.35); }
+    .search-results {
+      position: absolute; z-index: 10; background: #2a2a2a; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-width: 400px; width: 100%; overflow: hidden;
+    }
+    .search-result-row {
+      display: flex; align-items: center; gap: 0.5rem; padding: 8px 12px;
+      font-size: 0.8125rem;
+    }
+    .search-result-row:hover { background: rgba(255,255,255,0.05); }
+    .result-year { opacity: 0.4; }
+    .add-btn { margin-left: auto; font-size: 0.75rem !important; padding: 0 8px !important; min-height: 24px !important; line-height: 24px !important; }
+    .remove-btn {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(0,0,0,0.6); border: none; border-radius: 50%;
+      width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: rgba(255,255,255,0.7); padding: 0; opacity: 0;
+      transition: opacity 0.15s;
+      mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    }
+    .poster-wrapper:hover .remove-btn { opacity: 1; }
   `,
 })
 export class TagDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
+  private readonly http = inject(HttpClient);
+  readonly features = inject(FeatureService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -112,9 +172,13 @@ export class TagDetailComponent implements OnInit {
   readonly tag = signal<TagCard | null>(null);
   readonly titles = signal<TitleCard[]>([]);
   readonly total = signal(0);
+  readonly searchQuery = signal('');
+  readonly searchResults = signal<{ title_id: number; title_name: string; release_year: number | null }[]>([]);
+  private tagId = 0;
 
   async ngOnInit(): Promise<void> {
-    const id = Number(this.route.snapshot.paramMap.get('tagId'));
+    this.tagId = Number(this.route.snapshot.paramMap.get('tagId'));
+    const id = this.tagId;
     if (!id) {
       this.error.set('Invalid tag ID');
       this.loading.set(false);
@@ -130,5 +194,42 @@ export class TagDetailComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  updateSearch(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+    if (this.searchQuery().trim().length >= 2) this.searchTitles();
+    else this.searchResults.set([]);
+  }
+
+  async searchTitles(): Promise<void> {
+    const q = this.searchQuery().trim();
+    if (q.length < 2) return;
+    try {
+      const d = await firstValueFrom(this.http.get<{ results: { title_id: number; title_name: string; release_year: number | null }[] }>(
+        `/api/v2/catalog/tags/${this.tagId}/search-titles`, { params: { q } }));
+      this.searchResults.set(d.results);
+    } catch { /* ignore */ }
+  }
+
+  async addTitle(titleId: number): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/catalog/tags/${this.tagId}/titles/${titleId}`, {}));
+    this.searchResults.set([]);
+    this.searchQuery.set('');
+    await this.refreshTag();
+  }
+
+  async removeTitle(titleId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/catalog/tags/${this.tagId}/titles/${titleId}`));
+    await this.refreshTag();
+  }
+
+  private async refreshTag(): Promise<void> {
+    try {
+      const data = await this.catalog.getTagDetail(this.tagId);
+      this.tag.set(data.tag);
+      this.titles.set(data.titles);
+      this.total.set(data.total);
+    } catch { /* ignore */ }
   }
 }
