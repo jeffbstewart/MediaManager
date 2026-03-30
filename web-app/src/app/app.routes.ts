@@ -44,7 +44,7 @@ export const routes: Routes = [
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
-      { path: 'admin/transcodes/status', loadComponent: placeholder, data: { title: 'Transcode Status' } },
+      { path: 'admin/transcodes/status', loadComponent: () => import('./features/admin/transcode-status').then(m => m.TranscodeStatusComponent) },
       { path: 'admin/transcodes/unmatched', loadComponent: placeholder, data: { title: 'Unmatched Transcodes' } },
       { path: 'admin/transcodes/linked', loadComponent: placeholder, data: { title: 'Linked Transcodes' } },
       { path: 'admin/transcodes/backlog', loadComponent: placeholder, data: { title: 'Transcode Backlog' } },

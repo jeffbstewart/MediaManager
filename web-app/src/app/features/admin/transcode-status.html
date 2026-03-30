@@ -1,0 +1,213 @@
+<div class="status-page">
+  @if (loading() && !data()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (data(); as d) {
+
+    <!-- Action buttons -->
+    <div class="action-bar">
+      <button mat-flat-button color="primary" (click)="scanNas()" [disabled]="scanning()">
+        <mat-icon>radar</mat-icon>
+        {{ scanning() ? 'Scanning...' : 'Scan NAS' }}
+      </button>
+      @if (d.overall.failed_count > 0) {
+        <button mat-stroked-button (click)="clearFailures()">
+          <mat-icon>delete_sweep</mat-icon>
+          Clear Failures ({{ d.overall.failed_count }})
+        </button>
+      }
+    </div>
+
+    <!-- Overall Progress -->
+    <mat-card class="status-card">
+      <mat-card-header>
+        <mat-card-title>Overall Transcode Progress</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="stat-row highlight">
+          <span>{{ d.overall.total_completed | number }} completed</span>
+          <span class="dot">&middot;</span>
+          <span>{{ d.overall.total_bytes }} processed</span>
+        </div>
+
+        @if (d.overall.pending.total > 0) {
+          <div class="stat-row">
+            <span class="stat-label">Pending</span>
+            <span>{{ d.overall.pending.transcodes }} transcodes</span>
+            <span class="dot">&middot;</span>
+            <span>{{ d.overall.pending.mobile }} mobile</span>
+            <span class="dot">&middot;</span>
+            <span>{{ d.overall.pending.thumbnails }} thumbs</span>
+            <span class="dot">&middot;</span>
+            <span>{{ d.overall.pending.subtitles }} subs</span>
+            <span class="dot">&middot;</span>
+            <span>{{ d.overall.pending.chapters }} chapters</span>
+          </div>
+        }
+
+        <div class="stat-row">
+          <span class="stat-label">Throughput</span>
+          @if (d.overall.throughput.transcode_rate > 0) {
+            <span>{{ d.overall.throughput.transcode_rate }}/hr transcode</span>
+            <span class="dot">&middot;</span>
+          }
+          @if (d.overall.throughput.mobile_rate > 0) {
+            <span>{{ d.overall.throughput.mobile_rate }}/hr mobile</span>
+            <span class="dot">&middot;</span>
+          }
+          @if (d.overall.throughput.thumbnail_rate > 0) {
+            <span>{{ d.overall.throughput.thumbnail_rate }}/hr thumbs</span>
+            <span class="dot">&middot;</span>
+          }
+          @if (d.overall.throughput.subtitle_rate > 0) {
+            <span>{{ d.overall.throughput.subtitle_rate }}/hr subs</span>
+          }
+        </div>
+
+        @if (d.overall.eta_seconds) {
+          <div class="stat-row">
+            <span class="stat-label">ETA</span>
+            <span>{{ formatEta(d.overall.eta_seconds) }}</span>
+          </div>
+        }
+
+        <div class="stat-row">
+          <span class="stat-label">Workers</span>
+          <span>{{ d.overall.active_workers }} active</span>
+          @if (d.overall.failed_count > 0) {
+            <span class="dot">&middot;</span>
+            <span class="failed">{{ d.overall.failed_count }} failed</span>
+          }
+          <span class="dot">&middot;</span>
+          <span>{{ d.overall.thumbnail_stats.total }} thumbs ({{ d.overall.thumbnail_stats.today }} today)</span>
+          <span class="dot">&middot;</span>
+          <span>{{ d.overall.subtitle_stats.total }} subs ({{ d.overall.subtitle_stats.today }} today)</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Local Transcoder -->
+    @if (d.local_disabled) {
+      <mat-card class="status-card muted">
+        <mat-card-content>
+          <div class="info-note">
+            <mat-icon>info</mat-icon>
+            <span>Local transcoding is disabled. Transcoding is handled by remote transcode buddy workers.</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    } @else if (d.local_status.active) {
+      <mat-card class="status-card">
+        <mat-card-header>
+          <mat-card-title>Local Transcoder</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="worker-row">
+            <span class="file-name">{{ d.local_status.file_name }}</span>
+            <span class="lease-tag">{{ leaseTypeLabel(d.local_status.lease_type!) }}</span>
+          </div>
+          <div class="progress-row">
+            <mat-progress-bar mode="determinate" [value]="d.local_status.progress_percent!" />
+            <span class="progress-label">{{ d.local_status.progress_percent }}%</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- Active Buddy Workers -->
+    @if (d.active_buddies.length > 0) {
+      <mat-card class="status-card">
+        <mat-card-header>
+          <mat-card-title>Active Workers</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          @for (buddy of d.active_buddies; track buddy.id) {
+            <div class="worker-row">
+              <span class="buddy-name">{{ buddy.buddy_name }}</span>
+              <span class="lease-tag" [class]="'tag-' + buddy.lease_type">{{ leaseTypeLabel(buddy.lease_type) }}</span>
+              <span class="file-name">{{ buddy.file_name }}</span>
+              @if (buddy.encoder) {
+                <span class="encoder-tag">{{ buddy.encoder }}</span>
+              }
+            </div>
+            @if (buddy.lease_type === 'TRANSCODE' || buddy.lease_type === 'MOBILE_TRANSCODE') {
+              @if (buddy.status === 'IN_PROGRESS') {
+                <div class="progress-row">
+                  <mat-progress-bar mode="determinate" [value]="buddy.progress_percent" />
+                  <span class="progress-label">{{ buddy.progress_percent }}%</span>
+                </div>
+              } @else {
+                <span class="status-text">Claimed</span>
+              }
+            } @else {
+              <span class="status-text">Running for {{ formatElapsed(buddy.elapsed_seconds) }}</span>
+            }
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <!-- Recent Activity (mat-table) -->
+    @if (d.recent.length > 0) {
+      <mat-card class="status-card">
+        <mat-card-header>
+          <mat-card-title>Recent Activity</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="table-container">
+          <table mat-table [dataSource]="d.recent" class="recent-table">
+
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let item">
+                @if (item.status === 'FAILED') {
+                  <mat-icon class="status-icon failed">error</mat-icon>
+                } @else {
+                  <mat-icon class="status-icon success">check_circle</mat-icon>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="buddy">
+              <th mat-header-cell *matHeaderCellDef>Worker</th>
+              <td mat-cell *matCellDef="let item">{{ item.buddy_name }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let item">
+                <span class="lease-tag" [class]="'tag-' + item.lease_type">{{ leaseTypeLabel(item.lease_type) }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="file">
+              <th mat-header-cell *matHeaderCellDef>File</th>
+              <td mat-cell *matCellDef="let item" [title]="item.file_name">
+                <span class="file-name-table">{{ item.file_name }}</span>
+                @if (item.error_message) {
+                  <span class="error-detail">{{ item.error_message }}</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="elapsed">
+              <th mat-header-cell *matHeaderCellDef>Elapsed</th>
+              <td mat-cell *matCellDef="let item">
+                {{ item.elapsed_seconds ? formatElapsed(item.elapsed_seconds) : '—' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="size">
+              <th mat-header-cell *matHeaderCellDef>Size</th>
+              <td mat-cell *matCellDef="let item">
+                {{ item.file_size_bytes ? formatSize(item.file_size_bytes) : '—' }}
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: recentColumns;"
+                [class.failed-row]="row.status === 'FAILED'"></tr>
+          </table>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+</div>
