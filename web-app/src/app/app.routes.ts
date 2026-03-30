@@ -25,10 +25,9 @@ export const routes: Routes = [
     loadComponent: () => import('./core/shell/shell').then(m => m.ShellComponent),
     children: [
       { path: '', loadComponent: () => import('./features/home/home').then(m => m.HomeComponent) },
-      { path: 'catalog', loadComponent: placeholder, data: { title: 'Catalog' } },
       { path: 'title/:titleId', loadComponent: () => import('./features/title-detail/title-detail').then(m => m.TitleDetailComponent) },
       { path: 'actor/:personId', loadComponent: () => import('./features/actor/actor').then(m => m.ActorComponent) },
-      { path: 'search', loadComponent: placeholder, data: { title: 'Search' } },
+      { path: 'search', loadComponent: () => import('./features/search/search').then(m => m.SearchComponent) },
       { path: 'content/movies', loadComponent: () => import('./features/content/movies').then(m => m.MoviesComponent) },
       { path: 'content/tv', loadComponent: () => import('./features/content/tv-shows').then(m => m.TvShowsComponent) },
       { path: 'content/collections', loadComponent: () => import('./features/content/collections').then(m => m.CollectionsComponent) },

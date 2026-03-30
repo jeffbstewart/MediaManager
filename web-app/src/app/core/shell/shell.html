@@ -145,6 +145,41 @@
       </button>
       <span class="app-title">Media Manager</span>
 
+      <div class="search-container">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input class="search-input" type="text" placeholder="Search..."
+               [value]="searchQuery()"
+               (input)="onSearchInput($event)"
+               (keydown.enter)="onSearchSubmit()"
+               (keydown.escape)="clearSearch()"
+               (focus)="onSearchFocus()"
+               (blur)="onSearchBlur()" />
+        @if (searchQuery().length > 0) {
+          <button class="search-clear" (mousedown)="clearSearch(); $event.preventDefault()">
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+        @if (showSuggestions() && suggestions().length > 0) {
+          <div class="suggestions-dropdown">
+            @for (item of suggestions(); track item.name + item.type) {
+              <a class="suggestion-item" [routerLink]="resultRoute(item)"
+                 (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
+                <span class="suggestion-type" [class]="'type-' + item.type">{{ typeLabel(item.type) }}</span>
+                <span class="suggestion-name">{{ item.name }}</span>
+                @if (item.year) {
+                  <span class="suggestion-meta">{{ item.year }}</span>
+                }
+              </a>
+            }
+            <a class="suggestion-item suggestion-all" routerLink="/search"
+               [queryParams]="{ q: searchQuery() }"
+               (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
+              See all results
+            </a>
+          </div>
+        }
+      </div>
+
       <span class="spacer"></span>
 
       <button mat-icon-button [matMenuTriggerFor]="profileMenu" aria-label="Profile menu">

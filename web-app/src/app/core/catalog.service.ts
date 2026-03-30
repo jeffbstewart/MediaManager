@@ -268,6 +268,31 @@ export interface TmdbSearchResponse {
   results: TmdbSearchResultItem[];
 }
 
+export interface SearchResult {
+  type: 'movie' | 'tv' | 'personal' | 'actor' | 'collection' | 'tag' | 'channel' | 'camera';
+  name: string;
+  title_id?: number;
+  person_id?: number;
+  collection_id?: number;
+  tag_id?: number;
+  channel_id?: number;
+  camera_id?: number;
+  poster_url?: string | null;
+  headshot_url?: string | null;
+  year?: number | null;
+  playable?: boolean;
+  bg_color?: string;
+  text_color?: string;
+  title_count?: number;
+  affiliation?: string | null;
+  score?: number;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  query: string;
+}
+
 export interface ActorDetail {
   person_id: number;
   name: string;
@@ -346,6 +371,10 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async search(query: string, limit = 30): Promise<SearchResponse> {
+    return firstValueFrom(this.http.get<SearchResponse>('/api/v2/search', { params: { q: query, limit: limit.toString() } }));
   }
 
   async getActorDetail(personId: number): Promise<ActorDetail> {

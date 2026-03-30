@@ -30,6 +30,124 @@
     background-color: rgba(255, 255, 255, 0.08);
   }
 
+  // Search bar
+  .search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-left: 1rem;
+    max-width: 320px;
+    flex: 1;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    color: white;
+    padding: 6px 32px 6px 30px;
+    font-size: 0.8125rem;
+    outline: none;
+
+    &:focus {
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    &::placeholder { color: rgba(255, 255, 255, 0.35); }
+  }
+
+  .search-clear {
+    position: absolute;
+    right: 4px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  }
+
+  .suggestions-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: #2a2a2a;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    z-index: 1000;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 8px 12px;
+    text-decoration: none;
+    color: white;
+    cursor: pointer;
+
+    &:hover { background: rgba(255, 255, 255, 0.08); }
+
+    &.suggestion-all {
+      justify-content: center;
+      font-size: 0.8125rem;
+      opacity: 0.6;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  .suggestion-type {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+
+    &.type-movie { background: #1565c0; }
+    &.type-tv { background: #6a1b9a; }
+    &.type-actor { background: #2e7d32; }
+    &.type-collection { background: #e65100; }
+    &.type-tag { background: #455a64; }
+    &.type-channel { background: #00838f; }
+    &.type-camera { background: #4e342e; }
+    &.type-personal { background: #ad1457; }
+  }
+
+  .suggestion-name {
+    font-size: 0.8125rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .suggestion-meta {
+    font-size: 0.6875rem;
+    opacity: 0.4;
+    flex-shrink: 0;
+  }
+
   .wish-badge {
     background-color: #4caf50;
     color: white;

@@ -1,0 +1,54 @@
+<div class="content-page">
+  <h2>Search results for "{{ query() }}"</h2>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (results().length === 0) {
+    <p class="empty-text">No results found.</p>
+  } @else {
+    <span class="result-count">{{ results().length }} results</span>
+
+    <div class="results-grid">
+      @for (item of results(); track item.name + item.type) {
+        <a class="result-card" [routerLink]="resultRoute(item)">
+          <div class="result-visual">
+            @if (item.poster_url) {
+              <img [src]="item.poster_url" [alt]="item.name" class="result-img" />
+            } @else if (item.headshot_url) {
+              <img [src]="item.headshot_url" [alt]="item.name" class="result-img headshot" />
+            } @else {
+              <div class="result-placeholder">
+                <mat-icon>
+                  @switch (item.type) {
+                    @case ('actor') { person }
+                    @case ('collection') { collections_bookmark }
+                    @case ('tag') { label }
+                    @case ('channel') { live_tv }
+                    @case ('camera') { videocam }
+                    @default { movie }
+                  }
+                </mat-icon>
+              </div>
+            }
+            @if (item.playable) {
+              <div class="playable-badge"><div class="play-triangle"></div></div>
+            }
+          </div>
+          <div class="result-info">
+            <span class="result-type" [class]="'type-' + item.type">{{ typeLabel(item.type) }}</span>
+            <span class="result-name">{{ item.name }}</span>
+            @if (item.year) {
+              <span class="result-meta">{{ item.year }}</span>
+            }
+            @if (item.affiliation) {
+              <span class="result-meta">{{ item.affiliation }}</span>
+            }
+            @if (item.title_count) {
+              <span class="result-meta">{{ item.title_count }} titles</span>
+            }
+          </div>
+        </a>
+      }
+    </div>
+  }
+</div>
