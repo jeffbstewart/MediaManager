@@ -1,0 +1,73 @@
+<div class="cam-page">
+  <div class="header-row">
+    <h2>Camera Settings</h2>
+    <button mat-flat-button color="primary" (click)="openAdd()">
+      <mat-icon>add</mat-icon> Add Camera
+    </button>
+  </div>
+
+  <!-- go2rtc status -->
+  <div class="status-badge" [style.color]="statusColor(go2rtcStatus())">
+    <mat-icon>{{ go2rtcStatus() === 'running' ? 'check_circle' : 'error' }}</mat-icon>
+    {{ statusLabel(go2rtcStatus()) }}
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (cameras().length === 0) {
+    <p class="empty-text">No cameras configured. Add a camera to get started.</p>
+  } @else {
+    <p class="hint-text">Drag cameras to reorder.</p>
+
+    <div cdkDropList class="camera-list" (cdkDropListDropped)="onDrop($event)">
+      @for (cam of cameras(); track cam.id) {
+        <div cdkDrag class="camera-row" [class.disabled-row]="!cam.enabled">
+          <mat-icon class="drag-handle" cdkDragHandle>drag_indicator</mat-icon>
+          <label class="enable-toggle" [title]="cam.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'">
+            <input type="checkbox" [checked]="cam.enabled" (change)="toggleEnabled(cam)" />
+          </label>
+          <span class="cam-name">{{ cam.name }}</span>
+          <span class="spacer"></span>
+          <button mat-icon-button (click)="openEdit(cam)" title="Edit"><mat-icon>edit</mat-icon></button>
+          <button mat-icon-button class="delete-btn" (click)="deleteCam(cam)" title="Delete"><mat-icon>delete</mat-icon></button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Add/Edit Dialog -->
+  @if (dialogOpen()) {
+    <div class="modal-overlay" (click)="closeDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ dialogMode() === 'edit' ? 'Edit Camera' : 'Add Camera' }}</h3>
+          <button class="close-btn" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="form-fields">
+          <label class="field-label">Name</label>
+          <input class="field-input" type="text" [value]="dialogName()" (input)="updateField('name', $event)" />
+
+          <label class="field-label">RTSP URL</label>
+          <input class="field-input" type="text" [value]="dialogRtsp()" (input)="updateField('rtsp', $event)"
+                 placeholder="rtsp://user:pass&#64;192.168.1.100:554/stream" />
+          @if (dialogMode() === 'edit') {
+            <span class="field-hint">Leave blank to keep existing URL</span>
+          }
+
+          <label class="field-label">Snapshot URL (optional)</label>
+          <input class="field-input" type="text" [value]="dialogSnapshot()" (input)="updateField('snapshot', $event)"
+                 placeholder="http://192.168.1.100/snapshot.jpg" />
+        </div>
+
+        @if (dialogError()) { <span class="field-error">{{ dialogError() }}</span> }
+
+        <div class="dialog-footer">
+          <button mat-button (click)="closeDialog()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="saveDialog()" [disabled]="!dialogName().trim()">
+            {{ dialogMode() === 'edit' ? 'Save' : 'Add' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

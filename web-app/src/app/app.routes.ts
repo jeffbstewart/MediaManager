@@ -56,7 +56,7 @@ export const routes: Routes = [
       { path: 'admin/data-quality', loadComponent: placeholder, data: { title: 'Data Quality' } },
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },
       { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },
-      { path: 'admin/cameras', loadComponent: placeholder, data: { title: 'Camera Settings' } },
+      { path: 'admin/cameras', loadComponent: () => import('./features/admin/camera-settings').then(m => m.CameraSettingsComponent) },
       { path: 'admin/live-tv', loadComponent: () => import('./features/admin/live-tv-settings').then(m => m.LiveTvSettingsComponent) },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
