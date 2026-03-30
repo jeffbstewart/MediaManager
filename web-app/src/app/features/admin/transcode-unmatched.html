@@ -1,0 +1,111 @@
+<div class="unmatched-page">
+  <h2>Unmatched Files</h2>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (files().length === 0) {
+    <mat-card>
+      <mat-card-content>
+        <div class="empty-state">
+          <mat-icon>check_circle</mat-icon>
+          <span>All discovered files are matched. Nothing to do.</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    <span class="status-label">{{ total() }} unmatched files</span>
+
+    <div class="table-container">
+      <table mat-table [dataSource]="files()" class="unmatched-table">
+
+        <ng-container matColumnDef="file">
+          <th mat-header-cell *matHeaderCellDef>File Name</th>
+          <td mat-cell *matCellDef="let f" [title]="f.file_path">
+            <span class="file-name-cell">{{ f.file_name }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="directory">
+          <th mat-header-cell *matHeaderCellDef>Directory</th>
+          <td mat-cell *matCellDef="let f">{{ f.directory }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="parsed">
+          <th mat-header-cell *matHeaderCellDef>Parsed Title</th>
+          <td mat-cell *matCellDef="let f" [title]="f.parsed_title ?? ''">
+            <span class="parsed-cell">{{ f.parsed_title ?? '—' }}</span>
+            @if (f.parsed_season != null) {
+              <span class="episode-label">S{{ f.parsed_season }}E{{ f.parsed_episode }}</span>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="year">
+          <th mat-header-cell *matHeaderCellDef>Year</th>
+          <td mat-cell *matCellDef="let f">{{ f.parsed_year ?? '' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="suggestion">
+          <th mat-header-cell *matHeaderCellDef>Suggestion</th>
+          <td mat-cell *matCellDef="let f">
+            @if (f.suggestion) {
+              <div class="suggestion-cell">
+                <span class="suggestion-name">{{ f.suggestion.title_name }}</span>
+                <span class="suggestion-score">{{ f.suggestion.score }}%</span>
+                <button mat-stroked-button color="primary" class="small-btn" (click)="accept(f)">Accept</button>
+              </div>
+            } @else {
+              <span class="no-suggestion">—</span>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let f">
+            <div class="action-buttons">
+              <button mat-stroked-button class="small-btn" (click)="openLinkDialog(f)">Link</button>
+              <button mat-button class="small-btn muted" (click)="ignore(f)">Ignore</button>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+      </table>
+    </div>
+  }
+
+  <!-- Link dialog -->
+  @if (linkDialogOpen()) {
+    <div class="modal-overlay" (click)="closeLinkDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Link: {{ linkFile()?.parsed_title ?? linkFile()?.file_name }}</h3>
+          <button class="close-btn" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+
+        <input class="search-input" type="text" placeholder="Search catalog titles..."
+               [value]="linkQuery()" (input)="updateLinkQuery($event)" />
+
+        @if (linkSearching()) {
+          <mat-spinner diameter="24" />
+        }
+
+        @if (linkResults().length > 0) {
+          <div class="link-results">
+            @for (title of linkResults(); track title.id) {
+              <div class="link-result-row">
+                <span class="link-title">{{ title.name }}</span>
+                <span class="link-meta">{{ title.media_type }}{{ title.release_year ? ' · ' + title.release_year : '' }}</span>
+                <button mat-flat-button color="primary" class="small-btn" (click)="linkToTitle(title)">Select</button>
+              </div>
+            }
+          </div>
+        } @else if (!linkSearching() && linkQuery().length >= 2) {
+          <span class="no-results">No matching titles found.</span>
+        }
+      </div>
+    </div>
+  }
+</div>

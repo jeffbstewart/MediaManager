@@ -66,6 +66,7 @@ export interface FeatureFlags {
   has_live_tv: boolean;
   is_admin: boolean;
   wish_ready_count: number;
+  unmatched_count: number;
 }
 
 export interface TitleDetail {

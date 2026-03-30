@@ -113,6 +113,9 @@
         <button mat-list-item (click)="toggleTranscodes()">
           <mat-icon matListItemIcon>movie</mat-icon>
           <span matListItemTitle>Transcodes</span>
+          @if (!transcodesOpen() && features.unmatchedCount() > 0) {
+            <span class="unmatched-badge">{{ features.unmatchedCount() }}</span>
+          }
           <mat-icon class="expand-icon" [class.expanded]="transcodesOpen()">expand_more</mat-icon>
         </button>
         @if (transcodesOpen()) {
@@ -121,6 +124,9 @@
           </a>
           <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeUnmatched()" routerLinkActive="active-link">
             <span matListItemTitle>Unmatched</span>
+            @if (features.unmatchedCount() > 0) {
+              <span matListItemMeta class="unmatched-badge">{{ features.unmatchedCount() }}</span>
+            }
           </a>
           <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeLinked()" routerLinkActive="active-link">
             <span matListItemTitle>Linked</span>

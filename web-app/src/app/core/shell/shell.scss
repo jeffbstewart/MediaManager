@@ -30,6 +30,18 @@
     background-color: rgba(255, 255, 255, 0.08);
   }
 
+  .unmatched-badge {
+    background-color: #f59e0b;
+    color: #1e1e1e;
+    font-size: 0.625rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    line-height: 1;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
   .wish-badge {
     background-color: #4caf50;
     color: white;

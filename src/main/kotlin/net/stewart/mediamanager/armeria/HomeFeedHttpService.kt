@@ -10,6 +10,8 @@ import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.DiscoveredFile
+import net.stewart.mediamanager.entity.DiscoveredFileStatus
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Camera
@@ -89,12 +91,17 @@ class HomeFeedHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx)
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
+        val unmatchedCount = if (user.isAdmin()) {
+            DiscoveredFile.findAll().count { it.match_status == DiscoveredFileStatus.UNMATCHED.name }
+        } else 0
+
         val features = mapOf(
             "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
-            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!)
+            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
+            "unmatched_count" to unmatchedCount
         )
         return HttpResponse.builder()
             .status(HttpStatus.OK)

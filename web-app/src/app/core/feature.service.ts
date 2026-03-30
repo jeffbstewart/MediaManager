@@ -13,6 +13,7 @@ export class FeatureService {
     has_live_tv: false,
     is_admin: false,
     wish_ready_count: 0,
+    unmatched_count: 0,
   });
 
   readonly hasPersonalVideos = () => this.flags().has_personal_videos;
@@ -20,6 +21,7 @@ export class FeatureService {
   readonly hasLiveTv = () => this.flags().has_live_tv;
   readonly isAdmin = () => this.flags().is_admin;
   readonly wishReadyCount = () => this.flags().wish_ready_count;
+  readonly unmatchedCount = () => this.flags().unmatched_count;
 
   update(flags: FeatureFlags): void {
     this.flags.set(flags);
