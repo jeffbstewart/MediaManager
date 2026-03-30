@@ -17,6 +17,8 @@ import net.stewart.mediamanager.entity.TmdbCollection
 import net.stewart.mediamanager.entity.TmdbCollectionPart
 import net.stewart.mediamanager.entity.UserFlagType
 import net.stewart.mediamanager.entity.UserTitleFlag
+import net.stewart.mediamanager.entity.WishListItem
+import net.stewart.mediamanager.entity.WishStatus
 import net.stewart.mediamanager.service.PlaybackProgressService
 import net.stewart.mediamanager.service.TranscoderAgent
 
@@ -107,6 +109,13 @@ class CollectionHttpService {
             .filter { user.canSeeRating(it.content_rating) }
             .associateBy { it.tmdb_id }
 
+        // Wish status for unowned parts — collection parts are always movies
+        val userWishes = WishListItem.findAll()
+            .filter { it.user_id == user.id && it.status == WishStatus.ACTIVE.name
+                && it.tmdb_media_type == net.stewart.mediamanager.entity.MediaType.MOVIE.name }
+            .mapNotNull { it.tmdb_id }
+            .toSet()
+
         val nasRoot = TranscoderAgent.getNasRoot()
         val allTranscodes = net.stewart.mediamanager.entity.Transcode.findAll()
         val progressByTitle = PlaybackProgressService.getProgressByTitle()
@@ -144,7 +153,8 @@ class CollectionHttpService {
                     "release_year" to part.release_date?.take(4)?.toIntOrNull(),
                     "owned" to false,
                     "playable" to false,
-                    "progress_fraction" to null
+                    "progress_fraction" to null,
+                    "wished" to (part.tmdb_movie_id in userWishes)
                 )
             }
         }

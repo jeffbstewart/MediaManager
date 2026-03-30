@@ -155,6 +155,7 @@ export interface CollectionPart {
   owned: boolean;
   playable: boolean;
   progress_fraction: number | null;
+  wished?: boolean;
 }
 
 export interface CollectionDetail {

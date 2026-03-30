@@ -1,13 +1,16 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
 import { CatalogService, CollectionDetail, CollectionPart } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 
 @Component({
   selector: 'app-collection-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatProgressSpinnerModule],
+  imports: [RouterLink, MatProgressSpinnerModule, MatIconModule],
   template: `
     <div class="content-page">
       @if (loading()) {
@@ -51,6 +54,13 @@ import { AppRoutes } from '../../core/routes';
                     <img [src]="part.poster_url" [alt]="part.title_name" class="poster-img" />
                   } @else {
                     <div class="poster-placeholder not-owned-label">Not Owned</div>
+                  }
+                  @if (part.tmdb_movie_id) {
+                    <button class="wish-heart" [class.wished]="part.wished"
+                            (click)="toggleWish(part)"
+                            [attr.aria-label]="part.wished ? 'Remove from wish list' : 'Add to wish list'">
+                      <mat-icon>{{ part.wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+                    </button>
                   }
                 </div>
                 <span class="poster-title">{{ part.title_name }}</span>
@@ -112,11 +122,20 @@ import { AppRoutes } from '../../core/routes';
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .poster-meta { font-size: 0.6875rem; opacity: 0.5; }
+    .wish-heart {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
+      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: rgba(255,255,255,0.7); padding: 0;
+      &.wished { color: #f44336; }
+      mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    }
   `,
 })
 export class CollectionDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
+  private readonly http = inject(HttpClient);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -137,5 +156,32 @@ export class CollectionDetailComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async toggleWish(part: CollectionPart): Promise<void> {
+    if (!part.tmdb_movie_id) return;
+
+    if (part.wished) {
+      // Find and cancel the wish — collection parts are always movies
+      const wishList = await this.catalog.getWishList();
+      const wish = wishList.media_wishes.find(
+        w => w.tmdb_id === part.tmdb_movie_id && w.tmdb_media_type === 'MOVIE'
+      );
+      if (wish) await this.catalog.cancelWish(wish.id);
+    } else {
+      // Add wish — collection parts are always movies
+      await firstValueFrom(this.http.post('/api/v2/wishlist/add', {
+        tmdb_id: part.tmdb_movie_id,
+        media_type: 'MOVIE',
+        title: part.title_name,
+        poster_path: null,
+        release_year: part.release_year,
+        popularity: null,
+      }));
+    }
+
+    // Refresh to get updated wish status
+    const id = this.detail()?.id;
+    if (id) this.detail.set(await this.catalog.getCollectionDetail(id));
   }
 }
