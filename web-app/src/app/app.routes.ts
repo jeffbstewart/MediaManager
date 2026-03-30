@@ -2,8 +2,6 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { setupGuard } from './core/setup.guard';
 
-const placeholder = () => import('./features/placeholder/placeholder').then(m => m.PlaceholderComponent);
-
 export const routes: Routes = [
   {
     path: 'login',
@@ -43,7 +41,6 @@ export const routes: Routes = [
       { path: 'help', loadComponent: () => import('./features/help/help').then(m => m.HelpComponent) },
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: () => import('./features/admin/add-item').then(m => m.AddItemComponent) },
-      { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
       { path: 'admin/transcodes/status', loadComponent: () => import('./features/admin/transcode-status').then(m => m.TranscodeStatusComponent) },
       { path: 'admin/transcodes/unmatched', loadComponent: () => import('./features/admin/transcode-unmatched').then(m => m.TranscodeUnmatchedComponent) },
       { path: 'admin/transcodes/linked', loadComponent: () => import('./features/admin/transcode-linked').then(m => m.TranscodeLinkedComponent) },
@@ -55,7 +52,6 @@ export const routes: Routes = [
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/data-quality', loadComponent: () => import('./features/admin/data-quality').then(m => m.DataQualityComponent) },
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },
-      { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },
       { path: 'admin/cameras', loadComponent: () => import('./features/admin/camera-settings').then(m => m.CameraSettingsComponent) },
       { path: 'admin/live-tv', loadComponent: () => import('./features/admin/live-tv-settings').then(m => m.LiveTvSettingsComponent) },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },

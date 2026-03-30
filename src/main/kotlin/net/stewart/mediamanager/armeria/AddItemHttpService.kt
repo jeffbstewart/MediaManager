@@ -172,6 +172,16 @@ class AddItemHttpService {
         return jsonResponse(gson.toJson(mapOf("ok" to true, "title_name" to title.name, "media_item_id" to item.id)))
     }
 
+    /** Delete a media item and cascade to all dependents (undo an add). */
+    @Delete("/api/v2/admin/add-item/item/{mediaItemId}")
+    fun deleteItem(ctx: ServiceRequestContext, @Param("mediaItemId") mediaItemId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        MediaItemDeleteService.delete(mediaItemId)
+        return jsonResponse("""{"ok":true}""")
+    }
+
     /** Delete a stuck barcode scan. */
     @Delete("/api/v2/admin/add-item/scan/{scanId}")
     fun deleteScan(ctx: ServiceRequestContext, @Param("scanId") scanId: Long): HttpResponse {

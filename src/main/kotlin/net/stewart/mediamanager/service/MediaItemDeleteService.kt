@@ -30,9 +30,10 @@ import org.slf4j.LoggerFactory
  *     1. media_item_title_season (media_item_title_id — via media_item_title)
  *     2. media_item_title      (media_item_id)
  *     3. ownership_photo       (media_item_id — files + DB)
- *     4. barcode_scan          (media_item_id — nullable, nulled out)
- *     5. amazon_order          (linked_media_item_id — nullable, nulled out)
- *     6. media_item            (the item itself)
+ *     4. price_lookup          (media_item_id — NOT NULL FK)
+ *     5. barcode_scan          (media_item_id — nullable, nulled out)
+ *     6. amazon_order          (linked_media_item_id — nullable, nulled out)
+ *     7. media_item            (the item itself)
  */
 object MediaItemDeleteService {
     private val log = LoggerFactory.getLogger(MediaItemDeleteService::class.java)
@@ -76,6 +77,10 @@ object MediaItemDeleteService {
             scan.save()
         }
 
+        // Delete price lookups (NOT NULL FK to media_item)
+        val priceLookups = PriceLookup.findAll().filter { it.media_item_id == mediaItemId }
+        priceLookups.forEach { it.delete() }
+
         // Unlink amazon_order references
         val orders = AmazonOrder.findAll().filter { it.linked_media_item_id == mediaItemId }
         for (order in orders) {
@@ -87,9 +92,15 @@ object MediaItemDeleteService {
         // Delete the media item
         item.delete()
 
-        log.info("Media item deleted: id={} (removed {} title link(s), {} photo(s), nulled {} scan(s), unlinked {} order(s))",
-            mediaItemId, mediaItemTitles.size, photos.size, scans.size, orders.size)
+        log.info("Media item deleted: id={} (removed {} title link(s), {} photo(s), {} price lookup(s), nulled {} scan(s), unlinked {} order(s))",
+            mediaItemId, mediaItemTitles.size, photos.size, priceLookups.size, scans.size, orders.size)
     }
+
+    /**
+     * Deletes a title and all its dependents (transcodes, episodes, cast, etc.).
+     * Public so DataQualityHttpService can delete titles that have no media items.
+     */
+    fun deleteTitleCascade(titleId: Long) = deleteTitle(titleId)
 
     private fun deleteTitle(titleId: Long) {
         val title = Title.findById(titleId) ?: return

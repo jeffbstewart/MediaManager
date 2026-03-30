@@ -25,7 +25,6 @@ export const AppRoutes = {
 
   // Admin
   adminAdd: () => '/admin/add',
-  adminTranscodes: () => '/admin/transcodes',
   adminTranscodeStatus: () => '/admin/transcodes/status',
   adminTranscodeUnmatched: () => '/admin/transcodes/unmatched',
   adminTranscodeLinked: () => '/admin/transcodes/linked',
@@ -36,7 +35,6 @@ export const AppRoutes = {
   adminPurchaseWishes: () => '/admin/purchase-wishes',
   adminDataQuality: () => '/admin/data-quality',
   adminInventory: () => '/admin/inventory',
-  adminSessions: () => '/admin/sessions',
   adminCameras: () => '/admin/cameras',
   adminLiveTv: () => '/admin/live-tv',
   adminTags: () => '/admin/tags',

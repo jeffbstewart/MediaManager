@@ -7,6 +7,8 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatMenuModule } from '@angular/material/menu';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 interface RecentItem {
@@ -21,7 +23,7 @@ interface TmdbResult { tmdb_id: number; title: string; media_type: string; relea
 @Component({
   selector: 'app-add-item',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatProgressSpinnerModule, MatTabsModule, MatTableModule, MatButtonModule, MatCardModule, MatChipsModule],
+  imports: [RouterLink, MatIconModule, MatProgressSpinnerModule, MatTabsModule, MatTableModule, MatButtonModule, MatCardModule, MatChipsModule, MatMenuModule],
   templateUrl: './add-item.html',
   styleUrl: './add-item.scss',
 })
@@ -184,9 +186,15 @@ export class AddItemComponent implements OnInit, OnDestroy {
 
   async setFilter(f: string): Promise<void> { this.itemFilter.set(f); await this.refreshItems(); }
 
-  async deleteScan(item: RecentItem): Promise<void> {
-    if (!item.scan_id) return;
-    await firstValueFrom(this.http.delete(`/api/v2/admin/add-item/scan/${item.scan_id}`));
+  async deleteEntry(item: RecentItem): Promise<void> {
+    const label = item.display_name || item.upc || 'this entry';
+    if (!confirm(`Delete "${label}"? This will remove the media item and any orphaned title data. This cannot be undone.`)) return;
+
+    if (item.type === 'scan' && item.scan_id) {
+      await firstValueFrom(this.http.delete(`/api/v2/admin/add-item/scan/${item.scan_id}`));
+    } else if (item.type === 'item' && item.media_item_id) {
+      await firstValueFrom(this.http.delete(`/api/v2/admin/add-item/item/${item.media_item_id}`));
+    }
     await this.refreshItems();
   }
 

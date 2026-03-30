@@ -16,6 +16,7 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
+import net.stewart.mediamanager.service.MediaItemDeleteService
 import net.stewart.mediamanager.service.SearchIndexService
 import java.time.LocalDateTime
 
@@ -140,16 +141,23 @@ class DataQualityHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        TitleTag.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        TitleGenre.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        CastMember.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        val transcodeIds = Transcode.findAll().filter { it.title_id == titleId }.mapNotNull { it.id }.toSet()
-        if (transcodeIds.isNotEmpty()) TranscodeLease.findAll().filter { it.transcode_id in transcodeIds }.forEach { it.delete() }
-        Transcode.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        Episode.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        MediaItemTitle.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
-        Title.findById(titleId)?.delete()
-        SearchIndexService.onTitleDeleted(titleId)
+        // Delete all media items linked to this title (cascades through MediaItemDeleteService).
+        // MediaItemDeleteService.delete() handles orphaned title cleanup: if no other item
+        // references the title, the title and all its dependents are deleted too.
+        val mediaItemIds = MediaItemTitle.findAll()
+            .filter { it.title_id == titleId }
+            .mapNotNull { it.media_item_id }
+            .distinct()
+        for (id in mediaItemIds) {
+            MediaItemDeleteService.delete(id)
+        }
+
+        // If the title still exists (e.g., shared by another media item that wasn't deleted,
+        // or had no media items at all), delete it directly with full cascade.
+        if (Title.findById(titleId) != null) {
+            MediaItemDeleteService.deleteTitleCascade(titleId)
+        }
+
         return jsonResponse("""{"ok":true}""")
     }
 

@@ -120,9 +120,21 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let r">
-            @if (r.type === 'scan') {
-              <button mat-stroked-button color="warn" class="small-btn" (click)="deleteScan(r)">Delete</button>
-            }
+            <button mat-icon-button [matMenuTriggerFor]="rowMenu" aria-label="Actions">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #rowMenu="matMenu">
+              @if (r.title_id) {
+                <a mat-menu-item [routerLink]="['/title', r.title_id]">
+                  <mat-icon>open_in_new</mat-icon>
+                  <span>View Title</span>
+                </a>
+              }
+              <button mat-menu-item class="delete-action" (click)="deleteEntry(r)">
+                <mat-icon>delete</mat-icon>
+                <span>Delete</span>
+              </button>
+            </mat-menu>
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
