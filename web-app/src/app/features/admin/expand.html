@@ -1,0 +1,107 @@
+<div class="expand-page">
+  <h2>Multi-Pack Expansion</h2>
+  <p class="subtitle">Combo disc sets that need to be split into individual titles.</p>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (items().length === 0) {
+    <mat-card><mat-card-content>
+      <div class="empty-state"><mat-icon>check_circle</mat-icon> <span>No multi-packs awaiting expansion.</span></div>
+    </mat-card-content></mat-card>
+  } @else {
+    <span class="status-label">{{ items().length }} multi-pack(s) awaiting expansion</span>
+
+    <div class="table-container">
+      <table mat-table [dataSource]="items()" class="expand-table">
+        <ng-container matColumnDef="product">
+          <th mat-header-cell *matHeaderCellDef>Product</th>
+          <td mat-cell *matCellDef="let item">
+            <span class="product-name">{{ item.product_name ?? '(unknown)' }}</span>
+            @if (item.upc) { <span class="upc">{{ item.upc }}</span> }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="format">
+          <th mat-header-cell *matHeaderCellDef>Format</th>
+          <td mat-cell *matCellDef="let item">{{ item.media_format.replace('_', ' ') }}</td>
+        </ng-container>
+        <ng-container matColumnDef="titles">
+          <th mat-header-cell *matHeaderCellDef>Est. Titles</th>
+          <td mat-cell *matCellDef="let item">
+            <span class="count-badge">{{ item.title_count }}</span>
+            <button mat-stroked-button color="primary" class="small-btn" (click)="openDialog(item)">Expand</button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+      </table>
+    </div>
+  }
+
+  <!-- Expand Dialog -->
+  @if (dialogOpen() && dialogItem(); as item) {
+    <div class="modal-overlay" (click)="closeDialog()">
+      <div class="modal-content large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ item.product_name ?? 'Multi-Pack' }}</h3>
+          <button class="close-btn" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+
+        <!-- TMDB Search -->
+        <div class="search-row">
+          <input class="field-input" type="text" placeholder="Search TMDB..."
+                 [value]="searchQuery()" (input)="searchTmdb($event)" />
+          <mat-chip-set>
+            <mat-chip [highlighted]="searchType() === 'movie'" (click)="searchType.set('movie')">Movie</mat-chip>
+            <mat-chip [highlighted]="searchType() === 'tv'" (click)="searchType.set('tv')">TV</mat-chip>
+          </mat-chip-set>
+        </div>
+
+        @if (searching()) { <mat-spinner diameter="24" /> }
+        @if (searchResults().length > 0) {
+          <div class="tmdb-results">
+            @for (r of searchResults(); track r.tmdb_id) {
+              <div class="tmdb-row">
+                @if (r.poster_path) {
+                  <img [src]="posterUrl(r.poster_path)" class="tmdb-poster" alt="" />
+                }
+                <div class="tmdb-info">
+                  <span class="tmdb-title">{{ r.title }}</span>
+                  <span class="tmdb-meta">{{ r.release_year ?? '' }} · {{ r.media_type === 'TV' ? 'TV' : 'Film' }}</span>
+                </div>
+                <button mat-flat-button color="primary" class="small-btn" (click)="addTitle(r)">Add</button>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Linked Titles -->
+        @if (dialogTitles().length > 0) {
+          <h4>Linked Titles</h4>
+          <div class="linked-list">
+            @for (t of dialogTitles(); track t.title_id) {
+              <div class="linked-row">
+                <span class="disc-num">{{ t.disc_number }}</span>
+                @if (t.poster_url) { <img [src]="t.poster_url" class="linked-poster" alt="" /> }
+                <div class="linked-info">
+                  <span class="linked-name">{{ t.name }}</span>
+                  @if (t.release_year) { <span class="linked-year">{{ t.release_year }}</span> }
+                </div>
+                <button mat-icon-button class="remove-btn" (click)="removeTitle(t)" title="Remove">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Actions -->
+        <div class="dialog-actions">
+          <button mat-stroked-button (click)="notMultiPack()">Not a Multi-Pack</button>
+          <button mat-flat-button color="primary" (click)="markExpanded()" [disabled]="dialogTitles().length === 0">
+            Mark Expanded
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

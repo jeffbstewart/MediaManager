@@ -60,7 +60,7 @@ export const routes: Routes = [
       { path: 'admin/live-tv', loadComponent: placeholder, data: { title: 'Live TV Settings' } },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
-      { path: 'admin/expand', loadComponent: placeholder, data: { title: 'Expand' } },
+      { path: 'admin/expand', loadComponent: () => import('./features/admin/expand').then(m => m.ExpandComponent) },
       { path: 'admin/document-ownership', loadComponent: () => import('./features/admin/document-ownership').then(m => m.DocumentOwnershipComponent) },
     ],
   },
