@@ -56,10 +56,6 @@
         <mat-divider />
         <div class="section-header">MANAGE</div>
 
-        <a mat-list-item [routerLink]="routes.adminDataQuality()" routerLinkActive="active-link">
-          <mat-icon matListItemIcon>build</mat-icon>
-          <span matListItemTitle>Data Quality</span>
-        </a>
         <a mat-list-item [routerLink]="routes.adminAdd()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>add</mat-icon>
           <span matListItemTitle>Add Item</span>
@@ -67,6 +63,13 @@
         <a mat-list-item [routerLink]="routes.adminCameras()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>videocam</mat-icon>
           <span matListItemTitle>Cameras</span>
+        </a>
+        <a mat-list-item [routerLink]="routes.adminDataQuality()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>build</mat-icon>
+          <span matListItemTitle>Data Quality</span>
+          @if (features.dataQualityCount() > 0) {
+            <span matListItemMeta class="dq-badge">{{ features.dataQualityCount() }}</span>
+          }
         </a>
         <a mat-list-item [routerLink]="routes.adminLiveTv()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>desktop_windows</mat-icon>
@@ -83,20 +86,20 @@
           <a mat-list-item class="nested-item" [routerLink]="routes.adminImport()" routerLinkActive="active-link">
             <span matListItemTitle>Amazon Order Import</span>
           </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminDocumentOwnership()" routerLinkActive="active-link">
+            <span matListItemTitle>Document Ownership</span>
+          </a>
           <a mat-list-item class="nested-item" [routerLink]="routes.adminExpand()" routerLinkActive="active-link">
             <span matListItemTitle>Expand</span>
           </a>
-          <a mat-list-item class="nested-item" [routerLink]="routes.adminValuation()" routerLinkActive="active-link">
-            <span matListItemTitle>Valuation</span>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminInventory()" routerLinkActive="active-link">
+            <span matListItemTitle>Report</span>
           </a>
           <a mat-list-item class="nested-item" [routerLink]="routes.adminPurchaseWishes()" routerLinkActive="active-link">
             <span matListItemTitle>User Wishes</span>
           </a>
-          <a mat-list-item class="nested-item" [routerLink]="routes.adminDocumentOwnership()" routerLinkActive="active-link">
-            <span matListItemTitle>Document Ownership</span>
-          </a>
-          <a mat-list-item class="nested-item" [routerLink]="routes.adminInventory()" routerLinkActive="active-link">
-            <span matListItemTitle>Report</span>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminValuation()" routerLinkActive="active-link">
+            <span matListItemTitle>Valuation</span>
           </a>
         }
 
@@ -119,6 +122,12 @@
           <mat-icon class="expand-icon" [class.expanded]="transcodesOpen()">expand_more</mat-icon>
         </button>
         @if (transcodesOpen()) {
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeBacklog()" routerLinkActive="active-link">
+            <span matListItemTitle>Backlog</span>
+          </a>
+          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeLinked()" routerLinkActive="active-link">
+            <span matListItemTitle>Linked</span>
+          </a>
           <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeStatus()" routerLinkActive="active-link">
             <span matListItemTitle>Status</span>
           </a>
@@ -127,12 +136,6 @@
             @if (features.unmatchedCount() > 0) {
               <span matListItemMeta class="unmatched-badge">{{ features.unmatchedCount() }}</span>
             }
-          </a>
-          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeLinked()" routerLinkActive="active-link">
-            <span matListItemTitle>Linked</span>
-          </a>
-          <a mat-list-item class="nested-item" [routerLink]="routes.adminTranscodeBacklog()" routerLinkActive="active-link">
-            <span matListItemTitle>Backlog</span>
           </a>
         }
 

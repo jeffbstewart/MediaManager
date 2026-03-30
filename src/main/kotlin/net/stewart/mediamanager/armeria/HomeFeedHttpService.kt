@@ -63,12 +63,16 @@ class HomeFeedHttpService {
                 )
             }
 
+        val allTitlesForFeatures = Title.findAll()
         val features = mapOf(
-            "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
-            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!)
+            "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
+            "data_quality_count" to if (user.isAdmin()) {
+                allTitlesForFeatures.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
+            } else 0
         )
 
         val feed = mapOf(
@@ -91,17 +95,22 @@ class HomeFeedHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx)
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
+        val allTitles = Title.findAll()
         val unmatchedCount = if (user.isAdmin()) {
             DiscoveredFile.findAll().count { it.match_status == DiscoveredFileStatus.UNMATCHED.name }
         } else 0
+        val dataQualityCount = if (user.isAdmin()) {
+            allTitles.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
+        } else 0
 
         val features = mapOf(
-            "has_personal_videos" to Title.findAll().any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_personal_videos" to allTitles.any { it.media_type == MMMediaType.PERSONAL.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
-            "unmatched_count" to unmatchedCount
+            "unmatched_count" to unmatchedCount,
+            "data_quality_count" to dataQualityCount
         )
         return HttpResponse.builder()
             .status(HttpStatus.OK)

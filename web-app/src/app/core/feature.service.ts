@@ -14,6 +14,7 @@ export class FeatureService {
     is_admin: false,
     wish_ready_count: 0,
     unmatched_count: 0,
+    data_quality_count: 0,
   });
 
   readonly hasPersonalVideos = () => this.flags().has_personal_videos;
@@ -22,6 +23,7 @@ export class FeatureService {
   readonly isAdmin = () => this.flags().is_admin;
   readonly wishReadyCount = () => this.flags().wish_ready_count;
   readonly unmatchedCount = () => this.flags().unmatched_count;
+  readonly dataQualityCount = () => this.flags().data_quality_count;
 
   update(flags: FeatureFlags): void {
     this.flags.set(flags);

@@ -42,7 +42,7 @@ export const routes: Routes = [
       { path: 'profile', loadComponent: () => import('./features/profile/profile').then(m => m.ProfileComponent) },
       { path: 'help', loadComponent: () => import('./features/help/help').then(m => m.HelpComponent) },
       // TODO: Add adminGuard to gate admin routes by access_level
-      { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },
+      { path: 'admin/add', loadComponent: () => import('./features/admin/add-item').then(m => m.AddItemComponent) },
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
       { path: 'admin/transcodes/status', loadComponent: () => import('./features/admin/transcode-status').then(m => m.TranscodeStatusComponent) },
       { path: 'admin/transcodes/unmatched', loadComponent: () => import('./features/admin/transcode-unmatched').then(m => m.TranscodeUnmatchedComponent) },
@@ -53,7 +53,7 @@ export const routes: Routes = [
       { path: 'admin/valuation', loadComponent: () => import('./features/admin/valuation').then(m => m.ValuationComponent) },
       { path: 'admin/purchase-wishes', loadComponent: () => import('./features/admin/purchase-wishes').then(m => m.PurchaseWishesComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
-      { path: 'admin/data-quality', loadComponent: placeholder, data: { title: 'Data Quality' } },
+      { path: 'admin/data-quality', loadComponent: () => import('./features/admin/data-quality').then(m => m.DataQualityComponent) },
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },
       { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },
       { path: 'admin/cameras', loadComponent: () => import('./features/admin/camera-settings').then(m => m.CameraSettingsComponent) },

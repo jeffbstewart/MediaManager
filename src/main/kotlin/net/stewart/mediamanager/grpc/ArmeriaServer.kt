@@ -27,6 +27,7 @@ import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.ActorHttpService
 import net.stewart.mediamanager.armeria.CameraListHttpService
 import net.stewart.mediamanager.armeria.CameraSettingsHttpService
+import net.stewart.mediamanager.armeria.DataQualityHttpService
 import net.stewart.mediamanager.armeria.CollectionHttpService
 import net.stewart.mediamanager.armeria.LiveTvListHttpService
 import net.stewart.mediamanager.armeria.ProfileHttpService
@@ -37,6 +38,7 @@ import net.stewart.mediamanager.armeria.UserManagementHttpService
 import net.stewart.mediamanager.armeria.ValuationHttpService
 import net.stewart.mediamanager.armeria.TagManagementHttpService
 import net.stewart.mediamanager.armeria.TranscodeStatusHttpService
+import net.stewart.mediamanager.armeria.AddItemHttpService
 import net.stewart.mediamanager.armeria.AmazonImportHttpService
 import net.stewart.mediamanager.armeria.BacklogHttpService
 import net.stewart.mediamanager.armeria.DocumentOwnershipHttpService
@@ -223,6 +225,8 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(ExpandHttpService())
         sb.annotatedService().decorator(authDecorator).build(LiveTvSettingsHttpService())
         sb.annotatedService().decorator(authDecorator).build(CameraSettingsHttpService())
+        sb.annotatedService().decorator(authDecorator).build(DataQualityHttpService())
+        sb.annotatedService().decorator(authDecorator).build(AddItemHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

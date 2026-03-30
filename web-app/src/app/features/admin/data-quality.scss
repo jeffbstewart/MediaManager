@@ -1,0 +1,50 @@
+.dq-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+h2 { margin: 0 0 0.75rem; }
+
+.filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; row-gap: 6px; margin-bottom: 0.75rem; }
+.search-input {
+  width: 220px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; color: white; padding: 6px 14px; font-size: 0.8125rem; outline: none; font-family: inherit;
+  &:focus { border-color: rgba(255,255,255,0.25); } &::placeholder { color: rgba(255,255,255,0.35); }
+}
+
+.attention-label { display: block; font-size: 0.8125rem; color: #f44336; margin-bottom: 0.5rem; }
+
+.table-container { overflow-x: auto; }
+.dq-table {
+  width: 100%;
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-cell { font-size: 0.8125rem; vertical-align: top; padding-top: 8px; padding-bottom: 8px; }
+}
+
+.row-poster { width: 36px; height: 54px; border-radius: 4px; object-fit: cover; }
+.title-link { color: var(--mat-sys-primary, #bb86fc); text-decoration: none; &:hover { text-decoration: underline; } }
+.hidden-badge { font-size: 0.5625rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.1); margin-left: 0.375rem; opacity: 0.5; }
+.hidden-row { opacity: 0.4; }
+
+.status-badge { font-weight: 600; font-size: 0.75rem; }
+
+.issue-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.issue-chip {
+  font-size: 0.5625rem; padding: 1px 6px; border-radius: 4px;
+  background: rgba(244, 67, 54, 0.15); color: #f44336; white-space: nowrap;
+}
+
+.delete-item { color: #f44336 !important; }
+
+// Modal
+.modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; }
+.modal-content { background: #1e1e1e; border-radius: 12px; padding: 1.5rem; width: 90vw; max-width: 420px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; h3 { margin: 0; font-size: 1rem; } }
+.close-btn { background: none; border: none; color: white; cursor: pointer; padding: 4px; border-radius: 50%; &:hover { background: rgba(255,255,255,0.1); } }
+.form-fields { display: flex; flex-direction: column; gap: 0.375rem; }
+.field-label { font-size: 0.8125rem; opacity: 0.6; margin-top: 0.25rem; }
+.field-input, .field-select {
+  width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; color: white; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
+  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+  option { background: #1e1e1e; color: white; }
+}
+.field-hint { font-size: 0.6875rem; opacity: 0.4; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }

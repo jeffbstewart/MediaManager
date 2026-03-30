@@ -1,0 +1,135 @@
+<div class="add-page">
+  <h2>Add Item</h2>
+
+  <!-- Message banner -->
+  @if (scanMessage()) {
+    <div class="message-banner" [class.success]="scanSuccess()" [class.error]="!scanSuccess()">
+      {{ scanMessage() }}
+    </div>
+  }
+
+  <mat-tab-group>
+    <!-- Scan Barcode Tab -->
+    <mat-tab label="Scan Barcode">
+      <div class="tab-content">
+        <div class="upc-row">
+          <input class="upc-input" type="text" placeholder="Enter or scan UPC..."
+                 [value]="upcInput()" (input)="updateUpc($event)" (keydown)="onUpcKeydown($event)" autofocus />
+          <button mat-flat-button color="primary" (click)="submitUpc()" [disabled]="!upcInput().trim()">Lookup</button>
+        </div>
+
+        @if (!cameraActive()) {
+          <button mat-stroked-button class="camera-btn" (click)="startCamera()">
+            <mat-icon>photo_camera</mat-icon> Scan with Camera
+          </button>
+        } @else {
+          <div class="camera-container">
+            <video #videoEl autoplay playsinline muted class="camera-video"></video>
+            <div class="camera-overlay"><div class="scan-line"></div></div>
+            <button mat-stroked-button class="stop-btn" (click)="stopCamera()">Stop</button>
+          </div>
+        }
+
+        <span class="quota-label">UPC lookups today: {{ quotaUsed() }} / {{ quotaLimit() }}</span>
+      </div>
+    </mat-tab>
+
+    <!-- Search TMDB Tab -->
+    <mat-tab label="Search TMDB">
+      <div class="tab-content">
+        <div class="search-row">
+          <input class="field-input flex" type="text" placeholder="Search TMDB..."
+                 [value]="searchQuery()" (input)="searchTmdb($event)" (keydown.enter)="searchTmdb()" />
+          <mat-chip-set>
+            <mat-chip [highlighted]="searchType() === 'MOVIE'" (click)="searchType.set('MOVIE'); searchTmdb()">Movie</mat-chip>
+            <mat-chip [highlighted]="searchType() === 'TV'" (click)="searchType.set('TV'); searchTmdb()">TV</mat-chip>
+          </mat-chip-set>
+        </div>
+
+        <div class="format-row">
+          <label class="field-label">Format:</label>
+          <select class="field-select compact" (change)="addFormat.set($any($event.target).value)">
+            @for (f of formatOptions; track f.value) {
+              <option [value]="f.value" [selected]="f.value === addFormat()">{{ f.label }}</option>
+            }
+          </select>
+          @if (searchType() === 'TV') {
+            <label class="field-label">Seasons:</label>
+            <input class="field-input compact" type="text" placeholder="e.g., 1-3"
+                   [value]="addSeasons()" (input)="addSeasons.set($any($event.target).value)" />
+          }
+        </div>
+
+        @if (searching()) { <mat-spinner diameter="24" /> }
+        @if (searchResults().length > 0) {
+          <div class="tmdb-results">
+            @for (r of searchResults(); track r.tmdb_id) {
+              <div class="tmdb-row">
+                @if (r.poster_path) { <img [src]="posterUrl(r.poster_path)" class="tmdb-poster" alt="" /> }
+                <div class="tmdb-info">
+                  <span class="tmdb-title">{{ r.title }}</span>
+                  <span class="tmdb-meta">{{ r.release_year ?? '' }} · {{ r.media_type === 'TV' ? 'TV' : 'Film' }}</span>
+                  @if (r.overview) { <span class="tmdb-overview">{{ r.overview }}</span> }
+                </div>
+                <button mat-flat-button color="primary" class="small-btn" (click)="addFromTmdb(r)">Add</button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+
+  <!-- Recent Items Grid -->
+  <div class="recent-section">
+    <h3>Recent Items</h3>
+    <div class="filter-bar">
+      <mat-chip-set>
+        @for (f of filterOptions; track f.value) {
+          <mat-chip [highlighted]="itemFilter() === f.value" (click)="setFilter(f.value)">{{ f.label }}</mat-chip>
+        }
+      </mat-chip-set>
+    </div>
+
+    @if (items().length > 0) {
+      <table mat-table [dataSource]="items()" class="recent-table">
+        <ng-container matColumnDef="poster">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            @if (r.poster_url) { <img [src]="r.poster_url" class="row-poster" alt="" /> }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>Title</th>
+          <td mat-cell *matCellDef="let r">{{ r.display_name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="format">
+          <th mat-header-cell *matHeaderCellDef>Format</th>
+          <td mat-cell *matCellDef="let r">{{ (r.format ?? '—').replace('_', ' ') }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let r">
+            <span [style.color]="statusColor(r.enrichment_status)">{{ statusLabel(r.enrichment_status) }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="source">
+          <th mat-header-cell *matHeaderCellDef>Source</th>
+          <td mat-cell *matCellDef="let r">{{ r.entry_source === 'UPC_SCAN' ? 'UPC' : 'TMDB' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            @if (r.type === 'scan') {
+              <button mat-stroked-button color="warn" class="small-btn" (click)="deleteScan(r)">Delete</button>
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: recentColumns;"></tr>
+      </table>
+    } @else {
+      <p class="empty-text">No recent items.</p>
+    }
+  </div>
+</div>
