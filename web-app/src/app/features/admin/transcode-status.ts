@@ -67,7 +67,7 @@ export class TranscodeStatusComponent implements OnInit, OnDestroy {
   readonly scanning = signal(false);
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  readonly recentColumns = ['status', 'buddy', 'type', 'file', 'elapsed', 'size'];
+  readonly recentColumns = ['status', 'buddy', 'type', 'file', 'elapsed', 'size', 'completed'];
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -118,6 +118,12 @@ export class TranscodeStatusComponent implements OnInit, OnDestroy {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  formatTimestamp(ts: string | null): string {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   }
 
   leaseTypeLabel(type: string): string {

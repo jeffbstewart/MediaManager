@@ -202,6 +202,13 @@
               </td>
             </ng-container>
 
+            <ng-container matColumnDef="completed">
+              <th mat-header-cell *matHeaderCellDef>Completed</th>
+              <td mat-cell *matCellDef="let item">
+                {{ formatTimestamp(item.completed_at) }}
+              </td>
+            </ng-container>
+
             <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: recentColumns;"
                 [class.failed-row]="row.status === 'FAILED'"></tr>
