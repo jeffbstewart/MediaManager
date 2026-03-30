@@ -6,6 +6,7 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
@@ -19,6 +20,7 @@ import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.ContinueWatchingItem
 import net.stewart.mediamanager.service.MissingSeasonService
+import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PlaybackProgressService
 import net.stewart.mediamanager.service.WishListService
 
@@ -140,6 +142,54 @@ class HomeFeedHttpService {
             .status(HttpStatus.OK)
             .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("ok" to true)))
             .build()
+    }
+
+    /** Check pairing code status for the confirm page. */
+    @Get("/api/v2/pair/info")
+    fun pairInfo(ctx: ServiceRequestContext, @Param("code") @Default("") code: String): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        if (code.isBlank()) {
+            return HttpResponse.builder().status(HttpStatus.BAD_REQUEST)
+                .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("error" to "code required"))).build()
+        }
+
+        val status = PairingService.checkStatus(code)
+        if (status == null) {
+            return HttpResponse.builder().status(HttpStatus.OK)
+                .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("status" to "expired"))).build()
+        }
+
+        val result = mapOf(
+            "status" to status.status,
+            "username" to status.username,
+            "display_name" to user.display_name.ifEmpty { user.username }
+        )
+        return HttpResponse.builder().status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(result)).build()
+    }
+
+    /** Confirm a pairing code, linking the device to the current user. */
+    @Post("/api/v2/pair/confirm")
+    fun pairConfirm(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        val code = map["code"] as? String
+            ?: return HttpResponse.builder().status(HttpStatus.BAD_REQUEST)
+                .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("error" to "code required"))).build()
+
+        val deviceName = PairingService.confirmPairing(code, user)
+        if (deviceName == null) {
+            return HttpResponse.builder().status(HttpStatus.OK)
+                .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("ok" to false, "error" to "Invalid or expired code"))).build()
+        }
+
+        return HttpResponse.builder().status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("ok" to true, "device_name" to deviceName))).build()
     }
 
     private fun ContinueWatchingItem.toJson(): Map<String, Any?> = mapOf(

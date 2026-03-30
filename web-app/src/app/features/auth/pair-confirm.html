@@ -1,0 +1,52 @@
+<div class="pair-page">
+  <mat-card class="pair-card">
+    @switch (state()) {
+      @case ('loading') {
+        <mat-card-content class="center-content">
+          <mat-spinner diameter="32" />
+        </mat-card-content>
+      }
+
+      @case ('confirm') {
+        <mat-card-header>
+          <mat-card-title>Link Device</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Link this device to your account?</p>
+          <div class="user-badge">{{ displayName() }}</div>
+          <p class="hint">The device will have access to your media library, limited by your content rating settings.</p>
+        </mat-card-content>
+        <mat-card-actions align="end">
+          <button mat-flat-button color="primary" (click)="confirm()" [disabled]="submitting()">
+            Confirm Link
+          </button>
+        </mat-card-actions>
+      }
+
+      @case ('success') {
+        <mat-card-content class="center-content">
+          <mat-icon class="success-icon">check_circle</mat-icon>
+          <h2>Device Linked</h2>
+          <p>{{ deviceName() }} has been linked to your account.</p>
+          <p class="hint">You can close this page.</p>
+        </mat-card-content>
+      }
+
+      @case ('already_paired') {
+        <mat-card-content class="center-content">
+          <mat-icon class="info-icon">info</mat-icon>
+          <h2>Already Paired</h2>
+          <p>This device is already linked to <strong>{{ pairedUser() }}</strong>.</p>
+        </mat-card-content>
+      }
+
+      @case ('error') {
+        <mat-card-content class="center-content">
+          <mat-icon class="error-icon">error</mat-icon>
+          <h2>Pairing Failed</h2>
+          <p>{{ errorMessage() }}</p>
+        </mat-card-content>
+      }
+    }
+  </mat-card>
+</div>

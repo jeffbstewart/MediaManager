@@ -1,0 +1,41 @@
+.pair-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.pair-card {
+  max-width: 420px;
+  width: 100%;
+}
+
+.center-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2rem 0;
+}
+
+.user-badge {
+  display: inline-block;
+  background: #3f51b5;
+  color: white;
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin: 0.5rem 0;
+}
+
+.hint {
+  font-size: 0.8125rem;
+  opacity: 0.5;
+}
+
+.success-icon { font-size: 48px; width: 48px; height: 48px; color: #4caf50; }
+.error-icon { font-size: 48px; width: 48px; height: 48px; color: #f44336; }
+.info-icon { font-size: 48px; width: 48px; height: 48px; color: #2196f3; }

@@ -13,6 +13,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/setup').then(m => m.SetupComponent),
   },
   {
+    path: 'pair',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/pair-confirm').then(m => m.PairConfirmComponent),
+  },
+  {
     path: 'change-password',
     canActivate: [authGuard],
     loadComponent: () => import('./features/auth/change-password').then(m => m.ChangePasswordComponent),
