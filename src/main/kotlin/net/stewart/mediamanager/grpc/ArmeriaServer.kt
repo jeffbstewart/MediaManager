@@ -40,6 +40,7 @@ import net.stewart.mediamanager.armeria.AmazonImportHttpService
 import net.stewart.mediamanager.armeria.BacklogHttpService
 import net.stewart.mediamanager.armeria.DocumentOwnershipHttpService
 import net.stewart.mediamanager.armeria.ExpandHttpService
+import net.stewart.mediamanager.armeria.LiveTvSettingsHttpService
 import net.stewart.mediamanager.armeria.InventoryReportHttpService
 import net.stewart.mediamanager.armeria.LinkedTranscodesHttpService
 import net.stewart.mediamanager.armeria.UnmatchedHttpService
@@ -219,6 +220,7 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(AmazonImportHttpService())
         sb.annotatedService().decorator(authDecorator).build(DocumentOwnershipHttpService())
         sb.annotatedService().decorator(authDecorator).build(ExpandHttpService())
+        sb.annotatedService().decorator(authDecorator).build(LiveTvSettingsHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())

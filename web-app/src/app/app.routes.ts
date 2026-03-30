@@ -57,7 +57,7 @@ export const routes: Routes = [
       { path: 'admin/inventory', loadComponent: () => import('./features/admin/inventory-report').then(m => m.InventoryReportComponent) },
       { path: 'admin/sessions', loadComponent: placeholder, data: { title: 'Active Sessions' } },
       { path: 'admin/cameras', loadComponent: placeholder, data: { title: 'Camera Settings' } },
-      { path: 'admin/live-tv', loadComponent: placeholder, data: { title: 'Live TV Settings' } },
+      { path: 'admin/live-tv', loadComponent: () => import('./features/admin/live-tv-settings').then(m => m.LiveTvSettingsComponent) },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/expand', loadComponent: () => import('./features/admin/expand').then(m => m.ExpandComponent) },

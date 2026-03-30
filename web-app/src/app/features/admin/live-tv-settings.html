@@ -1,0 +1,164 @@
+<div class="ltv-page">
+  <h2>Live TV Settings</h2>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else {
+
+    <!-- Status + Settings -->
+    <mat-card class="settings-card">
+      <mat-card-content>
+        <div class="status-row">
+          <span>{{ tuners().length }} tuner(s) · {{ activeStreams() }} active stream(s)</span>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Max Concurrent Streams</label>
+          <input class="field-input short" type="number" min="1" max="10"
+                 [value]="maxStreams()" (input)="updateSetting('maxStreams', $event)" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Idle Timeout (seconds)</label>
+          <input class="field-input short" type="number" min="10" max="600"
+                 [value]="idleTimeout()" (input)="updateSetting('idleTimeout', $event)" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Minimum Content Rating for Live TV</label>
+          <select class="field-select" (change)="setMinRating(+$any($event.target).value)">
+            @for (opt of ratingOptions; track opt.value) {
+              <option [value]="opt.value" [selected]="opt.value === minRating()">{{ opt.label }}</option>
+            }
+          </select>
+          <span class="helper-text">Users must have a rating ceiling at or above this level to access Live TV</span>
+        </div>
+        <div class="save-row">
+          <button mat-flat-button color="primary" (click)="saveSettings()" [disabled]="saving()">Save Settings</button>
+          @if (saved()) { <span class="saved-label"><mat-icon>check</mat-icon> Saved</span> }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Tuners -->
+    <div class="section-header">
+      <h3>Tuners</h3>
+      <button mat-flat-button color="primary" (click)="openAddDialog()">
+        <mat-icon>add</mat-icon> Add Tuner
+      </button>
+    </div>
+
+    @if (tuners().length > 0) {
+      <table mat-table [dataSource]="tuners()" class="tuner-table">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let t">
+            <span [class.disabled-text]="!t.enabled">{{ t.name }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="model">
+          <th mat-header-cell *matHeaderCellDef>Model</th>
+          <td mat-cell *matCellDef="let t">{{ t.model_number }}</td>
+        </ng-container>
+        <ng-container matColumnDef="ip">
+          <th mat-header-cell *matHeaderCellDef>IP</th>
+          <td mat-cell *matCellDef="let t">{{ t.ip_address }}</td>
+        </ng-container>
+        <ng-container matColumnDef="tuners">
+          <th mat-header-cell *matHeaderCellDef>Tuners</th>
+          <td mat-cell *matCellDef="let t">{{ t.tuner_count }}</td>
+        </ng-container>
+        <ng-container matColumnDef="firmware">
+          <th mat-header-cell *matHeaderCellDef>Firmware</th>
+          <td mat-cell *matCellDef="let t">{{ t.firmware_version }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let t">
+            <button mat-icon-button (click)="toggleTuner(t)" [title]="t.enabled ? 'Disable' : 'Enable'">
+              <mat-icon>{{ t.enabled ? 'visibility' : 'visibility_off' }}</mat-icon>
+            </button>
+            <button mat-icon-button (click)="syncChannels(t)" title="Refresh channels">
+              <mat-icon>refresh</mat-icon>
+            </button>
+            <button mat-icon-button class="delete-btn" (click)="deleteTuner(t)" title="Delete">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="tunerColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: tunerColumns;"></tr>
+      </table>
+    } @else {
+      <p class="empty-text">No tuners configured. Add an HDHomeRun device to get started.</p>
+    }
+
+    <!-- Channels -->
+    @if (channels().length > 0) {
+      <h3>Channels</h3>
+      <table mat-table [dataSource]="channels()" class="channel-table">
+        <ng-container matColumnDef="enabled">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let ch">
+            <input type="checkbox" [checked]="ch.enabled" (change)="toggleChannel(ch)"
+                   class="channel-check" />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="number">
+          <th mat-header-cell *matHeaderCellDef>#</th>
+          <td mat-cell *matCellDef="let ch">{{ ch.guide_number }}</td>
+        </ng-container>
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let ch" [class.disabled-text]="!ch.enabled">{{ ch.guide_name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="affiliation">
+          <th mat-header-cell *matHeaderCellDef>Affiliation</th>
+          <td mat-cell *matCellDef="let ch">
+            <input class="inline-input" type="text" [value]="ch.network_affiliation ?? ''"
+                   (blur)="updateAffiliation(ch, $event)" placeholder="—" />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="quality">
+          <th mat-header-cell *matHeaderCellDef>Quality</th>
+          <td mat-cell *matCellDef="let ch">
+            <div class="star-row compact">
+              @for (star of qualityStars; track star) {
+                <button class="star-btn small" [class.active]="star <= ch.reception_quality"
+                        (click)="setQuality(ch, star)">
+                  <mat-icon>{{ star <= ch.reception_quality ? 'star' : 'star_border' }}</mat-icon>
+                </button>
+              }
+            </div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="channelColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: channelColumns;" [class.disabled-row]="!row.enabled"></tr>
+      </table>
+    }
+  }
+
+  <!-- Add Tuner Dialog -->
+  @if (addDialogOpen()) {
+    <div class="modal-overlay" (click)="closeAddDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Add HDHomeRun Tuner</h3>
+          <button class="close-btn" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="field-group">
+          <label class="field-label">IP Address</label>
+          <input class="field-input" type="text" placeholder="192.168.1.100"
+                 [value]="addIp()" (input)="addIp.set($any($event.target).value)"
+                 (keydown.enter)="discoverTuner()" />
+        </div>
+        @if (addError()) { <span class="field-error">{{ addError() }}</span> }
+        <div class="dialog-footer">
+          <button mat-button (click)="closeAddDialog()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="discoverTuner()" [disabled]="discovering() || !addIp().trim()">
+            @if (discovering()) { <mat-spinner diameter="16" /> }
+            Discover
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
