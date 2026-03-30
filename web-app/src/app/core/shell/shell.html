@@ -47,7 +47,7 @@
         <mat-icon matListItemIcon>favorite</mat-icon>
         <span matListItemTitle>My Wish List</span>
         @if (features.wishReadyCount() > 0) {
-          <span class="wish-badge">{{ features.wishReadyCount() }}</span>
+          <span matListItemMeta class="wish-badge">{{ features.wishReadyCount() }}</span>
         }
       </a>
 
