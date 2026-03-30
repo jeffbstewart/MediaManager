@@ -68,6 +68,7 @@ export const routes: Routes = [
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/expand', loadComponent: () => import('./features/admin/expand').then(m => m.ExpandComponent) },
+      { path: 'admin/family-members', loadComponent: () => import('./features/admin/family-members').then(m => m.FamilyMembersComponent) },
       { path: 'admin/document-ownership', loadComponent: () => import('./features/admin/document-ownership').then(m => m.DocumentOwnershipComponent) },
     ],
   },

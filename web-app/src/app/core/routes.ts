@@ -40,6 +40,7 @@ export const AppRoutes = {
   adminTags: () => '/admin/tags',
   adminImport: () => '/admin/import',
   adminExpand: () => '/admin/expand',
+  adminFamilyMembers: () => '/admin/family-members',
   adminDocumentOwnership: () => '/admin/document-ownership',
   adminMediaItem: (itemId: number) => `/admin/item/${itemId}`,
 } as const;

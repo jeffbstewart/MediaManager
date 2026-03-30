@@ -1,0 +1,51 @@
+.family-page { padding: 1.5rem; max-width: 900px; margin: 0 auto; }
+h2 { margin: 0; }
+.empty-text { opacity: 0.5; font-size: 0.875rem; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+
+.member-table {
+  width: 100%;
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-cell { font-size: 0.8125rem; }
+}
+
+.name-cell { display: flex; align-items: center; gap: 0.5rem; }
+.initial-circle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(187, 134, 252, 0.15); color: var(--mat-sys-primary, #bb86fc);
+  font-weight: 700; font-size: 0.75rem;
+}
+.member-name { font-weight: 500; }
+.secondary { font-size: 0.8125rem; opacity: 0.5; }
+.notes-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.delete-btn { color: #f44336 !important; }
+
+// Modal
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+  background: #2a2a2a; border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 450px;
+  &.small { max-width: 400px; }
+  h3 { margin: 0 0 1rem; }
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+.field-group { margin-bottom: 0.75rem; }
+.field-label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; margin-bottom: 4px; }
+.field-input, .field-textarea {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; color: white; padding: 8px 12px; font-size: 0.875rem; outline: none;
+  width: 100%; box-sizing: border-box; font-family: inherit;
+  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+  &::placeholder { color: rgba(255,255,255,0.35); }
+}
+.field-textarea { height: 80px; resize: vertical; }
+
+.error-message {
+  background: rgba(244,67,54,0.15); color: #f44336;
+  padding: 8px 12px; border-radius: 6px; font-size: 0.8125rem; margin-bottom: 0.75rem;
+}

@@ -1,0 +1,118 @@
+<div class="family-page">
+  <div class="page-header">
+    <h2>Family Members</h2>
+    <button mat-flat-button color="primary" (click)="openCreate()">
+      <mat-icon>add</mat-icon> New Member
+    </button>
+  </div>
+
+  @if (members().length > 0) {
+    <table mat-table [dataSource]="members()" class="member-table">
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>Name</th>
+        <td mat-cell *matCellDef="let r">
+          <div class="name-cell">
+            <span class="initial-circle">{{ initial(r.name) }}</span>
+            <span class="member-name">{{ r.name }}</span>
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="birth_date">
+        <th mat-header-cell *matHeaderCellDef>Birth Date</th>
+        <td mat-cell *matCellDef="let r">
+          @if (r.birth_date) {
+            <span class="secondary">{{ r.birth_date }} (age {{ r.age }})</span>
+          } @else {
+            <span class="secondary">&mdash;</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="videos">
+        <th mat-header-cell *matHeaderCellDef>Videos</th>
+        <td mat-cell *matCellDef="let r">{{ r.video_count }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="notes">
+        <th mat-header-cell *matHeaderCellDef>Notes</th>
+        <td mat-cell *matCellDef="let r">
+          <span class="notes-text secondary">{{ r.notes ?? '' }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let r">
+          <button mat-icon-button (click)="openEdit(r)" aria-label="Edit">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button mat-icon-button class="delete-btn" (click)="openDelete(r)" aria-label="Delete">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+    </table>
+  } @else if (!loading()) {
+    <p class="empty-text">No family members yet.</p>
+  }
+
+  <!-- Create/Edit Dialog -->
+  @if (dialogOpen()) {
+    <div class="modal-overlay" (click)="closeDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>{{ dialogTitle() }}</h3>
+
+        @if (editError()) {
+          <div class="error-message">{{ editError() }}</div>
+        }
+
+        <div class="field-group">
+          <label class="field-label">Name</label>
+          <input class="field-input" type="text" [value]="editName()" (input)="updateName($event)" maxlength="200" />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Birth Date</label>
+          <input class="field-input" type="date" [value]="editBirthDate()" (input)="updateBirthDate($event)" />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Notes</label>
+          <textarea class="field-textarea" [value]="editNotes()" (input)="updateNotes($event)"
+                    maxlength="500" placeholder="Optional notes"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button mat-stroked-button (click)="closeDialog()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="save()" [disabled]="!editName().trim()">Save</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Delete Confirmation -->
+  @if (deleteOpen()) {
+    <div class="modal-overlay" (click)="closeDelete()">
+      <div class="modal-content small" (click)="$event.stopPropagation()">
+        <h3>Delete Family Member</h3>
+        @if (deleteTarget(); as t) {
+          <p>
+            Delete "{{ t.name }}"?
+            @if (t.video_count > 0) {
+              They appear in {{ t.video_count }} video{{ t.video_count === 1 ? '' : 's' }}.
+              They will be removed from all videos.
+            }
+          </p>
+        }
+        <div class="modal-actions">
+          <button mat-stroked-button (click)="closeDelete()">Cancel</button>
+          <button mat-flat-button color="warn" (click)="confirmDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

@@ -71,6 +71,10 @@
             <span matListItemMeta class="dq-badge">{{ features.dataQualityCount() }}</span>
           }
         </a>
+        <a mat-list-item [routerLink]="routes.adminFamilyMembers()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>family_restroom</mat-icon>
+          <span matListItemTitle>Family Members</span>
+        </a>
         <a mat-list-item [routerLink]="routes.adminLiveTv()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>desktop_windows</mat-icon>
           <span matListItemTitle>Live TV</span>
