@@ -27,7 +27,7 @@ export const routes: Routes = [
       { path: '', loadComponent: () => import('./features/home/home').then(m => m.HomeComponent) },
       { path: 'catalog', loadComponent: placeholder, data: { title: 'Catalog' } },
       { path: 'title/:titleId', loadComponent: () => import('./features/title-detail/title-detail').then(m => m.TitleDetailComponent) },
-      { path: 'actor/:personId', loadComponent: placeholder, data: { title: 'Actor' } },
+      { path: 'actor/:personId', loadComponent: () => import('./features/actor/actor').then(m => m.ActorComponent) },
       { path: 'search', loadComponent: placeholder, data: { title: 'Search' } },
       { path: 'content/movies', loadComponent: () => import('./features/content/movies').then(m => m.MoviesComponent) },
       { path: 'content/tv', loadComponent: () => import('./features/content/tv-shows').then(m => m.TvShowsComponent) },

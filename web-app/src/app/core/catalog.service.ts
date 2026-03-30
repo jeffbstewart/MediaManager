@@ -268,6 +268,38 @@ export interface TmdbSearchResponse {
   results: TmdbSearchResultItem[];
 }
 
+export interface ActorDetail {
+  person_id: number;
+  name: string;
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  place_of_birth: string | null;
+  known_for: string | null;
+  profile_path: string | null;
+  owned_titles: ActorOwnedTitle[];
+  other_works: ActorCredit[];
+}
+
+export interface ActorOwnedTitle {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  character_name: string | null;
+}
+
+export interface ActorCredit {
+  tmdb_id: number;
+  title: string;
+  media_type: string;
+  character_name: string | null;
+  release_year: number | null;
+  poster_path: string | null;
+  popularity: number | null;
+  already_wished: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -314,6 +346,10 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  async getActorDetail(personId: number): Promise<ActorDetail> {
+    return firstValueFrom(this.http.get<ActorDetail>(`/api/v2/catalog/actor/${personId}`));
   }
 
   async getWishList(): Promise<WishListResponse> {

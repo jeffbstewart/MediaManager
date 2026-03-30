@@ -1,0 +1,90 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (actor(); as a) {
+
+    <!-- Hero section -->
+    <div class="hero">
+      @if (a.profile_path) {
+        <img [src]="profileImgUrl(a.profile_path)" [alt]="a.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder">
+          <mat-icon>person</mat-icon>
+        </div>
+      }
+      <div class="hero-info">
+        <h1>{{ a.name }}</h1>
+        @if (a.known_for) {
+          <span class="known-for">{{ a.known_for }}</span>
+        }
+        @if (formatLifespan()) {
+          <span class="lifespan">{{ formatLifespan() }}</span>
+        }
+        @if (a.place_of_birth) {
+          <span class="birthplace">{{ a.place_of_birth }}</span>
+        }
+        @if (a.biography) {
+          <p class="biography">{{ a.biography }}</p>
+        }
+      </div>
+    </div>
+
+    <!-- In Your Collection -->
+    @if (a.owned_titles.length > 0) {
+      <h2>In Your Collection</h2>
+      <div class="poster-grid">
+        @for (title of a.owned_titles; track title.title_id) {
+          <a class="poster-card" [routerLink]="routes.title(title.title_id)">
+            <div class="poster-wrapper">
+              @if (title.poster_url) {
+                <img [src]="title.poster_url" [alt]="title.title_name" class="poster-img" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+            </div>
+            <span class="poster-title">{{ title.title_name }}</span>
+            @if (title.character_name) {
+              <span class="character-name">as {{ title.character_name }}</span>
+            }
+            @if (title.release_year) {
+              <span class="poster-meta">{{ title.release_year }}</span>
+            }
+          </a>
+        }
+      </div>
+    }
+
+    <!-- Other Works -->
+    @if (a.other_works.length > 0) {
+      <h2>Other Works</h2>
+      <div class="poster-grid">
+        @for (credit of a.other_works; track credit.tmdb_id) {
+          <div class="poster-card unowned">
+            <div class="poster-wrapper">
+              @if (credit.poster_path) {
+                <img [src]="posterUrl(credit.poster_path)" [alt]="credit.title" class="poster-img" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+              <!-- Wish list heart button -->
+              <button class="wish-btn" [class.wished]="credit.already_wished"
+                      (click)="toggleWish(credit)"
+                      [title]="credit.already_wished ? 'On your wish list' : 'Add to wish list'">
+                <mat-icon>{{ credit.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+              </button>
+            </div>
+            <span class="poster-title">{{ credit.title }}</span>
+            @if (credit.character_name) {
+              <span class="character-name">as {{ credit.character_name }}</span>
+            }
+            <span class="poster-meta">
+              {{ credit.release_year ?? '' }}{{ credit.release_year && credit.media_type ? ' · ' : '' }}{{ credit.media_type === 'TV' ? 'TV' : 'Film' }}
+            </span>
+          </div>
+        }
+      </div>
+    }
+  }
+</div>
