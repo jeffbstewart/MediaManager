@@ -59,9 +59,9 @@ export const routes: Routes = [
       { path: 'admin/cameras', loadComponent: placeholder, data: { title: 'Camera Settings' } },
       { path: 'admin/live-tv', loadComponent: placeholder, data: { title: 'Live TV Settings' } },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
-      { path: 'admin/import', loadComponent: placeholder, data: { title: 'Amazon Import' } },
+      { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/expand', loadComponent: placeholder, data: { title: 'Expand' } },
-      { path: 'admin/document-ownership', loadComponent: placeholder, data: { title: 'Document Ownership' } },
+      { path: 'admin/document-ownership', loadComponent: () => import('./features/admin/document-ownership').then(m => m.DocumentOwnershipComponent) },
     ],
   },
 ];

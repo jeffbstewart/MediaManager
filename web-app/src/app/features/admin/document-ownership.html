@@ -1,0 +1,116 @@
+<div class="ownership-page">
+  @if (phase() === 'scan') {
+    <!-- Scan Phase -->
+    <h2>Document Ownership</h2>
+    <p class="subtitle">Scan a UPC barcode or search by title to begin documenting ownership.</p>
+
+    <mat-card class="scan-card">
+      <mat-card-content>
+        <!-- UPC input -->
+        <div class="upc-row">
+          <input class="upc-input" type="text" placeholder="Enter or scan UPC..."
+                 [value]="upcInput()" (input)="updateUpc($event)" (keydown)="onUpcKeydown($event)"
+                 autofocus />
+          <button mat-flat-button color="primary" (click)="lookupUpc()" [disabled]="scanning() || !upcInput().trim()">
+            @if (scanning()) { <mat-spinner diameter="18" /> }
+            Lookup
+          </button>
+        </div>
+
+        <!-- Camera scanner -->
+        @if (!cameraActive()) {
+          <button mat-stroked-button class="camera-btn" (click)="startCamera()">
+            <mat-icon>photo_camera</mat-icon> Scan with Camera
+          </button>
+        } @else {
+          <div class="camera-container">
+            <video #videoEl autoplay playsinline muted class="camera-video"></video>
+            <div class="camera-overlay"><div class="scan-line"></div></div>
+            <button mat-stroked-button class="stop-btn" (click)="stopCamera()">Stop Camera</button>
+          </div>
+        }
+
+        <!-- Search by title -->
+        <div class="search-section">
+          <span class="or-divider">or search by title</span>
+          <input class="search-input" type="text" placeholder="Search titles or UPCs..."
+                 [value]="searchQuery()" (input)="searchItems($event)" />
+          @if (searchResults().length > 0) {
+            <div class="search-results">
+              @for (item of searchResults(); track item.media_item_id) {
+                <div class="search-row" (click)="selectItem(item)">
+                  <span class="sr-name">{{ item.title_name }}</span>
+                  <span class="sr-meta">{{ item.media_format.replace('_', ' ') }}{{ item.upc ? ' · ' + item.upc : '' }}</span>
+                  @if (item.photo_count > 0) {
+                    <mat-icon class="sr-check">check_circle</mat-icon>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+  } @else if (item(); as it) {
+    <!-- Capture Phase -->
+    <div class="capture-header">
+      <button mat-stroked-button (click)="scanAnother()">
+        <mat-icon>arrow_back</mat-icon> Scan Another
+      </button>
+    </div>
+
+    <mat-card class="item-card">
+      <mat-card-content>
+        <div class="item-info">
+          @if (it.poster_url) {
+            <img [src]="it.poster_url" class="item-poster" alt="" />
+          } @else {
+            <div class="item-poster-placeholder"><mat-icon>inventory_2</mat-icon></div>
+          }
+          <div class="item-details">
+            @if (it.found) {
+              <span class="item-title">{{ it.title_name }}</span>
+              <span class="item-meta">{{ it.media_format?.replace('_', ' ') }}</span>
+            } @else {
+              <span class="item-title">New Scan — Queued for Lookup</span>
+            }
+            <span class="item-upc">UPC: {{ it.upc }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Photo capture -->
+    <mat-card class="photo-card">
+      <mat-card-content>
+        <label class="take-photo-btn">
+          <mat-icon>add_a_photo</mat-icon>
+          <span>Take Photo</span>
+          <input type="file" accept="image/*" capture="environment" (change)="onPhotoCapture($event)" hidden />
+        </label>
+        @if (uploading()) {
+          <mat-spinner diameter="24" />
+        }
+
+        @if (it.photos.length > 0) {
+          <h3>Evidence Photos</h3>
+          <div class="photo-strip">
+            @for (photo of it.photos; track photo.id) {
+              <div class="photo-thumb">
+                <a [href]="photo.url" target="_blank">
+                  <img [src]="photo.url" alt="Ownership photo" />
+                </a>
+                <button class="delete-photo" (click)="deletePhoto(photo)" title="Delete">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="no-photos">No photos yet. Tap "Take Photo" to capture ownership evidence.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+</div>
