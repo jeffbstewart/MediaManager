@@ -46,7 +46,7 @@ export const routes: Routes = [
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
       { path: 'admin/transcodes/status', loadComponent: () => import('./features/admin/transcode-status').then(m => m.TranscodeStatusComponent) },
       { path: 'admin/transcodes/unmatched', loadComponent: () => import('./features/admin/transcode-unmatched').then(m => m.TranscodeUnmatchedComponent) },
-      { path: 'admin/transcodes/linked', loadComponent: placeholder, data: { title: 'Linked Transcodes' } },
+      { path: 'admin/transcodes/linked', loadComponent: () => import('./features/admin/transcode-linked').then(m => m.TranscodeLinkedComponent) },
       { path: 'admin/transcodes/backlog', loadComponent: placeholder, data: { title: 'Transcode Backlog' } },
       { path: 'admin/users', loadComponent: placeholder, data: { title: 'Users' } },
       { path: 'admin/settings', loadComponent: placeholder, data: { title: 'Settings' } },
