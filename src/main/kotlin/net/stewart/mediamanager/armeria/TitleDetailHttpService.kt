@@ -7,8 +7,10 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.Episode
 import net.stewart.mediamanager.entity.FamilyMember
@@ -29,8 +31,11 @@ import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.UserTitleFlag
 import net.stewart.mediamanager.entity.UserFlagType
 import net.stewart.mediamanager.service.PlaybackProgressService
+import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.SimilarTitlesService
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.service.UserTitleFlagService
+import java.time.LocalDateTime
 
 /**
  * REST endpoint for the title detail page.
@@ -241,6 +246,60 @@ class TitleDetailHttpService {
             .content(MediaType.JSON_UTF_8, gson.toJson(response))
             .build()
     }
+
+    /** Toggle star flag on a title for the current user. */
+    @Post("/api/v2/catalog/titles/{titleId}/star")
+    fun toggleStar(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        Title.findById(titleId) ?: return jsonError(HttpStatus.NOT_FOUND, "Title not found")
+
+        val wasStarred = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        if (wasStarred) UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        else UserTitleFlagService.setFlagForUser(user.id!!, titleId, UserFlagType.STARRED)
+        val starred = !wasStarred
+        return jsonOk(mapOf("is_starred" to starred))
+    }
+
+    /** Toggle hidden flag on a title for the current user. */
+    @Post("/api/v2/catalog/titles/{titleId}/hide")
+    fun toggleHide(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        Title.findById(titleId) ?: return jsonError(HttpStatus.NOT_FOUND, "Title not found")
+
+        val wasHidden = UserTitleFlagService.hasFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+        if (wasHidden) UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+        else UserTitleFlagService.setFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
+        val hidden = !wasHidden
+        return jsonOk(mapOf("is_hidden" to hidden))
+    }
+
+    /** Set tags for a title (admin only). Replaces all existing tags. */
+    @Post("/api/v2/catalog/titles/{titleId}/tags")
+    fun setTags(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+        Title.findById(titleId) ?: return jsonError(HttpStatus.NOT_FOUND, "Title not found")
+
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+        @Suppress("UNCHECKED_CAST")
+        val tagIds = (body["tag_ids"] as? List<Number>)?.map { it.toLong() } ?: emptyList()
+
+        // Remove existing tags
+        TitleTag.findAll().filter { it.title_id == titleId }.forEach { it.delete() }
+        // Add new tags
+        for (tagId in tagIds) {
+            TitleTag(title_id = titleId, tag_id = tagId).save()
+        }
+        SearchIndexService.onTitleChanged(titleId)
+
+        return jsonOk(mapOf("ok" to true))
+    }
+
+    private fun jsonOk(data: Any): HttpResponse =
+        HttpResponse.builder()
+            .status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, gson.toJson(data))
+            .build()
 
     private fun jsonError(status: HttpStatus, message: String): HttpResponse =
         HttpResponse.builder()

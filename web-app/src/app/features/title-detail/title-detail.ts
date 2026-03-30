@@ -6,8 +6,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { AppRoutes } from '../../core/routes';
 import { CatalogService, TitleDetail } from '../../core/catalog.service';
+import { FeatureService } from '../../core/feature.service';
 
 @Component({
   selector: 'app-title-detail',
@@ -27,6 +30,8 @@ import { CatalogService, TitleDetail } from '../../core/catalog.service';
 export class TitleDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
+  private readonly http = inject(HttpClient);
+  readonly features = inject(FeatureService);
 
   readonly routes = AppRoutes;
   readonly loading = signal(true);
@@ -108,5 +113,30 @@ export class TitleDetailComponent implements OnInit {
 
   selectSeason(n: number): void {
     this.selectedSeason.set(n);
+  }
+
+  async toggleStar(): Promise<void> {
+    const t = this.title();
+    if (!t) return;
+    const r = await firstValueFrom(this.http.post<{ is_starred: boolean }>(
+      `/api/v2/catalog/titles/${t.title_id}/star`, {}));
+    this.title.set({ ...t, is_starred: r.is_starred });
+  }
+
+  async toggleHide(): Promise<void> {
+    const t = this.title();
+    if (!t) return;
+    const r = await firstValueFrom(this.http.post<{ is_hidden: boolean }>(
+      `/api/v2/catalog/titles/${t.title_id}/hide`, {}));
+    this.title.set({ ...t, is_hidden: r.is_hidden });
+  }
+
+  formatLabel(f: string): string {
+    switch (f) {
+      case 'BLURAY': return 'Blu-ray';
+      case 'UHD_BLURAY': return '4K UHD';
+      case 'HD_DVD': return 'HD DVD';
+      default: return f;
+    }
   }
 }

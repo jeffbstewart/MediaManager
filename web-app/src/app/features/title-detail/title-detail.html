@@ -21,8 +21,12 @@
           <div class="title-row">
             <h1>{{ t.title_name }}</h1>
             <button mat-icon-button class="star-btn" [class.starred]="t.is_starred"
-                    aria-label="Star">
+                    (click)="toggleStar()" aria-label="Star">
               <mat-icon>{{ t.is_starred ? 'star' : 'star_border' }}</mat-icon>
+            </button>
+            <button mat-icon-button class="hide-btn" [class.hidden-title]="t.is_hidden"
+                    (click)="toggleHide()" [attr.aria-label]="t.is_hidden ? 'Unhide' : 'Hide'">
+              <mat-icon>{{ t.is_hidden ? 'visibility_off' : 'visibility' }}</mat-icon>
             </button>
           </div>
 
@@ -50,7 +54,7 @@
           @if (t.formats.length > 0) {
             <div class="format-row">
               @for (fmt of t.formats; track fmt) {
-                <span class="format-badge">{{ fmt }}</span>
+                <span class="format-badge">{{ formatLabel(fmt) }}</span>
               }
             </div>
           }
