@@ -41,7 +41,7 @@ export const routes: Routes = [
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },
       { path: 'live-tv/:channelId', loadComponent: () => import('./features/live-tv/live-tv-player').then(m => m.LiveTvPlayerComponent) },
       { path: 'profile', loadComponent: () => import('./features/profile/profile').then(m => m.ProfileComponent) },
-      { path: 'help', loadComponent: placeholder, data: { title: 'Help' } },
+      { path: 'help', loadComponent: () => import('./features/help/help').then(m => m.HelpComponent) },
       // TODO: Add adminGuard to gate admin routes by access_level
       { path: 'admin/add', loadComponent: placeholder, data: { title: 'Add Titles' } },
       { path: 'admin/transcodes', loadComponent: placeholder, data: { title: 'Transcodes' } },
