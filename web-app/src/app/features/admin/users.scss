@@ -1,0 +1,85 @@
+.users-page { padding: 1.5rem; max-width: 1000px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+
+.header-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+  h2 { margin: 0; }
+}
+
+.users-table {
+  width: 100%;
+  .mat-mdc-header-cell {
+    font-size: 0.6875rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+  }
+  .mat-mdc-cell { font-size: 0.875rem; }
+}
+
+.username { font-weight: 500; margin-right: 0.5rem; }
+
+.status-badge {
+  font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 4px; margin-left: 0.25rem;
+
+  &.locked { background: #f44336; color: white; }
+  &.pw-change { background: #f59e0b; color: #1e1e1e; }
+}
+
+.role-badge {
+  font-size: 0.75rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.1);
+
+  &.admin { background: #6366f1; color: white; }
+}
+
+.delete-item { color: #f44336 !important; }
+.active-rating { font-weight: 700; color: var(--mat-sys-primary, #bb86fc) !important; }
+
+// Modal shared styles
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+  background: #1e1e1e; border-radius: 12px;
+  padding: 1.5rem; width: 90vw; max-width: 420px;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+  h3 { margin: 0; }
+}
+.close-btn {
+  background: none; border: none; color: white; cursor: pointer;
+  padding: 4px; border-radius: 50%;
+  &:hover { background: rgba(255,255,255,0.1); }
+}
+
+.form-fields {
+  display: flex; flex-direction: column; gap: 0.375rem;
+}
+
+.field-label { font-size: 0.8125rem; opacity: 0.6; margin-top: 0.25rem; }
+.field-input {
+  width: 100%; background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; color: white;
+  padding: 8px 12px; font-size: 0.875rem;
+  outline: none; box-sizing: border-box;
+  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+}
+.field-hint { font-size: 0.75rem; color: #ffa500; }
+.field-error { font-size: 0.75rem; color: #f44336; }
+
+.checkbox-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;
+  input { accent-color: var(--mat-sys-primary, #bb86fc); width: 16px; height: 16px; }
+}
+
+.reset-note { font-size: 0.8125rem; opacity: 0.5; margin: 0.5rem 0 0; }
+
+.dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }

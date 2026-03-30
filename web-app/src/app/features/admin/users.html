@@ -1,0 +1,162 @@
+<div class="users-page">
+  <div class="header-row">
+    <h2>Users</h2>
+    <button mat-flat-button color="primary" (click)="openAddDialog()">
+      <mat-icon>person_add</mat-icon> Add User
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else {
+    <table mat-table [dataSource]="users()" class="users-table">
+
+      <ng-container matColumnDef="username">
+        <th mat-header-cell *matHeaderCellDef>Username</th>
+        <td mat-cell *matCellDef="let u">
+          <span class="username">{{ u.username }}</span>
+          @if (u.locked) { <span class="status-badge locked">Locked</span> }
+          @if (u.must_change_password) { <span class="status-badge pw-change">PW Change</span> }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="role">
+        <th mat-header-cell *matHeaderCellDef>Role</th>
+        <td mat-cell *matCellDef="let u">
+          <span class="role-badge" [class.admin]="u.access_level >= 2">
+            {{ u.access_level >= 2 ? 'Admin' : 'Viewer' }}
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="rating">
+        <th mat-header-cell *matHeaderCellDef>Rating Ceiling</th>
+        <td mat-cell *matCellDef="let u">{{ ratingLabel(u.rating_ceiling) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="created">
+        <th mat-header-cell *matHeaderCellDef>Created</th>
+        <td mat-cell *matCellDef="let u">{{ u.created_at ?? '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let u">
+          <button mat-icon-button [matMenuTriggerFor]="actionMenu" aria-label="Actions">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #actionMenu="matMenu">
+            @if (u.access_level < 2) {
+              <button mat-menu-item (click)="promote(u)">
+                <mat-icon>arrow_upward</mat-icon> <span>Promote to Admin</span>
+              </button>
+            } @else {
+              <button mat-menu-item (click)="demote(u)">
+                <mat-icon>arrow_downward</mat-icon> <span>Demote to Viewer</span>
+              </button>
+            }
+            @if (u.locked) {
+              <button mat-menu-item (click)="unlock(u)">
+                <mat-icon>lock_open</mat-icon> <span>Unlock</span>
+              </button>
+            }
+            @if (!u.must_change_password) {
+              <button mat-menu-item (click)="forcePasswordChange(u)">
+                <mat-icon>vpn_key</mat-icon> <span>Force Password Change</span>
+              </button>
+            }
+            <button mat-menu-item (click)="openResetDialog(u)">
+              <mat-icon>lock_reset</mat-icon> <span>Reset Password</span>
+            </button>
+            <button mat-menu-item [matMenuTriggerFor]="ratingMenu">
+              <mat-icon>shield</mat-icon> <span>Set Rating Ceiling</span>
+            </button>
+            <mat-divider />
+            <button mat-menu-item class="delete-item" (click)="deleteUser(u)">
+              <mat-icon>delete</mat-icon> <span>Delete User</span>
+            </button>
+          </mat-menu>
+          <mat-menu #ratingMenu="matMenu">
+            @for (choice of ratingChoices; track choice.label) {
+              <button mat-menu-item (click)="setRatingCeiling(u, choice.value)"
+                      [class.active-rating]="u.rating_ceiling === choice.value">
+                {{ choice.label }}
+              </button>
+            }
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns;"></tr>
+    </table>
+  }
+
+  <!-- Add User Dialog -->
+  @if (addDialogOpen()) {
+    <div class="modal-overlay" (click)="closeAddDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Add User</h3>
+          <button class="close-btn" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="form-fields">
+          <label class="field-label">Username</label>
+          <input class="field-input" type="text" [value]="addUsername()" (input)="updateAddField('username', $event)" />
+
+          <label class="field-label">Password</label>
+          <input class="field-input" type="password" [value]="addPassword()" (input)="updateAddField('password', $event)" />
+          @if (addPassword().length > 0 && addPassword().length < 8) {
+            <span class="field-hint">Must be at least 8 characters</span>
+          }
+
+          <label class="field-label">Confirm Password</label>
+          <input class="field-input" type="password" [value]="addConfirm()" (input)="updateAddField('confirm', $event)" />
+          @if (addConfirm().length > 0 && addPassword() !== addConfirm()) {
+            <span class="field-hint">Passwords do not match</span>
+          }
+
+          <label class="checkbox-row">
+            <input type="checkbox" [checked]="addForceChange()" (change)="updateAddForceChange($event)" />
+            <span>Require password change on first login</span>
+          </label>
+
+          @if (addError()) { <span class="field-error">{{ addError() }}</span> }
+        </div>
+        <div class="dialog-footer">
+          <button mat-button (click)="closeAddDialog()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="submitAddUser()" [disabled]="!addValid()">Create</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Reset Password Dialog -->
+  @if (resetDialogOpen() && resetUser(); as u) {
+    <div class="modal-overlay" (click)="closeResetDialog()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Reset Password: {{ u.username }}</h3>
+          <button class="close-btn" (click)="closeResetDialog()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="form-fields">
+          <label class="field-label">New Password</label>
+          <input class="field-input" type="password" [value]="resetPassword()" (input)="updateResetField('password', $event)" />
+
+          <label class="field-label">Confirm Password</label>
+          <input class="field-input" type="password" [value]="resetConfirm()" (input)="updateResetField('confirm', $event)" />
+          @if (resetConfirm().length > 0 && resetPassword() !== resetConfirm()) {
+            <span class="field-hint">Passwords do not match</span>
+          }
+
+          @if (resetError()) { <span class="field-error">{{ resetError() }}</span> }
+        </div>
+        <p class="reset-note">All sessions for this user will be invalidated. They will be required to change their password on next login.</p>
+        <div class="dialog-footer">
+          <button mat-button (click)="closeResetDialog()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="submitResetPassword()" [disabled]="!resetValid()">Reset</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

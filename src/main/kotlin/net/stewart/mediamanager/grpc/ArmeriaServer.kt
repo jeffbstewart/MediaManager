@@ -30,6 +30,8 @@ import net.stewart.mediamanager.armeria.CollectionHttpService
 import net.stewart.mediamanager.armeria.LiveTvListHttpService
 import net.stewart.mediamanager.armeria.ProfileHttpService
 import net.stewart.mediamanager.armeria.SearchHttpService
+import net.stewart.mediamanager.armeria.SettingsHttpService
+import net.stewart.mediamanager.armeria.UserManagementHttpService
 import net.stewart.mediamanager.armeria.TagManagementHttpService
 import net.stewart.mediamanager.armeria.TranscodeStatusHttpService
 import net.stewart.mediamanager.armeria.BacklogHttpService
@@ -203,6 +205,8 @@ object ArmeriaServer {
         sb.annotatedService().decorator(authDecorator).build(LinkedTranscodesHttpService())
         sb.annotatedService().decorator(authDecorator).build(BacklogHttpService())
         sb.annotatedService().decorator(authDecorator).build(TagManagementHttpService())
+        sb.annotatedService().decorator(authDecorator).build(SettingsHttpService())
+        sb.annotatedService().decorator(authDecorator).build(UserManagementHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         sb.annotatedService(AuthRestService())
