@@ -30,124 +30,6 @@
     background-color: rgba(255, 255, 255, 0.08);
   }
 
-  // Search bar
-  .search-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-    margin-left: 1rem;
-    max-width: 320px;
-    flex: 1;
-  }
-
-  .search-icon {
-    position: absolute;
-    left: 8px;
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    opacity: 0.4;
-    pointer-events: none;
-  }
-
-  .search-input {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    color: white;
-    padding: 6px 32px 6px 30px;
-    font-size: 0.8125rem;
-    outline: none;
-
-    &:focus {
-      border-color: rgba(255, 255, 255, 0.25);
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    &::placeholder { color: rgba(255, 255, 255, 0.35); }
-  }
-
-  .search-clear {
-    position: absolute;
-    right: 4px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    padding: 2px;
-    display: flex;
-
-    mat-icon { font-size: 16px; width: 16px; height: 16px; }
-  }
-
-  .suggestions-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 4px;
-    background: #2a2a2a;
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    z-index: 1000;
-    max-height: 400px;
-    overflow-y: auto;
-  }
-
-  .suggestion-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 8px 12px;
-    text-decoration: none;
-    color: white;
-    cursor: pointer;
-
-    &:hover { background: rgba(255, 255, 255, 0.08); }
-
-    &.suggestion-all {
-      justify-content: center;
-      font-size: 0.8125rem;
-      opacity: 0.6;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-    }
-  }
-
-  .suggestion-type {
-    font-size: 0.625rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    flex-shrink: 0;
-
-    &.type-movie { background: #1565c0; }
-    &.type-tv { background: #6a1b9a; }
-    &.type-actor { background: #2e7d32; }
-    &.type-collection { background: #e65100; }
-    &.type-tag { background: #455a64; }
-    &.type-channel { background: #00838f; }
-    &.type-camera { background: #4e342e; }
-    &.type-personal { background: #ad1457; }
-  }
-
-  .suggestion-name {
-    font-size: 0.8125rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-  }
-
-  .suggestion-meta {
-    font-size: 0.6875rem;
-    opacity: 0.4;
-    flex-shrink: 0;
-  }
-
   .wish-badge {
     background-color: #4caf50;
     color: white;
@@ -170,10 +52,193 @@
   font-size: 1.125rem;
   font-weight: 700;
   margin-left: 8px;
+  white-space: nowrap;
 }
 
 .spacer {
   flex: 1;
+}
+
+// Search bar (in top toolbar)
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 1.5rem;
+  max-width: 360px;
+  flex: 1;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  color: white;
+  padding: 8px 36px 8px 36px;
+  font-size: 0.875rem;
+  outline: none;
+  font-family: inherit;
+
+  &:focus {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: 50%;
+
+  &:hover { color: white; }
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  z-index: 1000;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 10px 14px;
+  text-decoration: none;
+  color: white;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover { background: rgba(255, 255, 255, 0.08); }
+
+  &.suggestion-all {
+    justify-content: center;
+    font-size: 0.8125rem;
+    opacity: 0.5;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px;
+
+    &:hover { opacity: 0.8; }
+  }
+}
+
+.suggestion-type {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: white;
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+
+  &.type-movie { background: #1565c0; }
+  &.type-tv { background: #6a1b9a; }
+  &.type-actor { background: #2e7d32; }
+  &.type-collection { background: #e65100; }
+  &.type-tag { background: #455a64; }
+  &.type-channel { background: #00838f; }
+  &.type-camera { background: #4e342e; }
+  &.type-personal { background: #ad1457; }
+}
+
+.suggestion-thumb {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+
+  &.actor {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-position: top;
+  }
+}
+
+.suggestion-thumb-placeholder {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; opacity: 0.3; }
+
+  &.actor {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+}
+
+.suggestion-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.suggestion-name {
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-sub {
+  font-size: 0.6875rem;
+  opacity: 0.45;
+}
+
+.suggestion-tag-pill {
+  padding: 3px 12px;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.suggestion-meta {
+  font-size: 0.75rem;
+  opacity: 0.4;
+  flex-shrink: 0;
 }
 
 .page-content {

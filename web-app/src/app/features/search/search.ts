@@ -1,5 +1,6 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { CatalogService, SearchResult } from '../../core/catalog.service';
@@ -12,7 +13,7 @@ import { AppRoutes } from '../../core/routes';
   templateUrl: './search.html',
   styleUrl: './search.scss',
 })
-export class SearchComponent implements OnInit {
+export class SearchComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly catalog = inject(CatalogService);
@@ -22,14 +23,23 @@ export class SearchComponent implements OnInit {
   readonly query = signal('');
   readonly results = signal<SearchResult[]>([]);
 
-  async ngOnInit(): Promise<void> {
-    const q = this.route.snapshot.queryParamMap.get('q') ?? '';
-    this.query.set(q);
-    if (q.trim().length >= 2) {
-      await this.doSearch(q);
-    } else {
-      this.loading.set(false);
-    }
+  private querySub?: Subscription;
+
+  ngOnInit(): void {
+    this.querySub = this.route.queryParamMap.subscribe(params => {
+      const q = params.get('q') ?? '';
+      this.query.set(q);
+      if (q.trim().length >= 2) {
+        this.doSearch(q);
+      } else {
+        this.loading.set(false);
+        this.results.set([]);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.querySub?.unsubscribe();
   }
 
   async doSearch(q: string): Promise<void> {

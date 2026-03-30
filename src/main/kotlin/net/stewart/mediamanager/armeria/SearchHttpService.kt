@@ -97,7 +97,7 @@ class SearchHttpService {
                     "person_id" to cm.tmdb_person_id,
                     "name" to cm.name,
                     "headshot_url" to if (cm.headshot_cache_id != null) "/headshots/${cm.id}" else null,
-                    "score" to ((cm.popularity ?: 0.0) + 5000.0)
+                    "score" to (cm.popularity ?: 0.0)
                 ))
             }
         }

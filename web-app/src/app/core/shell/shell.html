@@ -164,10 +164,44 @@
             @for (item of suggestions(); track item.name + item.type) {
               <a class="suggestion-item" [routerLink]="resultRoute(item)"
                  (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
-                <span class="suggestion-type" [class]="'type-' + item.type">{{ typeLabel(item.type) }}</span>
-                <span class="suggestion-name">{{ item.name }}</span>
-                @if (item.year) {
-                  <span class="suggestion-meta">{{ item.year }}</span>
+                @if (item.type === 'movie' || item.type === 'tv' || item.type === 'personal') {
+                  @if (item.poster_url) {
+                    <img [src]="item.poster_url" class="suggestion-thumb" alt="" />
+                  } @else {
+                    <div class="suggestion-thumb-placeholder"><mat-icon>movie</mat-icon></div>
+                  }
+                  <div class="suggestion-text">
+                    <span class="suggestion-name">{{ item.name }}</span>
+                    <span class="suggestion-sub">{{ typeLabel(item.type) }}{{ item.year ? ' · ' + item.year : '' }}</span>
+                  </div>
+                } @else if (item.type === 'actor') {
+                  @if (item.headshot_url) {
+                    <img [src]="item.headshot_url" class="suggestion-thumb actor" alt="" />
+                  } @else {
+                    <div class="suggestion-thumb-placeholder actor"><mat-icon>person</mat-icon></div>
+                  }
+                  <div class="suggestion-text">
+                    <span class="suggestion-name">{{ item.name }}</span>
+                    <span class="suggestion-sub">Actor</span>
+                  </div>
+                } @else if (item.type === 'tag') {
+                  <span class="suggestion-tag-pill"
+                        [style.background-color]="item.bg_color"
+                        [style.color]="item.text_color">{{ item.name }}</span>
+                  @if (item.title_count) {
+                    <span class="suggestion-sub">{{ item.title_count }} titles</span>
+                  }
+                } @else if (item.type === 'channel') {
+                  <span class="suggestion-type type-channel">Channel</span>
+                  <div class="suggestion-text">
+                    <span class="suggestion-name">{{ item.name }}</span>
+                    @if (item.affiliation) {
+                      <span class="suggestion-sub">{{ item.affiliation }}</span>
+                    }
+                  </div>
+                } @else {
+                  <span class="suggestion-type" [class]="'type-' + item.type">{{ typeLabel(item.type) }}</span>
+                  <span class="suggestion-name">{{ item.name }}</span>
                 }
               </a>
             }
