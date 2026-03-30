@@ -1,0 +1,159 @@
+<div class="edit-page">
+  @if (loading()) {
+    <mat-spinner diameter="32" />
+  } @else if (item(); as data) {
+    <!-- Message banner -->
+    @if (message()) {
+      <div class="message-banner" [class.success]="messageType() === 'success'" [class.error]="messageType() === 'error'">
+        {{ message() }}
+      </div>
+    }
+
+    <!-- Header -->
+    <div class="header-row">
+      @if (primary && primary.poster_url) {
+        <img [src]="primary!.poster_url" class="header-poster" alt="" />
+      }
+      <div class="header-info">
+        <h2>{{ data.display_name }}</h2>
+        <span class="meta">
+          @if (data.media_format) { {{ formatLabel(data.media_format) }} }
+          @if (data.upc) { &middot; UPC: {{ data.upc }} }
+        </span>
+        @if (data.titles.length > 1) {
+          <span class="meta small">{{ data.titles.length }} titles in this item</span>
+        }
+      </div>
+    </div>
+
+    <!-- Media Type -->
+    @if (primary) {
+      <div class="field-group">
+        <label class="field-label">Media Type</label>
+        <select class="field-select" (change)="setMediaType($event)">
+          @for (t of ['MOVIE', 'TV', 'PERSONAL']; track t) {
+            <option [value]="t" [selected]="t === primary.media_type">{{ t }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    <!-- Seasons (for TV titles) -->
+    @for (t of data.titles; track t.join_id) {
+      @if (t.media_type === 'TV') {
+        <div class="field-group">
+          <label class="field-label">{{ data.titles.length > 1 ? 'Seasons (' + t.title_name + ')' : 'Seasons' }}</label>
+          <input class="field-input" type="text" [value]="t.seasons ?? ''" placeholder="e.g. 2 or 1, 2, 3"
+                 (change)="saveSeasons(t.join_id, $event)" />
+        </div>
+      }
+    }
+
+    <!-- TMDB Match Section -->
+    @if (needsTmdbFix || isPending) {
+      <h3>TMDB Match</h3>
+      <span class="status-text" [class.error-text]="needsTmdbFix" [class.pending-text]="isPending">
+        {{ statusLabel(primary!.enrichment_status) }}
+      </span>
+    }
+
+    @if (needsTmdbFix) {
+      <div class="search-row">
+        <input class="field-input flex" type="text" [value]="tmdbQuery()" (input)="updateTmdbQuery($event)"
+               (keydown.enter)="searchTmdb()" placeholder="Search TMDB..." />
+        <mat-chip-set>
+          <mat-chip [highlighted]="tmdbType() === 'MOVIE'" (click)="tmdbType.set('MOVIE')">Movie</mat-chip>
+          <mat-chip [highlighted]="tmdbType() === 'TV'" (click)="tmdbType.set('TV')">TV</mat-chip>
+        </mat-chip-set>
+        <button mat-flat-button color="primary" (click)="searchTmdb()">Search</button>
+      </div>
+
+      @if (searching()) { <mat-spinner diameter="24" /> }
+      @if (tmdbResults().length > 0) {
+        <div class="tmdb-results">
+          @for (r of tmdbResults(); track r.tmdb_id) {
+            <div class="tmdb-row">
+              @if (r.poster_path) { <img [src]="posterUrl(r.poster_path)" class="tmdb-poster" alt="" /> }
+              <div class="tmdb-info">
+                <span class="tmdb-title">{{ r.title }}</span>
+                <span class="tmdb-meta">{{ r.release_year ?? '' }} &middot; {{ r.media_type === 'TV' ? 'TV' : 'Film' }}</span>
+                @if (r.overview) { <span class="tmdb-overview">{{ r.overview }}</span> }
+              </div>
+              <button mat-flat-button color="primary" class="small-btn" (click)="selectTmdb(r)">Select</button>
+            </div>
+          }
+        </div>
+      }
+    }
+
+    <!-- Purchase Info -->
+    <h3>Purchase Info</h3>
+    @if (data.amazon_order_id) {
+      <span class="linked-order">Linked to Amazon order {{ data.amazon_order_id }}</span>
+    }
+    <div class="purchase-grid">
+      <div class="field-group">
+        <label class="field-label">Purchase Place</label>
+        <input class="field-input" type="text" [value]="purchasePlace()" (input)="updatePurchasePlace($event)" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Purchase Date</label>
+        <input class="field-input" type="date" [value]="purchaseDate()" (input)="updatePurchaseDate($event)" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Purchase Price</label>
+        <div class="price-input">
+          <span class="prefix">$</span>
+          <input class="field-input" type="number" step="0.01" [value]="purchasePrice()" (input)="updatePurchasePrice($event)" />
+        </div>
+      </div>
+    </div>
+    <button mat-flat-button color="primary" class="save-btn" (click)="savePurchase()">Save Purchase Info</button>
+
+    <!-- Amazon Order Lookup -->
+    <h3>Amazon Purchase History</h3>
+    <div class="search-row">
+      <input class="field-input flex" type="text" [value]="amazonQuery()" (input)="updateAmazonQuery($event)"
+             (keydown.enter)="searchAmazon()" placeholder="Search Amazon orders..." />
+      <button mat-flat-button (click)="searchAmazon()">Search</button>
+    </div>
+    @if (amazonOrders().length > 0) {
+      <div class="amazon-list">
+        @for (o of amazonOrders(); track o.id) {
+          <div class="amazon-row">
+            <span class="amazon-name">{{ o.product_name }}</span>
+            <span class="amazon-meta">{{ o.order_date ?? '' }}</span>
+            @if (o.unit_price != null) {
+              <span class="amazon-price">${{ o.unit_price.toFixed(2) }}</span>
+            }
+            <button mat-flat-button color="primary" class="small-btn" (click)="linkAmazon(o)">Use</button>
+          </div>
+        }
+      </div>
+    } @else {
+      <p class="empty-text">No matching orders.</p>
+    }
+
+    <!-- Ownership Photos -->
+    @if (data.photos.length > 0) {
+      <h3>Ownership Photos ({{ data.photo_count }})</h3>
+      <div class="photo-strip">
+        @for (p of data.photos; track p.id) {
+          <img [src]="'/ownership-photos/' + p.id" class="photo-thumb" alt="Ownership photo" />
+        }
+      </div>
+    }
+
+    <!-- Navigation -->
+    <div class="nav-row">
+      <a mat-stroked-button routerLink="/admin/add">
+        <mat-icon>arrow_back</mat-icon> Back to Add Item
+      </a>
+      @if (primary) {
+        <a mat-stroked-button [routerLink]="['/title', primary.title_id]">
+          <mat-icon>open_in_new</mat-icon> View Title
+        </a>
+      }
+    </div>
+  }
+</div>

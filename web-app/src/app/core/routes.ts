@@ -41,4 +41,5 @@ export const AppRoutes = {
   adminImport: () => '/admin/import',
   adminExpand: () => '/admin/expand',
   adminDocumentOwnership: () => '/admin/document-ownership',
+  adminMediaItem: (itemId: number) => `/admin/item/${itemId}`,
 } as const;

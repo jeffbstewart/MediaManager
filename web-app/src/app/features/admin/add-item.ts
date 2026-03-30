@@ -8,7 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 interface RecentItem {
@@ -29,6 +29,7 @@ interface TmdbResult { tmdb_id: number; title: string; media_type: string; relea
 })
 export class AddItemComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
 
   readonly videoRef = viewChild<ElementRef<HTMLVideoElement>>('videoEl');
 
@@ -185,6 +186,12 @@ export class AddItemComponent implements OnInit, OnDestroy {
   }
 
   async setFilter(f: string): Promise<void> { this.itemFilter.set(f); await this.refreshItems(); }
+
+  onRowClick(item: RecentItem): void {
+    if (item.type === 'item' && item.media_item_id) {
+      this.router.navigate(['/admin/item', item.media_item_id]);
+    }
+  }
 
   async deleteEntry(item: RecentItem): Promise<void> {
     const label = item.display_name || item.upc || 'this entry';

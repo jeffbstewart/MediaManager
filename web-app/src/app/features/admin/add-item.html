@@ -138,7 +138,8 @@
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
-        <tr mat-row *matRowDef="let row; columns: recentColumns;"></tr>
+        <tr mat-row *matRowDef="let row; columns: recentColumns;" class="clickable-row"
+            (click)="onRowClick(row)"></tr>
       </table>
     } @else {
       <p class="empty-text">No recent items.</p>

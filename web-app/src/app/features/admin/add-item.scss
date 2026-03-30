@@ -64,4 +64,5 @@ h3 { margin: 1.5rem 0 0.5rem; }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 .row-poster { width: 34px; height: 50px; border-radius: 4px; object-fit: cover; }
+.clickable-row { cursor: pointer; &:hover { background: rgba(255,255,255,0.04); } }
 .delete-action { color: #f44336 !important; }
