@@ -97,6 +97,11 @@ export class LoginComponent implements OnInit {
         return;
       }
 
+      if (response.password_change_required) {
+        this.router.navigate(['/change-password']);
+        return;
+      }
+
       this.router.navigate(['/']);
     } catch (e: unknown) {
       const httpError = e as { error?: { error?: string; retry_after?: number } };

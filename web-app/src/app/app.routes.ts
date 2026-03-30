@@ -13,6 +13,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/setup').then(m => m.SetupComponent),
   },
   {
+    path: 'change-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/change-password').then(m => m.ChangePasswordComponent),
+  },
+  {
     path: 'play/:transcodeId',
     canActivate: [authGuard],
     loadComponent: () => import('./features/player/player').then(m => m.PlayerComponent),
