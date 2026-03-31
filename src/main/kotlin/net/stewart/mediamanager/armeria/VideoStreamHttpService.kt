@@ -12,8 +12,8 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
-import net.stewart.mediamanager.VideoPlayerDialog
 import net.stewart.mediamanager.entity.Chapter
+import net.stewart.mediamanager.entity.Episode
 import net.stewart.mediamanager.entity.SkipSegment
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
@@ -404,10 +404,10 @@ class VideoStreamHttpService {
     }
 
     private fun serveNextEpisode(transcodeId: Long): HttpResponse {
-        val next = VideoPlayerDialog.findNextPlayableEpisode(transcodeId)
+        val next = findNextPlayableEpisode(transcodeId)
             ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
 
-        val json = Gson().toJson(mapOf("transcodeId" to next.transcodeId, "label" to next.label))
+        val json = Gson().toJson(mapOf("transcodeId" to next.first, "label" to next.second))
         val bytes = json.toByteArray(Charsets.UTF_8)
         val headers = ResponseHeaders.builder(HttpStatus.OK)
             .contentType(MediaType.JSON_UTF_8)
@@ -451,5 +451,38 @@ class VideoStreamHttpService {
         } catch (e: NumberFormatException) {
             null
         }
+    }
+
+    /** Find the next playable episode after the given transcode. Returns (transcodeId, label) or null. */
+    private fun findNextPlayableEpisode(currentTranscodeId: Long): Pair<Long, String>? {
+        val currentTranscode = Transcode.findById(currentTranscodeId) ?: return null
+        val currentEpisodeId = currentTranscode.episode_id ?: return null
+        val currentEpisode = Episode.findById(currentEpisodeId) ?: return null
+
+        val titleId = currentTranscode.title_id
+        val allEpisodes = Episode.findAll()
+            .filter { it.title_id == titleId }
+            .sortedWith(compareBy({ it.season_number }, { it.episode_number }))
+
+        val currentIndex = allEpisodes.indexOfFirst { it.id == currentEpisodeId }
+        if (currentIndex < 0) return null
+
+        val titleTranscodes = Transcode.findAll().filter { it.title_id == titleId }
+        val nasRoot = TranscoderAgent.getNasRoot()
+
+        for (i in (currentIndex + 1) until allEpisodes.size) {
+            val nextEp = allEpisodes[i]
+            val tc = titleTranscodes.firstOrNull { it.episode_id == nextEp.id } ?: continue
+            val filePath = tc.file_path ?: continue
+            val canPlay = if (TranscoderAgent.needsTranscoding(filePath)) {
+                nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, filePath)
+            } else true
+            if (canPlay) {
+                val seasonEp = "S%02dE%02d".format(nextEp.season_number, nextEp.episode_number)
+                val label = nextEp.name?.let { "$seasonEp \u2014 $it" } ?: seasonEp
+                return tc.id!! to label
+            }
+        }
+        return null
     }
 }

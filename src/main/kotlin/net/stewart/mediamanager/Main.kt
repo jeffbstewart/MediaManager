@@ -1,7 +1,5 @@
 package net.stewart.mediamanager
 
-import com.github.mvysny.vaadinboot.VaadinBoot
-import org.eclipse.jetty.server.ServerConnector
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.DatabaseBackupService
 import net.stewart.mediamanager.service.ForBrowserValidator
@@ -27,8 +25,7 @@ import java.util.concurrent.TimeUnit
 object CommandLineFlags {
     var developerMode: Boolean = false
     var listenOnAllInterfaces: Boolean = false
-    var port: Int = 8080
-    var grpcPort: Int = 9090
+    var port: Int = 9090
     var h2ConsolePort: Int = 8082
     var maxTranscodeDeletes: Int = 25
     var disableLocalTranscoding: Boolean = false
@@ -41,7 +38,6 @@ object CommandLineFlags {
         args.forEachIndexed { i, arg ->
             when (arg) {
                 "--port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { port = it }
-                "--grpc_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { grpcPort = it }
                 "--h2_console_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { h2ConsolePort = it }
                 "--max_transcode_deletes" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { maxTranscodeDeletes = it }
                 "--internal_port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { internalPort = it }
@@ -147,9 +143,9 @@ fun main(args: Array<String>) {
     }, 3, TimeUnit.MINUTES)
     Runtime.getRuntime().addShutdownHook(Thread { scheduler.shutdownNow() })
 
-    // Armeria server: gRPC on main port + monitoring on internal port
+    // Armeria server: gRPC + REST + SPA on main port, monitoring on internal port
     net.stewart.mediamanager.grpc.ArmeriaServer.start(
-        port = CommandLineFlags.grpcPort,
+        port = CommandLineFlags.port,
         internalPort = CommandLineFlags.internalPort
     )
     Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.ArmeriaServer.stop() })
@@ -168,27 +164,7 @@ fun main(args: Array<String>) {
         Runtime.getRuntime().addShutdownHook(Thread { h2Web.stop() })
     }
 
-    val boot = object : VaadinBoot() {
-        override fun onStarted(context: org.eclipse.jetty.ee10.webapp.WebAppContext) {
-            val server = context.server
-            for (connector in server.connectors) {
-                if (connector is org.eclipse.jetty.server.ServerConnector) {
-                    // Increase idle timeout from 30s (default) to 5 minutes.
-                    // Roku streaming requests can have long pauses between range fetches;
-                    // the default 30s timeout kills the connection mid-playback.
-                    connector.idleTimeout = 300_000 // 5 minutes
-                    log.info("Jetty connector idle timeout set to {}ms", connector.idleTimeout)
-                }
-            }
-        }
-    }
-    boot.port = CommandLineFlags.port
-    if (CommandLineFlags.listenOnAllInterfaces) {
-        log.info("Listening on all IPv4 interfaces")
-    } else {
-        log.info("Listening only on loopback")
-        boot.listenOn = "127.0.0.1"
-    }
-    boot.run()
+    // Block main thread (Armeria server runs in its own threads)
+    log.info("Media Manager started on port {} (internal: {})", CommandLineFlags.port, CommandLineFlags.internalPort)
+    Thread.currentThread().join()
 }
-

@@ -55,21 +55,8 @@ data class ContinueWatchingItem(
 object PlaybackProgressService {
     private val log = LoggerFactory.getLogger(PlaybackProgressService::class.java)
 
-    /** Returns the current Vaadin session user's ID, or null if not authenticated. */
-    private fun currentUserId(): Long? = AuthService.getCurrentUser()?.id
-
     /**
-     * Records playback progress for the current user.
-     * If near the end (>= 95% or within 120s of end), deletes the record (auto-clear).
-     * Sets VIEWED flag when user watches > 25%.
-     */
-    fun recordProgress(transcodeId: Long, positionSeconds: Double, durationSeconds: Double?) {
-        val userId = currentUserId() ?: return
-        recordProgressForUser(userId, transcodeId, positionSeconds, durationSeconds)
-    }
-
-    /**
-     * Records playback progress for an explicit user ID (used by servlet for Roku path).
+     * Records playback progress for an explicit user ID.
      */
     fun recordProgressForUser(userId: Long, transcodeId: Long, positionSeconds: Double, durationSeconds: Double?) {
         // Check if near end — auto-clear
@@ -108,24 +95,9 @@ object PlaybackProgressService {
         }
     }
 
-    /** Returns saved progress for the current user and transcode, or null. */
-    fun getProgress(transcodeId: Long): PlaybackProgress? {
-        val userId = currentUserId() ?: return null
-        return getProgressForUser(userId, transcodeId)
-    }
-
     /** Returns saved progress for an explicit user and transcode, or null. */
     fun getProgressForUser(userId: Long, transcodeId: Long): PlaybackProgress? {
         return findProgressForUser(userId, transcodeId)
-    }
-
-    /**
-     * Returns in-progress titles for the current user, sorted by most recently watched.
-     * Each item contains all data needed for a Continue Watching card.
-     */
-    fun getContinueWatching(limit: Int = 5): List<ContinueWatchingItem> {
-        val userId = currentUserId() ?: return emptyList()
-        return getContinueWatchingForUser(userId, limit)
     }
 
     /** Returns in-progress titles for an explicit user ID. */
@@ -168,32 +140,6 @@ object PlaybackProgressService {
         }
     }
 
-    /** Clears progress for the current user on a specific transcode. */
-    fun clearProgress(transcodeId: Long) {
-        val userId = currentUserId() ?: return
-        deleteProgressForUser(userId, transcodeId)
-    }
-
-    /**
-     * Returns a map of transcode_id → PlaybackProgress for the current user,
-     * filtered to the given transcode IDs. Useful for batch lookups in views.
-     */
-    fun getProgressForTranscodes(transcodeIds: Set<Long>): Map<Long, PlaybackProgress> {
-        val userId = currentUserId() ?: return emptyMap()
-        return PlaybackProgress.findAll()
-            .filter { it.user_id == userId && it.transcode_id in transcodeIds }
-            .associateBy { it.transcode_id }
-    }
-
-    /**
-     * Returns a map of title_id → PlaybackProgress for the current user,
-     * picking the most recent progress per title. Useful for catalog view overlays.
-     */
-    fun getProgressByTitle(): Map<Long, PlaybackProgress> {
-        val userId = currentUserId() ?: return emptyMap()
-        return getProgressByTitleForUser(userId)
-    }
-
     /** Returns a map of title_id → PlaybackProgress for an explicit user ID. */
     fun getProgressByTitleForUser(userId: Long): Map<Long, PlaybackProgress> {
         val allProgress = PlaybackProgress.findAll().filter { it.user_id == userId }
@@ -228,15 +174,6 @@ object PlaybackProgressService {
             ).apply { save() }
     }
 
-    /**
-     * Returns titles with the VIEWED flag for the current user, sorted by most
-     * recently viewed (based on the flag's created_at). Limited to [limit] items.
-     */
-    fun getRecentlyWatched(limit: Int = 10): List<Title> {
-        val userId = currentUserId() ?: return emptyList()
-        return getRecentlyWatchedForUser(userId, limit)
-    }
-
     /** Returns recently watched titles for an explicit user ID. */
     fun getRecentlyWatchedForUser(userId: Long, limit: Int = 10): List<Title> {
         val viewedFlags = UserTitleFlag.findAll()
@@ -261,15 +198,6 @@ object PlaybackProgressService {
             if (flag.title_id in activeTranscodes) return@mapNotNull null
             titles[flag.title_id]
         }
-    }
-
-    /**
-     * Returns the most recently linked transcodes with their titles, for the
-     * "Recently Added" row on the home screen. Limited to [limit] items.
-     */
-    fun getRecentlyAdded(limit: Int = 10): List<Pair<Title, Transcode>> {
-        val user = AuthService.getCurrentUser()
-        return getRecentlyAddedForUser(user, limit)
     }
 
     /** Returns recently added titles for an explicit user (used for rating/hidden filtering). */

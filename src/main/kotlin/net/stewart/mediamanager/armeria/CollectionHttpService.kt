@@ -118,7 +118,7 @@ class CollectionHttpService {
 
         val nasRoot = TranscoderAgent.getNasRoot()
         val allTranscodes = net.stewart.mediamanager.entity.Transcode.findAll()
-        val progressByTitle = PlaybackProgressService.getProgressByTitle()
+        val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(user.id!!)
 
         val partList = parts.map { part ->
             val ownedTitle = ownedTitlesByTmdbId[part.tmdb_movie_id]

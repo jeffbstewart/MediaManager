@@ -12,14 +12,8 @@ object SimilarTitlesService {
     /**
      * Returns up to [limit] similar titles from our catalog for the given title.
      * Scores each candidate by: TMDB recommendation match (+10), shared genres (+2 each),
-     * shared top-5 cast members (+3 each). Excludes hidden titles for the current user.
+     * shared top-5 cast members (+3 each). Excludes hidden titles for the given user.
      */
-    fun getSimilarTitles(title: Title, limit: Int = 12): List<Title> {
-        val currentUser = AuthService.getCurrentUser()
-        return getSimilarTitlesForUser(title, currentUser?.id, limit, currentUser)
-    }
-
-    /** Returns similar titles for an explicit user ID. */
     fun getSimilarTitlesForUser(title: Title, userId: Long?, limit: Int = 12, user: AppUser? = null): List<Title> {
         val titleId = title.id ?: return emptyList()
         val tmdbKey = title.tmdbKey()

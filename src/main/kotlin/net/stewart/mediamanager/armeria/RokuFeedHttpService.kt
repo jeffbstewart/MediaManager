@@ -17,7 +17,7 @@ import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.LiveTvChannel
 import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.service.AuthService
-import net.stewart.mediamanager.LiveTvStreamServlet
+// LiveTvStreamServlet removed — using LiveTvStreamHttpService.canAccessLiveTv()
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.RokuFeedService
@@ -204,7 +204,7 @@ class RokuFeedHttpService {
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         val baseUrl = getConfiguredBaseUrl(ctx)
 
-        if (!LiveTvStreamServlet.canAccessLiveTv(user)) {
+        if (!LiveTvStreamHttpService.canAccessLiveTv(user)) {
             MetricsRegistry.countHttpResponse("roku", 403)
             return HttpResponse.of(HttpStatus.FORBIDDEN)
         }

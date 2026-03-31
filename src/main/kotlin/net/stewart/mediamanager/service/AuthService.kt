@@ -2,11 +2,7 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.count
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
-import com.vaadin.flow.server.VaadinRequest
-import com.vaadin.flow.server.VaadinServletResponse
-import com.vaadin.flow.server.VaadinSession
-import jakarta.servlet.http.Cookie
-import jakarta.servlet.http.HttpServletRequest
+// Vaadin session imports removed — all auth is now via Armeria request context
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.LoginAttempt
 import net.stewart.mediamanager.entity.SessionToken
@@ -38,10 +34,8 @@ object AuthService {
         MetricsRegistry.registry.counter("mm_login_attempts_total", "result", result).increment()
     }
 
-    private const val SESSION_KEY = "currentUser"
-    private const val CURRENT_TOKEN_HASH_KEY = "currentTokenHash"
-    private const val COOKIE_NAME = "mm_auth"
-    private const val SESSION_DAYS = 30L
+    const val COOKIE_NAME = "mm_auth"
+    const val SESSION_DAYS = 30L
     private const val RATE_LIMIT_WINDOW_MINUTES = 15L
     private const val RATE_LIMIT_THRESHOLD = 5
     private const val RATE_LIMIT_BASE_COOLDOWN_SECONDS = 30L
@@ -266,13 +260,11 @@ object AuthService {
         return null
     }
 
-    fun establishSession(user: AppUser): String {
-        // Rotate HTTP session ID to prevent session fixation
-        val servletRequest = (VaadinRequest.getCurrent() as? com.vaadin.flow.server.VaadinServletRequest)?.httpServletRequest
-        servletRequest?.changeSessionId()
-
-        val userAgent = servletRequest?.getHeader("User-Agent") ?: ""
-
+    /**
+     * Creates a new session token for the given user.
+     * Returns the raw token string (caller is responsible for setting the cookie).
+     */
+    fun createSession(user: AppUser, userAgent: String): String {
         // Cap sessions per user — keep the most recent ones, trim the oldest
         val maxSessionsPerUser = 10
         val existingTokenIds = JdbiOrm.jdbi().withHandle<List<Long>, Exception> { handle ->
@@ -292,7 +284,6 @@ object AuthService {
             log.info("AUDIT: Session created user='{}'", user.username)
         }
 
-        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, user)
         val token = UUID.randomUUID().toString()
         val tokenHash = hashToken(token)
         val now = LocalDateTime.now()
@@ -303,85 +294,25 @@ object AuthService {
             expires_at = now.plusDays(SESSION_DAYS),
             last_used_at = now
         ).save()
-        VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, tokenHash)
         return token
     }
 
-    fun logout() {
-        val user = getCurrentUser()
-        // Delete the current session token from DB
-        val request = VaadinRequest.getCurrent()
-        val cookieValue = request?.cookies
-            ?.firstOrNull { it.name == COOKIE_NAME }
-            ?.value
-        if (cookieValue != null) {
-            val hash = hashToken(cookieValue)
-            evictTokenCache(hash)
-            val tokenId = JdbiOrm.jdbi().withHandle<Long?, Exception> { handle ->
-                handle.createQuery("SELECT id FROM session_token WHERE token_hash = :hash LIMIT 1")
-                    .bind("hash", hash)
-                    .mapTo(Long::class.java)
-                    .firstOrNull()
-            }
-            tokenId?.let { SessionToken.findById(it)?.delete() }
-        }
-        // Expire the HttpOnly cookie via Set-Cookie header
-        val response = VaadinServletResponse.getCurrent()
-        if (response != null) {
-            val expireCookie = Cookie(COOKIE_NAME, "").apply {
-                path = "/"
-                maxAge = 0
-                isHttpOnly = true
-            }
-            response.addCookie(expireCookie)
-        }
-        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, null)
-        if (user != null) {
-            val ip = extractIpFromVaadinRequest()
-            log.info("AUDIT: Logout user='{}' ip='{}'", user.username, ip ?: "unknown")
-        }
-    }
-
-    private fun extractIpFromVaadinRequest(): String? {
-        val request = VaadinRequest.getCurrent() ?: return null
-        val httpRequest = (request as? com.vaadin.flow.server.VaadinServletRequest)?.httpServletRequest
-        return httpRequest?.remoteAddr
-    }
-
-    fun getCurrentUser(): AppUser? =
-        VaadinSession.getCurrent()?.getAttribute(SESSION_KEY) as? AppUser
-
     /**
-     * Re-fetches the current user from DB and updates the session cache.
-     * Returns null if the user no longer exists (was deleted).
+     * Revokes a session by cookie token value. Returns the user who was logged out, or null.
      */
-    fun refreshCurrentUser(): AppUser? {
-        val cached = getCurrentUser() ?: return null
-        val fresh = AppUser.findById(cached.id!!) ?: return null
-        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, fresh)
-        return fresh
-    }
-
-    /**
-     * Attempts to restore a session from the mm_session cookie in the current VaadinRequest.
-     * Returns the user if the cookie token is valid and not expired.
-     */
-    fun restoreFromCookie(): AppUser? {
-        val request = VaadinRequest.getCurrent() ?: return null
-        val cookieValue = request.cookies
-            ?.firstOrNull { it.name == COOKIE_NAME }
-            ?.value ?: return null
-        return validateToken(cookieValue)
-    }
-
-    /**
-     * Validates a cookie token from a raw HttpServletRequest (for servlet filter context).
-     */
-    fun validateCookieFromRequest(request: HttpServletRequest): AppUser? {
-        val cookieValue = request.cookies
-            ?.firstOrNull { it.name == COOKIE_NAME }
-            ?.value ?: return null
-        return validateToken(cookieValue)
+    fun revokeSessionByToken(cookieToken: String): AppUser? {
+        val hash = hashToken(cookieToken)
+        evictTokenCache(hash)
+        val tokenId = JdbiOrm.jdbi().withHandle<Long?, Exception> { handle ->
+            handle.createQuery("SELECT id FROM session_token WHERE token_hash = :hash LIMIT 1")
+                .bind("hash", hash)
+                .mapTo(Long::class.java)
+                .firstOrNull()
+        }
+        val sessionToken = tokenId?.let { SessionToken.findById(it) }
+        val user = sessionToken?.let { AppUser.findById(it.user_id) }
+        sessionToken?.delete()
+        return user
     }
 
     /**
@@ -410,8 +341,6 @@ object AuthService {
                     // Non-critical — don't fail the request over a timestamp update
                 }
             }
-            VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, cached.user)
-            VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, hash)
             return cached.user
         }
 
@@ -444,26 +373,26 @@ object AuthService {
                 .execute()
         }
 
-        VaadinSession.getCurrent()?.setAttribute(SESSION_KEY, user)
-        VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, hash)
         return user
     }
 
     /**
-     * Sets the mm_session cookie server-side with HttpOnly, SameSite=Lax, and
-     * conditionally Secure. This prevents client-side JS from reading the token.
+     * Builds a Set-Cookie header value for the session cookie.
+     * Caller is responsible for adding this header to the HTTP response.
      */
-    fun setSessionCookie(token: String) {
-        val response = VaadinServletResponse.getCurrent() ?: return
-        val request = VaadinRequest.getCurrent()
-        val isSecure = request?.isSecure == true
-            || request?.getHeader("X-Forwarded-Proto")?.equals("https", ignoreCase = true) == true
+    fun buildSessionCookieHeader(token: String, secure: Boolean): String {
         val maxAge = (SESSION_DAYS * 24 * 60 * 60).toInt()
-        val header = buildString {
+        return buildString {
             append("${COOKIE_NAME}=$token; Path=/; Max-Age=$maxAge; HttpOnly; SameSite=Lax")
-            if (isSecure) append("; Secure")
+            if (secure) append("; Secure")
         }
-        response.addHeader("Set-Cookie", header)
+    }
+
+    /**
+     * Builds a Set-Cookie header value that expires (clears) the session cookie.
+     */
+    fun buildExpireSessionCookieHeader(): String {
+        return "${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
     }
 
     /**
@@ -482,20 +411,6 @@ object AuthService {
         }
         PairingService.revokeAllForUser(userId)
         JwtService.revokeAllForUser(userId)
-    }
-
-    fun getCurrentTokenHash(): String? {
-        var hash = VaadinSession.getCurrent()?.getAttribute(CURRENT_TOKEN_HASH_KEY) as? String
-        if (hash == null) {
-            // Derive from cookie for sessions established before token-hash tracking was added
-            val request = VaadinRequest.getCurrent() ?: return null
-            val cookieValue = request.cookies
-                ?.firstOrNull { it.name == COOKIE_NAME }
-                ?.value ?: return null
-            hash = hashToken(cookieValue)
-            VaadinSession.getCurrent()?.setAttribute(CURRENT_TOKEN_HASH_KEY, hash)
-        }
-        return hash
     }
 
     /**

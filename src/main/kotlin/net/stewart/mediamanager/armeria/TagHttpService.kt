@@ -77,7 +77,7 @@ class TagHttpService {
         val nasRoot = TranscoderAgent.getNasRoot()
         val allTranscodes = Transcode.findAll().filter { it.file_path != null }
         val transcodesByTitle = allTranscodes.groupBy { it.title_id }
-        val progressByTitle = PlaybackProgressService.getProgressByTitle()
+        val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(user.id!!)
 
         val titles = taggedTitleIds.mapNotNull { allTitles[it] }
             .filter { !it.hidden && it.id !in hiddenIds }

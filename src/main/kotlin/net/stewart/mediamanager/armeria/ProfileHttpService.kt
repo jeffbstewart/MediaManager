@@ -49,7 +49,7 @@ class ProfileHttpService {
             "display_name" to user.display_name,
             "is_admin" to user.isAdmin(),
             "rating_ceiling" to user.rating_ceiling,
-            "live_tv_min_quality" to (user.live_tv_min_quality ?: 4),
+            "live_tv_min_quality" to user.live_tv_min_quality,
             "has_live_tv" to hasLiveTv
         )
         return jsonResponse(gson.toJson(profile))
@@ -126,7 +126,7 @@ class ProfileHttpService {
                     "user_agent" to token.user_agent,
                     "created_at" to token.created_at?.toString(),
                     "last_used_at" to token.last_used_at?.toString(),
-                    "expires_at" to token.expires_at?.toString(),
+                    "expires_at" to token.expires_at.toString(),
                     "is_current" to (token.token_hash == currentTokenHash)
                 )
             }

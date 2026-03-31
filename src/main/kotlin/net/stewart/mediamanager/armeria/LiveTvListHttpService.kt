@@ -10,7 +10,6 @@ import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
-import net.stewart.mediamanager.LiveTvStreamServlet
 import net.stewart.mediamanager.entity.LiveTvChannel
 import net.stewart.mediamanager.entity.LiveTvTuner
 
@@ -27,7 +26,7 @@ class LiveTvListHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx)
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
-        if (!LiveTvStreamServlet.canAccessLiveTv(user)) {
+        if (!LiveTvStreamHttpService.canAccessLiveTv(user)) {
             return HttpResponse.of(HttpStatus.FORBIDDEN)
         }
 
@@ -36,7 +35,7 @@ class LiveTvListHttpService {
             .mapNotNull { it.id }
             .toSet()
 
-        val minQuality = user.live_tv_min_quality ?: 4
+        val minQuality = user.live_tv_min_quality
 
         val channels = LiveTvChannel.findAll()
             .filter { it.enabled && it.tuner_id in enabledTunerIds }

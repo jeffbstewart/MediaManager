@@ -22,7 +22,7 @@ services:
     # mode and uncomment the ports section below instead.
     network_mode: host
     # ports:
-    #   - "8080:8080"        # Main app (Vaadin UI + streaming)
+    #   - "9090:9090"        # Main app (gRPC + REST + SPA + streaming)
     #   - "16002:8081"       # Internal health/metrics (LAN only)
 
     # ── Volumes ──────────────────────────────────────────────────────

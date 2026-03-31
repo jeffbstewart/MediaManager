@@ -10,7 +10,6 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
-import net.stewart.mediamanager.LiveTvStreamServlet
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.LiveTvChannel
@@ -146,7 +145,7 @@ class LiveTvStreamHttpService {
             return null to HttpResponse.of(HttpStatus.UNAUTHORIZED)
         }
 
-        if (!LiveTvStreamServlet.canAccessLiveTv(user)) {
+        if (!canAccessLiveTv(user)) {
             MetricsRegistry.countHttpResponse("live-tv", 403)
             return null to HttpResponse.of(HttpStatus.FORBIDDEN)
         }
@@ -190,5 +189,17 @@ class LiveTvStreamHttpService {
             .add("Cache-Control", "no-cache")
             .build()
         return HttpResponse.of(headers, HttpData.wrap(bytes))
+    }
+
+    companion object {
+        /** Checks if a user has sufficient content rating to access live TV. */
+        fun canAccessLiveTv(user: AppUser): Boolean {
+            if (user.isAdmin()) return true
+            val ceiling = user.ratingCeilingValue ?: return true
+            val minLevel = AppConfig.findAll()
+                .firstOrNull { it.config_key == "live_tv_min_rating" }
+                ?.config_val?.toIntOrNull() ?: 4
+            return ceiling.ordinalLevel >= minLevel
+        }
     }
 }

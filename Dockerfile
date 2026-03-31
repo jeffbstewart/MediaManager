@@ -19,7 +19,7 @@ COPY proto/ proto/
 COPY src/ src/
 COPY transcode-common/ transcode-common/
 COPY transcode-buddy/ transcode-buddy/
-RUN ./gradlew --no-daemon --max-workers=2 -Pvaadin.productionMode installDist
+RUN ./gradlew --no-daemon --max-workers=2 installDist
 
 # Stage 2: Runtime (Alpine for smaller image)
 FROM amazoncorretto:25-alpine
@@ -36,7 +36,7 @@ COPY --from=builder --chown=app:users /build/build/install/mediaManager/ ./
 COPY --from=angular-builder --chown=app:users /build/dist/media-manager/browser/ ./spa/
 RUN mkdir -p /cache && chown app:users /cache && ln -s /cache /app/data
 USER app
-EXPOSE 8080 8081 9090
+EXPOSE 8081 9090
 CMD [ \
     "./bin/mediaManager", \
     "--listen_on_all_interfaces", \

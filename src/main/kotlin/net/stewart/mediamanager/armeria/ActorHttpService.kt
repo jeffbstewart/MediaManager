@@ -74,8 +74,7 @@ class ActorHttpService {
 
         val otherWorks = credits
             .filter { credit ->
-                val key = credit.tmdbKey() ?: return@filter false
-                // Exclude titles already owned
+                val key = credit.tmdbKey()
                 !ownedTmdbIds.contains(key.id to key.type.name)
             }
             .map { credit ->
@@ -88,7 +87,7 @@ class ActorHttpService {
                     "release_year" to credit.releaseYear,
                     "poster_path" to credit.posterPath,
                     "popularity" to credit.popularity,
-                    "already_wished" to (key != null && key in wishedKeys)
+                    "already_wished" to (key in wishedKeys)
                 )
             }
 

@@ -17,7 +17,7 @@ import net.stewart.mediamanager.entity.DiscoveredFileStatus
 import net.stewart.mediamanager.entity.EnrichmentStatus
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
-import net.stewart.mediamanager.linkDiscoveredFileToTitle
+import net.stewart.mediamanager.service.DiscoveredFileLinkService
 import net.stewart.mediamanager.entity.TmdbId
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.FuzzyMatchService
@@ -86,7 +86,7 @@ class UnmatchedHttpService {
         val suggestions = FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles)
         val best = suggestions.firstOrNull() ?: return jsonResponse("""{"ok":false,"reason":"No match found"}""")
 
-        val count = linkDiscoveredFileToTitle(df, best.title)
+        val count = DiscoveredFileLinkService.linkToTitle(df, best.title)
         return jsonResponse(gson.toJson(mapOf("ok" to true, "linked" to count, "title_name" to best.title.name)))
     }
 
@@ -99,7 +99,7 @@ class UnmatchedHttpService {
         val df = DiscoveredFile.findById(id) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
         val title = Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
 
-        val count = linkDiscoveredFileToTitle(df, title)
+        val count = DiscoveredFileLinkService.linkToTitle(df, title)
         return jsonResponse(gson.toJson(mapOf("ok" to true, "linked" to count, "title_name" to title.name)))
     }
 

@@ -23,7 +23,7 @@ import net.stewart.mediamanager.entity.Episode as EpisodeEntity
 import net.stewart.mediamanager.entity.Tag as TagEntity
 import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.entity.Transcode as TranscodeEntity
-import net.stewart.mediamanager.linkDiscoveredFileToTitle
+import net.stewart.mediamanager.service.DiscoveredFileLinkService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.BarcodeScanService
 import net.stewart.mediamanager.service.Broadcaster
@@ -465,7 +465,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         val best = suggestions.firstOrNull()
             ?: throw StatusException(Status.NOT_FOUND.withDescription("No matching title found"))
 
-        val count = linkDiscoveredFileToTitle(df, best.title)
+        val count = DiscoveredFileLinkService.linkToTitle(df, best.title)
 
         return acceptUnmatchedResponse {
             linked = count > 0
@@ -490,7 +490,7 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         val title = TitleEntity.findById(request.titleId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Title not found"))
 
-        val count = linkDiscoveredFileToTitle(df, title)
+        val count = DiscoveredFileLinkService.linkToTitle(df, title)
 
         return acceptUnmatchedResponse {
             linked = count > 0

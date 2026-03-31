@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.vaadin)
     alias(libs.plugins.owasp.depcheck)
     alias(libs.plugins.protobuf)
     application
@@ -17,22 +16,7 @@ repositories {
     mavenCentral()
 }
 
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group.startsWith("org.eclipse.jetty")) {
-            useVersion("12.1.6")
-            because("CVE-2026-1605: GzipHandler memory leak in Jetty <12.1.6")
-        }
-    }
-}
-
 dependencies {
-    implementation(libs.vaadin.core)
-    if (!vaadin.effective.productionMode.get()) {
-        implementation(libs.vaadin.dev)
-    }
-    implementation(libs.vaadin.boot)
-    implementation(libs.karibu.dsl)
     implementation(libs.vok.db)
     implementation(libs.hikaricp)
     implementation(libs.h2)
@@ -55,7 +39,6 @@ dependencies {
     implementation(libs.protobuf.kotlin)
     implementation(libs.kotlinx.coroutines.core)
 
-    testImplementation(libs.karibu.testing)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.grpc.inprocess)
     testImplementation(libs.grpc.testing)
@@ -132,14 +115,3 @@ tasks.register("recordDepScan") {
         sentinel.setLastModified(System.currentTimeMillis())
     }
 }
-
-// In production mode, ensure vaadinBuildFrontend runs before run and jar
-if (vaadin.effective.productionMode.get()) {
-    tasks.named("run") {
-        dependsOn("vaadinBuildFrontend")
-    }
-    tasks.named("jar") {
-        dependsOn("vaadinBuildFrontend")
-    }
-}
-

@@ -16,7 +16,6 @@ import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.FamilyMemberService
 import net.stewart.mediamanager.service.PersonalVideoService
 import net.stewart.mediamanager.service.PlaybackProgressService
-import net.stewart.mediamanager.PosterGridHelper
 import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.TranscoderAgent
 
@@ -36,7 +35,7 @@ class FamilyVideosHttpService {
         @Param("members") @Default("") members: String,
         @Param("playable_only") @Default("false") playableOnly: Boolean
     ): HttpResponse {
-        ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
         var titles = PersonalVideoService.getAllPersonalVideos()
 
@@ -48,7 +47,12 @@ class FamilyVideosHttpService {
         }
 
         // Compute playability
-        val playableTitleIds = PosterGridHelper.computePlayableTitleIds()
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val playableTitleIds = Transcode.findAll().filter { it.file_path != null }.filter { tc ->
+            val fp = tc.file_path!!
+            if (TranscoderAgent.needsTranscoding(fp)) nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, fp)
+            else true
+        }.map { it.title_id }.toSet()
         if (playableOnly) {
             titles = titles.filter { it.id in playableTitleIds }
         }
@@ -65,7 +69,7 @@ class FamilyVideosHttpService {
         val titleIds = titles.mapNotNull { it.id }.toSet()
         val membersByTitle = titleIds.associateWith { FamilyMemberService.getMembersForTitle(it) }
         val tagsByTitle = titleIds.associateWith { TagService.getTagsForTitle(it) }
-        val progressByTitle = PlaybackProgressService.getProgressByTitle()
+        val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(user.id!!)
 
         val videos = titles.map { title ->
             val progress = progressByTitle[title.id]
