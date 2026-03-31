@@ -110,6 +110,19 @@ export class TranscodeLinkedComponent implements OnInit {
     await this.refresh();
   }
 
+  async confirmRetranscode(row: LinkedRow): Promise<void> {
+    const confirmed = confirm(
+      `Request re-transcode for "${row.title_name}"?\n\n` +
+      `This is only necessary if you notice quality problems in the video ` +
+      `(artifacts, audio sync issues, etc.) that you believe are not present ` +
+      `in the original disc rip. The file will be re-transcoded from the ` +
+      `source on the NAS, which may take some time.`
+    );
+    if (!confirmed) return;
+    await firstValueFrom(this.http.post(`/api/v2/admin/linked-transcodes/${row.transcode_id}/retranscode`, {}));
+    await this.refresh();
+  }
+
   async unlink(row: LinkedRow): Promise<void> {
     await firstValueFrom(this.http.delete(`/api/v2/admin/linked-transcodes/${row.transcode_id}`));
     await this.refresh();

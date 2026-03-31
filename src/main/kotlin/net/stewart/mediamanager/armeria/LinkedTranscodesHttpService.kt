@@ -13,6 +13,7 @@ import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.TranscoderAgent
 
@@ -87,6 +88,17 @@ class LinkedTranscodesHttpService {
         val paged = rows.drop(page * size).take(size)
 
         return jsonResponse(gson.toJson(mapOf("rows" to paged, "total" to total)))
+    }
+
+    @Post("/api/v2/admin/linked-transcodes/{transcodeId}/retranscode")
+    fun requestRetranscode(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val tc = Transcode.findById(transcodeId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        tc.retranscode_requested = true
+        tc.save()
+        return jsonResponse("""{"ok":true}""")
     }
 
     @Delete("/api/v2/admin/linked-transcodes/{transcodeId}")

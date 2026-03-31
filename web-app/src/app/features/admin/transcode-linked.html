@@ -82,10 +82,18 @@
           <td mat-cell *matCellDef="let row">
             <div class="action-cell">
               @if (row.playable) {
-                <mat-icon class="play-icon">play_circle</mat-icon>
+                <a [routerLink]="'/play/' + row.transcode_id" [queryParams]="{ title: row.title_name }"
+                   class="play-link" title="Play">
+                  <mat-icon>play_circle</mat-icon>
+                </a>
               }
               @if (row.retranscode_requested) {
-                <mat-icon class="retranscode-icon" title="Re-transcode requested">refresh</mat-icon>
+                <mat-icon class="retranscode-icon active" title="Re-transcode requested">refresh</mat-icon>
+              } @else {
+                <button mat-icon-button class="retranscode-btn"
+                        (click)="confirmRetranscode(row)" title="Request re-transcode">
+                  <mat-icon>refresh</mat-icon>
+                </button>
               }
               <button mat-icon-button class="unlink-btn" (click)="unlink(row)" title="Unlink from title">
                 <mat-icon>link_off</mat-icon>

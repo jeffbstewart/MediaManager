@@ -77,19 +77,24 @@ h2 { margin: 0 0 0.75rem; }
   gap: 2px;
 }
 
-.play-icon {
+.play-link {
   color: #4caf50;
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  display: flex; align-items: center;
+  text-decoration: none;
+  mat-icon { font-size: 20px; width: 20px; height: 20px; }
 }
 
 .retranscode-icon {
-  color: var(--mat-sys-primary, #bb86fc);
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  font-size: 20px; width: 20px; height: 20px;
+  &.active { color: var(--mat-sys-primary, #bb86fc); animation: spin 2s linear infinite; }
 }
+
+.retranscode-btn {
+  color: rgba(255, 255, 255, 0.25);
+  &:hover { color: rgba(255, 255, 255, 0.6); }
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .unlink-btn {
   color: rgba(255, 255, 255, 0.4);
