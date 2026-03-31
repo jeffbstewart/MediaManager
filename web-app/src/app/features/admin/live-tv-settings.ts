@@ -39,6 +39,12 @@ export class LiveTvSettingsComponent implements OnInit {
   readonly addError = signal('');
   readonly discovering = signal(false);
 
+  // Edit tuner dialog
+  readonly editTunerOpen = signal(false);
+  readonly editTunerId = signal(0);
+  readonly editTunerName = signal('');
+  readonly editTunerIp = signal('');
+
   readonly qualityStars = [1, 2, 3, 4, 5];
   readonly ratingOptions = [
     { value: 0, label: 'TV-Y' },
@@ -101,6 +107,21 @@ export class LiveTvSettingsComponent implements OnInit {
   async deleteTuner(tuner: Tuner): Promise<void> {
     if (!confirm(`Delete "${tuner.name}" and all its channels?`)) return;
     await firstValueFrom(this.http.delete(`/api/v2/admin/live-tv/tuners/${tuner.id}`));
+    await this.refresh();
+  }
+
+  openEditTuner(tuner: Tuner): void {
+    this.editTunerId.set(tuner.id);
+    this.editTunerName.set(tuner.name);
+    this.editTunerIp.set(tuner.ip_address);
+    this.editTunerOpen.set(true);
+  }
+
+  async saveEditTuner(): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/admin/live-tv/tuners/${this.editTunerId()}/update`, {
+      name: this.editTunerName(), ip_address: this.editTunerIp()
+    }));
+    this.editTunerOpen.set(false);
     await this.refresh();
   }
 

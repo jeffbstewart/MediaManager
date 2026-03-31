@@ -101,6 +101,20 @@ class LiveTvSettingsHttpService {
             "channels_added" to (sync?.added ?: 0))))
     }
 
+    @Post("/api/v2/admin/live-tv/tuners/{tunerId}/update")
+    fun updateTuner(ctx: ServiceRequestContext, @Param("tunerId") tunerId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val tuner = LiveTvTuner.findById(tunerId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        if (map.containsKey("name")) tuner.name = (map["name"] as String).trim()
+        if (map.containsKey("ip_address")) tuner.ip_address = (map["ip_address"] as String).trim()
+        tuner.save()
+        return jsonResponse("""{"ok":true}""")
+    }
+
     @Post("/api/v2/admin/live-tv/tuners/{tunerId}/toggle")
     fun toggleTuner(ctx: ServiceRequestContext, @Param("tunerId") tunerId: Long): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
