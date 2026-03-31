@@ -57,9 +57,14 @@
   margin-top: 0.5rem;
   font-size: 0.875rem;
   line-height: 1.6;
+  white-space: pre-line;
   opacity: 0.75;
-  max-height: 200px;
-  overflow-y: auto;
+}
+
+.bio-toggle {
+  background: none; border: none; color: var(--mat-sys-primary, #bb86fc);
+  cursor: pointer; font-size: 0.8125rem; padding: 0; margin-top: 0.25rem;
+  &:hover { text-decoration: underline; }
 }
 
 // Section headers

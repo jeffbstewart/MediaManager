@@ -26,7 +26,14 @@
           <span class="birthplace">{{ a.place_of_birth }}</span>
         }
         @if (a.biography) {
-          <p class="biography">{{ a.biography }}</p>
+          <p class="biography">
+            {{ bioExpanded() || a.biography.length <= 500 ? a.biography : a.biography.substring(0, 500) + '...' }}
+          </p>
+          @if (a.biography.length > 500) {
+            <button class="bio-toggle" (click)="bioExpanded.set(!bioExpanded())">
+              {{ bioExpanded() ? 'Show less' : 'Show more' }}
+            </button>
+          }
         }
       </div>
     </div>

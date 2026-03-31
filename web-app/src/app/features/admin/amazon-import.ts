@@ -34,6 +34,7 @@ export class AmazonImportComponent implements OnInit {
   readonly search = signal('');
   readonly mediaOnly = signal(false);
   readonly unlinkedOnly = signal(false);
+  readonly hideCancelled = signal(true);
   readonly page = signal(0);
   readonly pageSize = signal(50);
   readonly columns = ['name', 'date', 'price', 'condition', 'linked', 'actions'];
@@ -58,6 +59,7 @@ export class AmazonImportComponent implements OnInit {
       if (this.search().trim()) params['search'] = this.search().trim();
       if (this.mediaOnly()) params['media_only'] = 'true';
       if (this.unlinkedOnly()) params['unlinked_only'] = 'true';
+      if (this.hideCancelled()) params['hide_cancelled'] = 'true';
       const data = await firstValueFrom(this.http.get<{ rows: OrderRow[]; total: number; stats: { total: number; media: number; linked: number } }>(
         '/api/v2/admin/amazon-orders', { params }));
       this.rows.set(data.rows); this.total.set(data.total); this.stats.set(data.stats);
@@ -66,6 +68,7 @@ export class AmazonImportComponent implements OnInit {
   }
 
   async onSearch(event: Event): Promise<void> { this.search.set((event.target as HTMLInputElement).value); this.page.set(0); await this.refresh(); }
+  async toggleCancelled(): Promise<void> { this.hideCancelled.update(v => !v); this.page.set(0); await this.refresh(); }
   async toggleMedia(): Promise<void> { this.mediaOnly.update(v => !v); this.page.set(0); await this.refresh(); }
   async toggleUnlinked(): Promise<void> { this.unlinkedOnly.update(v => !v); this.page.set(0); await this.refresh(); }
   async onPage(event: PageEvent): Promise<void> { this.page.set(event.pageIndex); this.pageSize.set(event.pageSize); await this.refresh(); }

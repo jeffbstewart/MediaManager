@@ -32,6 +32,7 @@
     <mat-chip-set>
       <mat-chip [highlighted]="mediaOnly()" (click)="toggleMedia()">Media only</mat-chip>
       <mat-chip [highlighted]="unlinkedOnly()" (click)="toggleUnlinked()">Unlinked only</mat-chip>
+      <mat-chip [highlighted]="hideCancelled()" (click)="toggleCancelled()">Hide cancelled</mat-chip>
     </mat-chip-set>
   </div>
 

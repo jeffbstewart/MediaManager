@@ -20,6 +20,7 @@ export class ActorComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
   readonly actor = signal<ActorDetail | null>(null);
+  readonly bioExpanded = signal(false);
 
   async ngOnInit(): Promise<void> {
     const id = Number(this.route.snapshot.paramMap.get('personId'));
