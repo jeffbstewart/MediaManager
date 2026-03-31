@@ -18,17 +18,6 @@
         </td>
       </ng-container>
 
-      <ng-container matColumnDef="birth_date">
-        <th mat-header-cell *matHeaderCellDef>Birth Date</th>
-        <td mat-cell *matCellDef="let r">
-          @if (r.birth_date) {
-            <span class="secondary">{{ r.birth_date }} (age {{ r.age }})</span>
-          } @else {
-            <span class="secondary">&mdash;</span>
-          }
-        </td>
-      </ng-container>
-
       <ng-container matColumnDef="videos">
         <th mat-header-cell *matHeaderCellDef>Videos</th>
         <td mat-cell *matCellDef="let r">{{ r.video_count }}</td>
@@ -73,11 +62,6 @@
         <div class="field-group">
           <label class="field-label">Name</label>
           <input class="field-input" type="text" [value]="editName()" (input)="updateName($event)" maxlength="200" />
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">Birth Date</label>
-          <input class="field-input" type="date" [value]="editBirthDate()" (input)="updateBirthDate($event)" />
         </div>
 
         <div class="field-group">

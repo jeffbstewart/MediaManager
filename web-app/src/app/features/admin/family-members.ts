@@ -6,7 +6,7 @@ import { MatTableModule } from '@angular/material/table';
 import { firstValueFrom } from 'rxjs';
 
 interface FamilyMemberRow {
-  id: number; name: string; birth_date: string | null; age: number | null;
+  id: number; name: string;
   notes: string | null; video_count: number;
 }
 
@@ -22,14 +22,13 @@ export class FamilyMembersComponent implements OnInit {
 
   readonly loading = signal(true);
   readonly members = signal<FamilyMemberRow[]>([]);
-  readonly columns = ['name', 'birth_date', 'videos', 'notes', 'actions'];
+  readonly columns = ['name', 'videos', 'notes', 'actions'];
 
   // Dialog
   readonly dialogOpen = signal(false);
   readonly dialogTitle = signal('');
   readonly editId = signal<number | null>(null);
   readonly editName = signal('');
-  readonly editBirthDate = signal('');
   readonly editNotes = signal('');
   readonly editError = signal('');
 
@@ -51,7 +50,6 @@ export class FamilyMembersComponent implements OnInit {
   openCreate(): void {
     this.editId.set(null);
     this.editName.set('');
-    this.editBirthDate.set('');
     this.editNotes.set('');
     this.editError.set('');
     this.dialogTitle.set('New Family Member');
@@ -61,7 +59,6 @@ export class FamilyMembersComponent implements OnInit {
   openEdit(row: FamilyMemberRow): void {
     this.editId.set(row.id);
     this.editName.set(row.name);
-    this.editBirthDate.set(row.birth_date ?? '');
     this.editNotes.set(row.notes ?? '');
     this.editError.set('');
     this.dialogTitle.set('Edit Family Member');
@@ -71,7 +68,6 @@ export class FamilyMembersComponent implements OnInit {
   closeDialog(): void { this.dialogOpen.set(false); }
 
   updateName(event: Event): void { this.editName.set((event.target as HTMLInputElement).value); }
-  updateBirthDate(event: Event): void { this.editBirthDate.set((event.target as HTMLInputElement).value); }
   updateNotes(event: Event): void { this.editNotes.set((event.target as HTMLTextAreaElement).value); }
 
   async save(): Promise<void> {
@@ -79,7 +75,7 @@ export class FamilyMembersComponent implements OnInit {
     if (!name) { this.editError.set('Name is required'); return; }
     this.editError.set('');
 
-    const body: Record<string, unknown> = { name, birth_date: this.editBirthDate() || null, notes: this.editNotes() || null };
+    const body: Record<string, unknown> = { name, notes: this.editNotes() || null };
     try {
       const id = this.editId();
       if (id) {

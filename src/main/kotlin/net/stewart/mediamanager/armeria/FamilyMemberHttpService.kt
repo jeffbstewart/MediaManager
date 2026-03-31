@@ -13,7 +13,6 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.service.FamilyMemberService
-import java.time.LocalDate
 
 @Blocking
 class FamilyMemberHttpService {
@@ -32,8 +31,6 @@ class FamilyMemberHttpService {
             mapOf(
                 "id" to m.id,
                 "name" to m.name,
-                "birth_date" to m.birth_date?.toString(),
-                "age" to m.birth_date?.let { m.ageAt(LocalDate.now()) },
                 "notes" to m.notes,
                 "video_count" to (counts[m.id] ?: 0)
             )
@@ -51,9 +48,8 @@ class FamilyMemberHttpService {
         if (name.isBlank()) return badRequest("name required")
         if (!FamilyMemberService.isNameUnique(name)) return badRequest("Name already exists")
 
-        val birthDate = (body["birth_date"] as? String)?.let { LocalDate.parse(it) }
         val notes = body["notes"] as? String
-        val member = FamilyMemberService.createMember(name, birthDate, notes)
+        val member = FamilyMemberService.createMember(name, notes = notes)
         return jsonResponse(gson.toJson(mapOf("ok" to true, "id" to member.id)))
     }
 
@@ -67,9 +63,8 @@ class FamilyMemberHttpService {
         if (name.isBlank()) return badRequest("name required")
         if (!FamilyMemberService.isNameUnique(name, id)) return badRequest("Name already exists")
 
-        val birthDate = (body["birth_date"] as? String)?.let { LocalDate.parse(it) }
         val notes = body["notes"] as? String
-        FamilyMemberService.updateMember(id, name, birthDate, notes)
+        FamilyMemberService.updateMember(id, name, notes = notes)
             ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
         return jsonResponse("""{"ok":true}""")
     }
