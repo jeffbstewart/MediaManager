@@ -14,9 +14,15 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.DiscoveredFile
 import net.stewart.mediamanager.entity.DiscoveredFileStatus
+import net.stewart.mediamanager.entity.EnrichmentStatus
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.linkDiscoveredFileToTitle
+import net.stewart.mediamanager.entity.TmdbId
+import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.FuzzyMatchService
+import net.stewart.mediamanager.service.SearchIndexService
+import net.stewart.mediamanager.service.TmdbService
 
 /**
  * REST endpoints for the unmatched files admin page in the Angular web app.
@@ -25,6 +31,7 @@ import net.stewart.mediamanager.service.FuzzyMatchService
 class UnmatchedHttpService {
 
     private val gson = Gson()
+    private val tmdbService = TmdbService()
 
     /** List all unmatched discovered files with top fuzzy-match suggestion. */
     @Get("/api/v2/admin/unmatched")
@@ -54,6 +61,7 @@ class UnmatchedHttpService {
                 "parsed_year" to df.parsed_year,
                 "parsed_season" to df.parsed_season,
                 "parsed_episode" to df.parsed_episode,
+                "is_personal" to (df.media_type == MMMediaType.PERSONAL.name),
                 "suggestion" to if (best != null) mapOf(
                     "title_id" to best.title.id,
                     "title_name" to best.title.name,
@@ -105,6 +113,80 @@ class UnmatchedHttpService {
         df.match_status = DiscoveredFileStatus.IGNORED.name
         df.save()
         return jsonResponse("""{"ok":true}""")
+    }
+
+    /** Create a personal video title and link the discovered file to it. */
+    @Post("/api/v2/admin/unmatched/{id}/create-personal")
+    fun createPersonal(ctx: ServiceRequestContext, @Param("id") id: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val df = DiscoveredFile.findById(id) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val title = Title(
+            name = df.parsed_title ?: df.file_name,
+            media_type = MMMediaType.PERSONAL.name,
+            enrichment_status = EnrichmentStatus.SKIPPED.name,
+            created_at = java.time.LocalDateTime.now(),
+            updated_at = java.time.LocalDateTime.now()
+        )
+        title.save()
+
+        val tc = Transcode(title_id = title.id!!, file_path = df.file_path, media_format = df.media_format)
+        tc.save()
+
+        df.match_status = DiscoveredFileStatus.MATCHED.name
+        df.matched_title_id = title.id
+        df.save()
+
+        SearchIndexService.onTitleChanged(title.id!!)
+        return jsonResponse(gson.toJson(mapOf("ok" to true, "title_id" to title.id, "title_name" to title.name)))
+    }
+
+    /** Search TMDB and create + link a new title from results. */
+    @Post("/api/v2/admin/unmatched/{id}/add-from-tmdb")
+    fun addFromTmdb(ctx: ServiceRequestContext, @Param("id") id: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val df = DiscoveredFile.findById(id) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        val tmdbId = (map["tmdb_id"] as? Number)?.toInt() ?: return HttpResponse.of(HttpStatus.BAD_REQUEST)
+        val mediaType = map["media_type"] as? String ?: return HttpResponse.of(HttpStatus.BAD_REQUEST)
+
+        val mmType = when (mediaType.uppercase()) {
+            "TV" -> MMMediaType.TV
+            else -> MMMediaType.MOVIE
+        }
+        val tmdbKey = TmdbId(tmdbId, mmType)
+        val details = try { tmdbService.getDetails(tmdbKey) } catch (_: Exception) { null }
+
+        // Check for existing title with same TMDB key
+        var title = Title.findAll().firstOrNull { it.tmdbKey() == tmdbKey }
+        if (title == null) {
+            title = Title(
+                name = details?.title ?: "Unknown",
+                media_type = tmdbKey.typeString,
+                tmdb_id = tmdbKey.id,
+                release_year = details?.releaseYear,
+                description = details?.overview,
+                poster_path = details?.posterPath,
+                enrichment_status = EnrichmentStatus.REASSIGNMENT_REQUESTED.name,
+                created_at = java.time.LocalDateTime.now(),
+                updated_at = java.time.LocalDateTime.now()
+            )
+            title.save()
+            SearchIndexService.onTitleChanged(title.id!!)
+        }
+
+        val tc = Transcode(title_id = title.id!!, file_path = df.file_path, media_format = df.media_format)
+        tc.save()
+
+        df.match_status = DiscoveredFileStatus.MATCHED.name
+        df.matched_title_id = title.id
+        df.save()
+
+        return jsonResponse(gson.toJson(mapOf("ok" to true, "title_id" to title.id, "title_name" to title.name)))
     }
 
     /** Search catalog titles for manual linking. */

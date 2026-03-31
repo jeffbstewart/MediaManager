@@ -64,7 +64,11 @@
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let f">
             <div class="action-buttons">
-              <button mat-stroked-button class="small-btn" (click)="openLinkDialog(f)">Link</button>
+              @if (f.is_personal) {
+                <button mat-flat-button color="primary" class="small-btn" (click)="createPersonal(f)">Create</button>
+              } @else {
+                <button mat-stroked-button class="small-btn" (click)="openLinkDialog(f)">Link</button>
+              }
               <button mat-button class="small-btn muted" (click)="ignore(f)">Ignore</button>
             </div>
           </td>
@@ -103,7 +107,35 @@
             }
           </div>
         } @else if (!linkSearching() && linkQuery().length >= 2) {
-          <span class="no-results">No matching titles found.</span>
+          <span class="no-results">No matching titles in catalog.</span>
+        }
+
+        <!-- TMDB Search -->
+        <h4 class="tmdb-section-title">Or add from TMDB</h4>
+        <div class="tmdb-search-row">
+          <input class="search-input flex" type="text" [value]="tmdbQuery()" placeholder="Search TMDB..."
+                 (input)="tmdbQuery.set($any($event.target).value)"
+                 (keydown.enter)="searchTmdb()" />
+          <mat-chip-set>
+            <mat-chip [highlighted]="tmdbType() === 'MOVIE'" (click)="tmdbType.set('MOVIE')">Movie</mat-chip>
+            <mat-chip [highlighted]="tmdbType() === 'TV'" (click)="tmdbType.set('TV')">TV</mat-chip>
+          </mat-chip-set>
+          <button mat-stroked-button (click)="searchTmdb()">Search</button>
+        </div>
+        @if (tmdbSearching()) { <mat-spinner diameter="24" /> }
+        @if (tmdbResults().length > 0) {
+          <div class="link-results">
+            @for (r of tmdbResults(); track r.tmdb_id) {
+              <div class="link-result-row">
+                @if (r.poster_path) { <img [src]="posterUrl(r.poster_path)" class="tmdb-poster" alt="" /> }
+                <div class="tmdb-info">
+                  <span class="link-title">{{ r.title }}</span>
+                  <span class="link-meta">{{ r.release_year ?? '' }} &middot; {{ r.media_type === 'TV' ? 'TV' : 'Film' }}</span>
+                </div>
+                <button mat-flat-button color="primary" class="small-btn" (click)="addFromTmdb(r)">Add &amp; Link</button>
+              </div>
+            }
+          </div>
         }
       </div>
     </div>

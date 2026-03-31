@@ -5,6 +5,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 
 interface UnmatchedFile {
@@ -13,6 +14,7 @@ interface UnmatchedFile {
   file_path: string;
   directory: string;
   media_type: string | null;
+  is_personal: boolean;
   parsed_title: string | null;
   parsed_year: number | null;
   parsed_season: number | null;
@@ -30,7 +32,7 @@ interface SearchTitle {
 @Component({
   selector: 'app-transcode-unmatched',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatProgressSpinnerModule, MatTableModule, MatButtonModule, MatCardModule],
+  imports: [MatIconModule, MatProgressSpinnerModule, MatTableModule, MatButtonModule, MatCardModule, MatChipsModule],
   templateUrl: './transcode-unmatched.html',
   styleUrl: './transcode-unmatched.scss',
 })
@@ -47,6 +49,12 @@ export class TranscodeUnmatchedComponent implements OnInit {
   readonly linkQuery = signal('');
   readonly linkSearching = signal(false);
   readonly linkResults = signal<SearchTitle[]>([]);
+
+  // TMDB search in link dialog
+  readonly tmdbQuery = signal('');
+  readonly tmdbType = signal<'MOVIE' | 'TV'>('MOVIE');
+  readonly tmdbResults = signal<{ tmdb_id: number; title: string; media_type: string; release_year: number | null; poster_path: string | null; overview: string | null }[]>([]);
+  readonly tmdbSearching = signal(false);
 
   readonly columns = ['file', 'directory', 'parsed', 'year', 'suggestion', 'actions'];
 
@@ -80,6 +88,8 @@ export class TranscodeUnmatchedComponent implements OnInit {
     this.linkFile.set(file);
     this.linkQuery.set(file.parsed_title ?? '');
     this.linkResults.set([]);
+    this.tmdbQuery.set(file.parsed_title ?? '');
+    this.tmdbResults.set([]);
     this.linkDialogOpen.set(true);
     if (file.parsed_title) this.searchTitles(file.parsed_title);
   }
@@ -112,4 +122,35 @@ export class TranscodeUnmatchedComponent implements OnInit {
     this.total.update(n => n - 1);
     this.closeLinkDialog();
   }
+
+  async createPersonal(file: UnmatchedFile): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/admin/unmatched/${file.id}/create-personal`, {}));
+    this.files.update(f => f.filter(x => x.id !== file.id));
+    this.total.update(n => n - 1);
+  }
+
+  async searchTmdb(): Promise<void> {
+    const q = this.tmdbQuery().trim();
+    if (!q) return;
+    this.tmdbSearching.set(true);
+    try {
+      const d = await firstValueFrom(this.http.get<{ results: { tmdb_id: number; title: string; media_type: string; release_year: number | null; poster_path: string | null; overview: string | null }[] }>(
+        '/api/v2/admin/media-item/search-tmdb', { params: { q, type: this.tmdbType() } }));
+      this.tmdbResults.set(d.results);
+    } catch { /* ignore */ }
+    this.tmdbSearching.set(false);
+  }
+
+  async addFromTmdb(result: { tmdb_id: number; media_type: string }): Promise<void> {
+    const file = this.linkFile();
+    if (!file) return;
+    await firstValueFrom(this.http.post(`/api/v2/admin/unmatched/${file.id}/add-from-tmdb`, {
+      tmdb_id: result.tmdb_id, media_type: result.media_type
+    }));
+    this.files.update(f => f.filter(x => x.id !== file.id));
+    this.total.update(n => n - 1);
+    this.closeLinkDialog();
+  }
+
+  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
 }

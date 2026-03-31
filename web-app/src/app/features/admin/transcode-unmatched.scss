@@ -111,3 +111,8 @@ h2 { margin: 0 0 0.75rem; }
 .link-title { flex: 1; font-size: 0.875rem; }
 .link-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
 .no-results { font-size: 0.8125rem; opacity: 0.5; }
+
+.tmdb-section-title { font-size: 0.8125rem; font-weight: 600; margin: 1rem 0 0.5rem; opacity: 0.6; }
+.tmdb-search-row { display: flex; gap: 0.375rem; align-items: center; margin-bottom: 0.5rem; .flex { flex: 1; margin-bottom: 0; } }
+.tmdb-poster { width: 36px; height: 54px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
+.tmdb-info { display: flex; flex-direction: column; flex: 1; }
