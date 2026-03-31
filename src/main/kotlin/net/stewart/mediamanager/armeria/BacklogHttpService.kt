@@ -36,6 +36,10 @@ class BacklogHttpService {
         val titles = Title.findAll()
         val transcodes = Transcode.findAll()
         val wishCounts = WishListService.getRipPriorityCounts()
+        val userWishTitleIds = WishListItem.findAll()
+            .filter { it.user_id == user.id && it.wish_type == WishType.TRANSCODE.name && it.status == WishStatus.ACTIVE.name }
+            .mapNotNull { it.title_id }
+            .toSet()
 
         val titlesWithTranscodes = transcodes
             .filter { it.file_path != null }
@@ -61,7 +65,8 @@ class BacklogHttpService {
                     "release_year" to title.release_year,
                     "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
                     "request_count" to (wishCounts[title.id] ?: 0),
-                    "popularity" to (title.popularity ?: 0.0)
+                    "popularity" to (title.popularity ?: 0.0),
+                    "is_wished" to (title.id in userWishTitleIds)
                 )
             }
 

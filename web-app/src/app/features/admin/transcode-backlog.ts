@@ -16,6 +16,7 @@ interface BacklogRow {
   poster_url: string | null;
   request_count: number;
   popularity: number;
+  is_wished: boolean;
 }
 
 @Component({
@@ -35,7 +36,7 @@ export class TranscodeBacklogComponent implements OnInit {
   readonly page = signal(0);
   readonly pageSize = signal(50);
 
-  readonly columns = ['poster', 'title', 'type', 'year', 'requests'];
+  readonly columns = ['poster', 'title', 'type', 'year', 'requests', 'request'];
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -69,6 +70,18 @@ export class TranscodeBacklogComponent implements OnInit {
   async onPage(event: PageEvent): Promise<void> {
     this.page.set(event.pageIndex);
     this.pageSize.set(event.pageSize);
+    await this.refresh();
+  }
+
+  async toggleWish(row: BacklogRow): Promise<void> {
+    if (row.is_wished) {
+      // Find and remove the wish
+      const wishList = await firstValueFrom(this.http.get<{ transcode_wishes: { id: number; title_id: number }[] }>('/api/v2/wishlist'));
+      const wish = wishList.transcode_wishes.find(w => w.title_id === row.title_id);
+      if (wish) await firstValueFrom(this.http.delete(`/api/v2/wishlist/transcode/${wish.id}`));
+    } else {
+      await firstValueFrom(this.http.post(`/api/v2/wishlist/transcode/${row.title_id}`, {}));
+    }
     await this.refresh();
   }
 }

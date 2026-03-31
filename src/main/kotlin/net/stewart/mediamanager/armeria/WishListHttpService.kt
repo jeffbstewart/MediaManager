@@ -172,6 +172,18 @@ class WishListHttpService {
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
 
+    /** Add a transcode wish (request a title be ripped). */
+    @Post("/api/v2/wishlist/transcode/{titleId}")
+    fun addTranscodeWish(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val wish = WishListService.addTranscodeWishForUser(user.id!!, titleId)
+        return if (wish != null) {
+            jsonResponse(gson.toJson(mapOf("ok" to true, "id" to wish.id)))
+        } else {
+            jsonResponse(gson.toJson(mapOf("ok" to false, "reason" to "Already on wish list")))
+        }
+    }
+
     /** Remove a transcode wish. */
     @Delete("/api/v2/wishlist/transcode/{wishId}")
     fun removeTranscodeWish(ctx: ServiceRequestContext, @Param("wishId") wishId: Long): HttpResponse {
