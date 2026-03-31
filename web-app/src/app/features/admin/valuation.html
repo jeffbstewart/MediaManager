@@ -121,6 +121,29 @@
 
           <label class="field-label">Override ASIN</label>
           <input class="field-input" type="text" [value]="editAsin()" (input)="updateField('asin', $event)" placeholder="e.g., B08N5WRWNW" />
+
+          <!-- Amazon Order Linking -->
+          <label class="field-label" style="margin-top:0.75rem">Link Amazon Order</label>
+          <div class="amazon-search-row">
+            <input class="field-input flex" type="text" [value]="amazonQuery()" (input)="updateAmazonQuery($event)"
+                   (keydown.enter)="searchAmazon()" placeholder="Search Amazon orders..." />
+            <button mat-stroked-button (click)="searchAmazon()">Search</button>
+          </div>
+          @if (amazonSearching()) { <mat-spinner diameter="20" /> }
+          @if (amazonOrders().length > 0) {
+            <div class="amazon-list">
+              @for (o of amazonOrders(); track o.id) {
+                <div class="amazon-row">
+                  <span class="amazon-name">{{ o.product_name }}</span>
+                  <span class="amazon-meta">{{ o.order_date ?? '' }}</span>
+                  @if (o.unit_price != null) {
+                    <span class="amazon-price">${{ o.unit_price.toFixed(2) }}</span>
+                  }
+                  <button mat-flat-button color="primary" class="small-btn" (click)="linkAmazon(o.id)">Use</button>
+                </div>
+              }
+            </div>
+          }
         </div>
         <div class="dialog-footer">
           <button mat-button (click)="closeEdit()">Cancel</button>

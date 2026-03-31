@@ -58,6 +58,11 @@ export class ValuationComponent implements OnInit {
   readonly editReplacement = signal('');
   readonly editAsin = signal('');
 
+  // Amazon order linking in edit dialog
+  readonly amazonQuery = signal('');
+  readonly amazonOrders = signal<{ id: number; product_name: string; order_date: string | null; unit_price: number | null }[]>([]);
+  readonly amazonSearching = signal(false);
+
   async ngOnInit(): Promise<void> { await this.refresh(); }
 
   async refresh(): Promise<void> {
@@ -100,7 +105,10 @@ export class ValuationComponent implements OnInit {
     this.editPrice.set(row.purchase_price?.toString() ?? '');
     this.editReplacement.set(row.replacement_value?.toString() ?? '');
     this.editAsin.set(row.override_asin ?? '');
+    this.amazonOrders.set([]);
+    this.amazonQuery.set('');
     this.editOpen.set(true);
+    this.loadAmazonOrders(row.id);
   }
 
   closeEdit(): void { this.editOpen.set(false); }
@@ -128,6 +136,34 @@ export class ValuationComponent implements OnInit {
     if (!isNaN(repl)) body['replacement_value'] = repl; else body['replacement_value'] = null;
     body['override_asin'] = this.editAsin();
     await firstValueFrom(this.http.post(`/api/v2/admin/valuations/${item.id}`, body));
+    this.closeEdit();
+    await this.refresh();
+  }
+
+  async loadAmazonOrders(itemId: number): Promise<void> {
+    this.amazonSearching.set(true);
+    try {
+      const params: Record<string, string> = {};
+      if (this.amazonQuery()) params['q'] = this.amazonQuery();
+      const d = await firstValueFrom(this.http.get<{ orders: { id: number; product_name: string; order_date: string | null; unit_price: number | null }[]; search_query: string }>(
+        `/api/v2/admin/media-item/${itemId}/amazon-orders`, { params }));
+      this.amazonOrders.set(d.orders);
+      if (!this.amazonQuery()) this.amazonQuery.set(d.search_query);
+    } catch { /* ignore */ }
+    this.amazonSearching.set(false);
+  }
+
+  async searchAmazon(): Promise<void> {
+    const item = this.editItem();
+    if (item) await this.loadAmazonOrders(item.id);
+  }
+
+  updateAmazonQuery(event: Event): void { this.amazonQuery.set((event.target as HTMLInputElement).value); }
+
+  async linkAmazon(orderId: number): Promise<void> {
+    const item = this.editItem();
+    if (!item) return;
+    await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${item.id}/link-amazon/${orderId}`, {}));
     this.closeEdit();
     await this.refresh();
   }
