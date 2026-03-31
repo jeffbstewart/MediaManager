@@ -6,6 +6,7 @@ import {
   CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
+import { WishInterstitialService } from '../../core/wish-interstitial.service';
 
 @Component({
   selector: 'app-wishlist',
@@ -17,6 +18,7 @@ import { AppRoutes } from '../../core/routes';
 export class WishListComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
   private readonly router = inject(Router);
+  private readonly wishInterstitial = inject(WishInterstitialService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -29,6 +31,10 @@ export class WishListComponent implements OnInit {
   readonly searching = signal(false);
   readonly searchResults = signal<TmdbSearchResultItem[]>([]);
   readonly searchVisible = signal(false);
+
+  // First-wish interstitial
+  readonly showInterstitial = signal(false);
+  private pendingWishItem: TmdbSearchResultItem | null = null;
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -72,6 +78,29 @@ export class WishListComponent implements OnInit {
   }
 
   async addWish(item: TmdbSearchResultItem): Promise<void> {
+    if (await this.wishInterstitial.needsInterstitial()) {
+      this.pendingWishItem = item;
+      this.showInterstitial.set(true);
+      return;
+    }
+    await this.doAddWish(item);
+  }
+
+  async confirmInterstitial(): Promise<void> {
+    this.wishInterstitial.acknowledge();
+    this.showInterstitial.set(false);
+    if (this.pendingWishItem) {
+      await this.doAddWish(this.pendingWishItem);
+      this.pendingWishItem = null;
+    }
+  }
+
+  cancelInterstitial(): void {
+    this.showInterstitial.set(false);
+    this.pendingWishItem = null;
+  }
+
+  private async doAddWish(item: TmdbSearchResultItem): Promise<void> {
     await this.catalog.addMediaWish({
       tmdb_id: item.tmdb_id,
       title: item.title,

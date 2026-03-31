@@ -63,6 +63,11 @@ export class ValuationComponent implements OnInit {
   readonly amazonOrders = signal<{ id: number; product_name: string; order_date: string | null; unit_price: number | null }[]>([]);
   readonly amazonSearching = signal(false);
 
+  // Keepa search in edit dialog
+  readonly keepaResults = signal<{ asin: string; title: string; price_new: number | null; price_amazon: number | null }[]>([]);
+  readonly keepaSearching = signal(false);
+  readonly keepaError = signal('');
+
   async ngOnInit(): Promise<void> { await this.refresh(); }
 
   async refresh(): Promise<void> {
@@ -107,6 +112,8 @@ export class ValuationComponent implements OnInit {
     this.editAsin.set(row.override_asin ?? '');
     this.amazonOrders.set([]);
     this.amazonQuery.set('');
+    this.keepaResults.set([]);
+    this.keepaError.set('');
     this.editOpen.set(true);
     this.loadAmazonOrders(row.id);
   }
@@ -164,6 +171,30 @@ export class ValuationComponent implements OnInit {
     const item = this.editItem();
     if (!item) return;
     await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${item.id}/link-amazon/${orderId}`, {}));
+    this.closeEdit();
+    await this.refresh();
+  }
+
+  async searchKeepa(): Promise<void> {
+    const item = this.editItem();
+    if (!item) return;
+    this.keepaSearching.set(true);
+    this.keepaError.set('');
+    try {
+      const d = await firstValueFrom(this.http.get<{ results?: { asin: string; title: string; price_new: number | null; price_amazon: number | null }[]; error?: string }>(
+        `/api/v2/admin/valuations/${item.id}/keepa-search`));
+      if (d.error) { this.keepaError.set(d.error); }
+      else { this.keepaResults.set(d.results ?? []); }
+    } catch { this.keepaError.set('Request failed'); }
+    this.keepaSearching.set(false);
+  }
+
+  async useKeepaResult(result: { asin: string; price_new: number | null }): Promise<void> {
+    const item = this.editItem();
+    if (!item) return;
+    await firstValueFrom(this.http.post(`/api/v2/admin/valuations/${item.id}/keepa-apply`, {
+      asin: result.asin, price: result.price_new
+    }));
     this.closeEdit();
     await this.refresh();
   }

@@ -3,6 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { CatalogService, ActorDetail, ActorCredit } from '../../core/catalog.service';
+import { WishInterstitialService } from '../../core/wish-interstitial.service';
 import { AppRoutes } from '../../core/routes';
 
 @Component({
@@ -15,6 +16,7 @@ import { AppRoutes } from '../../core/routes';
 export class ActorComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
+  private readonly wishInterstitial = inject(WishInterstitialService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -40,6 +42,10 @@ export class ActorComponent implements OnInit {
 
   async toggleWish(credit: ActorCredit): Promise<void> {
     if (credit.already_wished) return;
+    if (await this.wishInterstitial.needsInterstitial()) {
+      if (!confirm('Your media wish list entries are visible to administrators to help inform media purchase decisions. Continue?')) return;
+      this.wishInterstitial.acknowledge();
+    }
     await this.catalog.addMediaWish({
       tmdb_id: credit.tmdb_id,
       title: credit.title,

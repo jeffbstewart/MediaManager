@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { CatalogService, CollectionDetail, CollectionPart } from '../../core/catalog.service';
+import { WishInterstitialService } from '../../core/wish-interstitial.service';
 import { AppRoutes } from '../../core/routes';
 
 @Component({
@@ -136,6 +137,7 @@ export class CollectionDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
   private readonly http = inject(HttpClient);
+  private readonly wishInterstitial = inject(WishInterstitialService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -160,6 +162,13 @@ export class CollectionDetailComponent implements OnInit {
 
   async toggleWish(part: CollectionPart): Promise<void> {
     if (!part.tmdb_movie_id) return;
+
+    if (!part.wished) {
+      if (await this.wishInterstitial.needsInterstitial()) {
+        if (!confirm('Your media wish list entries are visible to administrators to help inform media purchase decisions. Continue?')) return;
+        this.wishInterstitial.acknowledge();
+      }
+    }
 
     if (part.wished) {
       // Find and cancel the wish — collection parts are always movies

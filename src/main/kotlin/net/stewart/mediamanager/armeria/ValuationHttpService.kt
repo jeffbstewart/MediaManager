@@ -13,10 +13,14 @@ import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.OwnershipPhoto
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.service.KeepaHttpService
+import net.stewart.mediamanager.service.PriceLookupAgent
+import net.stewart.mediamanager.service.TitleCleanerService
 import java.time.LocalDateTime
 
 @Blocking
@@ -106,6 +110,86 @@ class ValuationHttpService {
         item.save()
 
         return jsonResponse("""{"ok":true}""")
+    }
+
+    /** Search Keepa for replacement value candidates. Blocks ~4s for API response. */
+    @Get("/api/v2/admin/valuations/{itemId}/keepa-search")
+    fun keepaSearch(ctx: ServiceRequestContext, @Param("itemId") itemId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val apiKey = AppConfig.findAll().firstOrNull { it.config_key == "keepa_api_key" }?.config_val
+        if (apiKey.isNullOrBlank()) {
+            return jsonResponse(gson.toJson(mapOf("error" to "Keepa API key not configured")))
+        }
+
+        val item = MediaItem.findById(itemId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val titleName = MediaItemTitle.findAll().firstOrNull { it.media_item_id == itemId }
+            ?.let { Title.findById(it.title_id)?.name }
+        val searchTerm = TitleCleanerService.clean(titleName ?: item.product_name ?: "").displayName
+
+        val keepa = KeepaHttpService(apiKey)
+        val candidates = try {
+            keepa.searchCandidates(searchTerm, item.media_format)
+        } catch (e: Exception) {
+            return jsonResponse(gson.toJson(mapOf("error" to (e.message ?: "Keepa search failed"))))
+        }
+
+        val results = candidates.filter { it.found }.map { r ->
+            mapOf(
+                "asin" to r.asin,
+                "title" to r.title,
+                "price_new" to r.priceNewCurrent?.toDouble(),
+                "price_amazon" to r.priceAmazonCurrent?.toDouble(),
+                "price_used" to r.priceUsedCurrent?.toDouble(),
+                "offers_new" to r.offerCountNew,
+                "offers_used" to r.offerCountUsed
+            )
+        }
+        return jsonResponse(gson.toJson(mapOf("results" to results)))
+    }
+
+    /** Use a Keepa result to set replacement value and ASIN. */
+    @Post("/api/v2/admin/valuations/{itemId}/keepa-apply")
+    fun keepaApply(ctx: ServiceRequestContext, @Param("itemId") itemId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val item = MediaItem.findById(itemId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        val asin = map["asin"] as? String
+        val price = (map["price"] as? Number)?.toDouble()
+
+        if (asin != null) item.override_asin = asin
+        if (price != null) item.replacement_value = java.math.BigDecimal.valueOf(price)
+        item.replacement_value_updated_at = LocalDateTime.now()
+        item.updated_at = LocalDateTime.now()
+        item.save()
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    /** Pricing agent status. */
+    @Get("/api/v2/admin/valuations/agent-status")
+    fun agentStatus(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val agent = PriceLookupAgent.instance
+        val result = if (agent != null) {
+            mapOf(
+                "status" to agent.status,
+                "last_batch_time" to agent.lastBatchTime?.toString(),
+                "last_batch_size" to agent.lastBatchSize,
+                "last_batch_priced" to agent.lastBatchPriced,
+                "eligible_remaining" to agent.lastEligibleCount,
+                "session_total_priced" to agent.totalItemsPriced,
+                "session_total_batches" to agent.totalBatches
+            )
+        } else {
+            mapOf("status" to "not configured")
+        }
+        return jsonResponse(gson.toJson(result))
     }
 
     private fun jsonResponse(json: String): HttpResponse {

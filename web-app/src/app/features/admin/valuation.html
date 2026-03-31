@@ -144,6 +144,32 @@
               }
             </div>
           }
+
+          <!-- Keepa Search -->
+          <label class="field-label" style="margin-top:0.75rem">Find on Keepa</label>
+          <button mat-stroked-button (click)="searchKeepa()" [disabled]="keepaSearching()" class="keepa-btn">
+            @if (keepaSearching()) { <mat-spinner diameter="16" /> }
+            Search Keepa
+          </button>
+          @if (keepaError()) { <span class="keepa-error">{{ keepaError() }}</span> }
+          @if (keepaResults().length > 0) {
+            <div class="keepa-list">
+              @for (r of keepaResults(); track r.asin) {
+                <div class="keepa-row">
+                  <div class="keepa-info">
+                    <span class="keepa-title">{{ r.title }}</span>
+                    <span class="keepa-asin">{{ r.asin }}</span>
+                  </div>
+                  @if (r.price_new != null) {
+                    <span class="keepa-price">${{ r.price_new.toFixed(2) }}</span>
+                  } @else {
+                    <span class="keepa-no-price">No price</span>
+                  }
+                  <button mat-flat-button color="primary" class="small-btn" (click)="useKeepaResult(r)">Use</button>
+                </div>
+              }
+            </div>
+          }
         </div>
         <div class="dialog-footer">
           <button mat-button (click)="closeEdit()">Cancel</button>

@@ -54,3 +54,17 @@ h2 { margin: 0 0 1rem; }
 .amazon-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
 .amazon-price { font-size: 0.8125rem; flex-shrink: 0; }
 .small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
+
+// Keepa
+.keepa-btn { margin-bottom: 0.25rem; }
+.keepa-error { color: #f44336; font-size: 0.75rem; }
+.keepa-list { max-height: 200px; overflow-y: auto; margin-top: 0.25rem; }
+.keepa-row {
+  display: flex; align-items: center; gap: 0.5rem; padding: 6px 4px; border-radius: 4px;
+  &:hover { background: rgba(255,255,255,0.05); }
+}
+.keepa-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.keepa-title { font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keepa-asin { font-size: 0.6875rem; opacity: 0.4; font-family: monospace; }
+.keepa-price { font-size: 0.875rem; font-weight: 600; color: #4caf50; flex-shrink: 0; }
+.keepa-no-price { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
