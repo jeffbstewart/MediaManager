@@ -47,6 +47,12 @@ export class DataQualityComponent implements OnInit {
   readonly editTmdbId = signal('');
   readonly editMediaType = signal('MOVIE');
 
+  // TMDB search in edit dialog
+  readonly tmdbQuery = signal('');
+  readonly tmdbType = signal<'MOVIE' | 'TV'>('MOVIE');
+  readonly tmdbResults = signal<{ tmdb_id: number; title: string; media_type: string; release_year: number | null; poster_path: string | null; overview: string | null }[]>([]);
+  readonly tmdbSearching = signal(false);
+
   async ngOnInit(): Promise<void> { await this.refresh(); }
 
   async refresh(): Promise<void> {
@@ -88,6 +94,9 @@ export class DataQualityComponent implements OnInit {
     this.editRow.set(row);
     this.editTmdbId.set(row.tmdb_id?.toString() ?? '');
     this.editMediaType.set(row.media_type);
+    this.tmdbQuery.set(row.name);
+    this.tmdbType.set(row.media_type === 'TV' ? 'TV' : 'MOVIE');
+    this.tmdbResults.set([]);
     this.editOpen.set(true);
   }
   closeEdit(): void { this.editOpen.set(false); }
@@ -100,6 +109,26 @@ export class DataQualityComponent implements OnInit {
     }));
     this.closeEdit(); await this.refresh();
   }
+
+  async searchTmdb(): Promise<void> {
+    const q = this.tmdbQuery().trim();
+    if (!q) return;
+    this.tmdbSearching.set(true);
+    try {
+      const d = await firstValueFrom(this.http.get<{ results: { tmdb_id: number; title: string; media_type: string; release_year: number | null; poster_path: string | null; overview: string | null }[] }>(
+        '/api/v2/admin/media-item/search-tmdb', { params: { q, type: this.tmdbType() } }));
+      this.tmdbResults.set(d.results);
+    } catch { /* ignore */ }
+    this.tmdbSearching.set(false);
+  }
+
+  selectTmdbResult(result: { tmdb_id: number; media_type: string }): void {
+    this.editTmdbId.set(result.tmdb_id.toString());
+    this.editMediaType.set(result.media_type === 'TV' ? 'TV' : 'MOVIE');
+    this.tmdbResults.set([]);
+  }
+
+  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
 
   statusLabel(s: string): string {
     switch (s) { case '': return 'All'; case 'NEEDS_ATTENTION': return 'Needs Attention'; case 'ENRICHED': return 'Enriched'; case 'FAILED': return 'Failed'; case 'PENDING': return 'Pending';
