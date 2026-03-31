@@ -1,7 +1,9 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { SlicePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 
@@ -29,7 +31,7 @@ interface Session {
 @Component({
   selector: 'app-profile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SlicePipe, MatIconModule, MatProgressSpinnerModule],
+  imports: [SlicePipe, RouterLink, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
   templateUrl: './profile.html',
   styleUrl: './profile.scss',
 })
@@ -39,6 +41,7 @@ export class ProfileComponent implements OnInit {
   readonly loading = signal(true);
   readonly profile = signal<Profile | null>(null);
   readonly sessions = signal<Session[]>([]);
+  readonly hiddenTitles = signal<{ title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[]>([]);
 
   // Change password modal
   readonly showPasswordDialog = signal(false);
@@ -51,12 +54,14 @@ export class ProfileComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const [profile, sessionData] = await Promise.all([
+      const [profile, sessionData, hiddenData] = await Promise.all([
         firstValueFrom(this.http.get<Profile>('/api/v2/profile')),
         firstValueFrom(this.http.get<{ sessions: Session[] }>('/api/v2/profile/sessions')),
+        firstValueFrom(this.http.get<{ titles: { title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[] }>('/api/v2/profile/hidden-titles')),
       ]);
       this.profile.set(profile);
       this.sessions.set(sessionData.sessions);
+      this.hiddenTitles.set(hiddenData.titles);
     } catch {
       // handled by empty state
     } finally {
@@ -131,4 +136,9 @@ export class ProfileComponent implements OnInit {
   }
 
   qualityStars = [1, 2, 3, 4, 5];
+
+  async unhideTitle(titleId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/profile/hidden-titles/${titleId}`));
+    this.hiddenTitles.update(list => list.filter(t => t.title_id !== titleId));
+  }
 }

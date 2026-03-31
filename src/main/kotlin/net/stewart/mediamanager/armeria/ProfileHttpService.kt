@@ -15,7 +15,12 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.LiveTvTuner
+import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.SessionToken
+import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.UserFlagType
+import net.stewart.mediamanager.entity.UserTitleFlag
+import net.stewart.mediamanager.service.UserTitleFlagService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PasswordService
@@ -170,6 +175,38 @@ class ProfileHttpService {
 
         AuthService.revokeAllSessionsExceptCurrent(user.id!!, currentTokenHash)
         PairingService.revokeAllForUser(user.id!!)
+        return jsonResponse(gson.toJson(mapOf("ok" to true)))
+    }
+
+    /** List titles the current user has personally hidden. */
+    @Get("/api/v2/profile/hidden-titles")
+    fun hiddenTitles(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val hiddenIds = UserTitleFlagService.getHiddenTitleIdsForUser(user.id!!)
+        val titles = if (hiddenIds.isEmpty()) emptyList()
+        else Title.findAll()
+            .filter { it.id in hiddenIds }
+            .sortedBy { it.name.lowercase() }
+            .map { t ->
+                mapOf(
+                    "title_id" to t.id,
+                    "title_name" to t.name,
+                    "poster_url" to t.posterUrl(PosterSize.THUMBNAIL),
+                    "release_year" to t.release_year
+                )
+            }
+
+        return jsonResponse(gson.toJson(mapOf("titles" to titles)))
+    }
+
+    /** Unhide a title for the current user. */
+    @Delete("/api/v2/profile/hidden-titles/{titleId}")
+    fun unhideTitle(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
 

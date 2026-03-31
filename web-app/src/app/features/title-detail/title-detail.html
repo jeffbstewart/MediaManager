@@ -25,7 +25,8 @@
               <mat-icon>{{ t.is_starred ? 'star' : 'star_border' }}</mat-icon>
             </button>
             <button mat-icon-button class="hide-btn" [class.hidden-title]="t.is_hidden"
-                    (click)="toggleHide()" [attr.aria-label]="t.is_hidden ? 'Unhide' : 'Hide'">
+                    (click)="confirmHide()" [attr.aria-label]="t.is_hidden ? 'Unhide' : 'Hide'"
+                    [title]="t.is_hidden ? 'This title is hidden from your library. Click to unhide.' : 'Hide this title from your library'">
               <mat-icon>{{ t.is_hidden ? 'visibility_off' : 'visibility' }}</mat-icon>
             </button>
           </div>

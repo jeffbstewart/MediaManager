@@ -48,6 +48,26 @@
       <mat-icon>lock</mat-icon> Change Password
     </button>
 
+    <!-- Hidden Titles -->
+    @if (hiddenTitles().length > 0) {
+      <h3>Hidden Titles</h3>
+      <p class="section-hint">These titles are hidden from your library. Click unhide to restore them.</p>
+      <div class="hidden-titles-list">
+        @for (t of hiddenTitles(); track t.title_id) {
+          <div class="hidden-title-row">
+            @if (t.poster_url) {
+              <img [src]="t.poster_url" class="hidden-poster" alt="" />
+            }
+            <a class="hidden-title-link" [routerLink]="['/title', t.title_id]">
+              {{ t.title_name }}
+              @if (t.release_year) { <span class="hidden-year">({{ t.release_year }})</span> }
+            </a>
+            <button mat-stroked-button class="unhide-btn" (click)="unhideTitle(t.title_id)">Unhide</button>
+          </div>
+        }
+      </div>
+    }
+
     <!-- Active Sessions -->
     <h3>Active Sessions</h3>
     @if (sessions().length > 1) {

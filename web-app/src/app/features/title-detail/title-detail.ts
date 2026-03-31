@@ -123,9 +123,25 @@ export class TitleDetailComponent implements OnInit {
     this.title.set({ ...t, is_starred: r.is_starred });
   }
 
-  async toggleHide(): Promise<void> {
+  async confirmHide(): Promise<void> {
     const t = this.title();
     if (!t) return;
+
+    if (t.is_hidden) {
+      // Unhiding doesn't need confirmation
+      const r = await firstValueFrom(this.http.post<{ is_hidden: boolean }>(
+        `/api/v2/catalog/titles/${t.title_id}/hide`, {}));
+      this.title.set({ ...t, is_hidden: r.is_hidden });
+      return;
+    }
+
+    const confirmed = confirm(
+      `Hide "${t.title_name}" from your library?\n\n` +
+      `This title will no longer appear in your movie and TV lists, search results, or home page. ` +
+      `Other users are not affected. You can unhide it from your Profile page.`
+    );
+    if (!confirmed) return;
+
     const r = await firstValueFrom(this.http.post<{ is_hidden: boolean }>(
       `/api/v2/catalog/titles/${t.title_id}/hide`, {}));
     this.title.set({ ...t, is_hidden: r.is_hidden });

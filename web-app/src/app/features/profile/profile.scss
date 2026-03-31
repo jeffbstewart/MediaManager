@@ -145,3 +145,17 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
   mat-icon { font-size: 24px; width: 24px; height: 24px; }
 }
+
+.section-hint { font-size: 0.8125rem; opacity: 0.5; margin: 0 0 0.5rem; }
+
+.hidden-titles-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.hidden-title-row {
+  display: flex; align-items: center; gap: 0.75rem; padding: 4px 0;
+}
+.hidden-poster { width: 30px; height: 45px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
+.hidden-title-link {
+  flex: 1; text-decoration: none; color: inherit; font-size: 0.875rem;
+  &:hover { text-decoration: underline; }
+}
+.hidden-year { opacity: 0.4; }
+.unhide-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
