@@ -115,6 +115,30 @@ export class CameraSettingsComponent implements OnInit {
     } catch { this.dialogError.set('Request failed'); }
   }
 
+  // Snapshot preview
+  readonly snapshotOpen = signal(false);
+  readonly snapshotName = signal('');
+  readonly snapshotUrl = signal('');
+  readonly snapshotError = signal(false);
+
+  testSnapshot(cam: CameraRow): void {
+    this.snapshotName.set(cam.name);
+    this.snapshotError.set(false);
+    this.snapshotUrl.set(`/api/v2/cameras/${cam.id}/snapshot?t=${Date.now()}`);
+    this.snapshotOpen.set(true);
+  }
+
+  refreshSnapshot(): void {
+    this.snapshotError.set(false);
+    const base = this.snapshotUrl().replace(/\?.*/, '');
+    this.snapshotUrl.set(`${base}?t=${Date.now()}`);
+  }
+
+  async duplicateCam(cam: CameraRow): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/admin/cameras/${cam.id}/duplicate`, {}));
+    await this.refresh();
+  }
+
   statusLabel(status: string): string {
     switch (status) {
       case 'running': return 'go2rtc: Running';

@@ -66,6 +66,24 @@ class CameraSettingsHttpService {
         return jsonResponse(gson.toJson(mapOf("ok" to true, "id" to camera.id)))
     }
 
+    @Post("/api/v2/admin/cameras/{cameraId}/duplicate")
+    fun duplicate(ctx: ServiceRequestContext, @Param("cameraId") cameraId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val source = Camera.findById(cameraId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
+        val copyName = "${source.name} (copy)"
+        val go2rtcName = copyName.lowercase().replace(Regex("[^a-z0-9]+"), "_").trimEnd('_')
+
+        val copy = Camera(name = copyName, rtsp_url = source.rtsp_url, snapshot_url = source.snapshot_url,
+            go2rtc_name = go2rtcName, display_order = maxOrder + 1, enabled = false, created_at = LocalDateTime.now())
+        copy.save()
+        Go2rtcAgent.instance?.reconfigure()
+
+        return jsonResponse(gson.toJson(mapOf("ok" to true, "id" to copy.id)))
+    }
+
     @Post("/api/v2/admin/cameras/{cameraId}")
     fun update(ctx: ServiceRequestContext, @Param("cameraId") cameraId: Long): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)

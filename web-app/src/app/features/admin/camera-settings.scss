@@ -48,7 +48,12 @@
 }
 
 .cam-name { font-weight: 500; font-size: 0.875rem; white-space: nowrap; }
+.cam-stream { font-size: 0.6875rem; margin-left: 0.5rem; }
+.secondary { opacity: 0.4; }
 .spacer { flex: 1; }
+
+.snapshot-modal { max-width: 600px; }
+.snapshot-img { width: 100%; border-radius: 6px; margin: 0.5rem 0; }
 
 .delete-btn { color: rgba(255, 255, 255, 0.4); &:hover { color: #f44336; } }
 

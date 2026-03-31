@@ -27,8 +27,11 @@
             <input type="checkbox" [checked]="cam.enabled" (change)="toggleEnabled(cam)" />
           </label>
           <span class="cam-name">{{ cam.name }}</span>
+          <span class="cam-stream secondary">{{ cam.go2rtc_name }}</span>
           <span class="spacer"></span>
+          <button mat-icon-button (click)="testSnapshot(cam)" title="Test Snapshot"><mat-icon>photo_camera</mat-icon></button>
           <button mat-icon-button (click)="openEdit(cam)" title="Edit"><mat-icon>edit</mat-icon></button>
+          <button mat-icon-button (click)="duplicateCam(cam)" title="Duplicate"><mat-icon>content_copy</mat-icon></button>
           <button mat-icon-button class="delete-btn" (click)="deleteCam(cam)" title="Delete"><mat-icon>delete</mat-icon></button>
         </div>
       }
@@ -66,6 +69,27 @@
           <button mat-flat-button color="primary" (click)="saveDialog()" [disabled]="!dialogName().trim()">
             {{ dialogMode() === 'edit' ? 'Save' : 'Add' }}
           </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Snapshot Preview -->
+  @if (snapshotOpen()) {
+    <div class="modal-overlay" (click)="snapshotOpen.set(false)">
+      <div class="modal-content snapshot-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Snapshot: {{ snapshotName() }}</h3>
+          <button class="close-btn" (click)="snapshotOpen.set(false)"><mat-icon>close</mat-icon></button>
+        </div>
+        <img [src]="snapshotUrl()" class="snapshot-img" alt="Camera snapshot"
+             (error)="snapshotError.set(true)" />
+        @if (snapshotError()) {
+          <p class="field-error">Failed to load snapshot. Check snapshot URL configuration.</p>
+        }
+        <div class="dialog-footer">
+          <button mat-stroked-button (click)="refreshSnapshot()"><mat-icon>refresh</mat-icon> Refresh</button>
+          <button mat-flat-button (click)="snapshotOpen.set(false)">Close</button>
         </div>
       </div>
     </div>
