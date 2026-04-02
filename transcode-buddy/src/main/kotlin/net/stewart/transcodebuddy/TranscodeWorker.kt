@@ -50,6 +50,8 @@ class TranscodeWorker(
     )
 
     private val reconnectIntervalMs = 30_000L // retry reconnection every 30s
+    private val reportMaxAttempts = 5
+    private val reportBaseDelayMs = 5_000L
 
     override fun run() {
         log.info("Worker-{} started (encoder: {} / {})", workerIndex, encoder.name, encoder.ffmpegEncoder)
@@ -291,17 +293,8 @@ class TranscodeWorker(
                 null
             }
 
-            var reported = false
-            for (attempt in 1..3) {
-                if (apiClient.reportComplete(leaseId, encoderName, outputProbe, mp4File.length())) {
-                    reported = true
-                    break
-                }
-                log.warn("reportComplete attempt {} failed, retrying...", attempt)
-                Thread.sleep(5000L * attempt)
-            }
-            if (!reported) {
-                log.error("Failed to report completion for lease {} after retries (file is on NAS)", leaseId)
+            reportWithRetry("reportComplete lease $leaseId") {
+                apiClient.reportComplete(leaseId, encoderName, outputProbe, mp4File.length())
             }
 
             return true
@@ -395,16 +388,8 @@ class TranscodeWorker(
 
             log.info("Mobile transcode complete: {} (size={})", mp4File.absolutePath, mp4File.length())
 
-            var reported = false
-            for (attempt in 1..3) {
-                if (apiClient.reportComplete(leaseId, encoderName, null, mp4File.length())) {
-                    reported = true; break
-                }
-                log.warn("reportComplete attempt {} failed, retrying...", attempt)
-                Thread.sleep(5000L * attempt)
-            }
-            if (!reported) {
-                log.error("Failed to report mobile completion for lease {} after retries", leaseId)
+            reportWithRetry("reportComplete mobile lease $leaseId") {
+                apiClient.reportComplete(leaseId, encoderName, null, mp4File.length())
             }
             return true
 
@@ -451,7 +436,9 @@ class TranscodeWorker(
 
         if (success) {
             log.info("Thumbnails complete for: {}", videoFile.name)
-            apiClient.reportComplete(leaseId, null)
+            reportWithRetry("reportComplete thumbnails lease $leaseId") {
+                apiClient.reportComplete(leaseId, null)
+            }
         } else {
             log.warn("Thumbnail generation failed for: {}", videoFile.name)
             apiClient.reportFailure(leaseId, "FFmpeg thumbnail generation failed")
@@ -587,7 +574,9 @@ class TranscodeWorker(
             }
 
             log.info("Subtitles complete: {} ({} cues)", srtFile.name, cueCount)
-            apiClient.reportComplete(leaseId, null)
+            reportWithRetry("reportComplete subtitles lease $leaseId") {
+                apiClient.reportComplete(leaseId, null)
+            }
             return true
 
         } catch (e: Exception) {
@@ -625,7 +614,9 @@ class TranscodeWorker(
             log.info("Found {} chapters in: {}", chapters.size, fileToProbe.name)
         }
 
-        apiClient.reportCompleteWithChapters(leaseId, chapters)
+        reportWithRetry("reportComplete chapters lease $leaseId") {
+            apiClient.reportCompleteWithChapters(leaseId, chapters)
+        }
         return true
     }
 
@@ -656,6 +647,30 @@ class TranscodeWorker(
                 }
             }
         }, "heartbeat-$activeLeaseId").apply { isDaemon = true }
+    }
+
+    /**
+     * Retries a report operation with reconnection between attempts.
+     * When the gRPC stream is disconnected, reconnects before retrying.
+     */
+    private fun reportWithRetry(description: String, report: () -> Boolean): Boolean {
+        for (attempt in 1..reportMaxAttempts) {
+            if (!apiClient.isConnected()) {
+                log.info("{}: stream disconnected, reconnecting (attempt {}/{})", description, attempt, reportMaxAttempts)
+                val reconnected = apiClient.connect()
+                if (reconnected == null) {
+                    log.warn("{}: reconnection failed (attempt {}/{})", description, attempt, reportMaxAttempts)
+                    Thread.sleep(reportBaseDelayMs * attempt)
+                    continue
+                }
+                log.info("{}: reconnected to server ({} pending)", description, reconnected.pendingCount)
+            }
+            if (report()) return true
+            log.warn("{}: send failed (attempt {}/{})", description, attempt, reportMaxAttempts)
+            Thread.sleep(reportBaseDelayMs * attempt)
+        }
+        log.error("{}: giving up after {} attempts", description, reportMaxAttempts)
+        return false
     }
 
     private fun writeSentinel(sentinelFile: File, message: String) {
