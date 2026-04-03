@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
+import { TimezoneService } from '../../core/timezone.service';
 
 interface UserRow {
   id: number;
@@ -38,6 +39,7 @@ const RATING_CHOICES = [
 })
 export class UsersComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  readonly tz = inject(TimezoneService);
 
   readonly loading = signal(true);
   readonly users = signal<UserRow[]>([]);
@@ -223,8 +225,6 @@ export class UsersComponent implements OnInit {
   }
 
   formatSessionDate(dateStr: string | null): string {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return this.tz.formatDateTime(dateStr);
   }
 }

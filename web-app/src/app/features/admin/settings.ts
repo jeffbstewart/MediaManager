@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { firstValueFrom } from 'rxjs';
+import { TimezoneService } from '../../core/timezone.service';
 
 interface BuddyKey { id: number; name: string; created_at: string | null; }
 
@@ -18,6 +19,7 @@ interface BuddyKey { id: number; name: string; created_at: string | null; }
 })
 export class SettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  readonly tz = inject(TimezoneService);
 
   readonly loading = signal(true);
   readonly settings = signal<Record<string, string>>({});

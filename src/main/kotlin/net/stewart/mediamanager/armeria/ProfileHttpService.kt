@@ -24,6 +24,7 @@ import net.stewart.mediamanager.service.UserTitleFlagService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.util.toIsoUtc
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 
@@ -124,9 +125,9 @@ class ProfileHttpService {
                     "id" to token.id,
                     "type" to "browser",
                     "user_agent" to token.user_agent,
-                    "created_at" to token.created_at?.toString(),
-                    "last_used_at" to token.last_used_at?.toString(),
-                    "expires_at" to token.expires_at.toString(),
+                    "created_at" to toIsoUtc(token.created_at),
+                    "last_used_at" to toIsoUtc(token.last_used_at),
+                    "expires_at" to toIsoUtc(token.expires_at),
                     "is_current" to (token.token_hash == currentTokenHash)
                 )
             }
@@ -136,8 +137,8 @@ class ProfileHttpService {
                 "id" to token.id,
                 "type" to "device",
                 "device_name" to token.device_name,
-                "created_at" to token.created_at?.toString(),
-                "last_used_at" to token.last_used_at?.toString(),
+                "created_at" to toIsoUtc(token.created_at),
+                "last_used_at" to toIsoUtc(token.last_used_at),
                 "is_current" to false
             )
         }

@@ -121,10 +121,25 @@ class TranscodeWorker(
         val sortedLeases = bundle.leases.sortedBy { executionOrder[it.leaseType] ?: 99 }
         val allLeaseIds = sortedLeases.map { it.leaseId }
 
+        // Bundle-level heartbeat keeps the gRPC stream alive throughout all operations
+        // (staging, chapters, thumbnails, gaps between operations, etc.).
+        // Per-operation heartbeat threads (TRANSCODE, MOBILE_TRANSCODE, SUBTITLES) handle
+        // progress reporting and lease-invalidation process killing on top of this.
+        val bundleHeartbeat = Thread({
+            while (!Thread.currentThread().isInterrupted) {
+                try {
+                    Thread.sleep(config.progressIntervalSeconds * 1000L)
+                    apiClient.heartbeatMultiple(allLeaseIds)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }, "bundle-heartbeat").apply { isDaemon = true }
+        bundleHeartbeat.start()
+
         // Determine the video input file: local cache or NAS
-        // Heartbeat all leases during file staging to prevent idle timeout
         val sourceFile = pathTranslator.sourceFile(bundle.relativePath)
-        val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size, allLeaseIds)
+        val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size)
 
         try {
             for (lease in sortedLeases) {
@@ -162,6 +177,8 @@ class TranscodeWorker(
                 }
             }
         } finally {
+            bundleHeartbeat.interrupt()
+            bundleHeartbeat.join(2000)
             apiClient.clearInvalidatedLeases()
             // Clean up local cache after bundle completes
             if (localCache != null && videoInputFile != sourceFile) {
@@ -177,7 +194,7 @@ class TranscodeWorker(
      * For bundles with 2+ leases and local cache configured, stages the file locally.
      * For single-lease bundles or no cache, streams from NAS.
      */
-    private fun resolveVideoInput(bundle: BundleResponse, sourceFile: File, leaseCount: Int, leaseIds: List<Long>): File {
+    private fun resolveVideoInput(bundle: BundleResponse, sourceFile: File, leaseCount: Int): File {
         if (localCache == null) return sourceFile
 
         // Check if already cached
@@ -190,26 +207,8 @@ class TranscodeWorker(
         // Only stage locally if 2+ leases (copy pays for itself)
         if (leaseCount < 2) return sourceFile
 
-        // Heartbeat all leases during staging to prevent idle stream timeout
-        val stagingHeartbeat = Thread({
-            while (!Thread.currentThread().isInterrupted) {
-                try {
-                    Thread.sleep(config.progressIntervalSeconds * 1000L)
-                    apiClient.heartbeatMultiple(leaseIds)
-                } catch (_: InterruptedException) {
-                    break
-                }
-            }
-        }, "staging-heartbeat").apply { isDaemon = true }
-        stagingHeartbeat.start()
-
-        // Stage the file locally
-        val staged = try {
-            localCache.stageFile(bundle.transcodeId, bundle.relativePath, sourceFile)
-        } finally {
-            stagingHeartbeat.interrupt()
-            stagingHeartbeat.join(2000)
-        }
+        // Stage the file locally (bundle heartbeat keeps stream alive)
+        val staged = localCache.stageFile(bundle.transcodeId, bundle.relativePath, sourceFile)
         if (staged != null) {
             return staged
         }

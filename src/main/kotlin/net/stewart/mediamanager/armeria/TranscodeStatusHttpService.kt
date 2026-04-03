@@ -16,6 +16,7 @@ import net.stewart.mediamanager.entity.LeaseType
 import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.TranscodeLeaseService
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.util.toIsoUtc
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -79,7 +80,7 @@ class TranscodeStatusHttpService {
                 "file_size_bytes" to lease.file_size_bytes,
                 "elapsed_seconds" to elapsed,
                 "error_message" to lease.error_message,
-                "completed_at" to lease.completed_at?.toString()
+                "completed_at" to toIsoUtc(lease.completed_at)
             )
         }
 

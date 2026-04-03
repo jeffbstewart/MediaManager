@@ -23,6 +23,7 @@ RUN ./gradlew --no-daemon --max-workers=2 installDist
 
 # Stage 2: Runtime (Alpine for smaller image)
 FROM amazoncorretto:25-alpine
+ENV TZ=UTC
 RUN apk add --no-cache ffmpeg curl
 # Download go2rtc binary for camera stream relay (never port-map 1984 externally)
 ARG GO2RTC_VERSION=1.9.8

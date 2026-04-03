@@ -17,7 +17,8 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.BuddyApiKey
 import net.stewart.mediamanager.service.BuddyKeyService
 import net.stewart.mediamanager.service.LegalRequirements
-import java.time.format.DateTimeFormatter
+import net.stewart.mediamanager.util.toIsoUtc
+
 
 /**
  * REST endpoints for the admin settings page.
@@ -52,7 +53,7 @@ class SettingsHttpService {
             mapOf(
                 "id" to key.id,
                 "name" to key.name,
-                "created_at" to key.created_at?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                "created_at" to toIsoUtc(key.created_at)
             )
         }
 

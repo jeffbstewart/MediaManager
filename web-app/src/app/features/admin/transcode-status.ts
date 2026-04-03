@@ -8,6 +8,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
+import { TimezoneService } from '../../core/timezone.service';
 
 interface TranscodeStatus {
   local_disabled: boolean;
@@ -61,6 +62,7 @@ interface RecentLease {
 })
 export class TranscodeStatusComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+  readonly tz = inject(TimezoneService);
 
   readonly loading = signal(true);
   readonly data = signal<TranscodeStatus | null>(null);
@@ -121,9 +123,7 @@ export class TranscodeStatusComponent implements OnInit, OnDestroy {
   }
 
   formatTimestamp(ts: string | null): string {
-    if (!ts) return '—';
-    const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return this.tz.formatTime(ts);
   }
 
   leaseTypeLabel(type: string): string {

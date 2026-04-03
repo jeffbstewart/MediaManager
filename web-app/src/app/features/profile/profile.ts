@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
+import { TimezoneService } from '../../core/timezone.service';
 
 interface Profile {
   id: number;
@@ -37,6 +38,7 @@ interface Session {
 })
 export class ProfileComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  readonly tz = inject(TimezoneService);
 
   readonly loading = signal(true);
   readonly profile = signal<Profile | null>(null);
@@ -130,9 +132,7 @@ export class ProfileComponent implements OnInit {
   }
 
   formatDate(dateStr: string | null): string {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return this.tz.formatDateTime(dateStr);
   }
 
   qualityStars = [1, 2, 3, 4, 5];

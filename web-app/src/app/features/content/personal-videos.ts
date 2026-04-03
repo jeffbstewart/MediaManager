@@ -6,6 +6,7 @@ import {
   CatalogService, FamilyVideoCard, FamilySortMode,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
+import { TimezoneService } from '../../core/timezone.service';
 
 @Component({
   selector: 'app-personal-videos',
@@ -16,6 +17,7 @@ import { AppRoutes } from '../../core/routes';
 })
 export class PersonalVideosComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
+  private readonly tz = inject(TimezoneService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -64,8 +66,7 @@ export class PersonalVideosComponent implements OnInit {
   }
 
   formatDate(dateStr: string): string {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return this.tz.formatDate(dateStr);
   }
 
   private async refresh(): Promise<void> {

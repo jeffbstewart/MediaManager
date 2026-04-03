@@ -16,15 +16,13 @@ import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.util.toIsoUtc
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 @Blocking
 class UserManagementHttpService {
 
     private val gson = Gson()
-    private val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-
     @Get("/api/v2/admin/users")
     fun list(ctx: ServiceRequestContext): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -38,7 +36,7 @@ class UserManagementHttpService {
                 "locked" to u.locked,
                 "must_change_password" to u.must_change_password,
                 "rating_ceiling" to u.rating_ceiling,
-                "created_at" to u.created_at?.format(dtf)
+                "created_at" to toIsoUtc(u.created_at)
             )
         }
         return jsonResponse(gson.toJson(mapOf("users" to users)))
@@ -178,12 +176,12 @@ class UserManagementHttpService {
 
         val browserSessions = net.stewart.mediamanager.service.PairingService.getSessionTokensForUser(userId).map { token ->
             mapOf("id" to token.id, "type" to "browser", "user_agent" to token.user_agent,
-                "created_at" to token.created_at?.toString(), "last_used_at" to token.last_used_at?.toString(),
-                "expires_at" to token.expires_at.toString())
+                "created_at" to toIsoUtc(token.created_at), "last_used_at" to toIsoUtc(token.last_used_at),
+                "expires_at" to toIsoUtc(token.expires_at))
         }
         val deviceSessions = net.stewart.mediamanager.service.PairingService.getDeviceTokensForUser(userId).map { token ->
             mapOf("id" to token.id, "type" to "device", "device_name" to token.device_name,
-                "created_at" to token.created_at?.toString(), "last_used_at" to token.last_used_at?.toString())
+                "created_at" to toIsoUtc(token.created_at), "last_used_at" to toIsoUtc(token.last_used_at))
         }
         return jsonResponse(gson.toJson(mapOf("sessions" to browserSessions + deviceSessions)))
     }

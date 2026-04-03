@@ -16,6 +16,7 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.*
+import net.stewart.mediamanager.util.toIsoUtc
 import java.time.LocalDateTime
 
 @Blocking
@@ -88,7 +89,7 @@ class AddItemHttpService {
                 "has_purchase" to hasPurchase,
                 "photo_count" to (photoCounts[item.id] ?: 0),
                 "entry_source" to item.entry_source,
-                "created_at" to item.created_at?.toString()
+                "created_at" to toIsoUtc(item.created_at)
             ))
         }
 
@@ -98,7 +99,7 @@ class AddItemHttpService {
                 "display_name" to (scan.upc), "upc" to scan.upc,
                 "format" to null, "enrichment_status" to scan.lookup_status,
                 "poster_url" to null, "has_purchase" to false, "photo_count" to 0,
-                "entry_source" to "UPC", "created_at" to scan.scanned_at?.toString()
+                "entry_source" to "UPC", "created_at" to toIsoUtc(scan.scanned_at)
             ))
         }
 
