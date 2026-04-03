@@ -129,6 +129,14 @@ class TranscodeWorker(
             for (lease in sortedLeases) {
                 if (!running.get()) break
 
+                // Abort bundle if the server has invalidated any of our leases
+                if (apiClient.hasInvalidatedLeases(allLeaseIds)) {
+                    log.warn("Bundle abandoned — server invalidated leases for: {} (transcode_id={})",
+                        bundle.relativePath, bundle.transcodeId)
+                    apiClient.clearInvalidatedLeases()
+                    break
+                }
+
                 // Heartbeat all other leases in the bundle
                 val othersToHeartbeat = allLeaseIds.filter { it != lease.leaseId }
                 if (othersToHeartbeat.isNotEmpty()) {
@@ -153,6 +161,7 @@ class TranscodeWorker(
                 }
             }
         } finally {
+            apiClient.clearInvalidatedLeases()
             // Clean up local cache after bundle completes
             if (localCache != null && videoInputFile != sourceFile) {
                 localCache.remove(bundle.transcodeId)
@@ -441,9 +450,25 @@ class TranscodeWorker(
             }
         } else {
             log.warn("Thumbnail generation failed for: {}", videoFile.name)
+            // Clean up partial sprite sheets and VTT so they don't block regeneration
+            cleanupThumbnails(outputDir, outputBaseName)
             apiClient.reportFailure(leaseId, "FFmpeg thumbnail generation failed")
         }
         return true
+    }
+
+    /** Deletes any thumbnail sprite sheets and VTT for the given base name. */
+    private fun cleanupThumbnails(outputDir: File, baseName: String) {
+        val vtt = File(outputDir, "$baseName.thumbs.vtt")
+        if (vtt.exists()) { vtt.delete(); log.info("Deleted partial VTT: {}", vtt.name) }
+        var i = 1
+        while (true) {
+            val sheet = File(outputDir, "$baseName.thumbs_$i.jpg")
+            if (!sheet.exists()) break
+            sheet.delete()
+            i++
+        }
+        if (i > 1) log.info("Deleted {} partial sprite sheet(s) for {}", i - 1, baseName)
     }
 
     /**
@@ -533,6 +558,13 @@ class TranscodeWorker(
                 whisperOutputFile.exists() -> whisperOutputFile
                 alternateOutputFile.exists() -> alternateOutputFile
                 else -> null
+            }
+
+            // If leases were invalidated (heartbeat killed the process), clean up partial output
+            if (apiClient.hasInvalidatedLeases(bundleLeaseIds)) {
+                log.warn("Subtitles aborted (leases invalidated), cleaning up partial output for: {}", relativePath)
+                actualOutput?.delete()
+                return true
             }
 
             val exitCode = process.exitValue()
@@ -637,6 +669,12 @@ class TranscodeWorker(
                 try {
                     Thread.sleep(config.progressIntervalSeconds * 1000L)
                     if (process.isAlive) {
+                        // Check if the server has invalidated our leases (e.g. after server restart)
+                        if (apiClient.hasInvalidatedLeases(bundleLeaseIds)) {
+                            log.warn("Lease invalidated mid-transcode, killing process for lease {}", activeLeaseId)
+                            process.destroyForcibly()
+                            break
+                        }
                         apiClient.reportProgress(activeLeaseId, progressPercent.get(), encoderName)
                         if (othersToHeartbeat.isNotEmpty()) {
                             apiClient.heartbeatMultiple(othersToHeartbeat)

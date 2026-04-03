@@ -17,6 +17,7 @@ import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.MediaItemDeleteService
+import net.stewart.mediamanager.service.ScanDetailService
 import net.stewart.mediamanager.service.SearchIndexService
 import java.time.LocalDateTime
 
@@ -118,22 +119,33 @@ class DataQualityHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val title = Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
         val body = ctx.request().aggregate().join().contentUtf8()
         val map = gson.fromJson(body, Map::class.java)
 
-        if (map.containsKey("tmdb_id")) {
-            val newTmdbId = (map["tmdb_id"] as? Number)?.toInt()
-            title.tmdb_id = newTmdbId
-            if (newTmdbId != null) {
-                title.enrichment_status = EnrichmentStatus.REASSIGNMENT_REQUESTED.name
+        val newTmdbId = if (map.containsKey("tmdb_id")) (map["tmdb_id"] as? Number)?.toInt() else null
+        val newMediaType = (map["media_type"] as? String) ?: "MOVIE"
+
+        if (newTmdbId != null) {
+            // Delegate to ScanDetailService which handles duplicate detection and merging
+            return when (val result = ScanDetailService.assignTmdb(titleId, newTmdbId, newMediaType)) {
+                is ScanDetailService.AssignResult.Assigned ->
+                    jsonResponse(gson.toJson(mapOf("ok" to true)))
+                is ScanDetailService.AssignResult.Merged ->
+                    jsonResponse(gson.toJson(mapOf("ok" to true, "merged_into" to result.intoTitleId,
+                        "merged_title_name" to result.mergedTitleName)))
+                is ScanDetailService.AssignResult.NotFound ->
+                    HttpResponse.of(HttpStatus.NOT_FOUND)
             }
         }
-        if (map.containsKey("media_type")) title.media_type = map["media_type"] as String
+
+        // Non-TMDB updates (media_type only, etc.)
+        val title = Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        if (map.containsKey("media_type")) title.media_type = newMediaType
         title.updated_at = LocalDateTime.now()
         title.save()
         SearchIndexService.onTitleChanged(titleId)
-        return jsonResponse("""{"ok":true}""")
+        return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
 
     @Delete("/api/v2/admin/data-quality/{titleId}")

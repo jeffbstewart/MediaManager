@@ -9,6 +9,7 @@ import net.stewart.mediamanager.grpc.*
 import net.stewart.transcode.ChapterInfo
 import net.stewart.transcode.ForBrowserProbeResult
 import org.slf4j.LoggerFactory
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -58,6 +59,9 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     @Volatile private var connected = false
     @Volatile private var lastPendingCount = 0
 
+    /** Lease IDs the server has rejected as invalid/expired. */
+    private val invalidatedLeases: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
     // ========================================================================
     // Connection
     // ========================================================================
@@ -90,7 +94,20 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
                     }
                     ServerMessage.MessageCase.ERROR -> {
                         val err = message.error
-                        log.warn("Server error: {} — {}", err.code, err.message)
+                        if (err.code == BuddyErrorCode.BUDDY_ERROR_CODE_INVALID_LEASE) {
+                            // Extract lease ID from message like "Lease 12345 not found or not active"
+                            val leaseId = Regex("""Lease (\d+)""").find(err.message)?.groupValues?.get(1)?.toLongOrNull()
+                            if (leaseId != null) {
+                                if (invalidatedLeases.add(leaseId)) {
+                                    log.warn("Lease {} invalidated by server: {}", leaseId, err.message)
+                                }
+                                // else: already known, don't spam the log
+                            } else {
+                                log.warn("Server error: {} — {}", err.code, err.message)
+                            }
+                        } else {
+                            log.warn("Server error: {} — {}", err.code, err.message)
+                        }
                     }
                     else -> {
                         log.warn("Unknown server message: {}", message.messageCase)
@@ -292,6 +309,13 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     fun getPendingCount(): Int = lastPendingCount
 
     fun isConnected(): Boolean = connected
+
+    /** Returns true if any of the given lease IDs have been rejected by the server. */
+    fun hasInvalidatedLeases(leaseIds: List<Long>): Boolean =
+        leaseIds.any { it in invalidatedLeases }
+
+    /** Clears invalidated lease tracking (call after abandoning a bundle). */
+    fun clearInvalidatedLeases() = invalidatedLeases.clear()
 
     fun shutdown() {
         try {
