@@ -122,8 +122,9 @@ class TranscodeWorker(
         val allLeaseIds = sortedLeases.map { it.leaseId }
 
         // Determine the video input file: local cache or NAS
+        // Heartbeat all leases during file staging to prevent idle timeout
         val sourceFile = pathTranslator.sourceFile(bundle.relativePath)
-        val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size)
+        val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size, allLeaseIds)
 
         try {
             for (lease in sortedLeases) {
@@ -176,7 +177,7 @@ class TranscodeWorker(
      * For bundles with 2+ leases and local cache configured, stages the file locally.
      * For single-lease bundles or no cache, streams from NAS.
      */
-    private fun resolveVideoInput(bundle: BundleResponse, sourceFile: File, leaseCount: Int): File {
+    private fun resolveVideoInput(bundle: BundleResponse, sourceFile: File, leaseCount: Int, leaseIds: List<Long>): File {
         if (localCache == null) return sourceFile
 
         // Check if already cached
@@ -189,8 +190,26 @@ class TranscodeWorker(
         // Only stage locally if 2+ leases (copy pays for itself)
         if (leaseCount < 2) return sourceFile
 
+        // Heartbeat all leases during staging to prevent idle stream timeout
+        val stagingHeartbeat = Thread({
+            while (!Thread.currentThread().isInterrupted) {
+                try {
+                    Thread.sleep(config.progressIntervalSeconds * 1000L)
+                    apiClient.heartbeatMultiple(leaseIds)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }, "staging-heartbeat").apply { isDaemon = true }
+        stagingHeartbeat.start()
+
         // Stage the file locally
-        val staged = localCache.stageFile(bundle.transcodeId, bundle.relativePath, sourceFile)
+        val staged = try {
+            localCache.stageFile(bundle.transcodeId, bundle.relativePath, sourceFile)
+        } finally {
+            stagingHeartbeat.interrupt()
+            stagingHeartbeat.join(2000)
+        }
         if (staged != null) {
             return staged
         }
