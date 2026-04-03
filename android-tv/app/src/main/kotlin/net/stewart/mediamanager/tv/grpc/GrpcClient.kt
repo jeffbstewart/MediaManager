@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.tv.grpc
 
+import com.google.protobuf.ByteString
 import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.ClientCall
@@ -8,11 +9,16 @@ import io.grpc.ForwardingClientCall.SimpleForwardingClientCall
 import io.grpc.ManagedChannel
 import io.grpc.Metadata
 import io.grpc.MethodDescriptor
+import io.grpc.Status
+import io.grpc.StatusException
+import io.grpc.StatusRuntimeException
 import io.grpc.okhttp.OkHttpChannelBuilder
 import net.stewart.mediamanager.grpc.AuthServiceGrpcKt
 import net.stewart.mediamanager.grpc.CatalogServiceGrpcKt
+import net.stewart.mediamanager.grpc.ImageServiceGrpcKt
 import net.stewart.mediamanager.grpc.InfoServiceGrpcKt
 import net.stewart.mediamanager.grpc.discoverRequest
+import net.stewart.mediamanager.grpc.refreshRequest
 import net.stewart.mediamanager.tv.auth.AuthManager
 
 class GrpcClient(private val authManager: AuthManager) {
@@ -31,28 +37,60 @@ class GrpcClient(private val authManager: AuthManager) {
         return newChannel
     }
 
-    /** Unauthenticated -- for Login and Discover */
     fun authService(): AuthServiceGrpcKt.AuthServiceCoroutineStub =
         AuthServiceGrpcKt.AuthServiceCoroutineStub(getChannel())
 
-    /** Unauthenticated -- for Discover */
     fun infoService(): InfoServiceGrpcKt.InfoServiceCoroutineStub =
         InfoServiceGrpcKt.InfoServiceCoroutineStub(getChannel())
 
-    /** Authenticated */
     fun catalogService(): CatalogServiceGrpcKt.CatalogServiceCoroutineStub =
         CatalogServiceGrpcKt.CatalogServiceCoroutineStub(getChannel())
 
-    /** Shut down and recreate on next call (e.g. after server address change) */
+    fun imageService(): ImageServiceGrpcKt.ImageServiceCoroutineStub =
+        ImageServiceGrpcKt.ImageServiceCoroutineStub(getChannel())
+
     fun resetChannel() {
         channel?.shutdownNow()
         channel = null
     }
 
     /**
-     * Test connectivity to a server without modifying stored auth state.
-     * Creates a temporary channel, calls Discover, then shuts it down.
+     * Execute an authenticated gRPC call with automatic token refresh.
+     * If the call fails with UNAUTHENTICATED, refreshes the access token
+     * using the stored refresh token and retries once.
      */
+    suspend fun <T> withAuth(call: suspend () -> T): T {
+        return try {
+            call()
+        } catch (e: StatusException) {
+            if (e.status.code == Status.Code.UNAUTHENTICATED && tryRefreshToken()) {
+                call()
+            } else throw e
+        } catch (e: StatusRuntimeException) {
+            if (e.status.code == Status.Code.UNAUTHENTICATED && tryRefreshToken()) {
+                call()
+            } else throw e
+        }
+    }
+
+    private suspend fun tryRefreshToken(): Boolean {
+        val refresh = authManager.refreshToken ?: return false
+        val username = authManager.activeUsername ?: return false
+        return try {
+            val response = authService().refresh(refreshRequest {
+                this.refreshToken = ByteString.copyFrom(refresh)
+            })
+            authManager.addAccount(
+                username,
+                response.accessToken.toByteArray(),
+                response.refreshToken.toByteArray()
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun testDiscover(host: String, port: Int, useTls: Boolean) {
         val testChannel = buildChannel(host, port, useTls)
         try {
@@ -96,8 +134,6 @@ private class AuthInterceptor(private val authManager: AuthManager) : ClientInte
         ) {
             override fun start(responseListener: Listener<RespT>, headers: Metadata) {
                 authManager.accessToken?.let { token ->
-                    // Server expects "Bearer <jwt>" in the ASCII "authorization" header.
-                    // The token bytes are a UTF-8 encoded JWT string.
                     val jwt = String(token, Charsets.UTF_8)
                     headers.put(AUTHORIZATION_KEY, "Bearer $jwt")
                 }

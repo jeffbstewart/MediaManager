@@ -5,6 +5,7 @@ import io.grpc.Status
 import io.grpc.StatusException
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.FamilyMember
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.TitleFamilyMember
 import net.stewart.mediamanager.entity.TitleSeason
@@ -801,6 +802,8 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         val allTranscodes = TranscodeEntity.findAll().filter { it.file_path != null }
         val playableByTitle = allTranscodes.filter { isPlayable(it, nasRoot) }.groupBy { it.title_id }
+        // Title IDs that have a physical disc (MediaItemTitle link) — wish-only titles don't count as owned
+        val ownedTitleIds = MediaItemTitle.findAll().map { it.title_id }.toSet()
 
         val items = parts.map { part ->
             val title = titlesByTmdbId[part.tmdb_movie_id]
@@ -817,7 +820,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                 name = title?.name ?: part.title
                 posterUrl?.let { this.posterUrl = it }
                 year?.let { this.year = it }
-                owned = title != null
+                owned = title != null && title.id!! in ownedTitleIds
                 playable = tc != null
                 title?.id?.let { titleId = it }
                 quality = tc?.media_format.toProtoQuality()

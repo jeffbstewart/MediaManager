@@ -253,7 +253,7 @@ fun CastMemberEntity.toProto(): CastMember = castMember {
     tmdbPersonId = this@toProto.tmdb_person_id
     name = this@toProto.name
     this@toProto.character_name?.let { characterName = it }
-    this@toProto.profile_path?.let { headshotUrl = "/headshots/${this@toProto.tmdb_person_id}" }
+    this@toProto.profile_path?.let { headshotUrl = "/headshots/${this@toProto.id}" }
     order = this@toProto.cast_order
 }
 

@@ -49,7 +49,8 @@ private val AVATAR_COLORS = listOf(
 fun HomeScreen(
     authManager: AuthManager,
     grpcClient: GrpcClient,
-    onSwitchAccount: () -> Unit = {}
+    onSwitchAccount: () -> Unit = {},
+    onNavigate: (String) -> Unit = {}
 ) {
     var feed by remember { mutableStateOf<HomeFeedResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -57,7 +58,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         try {
-            feed = grpcClient.catalogService().homeFeed(empty { })
+            feed = grpcClient.withAuth { grpcClient.catalogService().homeFeed(empty { }) }
         } catch (e: Exception) {
             error = e.message ?: "Failed to load home feed"
         } finally {
@@ -66,10 +67,11 @@ fun HomeScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // ── Profile bar ──
+        // ── Top bar ──
         ProfileBar(
             username = authManager.activeUsername ?: "",
-            onProfileClick = onSwitchAccount
+            onProfileClick = onSwitchAccount,
+            onNavigate = onNavigate
         )
 
         // ── Content ──
@@ -104,7 +106,8 @@ fun HomeScreen(
                 } else {
                     HomeFeedContent(
                         carousels = carousels,
-                        baseUrl = authManager.httpBaseUrl ?: ""
+                        baseUrl = authManager.httpBaseUrl ?: "",
+                        onTitleClick = { id -> onNavigate("title/$id") }
                     )
                 }
             }
@@ -113,7 +116,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ProfileBar(username: String, onProfileClick: () -> Unit) {
+private fun ProfileBar(username: String, onProfileClick: () -> Unit, onNavigate: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -121,17 +124,22 @@ private fun ProfileBar(username: String, onProfileClick: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Media Manager",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
+        // Left: nav tabs
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Search placeholder
-            OutlinedButton(onClick = { /* TODO: navigate to search */ }) {
-                Text("Search...")
-            }
+            Text(
+                text = "Media Manager",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterVertically).padding(end = 12.dp)
+            )
+            OutlinedButton(onClick = { onNavigate("movies") }) { Text("Movies") }
+            OutlinedButton(onClick = { onNavigate("tv") }) { Text("TV Shows") }
+            OutlinedButton(onClick = { onNavigate("family") }) { Text("Family") }
+            OutlinedButton(onClick = { onNavigate("search") }) { Text("Search") }
+        }
+
+        // Right: profile
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
 
             // Profile / switch account
             OutlinedButton(onClick = onProfileClick) {
@@ -160,7 +168,7 @@ private fun ProfileBar(username: String, onProfileClick: () -> Unit) {
 }
 
 @Composable
-private fun HomeFeedContent(carousels: List<Carousel>, baseUrl: String) {
+private fun HomeFeedContent(carousels: List<Carousel>, baseUrl: String, onTitleClick: (Long) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 16.dp),
@@ -170,7 +178,8 @@ private fun HomeFeedContent(carousels: List<Carousel>, baseUrl: String) {
             CarouselRow(
                 title = carousel.name,
                 items = carousel.itemsList,
-                baseUrl = baseUrl
+                baseUrl = baseUrl,
+                onTitleClick = onTitleClick
             )
         }
     }
@@ -180,7 +189,8 @@ private fun HomeFeedContent(carousels: List<Carousel>, baseUrl: String) {
 private fun CarouselRow(
     title: String,
     items: List<Title>,
-    baseUrl: String
+    baseUrl: String,
+    onTitleClick: (Long) -> Unit
 ) {
     Column(modifier = Modifier.padding(start = 48.dp)) {
         Text(
@@ -196,7 +206,7 @@ private fun CarouselRow(
                 PosterCard(
                     title = title,
                     baseUrl = baseUrl,
-                    onClick = { /* TODO: navigate to detail */ }
+                    onClick = { onTitleClick(title.id) }
                 )
             }
         }
