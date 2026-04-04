@@ -124,6 +124,11 @@ object ArmeriaServer {
             .decorator(slowHandlerDecorator)
             .service(grpcService)
 
+        // All annotated HTTP services run on the blocking executor by default.
+        // This prevents any handler from accidentally blocking the Netty event loop
+        // with DB queries, file I/O, or CompletableFuture.join() calls.
+        // gRPC services are unaffected — they use their own coroutine dispatchers
+        // and are registered via .service(grpcService) above.
         registerHttpServices(sb)
 
         // Angular SPA at /app/ with client-side routing fallback.
@@ -159,9 +164,9 @@ object ArmeriaServer {
 
             // Restrict monitoring endpoints to the internal port only
             val internalOnly = internalOnlyDecorator(internalPort)
-            sb.annotatedService().decorator(internalOnly).build(MetricsHttpService())
-            sb.annotatedService().decorator(internalOnly).build(AppLogHttpService())
-            sb.annotatedService().decorator(internalOnly).build(RequestLogHttpService())
+            sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(MetricsHttpService())
+            sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(AppLogHttpService())
+            sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(RequestLogHttpService())
         }
 
         server = sb.build()
@@ -189,61 +194,68 @@ object ArmeriaServer {
     fun registerHttpServices(sb: com.linecorp.armeria.server.ServerBuilder) {
         val authDecorator = ArmeriaAuthDecorator()
 
-        // Health check (no auth)
-        sb.annotatedService(HealthHttpService())
+        // Helper: register an annotated service that always runs on the blocking executor.
+        // Every HTTP handler does DB queries or file I/O — none should run on the event loop.
+        fun blocking(service: Any) =
+            sb.annotatedService().decorator(authDecorator).useBlockingTaskExecutor(true).build(service)
+        fun blockingNoAuth(service: Any) =
+            sb.annotatedService().useBlockingTaskExecutor(true).build(service)
 
-        // Authenticated image/data endpoints
-        sb.annotatedService().decorator(authDecorator).build(PosterHttpService())
-        sb.annotatedService().decorator(authDecorator).build(HeadshotHttpService())
-        sb.annotatedService().decorator(authDecorator).build(BackdropHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CollectionPosterHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LocalImageHttpService())
-        sb.annotatedService().decorator(authDecorator).build(OwnershipPhotoHttpService())
-        sb.annotatedService().decorator(authDecorator).build(PlaybackProgressHttpService())
+        // Health check (no auth, lightweight — but blocking is harmless and consistent)
+        blockingNoAuth(HealthHttpService())
+
+        // Image endpoints
+        blocking(PosterHttpService())
+        blocking(HeadshotHttpService())
+        blocking(BackdropHttpService())
+        blocking(CollectionPosterHttpService())
+        blocking(LocalImageHttpService())
+        blocking(OwnershipPhotoHttpService())
+        blocking(PlaybackProgressHttpService())
 
         // Streaming endpoints (video, camera, live TV)
-        sb.annotatedService().decorator(authDecorator).build(VideoStreamHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CameraStreamHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LiveTvStreamHttpService())
+        blocking(VideoStreamHttpService())
+        blocking(CameraStreamHttpService())
+        blocking(LiveTvStreamHttpService())
 
-        // REST API — authenticated catalog endpoints
-        sb.annotatedService().decorator(authDecorator).build(HomeFeedHttpService())
-        sb.annotatedService().decorator(authDecorator).build(TitleListHttpService())
-        sb.annotatedService().decorator(authDecorator).build(TitleDetailHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CollectionHttpService())
-        sb.annotatedService().decorator(authDecorator).build(TagHttpService())
-        sb.annotatedService().decorator(authDecorator).build(FamilyVideosHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CameraListHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LiveTvListHttpService())
-        sb.annotatedService().decorator(authDecorator).build(WishListHttpService())
-        sb.annotatedService().decorator(authDecorator).build(ProfileHttpService())
-        sb.annotatedService().decorator(authDecorator).build(ActorHttpService())
-        sb.annotatedService().decorator(authDecorator).build(SearchHttpService())
-        sb.annotatedService().decorator(authDecorator).build(TranscodeStatusHttpService())
-        sb.annotatedService().decorator(authDecorator).build(UnmatchedHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LinkedTranscodesHttpService())
-        sb.annotatedService().decorator(authDecorator).build(BacklogHttpService())
-        sb.annotatedService().decorator(authDecorator).build(TagManagementHttpService())
-        sb.annotatedService().decorator(authDecorator).build(SettingsHttpService())
-        sb.annotatedService().decorator(authDecorator).build(UserManagementHttpService())
-        sb.annotatedService().decorator(authDecorator).build(InventoryReportHttpService())
-        sb.annotatedService().decorator(authDecorator).build(PurchaseWishesHttpService())
-        sb.annotatedService().decorator(authDecorator).build(ValuationHttpService())
-        sb.annotatedService().decorator(authDecorator).build(AmazonImportHttpService())
-        sb.annotatedService().decorator(authDecorator).build(DocumentOwnershipHttpService())
-        sb.annotatedService().decorator(authDecorator).build(ExpandHttpService())
-        sb.annotatedService().decorator(authDecorator).build(LiveTvSettingsHttpService())
-        sb.annotatedService().decorator(authDecorator).build(CameraSettingsHttpService())
-        sb.annotatedService().decorator(authDecorator).build(DataQualityHttpService())
-        sb.annotatedService().decorator(authDecorator).build(AddItemHttpService())
-        sb.annotatedService().decorator(authDecorator).build(MediaItemEditHttpService())
-        sb.annotatedService().decorator(authDecorator).build(FamilyMemberHttpService())
+        // REST API — catalog endpoints
+        blocking(HomeFeedHttpService())
+        blocking(TitleListHttpService())
+        blocking(TitleDetailHttpService())
+        blocking(CollectionHttpService())
+        blocking(TagHttpService())
+        blocking(FamilyVideosHttpService())
+        blocking(CameraListHttpService())
+        blocking(LiveTvListHttpService())
+        blocking(WishListHttpService())
+        blocking(ProfileHttpService())
+        blocking(ActorHttpService())
+        blocking(SearchHttpService())
+        blocking(TranscodeStatusHttpService())
+        blocking(UnmatchedHttpService())
+        blocking(LinkedTranscodesHttpService())
+        blocking(BacklogHttpService())
+        blocking(TagManagementHttpService())
+        blocking(SettingsHttpService())
+        blocking(UserManagementHttpService())
+        blocking(InventoryReportHttpService())
+        blocking(PurchaseWishesHttpService())
+        blocking(ValuationHttpService())
+        blocking(AmazonImportHttpService())
+        blocking(DocumentOwnershipHttpService())
+        blocking(ExpandHttpService())
+        blocking(LiveTvSettingsHttpService())
+        blocking(CameraSettingsHttpService())
+        blocking(DataQualityHttpService())
+        blocking(AddItemHttpService())
+        blocking(MediaItemEditHttpService())
+        blocking(FamilyMemberHttpService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
-        sb.annotatedService(AuthRestService())
+        blockingNoAuth(AuthRestService())
 
         // Roku endpoints (own auth: device token + cookie fallback, no ArmeriaAuthDecorator)
-        sb.annotatedService(RokuFeedHttpService())
+        blockingNoAuth(RokuFeedHttpService())
         // Device pairing (unauthenticated, has its own rate limiting)
         sb.annotatedService(PairingHttpService())
     }
