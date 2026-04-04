@@ -135,13 +135,15 @@ private fun ProfileBar(username: String, onProfileClick: () -> Unit, onNavigate:
             OutlinedButton(onClick = { onNavigate("movies") }) { Text("Movies") }
             OutlinedButton(onClick = { onNavigate("tv") }) { Text("TV Shows") }
             OutlinedButton(onClick = { onNavigate("family") }) { Text("Family") }
+            OutlinedButton(onClick = { onNavigate("wishlist") }) { Text("Wishes") }
+            OutlinedButton(onClick = { onNavigate("cameras") }) { Text("Cameras") }
+            OutlinedButton(onClick = { onNavigate("livetv") }) { Text("Live TV") }
             OutlinedButton(onClick = { onNavigate("search") }) { Text("Search") }
         }
 
         // Right: profile
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Profile / switch account
+            OutlinedButton(onClick = { onNavigate("profile") }) { Text("Profile") }
             OutlinedButton(onClick = onProfileClick) {
                 val color = AVATAR_COLORS[username.hashCode().absoluteValue % AVATAR_COLORS.size]
                 Box(

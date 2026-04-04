@@ -23,7 +23,11 @@ import net.stewart.mediamanager.tv.catalog.TitleDetailScreen
 import net.stewart.mediamanager.tv.catalog.TitleGridScreen
 import net.stewart.mediamanager.tv.grpc.GrpcClient
 import net.stewart.mediamanager.tv.home.HomeScreen
+import net.stewart.mediamanager.tv.live.CamerasScreen
+import net.stewart.mediamanager.tv.live.LiveTvScreen
 import net.stewart.mediamanager.tv.player.VideoPlayerScreen
+import net.stewart.mediamanager.tv.profile.ProfileScreen
+import net.stewart.mediamanager.tv.wishlist.WishListScreen
 import net.stewart.mediamanager.tv.search.SearchScreen
 
 @Composable
@@ -135,6 +139,37 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 onCollectionClick = { id -> navController.navigate("collection/$id") },
                 onTagClick = { id -> navController.navigate("tag/$id") },
                 onGenreClick = { id -> navController.navigate("genre/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("wishlist") {
+            WishListScreen(
+                grpcClient = grpcClient,
+                onTitleClick = { id -> navController.navigate("title/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("cameras") {
+            CamerasScreen(
+                authManager = authManager,
+                grpcClient = grpcClient,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("livetv") {
+            LiveTvScreen(
+                authManager = authManager,
+                grpcClient = grpcClient,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("profile") {
+            ProfileScreen(
+                grpcClient = grpcClient,
                 onBack = { navController.popBackStack() }
             )
         }

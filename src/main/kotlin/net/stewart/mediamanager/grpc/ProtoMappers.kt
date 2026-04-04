@@ -371,8 +371,8 @@ fun AppUser.toUserInfo(): UserInfo = userInfo {
 fun CameraEntity.toProto(): net.stewart.mediamanager.grpc.Camera = camera {
     id = this@toProto.id!!
     name = this@toProto.name
-    streamUrl = "/cam/${this@toProto.go2rtc_name}/stream.m3u8"
-    snapshotUrl = "/cam/${this@toProto.go2rtc_name}/snapshot.jpg"
+    streamUrl = "/cam/${this@toProto.id}/stream.m3u8"
+    snapshotUrl = "/cam/${this@toProto.id}/snapshot.jpg"
 }
 
 fun LiveTvChannel.toProto(): TvChannel = tvChannel {
