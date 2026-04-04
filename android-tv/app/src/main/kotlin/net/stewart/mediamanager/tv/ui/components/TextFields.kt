@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.tv.ui.components
 
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -21,7 +22,7 @@ private val TvTextFieldColors
         unfocusedContainerColor = Color(0xFF1E1E1E),
     )
 
-/** OutlinedTextField with TV-appropriate contrast colors. */
+/** OutlinedTextField with TV-appropriate contrast colors. Autocorrect disabled by default. */
 @Composable
 fun TvOutlinedTextField(
     value: String,
@@ -29,7 +30,8 @@ fun TvOutlinedTextField(
     label: String,
     modifier: Modifier = Modifier,
     singleLine: Boolean = true,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(autoCorrectEnabled = false)
 ) {
     OutlinedTextField(
         value = value,
@@ -37,6 +39,7 @@ fun TvOutlinedTextField(
         label = { Text(label) },
         singleLine = singleLine,
         visualTransformation = visualTransformation,
+        keyboardOptions = keyboardOptions,
         colors = TvTextFieldColors,
         modifier = modifier
     )

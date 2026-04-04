@@ -36,7 +36,8 @@ class SettingsHttpService {
         "keepa_enabled", "keepa_api_key", "keepa_tokens_per_minute",
         "privacy_policy_url", "privacy_policy_version",
         "ios_terms_of_use_url", "ios_terms_of_use_version",
-        "web_terms_of_use_url", "web_terms_of_use_version"
+        "web_terms_of_use_url", "web_terms_of_use_version",
+        "android_tv_terms_of_use_url", "android_tv_terms_of_use_version"
     )
 
     @Get("/api/v2/admin/settings")

@@ -21,6 +21,10 @@ fun currentUser(): AppUser = USER_CONTEXT_KEY.get()
 private val AUTHORIZATION_KEY: Metadata.Key<String> =
     Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
 
+/** Optional metadata key sent by clients to identify their platform for legal compliance. */
+private val CLIENT_PLATFORM_KEY: Metadata.Key<String> =
+    Metadata.Key.of("x-client-platform", Metadata.ASCII_STRING_MARSHALLER)
+
 /**
  * gRPC [ServerInterceptor] that validates JWT Bearer tokens and enforces access policies.
  *
@@ -78,7 +82,10 @@ class AuthInterceptor : ServerInterceptor {
 
         // Legal compliance: block if user hasn't agreed to current terms
         // (admins are exempt — they need access to configure the URLs)
-        if (!net.stewart.mediamanager.service.LegalRequirements.isCompliant(user.id!!, user.isAdmin()) && !isGateExempt(method)) {
+        // Use client-supplied platform header to check the correct platform's TOU version.
+        val clientPlatform = headers.get(CLIENT_PLATFORM_KEY)
+        val requiredTou = net.stewart.mediamanager.service.LegalRequirements.touVersionForPlatform(clientPlatform)
+        if (!net.stewart.mediamanager.service.LegalRequirements.isCompliant(user.id!!, user.isAdmin(), requiredTou) && !isGateExempt(method)) {
             call.close(
                 Status.PERMISSION_DENIED.withDescription("legal_agreement_required"),
                 Metadata()

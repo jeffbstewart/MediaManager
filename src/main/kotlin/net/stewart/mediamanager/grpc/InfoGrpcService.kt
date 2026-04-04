@@ -21,6 +21,7 @@ class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
         val ppVersion = configs["privacy_policy_version"]?.config_val?.toIntOrNull()
         val touKey = when (request.platform) {
             ClientPlatform.CLIENT_PLATFORM_IOS -> "ios_terms_of_use"
+            ClientPlatform.CLIENT_PLATFORM_ANDROID_TV -> "android_tv_terms_of_use"
             else -> "web_terms_of_use"  // UNKNOWN defaults to web
         }
         val touUrl = configs["${touKey}_url"]?.config_val?.takeIf { it.isNotBlank() }

@@ -117,6 +117,14 @@ class GrpcClient(private val authManager: AuthManager) {
         }
     }
 
+    /** Call Discover on the configured server to get legal info and capabilities. */
+    suspend fun discover(): net.stewart.mediamanager.grpc.DiscoverResponse {
+        return InfoServiceGrpcKt.InfoServiceCoroutineStub(getChannel())
+            .discover(discoverRequest {
+                platform = net.stewart.mediamanager.grpc.ClientPlatform.CLIENT_PLATFORM_ANDROID_TV
+            })
+    }
+
     companion object {
         private fun buildChannel(
             host: String,
@@ -139,6 +147,9 @@ class GrpcClient(private val authManager: AuthManager) {
 private val AUTHORIZATION_KEY: Metadata.Key<String> =
     Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
 
+private val CLIENT_PLATFORM_KEY: Metadata.Key<String> =
+    Metadata.Key.of("x-client-platform", Metadata.ASCII_STRING_MARSHALLER)
+
 private class AuthInterceptor(private val authManager: AuthManager) : ClientInterceptor {
     override fun <ReqT, RespT> interceptCall(
         method: MethodDescriptor<ReqT, RespT>,
@@ -153,6 +164,7 @@ private class AuthInterceptor(private val authManager: AuthManager) : ClientInte
                     val jwt = String(token, Charsets.UTF_8)
                     headers.put(AUTHORIZATION_KEY, "Bearer $jwt")
                 }
+                headers.put(CLIENT_PLATFORM_KEY, "android_tv")
                 super.start(responseListener, headers)
             }
         }

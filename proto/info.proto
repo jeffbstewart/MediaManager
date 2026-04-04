@@ -27,6 +27,7 @@ enum ClientPlatform {
   CLIENT_PLATFORM_UNKNOWN = 0;
   CLIENT_PLATFORM_IOS = 1;
   CLIENT_PLATFORM_WEB = 2;
+  CLIENT_PLATFORM_ANDROID_TV = 3;
 }
 
 // Server capabilities advertised after authentication.

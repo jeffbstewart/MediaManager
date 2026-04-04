@@ -143,6 +143,18 @@
                  (input)="updateSetting('web_terms_of_use_version', $event)" min="0" />
         </div>
 
+        <span class="subsection-label">Android TV Terms of Use</span>
+        <div class="field-group">
+          <label class="field-label">URL</label>
+          <input class="field-input" type="url" [value]="settings()['android_tv_terms_of_use_url'] ?? ''"
+                 (input)="updateSetting('android_tv_terms_of_use_url', $event)" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Version</label>
+          <input class="field-input" type="number" [value]="settings()['android_tv_terms_of_use_version'] ?? '0'"
+                 (input)="updateSetting('android_tv_terms_of_use_version', $event)" min="0" />
+        </div>
+
         <!-- Save -->
         <div class="save-row">
           <button mat-flat-button color="primary" (click)="save()" [disabled]="saving()">

@@ -245,8 +245,11 @@ class AuthRestService {
 
                 // Include legal compliance status so the UI can prompt re-acknowledgement
                 // if the required versions have changed since the user last agreed.
+                // Use web-specific TOU version — this endpoint only serves the web SPA.
                 if (LegalRequirements.privacyPolicyVersion > 0) {
-                    responseBody["legal_compliant"] = LegalRequirements.isCompliant(user.id!!, user.isAdmin())
+                    responseBody["legal_compliant"] = LegalRequirements.isCompliant(
+                        user.id!!, user.isAdmin(), LegalRequirements.webTermsOfUseVersion
+                    )
                     responseBody["agreed_privacy_policy_version"] = user.privacy_policy_version
                     responseBody["agreed_terms_of_use_version"] = user.terms_of_use_version
                     responseBody["required_privacy_policy_version"] = LegalRequirements.privacyPolicyVersion
