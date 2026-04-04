@@ -292,6 +292,31 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (video) video.currentTime = Math.min(video.duration, video.currentTime + 30);
   }
 
+  seekToChapter(startSeconds: number, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    const video = this.videoRef()?.nativeElement;
+    if (video) video.currentTime = startSeconds;
+  }
+
+  nextChapter(): void {
+    const video = this.videoRef()?.nativeElement;
+    if (!video || this.chapters.chapters.length === 0) return;
+    const pos = video.currentTime;
+    const next = this.chapters.chapters.find(ch => ch.start > pos + 1);
+    if (next) video.currentTime = next.start;
+  }
+
+  previousChapter(): void {
+    const video = this.videoRef()?.nativeElement;
+    if (!video || this.chapters.chapters.length === 0) return;
+    const pos = video.currentTime;
+    // Find the chapter we're currently in or the one before
+    const sorted = [...this.chapters.chapters].sort((a, b) => b.start - a.start);
+    const prev = sorted.find(ch => ch.start < pos - 2);
+    if (prev) video.currentTime = prev.start;
+  }
+
   goBack(): void {
     window.history.back();
   }

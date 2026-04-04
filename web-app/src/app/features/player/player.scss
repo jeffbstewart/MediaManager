@@ -209,12 +209,24 @@ video {
 
 .chapter-tick {
   position: absolute;
-  top: -1px;
+  top: -4px;
   width: 2px;
-  height: calc(100% + 2px);
+  height: calc(100% + 8px);
   background: #fbbf24;
+  border: none;
   border-radius: 1px;
-  pointer-events: none;
+  padding: 0;
+  // Wider hit area via transparent padding trick
+  box-shadow: -4px 0 0 transparent, 4px 0 0 transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 3;
+  transition: transform 0.1s, background 0.1s;
+
+  &:hover {
+    background: #fde68a;
+    transform: scaleX(2);
+  }
 }
 
 // Thumbnail preview (Plyr/Shaka approach: <img> in overflow:hidden container)

@@ -25,6 +25,8 @@
      (keydown.f)="toggleFullscreen()"
      (keydown.space)="togglePlay()"
      (keydown.escape)="goBack()"
+     (keydown.[)="previousChapter()"
+     (keydown.])="nextChapter()"
      tabindex="0">
 
   @if (videoSrc()) {
@@ -86,7 +88,11 @@
 
           <!-- Chapter markers -->
           @for (ch of chapters.chapters; track ch.number) {
-            <div class="chapter-tick" [style.left.%]="chapterPercent(ch.start)"></div>
+            <button class="chapter-tick"
+                    [style.left.%]="chapterPercent(ch.start)"
+                    [attr.aria-label]="ch.title || 'Chapter ' + ch.number"
+                    [title]="ch.title || 'Chapter ' + ch.number"
+                    (click)="seekToChapter(ch.start, $event)"></button>
           }
         </div>
       </div>
