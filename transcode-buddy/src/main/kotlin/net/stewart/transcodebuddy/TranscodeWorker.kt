@@ -305,6 +305,11 @@ class TranscodeWorker(
                 }
                 val line = sanitizeFfmpegOutput(rawLine)
                 outputBuilder.appendLine(line)
+                if (line.contains("moving the moov atom") || line.contains("Starting second pass")) {
+                    status.task = "faststart (moving moov atom)"
+                    status.transcodePercent = 96
+                    progressPercent.set(96)
+                }
                 if (durationSecs != null && durationSecs > 0) {
                     val match = timeRegex.find(line)
                     if (match != null) {
@@ -414,6 +419,11 @@ class TranscodeWorker(
                 if (!running.get()) { process.destroyForcibly(); return@forEachLine }
                 val line = sanitizeFfmpegOutput(rawLine)
                 outputBuilder.appendLine(line)
+                if (line.contains("moving the moov atom") || line.contains("Starting second pass")) {
+                    status.task = "faststart (moving moov atom)"
+                    status.transcodePercent = 96
+                    progressPercent.set(96)
+                }
                 if (durationSecs != null && durationSecs > 0) {
                     val match = timeRegex.find(line)
                     if (match != null) {
