@@ -174,7 +174,9 @@ class TranscodeWorker(
                 status.taskStartTime = System.currentTimeMillis()
                 val leaseStart = System.currentTimeMillis()
                 try {
-                    when (lease.leaseType) {
+                    // Process methods return Boolean (true=success) or Unit (always success if no exception).
+                    // Track the result to avoid recording "success" when the method handled the failure internally.
+                    val success = when (lease.leaseType) {
                         "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
                         "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
                         "MOBILE_TRANSCODE" -> processMobileTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
@@ -183,10 +185,12 @@ class TranscodeWorker(
                         else -> {
                             log.warn("Unknown lease type: {}", lease.leaseType)
                             apiClient.reportFailure(lease.leaseId, "Unknown lease type: ${lease.leaseType}")
+                            false
                         }
                     }
+                    val result = if (success != false) "success" else "failed"
                     val outputBytes = status.outputFile?.let { if (it.exists()) it.length() else 0L } ?: 0L
-                    status.recordCompletion(status.fileName, taskName, "success",
+                    status.recordCompletion(status.fileName, taskName, result,
                         (System.currentTimeMillis() - leaseStart) / 1000, outputBytes)
                 } catch (e: Exception) {
                     log.error("Error processing {} lease {}: {}", lease.leaseType, lease.leaseId, e.message, e)
