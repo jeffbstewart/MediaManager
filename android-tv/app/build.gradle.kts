@@ -1,5 +1,6 @@
 import com.google.protobuf.gradle.proto
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -14,6 +15,12 @@ kotlin {
     }
 }
 
+// Load signing config from secrets/ if available (not checked into git)
+val signingPropsFile = rootProject.file("../secrets/android-tv-signing.properties")
+val hasSigningConfig = signingPropsFile.exists()
+val signingProps = Properties()
+if (hasSigningConfig) signingProps.load(signingPropsFile.inputStream())
+
 android {
     namespace = "net.stewart.mediamanager.tv"
     compileSdk = 36
@@ -26,6 +33,17 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = rootProject.file(signingProps.getProperty("storeFile"))
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -33,6 +51,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
