@@ -173,7 +173,11 @@ class VideoStreamHttpService {
             parsed
         }
 
-        val (start, end) = range
+        val (start, requestedEnd) = range
+        // Cap response at 10MB to prevent Armeria request timeout on large ranges.
+        // Browsers seamlessly issue follow-up Range requests for the next chunk.
+        val maxChunkSize = 10L * 1024 * 1024
+        val end = minOf(requestedEnd, start + maxChunkSize - 1)
         val contentLength = end - start + 1
 
         val headers = ResponseHeaders.builder(HttpStatus.PARTIAL_CONTENT)
