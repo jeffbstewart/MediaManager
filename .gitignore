@@ -47,6 +47,8 @@ secrets/roku-deploy.env
 secrets/roku-deploy-dev.env
 secrets/roku-deploy-prod.env
 secrets/*.agent_visible_env
+secrets/android-tv-keystore.jks
+secrets/android-tv-signing.properties
 
 # Vaadin generated (src/main)
 src/main/bundles/

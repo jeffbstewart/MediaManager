@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
@@ -80,6 +81,14 @@ fun ServerSetupScreen(
             ) {
                 Text("Use TLS", style = MaterialTheme.typography.bodyLarge)
                 Switch(checked = useTls, onCheckedChange = { useTls = it })
+            }
+            if (!useTls) {
+                Text(
+                    "Plaintext sends credentials unencrypted.\nOnly use on trusted local networks.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF9800),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
 
