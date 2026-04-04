@@ -33,7 +33,7 @@ fun EpisodesScreen(
     titleId: Long,
     seasonNumber: Int,
     grpcClient: GrpcClient,
-    onEpisodeClick: (transcodeId: Long) -> Unit,
+    onEpisodeClick: (transcodeId: Long, season: Int, episodeNumber: Int) -> Unit,
     onBack: () -> Unit = {}
 ) {
     var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
@@ -79,7 +79,7 @@ fun EpisodesScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(episodes) { episode ->
-                        EpisodeCard(episode, onEpisodeClick)
+                        EpisodeCard(episode, seasonNumber, onEpisodeClick)
                     }
                 }
             }
@@ -88,9 +88,9 @@ fun EpisodesScreen(
 }
 
 @Composable
-private fun EpisodeCard(episode: Episode, onClick: (Long) -> Unit) {
+private fun EpisodeCard(episode: Episode, seasonNumber: Int, onClick: (Long, Int, Int) -> Unit) {
     Card(
-        onClick = { if (episode.playable && episode.hasTranscodeId()) onClick(episode.transcodeId) },
+        onClick = { if (episode.playable && episode.hasTranscodeId()) onClick(episode.transcodeId, seasonNumber, episode.episodeNumber) },
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

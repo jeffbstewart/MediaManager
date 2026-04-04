@@ -17,6 +17,7 @@ import net.stewart.mediamanager.grpc.AuthServiceGrpcKt
 import net.stewart.mediamanager.grpc.CatalogServiceGrpcKt
 import net.stewart.mediamanager.grpc.ImageServiceGrpcKt
 import net.stewart.mediamanager.grpc.InfoServiceGrpcKt
+import net.stewart.mediamanager.grpc.PlaybackServiceGrpcKt
 import net.stewart.mediamanager.grpc.discoverRequest
 import net.stewart.mediamanager.grpc.refreshRequest
 import net.stewart.mediamanager.tv.auth.AuthManager
@@ -48,6 +49,9 @@ class GrpcClient(private val authManager: AuthManager) {
 
     fun imageService(): ImageServiceGrpcKt.ImageServiceCoroutineStub =
         ImageServiceGrpcKt.ImageServiceCoroutineStub(getChannel())
+
+    fun playbackService(): PlaybackServiceGrpcKt.PlaybackServiceCoroutineStub =
+        PlaybackServiceGrpcKt.PlaybackServiceCoroutineStub(getChannel())
 
     fun resetChannel() {
         channel?.shutdownNow()

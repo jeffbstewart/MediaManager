@@ -56,6 +56,7 @@ fun TitleDetailScreen(
     onTagClick: (Long) -> Unit,
     onSeasonClick: (Long) -> Unit,
     onCollectionClick: (Int) -> Unit,
+    onPlay: (Long) -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     var detail by remember { mutableStateOf<TitleDetail?>(null) }
@@ -80,7 +81,7 @@ fun TitleDetailScreen(
             Text(error!!, color = MaterialTheme.colorScheme.error)
         }
         detail != null -> TitleDetailContent(
-            detail!!, onActorClick, onGenreClick, onTagClick, onSeasonClick, onCollectionClick, onBack
+            detail!!, onActorClick, onGenreClick, onTagClick, onSeasonClick, onCollectionClick, onPlay, onBack
         )
     }
 }
@@ -93,6 +94,7 @@ private fun TitleDetailContent(
     onTagClick: (Long) -> Unit,
     onSeasonClick: (Long) -> Unit,
     onCollectionClick: (Int) -> Unit,
+    onPlay: (Long) -> Unit,
     onBack: () -> Unit
 ) {
     val title = detail.title
@@ -152,8 +154,8 @@ private fun TitleDetailContent(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             androidx.tv.material3.OutlinedButton(onClick = onBack) { Text("Back") }
-            if (title.playable) {
-                Button(onClick = { /* TODO: play */ }) { Text("Play") }
+            if (title.playable && title.hasTranscodeId()) {
+                Button(onClick = { onPlay(title.transcodeId) }) { Text("Play") }
             } else {
                 Text(
                     "Not available yet",

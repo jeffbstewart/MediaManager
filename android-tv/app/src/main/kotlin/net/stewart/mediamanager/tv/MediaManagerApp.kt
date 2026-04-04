@@ -23,6 +23,7 @@ import net.stewart.mediamanager.tv.catalog.TitleDetailScreen
 import net.stewart.mediamanager.tv.catalog.TitleGridScreen
 import net.stewart.mediamanager.tv.grpc.GrpcClient
 import net.stewart.mediamanager.tv.home.HomeScreen
+import net.stewart.mediamanager.tv.player.VideoPlayerScreen
 import net.stewart.mediamanager.tv.search.SearchScreen
 
 @Composable
@@ -151,6 +152,7 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 onTagClick = { id -> navController.navigate("tag/$id") },
                 onSeasonClick = { id -> navController.navigate("seasons/$id") },
                 onCollectionClick = { id -> navController.navigate("collection/$id") },
+                onPlay = { tcId -> navController.navigate("play/$tcId") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -178,7 +180,9 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 titleId = titleId,
                 seasonNumber = season,
                 grpcClient = grpcClient,
-                onEpisodeClick = { /* TODO: play */ },
+                onEpisodeClick = { tcId, epSeason, epNumber ->
+                    navController.navigate("play/$tcId/$titleId/$epSeason/$epNumber")
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -223,6 +227,52 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 authManager = authManager,
                 grpcClient = grpcClient,
                 onTitleClick = { id -> navController.navigate("title/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Video player ─────────────────────────────────────────
+
+        // Movie playback (no next-episode)
+        composable("play/{transcodeId}", arguments = listOf(
+            navArgument("transcodeId") { type = NavType.LongType }
+        )) {
+            val tcId = it.arguments?.getLong("transcodeId") ?: return@composable
+            VideoPlayerScreen(
+                transcodeId = tcId,
+                authManager = authManager,
+                grpcClient = grpcClient,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // Episode playback (with next-episode support)
+        composable(
+            "play/{transcodeId}/{titleId}/{season}/{episode}",
+            arguments = listOf(
+                navArgument("transcodeId") { type = NavType.LongType },
+                navArgument("titleId") { type = NavType.LongType },
+                navArgument("season") { type = NavType.IntType },
+                navArgument("episode") { type = NavType.IntType }
+            )
+        ) {
+            val tcId = it.arguments?.getLong("transcodeId") ?: return@composable
+            val tId = it.arguments?.getLong("titleId") ?: return@composable
+            val s = it.arguments?.getInt("season") ?: return@composable
+            val ep = it.arguments?.getInt("episode") ?: return@composable
+            VideoPlayerScreen(
+                transcodeId = tcId,
+                authManager = authManager,
+                grpcClient = grpcClient,
+                titleId = tId,
+                seasonNumber = s,
+                episodeNumber = ep,
+                onPlayNext = { nextTcId ->
+                    // Replace current player with next episode
+                    navController.navigate("play/$nextTcId/$tId/$s/${ep + 1}") {
+                        popUpTo("play/$tcId/$tId/$s/$ep") { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() }
             )
         }

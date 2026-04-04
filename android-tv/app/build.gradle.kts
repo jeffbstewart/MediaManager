@@ -121,9 +121,10 @@ dependencies {
     // Protobuf
     implementation(libs.protobuf.kotlin.lite)
 
-    // Image loading
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
+    // Video player
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
