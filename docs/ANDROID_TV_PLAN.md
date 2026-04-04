@@ -368,6 +368,7 @@ The server already handles:
 
 <p align="center">
   <a href="index.md">Documentation Home</a> &bull;
+  <a href="ANDROID_TV_GUIDE.md">Android TV Guide</a> &bull;
   <a href="IOS_PLAN.md">iOS Architecture Notes</a> &bull;
   <a href="ROKU_GUIDE.md">Roku Guide</a>
 </p>

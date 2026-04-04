@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Your physical media collection, digitized and streamable.</strong><br>
   Catalog DVDs, Blu-rays, and UHDs by barcode. Enrich with TMDB metadata.<br>
-  Stream from your NAS to any browser or Roku.
+  Stream from your NAS to any browser, Roku, or Google TV.
 </p>
 
 <p align="center">
@@ -15,6 +15,7 @@
   <a href="USER_GUIDE.md">User Guide</a> &bull;
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;
   <a href="ROKU_GUIDE.md">Roku Setup</a> &bull;
+  <a href="ANDROID_TV_GUIDE.md">Android TV Setup</a> &bull;
   <a href="TRANSCODE_BUDDY.md">Transcode Buddy</a> &bull;
   <a href="COMPETITIVE_ANALYSIS.md">Competitive Analysis</a>
 </p>
@@ -29,7 +30,7 @@ Media Manager is a self-hosted web application for people who own physical media
 
 **Discover** transcoded files on your NAS and automatically match them to catalog titles. The system understands MakeMKV naming conventions and handles movies, TV series with season/episode structure, and multi-disc sets.
 
-**Watch** from any browser or your living room Roku. The built-in video player streams MP4 files directly. MKV and AVI files are automatically transcoded to browser-compatible MP4 in the background, prioritized by popularity. Playback position syncs across devices.
+**Watch** from any browser, Roku, or Google TV. The built-in video player streams MP4 files directly. MKV and AVI files are automatically transcoded to browser-compatible MP4 in the background, prioritized by popularity. Playback position syncs across devices.
 
 **Organize** with tags, wish lists, favorites, and per-user content rating filters. Each household member gets their own account with personalized views.
 
@@ -43,6 +44,7 @@ Media Manager is a self-hosted web application for people who own physical media
 | [User Guide](USER_GUIDE.md) | Everyone | Browsing, searching, watching, personalizing |
 | [Admin Guide](ADMIN_GUIDE.md) | Administrators | Catalog management, transcoding, user management |
 | [Roku Setup](ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
+| [Android TV Setup](ANDROID_TV_GUIDE.md) | Google TV / Android TV users | Building, installing, multi-account, playback |
 | [Transcode Buddy](TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Mac Development Setup](MAC_SETUP.md) | Contributors | macOS prerequisites, building, deploying, iOS development |
@@ -66,6 +68,7 @@ graph LR
     subgraph Clients
         Browser
         Roku[Roku Channel]
+        AndroidTV[Android TV App]
     end
 
     subgraph NAS["Synology NAS"]
@@ -95,6 +98,7 @@ graph LR
 
     Browser -- HTTPS --> nginx
     Roku -- HTTPS --> nginx
+    AndroidTV -- HTTPS/gRPC --> nginx
     nginx -- HTTP --> App
     App --> media
     App --> cache
