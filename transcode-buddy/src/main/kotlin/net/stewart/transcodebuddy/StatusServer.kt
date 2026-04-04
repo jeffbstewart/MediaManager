@@ -84,7 +84,7 @@ class StatusServer(
         // Worker status
         sb.appendLine("<h2>Workers</h2>")
         sb.appendLine("<table>")
-        sb.appendLine("<tr><th>Worker</th><th>State</th><th>Task</th><th>File</th><th>Output Size</th><th>Rate</th></tr>")
+        sb.appendLine("<tr><th>Worker</th><th>State</th><th>Task</th><th>File</th><th>Output Size</th><th>Rate</th><th>Progress</th><th>ETA</th></tr>")
 
         for (ws in workerStatuses) {
             val snapshot = ws.snapshot()
@@ -100,6 +100,8 @@ class StatusServer(
             sb.appendLine("<td>${snapshot.fileName}</td>")
             sb.appendLine("<td class=\"mono\">${snapshot.outputSize}</td>")
             sb.appendLine("<td class=\"rate\">${snapshot.rate}</td>")
+            sb.appendLine("<td>${snapshot.progress}</td>")
+            sb.appendLine("<td>${snapshot.eta}</td>")
             sb.appendLine("</tr>")
         }
         sb.appendLine("</table>")
@@ -152,6 +154,8 @@ class WorkerStatus(val index: Int) {
     @Volatile var task: String = ""
     @Volatile var fileName: String = ""
     @Volatile var outputFile: File? = null
+    /** Expected final size of the output (source file size for staging, 0 if unknown). */
+    @Volatile var expectedSize: Long = 0
     @Volatile private var lastSize: Long = 0
     @Volatile private var lastSizeTime: Long = System.currentTimeMillis()
     @Volatile private var bytesPerSecond: Double = 0.0
@@ -172,12 +176,29 @@ class WorkerStatus(val index: Int) {
             lastSizeTime = now
         }
 
+        // ETA: for staging, expectedSize is the source file size.
+        // For transcodes, we don't know the final size, but we can show progress if expectedSize is set.
+        val eta = if (bytesPerSecond > 0 && expectedSize > 0 && currentSize < expectedSize) {
+            val remainingBytes = expectedSize - currentSize
+            val remainingSec = (remainingBytes / bytesPerSecond).toLong()
+            StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
+        } else if (bytesPerSecond > 0 && expectedSize == 0L && currentSize > 0) {
+            // No expected size (transcode) — can't compute ETA
+            ""
+        } else ""
+
+        val progress = if (expectedSize > 0 && currentSize > 0) {
+            "${(currentSize * 100 / expectedSize)}%"
+        } else ""
+
         return Snapshot(
             state = state,
             task = task,
             fileName = fileName,
             outputSize = if (file != null && currentSize > 0) StatusServer.humanSize(currentSize) else "",
-            rate = if (bytesPerSecond > 0) "${StatusServer.humanSize(bytesPerSecond.toLong())}/s" else ""
+            rate = if (bytesPerSecond > 0) "${StatusServer.humanSize(bytesPerSecond.toLong())}/s" else "",
+            progress = progress,
+            eta = eta
         )
     }
 
@@ -186,6 +207,8 @@ class WorkerStatus(val index: Int) {
         val task: String,
         val fileName: String,
         val outputSize: String,
-        val rate: String
+        val rate: String,
+        val progress: String,
+        val eta: String
     )
 }

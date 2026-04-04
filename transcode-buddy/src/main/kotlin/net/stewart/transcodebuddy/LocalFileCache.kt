@@ -18,7 +18,7 @@ import java.nio.file.StandardCopyOption
  * - Detect and delete incomplete transfers (`.copying` files)
  */
 class LocalFileCache(
-    private val tempDir: File,
+    val tempDir: File,
     private val apiClient: BuddyGrpcClient
 ) {
 

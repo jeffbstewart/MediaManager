@@ -145,6 +145,7 @@ class TranscodeWorker(
         bundleHeartbeat.start()
 
         // Determine the video input file: local cache or NAS
+        status.task = "staging"
         val sourceFile = pathTranslator.sourceFile(bundle.relativePath)
         val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size)
 
@@ -168,6 +169,7 @@ class TranscodeWorker(
 
                 try {
                     status.task = lease.leaseType.lowercase().replace('_', ' ')
+                    status.expectedSize = 0 // unknown for transcodes; staging sets this explicitly
                     when (lease.leaseType) {
                         "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
                         "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
@@ -214,6 +216,12 @@ class TranscodeWorker(
 
         // Only stage locally if 2+ leases (copy pays for itself)
         if (leaseCount < 2) return sourceFile
+
+        // Track the staging copy progress on the status page
+        val localFilename = "${bundle.transcodeId}_${bundle.relativePath.replace('/', '_')
+            .replace('\\', '_')}"
+        status.outputFile = java.io.File(localCache.tempDir, "$localFilename.copying")
+        status.expectedSize = sourceFile.length()
 
         // Stage the file locally (bundle heartbeat keeps stream alive)
         val staged = localCache.stageFile(bundle.transcodeId, bundle.relativePath, sourceFile)
