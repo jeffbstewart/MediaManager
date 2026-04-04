@@ -34,18 +34,18 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
         val user = currentUser()
         var cancelWatermark = -1
 
-        requests.collect { request ->
-            when {
-                request.hasCancelStale() -> {
-                    cancelWatermark = request.cancelStale.beforeRequestId
-                }
-                request.hasFetch() -> {
-                    val fetch = request.fetch
-                    // Skip if cancelled
-                    if (fetch.requestId <= cancelWatermark) return@collect
-
-                    val response = handleFetch(fetch, user.isAdmin())
-                    emit(response)
+        net.stewart.mediamanager.service.MetricsRegistry.trackImageStream().use {
+            requests.collect { request ->
+                when {
+                    request.hasCancelStale() -> {
+                        cancelWatermark = request.cancelStale.beforeRequestId
+                    }
+                    request.hasFetch() -> {
+                        val fetch = request.fetch
+                        if (fetch.requestId <= cancelWatermark) return@collect
+                        val response = handleFetch(fetch, user.isAdmin())
+                        emit(response)
+                    }
                 }
             }
         }

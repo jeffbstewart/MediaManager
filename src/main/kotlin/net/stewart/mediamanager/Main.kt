@@ -8,6 +8,7 @@ import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
+import net.stewart.mediamanager.service.EventLoopPacemaker
 import net.stewart.mediamanager.service.HealthWatchdog
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LiveTvStreamManager
@@ -145,7 +146,7 @@ fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(Thread { scheduler.shutdownNow() })
 
     // Armeria server: gRPC + REST + SPA on main port, monitoring on internal port
-    net.stewart.mediamanager.grpc.ArmeriaServer.start(
+    val armeriaServer = net.stewart.mediamanager.grpc.ArmeriaServer.start(
         port = CommandLineFlags.port,
         internalPort = CommandLineFlags.internalPort
     )
@@ -155,6 +156,11 @@ fun main(args: Array<String>) {
     val watchdog = HealthWatchdog(CommandLineFlags.port)
     watchdog.start()
     Runtime.getRuntime().addShutdownHook(Thread { watchdog.stop() })
+
+    // Pacemaker: measure event loop queue latency (detects blocked event loops)
+    val pacemaker = EventLoopPacemaker(armeriaServer)
+    pacemaker.start()
+    Runtime.getRuntime().addShutdownHook(Thread { pacemaker.stop() })
 
     // SSDP responder for Roku device discovery
     val ssdpResponder = SsdpResponder(CommandLineFlags.port)

@@ -20,6 +20,11 @@ object MetricsRegistry {
     private val activeMjpegStreams = AtomicInteger(0)
     private val activeHlsStreams = AtomicInteger(0)
 
+    // Armeria/gRPC active connection tracking
+    private val activeGrpcImageStreams = AtomicInteger(0)
+    private val activeVideoStreams = AtomicInteger(0)
+    private val watchdogFailures = java.util.concurrent.atomic.AtomicLong(0)
+
     init {
         JvmMemoryMetrics().bindTo(registry)
         JvmGcMetrics().bindTo(registry)
@@ -31,6 +36,11 @@ object MetricsRegistry {
         // Camera active stream gauges
         registry.gauge("mm_camera_active_streams", listOf(io.micrometer.core.instrument.Tag.of("type", "mjpeg")), activeMjpegStreams) { it.toDouble() }
         registry.gauge("mm_camera_active_streams", listOf(io.micrometer.core.instrument.Tag.of("type", "hls")), activeHlsStreams) { it.toDouble() }
+
+        // gRPC/Armeria connection tracking
+        registry.gauge("mm_grpc_active_image_streams", activeGrpcImageStreams) { it.toDouble() }
+        registry.gauge("mm_video_active_streams", activeVideoStreams) { it.toDouble() }
+        registry.gauge("mm_watchdog_failures_total", watchdogFailures) { it.toDouble() }
     }
 
     fun countHttpResponse(servlet: String, status: Int) {
@@ -91,6 +101,29 @@ object MetricsRegistry {
         registry.counter("mm_live_tv_tuner_busy_total").increment()
     }
 
+    /**
+     * Returns a [java.io.Closeable] that increments a gauge on creation and decrements on close.
+     * Use with Kotlin's `use {}` to guarantee cleanup:
+     * ```
+     * MetricsRegistry.trackImageStream().use {
+     *     // stream is active
+     * }
+     * // gauge decremented even on exception
+     * ```
+     */
+    fun trackImageStream(): java.io.Closeable {
+        activeGrpcImageStreams.incrementAndGet()
+        return java.io.Closeable { activeGrpcImageStreams.decrementAndGet() }
+    }
+
+    fun trackVideoStream(): java.io.Closeable {
+        activeVideoStreams.incrementAndGet()
+        return java.io.Closeable { activeVideoStreams.decrementAndGet() }
+    }
+
+    // Watchdog failure tracking
+    fun countWatchdogFailure(): Unit { watchdogFailures.incrementAndGet().let {} }
+
     fun registerEntityGauges() {
         registry.gauge("mm_active_sessions", this) {
             try {
@@ -145,6 +178,34 @@ object MetricsRegistry {
 
         registry.gauge("mm_live_tv_active_streams", this) {
             LiveTvStreamManager.activeStreamCount().toDouble()
+        }
+
+        // Auth: locked-out IP addresses (IPs with recent failures exceeding rate limit window)
+        registry.gauge("mm_auth_locked_accounts", this) {
+            try {
+                JdbiOrm.jdbi().withHandle<Double, Exception> { handle ->
+                    handle.createQuery("SELECT COUNT(*) FROM app_user WHERE locked = TRUE")
+                        .mapTo(Int::class.java)
+                        .one()
+                        .toDouble()
+                }
+            } catch (_: Exception) { 0.0 }
+        }
+
+        // Rate-limited IPs: IPs with recent failed attempts above threshold
+        registry.gauge("mm_auth_rate_limited_ips", this) {
+            try {
+                JdbiOrm.jdbi().withHandle<Double, Exception> { handle ->
+                    handle.createQuery(
+                        """SELECT COUNT(DISTINCT ip_address) FROM login_attempt
+                           WHERE success = FALSE AND attempted_at > :window"""
+                    )
+                        .bind("window", LocalDateTime.now().minusMinutes(30))
+                        .mapTo(Int::class.java)
+                        .one()
+                        .toDouble()
+                }
+            } catch (_: Exception) { 0.0 }
         }
     }
 }

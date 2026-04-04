@@ -75,7 +75,7 @@ object ArmeriaServer {
     private val log = LoggerFactory.getLogger(ArmeriaServer::class.java)
     private var server: Server? = null
 
-    fun start(port: Int, internalPort: Int = 0) {
+    fun start(port: Int, internalPort: Int = 0): Server {
         val loggingInterceptor = LoggingInterceptor()
         val authInterceptor = AuthInterceptor()
 
@@ -114,8 +114,14 @@ object ArmeriaServer {
         // Use the builder API (.annotatedService().decorator().build()) to avoid
         // varargs ambiguity with annotatedService(Object, Object...) which interprets
         // Function/DecoratingHttpServiceFunction as exception handlers instead of decorators.
+        val meterRegistry = net.stewart.mediamanager.service.MetricsRegistry.registry
+
+        val slowHandlerDecorator = net.stewart.mediamanager.armeria.SlowHandlerDecorator()
+
         val sb = Server.builder()
             .http(port)
+            .meterRegistry(meterRegistry)
+            .decorator(slowHandlerDecorator)
             .service(grpcService)
 
         registerHttpServices(sb)
@@ -167,6 +173,7 @@ object ArmeriaServer {
         } else {
             log.info("Armeria gRPC server started on port {} (h2c)", port)
         }
+        return server!!
     }
 
     fun stop() {

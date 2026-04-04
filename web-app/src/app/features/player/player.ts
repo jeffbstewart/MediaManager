@@ -145,35 +145,25 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   onResume(): void {
     this.showResume.set(false);
-    this.startPlayback();
-    const video = this.videoRef()?.nativeElement;
-    if (video) {
-      video.addEventListener('loadedmetadata', () => {
-        video.currentTime = this.resumePosition;
-        video.play();
-      }, { once: true });
-    }
+    this.startPlayback(this.resumePosition);
   }
 
   onStartOver(): void {
     this.showResume.set(false);
     this.reportClear();
-    this.startPlayback();
-    const video = this.videoRef()?.nativeElement;
-    if (video) {
-      video.addEventListener('canplay', () => video.play(), { once: true });
-    }
+    this.resumePosition = 0;
+    this.startPlayback(0);
   }
 
-  private startPlayback(): void {
+  private startPlayback(seekTo: number = 0): void {
     this.videoSrc.set(`/stream/${this.transcodeId}`);
     // Video element renders after signal update; set up listeners after render
-    setTimeout(() => this.setupVideoListeners(), 0);
+    setTimeout(() => this.setupVideoListeners(seekTo), 0);
   }
 
   // --- Video event listeners ---
 
-  private setupVideoListeners(): void {
+  private setupVideoListeners(seekTo: number = 0): void {
     const video = this.videoRef()?.nativeElement;
     if (!video) return;
 
@@ -205,6 +195,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
     });
     video.addEventListener('loadedmetadata', () => {
       this.duration.set(video.duration);
+      if (seekTo > 0) {
+        video.currentTime = seekTo;
+      }
+      video.play();
     });
     video.addEventListener('timeupdate', () => {
       this.currentTime.set(video.currentTime);

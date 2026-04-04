@@ -5,6 +5,7 @@ import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
@@ -22,6 +23,7 @@ class PlaybackProgressHttpService {
 
     private val gson = Gson()
 
+    @Blocking
     @Post("/playback-progress/{transcodeId}")
     fun record(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
         val userId = resolveUserId(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -41,6 +43,7 @@ class PlaybackProgressHttpService {
         return HttpResponse.of(HttpStatus.NO_CONTENT)
     }
 
+    @Blocking
     @Get("/playback-progress/{transcodeId}")
     fun get(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
         val userId = resolveUserId(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
@@ -55,6 +58,7 @@ class PlaybackProgressHttpService {
         return HttpResponse.of(HttpStatus.OK, MediaType.JSON_UTF_8, gson.toJson(result))
     }
 
+    @Blocking
     @Delete("/playback-progress/{transcodeId}")
     fun delete(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
         val userId = resolveUserId(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)

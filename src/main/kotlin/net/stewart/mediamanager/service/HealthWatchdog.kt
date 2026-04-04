@@ -1,8 +1,10 @@
 package net.stewart.mediamanager.service
 
+import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
 import java.net.HttpURLConnection
 import java.net.URI
+import java.util.concurrent.TimeUnit
 
 /**
  * Daemon thread that periodically probes the main Armeria port's /health endpoint.
@@ -17,6 +19,8 @@ class HealthWatchdog(private val mainPort: Int) {
     private val log = LoggerFactory.getLogger(HealthWatchdog::class.java)
     private val probeIntervalMs = 30_000L
     private val probeTimeoutMs = 5_000
+    private val probeTimer: Timer = MetricsRegistry.registry.timer("mm_watchdog_probe_seconds")
+    private val probeFailures = MetricsRegistry.registry.counter("mm_watchdog_probe_failures_total")
     @Volatile private var running = true
     @Volatile private var inFailure = false
     private var thread: Thread? = null
@@ -36,10 +40,14 @@ class HealthWatchdog(private val mainPort: Int) {
 
                 if (!running) break
 
+                val startNanos = System.nanoTime()
                 val healthy = probeHealth()
+                probeTimer.record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS)
+                if (!healthy) probeFailures.increment()
                 if (!healthy && !inFailure) {
                     // First failure — dump threads
                     inFailure = true
+                    MetricsRegistry.countWatchdogFailure()
                     log.error("WATCHDOG: Main port {} is NOT responding. Dumping all threads.", mainPort)
                     dumpAllThreads()
                 } else if (!healthy && inFailure) {

@@ -60,6 +60,7 @@ class VideoStreamHttpService {
     }
 
     private fun doStreamVideo(ctx: ServiceRequestContext, transcodeId: Long, writer: HttpResponseWriter) {
+        MetricsRegistry.trackVideoStream().use {
         try {
             val transcode = Transcode.findById(transcodeId)
             if (transcode == null || transcode.file_path == null) {
@@ -144,6 +145,7 @@ class VideoStreamHttpService {
         } catch (e: Exception) {
             log.warn("Video stream error: {}", e.message)
             try { writer.close() } catch (_: Exception) {}
+        }
         }
     }
 

@@ -7,6 +7,7 @@ import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
@@ -79,6 +80,7 @@ class RokuFeedHttpService {
             .build()
     }
 
+    @Blocking
     @Get("/roku/feed.json")
     fun feed(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "feed")
@@ -88,6 +90,7 @@ class RokuFeedHttpService {
         return jsonResponse(json, 300)
     }
 
+    @Blocking
     @Get("/roku/home.json")
     fun home(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "home")
@@ -98,6 +101,7 @@ class RokuFeedHttpService {
         return jsonResponse(json)
     }
 
+    @Blocking
     @Get("/roku/search.json")
     fun search(ctx: ServiceRequestContext, @Param("q") @Default("") q: String): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "search")
@@ -110,6 +114,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(result), 0)
     }
 
+    @Blocking
     @Get("regex:^/roku/title/(?<titleId>\\d+)\\.json$")
     fun titleDetail(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "title-detail")
@@ -123,6 +128,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
+    @Blocking
     @Get("regex:^/roku/collection/(?<collectionId>\\d+)\\.json$")
     fun collection(ctx: ServiceRequestContext, @Param("collectionId") collectionId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "collection")
@@ -136,6 +142,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
+    @Blocking
     @Get("regex:^/roku/tag/(?<tagId>\\d+)\\.json$")
     fun tag(ctx: ServiceRequestContext, @Param("tagId") tagId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "tag")
@@ -149,6 +156,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
+    @Blocking
     @Get("regex:^/roku/genre/(?<genreId>\\d+)\\.json$")
     fun genre(ctx: ServiceRequestContext, @Param("genreId") genreId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "genre")
@@ -162,6 +170,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
+    @Blocking
     @Get("regex:^/roku/actor/(?<personId>\\d+)\\.json$")
     fun actor(ctx: ServiceRequestContext, @Param("personId") personId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "actor")
@@ -175,6 +184,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(detail))
     }
 
+    @Blocking
     @Get("/roku/cameras.json")
     fun cameras(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, _) = authenticateDevice(ctx, "cameras")
@@ -198,6 +208,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(mapOf("cameras" to cameras)))
     }
 
+    @Blocking
     @Get("/roku/livetv/channels.json")
     fun liveTvChannels(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "livetv-channels")
@@ -234,6 +245,7 @@ class RokuFeedHttpService {
         return jsonResponse(mapper.writeValueAsString(mapOf("channels" to channels)))
     }
 
+    @Blocking
     @Post("/roku/wishlist/add")
     fun wishlistAdd(ctx: ServiceRequestContext): HttpResponse {
         val (_, user) = authenticateDevice(ctx, "wishlist-add")

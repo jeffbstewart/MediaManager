@@ -7,6 +7,7 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import net.stewart.mediamanager.entity.CastMember
@@ -60,6 +61,7 @@ private fun forbidden(metric: String): HttpResponse {
 
 class PosterHttpService {
 
+    @Blocking
     @Get("/posters/{size}/{titleId}")
     fun poster(ctx: ServiceRequestContext, @Param("size") size: String, @Param("titleId") titleId: Long): HttpResponse {
         val posterSize = PosterSize.entries.firstOrNull { it.pathSegment == size }
@@ -84,6 +86,7 @@ class PosterHttpService {
 
 class HeadshotHttpService {
 
+    @Blocking
     @Get("/headshots/{castMemberId}")
     fun headshot(@Param("castMemberId") castMemberId: Long): HttpResponse {
         val castMember = CastMember.findById(castMemberId)
@@ -102,6 +105,7 @@ class HeadshotHttpService {
 
 class BackdropHttpService {
 
+    @Blocking
     @Get("/backdrops/{titleId}")
     fun backdrop(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
         val title = Title.findById(titleId)
@@ -123,6 +127,7 @@ class BackdropHttpService {
 
 class CollectionPosterHttpService {
 
+    @Blocking
     @Get("/collection-posters/{collectionId}")
     fun collectionPoster(@Param("collectionId") collectionId: Int): HttpResponse {
         val collection = TmdbCollection.findAll().firstOrNull { it.tmdb_collection_id == collectionId }
@@ -141,6 +146,7 @@ class CollectionPosterHttpService {
 
 class LocalImageHttpService {
 
+    @Blocking
     @Get("/local-images/{uuid}")
     fun localImage(@Param("uuid") uuid: String): HttpResponse {
         if (uuid.isBlank() || uuid.contains("/")) return badRequest("local_image")
@@ -155,6 +161,7 @@ class LocalImageHttpService {
 
 class OwnershipPhotoHttpService {
 
+    @Blocking
     @Get("/ownership-photos/{uuid}")
     fun ownershipPhoto(ctx: ServiceRequestContext, @Param("uuid") uuid: String): HttpResponse {
         if (uuid.isBlank() || uuid.contains("/")) return badRequest("ownership_photo")

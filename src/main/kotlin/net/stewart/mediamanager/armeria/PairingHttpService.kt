@@ -8,6 +8,7 @@ import com.linecorp.armeria.common.HttpStatus
 import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.common.ResponseHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
@@ -63,6 +64,7 @@ class PairingHttpService {
         return HttpResponse.of(status, MediaType.JSON_UTF_8, gson.toJson(data))
     }
 
+    @Blocking
     @Post("/api/pair/start")
     fun start(ctx: ServiceRequestContext): HttpResponse {
         val ip = getClientIp(ctx)
@@ -103,6 +105,7 @@ class PairingHttpService {
         return jsonResponse(HttpStatus.OK, result)
     }
 
+    @Blocking
     @Get("/api/pair/status")
     fun status(ctx: ServiceRequestContext, @Param("code") @Default("") code: String): HttpResponse {
         val ip = getClientIp(ctx)
@@ -136,6 +139,7 @@ class PairingHttpService {
         return jsonResponse(HttpStatus.OK, result)
     }
 
+    @Blocking
     @Get("/api/pair/qr")
     fun qr(ctx: ServiceRequestContext, @Param("code") @Default("") code: String): HttpResponse {
         val ip = getClientIp(ctx)
