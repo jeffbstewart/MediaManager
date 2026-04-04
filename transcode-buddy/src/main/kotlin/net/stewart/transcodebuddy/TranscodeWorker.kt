@@ -172,6 +172,7 @@ class TranscodeWorker(
                 status.expectedSize = 0
                 status.transcodePercent = 0
                 status.taskStartTime = System.currentTimeMillis()
+                status.lastError = ""
                 val leaseStart = System.currentTimeMillis()
                 try {
                     // Process methods return Boolean (true=success) or Unit (always success if no exception).
@@ -191,12 +192,14 @@ class TranscodeWorker(
                     val result = if (success != false) "success" else "failed"
                     val outputBytes = status.outputFile?.let { if (it.exists()) it.length() else 0L } ?: 0L
                     status.recordCompletion(status.fileName, taskName, result,
-                        (System.currentTimeMillis() - leaseStart) / 1000, outputBytes)
+                        (System.currentTimeMillis() - leaseStart) / 1000, outputBytes,
+                        if (result == "failed") status.lastError else "")
                 } catch (e: Exception) {
                     log.error("Error processing {} lease {}: {}", lease.leaseType, lease.leaseId, e.message, e)
                     apiClient.reportFailure(lease.leaseId, e.message ?: "Unknown error")
                     status.recordCompletion(status.fileName, taskName, "failed",
-                        (System.currentTimeMillis() - leaseStart) / 1000, 0)
+                        (System.currentTimeMillis() - leaseStart) / 1000, 0,
+                        e.message ?: "Unknown error")
                 }
             }
         } finally {
@@ -331,8 +334,9 @@ class TranscodeWorker(
                 val errorTail = outputBuilder.toString().takeLast(2000)
                 log.error("FFmpeg failed for {} (exit {}): {}", relativePath, exitCode, errorTail)
                 tmpFile.delete()
+                status.lastError = "FFmpeg exit $exitCode: ${errorTail.takeLast(200)}"
                 apiClient.reportFailure(leaseId, "FFmpeg exit code $exitCode: ${errorTail.takeLast(500)}")
-                return true
+                return false
             }
 
             if (!tmpFile.renameTo(mp4File)) {
@@ -436,8 +440,9 @@ class TranscodeWorker(
                 val errorTail = outputBuilder.toString().takeLast(2000)
                 log.error("Mobile FFmpeg failed for {} (exit {}): {}", relativePath, exitCode, errorTail)
                 tmpFile.delete()
+                status.lastError = "FFmpeg exit $exitCode: ${errorTail.takeLast(200)}"
                 apiClient.reportFailure(leaseId, "FFmpeg exit code $exitCode: ${errorTail.takeLast(500)}")
-                return true
+                return false
             }
 
             if (!tmpFile.renameTo(mp4File)) {

@@ -142,6 +142,15 @@ class StatusServer(
                 sb.appendLine("</tr>")
             }
             sb.appendLine("</table>")
+
+            // Show full error detail for failures below the table
+            val failures = history.filter { it.detail.isNotEmpty() }
+            for (entry in failures) {
+                sb.appendLine("<div style=\"margin-top:1rem;padding:0.75rem;background:#2a1a1a;border-left:3px solid #f44336;border-radius:4px\">")
+                sb.appendLine("<strong class=\"err\">${entry.fileName}</strong> &mdash; ${entry.task}<br>")
+                sb.appendLine("<pre style=\"margin:0.5rem 0 0;white-space:pre-wrap;word-break:break-all;font-size:0.8em;color:#ccc\">${entry.detail}</pre>")
+                sb.appendLine("</div>")
+            }
         }
 
         sb.appendLine("<div class=\"subtitle\" style=\"margin-top:2rem;\">Auto-refreshes every 15 seconds</div>")
@@ -181,14 +190,16 @@ class WorkerStatus(val index: Int) {
     @Volatile var expectedSize: Long = 0
     /** Transcode progress 0-100, reported by FFmpeg output parsing. */
     @Volatile var transcodePercent: Int = 0
+    /** Last error message from a failed operation. Cleared on next task start. */
+    @Volatile var lastError: String = ""
     /** When the current task started (for ETA calculation from percent). */
     @Volatile var taskStartTime: Long = 0
 
     // Completion history (ring buffer, most recent 5)
     private val completions = java.util.concurrent.ConcurrentLinkedDeque<CompletionEntry>()
 
-    fun recordCompletion(fileName: String, task: String, result: String, durationSeconds: Long, outputBytes: Long) {
-        completions.addFirst(CompletionEntry(fileName, task, result, durationSeconds, outputBytes, Instant.now()))
+    fun recordCompletion(fileName: String, task: String, result: String, durationSeconds: Long, outputBytes: Long, detail: String = "") {
+        completions.addFirst(CompletionEntry(fileName, task, result, detail, durationSeconds, outputBytes, Instant.now()))
         while (completions.size > 10) completions.removeLast()
     }
 
@@ -198,6 +209,7 @@ class WorkerStatus(val index: Int) {
         val fileName: String,
         val task: String,
         val result: String,
+        val detail: String,
         val durationSeconds: Long,
         val outputBytes: Long,
         val completedAt: Instant
