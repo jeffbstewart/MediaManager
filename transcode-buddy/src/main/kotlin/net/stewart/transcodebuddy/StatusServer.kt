@@ -179,6 +179,10 @@ class WorkerStatus(val index: Int) {
     @Volatile var outputFile: File? = null
     /** Expected final size of the output (source file size for staging, 0 if unknown). */
     @Volatile var expectedSize: Long = 0
+    /** Transcode progress 0-100, reported by FFmpeg output parsing. */
+    @Volatile var transcodePercent: Int = 0
+    /** When the current task started (for ETA calculation from percent). */
+    @Volatile var taskStartTime: Long = 0
 
     // Completion history (ring buffer, most recent 5)
     private val completions = java.util.concurrent.ConcurrentLinkedDeque<CompletionEntry>()
@@ -218,20 +222,27 @@ class WorkerStatus(val index: Int) {
             lastSizeTime = now
         }
 
-        // ETA: for staging, expectedSize is the source file size.
-        // For transcodes, we don't know the final size, but we can show progress if expectedSize is set.
-        val eta = if (bytesPerSecond > 0 && expectedSize > 0 && currentSize < expectedSize) {
-            val remainingBytes = expectedSize - currentSize
-            val remainingSec = (remainingBytes / bytesPerSecond).toLong()
-            StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
-        } else if (bytesPerSecond > 0 && expectedSize == 0L && currentSize > 0) {
-            // No expected size (transcode) — can't compute ETA
-            ""
-        } else ""
+        val pct = transcodePercent
+        // Progress: staging uses file size ratio, transcodes use FFmpeg-reported percent
+        val progress = when {
+            expectedSize > 0 && currentSize > 0 -> "${(currentSize * 100 / expectedSize)}%"
+            pct > 0 -> "$pct%"
+            else -> ""
+        }
 
-        val progress = if (expectedSize > 0 && currentSize > 0) {
-            "${(currentSize * 100 / expectedSize)}%"
-        } else ""
+        // ETA: staging from bytes remaining / rate, transcodes from percent + elapsed time
+        val eta = when {
+            bytesPerSecond > 0 && expectedSize > 0 && currentSize < expectedSize -> {
+                val remainingSec = ((expectedSize - currentSize) / bytesPerSecond).toLong()
+                StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
+            }
+            pct in 1..99 && taskStartTime > 0 -> {
+                val elapsedSec = (now - taskStartTime) / 1000.0
+                val remainingSec = (elapsedSec * (100 - pct) / pct).toLong()
+                StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
+            }
+            else -> ""
+        }
 
         return Snapshot(
             state = state,

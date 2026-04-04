@@ -170,6 +170,8 @@ class TranscodeWorker(
                 val taskName = lease.leaseType.lowercase().replace('_', ' ')
                 status.task = taskName
                 status.expectedSize = 0
+                status.transcodePercent = 0
+                status.taskStartTime = System.currentTimeMillis()
                 val leaseStart = System.currentTimeMillis()
                 try {
                     when (lease.leaseType) {
@@ -306,6 +308,7 @@ class TranscodeWorker(
                         val currentSecs = h * 3600.0 + m * 60.0 + s + frac
                         val percent = ((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95)
                         progressPercent.set(percent)
+                        status.transcodePercent = percent
                     }
                 }
             }
@@ -411,7 +414,9 @@ class TranscodeWorker(
                         val s = match.groupValues[3].toInt()
                         val frac = "0.${match.groupValues[4]}".toDouble()
                         val currentSecs = h * 3600.0 + m * 60.0 + s + frac
-                        progressPercent.set(((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95))
+                        val pct = ((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95)
+                        progressPercent.set(pct)
+                        status.transcodePercent = pct
                     }
                 }
             }
