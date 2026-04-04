@@ -57,7 +57,8 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
 
     @Volatile private var requestObserver: StreamObserver<BuddyMessage>? = null
     @Volatile private var connected = false
-    @Volatile private var lastPendingCount = 0
+    @Volatile var lastPendingCount = 0
+        private set
 
     /** Lease IDs the server has rejected as invalid/expired. */
     private val invalidatedLeases: MutableSet<Long> = ConcurrentHashMap.newKeySet()

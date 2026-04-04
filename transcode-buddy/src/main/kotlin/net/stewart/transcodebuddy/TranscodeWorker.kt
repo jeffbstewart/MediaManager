@@ -19,7 +19,8 @@ class TranscodeWorker(
     private val encoder: EncoderProfile,
     private val workerIndex: Int,
     private val running: AtomicBoolean,
-    private val localCache: LocalFileCache?
+    private val localCache: LocalFileCache?,
+    val status: WorkerStatus = WorkerStatus(workerIndex)
 ) : Runnable {
 
     private val log = LoggerFactory.getLogger("Worker-$workerIndex")
@@ -64,6 +65,8 @@ class TranscodeWorker(
                 // the "no work" backoff from growing to 1 hour when the real problem
                 // is a dead connection, not an empty queue.
                 if (!apiClient.isConnected()) {
+                    status.state = "reconnecting"
+                    status.task = ""; status.fileName = ""; status.outputFile = null
                     log.info("Worker-{} stream disconnected, attempting reconnection...", workerIndex)
                     val reconnected = apiClient.connect()
                     if (reconnected == null) {
@@ -90,6 +93,8 @@ class TranscodeWorker(
                         log.info("Worker-{} idle for a while, allowing system sleep", workerIndex)
                     }
                     // Binary exponential backoff when no work available
+                    status.state = "idle"
+                    status.task = ""; status.fileName = ""; status.outputFile = null
                     log.info("Worker-{} no work available, sleeping {}s (backoff)", workerIndex, currentIntervalMs / 1000)
                     Thread.sleep(currentIntervalMs)
                     currentIntervalMs = (currentIntervalMs * 2).coerceAtMost(maxIntervalMs)
@@ -116,6 +121,8 @@ class TranscodeWorker(
 
         log.info("Claimed bundle of {} lease(s) for: {} (transcode_id={})",
             bundle.leases.size, bundle.relativePath, bundle.transcodeId)
+        status.state = "working"
+        status.fileName = bundle.relativePath.substringAfterLast('/')
 
         // Sort leases by execution order
         val sortedLeases = bundle.leases.sortedBy { executionOrder[it.leaseType] ?: 99 }
@@ -160,11 +167,12 @@ class TranscodeWorker(
                 }
 
                 try {
+                    status.task = lease.leaseType.lowercase().replace('_', ' ')
                     when (lease.leaseType) {
-                        "CHAPTERS" -> processChapters(lease.leaseId, bundle.relativePath, videoInputFile)
+                        "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
                         "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
                         "MOBILE_TRANSCODE" -> processMobileTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
-                        "THUMBNAILS" -> processThumbnails(lease.leaseId, bundle.relativePath, videoInputFile)
+                        "THUMBNAILS" -> { status.outputFile = null; processThumbnails(lease.leaseId, bundle.relativePath, videoInputFile) }
                         "SUBTITLES" -> processSubtitles(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
                         else -> {
                             log.warn("Unknown lease type: {}", lease.leaseType)
@@ -235,6 +243,7 @@ class TranscodeWorker(
 
         val mp4File = pathTranslator.forBrowserPath(relativePath)
         val tmpFile = pathTranslator.tmpPath(relativePath)
+        status.outputFile = tmpFile
         mp4File.parentFile?.mkdirs()
 
         try {
@@ -351,6 +360,7 @@ class TranscodeWorker(
 
         val mp4File = pathTranslator.forMobilePath(relativePath)
         val tmpFile = pathTranslator.forMobileTmpPath(relativePath)
+        status.outputFile = tmpFile
         mp4File.parentFile?.mkdirs()
 
         try {

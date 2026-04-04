@@ -82,10 +82,25 @@ fun main(args: Array<String>) {
     val running = AtomicBoolean(true)
     val executor = Executors.newFixedThreadPool(config.workerCount)
 
+    // Create workers with status tracking
+    val workers = (0 until config.workerCount).map { i ->
+        TranscodeWorker(config, grpcClient, pathTranslator, encoder, i, running, localCache)
+    }
+
+    // Start status server
+    val statusServer = StatusServer(
+        port = config.statusPort,
+        config = config,
+        grpcClient = grpcClient,
+        workerStatuses = workers.map { it.status }
+    )
+    statusServer.start()
+
     // Shutdown hook
     Runtime.getRuntime().addShutdownHook(Thread {
         log.info("Shutting down...")
         running.set(false)
+        statusServer.stop()
         SleepInhibitor.shutdown()
         grpcClient.shutdown()
         executor.shutdownNow()
@@ -94,12 +109,11 @@ fun main(args: Array<String>) {
     })
 
     // Start workers
-    for (i in 0 until config.workerCount) {
-        val worker = TranscodeWorker(config, grpcClient, pathTranslator, encoder, i, running, localCache)
+    for (worker in workers) {
         executor.submit(worker)
     }
 
-    log.info("Transcode Buddy running with {} worker(s). Press Ctrl+C to stop.", config.workerCount)
+    log.info("Transcode Buddy running with {} worker(s). Status: http://localhost:{}/status", config.workerCount, config.statusPort)
 
     // Block main thread until shutdown
     try {
