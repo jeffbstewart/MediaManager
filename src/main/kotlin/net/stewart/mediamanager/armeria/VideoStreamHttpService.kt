@@ -195,14 +195,17 @@ class VideoStreamHttpService {
         try {
             RandomAccessFile(file, "r").use { raf ->
                 raf.seek(start)
-                val buf = ByteArray(8192)
                 var remaining = contentLength
                 while (remaining > 0) {
-                    val toRead = minOf(buf.size.toLong(), remaining).toInt()
+                    // Allocate each buffer fresh so HttpData.wrap() can take ownership
+                    // without copying. 256KB chunks reduce allocation count vs 8KB.
+                    val toRead = minOf(256 * 1024L, remaining).toInt()
+                    val buf = ByteArray(toRead)
                     val read = raf.read(buf, 0, toRead)
                     if (read == -1) break
                     writer.whenConsumed().join()
-                    if (!writer.tryWrite(HttpData.copyOf(buf, 0, read))) {
+                    val data = if (read == buf.size) HttpData.wrap(buf) else HttpData.wrap(buf, 0, read)
+                    if (!writer.tryWrite(data)) {
                         break // Client disconnected
                     }
                     remaining -= read
