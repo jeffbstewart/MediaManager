@@ -167,9 +167,11 @@ class TranscodeWorker(
                     apiClient.heartbeatMultiple(othersToHeartbeat)
                 }
 
+                val taskName = lease.leaseType.lowercase().replace('_', ' ')
+                status.task = taskName
+                status.expectedSize = 0
+                val leaseStart = System.currentTimeMillis()
                 try {
-                    status.task = lease.leaseType.lowercase().replace('_', ' ')
-                    status.expectedSize = 0 // unknown for transcodes; staging sets this explicitly
                     when (lease.leaseType) {
                         "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
                         "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
@@ -181,9 +183,14 @@ class TranscodeWorker(
                             apiClient.reportFailure(lease.leaseId, "Unknown lease type: ${lease.leaseType}")
                         }
                     }
+                    val outputBytes = status.outputFile?.let { if (it.exists()) it.length() else 0L } ?: 0L
+                    status.recordCompletion(status.fileName, taskName, "success",
+                        (System.currentTimeMillis() - leaseStart) / 1000, outputBytes)
                 } catch (e: Exception) {
                     log.error("Error processing {} lease {}: {}", lease.leaseType, lease.leaseId, e.message, e)
                     apiClient.reportFailure(lease.leaseId, e.message ?: "Unknown error")
+                    status.recordCompletion(status.fileName, taskName, "failed",
+                        (System.currentTimeMillis() - leaseStart) / 1000, 0)
                 }
             }
         } finally {

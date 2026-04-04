@@ -121,6 +121,29 @@ class StatusServer(
             }
         }
 
+        // Recent completions
+        val history = workerStatuses.flatMap { it.recentCompletions() }
+            .sortedByDescending { it.completedAt }
+            .take(5)
+        if (history.isNotEmpty()) {
+            sb.appendLine("<h2>Recent Completions</h2>")
+            sb.appendLine("<table>")
+            sb.appendLine("<tr><th>File</th><th>Task</th><th>Result</th><th>Duration</th><th>Output Size</th><th>When</th></tr>")
+            for (entry in history) {
+                val resultClass = if (entry.result == "success") "ok" else "err"
+                val ago = Duration.between(entry.completedAt, Instant.now())
+                sb.appendLine("<tr>")
+                sb.appendLine("<td>${entry.fileName}</td>")
+                sb.appendLine("<td>${entry.task}</td>")
+                sb.appendLine("<td class=\"$resultClass\">${entry.result}</td>")
+                sb.appendLine("<td>${formatDuration(Duration.ofSeconds(entry.durationSeconds))}</td>")
+                sb.appendLine("<td class=\"mono\">${if (entry.outputBytes > 0) humanSize(entry.outputBytes) else ""}</td>")
+                sb.appendLine("<td>${formatDuration(ago)} ago</td>")
+                sb.appendLine("</tr>")
+            }
+            sb.appendLine("</table>")
+        }
+
         sb.appendLine("<div class=\"subtitle\" style=\"margin-top:2rem;\">Auto-refreshes every 15 seconds</div>")
         sb.appendLine("</body></html>")
         return sb.toString()
@@ -156,6 +179,25 @@ class WorkerStatus(val index: Int) {
     @Volatile var outputFile: File? = null
     /** Expected final size of the output (source file size for staging, 0 if unknown). */
     @Volatile var expectedSize: Long = 0
+
+    // Completion history (ring buffer, most recent 5)
+    private val completions = java.util.concurrent.ConcurrentLinkedDeque<CompletionEntry>()
+
+    fun recordCompletion(fileName: String, task: String, result: String, durationSeconds: Long, outputBytes: Long) {
+        completions.addFirst(CompletionEntry(fileName, task, result, durationSeconds, outputBytes, Instant.now()))
+        while (completions.size > 10) completions.removeLast()
+    }
+
+    fun recentCompletions(): List<CompletionEntry> = completions.toList()
+
+    data class CompletionEntry(
+        val fileName: String,
+        val task: String,
+        val result: String,
+        val durationSeconds: Long,
+        val outputBytes: Long,
+        val completedAt: Instant
+    )
     @Volatile private var lastSize: Long = 0
     @Volatile private var lastSizeTime: Long = System.currentTimeMillis()
     @Volatile private var bytesPerSecond: Double = 0.0
