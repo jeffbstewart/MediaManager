@@ -8,6 +8,7 @@ import net.stewart.mediamanager.service.NasScannerService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.Go2rtcAgent
+import net.stewart.mediamanager.service.HealthWatchdog
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.SsdpResponder
@@ -149,6 +150,11 @@ fun main(args: Array<String>) {
         internalPort = CommandLineFlags.internalPort
     )
     Runtime.getRuntime().addShutdownHook(Thread { net.stewart.mediamanager.grpc.ArmeriaServer.stop() })
+
+    // Watchdog: probe the main port and dump threads if it stops responding
+    val watchdog = HealthWatchdog(CommandLineFlags.port)
+    watchdog.start()
+    Runtime.getRuntime().addShutdownHook(Thread { watchdog.stop() })
 
     // SSDP responder for Roku device discovery
     val ssdpResponder = SsdpResponder(CommandLineFlags.port)
