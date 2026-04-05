@@ -34,8 +34,9 @@ data class BundleResponse(
  * Maintains a single long-lived WorkStream. Exposes synchronous methods matching
  * [BuddyApiClient]'s interface so TranscodeWorker can use it as a drop-in replacement.
  *
- * Thread safety: all sends are synchronized. Work responses (WorkAssignment/NoWork)
- * are routed to a blocking queue consumed by the caller of [claimWork].
+ * Thread safety: all access to [connected] and [requestObserver] is guarded by
+ * [streamLock]. Reconnection attempts are serialized by [connectLock] and never
+ * hold [streamLock] across blocking waits.
  */
 class BuddyGrpcClient(private val config: BuddyConfig) {
 
@@ -52,9 +53,20 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     /** Queue for work responses (WorkAssignment or NoWork). */
     private val workResponseQueue = LinkedBlockingQueue<ServerMessage>()
 
-    /** Lock for sending on the stream (one sender at a time). */
-    private val sendLock = Any()
+    /**
+     * Guards all stream state: [connected], [requestObserver], and sends.
+     * Held briefly — never across blocking waits (poll, sleep).
+     */
+    private val streamLock = Any()
 
+    /**
+     * Serializes [connect] / [reconnectIfNeeded] so only one thread opens a
+     * stream at a time. Held across the full connect() duration including the
+     * 30-second blocking wait for the Connected response.
+     */
+    private val connectLock = Any()
+
+    // Guarded by streamLock. @Volatile for lock-free reads in isConnected().
     @Volatile private var requestObserver: StreamObserver<BuddyMessage>? = null
     @Volatile private var connected = false
     @Volatile var lastPendingCount = 0
@@ -70,17 +82,46 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     /**
      * Opens the WorkStream and sends Connect. Blocks until Connected response.
      * Returns the Connected message, or null if connection failed.
+     * Serialized — only one thread connects at a time.
      */
-    fun connect(): Connected? {
-        val responseQueue = LinkedBlockingQueue<Any>() // Connected or Exception
+    fun connect(): Connected? = synchronized(connectLock) { connectInternal() }
+
+    /**
+     * If disconnected, reconnects. Safe to call from any thread (heartbeat,
+     * worker, etc.) — concurrent calls are serialized and only one actually
+     * opens a new stream.
+     *
+     * @return true if connected after the call
+     */
+    fun reconnectIfNeeded(): Boolean {
+        if (connected) return true
+        synchronized(connectLock) {
+            if (connected) return true
+            log.info("Attempting stream reconnection...")
+            return connectInternal() != null
+        }
+    }
+
+    private fun connectInternal(): Connected? {
+        // Tear down any existing stream
+        synchronized(streamLock) {
+            try { requestObserver?.onCompleted() } catch (_: Exception) {}
+            connected = false
+            requestObserver = null
+        }
+
+        // Drain stale work responses from the previous stream
+        workResponseQueue.clear()
+
+        val connectQueue = LinkedBlockingQueue<Any>() // receives Connected or Throwable
 
         val responseObserver = object : StreamObserver<ServerMessage> {
             override fun onNext(message: ServerMessage) {
                 when (message.messageCase) {
                     ServerMessage.MessageCase.CONNECTED -> {
-                        connected = true
+                        synchronized(streamLock) { connected = true }
                         lastPendingCount = message.connected.pendingCount
-                        responseQueue.put(message.connected)
+                        connectQueue.put(message.connected)
                         val c = message.connected
                         log.info("Connected to server v{} ({} resumable leases, {} pending)",
                             c.serverVersion, c.resumableLeasesCount, c.pendingCount)
@@ -96,13 +137,11 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
                     ServerMessage.MessageCase.ERROR -> {
                         val err = message.error
                         if (err.code == BuddyErrorCode.BUDDY_ERROR_CODE_INVALID_LEASE) {
-                            // Extract lease ID from message like "Lease 12345 not found or not active"
                             val leaseId = Regex("""Lease (\d+)""").find(err.message)?.groupValues?.get(1)?.toLongOrNull()
                             if (leaseId != null) {
                                 if (invalidatedLeases.add(leaseId)) {
                                     log.warn("Lease {} invalidated by server: {}", leaseId, err.message)
                                 }
-                                // else: already known, don't spam the log
                             } else {
                                 log.warn("Server error: {} — {}", err.code, err.message)
                             }
@@ -117,23 +156,32 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
             }
 
             override fun onError(t: Throwable) {
-                connected = false
+                synchronized(streamLock) { connected = false }
                 val status = Status.fromThrowable(t)
                 log.error("WorkStream error: {} — {}", status.code, status.description)
-                responseQueue.put(t)
+                connectQueue.put(t)
                 // Unblock any pending claimWork
                 workResponseQueue.put(ServerMessage.getDefaultInstance())
             }
 
             override fun onCompleted() {
-                connected = false
+                synchronized(streamLock) { connected = false }
                 log.info("WorkStream completed by server")
-                // Unblock any pending claimWork
                 workResponseQueue.put(ServerMessage.getDefaultInstance())
             }
         }
 
-        requestObserver = asyncStub.workStream(responseObserver)
+        // Open new stream and install the observer
+        val newObserver = try {
+            asyncStub.workStream(responseObserver)
+        } catch (e: Exception) {
+            log.error("Failed to open WorkStream: {}", e.message)
+            return null
+        }
+
+        synchronized(streamLock) {
+            requestObserver = newObserver
+        }
 
         // Send Connect
         val connectMsg = BuddyMessage.newBuilder()
@@ -144,12 +192,19 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
                 .addAllCachedTranscodeIds(emptyList()))
             .build()
 
-        synchronized(sendLock) {
-            requestObserver?.onNext(connectMsg)
+        synchronized(streamLock) {
+            try {
+                requestObserver?.onNext(connectMsg)
+            } catch (e: Exception) {
+                log.error("Failed to send Connect: {}", e.message)
+                connected = false
+                requestObserver = null
+                return null
+            }
         }
 
-        // Wait for Connected response (30s timeout)
-        val response = responseQueue.poll(30, TimeUnit.SECONDS)
+        // Wait for Connected response — NOT under any lock
+        val response = connectQueue.poll(30, TimeUnit.SECONDS)
         return when (response) {
             is Connected -> response
             is Throwable -> {
@@ -177,8 +232,6 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     // ========================================================================
 
     fun claimWork(skipTypes: Set<String> = emptySet(), cachedTranscodeIds: Set<Long> = emptySet()): BundleResponse? {
-        if (!connected) return null
-
         // Drain any stale responses
         workResponseQueue.clear()
 
@@ -186,13 +239,21 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
             .addAllCachedTranscodeIds(cachedTranscodeIds)
             .build()
 
-        synchronized(sendLock) {
-            requestObserver?.onNext(
-                BuddyMessage.newBuilder().setRequestWork(requestWork).build()
-            ) ?: return null
+        // Atomic check + send under streamLock
+        synchronized(streamLock) {
+            if (!connected) return null
+            try {
+                requestObserver?.onNext(
+                    BuddyMessage.newBuilder().setRequestWork(requestWork).build()
+                ) ?: return null
+            } catch (e: Exception) {
+                log.warn("claimWork send failed: {}", e.message)
+                connected = false
+                return null
+            }
         }
 
-        // Block for response (30s timeout)
+        // Block for response — NOT under lock
         val response = workResponseQueue.poll(30, TimeUnit.SECONDS) ?: return null
 
         return when (response.messageCase) {
@@ -297,18 +358,16 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
 
     /** Release leases by closing the stream gracefully. */
     fun releaseLeases(): Int {
-        // Graceful close triggers server-side releaseLeases
-        try {
-            synchronized(sendLock) {
-                requestObserver?.onCompleted()
-            }
-        } catch (_: Exception) {}
+        synchronized(streamLock) {
+            try { requestObserver?.onCompleted() } catch (_: Exception) {}
+        }
         return 0
     }
 
     /** Returns cached pending count from last Connected or NoWork message. */
     fun getPendingCount(): Int = lastPendingCount
 
+    /** Lock-free read — volatile guarantees visibility across threads. */
     fun isConnected(): Boolean = connected
 
     /** Returns true if any of the given lease IDs have been rejected by the server. */
@@ -319,11 +378,11 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     fun clearInvalidatedLeases() = invalidatedLeases.clear()
 
     fun shutdown() {
-        try {
-            synchronized(sendLock) {
-                requestObserver?.onCompleted()
-            }
-        } catch (_: Exception) {}
+        synchronized(streamLock) {
+            try { requestObserver?.onCompleted() } catch (_: Exception) {}
+            connected = false
+            requestObserver = null
+        }
         channel.shutdown()
         channel.awaitTermination(5, TimeUnit.SECONDS)
     }
@@ -332,16 +391,21 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
     // Helpers
     // ========================================================================
 
+    /**
+     * Send a message on the stream. Atomic check-then-send under [streamLock].
+     * On send failure, marks the stream as disconnected.
+     */
     private fun send(message: BuddyMessage): Boolean {
-        if (!connected) return false
-        return try {
-            synchronized(sendLock) {
+        synchronized(streamLock) {
+            if (!connected) return false
+            return try {
                 requestObserver?.onNext(message)
+                true
+            } catch (e: Exception) {
+                log.warn("Send failed: {}", e.message)
+                connected = false
+                false
             }
-            true
-        } catch (e: Exception) {
-            log.warn("Send failed: {}", e.message)
-            false
         }
     }
 

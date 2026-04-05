@@ -136,6 +136,9 @@ class TranscodeWorker(
             while (!Thread.currentThread().isInterrupted) {
                 try {
                     Thread.sleep(config.progressIntervalSeconds * 1000L)
+                    if (!apiClient.isConnected()) {
+                        apiClient.reconnectIfNeeded()
+                    }
                     apiClient.heartbeatMultiple(allLeaseIds)
                 } catch (_: InterruptedException) {
                     break
@@ -741,6 +744,12 @@ class TranscodeWorker(
                             log.warn("Lease invalidated mid-transcode, killing process for lease {}", activeLeaseId)
                             process.destroyForcibly()
                             break
+                        }
+                        // If the stream is dead (server restart, network blip), reconnect
+                        // before sending so heartbeats resume and leases don't expire.
+                        if (!apiClient.isConnected()) {
+                            log.info("Heartbeat detected dead stream for lease {}, reconnecting...", activeLeaseId)
+                            apiClient.reconnectIfNeeded()
                         }
                         apiClient.reportProgress(activeLeaseId, progressPercent.get(), encoderName)
                         if (othersToHeartbeat.isNotEmpty()) {
