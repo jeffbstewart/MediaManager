@@ -48,6 +48,40 @@
       <mat-icon>lock</mat-icon> Change Password
     </button>
 
+    <!-- Passkeys (only shown when server has WebAuthn RP ID configured) -->
+    @if (profile()?.passkeys_enabled && webauthnSupported()) {
+      <h3>Passkeys</h3>
+      @if (passkeys().length > 0) {
+        <div class="passkeys-list">
+          @for (pk of passkeys(); track pk.id) {
+            <div class="passkey-row">
+              <div class="passkey-info">
+                <span class="passkey-name">{{ pk.display_name }}</span>
+                <span class="session-meta">
+                  Created: {{ formatDate(pk.created_at) }}
+                  @if (pk.last_used_at) {
+                    &middot; Last used: {{ formatDate(pk.last_used_at) }}
+                  }
+                </span>
+              </div>
+              <button class="revoke-btn" (click)="deletePasskey(pk)">Delete</button>
+            </div>
+          }
+        </div>
+      } @else {
+        <p class="section-hint">No passkeys registered. Register one for faster sign-in.</p>
+      }
+      <button class="action-btn" [disabled]="passkeyRegistering()" (click)="registerPasskey()">
+        @if (passkeyRegistering()) {
+          <mat-spinner diameter="16" />
+        }
+        <mat-icon>fingerprint</mat-icon> Register new passkey
+      </button>
+      @if (passkeyError()) {
+        <p class="pw-error">{{ passkeyError() }}</p>
+      }
+    }
+
     <!-- Hidden Titles -->
     @if (hiddenTitles().length > 0) {
       <h3>Hidden Titles</h3>

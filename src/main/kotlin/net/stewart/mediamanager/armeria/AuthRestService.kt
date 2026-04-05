@@ -19,6 +19,7 @@ import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.LoginResult
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.RefreshResult
+import net.stewart.mediamanager.service.WebAuthnService
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -85,7 +86,8 @@ class AuthRestService {
 
         val responseBody = mapOf(
             "setup_required" to !AuthService.hasUsers(),
-            "legal" to legal.ifEmpty { null }
+            "legal" to legal.ifEmpty { null },
+            "passkeys_available" to WebAuthnService.isAvailable()
         )
         return jsonResponse(HttpStatus.OK, responseBody)
     }
@@ -214,47 +216,15 @@ class AuthRestService {
         return when (result) {
             is LoginResult.Success -> {
                 val user = result.user
-                val now = java.time.LocalDateTime.now()
-
-                // Record legal acknowledgements if the client sent them
-                val ppVersion = body.get("privacy_policy_version")?.asInt
-                if (ppVersion != null && (user.privacy_policy_version == null || ppVersion > user.privacy_policy_version!!)) {
-                    user.privacy_policy_version = ppVersion
-                    user.privacy_policy_accepted_at = now
-                    user.save()
-                }
-                val touVersion = body.get("terms_of_use_version")?.asInt
-                if (touVersion != null && (user.terms_of_use_version == null || touVersion > user.terms_of_use_version!!)) {
-                    user.terms_of_use_version = touVersion
-                    user.terms_of_use_accepted_at = now
-                    user.save()
-                }
-                LegalRequirements.recordAgreement(user.id!!, user.privacy_policy_version, user.terms_of_use_version)
-
                 val deviceName = body.get("device_name")?.asString ?: "web"
                 val tokenPair = JwtService.createTokenPair(user, deviceName)
-
                 val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
 
-                // Field names follow RFC 6749 (OAuth 2.0): expires_in is always seconds.
-                val responseBody = mutableMapOf<String, Any?>(
+                val responseBody = mapOf(
                     "access_token" to tokenPair.accessToken,
                     "expires_in" to tokenPair.expiresIn,
                     "password_change_required" to user.must_change_password
                 )
-
-                // Include legal compliance status so the UI can prompt re-acknowledgement
-                // if the required versions have changed since the user last agreed.
-                // Use web-specific TOU version — this endpoint only serves the web SPA.
-                if (LegalRequirements.privacyPolicyVersion > 0) {
-                    responseBody["legal_compliant"] = LegalRequirements.isCompliant(
-                        user.id!!, user.isAdmin(), LegalRequirements.webTermsOfUseVersion
-                    )
-                    responseBody["agreed_privacy_policy_version"] = user.privacy_policy_version
-                    responseBody["agreed_terms_of_use_version"] = user.terms_of_use_version
-                    responseBody["required_privacy_policy_version"] = LegalRequirements.privacyPolicyVersion
-                    responseBody["required_terms_of_use_version"] = LegalRequirements.webTermsOfUseVersion
-                }
 
                 val headers = ResponseHeaders.builder(HttpStatus.OK)
                     .contentType(MediaType.JSON_UTF_8)
@@ -272,6 +242,98 @@ class AuthRestService {
                     "retry_after" to result.retryAfterSeconds
                 ))
             }
+        }
+    }
+
+    // -- Passkey authentication --
+
+    private val passkeyRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+
+    @Post("/api/v2/auth/passkey/authentication-options")
+    fun passkeyAuthenticationOptions(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(passkeyRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                "error" to "Too many requests",
+                "retry_after" to 60
+            ))
+        }
+
+        return try {
+            val options = WebAuthnService.generateAuthenticationOptions()
+            val responseBody = mapOf(
+                "challenge" to options.signedChallenge,
+                "options" to gson.fromJson(options.options.toString(), Map::class.java)
+            )
+            jsonResponse(HttpStatus.OK, responseBody)
+        } catch (e: IllegalStateException) {
+            jsonResponse(HttpStatus.SERVICE_UNAVAILABLE, mapOf("error" to e.message))
+        }
+    }
+
+    @Post("/api/v2/auth/passkey/authenticate")
+    fun passkeyAuthenticate(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(passkeyRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                "error" to "Too many requests",
+                "retry_after" to 60
+            ))
+        }
+
+        val body = parseBody(ctx) ?: return badRequest("Invalid request body")
+        val challenge = body.get("challenge")?.asString
+            ?: return badRequest("challenge is required")
+        val credential = body.getAsJsonObject("credential")
+            ?: return badRequest("credential is required")
+
+        val credentialId = credential.get("id")?.asString
+            ?: return badRequest("credential.id is required")
+        // WebAuthn JSON nests assertion fields under credential.response
+        val response = credential.getAsJsonObject("response")
+            ?: return badRequest("credential.response is required")
+        val clientDataJSON = response.get("clientDataJSON")?.asString
+            ?: return badRequest("credential.response.clientDataJSON is required")
+        val authenticatorData = response.get("authenticatorData")?.asString
+            ?: return badRequest("credential.response.authenticatorData is required")
+        val signature = response.get("signature")?.asString
+            ?: return badRequest("credential.response.signature is required")
+        val userHandle = response.get("userHandle")?.asString
+
+        return try {
+            val user = WebAuthnService.verifyAuthentication(
+                signedChallenge = challenge,
+                credentialId = credentialId,
+                clientDataJSON = clientDataJSON,
+                authenticatorData = authenticatorData,
+                signature = signature,
+                userHandle = userHandle
+            )
+
+            if (user.locked) {
+                return jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Account locked"))
+            }
+
+            val tokenPair = JwtService.createTokenPair(user, "web-passkey")
+            val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+
+            val responseBody = mapOf(
+                "access_token" to tokenPair.accessToken,
+                "expires_in" to tokenPair.expiresIn,
+                "password_change_required" to user.must_change_password
+            )
+
+            val headers = ResponseHeaders.builder(HttpStatus.OK)
+                .contentType(MediaType.JSON_UTF_8)
+                .add("Content-Security-Policy", API_CSP)
+                .cookie(refreshCookie)
+                .build()
+            HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+        } catch (e: IllegalArgumentException) {
+            log.warn("Passkey authentication failed from IP {}: {}", proxy.clientIp, e.message)
+            jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Passkey authentication failed"))
         }
     }
 

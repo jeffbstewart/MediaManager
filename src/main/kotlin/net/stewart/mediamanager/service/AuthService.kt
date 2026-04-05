@@ -415,10 +415,12 @@ object AuthService {
 
     /**
      * Revokes a single browser session token by ID.
-     * Returns false if the token is the caller's current session.
+     * Returns false if the token doesn't exist, doesn't belong to [callerUserId],
+     * or is the caller's current session.
      */
-    fun revokeSession(tokenId: Long, currentTokenHash: String?): Boolean {
+    fun revokeSession(tokenId: Long, callerUserId: Long, currentTokenHash: String?): Boolean {
         val token = SessionToken.findById(tokenId) ?: return false
+        if (token.user_id != callerUserId) return false
         if (currentTokenHash != null && token.token_hash == currentTokenHash) return false
         evictTokenCache(token.token_hash)
         token.delete()

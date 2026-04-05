@@ -1,0 +1,55 @@
+<div class="terms-container">
+  <mat-card class="terms-card">
+    <mat-card-header>
+      <mat-card-title>Updated Terms</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p class="terms-description">
+        Our terms have been updated since you last agreed.
+        Please review and accept the current versions to continue.
+      </p>
+
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        @if (status(); as s) {
+          <div class="legal-section">
+            @if (s.privacy_policy_url) {
+              <mat-checkbox formControlName="acceptPrivacy">
+                I agree to the
+                <a [href]="s.privacy_policy_url" target="_blank"
+                   rel="noopener noreferrer">Privacy Policy</a>
+              </mat-checkbox>
+              @if (form.controls.acceptPrivacy.hasError('required') && form.controls.acceptPrivacy.touched) {
+                <p class="field-error">You must accept the Privacy Policy</p>
+              }
+            }
+
+            @if (s.terms_of_use_url) {
+              <mat-checkbox formControlName="acceptTerms">
+                I agree to the
+                <a [href]="s.terms_of_use_url" target="_blank"
+                   rel="noopener noreferrer">Terms of Use</a>
+              </mat-checkbox>
+              @if (form.controls.acceptTerms.hasError('required') && form.controls.acceptTerms.touched) {
+                <p class="field-error">You must accept the Terms of Use</p>
+              }
+            }
+          </div>
+        }
+
+        @if (error()) {
+          <p class="error-message">{{ error() }}</p>
+        }
+
+        <button mat-flat-button color="primary" type="submit"
+                class="full-width"
+                [disabled]="submitting() || !form.valid">
+          @if (submitting()) {
+            <mat-spinner diameter="20" />
+          } @else {
+            Accept &amp; Continue
+          }
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

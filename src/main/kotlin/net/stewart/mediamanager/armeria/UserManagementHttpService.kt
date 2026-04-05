@@ -16,6 +16,7 @@ import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.service.WebAuthnService
 import net.stewart.mediamanager.util.toIsoUtc
 import java.time.LocalDateTime
 
@@ -36,7 +37,8 @@ class UserManagementHttpService {
                 "locked" to u.locked,
                 "must_change_password" to u.must_change_password,
                 "rating_ceiling" to u.rating_ceiling,
-                "created_at" to toIsoUtc(u.created_at)
+                "created_at" to toIsoUtc(u.created_at),
+                "passkey_count" to WebAuthnService.listCredentials(u.id!!).size
             )
         }
         return jsonResponse(gson.toJson(mapOf("users" to users)))
@@ -134,6 +136,7 @@ class UserManagementHttpService {
         u.updated_at = LocalDateTime.now()
         u.save()
         AuthService.invalidateUserSessions(userId)
+        WebAuthnService.deleteAllCredentials(userId)
         return jsonResponse("""{"ok":true}""")
     }
 
@@ -191,9 +194,9 @@ class UserManagementHttpService {
         val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        // Try browser session first, then device token
-        val revoked = AuthService.revokeSession(sessionId, null)
-        if (!revoked) net.stewart.mediamanager.service.PairingService.revokeToken(sessionId)
+        // Admin can revoke any user's session — pass the target userId for ownership scoping
+        val revoked = AuthService.revokeSession(sessionId, userId, null)
+        if (!revoked) net.stewart.mediamanager.service.PairingService.revokeTokenForUser(sessionId, userId)
         return jsonResponse("""{"ok":true}""")
     }
 
@@ -204,6 +207,42 @@ class UserManagementHttpService {
 
         AuthService.invalidateUserSessions(userId)
         return jsonResponse("""{"ok":true}""")
+    }
+
+    // -- Admin passkey management --
+
+    @Get("/api/v2/admin/users/{userId}/passkeys")
+    fun listPasskeys(ctx: ServiceRequestContext, @Param("userId") userId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val passkeys = WebAuthnService.listCredentials(userId).map { cred ->
+            mapOf(
+                "id" to cred.id,
+                "display_name" to cred.display_name,
+                "created_at" to cred.created_at?.let { toIsoUtc(it) },
+                "last_used_at" to cred.last_used_at?.let { toIsoUtc(it) }
+            )
+        }
+        return jsonResponse(gson.toJson(mapOf("passkeys" to passkeys)))
+    }
+
+    @Delete("/api/v2/admin/users/{userId}/passkeys/{credentialId}")
+    fun deletePasskey(ctx: ServiceRequestContext, @Param("userId") userId: Long, @Param("credentialId") credentialId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val deleted = WebAuthnService.adminDeleteCredential(credentialId)
+        return if (deleted) jsonResponse("""{"ok":true}""") else HttpResponse.of(HttpStatus.NOT_FOUND)
+    }
+
+    @Delete("/api/v2/admin/users/{userId}/passkeys")
+    fun deleteAllPasskeys(ctx: ServiceRequestContext, @Param("userId") userId: Long): HttpResponse {
+        val caller = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val count = WebAuthnService.adminDeleteAllCredentials(userId)
+        return jsonResponse(gson.toJson(mapOf("ok" to true, "deleted" to count)))
     }
 
     private fun jsonResponse(json: String): HttpResponse {

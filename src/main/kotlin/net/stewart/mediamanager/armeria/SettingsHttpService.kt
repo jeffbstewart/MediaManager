@@ -17,6 +17,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.BuddyApiKey
 import net.stewart.mediamanager.service.BuddyKeyService
 import net.stewart.mediamanager.service.LegalRequirements
+import net.stewart.mediamanager.service.WebAuthnService
 import net.stewart.mediamanager.util.toIsoUtc
 
 
@@ -37,7 +38,8 @@ class SettingsHttpService {
         "privacy_policy_url", "privacy_policy_version",
         "ios_terms_of_use_url", "ios_terms_of_use_version",
         "web_terms_of_use_url", "web_terms_of_use_version",
-        "android_tv_terms_of_use_url", "android_tv_terms_of_use_version"
+        "android_tv_terms_of_use_url", "android_tv_terms_of_use_version",
+        "webauthn_rp_id", "webauthn_rp_origin", "webauthn_rp_name"
     )
 
     @Get("/api/v2/admin/settings")
@@ -89,6 +91,7 @@ class SettingsHttpService {
         }
 
         LegalRequirements.refresh()
+        WebAuthnService.refreshConfig()
         return jsonResponse("""{"ok":true}""")
     }
 

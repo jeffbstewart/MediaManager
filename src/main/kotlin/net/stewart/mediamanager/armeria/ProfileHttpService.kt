@@ -24,6 +24,7 @@ import net.stewart.mediamanager.service.UserTitleFlagService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.service.WebAuthnService
 import net.stewart.mediamanager.util.toIsoUtc
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
@@ -51,7 +52,8 @@ class ProfileHttpService {
             "is_admin" to user.isAdmin(),
             "rating_ceiling" to user.rating_ceiling,
             "live_tv_min_quality" to user.live_tv_min_quality,
-            "has_live_tv" to hasLiveTv
+            "has_live_tv" to hasLiveTv,
+            "passkeys_enabled" to (WebAuthnService.rpId != null)
         )
         return jsonResponse(gson.toJson(profile))
     }
@@ -100,8 +102,12 @@ class ProfileHttpService {
         fresh.updated_at = LocalDateTime.now()
         fresh.save()
 
-        // Invalidate all other sessions
+        // Invalidate all other sessions and all passkeys
         AuthService.invalidateUserSessions(user.id!!)
+        val deletedPasskeys = WebAuthnService.deleteAllCredentials(user.id!!)
+        if (deletedPasskeys > 0) {
+            log.info("AUDIT: {} passkeys invalidated due to password change for user '{}'", deletedPasskeys, fresh.username)
+        }
 
         log.info("AUDIT: Password changed for user '{}' via Angular profile", fresh.username)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
@@ -156,10 +162,10 @@ class ProfileHttpService {
             ?.value()
             ?.let { AuthService.hashToken(it) }
 
-        val revoked = AuthService.revokeSession(sessionId, currentTokenHash)
+        val revoked = AuthService.revokeSession(sessionId, user.id!!, currentTokenHash)
         if (!revoked) {
-            // Try device token
-            PairingService.revokeToken(sessionId)
+            // Try device token (scoped to this user)
+            PairingService.revokeTokenForUser(sessionId, user.id!!)
         }
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
@@ -177,6 +183,100 @@ class ProfileHttpService {
         AuthService.revokeAllSessionsExceptCurrent(user.id!!, currentTokenHash)
         PairingService.revokeAllForUser(user.id!!)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
+    }
+
+    // -- Passkey management --
+
+    @Post("/api/v2/profile/passkeys/registration-options")
+    fun passkeyRegistrationOptions(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        return try {
+            val options = WebAuthnService.generateRegistrationOptions(user)
+            val body = mapOf(
+                "challenge" to options.signedChallenge,
+                "options" to gson.fromJson(options.options.toString(), Map::class.java)
+            )
+            jsonResponse(gson.toJson(body))
+        } catch (e: IllegalStateException) {
+            badRequest(e.message ?: "WebAuthn not configured")
+        }
+    }
+
+    @Post("/api/v2/profile/passkeys/register")
+    fun passkeyRegister(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        val challenge = map["challenge"] as? String ?: return badRequest("challenge required")
+        @Suppress("UNCHECKED_CAST")
+        val credential = map["credential"] as? Map<String, Any> ?: return badRequest("credential required")
+
+        val credentialId = credential["id"] as? String ?: return badRequest("credential.id required")
+        // WebAuthn JSON nests attestation fields under credential.response
+        @Suppress("UNCHECKED_CAST")
+        val response = credential["response"] as? Map<String, Any> ?: return badRequest("credential.response required")
+        val clientDataJSON = response["clientDataJSON"] as? String ?: return badRequest("credential.response.clientDataJSON required")
+        val attestationObject = response["attestationObject"] as? String ?: return badRequest("credential.response.attestationObject required")
+        @Suppress("UNCHECKED_CAST")
+        val transports = (response["transports"] as? List<String>)?.joinToString(",")
+        val displayName = (map["display_name"] as? String)?.take(255) ?: "Passkey"
+
+        return try {
+            val cred = WebAuthnService.verifyRegistration(
+                signedChallenge = challenge,
+                clientDataJSON = clientDataJSON,
+                attestationObject = attestationObject,
+                credentialId = credentialId,
+                transports = transports,
+                displayName = displayName,
+                userId = user.id!!
+            )
+            jsonResponse(gson.toJson(mapOf(
+                "ok" to true,
+                "credential" to mapOf(
+                    "id" to cred.id,
+                    "display_name" to cred.display_name,
+                    "created_at" to cred.created_at?.let { toIsoUtc(it) }
+                )
+            )))
+        } catch (e: IllegalArgumentException) {
+            log.warn("Passkey registration failed for user '{}': {}", user.username, e.message)
+            badRequest(e.message ?: "Registration failed")
+        }
+    }
+
+    @Get("/api/v2/profile/passkeys")
+    fun listPasskeys(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val passkeys = WebAuthnService.listCredentials(user.id!!).map { cred ->
+            mapOf(
+                "id" to cred.id,
+                "display_name" to cred.display_name,
+                "created_at" to cred.created_at?.let { toIsoUtc(it) },
+                "last_used_at" to cred.last_used_at?.let { toIsoUtc(it) }
+            )
+        }
+
+        return jsonResponse(gson.toJson(mapOf("passkeys" to passkeys)))
+    }
+
+    @Delete("/api/v2/profile/passkeys/{credentialId}")
+    fun deletePasskey(ctx: ServiceRequestContext, @Param("credentialId") credentialId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val deleted = WebAuthnService.deleteCredential(credentialId, user.id!!)
+        return if (deleted) {
+            jsonResponse(gson.toJson(mapOf("ok" to true)))
+        } else {
+            HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
     }
 
     /** List titles the current user has personally hidden. */

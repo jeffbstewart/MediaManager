@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 import { TimezoneService } from '../../core/timezone.service';
+import { WebAuthnService, Passkey } from '../../core/webauthn.service';
 
 interface Profile {
   id: number;
@@ -16,6 +17,7 @@ interface Profile {
   rating_ceiling: string | null;
   live_tv_min_quality: number;
   has_live_tv: boolean;
+  passkeys_enabled: boolean;
 }
 
 interface Session {
@@ -39,10 +41,14 @@ interface Session {
 export class ProfileComponent implements OnInit {
   private readonly http = inject(HttpClient);
   readonly tz = inject(TimezoneService);
+  private readonly webauthnService = inject(WebAuthnService);
 
   readonly loading = signal(true);
   readonly profile = signal<Profile | null>(null);
   readonly sessions = signal<Session[]>([]);
+  readonly passkeys = signal<Passkey[]>([]);
+  readonly webauthnSupported = signal(false);
+  readonly passkeyRegistering = signal(false);
   readonly hiddenTitles = signal<{ title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[]>([]);
 
   // Change password modal
@@ -55,15 +61,19 @@ export class ProfileComponent implements OnInit {
   readonly pwSubmitting = signal(false);
 
   async ngOnInit(): Promise<void> {
+    this.webauthnSupported.set(this.webauthnService.isSupported());
+
     try {
-      const [profile, sessionData, hiddenData] = await Promise.all([
+      const [profile, sessionData, hiddenData, passkeyData] = await Promise.all([
         firstValueFrom(this.http.get<Profile>('/api/v2/profile')),
         firstValueFrom(this.http.get<{ sessions: Session[] }>('/api/v2/profile/sessions')),
         firstValueFrom(this.http.get<{ titles: { title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[] }>('/api/v2/profile/hidden-titles')),
+        this.webauthnService.listPasskeys().catch(() => [] as Passkey[]),
       ]);
       this.profile.set(profile);
       this.sessions.set(sessionData.sessions);
       this.hiddenTitles.set(hiddenData.titles);
+      this.passkeys.set(passkeyData);
     } catch {
       // handled by empty state
     } finally {
@@ -133,6 +143,33 @@ export class ProfileComponent implements OnInit {
 
   formatDate(dateStr: string | null): string {
     return this.tz.formatDateTime(dateStr);
+  }
+
+  // -- Passkey management --
+
+  readonly passkeyError = signal('');
+
+  async registerPasskey(): Promise<void> {
+    this.passkeyRegistering.set(true);
+    this.passkeyError.set('');
+    try {
+      const displayName = prompt('Name for this passkey (optional):') || 'Passkey';
+      await this.webauthnService.performRegistration(displayName);
+      this.passkeys.set(await this.webauthnService.listPasskeys());
+    } catch (e: unknown) {
+      // User cancelled the browser dialog — not an error
+      if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+      const httpErr = e as { error?: { error?: string } };
+      this.passkeyError.set(httpErr.error?.error ?? 'Passkey registration failed');
+    } finally {
+      this.passkeyRegistering.set(false);
+    }
+  }
+
+  async deletePasskey(passkey: Passkey): Promise<void> {
+    if (!confirm(`Delete passkey "${passkey.display_name}"?`)) return;
+    await this.webauthnService.deletePasskey(passkey.id);
+    this.passkeys.update(list => list.filter(p => p.id !== passkey.id));
   }
 
   qualityStars = [1, 2, 3, 4, 5];

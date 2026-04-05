@@ -172,6 +172,18 @@ object PairingService {
     }
 
     /**
+     * Revokes a single device token by ID, only if it belongs to the specified user.
+     * Returns true if found, owned by the user, and deleted.
+     */
+    fun revokeTokenForUser(tokenId: Long, userId: Long): Boolean {
+        val token = DeviceToken.findById(tokenId) ?: return false
+        if (token.user_id != userId) return false
+        token.delete()
+        log.info("AUDIT: Revoked device token id={} for user_id={}", tokenId, token.user_id)
+        return true
+    }
+
+    /**
      * Returns all device tokens for a user, for the Active Sessions view.
      */
     fun getDeviceTokensForUser(userId: Long): List<DeviceToken> {

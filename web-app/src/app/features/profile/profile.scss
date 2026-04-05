@@ -55,6 +55,18 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
 
+// Passkeys
+.passkeys-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.passkey-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem; background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px; gap: 1rem;
+}
+
+.passkey-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
+.passkey-name { font-size: 0.875rem; font-weight: 500; }
+
 // Sessions
 .sessions-list { display: flex; flex-direction: column; gap: 0.5rem; }
 

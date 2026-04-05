@@ -1,13 +1,14 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { AuthService, DiscoverResponse } from '../../core/auth.service';
+import { MatDividerModule } from '@angular/material/divider';
+import { AuthService } from '../../core/auth.service';
+import { WebAuthnService } from '../../core/webauthn.service';
 
 @Component({
   selector: 'app-login',
@@ -18,8 +19,8 @@ import { AuthService, DiscoverResponse } from '../../core/auth.service';
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
-    MatCheckboxModule,
     MatProgressSpinnerModule,
+    MatDividerModule,
   ],
   templateUrl: './login.html',
   styleUrl: './login.scss',
@@ -27,29 +28,29 @@ import { AuthService, DiscoverResponse } from '../../core/auth.service';
 export class LoginComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
+  private readonly webauthn = inject(WebAuthnService);
 
-  readonly legalInfo = signal<DiscoverResponse['legal'] | null>(null);
-  readonly legalChanged = signal(false);
+  readonly passkeysAvailable = signal(false);
   readonly error = signal('');
   readonly submitting = signal(false);
+  readonly passkeyLoading = signal(false);
 
   readonly form = this.fb.group({
     username: ['', Validators.required],
     password: ['', Validators.required],
-    acceptPrivacy: [false],
-    acceptTerms: [false],
   });
 
   async ngOnInit(): Promise<void> {
-    // If already authenticated, redirect to home
+    // If already authenticated, redirect to destination
     if (this.auth.isAuthenticated()) {
-      this.router.navigate(['/']);
+      this.navigateAway();
       return;
     }
     // Try silent refresh — user may have a valid refresh cookie
     if (await this.auth.tryRefresh()) {
-      this.router.navigate(['/']);
+      this.navigateAway();
       return;
     }
 
@@ -59,17 +60,9 @@ export class LoginComponent implements OnInit {
         this.router.navigate(['/setup']);
         return;
       }
-      if (discover.legal) {
-        this.legalInfo.set(discover.legal);
-        if (discover.legal.privacy_policy_url) {
-          this.form.controls.acceptPrivacy.setValidators(Validators.requiredTrue);
-          this.form.controls.acceptPrivacy.updateValueAndValidity();
-        }
-        if (discover.legal.terms_of_use_url) {
-          this.form.controls.acceptTerms.setValidators(Validators.requiredTrue);
-          this.form.controls.acceptTerms.updateValueAndValidity();
-        }
-      }
+      this.passkeysAvailable.set(
+        !!discover.passkeys_available && this.webauthn.isSupported()
+      );
     } catch {
       this.error.set('Cannot reach server');
     }
@@ -82,27 +75,16 @@ export class LoginComponent implements OnInit {
     this.error.set('');
 
     const { username, password } = this.form.value;
-    const legal = this.legalInfo();
-    const legalVersions = legal ? {
-      privacy_policy_version: legal.privacy_policy_version,
-      terms_of_use_version: legal.terms_of_use_version,
-    } : undefined;
 
     try {
-      const response = await this.auth.login(username!, password!, legalVersions);
-
-      if (response.legal_compliant === false) {
-        this.legalChanged.set(true);
-        this.submitting.set(false);
-        return;
-      }
+      const response = await this.auth.login(username!, password!);
 
       if (response.password_change_required) {
         this.router.navigate(['/change-password']);
         return;
       }
 
-      this.router.navigate(['/']);
+      this.navigateAway();
     } catch (e: unknown) {
       const httpError = e as { error?: { error?: string; retry_after?: number } };
       const retryAfter = httpError.error?.retry_after;
@@ -114,5 +96,35 @@ export class LoginComponent implements OnInit {
         this.submitting.set(false);
       }
     }
+  }
+
+  async onPasskeyLogin(): Promise<void> {
+    this.passkeyLoading.set(true);
+    this.error.set('');
+
+    try {
+      const response = await this.auth.loginWithPasskey();
+
+      if (response.password_change_required) {
+        this.router.navigate(['/change-password']);
+        return;
+      }
+
+      this.navigateAway();
+    } catch (e: unknown) {
+      // User cancelled the passkey dialog — not an error
+      if (e instanceof DOMException && e.name === 'NotAllowedError') {
+        this.passkeyLoading.set(false);
+        return;
+      }
+      const httpError = e as { error?: { error?: string } };
+      this.error.set(httpError.error?.error ?? 'Passkey authentication failed');
+      this.passkeyLoading.set(false);
+    }
+  }
+
+  private navigateAway(): void {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') || '/';
+    this.router.navigateByUrl(returnUrl);
   }
 }

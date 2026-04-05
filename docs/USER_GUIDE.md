@@ -126,6 +126,18 @@ Your admin may configure a maximum content rating for your account (e.g., PG-13)
 
 Toggle subtitles on or off from your profile settings. When enabled, subtitles appear automatically during browser and Roku playback for titles that have generated subtitle files.
 
+### Passkeys
+
+Passkeys let you sign in with Face ID, Touch ID, or a hardware security key instead of typing your password each time. They are a convenience for faster re-login &mdash; your password still works normally.
+
+**Registering a passkey:** Open your **Profile** page and scroll to the **Passkeys** section. Click "Register new passkey" and follow the browser prompt. You can give each passkey a name (e.g., "iPhone" or "YubiKey") to tell them apart.
+
+**Signing in with a passkey:** On the login page, click "Sign in with passkey." Your browser will show a credential picker &mdash; select the passkey and authenticate with your device biometric or PIN.
+
+**Managing passkeys:** From your Profile page you can see all registered passkeys with their creation and last-used dates. Delete any passkey you no longer use.
+
+**Important:** Changing your password invalidates all registered passkeys. You will need to re-register them after a password change.
+
 ---
 
 ## Wish Lists

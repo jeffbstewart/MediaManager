@@ -516,6 +516,9 @@ Temporary stream files are written to `data/live-tv-streams/` inside the contain
 | **Keepa API Key** | API key from keepa.com for automated replacement value estimation |
 | **Tokens per minute** | Keepa API rate limit (default 20, match to your subscription tier) |
 | **Enable Keepa** | Activates the background price lookup agent |
+| **WebAuthn RP ID** | Relying Party domain for passkey authentication. Must exactly match the domain in users' browser address bar, without protocol or port (e.g., `mm.example.com`; use `localhost` for local development) |
+| **WebAuthn RP Origin** | Full origin URL including protocol and port if non-standard (e.g., `https://mm.example.com:8443`). Leave blank to default to `https://<RP ID>` on port 443. Required when using a non-standard HTTPS port. |
+| **WebAuthn RP Name** | Display name shown in browser passkey prompts (defaults to "Media Manager") |
 
 ### Price Lookup
 
@@ -552,10 +555,19 @@ The price lookup agent uses the **Keepa API** to estimate replacement values by 
 
 ### Actions
 
-- **Reset password** &mdash; Set a new password for any user
+- **Reset password** &mdash; Set a new password for any user (also invalidates all passkeys)
 - **Promote / Demote** &mdash; Toggle between Viewer and Admin
 - **Sessions** &mdash; View and revoke active sessions for any user
-- **Delete** &mdash; Remove the account and all associated sessions
+- **Passkeys** &mdash; View and delete passkeys registered by any user
+- **Delete** &mdash; Remove the account and all associated sessions and passkeys
+
+### Passkey Administration
+
+Users can register passkeys (Face ID, Touch ID, hardware security keys) for faster re-login. Passkeys supplement passwords &mdash; they do not replace them.
+
+As an admin you can view how many passkeys each user has registered in the user list. Click into a user to see their individual passkeys and delete any that should be revoked. Resetting a user's password automatically deletes all their passkeys.
+
+To enable passkey support, set the **WebAuthn RP ID** in Settings to match the domain your users access the site from (e.g., `mm.example.com`). Passkeys will not be offered on the login page until at least one user has registered a passkey and the RP ID is configured.
 
 ---
 

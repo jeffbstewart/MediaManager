@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { setupGuard } from './core/setup.guard';
+import { termsGuard } from './core/terms.guard';
 
 export const routes: Routes = [
   {
@@ -11,6 +12,11 @@ export const routes: Routes = [
     path: 'setup',
     canActivate: [setupGuard],
     loadComponent: () => import('./features/auth/setup').then(m => m.SetupComponent),
+  },
+  {
+    path: 'terms',
+    canActivate: [termsGuard],
+    loadComponent: () => import('./features/auth/terms').then(m => m.TermsComponent),
   },
   {
     path: 'pair',
@@ -66,7 +72,6 @@ export const routes: Routes = [
       { path: 'admin/cameras', loadComponent: () => import('./features/admin/camera-settings').then(m => m.CameraSettingsComponent) },
       { path: 'admin/live-tv', loadComponent: () => import('./features/admin/live-tv-settings').then(m => m.LiveTvSettingsComponent) },
       { path: 'admin/tags', loadComponent: () => import('./features/admin/tag-management').then(m => m.TagManagementComponent) },
-      { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },
       { path: 'admin/expand', loadComponent: () => import('./features/admin/expand').then(m => m.ExpandComponent) },
       { path: 'admin/family-members', loadComponent: () => import('./features/admin/family-members').then(m => m.FamilyMembersComponent) },
       { path: 'admin/document-ownership', loadComponent: () => import('./features/admin/document-ownership').then(m => m.DocumentOwnershipComponent) },

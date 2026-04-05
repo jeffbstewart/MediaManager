@@ -10,6 +10,7 @@ import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LoginResult
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.RefreshResult
+import net.stewart.mediamanager.service.WebAuthnService
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 
@@ -145,9 +146,10 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
         fresh.save()
 
         AuthService.invalidateUserSessions(fresh.id!!)
+        WebAuthnService.deleteAllCredentials(fresh.id!!)
 
         val pair = JwtService.createTokenPair(fresh, "")
-        log.info("AUDIT: gRPC password changed by user '{}' — all sessions invalidated", fresh.username)
+        log.info("AUDIT: gRPC password changed by user '{}' — all sessions and passkeys invalidated", fresh.username)
 
         return tokenResponse {
             accessToken = ByteString.copyFromUtf8(pair.accessToken)

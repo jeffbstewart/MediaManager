@@ -2,9 +2,11 @@ import { inject, Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { WebAuthnService } from './webauthn.service';
 
 export interface DiscoverResponse {
   setup_required: boolean;
+  passkeys_available?: boolean;
   legal?: {
     privacy_policy_url?: string;
     privacy_policy_version?: number;
@@ -18,11 +20,16 @@ export interface LoginResponse {
   /** Token lifetime in seconds (RFC 6749). */
   expires_in: number;
   password_change_required?: boolean;
-  legal_compliant?: boolean;
-  agreed_privacy_policy_version?: number;
-  agreed_terms_of_use_version?: number;
-  required_privacy_policy_version?: number;
-  required_terms_of_use_version?: number;
+}
+
+export interface LegalStatus {
+  compliant: boolean;
+  required_privacy_policy_version: number;
+  required_terms_of_use_version: number;
+  agreed_privacy_policy_version: number | null;
+  agreed_terms_of_use_version: number | null;
+  privacy_policy_url: string | null;
+  terms_of_use_url: string | null;
 }
 
 export interface SetupRequest {
@@ -36,34 +43,36 @@ export interface SetupRequest {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly webauthn = inject(WebAuthnService);
 
   private readonly accessToken = signal<string | null>(null);
   private refreshTimerId: ReturnType<typeof setTimeout> | null = null;
 
   readonly isAuthenticated = computed(() => this.accessToken() !== null);
 
+  /** Cached legal status — populated after login/refresh, cleared on logout. */
+  readonly legalStatus = signal<LegalStatus | null>(null);
+
   async discover(): Promise<DiscoverResponse> {
     return firstValueFrom(this.http.get<DiscoverResponse>('/api/v2/auth/discover'));
   }
 
-  async login(username: string, password: string, legalVersions?: {
-    privacy_policy_version?: number;
-    terms_of_use_version?: number;
-  }): Promise<LoginResponse> {
-    const body: Record<string, unknown> = { username, password };
-    if (legalVersions?.privacy_policy_version) {
-      body['privacy_policy_version'] = legalVersions.privacy_policy_version;
-    }
-    if (legalVersions?.terms_of_use_version) {
-      body['terms_of_use_version'] = legalVersions.terms_of_use_version;
-    }
-
+  async login(username: string, password: string): Promise<LoginResponse> {
     const response = await firstValueFrom(
-      this.http.post<LoginResponse>('/api/v2/auth/login', body)
+      this.http.post<LoginResponse>('/api/v2/auth/login', { username, password })
     );
 
     this.setAccessToken(response.access_token, response.expires_in);
+    this.legalStatus.set(null); // Force re-check on next guard
     return response;
+  }
+
+  /** Authenticate using a passkey. Returns the same shape as password login. */
+  async loginWithPasskey(): Promise<LoginResponse> {
+    const result = await this.webauthn.performAuthentication();
+    this.setAccessToken(result.access_token, result.expires_in);
+    this.legalStatus.set(null);
+    return result;
   }
 
   async setup(request: SetupRequest): Promise<LoginResponse> {
@@ -82,6 +91,7 @@ export class AuthService {
       // Best-effort — cookie cleared server-side
     }
     this.clearAccessToken();
+    this.legalStatus.set(null);
     this.router.navigate(['/login']);
   }
 
@@ -96,6 +106,37 @@ export class AuthService {
       this.clearAccessToken();
       return false;
     }
+  }
+
+  /**
+   * Check legal compliance status. Uses cached value if available.
+   * Call clearLegalStatus() to force a re-check.
+   */
+  async checkLegalStatus(): Promise<LegalStatus> {
+    const cached = this.legalStatus();
+    if (cached) return cached;
+
+    const status = await firstValueFrom(
+      this.http.get<LegalStatus>('/api/v2/legal/status')
+    );
+    this.legalStatus.set(status);
+    return status;
+  }
+
+  /** Clear the cached legal status (e.g., on 451 response). */
+  clearLegalStatus(): void {
+    this.legalStatus.set(null);
+  }
+
+  /** Submit agreement to current legal terms. */
+  async agreeToTerms(ppVersion: number, touVersion: number): Promise<void> {
+    await firstValueFrom(
+      this.http.post('/api/v2/legal/agree', {
+        privacy_policy_version: ppVersion,
+        terms_of_use_version: touVersion,
+      })
+    );
+    this.legalStatus.set(null); // Clear cache so next check picks up agreement
   }
 
   getAccessToken(): string | null {

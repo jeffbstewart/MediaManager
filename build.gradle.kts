@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.micrometer.prometheus)
     implementation(libs.gson)
     implementation(libs.java.jwt)
+    implementation(libs.webauthn4j.core)
     implementation(libs.openpdf)
     implementation(libs.zxing.core)
     implementation(libs.zxing.javase)

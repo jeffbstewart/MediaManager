@@ -28,6 +28,7 @@ import net.stewart.mediamanager.armeria.ActorHttpService
 import net.stewart.mediamanager.armeria.CameraListHttpService
 import net.stewart.mediamanager.armeria.CameraSettingsHttpService
 import net.stewart.mediamanager.armeria.DataQualityHttpService
+import net.stewart.mediamanager.armeria.LegalRestService
 import net.stewart.mediamanager.armeria.CollectionHttpService
 import net.stewart.mediamanager.armeria.LiveTvListHttpService
 import net.stewart.mediamanager.armeria.ProfileHttpService
@@ -250,6 +251,7 @@ object ArmeriaServer {
         blocking(AddItemHttpService())
         blocking(MediaItemEditHttpService())
         blocking(FamilyMemberHttpService())
+        blocking(LegalRestService())
 
         // REST API auth (unauthenticated — own proxy validation + rate limiting)
         blockingNoAuth(AuthRestService())

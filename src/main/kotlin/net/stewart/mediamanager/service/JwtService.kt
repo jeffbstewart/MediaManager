@@ -319,6 +319,9 @@ object JwtService {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
+    /** Returns the raw signing key bytes for HMAC operations (used by WebAuthnService for challenge signing). */
+    fun getSigningKeyBytes(): ByteArray = hexToBytes(getOrCreateSigningKey())
+
     private fun getOrCreateSigningKey(): String {
         val existing = getConfigValue(CONFIG_KEY_SIGNING)
         if (existing != null) return existing

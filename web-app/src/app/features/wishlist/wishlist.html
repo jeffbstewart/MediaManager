@@ -58,7 +58,7 @@
                    [class.dimmed]="wish.dismissible"
                    (click)="wish.dismissible && wish.title_id ? dismissMediaWish(wish) : null" />
             } @else {
-              <div class="media-poster-placeholder">{{ (wish.tmdb_title ?? '?').charAt(0) }}</div>
+              <div class="media-poster-placeholder">{{ wish.tmdb_title.charAt(0) }}</div>
             }
             @if (!wish.dismissible) {
               <button class="cancel-btn" (click)="cancelMediaWish(wish)">

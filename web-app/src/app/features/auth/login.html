@@ -22,39 +22,6 @@
           }
         </mat-form-field>
 
-        @if (legalInfo()) {
-          <div class="legal-section">
-            @if (legalChanged()) {
-              <p class="legal-changed-warning">
-                The terms of service and/or privacy policy have been updated
-                since you last agreed. Please review and accept the current versions.
-              </p>
-            }
-
-            @if (legalInfo()!.privacy_policy_url) {
-              <mat-checkbox formControlName="acceptPrivacy">
-                I agree to the
-                <a [href]="legalInfo()!.privacy_policy_url" target="_blank"
-                   rel="noopener noreferrer">Privacy Policy</a>
-              </mat-checkbox>
-              @if (form.controls.acceptPrivacy.hasError('required') && form.controls.acceptPrivacy.touched) {
-                <p class="field-error">You must accept the Privacy Policy</p>
-              }
-            }
-
-            @if (legalInfo()!.terms_of_use_url) {
-              <mat-checkbox formControlName="acceptTerms">
-                I agree to the
-                <a [href]="legalInfo()!.terms_of_use_url" target="_blank"
-                   rel="noopener noreferrer">Terms of Use</a>
-              </mat-checkbox>
-              @if (form.controls.acceptTerms.hasError('required') && form.controls.acceptTerms.touched) {
-                <p class="field-error">You must accept the Terms of Use</p>
-              }
-            }
-          </div>
-        }
-
         @if (error()) {
           <p class="error-message">{{ error() }}</p>
         }
@@ -69,6 +36,19 @@
           }
         </button>
       </form>
+
+      @if (passkeysAvailable()) {
+        <mat-divider class="passkey-divider" />
+        <button mat-stroked-button class="full-width passkey-button"
+                [disabled]="passkeyLoading()"
+                (click)="onPasskeyLogin()">
+          @if (passkeyLoading()) {
+            <mat-spinner diameter="20" />
+          } @else {
+            Sign in with passkey
+          }
+        </button>
+      }
     </mat-card-content>
   </mat-card>
 </div>

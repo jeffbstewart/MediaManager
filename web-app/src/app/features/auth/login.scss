@@ -19,32 +19,16 @@ mat-form-field {
   margin-bottom: 0.5rem;
 }
 
-.legal-section {
-  margin-bottom: 1rem;
-
-  mat-checkbox {
-    display: block;
-    margin-bottom: 0.5rem;
-  }
-
-  a {
-    text-decoration: underline;
-  }
-}
-
-.legal-changed-warning {
-  color: var(--mat-sys-error);
-  font-weight: 500;
-  margin-bottom: 0.75rem;
-}
-
-.error-message,
-.field-error {
+.error-message {
   color: var(--mat-sys-error);
   font-size: 0.8rem;
-  margin: 0 0 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
-.error-message {
-  margin-bottom: 0.75rem;
+.passkey-divider {
+  margin: 1.25rem 0;
+}
+
+.passkey-button {
+  margin-top: 0.25rem;
 }
