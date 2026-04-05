@@ -87,22 +87,25 @@ class StatusServer(
         sb.appendLine("<tr><th>Worker</th><th>State</th><th>Task</th><th>File</th><th>Output Size</th><th>Rate</th><th>Progress</th><th>ETA</th></tr>")
 
         for (ws in workerStatuses) {
-            val snapshot = ws.snapshot()
-            val stateClass = when (snapshot.state) {
-                "idle" -> "idle"
-                "error" -> "err"
-                else -> "ok"
+            val snaps = ws.snapshots()
+            for ((i, snapshot) in snaps.withIndex()) {
+                val stateClass = when (snapshot.state) {
+                    "idle" -> "idle"
+                    "error" -> "err"
+                    else -> "ok"
+                }
+                sb.appendLine("<tr>")
+                // Show worker label on first row, blank on subsequent parallel rows
+                sb.appendLine("<td>${if (i == 0) "Worker-${ws.index}" else ""}</td>")
+                sb.appendLine("<td class=\"$stateClass\">${snapshot.state}</td>")
+                sb.appendLine("<td>${snapshot.task}</td>")
+                sb.appendLine("<td>${snapshot.fileName}</td>")
+                sb.appendLine("<td class=\"mono\">${snapshot.outputSize}</td>")
+                sb.appendLine("<td class=\"rate\">${snapshot.rate}</td>")
+                sb.appendLine("<td>${snapshot.progress}</td>")
+                sb.appendLine("<td>${snapshot.eta}</td>")
+                sb.appendLine("</tr>")
             }
-            sb.appendLine("<tr>")
-            sb.appendLine("<td>Worker-${ws.index}</td>")
-            sb.appendLine("<td class=\"$stateClass\">${snapshot.state}</td>")
-            sb.appendLine("<td>${snapshot.task}</td>")
-            sb.appendLine("<td>${snapshot.fileName}</td>")
-            sb.appendLine("<td class=\"mono\">${snapshot.outputSize}</td>")
-            sb.appendLine("<td class=\"rate\">${snapshot.rate}</td>")
-            sb.appendLine("<td>${snapshot.progress}</td>")
-            sb.appendLine("<td>${snapshot.eta}</td>")
-            sb.appendLine("</tr>")
         }
         sb.appendLine("</table>")
 
@@ -179,7 +182,12 @@ class StatusServer(
 
 /**
  * Mutable status tracker for a single worker. Updated by TranscodeWorker,
- * read by StatusServer. Thread-safe via volatile fields.
+ * read by StatusServer. Thread-safe via volatile fields and concurrent collections.
+ *
+ * When leases run in parallel, each gets its own [ActiveTask] entry in [activeTasks]
+ * so the status page can show per-task progress. The top-level fields ([state],
+ * [task], [fileName]) reflect the most recently updated task — fine for single-task
+ * display but the status page prefers [activeTasks] when multiple are running.
  */
 class WorkerStatus(val index: Int) {
     @Volatile var state: String = "idle"
@@ -195,7 +203,56 @@ class WorkerStatus(val index: Int) {
     /** When the current task started (for ETA calculation from percent). */
     @Volatile var taskStartTime: Long = 0
 
-    // Completion history (ring buffer, most recent 5)
+    /**
+     * Per-lease active task tracking for parallel execution. Each parallel thread
+     * registers its task here so the status page can show all concurrent operations.
+     */
+    val activeTasks = java.util.concurrent.ConcurrentHashMap<Long, ActiveTask>()
+
+    data class ActiveTask(
+        val leaseId: Long,
+        val taskName: String,
+        val fileName: String,
+        @Volatile var outputFile: File? = null,
+        @Volatile var expectedSize: Long = 0,
+        @Volatile var transcodePercent: Int = 0,
+        @Volatile var taskStartTime: Long = System.currentTimeMillis(),
+        @Volatile var lastSize: Long = 0,
+        @Volatile var lastSizeTime: Long = System.currentTimeMillis(),
+        @Volatile var bytesPerSecond: Double = 0.0
+    )
+
+    /** Register an active task for parallel status tracking. */
+    fun registerTask(leaseId: Long, taskName: String, fileName: String): ActiveTask {
+        val at = ActiveTask(leaseId, taskName, fileName)
+        activeTasks[leaseId] = at
+        return at
+    }
+
+    /** Unregister a completed/failed task. */
+    fun unregisterTask(leaseId: Long) {
+        activeTasks.remove(leaseId)
+    }
+
+    /** Update output file on both top-level and per-task tracker. */
+    fun updateOutput(leaseId: Long, file: File?) {
+        outputFile = file
+        activeTasks[leaseId]?.outputFile = file
+    }
+
+    /** Update transcode progress on both top-level and per-task tracker. */
+    fun updateProgress(leaseId: Long, percent: Int) {
+        transcodePercent = percent
+        activeTasks[leaseId]?.transcodePercent = percent
+    }
+
+    /** Update task name on both top-level and per-task tracker. */
+    fun updateTask(leaseId: Long, taskName: String) {
+        task = taskName
+        activeTasks[leaseId]?.let { /* taskName is val, set at registration */ }
+    }
+
+    // Completion history (ring buffer, most recent entries)
     private val completions = java.util.concurrent.ConcurrentLinkedDeque<CompletionEntry>()
 
     fun recordCompletion(fileName: String, task: String, result: String, durationSeconds: Long, outputBytes: Long, detail: String = "") {
@@ -214,11 +271,71 @@ class WorkerStatus(val index: Int) {
         val outputBytes: Long,
         val completedAt: Instant
     )
+
+    /**
+     * Returns snapshots for all active tasks. When parallel leases are running,
+     * returns one snapshot per active task. When idle or sequential, returns a
+     * single snapshot from the top-level fields.
+     */
+    fun snapshots(): List<Snapshot> {
+        val tasks = activeTasks.values.toList()
+        if (tasks.isNotEmpty()) {
+            return tasks.map { snapshotForTask(it) }
+        }
+        return listOf(snapshotFromTopLevel())
+    }
+
+    private fun snapshotForTask(at: ActiveTask): Snapshot {
+        val file = at.outputFile
+        val currentSize = file?.let { if (it.exists()) it.length() else 0L } ?: 0L
+        val now = System.currentTimeMillis()
+        val elapsed = (now - at.lastSizeTime) / 1000.0
+
+        if (elapsed > 5 && currentSize > at.lastSize) {
+            at.bytesPerSecond = (currentSize - at.lastSize) / elapsed
+            at.lastSize = currentSize
+            at.lastSizeTime = now
+        } else if (file == null || !file.exists()) {
+            at.bytesPerSecond = 0.0
+            at.lastSize = 0
+            at.lastSizeTime = now
+        }
+
+        val pct = at.transcodePercent
+        val progress = when {
+            at.expectedSize > 0 && currentSize > 0 -> "${(currentSize * 100 / at.expectedSize)}%"
+            pct > 0 -> "$pct%"
+            else -> ""
+        }
+        val eta = when {
+            at.bytesPerSecond > 0 && at.expectedSize > 0 && currentSize < at.expectedSize -> {
+                val remainingSec = ((at.expectedSize - currentSize) / at.bytesPerSecond).toLong()
+                StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
+            }
+            pct in 1..99 && at.taskStartTime > 0 -> {
+                val elapsedSec = (now - at.taskStartTime) / 1000.0
+                val remainingSec = (elapsedSec * (100 - pct) / pct).toLong()
+                StatusServer.formatDuration(Duration.ofSeconds(remainingSec))
+            }
+            else -> ""
+        }
+
+        return Snapshot(
+            state = "working",
+            task = at.taskName,
+            fileName = at.fileName,
+            outputSize = if (file != null && currentSize > 0) StatusServer.humanSize(currentSize) else "",
+            rate = if (at.bytesPerSecond > 0) "${StatusServer.humanSize(at.bytesPerSecond.toLong())}/s" else "",
+            progress = progress,
+            eta = eta
+        )
+    }
+
     @Volatile private var lastSize: Long = 0
     @Volatile private var lastSizeTime: Long = System.currentTimeMillis()
     @Volatile private var bytesPerSecond: Double = 0.0
 
-    fun snapshot(): Snapshot {
+    private fun snapshotFromTopLevel(): Snapshot {
         val file = outputFile
         val currentSize = file?.let { if (it.exists()) it.length() else 0L } ?: 0L
         val now = System.currentTimeMillis()
@@ -235,14 +352,11 @@ class WorkerStatus(val index: Int) {
         }
 
         val pct = transcodePercent
-        // Progress: staging uses file size ratio, transcodes use FFmpeg-reported percent
         val progress = when {
             expectedSize > 0 && currentSize > 0 -> "${(currentSize * 100 / expectedSize)}%"
             pct > 0 -> "$pct%"
             else -> ""
         }
-
-        // ETA: staging from bytes remaining / rate, transcodes from percent + elapsed time
         val eta = when {
             bytesPerSecond > 0 && expectedSize > 0 && currentSize < expectedSize -> {
                 val remainingSec = ((expectedSize - currentSize) / bytesPerSecond).toLong()

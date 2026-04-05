@@ -50,6 +50,17 @@ class TranscodeWorker(
         "SUBTITLES" to 4
     )
 
+    /**
+     * Lease types that can run concurrently within a bundle. Each uses a different
+     * output directory or tool and doesn't compete for the same GPU resource:
+     * - TRANSCODE / MOBILE_TRANSCODE: separate NVENC sessions, different output dirs
+     * - THUMBNAILS: CPU-bound ffmpeg frame extraction, writes alongside source
+     *
+     * SUBTITLES is excluded because Whisper uses CUDA cores (competes with gaming/GPU).
+     * CHAPTERS is excluded because it's instant (ffprobe) and should finish first.
+     */
+    private val parallelTypes = setOf("TRANSCODE", "MOBILE_TRANSCODE", "THUMBNAILS")
+
     private val reconnectIntervalMs = 30_000L // retry reconnection every 30s
     private val reportMaxAttempts = 5
     private val reportBaseDelayMs = 5_000L
@@ -113,7 +124,9 @@ class TranscodeWorker(
 
     /**
      * Claims a bundle of work, optionally stages the file locally, then processes
-     * all leases in execution order. Returns true if work was done.
+     * all leases. Compatible lease types (TRANSCODE, MOBILE_TRANSCODE, THUMBNAILS)
+     * run in parallel using separate NVENC sessions / CPU threads.
+     * Returns true if work was done.
      */
     private fun processBundle(): Boolean {
         val cachedIds = localCache?.getCachedTranscodeIds() ?: emptySet()
@@ -127,6 +140,15 @@ class TranscodeWorker(
         // Sort leases by execution order
         val sortedLeases = bundle.leases.sortedBy { executionOrder[it.leaseType] ?: 99 }
         val allLeaseIds = sortedLeases.map { it.leaseId }
+
+        // Partition into three phases:
+        //   before: fast sequential ops that should finish first (CHAPTERS)
+        //   parallel: ops that can overlap (TRANSCODE, MOBILE_TRANSCODE, THUMBNAILS)
+        //   after: ops that need exclusive GPU access (SUBTITLES)
+        val beforeParallel = sortedLeases.takeWhile { it.leaseType !in parallelTypes }
+        val remaining = sortedLeases.drop(beforeParallel.size)
+        val parallel = remaining.takeWhile { it.leaseType in parallelTypes }
+        val afterParallel = remaining.drop(parallel.size)
 
         // Bundle-level heartbeat keeps the gRPC stream alive throughout all operations
         // (staging, chapters, thumbnails, gaps between operations, etc.).
@@ -153,57 +175,38 @@ class TranscodeWorker(
         val videoInputFile = resolveVideoInput(bundle, sourceFile, sortedLeases.size)
 
         try {
-            for (lease in sortedLeases) {
-                if (!running.get()) break
+            // Phase 1: sequential pre-parallel (CHAPTERS — fast ffprobe)
+            for (lease in beforeParallel) {
+                if (!running.get()) return true
+                if (isBundleInvalidated(allLeaseIds, bundle)) return true
+                processSingleLease(lease, bundle, videoInputFile, allLeaseIds)
+            }
 
-                // Abort bundle if the server has invalidated any of our leases
-                if (apiClient.hasInvalidatedLeases(allLeaseIds)) {
-                    log.warn("Bundle abandoned — server invalidated leases for: {} (transcode_id={})",
-                        bundle.relativePath, bundle.transcodeId)
-                    apiClient.clearInvalidatedLeases()
-                    break
+            // Phase 2: parallelizable leases
+            if (!running.get() || isBundleInvalidated(allLeaseIds, bundle)) return true
+            if (parallel.size > 1) {
+                log.info("Running {} leases in parallel: {}", parallel.size,
+                    parallel.joinToString { it.leaseType })
+                val threads = parallel.map { lease ->
+                    Thread({
+                        processSingleLease(lease, bundle, videoInputFile, allLeaseIds)
+                    }, "parallel-${lease.leaseType}-${lease.leaseId}")
                 }
+                threads.forEach { it.start() }
+                threads.forEach { it.join() }
+            } else {
+                for (lease in parallel) {
+                    if (!running.get()) return true
+                    if (isBundleInvalidated(allLeaseIds, bundle)) return true
+                    processSingleLease(lease, bundle, videoInputFile, allLeaseIds)
+                }
+            }
 
-                // Heartbeat all other leases in the bundle
-                val othersToHeartbeat = allLeaseIds.filter { it != lease.leaseId }
-                if (othersToHeartbeat.isNotEmpty()) {
-                    apiClient.heartbeatMultiple(othersToHeartbeat)
-                }
-
-                val taskName = lease.leaseType.lowercase().replace('_', ' ')
-                status.task = taskName
-                status.expectedSize = 0
-                status.transcodePercent = 0
-                status.taskStartTime = System.currentTimeMillis()
-                status.lastError = ""
-                val leaseStart = System.currentTimeMillis()
-                try {
-                    // Process methods return Boolean (true=success) or Unit (always success if no exception).
-                    // Track the result to avoid recording "success" when the method handled the failure internally.
-                    val success = when (lease.leaseType) {
-                        "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
-                        "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
-                        "MOBILE_TRANSCODE" -> processMobileTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
-                        "THUMBNAILS" -> { status.outputFile = null; processThumbnails(lease.leaseId, bundle.relativePath, videoInputFile) }
-                        "SUBTITLES" -> processSubtitles(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
-                        else -> {
-                            log.warn("Unknown lease type: {}", lease.leaseType)
-                            apiClient.reportFailure(lease.leaseId, "Unknown lease type: ${lease.leaseType}")
-                            false
-                        }
-                    }
-                    val result = if (success != false) "success" else "failed"
-                    val outputBytes = status.outputFile?.let { if (it.exists()) it.length() else 0L } ?: 0L
-                    status.recordCompletion(status.fileName, taskName, result,
-                        (System.currentTimeMillis() - leaseStart) / 1000, outputBytes,
-                        if (result == "failed") status.lastError else "")
-                } catch (e: Exception) {
-                    log.error("Error processing {} lease {}: {}", lease.leaseType, lease.leaseId, e.message, e)
-                    apiClient.reportFailure(lease.leaseId, e.message ?: "Unknown error")
-                    status.recordCompletion(status.fileName, taskName, "failed",
-                        (System.currentTimeMillis() - leaseStart) / 1000, 0,
-                        e.message ?: "Unknown error")
-                }
+            // Phase 3: sequential post-parallel (SUBTITLES — uses CUDA cores)
+            for (lease in afterParallel) {
+                if (!running.get()) return true
+                if (isBundleInvalidated(allLeaseIds, bundle)) return true
+                processSingleLease(lease, bundle, videoInputFile, allLeaseIds)
             }
         } finally {
             bundleHeartbeat.interrupt()
@@ -216,6 +219,71 @@ class TranscodeWorker(
         }
 
         return true
+    }
+
+    /** Check if the server has invalidated any leases in this bundle. */
+    private fun isBundleInvalidated(allLeaseIds: List<Long>, bundle: BundleResponse): Boolean {
+        if (!apiClient.hasInvalidatedLeases(allLeaseIds)) return false
+        log.warn("Bundle abandoned — server invalidated leases for: {} (transcode_id={})",
+            bundle.relativePath, bundle.transcodeId)
+        apiClient.clearInvalidatedLeases()
+        return true
+    }
+
+    /**
+     * Processes a single lease within a bundle. Safe to call from any thread.
+     * Registers an [WorkerStatus.ActiveTask] for per-task status tracking so
+     * the status page can show progress for each parallel operation independently.
+     */
+    private fun processSingleLease(
+        lease: LeaseInfo,
+        bundle: BundleResponse,
+        videoInputFile: File,
+        allLeaseIds: List<Long>
+    ) {
+        // Heartbeat all other leases in the bundle
+        val othersToHeartbeat = allLeaseIds.filter { it != lease.leaseId }
+        if (othersToHeartbeat.isNotEmpty()) {
+            apiClient.heartbeatMultiple(othersToHeartbeat)
+        }
+
+        val taskName = lease.leaseType.lowercase().replace('_', ' ')
+        val activeTask = status.registerTask(lease.leaseId, taskName, bundle.relativePath.substringAfterLast('/'))
+
+        // Update top-level status (best-effort for single-task display)
+        status.task = taskName
+        status.expectedSize = 0
+        status.transcodePercent = 0
+        status.taskStartTime = System.currentTimeMillis()
+        status.lastError = ""
+        val leaseStart = System.currentTimeMillis()
+        try {
+            val success = when (lease.leaseType) {
+                "CHAPTERS" -> { status.outputFile = null; processChapters(lease.leaseId, bundle.relativePath, videoInputFile) }
+                "TRANSCODE" -> processTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
+                "MOBILE_TRANSCODE" -> processMobileTranscode(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
+                "THUMBNAILS" -> { status.outputFile = null; processThumbnails(lease.leaseId, bundle.relativePath, videoInputFile) }
+                "SUBTITLES" -> processSubtitles(lease.leaseId, bundle.relativePath, videoInputFile, allLeaseIds)
+                else -> {
+                    log.warn("Unknown lease type: {}", lease.leaseType)
+                    apiClient.reportFailure(lease.leaseId, "Unknown lease type: ${lease.leaseType}")
+                    false
+                }
+            }
+            val result = if (success != false) "success" else "failed"
+            val outputBytes = status.outputFile?.let { if (it.exists()) it.length() else 0L } ?: 0L
+            status.recordCompletion(status.fileName, taskName, result,
+                (System.currentTimeMillis() - leaseStart) / 1000, outputBytes,
+                if (result == "failed") status.lastError else "")
+        } catch (e: Exception) {
+            log.error("Error processing {} lease {}: {}", lease.leaseType, lease.leaseId, e.message, e)
+            apiClient.reportFailure(lease.leaseId, e.message ?: "Unknown error")
+            status.recordCompletion(status.fileName, taskName, "failed",
+                (System.currentTimeMillis() - leaseStart) / 1000, 0,
+                e.message ?: "Unknown error")
+        } finally {
+            status.unregisterTask(lease.leaseId)
+        }
     }
 
     /**
@@ -270,7 +338,7 @@ class TranscodeWorker(
 
         val mp4File = pathTranslator.forBrowserPath(relativePath)
         val tmpFile = pathTranslator.tmpPath(relativePath)
-        status.outputFile = tmpFile
+        status.updateOutput(leaseId, tmpFile)
         mp4File.parentFile?.mkdirs()
 
         try {
@@ -310,7 +378,7 @@ class TranscodeWorker(
                 outputBuilder.appendLine(line)
                 if (line.contains("moving the moov atom") || line.contains("Starting second pass")) {
                     status.task = "faststart (moving moov atom)"
-                    status.transcodePercent = 96
+                    status.updateProgress(leaseId, 96)
                     progressPercent.set(96)
                 }
                 if (durationSecs != null && durationSecs > 0) {
@@ -323,7 +391,7 @@ class TranscodeWorker(
                         val currentSecs = h * 3600.0 + m * 60.0 + s + frac
                         val percent = ((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95)
                         progressPercent.set(percent)
-                        status.transcodePercent = percent
+                        status.updateProgress(leaseId, percent)
                     }
                 }
             }
@@ -394,7 +462,7 @@ class TranscodeWorker(
 
         val mp4File = pathTranslator.forMobilePath(relativePath)
         val tmpFile = pathTranslator.forMobileTmpPath(relativePath)
-        status.outputFile = tmpFile
+        status.updateOutput(leaseId, tmpFile)
         mp4File.parentFile?.mkdirs()
 
         try {
@@ -424,7 +492,7 @@ class TranscodeWorker(
                 outputBuilder.appendLine(line)
                 if (line.contains("moving the moov atom") || line.contains("Starting second pass")) {
                     status.task = "faststart (moving moov atom)"
-                    status.transcodePercent = 96
+                    status.updateProgress(leaseId, 96)
                     progressPercent.set(96)
                 }
                 if (durationSecs != null && durationSecs > 0) {
@@ -437,7 +505,7 @@ class TranscodeWorker(
                         val currentSecs = h * 3600.0 + m * 60.0 + s + frac
                         val pct = ((currentSecs / durationSecs) * 95).toInt().coerceIn(0, 95)
                         progressPercent.set(pct)
-                        status.transcodePercent = pct
+                        status.updateProgress(leaseId, pct)
                     }
                 }
             }
