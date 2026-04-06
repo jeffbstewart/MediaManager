@@ -78,6 +78,8 @@ enum class LeaseStatus { CLAIMED, IN_PROGRESS, COMPLETED, FAILED, EXPIRED }
 
 enum class LeaseType { TRANSCODE, THUMBNAILS, SUBTITLES, CHAPTERS, MOBILE_TRANSCODE }
 
+enum class ReportStatus { OPEN, RESOLVED, DISMISSED }
+
 /**
  * Content ratings from TMDB (MPAA for movies, TV Parental Guidelines for TV shows).
  *

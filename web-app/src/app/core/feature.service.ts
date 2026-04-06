@@ -15,6 +15,7 @@ export class FeatureService {
     wish_ready_count: 0,
     unmatched_count: 0,
     data_quality_count: 0,
+    open_reports_count: 0,
   });
 
   readonly hasPersonalVideos = () => this.flags().has_personal_videos;
@@ -24,6 +25,7 @@ export class FeatureService {
   readonly wishReadyCount = () => this.flags().wish_ready_count;
   readonly unmatchedCount = () => this.flags().unmatched_count;
   readonly dataQualityCount = () => this.flags().data_quality_count;
+  readonly openReportsCount = () => this.flags().open_reports_count;
 
   update(flags: FeatureFlags): void {
     this.flags.set(flags);

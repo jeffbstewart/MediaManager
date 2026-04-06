@@ -28,6 +28,7 @@ import net.stewart.mediamanager.armeria.ActorHttpService
 import net.stewart.mediamanager.armeria.CameraListHttpService
 import net.stewart.mediamanager.armeria.CameraSettingsHttpService
 import net.stewart.mediamanager.armeria.DataQualityHttpService
+import net.stewart.mediamanager.armeria.ProblemReportHttpService
 import net.stewart.mediamanager.armeria.LegalRestService
 import net.stewart.mediamanager.armeria.CollectionHttpService
 import net.stewart.mediamanager.armeria.LiveTvListHttpService
@@ -248,6 +249,7 @@ object ArmeriaServer {
         blocking(LiveTvSettingsHttpService())
         blocking(CameraSettingsHttpService())
         blocking(DataQualityHttpService())
+        blocking(ProblemReportHttpService())
         blocking(AddItemHttpService())
         blocking(MediaItemEditHttpService())
         blocking(FamilyMemberHttpService())

@@ -40,6 +40,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   readonly containerRef = viewChild<ElementRef<HTMLDivElement>>('containerEl');
   readonly thumbRef = viewChild<ElementRef<HTMLDivElement>>('thumbEl');
   readonly thumbImgRef = viewChild<ElementRef<HTMLImageElement>>('thumbImg');
+  readonly subsRef = viewChild<ElementRef<HTMLDivElement>>('subsEl');
 
   transcodeId = 0;
   titleName = '';
@@ -58,6 +59,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   // Subtitles
   readonly subsAvailable = signal(false);
   readonly subsEnabled = signal(true);
+  readonly subsText = signal('');
 
   // Chapters & skip segments
   chapters: ChapterData = { chapters: [], skipSegments: [] };
@@ -81,6 +83,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   // Progress tracking
   private progressInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimer: ReturnType<typeof setTimeout> | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private lastReportedTime = 0;
 
 
@@ -139,6 +142,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (this.progressInterval) clearInterval(this.progressInterval);
     if (this.controlsTimer) clearTimeout(this.controlsTimer);
     if (this.upNextTimerId) clearInterval(this.upNextTimerId);
+    this.resizeObserver?.disconnect();
   }
 
   // --- Resume prompt ---
@@ -199,6 +203,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
         video.currentTime = seekTo;
       }
       video.play();
+      this.updateSubsPosition();
     });
     video.addEventListener('timeupdate', () => {
       this.currentTime.set(video.currentTime);
@@ -219,19 +224,36 @@ export class PlayerComponent implements OnInit, OnDestroy {
     // Start progress reporting
     this.progressInterval = setInterval(() => this.reportProgress(false), 60000);
 
-    // Add subtitle track if available
+    // Add subtitle track — always 'hidden' mode; we render in a custom overlay
+    // positioned near the video content rather than at the window bottom
     if (this.subsAvailable()) {
       const track = document.createElement('track');
       track.kind = 'subtitles';
       track.srclang = 'en';
       track.label = 'English';
       track.src = `/stream/${this.transcodeId}/subs.vtt`;
-      track.default = this.subsEnabled();
+      track.default = true;
       video.appendChild(track);
       if (video.textTracks[0]) {
-        video.textTracks[0].mode = this.subsEnabled() ? 'showing' : 'hidden';
+        video.textTracks[0].mode = 'hidden';
+        video.textTracks[0].addEventListener('cuechange', () => {
+          const cues = video.textTracks[0].activeCues;
+          if (!cues || cues.length === 0) {
+            this.subsText.set('');
+            return;
+          }
+          const texts: string[] = [];
+          for (let i = 0; i < cues.length; i++) {
+            texts.push((cues[i] as VTTCue).text);
+          }
+          this.subsText.set(texts.join('\n'));
+        });
       }
     }
+
+    // Track video element size changes to reposition subtitles
+    this.resizeObserver = new ResizeObserver(() => this.updateSubsPosition());
+    this.resizeObserver.observe(video);
   }
 
   // --- Playback controls ---
@@ -268,11 +290,34 @@ export class PlayerComponent implements OnInit, OnDestroy {
   }
 
   toggleSubs(): void {
+    this.subsEnabled.update(v => !v);
+  }
+
+  private updateSubsPosition(): void {
     const video = this.videoRef()?.nativeElement;
-    if (!video?.textTracks[0]) return;
-    const enabled = !this.subsEnabled();
-    this.subsEnabled.set(enabled);
-    video.textTracks[0].mode = enabled ? 'showing' : 'hidden';
+    const subsEl = this.subsRef()?.nativeElement;
+    if (!video || !subsEl || !video.videoWidth) return;
+
+    const containerW = video.clientWidth;
+    const containerH = video.clientHeight;
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const containerAspect = containerW / containerH;
+
+    let blackBarBelow = 0;
+    if (videoAspect > containerAspect) {
+      const renderedH = containerW / videoAspect;
+      blackBarBelow = (containerH - renderedH) / 2;
+    }
+
+    if (blackBarBelow >= 60) {
+      // Enough room in black bar below video — place subs there (non-overlapping)
+      subsEl.style.top = `${containerH - blackBarBelow}px`;
+      subsEl.style.bottom = 'auto';
+    } else {
+      // Not enough room below — place at bottom of video content
+      subsEl.style.bottom = `${blackBarBelow}px`;
+      subsEl.style.top = 'auto';
+    }
   }
 
   skipIntro(): void {

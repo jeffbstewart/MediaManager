@@ -1,0 +1,94 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90vw;
+  max-width: 420px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  h3 { margin: 0; font-size: 1rem; }
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  &:hover { background: rgba(255, 255, 255, 0.1); }
+}
+
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.field-label {
+  font-size: 0.8125rem;
+  opacity: 0.6;
+  margin-top: 0.25rem;
+}
+
+.context-display {
+  font-size: 0.875rem;
+  padding: 6px 0;
+}
+
+.context-meta {
+  opacity: 0.5;
+  margin-left: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.field-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: white;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  resize: vertical;
+  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.done-message {
+  text-align: center;
+  padding: 1rem 0;
+
+  p { margin: 0.75rem 0 1rem; font-size: 0.9375rem; }
+}
+
+.done-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #4caf50;
+}

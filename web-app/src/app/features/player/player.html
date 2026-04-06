@@ -37,6 +37,11 @@
     </video>
   }
 
+  <!-- Custom subtitle overlay — positioned near video content, not window bottom -->
+  <div #subsEl class="custom-subs" [class.visible]="subsEnabled() && !!subsText()">
+    <span>{{ subsText() }}</span>
+  </div>
+
   <!-- Title on pause -->
   @if (paused() && !showResume() && !loading() && titleName) {
     <div class="title-on-pause">{{ titleName }}</div>

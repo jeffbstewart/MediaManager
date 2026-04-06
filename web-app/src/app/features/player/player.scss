@@ -25,6 +25,34 @@ video {
   background: #000;
 }
 
+// Custom subtitle overlay — positioned relative to video content area
+.custom-subs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  padding: 4px 10%;
+
+  &.visible {
+    display: flex;
+  }
+
+  span {
+    background: rgba(0, 0, 0, 0.75);
+    color: white;
+    font-size: 1.5rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-align: center;
+    line-height: 1.4;
+    white-space: pre-line;
+  }
+}
+
 // Overlays
 .overlay {
   position: absolute;

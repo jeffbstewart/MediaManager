@@ -11,6 +11,7 @@ import { AuthService } from '../auth.service';
 import { CatalogService, SearchResult } from '../catalog.service';
 import { FeatureService } from '../feature.service';
 import { AppRoutes } from '../routes';
+import { ReportProblemDialogComponent } from './report-problem-dialog';
 
 @Component({
   selector: 'app-shell',
@@ -26,6 +27,7 @@ import { AppRoutes } from '../routes';
     MatListModule,
     MatMenuModule,
     MatDividerModule,
+    ReportProblemDialogComponent,
   ],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
@@ -54,6 +56,13 @@ export class ShellComponent implements OnInit {
   }
   readonly purchasesOpen = signal(false);
   readonly transcodesOpen = signal(false);
+
+  // Report problem dialog
+  readonly reportDialogOpen = signal(false);
+  readonly reportTitleId = signal<number | null>(null);
+  readonly reportTitleName = signal<string | null>(null);
+  readonly reportSeasonNumber = signal<number | null>(null);
+  readonly reportEpisodeNumber = signal<number | null>(null);
 
   onSearchInput(event: Event): void {
     const q = (event.target as HTMLInputElement).value;
@@ -131,6 +140,40 @@ export class ShellComponent implements OnInit {
 
   toggleTranscodes(): void {
     this.transcodesOpen.update(v => !v);
+  }
+
+  async openReportDialog(): Promise<void> {
+    // Reset context
+    this.reportTitleId.set(null);
+    this.reportTitleName.set(null);
+    this.reportSeasonNumber.set(null);
+    this.reportEpisodeNumber.set(null);
+
+    // Extract title context from current URL
+    const url = this.router.url;
+    const titleMatch = url.match(/^\/title\/(\d+)/);
+    if (titleMatch) {
+      const titleId = Number(titleMatch[1]);
+      this.reportTitleId.set(titleId);
+      try {
+        const detail = await this.catalog.getTitleDetail(titleId);
+        this.reportTitleName.set(detail.title_name);
+      } catch { /* context is optional */ }
+    }
+
+    this.reportDialogOpen.set(true);
+  }
+
+  async onReportDialogSubmitted(): Promise<void> {
+    // Refresh feature flags so badge count updates
+    try {
+      const flags = await this.catalog.getFeatures();
+      this.features.update(flags);
+    } catch { /* non-fatal */ }
+  }
+
+  onReportDialogClosed(): void {
+    this.reportDialogOpen.set(false);
   }
 
   onLogout(): void {

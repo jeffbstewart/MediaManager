@@ -1,0 +1,43 @@
+@if (open()) {
+  <div class="modal-overlay" (click)="close()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      @if (!done()) {
+        <div class="modal-header">
+          <h3>Report a Problem</h3>
+          <button class="close-btn" (click)="close()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="form-fields">
+          @if (titleName()) {
+            <label class="field-label">Title</label>
+            <div class="context-display">
+              {{ titleName() }}
+              @if (seasonNumber() != null) {
+                <span class="context-meta">Season {{ seasonNumber() }}@if (episodeNumber() != null) {, Episode {{ episodeNumber() }}}</span>
+              }
+            </div>
+          }
+          <label class="field-label">What's the problem?</label>
+          <textarea class="field-input description-input"
+                    rows="4"
+                    placeholder="Describe the issue..."
+                    [value]="description()"
+                    (input)="description.set($any($event.target).value)"></textarea>
+        </div>
+        <div class="dialog-footer">
+          <button mat-button (click)="close()">Cancel</button>
+          <button mat-flat-button color="primary"
+                  [disabled]="!description().trim() || submitting()"
+                  (click)="submit()">
+            @if (submitting()) { Submitting... } @else { Submit }
+          </button>
+        </div>
+      } @else {
+        <div class="done-message">
+          <mat-icon class="done-icon">check_circle</mat-icon>
+          <p>Report submitted. Thank you!</p>
+          <button mat-flat-button (click)="close()">Close</button>
+        </div>
+      }
+    </div>
+  </div>
+}

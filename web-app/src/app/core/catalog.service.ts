@@ -68,6 +68,7 @@ export interface FeatureFlags {
   wish_ready_count: number;
   unmatched_count: number;
   data_quality_count: number;
+  open_reports_count: number;
 }
 
 export interface TitleDetail {

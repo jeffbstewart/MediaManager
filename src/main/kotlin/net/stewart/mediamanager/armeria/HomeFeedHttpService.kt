@@ -18,6 +18,8 @@ import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
+import net.stewart.mediamanager.entity.ProblemReport
+import net.stewart.mediamanager.entity.ReportStatus
 import net.stewart.mediamanager.service.ContinueWatchingItem
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.PairingService
@@ -74,6 +76,9 @@ class HomeFeedHttpService {
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
             "data_quality_count" to if (user.isAdmin()) {
                 allTitlesForFeatures.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
+            } else 0,
+            "open_reports_count" to if (user.isAdmin()) {
+                ProblemReport.findAll().count { it.status == ReportStatus.OPEN.name }
             } else 0
         )
 
@@ -112,7 +117,10 @@ class HomeFeedHttpService {
             "is_admin" to user.isAdmin(),
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
             "unmatched_count" to unmatchedCount,
-            "data_quality_count" to dataQualityCount
+            "data_quality_count" to dataQualityCount,
+            "open_reports_count" to if (user.isAdmin()) {
+                ProblemReport.findAll().count { it.status == ReportStatus.OPEN.name }
+            } else 0
         )
         return HttpResponse.builder()
             .status(HttpStatus.OK)

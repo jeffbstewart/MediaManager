@@ -75,6 +75,13 @@
           <mat-icon matListItemIcon>family_restroom</mat-icon>
           <span matListItemTitle>Family Members</span>
         </a>
+        <a mat-list-item [routerLink]="routes.adminReports()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>flag</mat-icon>
+          <span matListItemTitle>Reports</span>
+          @if (features.openReportsCount() > 0) {
+            <span matListItemMeta class="dq-badge">{{ features.openReportsCount() }}</span>
+          }
+        </a>
         <a mat-list-item [routerLink]="routes.adminLiveTv()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>desktop_windows</mat-icon>
           <span matListItemTitle>Live TV</span>
@@ -241,6 +248,10 @@
           <mat-icon>help_outline</mat-icon>
           <span>Help</span>
         </a>
+        <button mat-menu-item (click)="openReportDialog()">
+          <mat-icon>flag</mat-icon>
+          <span>Report a Problem</span>
+        </button>
         <button mat-menu-item (click)="onLogout()">
           <mat-icon>logout</mat-icon>
           <span>Sign Out</span>
@@ -253,3 +264,12 @@
     </div>
   </mat-sidenav-content>
 </mat-sidenav-container>
+
+<app-report-problem-dialog
+  [open]="reportDialogOpen()"
+  [titleId]="reportTitleId()"
+  [titleName]="reportTitleName()"
+  [seasonNumber]="reportSeasonNumber()"
+  [episodeNumber]="reportEpisodeNumber()"
+  (closed)="onReportDialogClosed()"
+  (submitted)="onReportDialogSubmitted()" />
