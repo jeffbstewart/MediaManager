@@ -582,9 +582,13 @@ class TranscodeWorker(
         val success = ThumbnailSpriteGenerator.generate(config.ffmpegPath, videoFile, outputDir, outputBaseName)
 
         if (success) {
-            log.info("Thumbnails complete for: {}", videoFile.name)
+            // Sum sprite sheet + VTT file sizes for output size reporting
+            val outputSize = outputDir.listFiles()
+                ?.filter { it.name.startsWith("$outputBaseName.thumbs") }
+                ?.sumOf { it.length() } ?: 0L
+            log.info("Thumbnails complete for: {} (output={})", videoFile.name, outputSize)
             reportWithRetry("reportComplete thumbnails lease $leaseId") {
-                apiClient.reportComplete(leaseId, null)
+                apiClient.reportComplete(leaseId, null, fileSize = outputSize)
             }
         } else {
             log.warn("Thumbnail generation failed for: {}", videoFile.name)
@@ -743,9 +747,9 @@ class TranscodeWorker(
                 actualOutput.renameTo(srtFile)
             }
 
-            log.info("Subtitles complete: {} ({} cues)", srtFile.name, cueCount)
+            log.info("Subtitles complete: {} ({} cues, {} bytes)", srtFile.name, cueCount, srtFile.length())
             reportWithRetry("reportComplete subtitles lease $leaseId") {
-                apiClient.reportComplete(leaseId, null)
+                apiClient.reportComplete(leaseId, null, fileSize = srtFile.length())
             }
             return true
 

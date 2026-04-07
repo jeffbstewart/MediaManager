@@ -296,7 +296,7 @@ object TranscodeLeaseService {
     /**
      * Reports successful completion of a transcode.
      */
-    fun reportComplete(leaseId: Long, encoder: String?): TranscodeLease? {
+    fun reportComplete(leaseId: Long, encoder: String?, outputSizeBytes: Long? = null): TranscodeLease? {
         val lease = TranscodeLease.findById(leaseId) ?: return null
         if (lease.status != LeaseStatus.CLAIMED.name && lease.status != LeaseStatus.IN_PROGRESS.name) return null
 
@@ -304,6 +304,7 @@ object TranscodeLeaseService {
         lease.progress_percent = 100
         lease.completed_at = LocalDateTime.now()
         if (encoder != null) lease.encoder = encoder
+        if (outputSizeBytes != null && outputSizeBytes > 0) lease.file_size_bytes = outputSizeBytes
         lease.save()
 
         log.info("Lease {} completed by '{}': {}", leaseId, lease.buddy_name, lease.relative_path)

@@ -131,6 +131,9 @@ message ReportComplete {
 
   // For TRANSCODE/LOW_STORAGE_TRANSCODE: probe results from output file
   ProbeData probe = 4;
+
+  // Actual output file size in bytes (all lease types that produce files)
+  int64 output_size_bytes = 5;
 }
 
 // Work failed.

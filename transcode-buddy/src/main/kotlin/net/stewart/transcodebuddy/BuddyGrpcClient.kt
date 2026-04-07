@@ -304,6 +304,7 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
         if (probeResult != null) {
             builder.probe = buildProbeData(probeResult, fileSize)
         }
+        if (fileSize != null && fileSize > 0) builder.outputSizeBytes = fileSize
         return send(BuddyMessage.newBuilder().setReportComplete(builder).build())
     }
 

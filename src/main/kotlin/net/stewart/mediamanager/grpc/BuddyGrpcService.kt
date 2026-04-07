@@ -243,7 +243,8 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
 
         private fun handleReportComplete(complete: ReportComplete) {
             val encoder = complete.encoder.ifBlank { null }
-            val lease = TranscodeLeaseService.reportComplete(complete.leaseId, encoder)
+            val outputSize = if (complete.outputSizeBytes > 0) complete.outputSizeBytes else null
+            val lease = TranscodeLeaseService.reportComplete(complete.leaseId, encoder, outputSize)
             if (lease == null) {
                 sendError(BuddyErrorCode.BUDDY_ERROR_CODE_INVALID_LEASE,
                     "Lease ${complete.leaseId} not found or not active")
