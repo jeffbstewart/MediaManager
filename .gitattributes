@@ -10,6 +10,15 @@
 *.sql text eol=lf
 *.kts text eol=lf
 
+# Force LF for web frontend
+*.ts text eol=lf
+*.html text eol=lf
+*.scss text eol=lf
+*.css text eol=lf
+
+# Force LF for Roku channel
+*.brs text eol=lf
+
 # Force LF for config/markup
 *.xml text eol=lf
 *.json text eol=lf
