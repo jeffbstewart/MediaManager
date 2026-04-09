@@ -479,6 +479,8 @@ object NasScannerService {
 
         for (transcode in missing) {
             val episodeId = transcode.episode_id
+            // Delete child leases first (FK_LEASE_TRANSCODE has no ON DELETE CASCADE)
+            TranscodeLease.findAll().filter { it.transcode_id == transcode.id }.forEach { it.delete() }
             transcode.delete()
 
             // Clean up orphaned episode
