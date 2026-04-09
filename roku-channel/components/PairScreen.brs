@@ -97,7 +97,7 @@ sub onPairCodeReceived()
     m.pairCodeLabel.visible = true
     m.pairInstructionLabel.visible = true
 
-    m.instructionLabel.text = "Scan the QR code with your phone, or enter the code in your browser at:" + chr(10) + baseUrl + "/pair?code=" + code
+    m.instructionLabel.text = "Scan the QR code with your phone, or enter the code in your browser at:" + chr(10) + baseUrl + "/app/pair?code=" + code
     m.buttonGroup.buttons = ["Enter Key Manually", "Retry", "Cancel"]
     m.buttonGroup.setFocus(true)
 

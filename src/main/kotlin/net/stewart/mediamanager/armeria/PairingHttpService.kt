@@ -161,7 +161,7 @@ class PairingHttpService {
             val host = ctx.request().headers().get("host") ?: "localhost"
             "http://$host"
         }
-        val pairUrl = "$baseUrl/pair?code=$code"
+        val pairUrl = "$baseUrl/app/pair?code=$code"
 
         val pngBytes = PairingService.generateQrCode(pairUrl)
         val headers = ResponseHeaders.builder(HttpStatus.OK)
