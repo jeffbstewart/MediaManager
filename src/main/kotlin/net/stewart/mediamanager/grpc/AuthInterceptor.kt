@@ -134,12 +134,16 @@ class AuthInterceptor : ServerInterceptor {
             "mediamanager.AuthService/Refresh",
             "mediamanager.AuthService/Revoke",
             "mediamanager.AuthService/CreateFirstUser",
+            "mediamanager.AuthService/GetPasskeyAuthenticationOptions",
+            "mediamanager.AuthService/AuthenticateWithPasskey",
             "mediamanager.InfoService/Discover"
         )
 
         /** Category 2: Token required, but allowed even with must_change_password. */
         private val GATE_EXEMPT_METHODS = setOf(
             "mediamanager.AuthService/ChangePassword",
+            "mediamanager.AuthService/GetLegalStatus",
+            "mediamanager.AuthService/AgreeToTerms",
             "mediamanager.InfoService/GetInfo"
             // All ProfileService RPCs are handled by prefix check in isGateExempt()
         )

@@ -9,9 +9,14 @@ import net.stewart.mediamanager.entity.SessionToken
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.WebAuthnService
+import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 class ProfileGrpcService : ProfileServiceGrpcKt.ProfileServiceCoroutineImplBase() {
+
+    private val log = LoggerFactory.getLogger(ProfileGrpcService::class.java)
 
     override suspend fun getProfile(request: Empty): ProfileResponse {
         return currentUser().toProfileResponse()
@@ -83,6 +88,68 @@ class ProfileGrpcService : ProfileServiceGrpcKt.ProfileServiceCoroutineImplBase(
     override suspend fun deleteOtherSessions(request: Empty): Empty {
         val user = currentUser()
         AuthService.invalidateUserSessions(user.id!!)
+        return Empty.getDefaultInstance()
+    }
+
+    // --- Passkey management ---
+
+    override suspend fun getPasskeyRegistrationOptions(request: Empty): PasskeyOptionsResponse {
+        val user = currentUser()
+        try {
+            val options = WebAuthnService.generateRegistrationOptions(user)
+            return passkeyOptionsResponse {
+                signedChallenge = options.signedChallenge
+                optionsJson = options.options.toString()
+            }
+        } catch (e: IllegalStateException) {
+            throw StatusException(Status.UNAVAILABLE.withDescription("Passkeys not available"))
+        }
+    }
+
+    override suspend fun registerPasskey(request: RegisterPasskeyRequest): PasskeyCredentialInfo {
+        val user = currentUser()
+
+        if (request.signedChallenge.isBlank() || request.credentialId.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Challenge and credential ID required"))
+        }
+
+        val displayName = if (request.hasDisplayName()) request.displayName else "Passkey"
+        val transports = if (request.hasTransports()) request.transports else null
+
+        val credential = try {
+            WebAuthnService.verifyRegistration(
+                signedChallenge = request.signedChallenge,
+                clientDataJSON = request.clientDataJson,
+                attestationObject = request.attestationObject,
+                credentialId = request.credentialId,
+                transports = transports,
+                displayName = displayName,
+                userId = user.id!!
+            )
+        } catch (e: IllegalArgumentException) {
+            log.warn("gRPC passkey registration failed for user '{}': {}", user.username, e.message)
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Passkey registration failed"))
+        } catch (e: IllegalStateException) {
+            throw StatusException(Status.UNAVAILABLE.withDescription("Passkeys not available"))
+        }
+
+        return credential.toProto()
+    }
+
+    override suspend fun listPasskeys(request: Empty): ListPasskeysResponse {
+        val user = currentUser()
+        val creds = WebAuthnService.listCredentials(user.id!!)
+        return listPasskeysResponse {
+            passkeys.addAll(creds.map { it.toProto() })
+        }
+    }
+
+    override suspend fun deletePasskey(request: DeletePasskeyRequest): Empty {
+        val user = currentUser()
+        val deleted = WebAuthnService.deleteCredential(request.passkeyId, user.id!!)
+        if (!deleted) {
+            throw StatusException(Status.NOT_FOUND.withDescription("Passkey not found"))
+        }
         return Empty.getDefaultInstance()
     }
 }

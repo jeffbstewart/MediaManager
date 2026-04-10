@@ -508,3 +508,10 @@ fun net.stewart.mediamanager.entity.OwnershipPhoto.toProtoPhotoInfo(): Ownership
     url = "/ownership-photos/${this@toProtoPhotoInfo.id}"
     this@toProtoPhotoInfo.captured_at?.let { capturedAt = it.toProtoTimestamp() }
 }
+
+fun net.stewart.mediamanager.entity.PasskeyCredential.toProto(): PasskeyCredentialInfo = passkeyCredentialInfo {
+    id = this@toProto.id!!
+    displayName = this@toProto.display_name
+    this@toProto.created_at?.let { createdAt = it.toProtoTimestamp() }
+    this@toProto.last_used_at?.let { lastUsedAt = it.toProtoTimestamp() }
+}

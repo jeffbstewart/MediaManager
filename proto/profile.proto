@@ -6,6 +6,7 @@ option java_package = "net.stewart.mediamanager.grpc";
 option java_multiple_files = true;
 option swift_prefix = "MM";
 
+import "auth.proto";
 import "common.proto";
 import "time.proto";
 
@@ -17,6 +18,12 @@ service ProfileService {
   rpc ListSessions(Empty) returns (SessionListResponse);
   rpc DeleteSession(DeleteSessionRequest) returns (Empty);
   rpc DeleteOtherSessions(Empty) returns (Empty);
+
+  // Passkey management (authenticated, gate-exempt via ProfileService prefix)
+  rpc GetPasskeyRegistrationOptions(Empty) returns (PasskeyOptionsResponse);
+  rpc RegisterPasskey(RegisterPasskeyRequest) returns (PasskeyCredentialInfo);
+  rpc ListPasskeys(Empty) returns (ListPasskeysResponse);
+  rpc DeletePasskey(DeletePasskeyRequest) returns (Empty);
 }
 
 message ProfileResponse {

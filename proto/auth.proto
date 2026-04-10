@@ -7,10 +7,11 @@ option java_multiple_files = true;
 option swift_prefix = "MM";
 
 import "info.proto";
+import "time.proto";
 
 // Authentication service.
-// This is the only service accessible without a valid session token.
-// All other services require a Bearer token obtained from Login or Refresh.
+// Login, Refresh, Revoke, CreateFirstUser, and passkey authentication RPCs
+// are unauthenticated. All others require a Bearer token.
 service AuthService {
   // Authenticate with username/password, receive token pair.
   rpc Login(LoginRequest) returns (TokenResponse);
@@ -27,6 +28,25 @@ service AuthService {
   // Create the first admin user on a fresh server. Unauthenticated.
   // Fails with ALREADY_EXISTS if any user already exists.
   rpc CreateFirstUser(CreateFirstUserRequest) returns (TokenResponse);
+
+  // --- Legal agreement (authenticated, gate-exempt) ---
+
+  // Check current user's legal compliance status. Returns required and
+  // agreed versions plus document URLs for the client's platform.
+  rpc GetLegalStatus(GetLegalStatusRequest) returns (LegalStatusResponse);
+
+  // Record the user's agreement to current legal terms. Submitted versions
+  // must exactly match the server's required versions (no pre-agreement).
+  rpc AgreeToTerms(AgreeToTermsRequest) returns (AgreeToTermsResponse);
+
+  // --- Passkey authentication (unauthenticated) ---
+
+  // Get WebAuthn authentication options (challenge + credential request).
+  // Uses discoverable credentials — no username required.
+  rpc GetPasskeyAuthenticationOptions(GetPasskeyAuthenticationOptionsRequest) returns (PasskeyOptionsResponse);
+
+  // Verify a passkey assertion and return a token pair.
+  rpc AuthenticateWithPasskey(AuthenticateWithPasskeyRequest) returns (TokenResponse);
 }
 
 enum TokenType {
@@ -42,10 +62,10 @@ message LoginRequest {
   // Client platform — determines which terms of use to enforce.
   ClientPlatform platform = 4;
 
-  // Legal agreement versions accepted by the user at login time.
-  // Server records these on the user record with the current timestamp.
-  optional int32 privacy_policy_version = 5;
-  optional int32 terms_of_use_version = 6;
+  // Fields 5-6 removed — legal agreement is now a separate post-login flow
+  // via GetLegalStatus + AgreeToTerms.
+  reserved 5, 6;
+  reserved "privacy_policy_version", "terms_of_use_version";
 }
 
 message TokenResponse {
@@ -81,4 +101,79 @@ message CreateFirstUserRequest {
   string password = 2;
   string display_name = 3;
   optional string device_name = 4;
+}
+
+// ============================================================================
+// Legal agreement
+// ============================================================================
+
+message GetLegalStatusRequest {
+  ClientPlatform platform = 1;
+}
+
+message LegalStatusResponse {
+  bool compliant = 1;
+  int32 required_privacy_policy_version = 2;
+  int32 required_terms_of_use_version = 3;
+  optional int32 agreed_privacy_policy_version = 4;
+  optional int32 agreed_terms_of_use_version = 5;
+  optional string privacy_policy_url = 6;
+  optional string terms_of_use_url = 7;
+}
+
+message AgreeToTermsRequest {
+  ClientPlatform platform = 1;
+  int32 privacy_policy_version = 2;
+  int32 terms_of_use_version = 3;
+}
+
+message AgreeToTermsResponse {
+  bool ok = 1;
+}
+
+// ============================================================================
+// Passkey / WebAuthn
+// ============================================================================
+
+message GetPasskeyAuthenticationOptionsRequest {}
+
+// Shared response for both registration and authentication options.
+// options_json is the PublicKeyCredential*Options serialized as JSON.
+message PasskeyOptionsResponse {
+  string signed_challenge = 1;
+  string options_json = 2;
+}
+
+message AuthenticateWithPasskeyRequest {
+  string signed_challenge = 1;
+  string credential_id = 2;
+  string client_data_json = 3;     // base64url-encoded
+  string authenticator_data = 4;   // base64url-encoded
+  string signature = 5;            // base64url-encoded
+  optional string user_handle = 6; // base64url-encoded
+  optional string device_name = 7; // e.g. "Jeff's iPad"
+}
+
+message RegisterPasskeyRequest {
+  string signed_challenge = 1;
+  string credential_id = 2;       // base64url-encoded
+  string client_data_json = 3;    // base64url-encoded
+  string attestation_object = 4;  // base64url-encoded
+  optional string transports = 5; // comma-separated, e.g. "internal,hybrid"
+  optional string display_name = 6;
+}
+
+message PasskeyCredentialInfo {
+  int64 id = 1;
+  string display_name = 2;
+  Timestamp created_at = 3;
+  optional Timestamp last_used_at = 4;
+}
+
+message ListPasskeysResponse {
+  repeated PasskeyCredentialInfo passkeys = 1;
+}
+
+message DeletePasskeyRequest {
+  int64 passkey_id = 1;
 }
