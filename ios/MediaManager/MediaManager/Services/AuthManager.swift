@@ -1,5 +1,6 @@
 import Foundation
 import GRPCCore
+import LocalAuthentication
 import Observation
 import UIKit
 import os.log
@@ -13,6 +14,7 @@ final class AuthManager {
         case needsServer
         case needsSetup(serverURL: URL)
         case needsLogin(serverURL: URL)
+        case needsLegalAgreement(serverURL: URL)
         case authenticated(serverURL: URL)
         case fingerprintMismatch(serverURL: URL, expected: String, received: String)
     }
@@ -23,12 +25,42 @@ final class AuthManager {
     private(set) var passwordChangeRequired = false
     private(set) var serverUnreachable = false
     private(set) var legalDocs: MMLegalDocumentInfo?
+    private(set) var legalStatus: MMLegalStatusResponse?
+    /// True when tokens exist but biometric gate hasn't been passed yet.
+    private(set) var awaitingBiometric = false
 
     let apiClient = APIClient()
     let grpcClient = GrpcClient()
     private var refreshTask: Task<Void, Never>?
 
     private static let legalDocsKey = "cachedLegalDocs"
+    private static let biometricEnabledKey = "biometricLoginEnabled"
+
+    var biometricLoginEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.biometricEnabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.biometricEnabledKey) }
+    }
+
+    /// True if the device has biometric hardware (Face ID, Touch ID, Optic ID).
+    /// Does not require enrollment — the toggle is shown so the user knows the
+    /// option exists, and enrollment errors are handled at authentication time.
+    static var isBiometricAvailable: Bool {
+        let context = LAContext()
+        // Check canEvaluatePolicy to populate biometryType, ignore the result
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        return context.biometryType != .none
+    }
+
+    static var biometricTypeName: String {
+        let context = LAContext()
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch context.biometryType {
+        case .faceID: return "Face ID"
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        @unknown default: return "Biometrics"
+        }
+    }
 
     init() {
         restoreLegalDocs()
@@ -70,14 +102,21 @@ final class AuthManager {
         }
         logger.info("restoreSession: found tokens, setting access token")
 
+        if biometricLoginEnabled && Self.isBiometricAvailable {
+            // Tokens exist but require biometric verification before use
+            logger.info("restoreSession: biometric gate — waiting for user")
+            awaitingBiometric = true
+            state = .needsLogin(serverURL: url)
+            return
+        }
+
         Task {
             let tokenString = String(data: tokenData, encoding: .utf8)
             await apiClient.setAccessToken(tokenString)
             await grpcClient.setAccessToken(tokenData)
 
-            state = .authenticated(serverURL: url)
             await performTokenRefresh()
-            await refreshServerInfo()
+            await transitionAfterAuth(serverURL: url)
         }
     }
 
@@ -206,11 +245,8 @@ final class AuthManager {
         error = nil
         let deviceName = UIDevice.current.name
         do {
-            let ppVersion = legalDocs?.hasPrivacyPolicyVersion == true ? legalDocs!.privacyPolicyVersion : nil
-            let touVersion = legalDocs?.hasTermsOfUseVersion == true ? legalDocs!.termsOfUseVersion : nil
             let response = try await grpcClient.login(
-                username: username, password: password, deviceName: deviceName,
-                privacyPolicyVersion: ppVersion, termsOfUseVersion: touVersion)
+                username: username, password: password, deviceName: deviceName)
 
             // Tokens are arbitrary bytes — base64 encode for Keychain storage
             let accessBase64 = response.accessToken.base64EncodedString()
@@ -228,11 +264,13 @@ final class AuthManager {
                 passwordChangeRequired = true
             }
 
-            if case .needsLogin(let url) = state {
-                state = .authenticated(serverURL: url)
-            }
-            await refreshServerInfo()
             scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
+
+            // Check legal compliance before transitioning to authenticated
+            if case .needsLogin(let url) = state {
+                await transitionAfterAuth(serverURL: url)
+            }
+
         } catch let rpcError as RPCError {
             switch rpcError.code {
             case .unauthenticated:
@@ -285,9 +323,85 @@ final class AuthManager {
         KeychainService.clearAll()
         serverInfo = nil
         legalDocs = nil
+        legalStatus = nil
+        awaitingBiometric = false
+        biometricLoginEnabled = false
         persistLegalDocs(nil)
         Task { await grpcClient.close() }
         state = .needsServer
+    }
+
+    /// After successful login or session restore, check legal compliance
+    /// and transition to either needsLegalAgreement or authenticated.
+    private func transitionAfterAuth(serverURL: URL) async {
+        do {
+            let status = try await grpcClient.getLegalStatus()
+            legalStatus = status
+            if status.compliant {
+                state = .authenticated(serverURL: serverURL)
+                await refreshServerInfo()
+            } else {
+                logger.info("transitionAfterAuth: legal agreement required")
+                state = .needsLegalAgreement(serverURL: serverURL)
+            }
+        } catch {
+            // If we can't check legal status, proceed to authenticated
+            // (the server's AuthInterceptor will enforce compliance on gated RPCs)
+            logger.warning("transitionAfterAuth: legal check failed, proceeding: \(error.localizedDescription)")
+            state = .authenticated(serverURL: serverURL)
+            await refreshServerInfo()
+        }
+    }
+
+    func agreeToTerms() async {
+        guard let status = legalStatus else { return }
+        error = nil
+        do {
+            _ = try await grpcClient.agreeToTerms(
+                privacyPolicyVersion: status.requiredPrivacyPolicyVersion,
+                termsOfUseVersion: status.requiredTermsOfUseVersion)
+            legalStatus = nil
+            if case .needsLegalAgreement(let url) = state {
+                state = .authenticated(serverURL: url)
+                await refreshServerInfo()
+            }
+        } catch let rpcError as RPCError {
+            self.error = rpcError.message
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    // MARK: - Biometric Login
+
+    /// Authenticate with Face ID / Touch ID to unlock stored session tokens.
+    func authenticateWithBiometric() async {
+        let context = LAContext()
+        let reason = "Sign in to Media Manager"
+        do {
+            let success = try await context.evaluatePolicy(
+                .deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+            guard success else { return }
+        } catch {
+            logger.warning("biometric auth failed: \(error.localizedDescription)")
+            // User cancelled or failed — stay on login screen
+            return
+        }
+
+        // Biometric passed — restore session from stored tokens
+        awaitingBiometric = false
+        guard let tokenBase64 = KeychainService.load(key: .accessToken),
+              let tokenData = Data(base64Encoded: tokenBase64) else {
+            return
+        }
+
+        let tokenString = String(data: tokenData, encoding: .utf8)
+        await apiClient.setAccessToken(tokenString)
+        await grpcClient.setAccessToken(tokenData)
+
+        guard case .needsLogin(let url) = state else { return }
+        await performTokenRefresh()
+        await transitionAfterAuth(serverURL: url)
     }
 
     private func scheduleTokenRefresh(expiresIn: Int = 900) {
@@ -330,9 +444,16 @@ final class AuthManager {
     }
 
     private func updateStreamingCookie(_ token: String?) {
-        guard let token,
-              case .authenticated(let url) = state,
-              let host = url.host() else { return }
+        guard let token else { return }
+        // Extract the server URL from whichever authenticated-ish state we're in
+        let url: URL
+        switch state {
+        case .authenticated(let u), .needsLegalAgreement(let u), .needsLogin(let u):
+            url = u
+        default:
+            return
+        }
+        guard let host = url.host() else { return }
         var cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "mm_jwt",
             .value: token,

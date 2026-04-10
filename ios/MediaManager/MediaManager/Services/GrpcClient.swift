@@ -139,16 +139,32 @@ actor GrpcClient {
         return try await infoService.getInfo(MMEmpty(), metadata: authMetadata())
     }
 
-    func login(username: String, password: String, deviceName: String,
-                privacyPolicyVersion: Int32? = nil, termsOfUseVersion: Int32? = nil) async throws -> MMTokenResponse {
+    func login(username: String, password: String, deviceName: String) async throws -> MMTokenResponse {
         logger.info("login: calling AuthService.Login for device=\(deviceName)")
         var request = MMLoginRequest()
         request.username = username
         request.password = password
         request.deviceName = deviceName
-        if let v = privacyPolicyVersion { request.privacyPolicyVersion = v }
-        if let v = termsOfUseVersion { request.termsOfUseVersion = v }
+        request.platform = .ios
         return try await authService.login(request)
+    }
+
+    // MARK: - Legal RPCs (authenticated, gate-exempt)
+
+    func getLegalStatus() async throws -> MMLegalStatusResponse {
+        logger.info("getLegalStatus: calling AuthService.GetLegalStatus")
+        var request = MMGetLegalStatusRequest()
+        request.platform = .ios
+        return try await authService.getLegalStatus(request, metadata: authMetadata())
+    }
+
+    func agreeToTerms(privacyPolicyVersion: Int32, termsOfUseVersion: Int32) async throws -> MMAgreeToTermsResponse {
+        logger.info("agreeToTerms: calling AuthService.AgreeToTerms")
+        var request = MMAgreeToTermsRequest()
+        request.platform = .ios
+        request.privacyPolicyVersion = privacyPolicyVersion
+        request.termsOfUseVersion = termsOfUseVersion
+        return try await authService.agreeToTerms(request, metadata: authMetadata())
     }
 
     func refresh(token: Data) async throws -> MMTokenResponse {

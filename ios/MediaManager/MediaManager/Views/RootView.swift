@@ -13,6 +13,8 @@ struct RootView: View {
             SetupAccountView(serverURL: serverURL)
         case .needsLogin(let serverURL):
             LoginView(serverURL: serverURL)
+        case .needsLegalAgreement(let serverURL):
+            TermsAgreementView(serverURL: serverURL)
         case .authenticated:
             ContentView()
                 .sheet(isPresented: .init(

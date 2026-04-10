@@ -50,6 +50,18 @@ struct ProfileView: View {
                         }
                     }
 
+                    if AuthManager.isBiometricAvailable {
+                        Section("Security") {
+                            Toggle(
+                                "Sign in with \(AuthManager.biometricTypeName)",
+                                isOn: Binding(
+                                    get: { authManager.biometricLoginEnabled },
+                                    set: { authManager.biometricLoginEnabled = $0 }
+                                )
+                            )
+                        }
+                    }
+
                     if let legal = authManager.legalDocs, legal.isConfigured {
                         Section("Legal") {
                             if let url = legal.privacyPolicyURL_resolved {

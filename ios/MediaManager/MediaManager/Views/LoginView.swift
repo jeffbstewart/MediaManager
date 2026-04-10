@@ -6,10 +6,6 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var isLoggingIn = false
-    @State private var agreedToPrivacy = false
-
-    private var legal: MMLegalDocumentInfo? { authManager.legalDocs }
-    private var legalConfigured: Bool { legal?.isConfigured == true }
 
     var body: some View {
         NavigationStack {
@@ -39,35 +35,6 @@ struct LoginView: View {
                         .textContentType(.password)
                         .onSubmit { login() }
 
-                    if legalConfigured, let legal {
-                        HStack {
-                            Button {
-                                agreedToPrivacy.toggle()
-                            } label: {
-                                Image(systemName: agreedToPrivacy ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(agreedToPrivacy ? .blue : .secondary)
-                                    .font(.title3)
-                            }
-                            .buttonStyle(.plain)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    Text("I agree to the")
-                                    if let url = legal.privacyPolicyURL_resolved {
-                                        Link("Privacy Policy", destination: url)
-                                    }
-                                }
-                                HStack(spacing: 4) {
-                                    Text("and the")
-                                    if let url = legal.termsOfUseURL_resolved {
-                                        Link("Terms of Use", destination: url)
-                                    }
-                                }
-                            }
-                            .font(.callout)
-                        }
-                    }
-
                     Button(action: login) {
                         if isLoggingIn {
                             ProgressView()
@@ -79,7 +46,19 @@ struct LoginView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn || (legalConfigured && !agreedToPrivacy))
+                    .disabled(username.isEmpty || password.isEmpty || isLoggingIn)
+
+                    if authManager.awaitingBiometric {
+                        Button {
+                            Task { await authManager.authenticateWithBiometric() }
+                        } label: {
+                            Label("Sign in with \(AuthManager.biometricTypeName)",
+                                  systemImage: biometricIcon)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
                 }
                 .padding(.horizontal)
 
@@ -93,28 +72,24 @@ struct LoginView: View {
 
                 Spacer()
 
-                VStack(spacing: 12) {
-                    Button("Use a different server") {
-                        authManager.disconnectServer()
-                    }
-                    .font(.callout)
-
-                    HStack(spacing: 16) {
-                        if let url = legal?.privacyPolicyURL_resolved {
-                            Link("Privacy Policy", destination: url)
-                        }
-                        if let url = legal?.termsOfUseURL_resolved {
-                            Link("Terms of Use", destination: url)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button("Use a different server") {
+                    authManager.disconnectServer()
                 }
+                .font(.callout)
                 .padding(.bottom)
             }
             .padding()
             .navigationTitle("")
+            .onAppear {
+                if authManager.awaitingBiometric {
+                    Task { await authManager.authenticateWithBiometric() }
+                }
+            }
         }
+    }
+
+    private var biometricIcon: String {
+        AuthManager.biometricTypeName == "Face ID" ? "faceid" : "touchid"
     }
 
     private func login() {
