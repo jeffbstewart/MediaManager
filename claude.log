@@ -4069,3 +4069,24 @@ Session 2 (Mar 25):
 - Created docs/TODO_IOS.md for multicast networking entitlement setup
   (Apple granted the capability; needs entitlements file + Info.plist)
 ===
+
+=== 2026-04-12 16:15 — Roku playback fix: Range chunk cap ===
+- Investigated: Roku playback dying after a few seconds, reverting to title page
+- Server logs (/admin/logs?logger=VideoStream) showed every STREAM entry capped
+  at exactly 10.0 MiB with CancelledSubscriptionException warnings
+- Root cause: VideoStreamHttpService caps Range responses at 10 MiB as a
+  workaround for Armeria's default request timeout. Browsers with MediaSource
+  Extensions re-range seamlessly; Roku's Video node treats response end as
+  EOF and transitions to "finished"
+- Researched Jellyfin for comparison: server returns PhysicalFileResult with
+  EnableRangeProcessing=true — no cap, full requested range served in one
+  response. Jellyfin's Roku client uses the same streamFormat="mp4" progressive
+  playback as ours, so the difference is entirely server-side
+- Fix in VideoStreamHttpService.kt: detect Roku via User-Agent, set a 6-hour
+  request timeout up front, and skip the 10 MiB cap so Roku gets the full
+  requested range on one response. Browsers unchanged
+- Discovered RequestLogBuffer has no writer — /admin/requests is always empty.
+  Noted for separate follow-up (not part of this fix)
+- Deployed as docker image 202604121611 via lifecycle/docker-build.sh
+- Files: src/main/kotlin/net/stewart/mediamanager/armeria/VideoStreamHttpService.kt
+===

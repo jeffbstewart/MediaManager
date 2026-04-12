@@ -23,6 +23,8 @@ import net.stewart.transcode.BifGenerator
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.RandomAccessFile
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.toJavaDuration
 
 /**
  * Armeria port of [net.stewart.mediamanager.VideoStreamServlet].
@@ -52,11 +54,26 @@ class VideoStreamHttpService {
      */
     @Get("/stream/{transcodeId}")
     fun streamVideo(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
+        // Roku's Video node is a progressive MP4 player: if the server caps the response
+        // at a small chunk (browser-friendly), Roku treats the chunk end as file EOF and
+        // transitions to "finished" after a few seconds. Browsers re-range seamlessly via
+        // MediaSource Extensions; Roku does not. For Roku clients we stream the full
+        // requested range on one response and extend the request timeout to cover a
+        // feature-length file at realtime playback.
+        if (isRokuClient(ctx)) {
+            ctx.setRequestTimeout(6.hours.toJavaDuration())
+        }
         val writer = HttpResponse.streaming()
         ctx.blockingTaskExecutor().execute {
             doStreamVideo(ctx, transcodeId, writer)
         }
         return writer
+    }
+
+    /** A request is from Roku when its User-Agent contains "Roku" (DVP player, etc.). */
+    private fun isRokuClient(ctx: ServiceRequestContext): Boolean {
+        val ua = ctx.request().headers().get("user-agent") ?: return false
+        return ua.contains("Roku", ignoreCase = true)
     }
 
     private fun doStreamVideo(ctx: ServiceRequestContext, transcodeId: Long, writer: HttpResponseWriter) {
@@ -174,10 +191,17 @@ class VideoStreamHttpService {
         }
 
         val (start, requestedEnd) = range
-        // Cap response at 10MB to prevent Armeria request timeout on large ranges.
-        // Browsers seamlessly issue follow-up Range requests for the next chunk.
-        val maxChunkSize = 10L * 1024 * 1024
-        val end = minOf(requestedEnd, start + maxChunkSize - 1)
+        // Browsers using MediaSource Extensions are happy with a capped response and
+        // re-range seamlessly; capping keeps any single response well under the default
+        // Armeria request timeout. Roku's progressive MP4 player treats the response end
+        // as file EOF, so for Roku we honor the requested range in full — the long
+        // request timeout is set up front in streamVideo().
+        val end = if (isRokuClient(ctx)) {
+            requestedEnd
+        } else {
+            val maxChunkSize = 10L * 1024 * 1024
+            minOf(requestedEnd, start + maxChunkSize - 1)
+        }
         val contentLength = end - start + 1
 
         val headers = ResponseHeaders.builder(HttpStatus.PARTIAL_CONTENT)
