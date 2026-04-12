@@ -4090,3 +4090,25 @@ Session 2 (Mar 25):
 - Deployed as docker image 202604121611 via lifecycle/docker-build.sh
 - Files: src/main/kotlin/net/stewart/mediamanager/armeria/VideoStreamHttpService.kt
 ===
+
+=== 2026-04-12 18:20 — OWASP dep scan cleanup ===
+- Ran OWASP dependency-check: 177 reported vulnerabilities (17 unique CVEs)
+- Raised failBuildOnCVSS 0.0 -> 7.0 so only HIGH+ CVEs fail the build
+- Upgraded versions: grpc 1.78->1.80, protobuf 4.29->4.34, armeria 1.37->1.38,
+  grpc-kotlin-stub 1.4.1->1.5.0 (upstream is NOT stuck — WebSearch was wrong),
+  protoc-gen-grpc-kotlin 1.4.1->1.5.0 (server + transcode-buddy)
+- Traced netty-all 4.1.116 and commons-fileupload2:2.0.0-M1 to Vaadin dev
+  tooling (com.vaadin:copilot, vaadin-dev) pulled in transitively by
+  vok-framework-vokdb. Vaadin UI was removed when we migrated to Angular,
+  so excluded com.vaadin group entirely from vok-db
+- Forced commons-lang3 3.20.0 via constraints block (CVE-2025-48924)
+- Added suppressions for CPE false positives:
+  - grpc-kotlin-stub 1.5.0 != grpc-core 1.5.0 (different software)
+  - protoc-gen-grpc-kotlin (build-time only) same CPE mismatch
+  - protobuf CVE-2026-0994 is Python-only (json_format.ParseDict)
+- Final scan: 0 vulnerabilities, data/last-dep-scan sentinel updated
+- Files: build.gradle.kts, gradle/libs.versions.toml,
+  transcode-buddy/build.gradle.kts, owasp-suppressions.xml
+- Note: npm audit of web-app/ still pending; OWASP scan does not cover
+  Angular deps (nodeEnabled is false in build.gradle.kts)
+===

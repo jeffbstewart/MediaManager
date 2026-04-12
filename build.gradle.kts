@@ -17,7 +17,14 @@ repositories {
 }
 
 dependencies {
-    implementation(libs.vok.db)
+    // vok-framework-vokdb is used only for its jdbi-orm wrapper. Vaadin was
+    // removed when we migrated the UI to Angular, so exclude the whole
+    // com.vaadin transitive tree — this drops vaadin-core, vaadin-dev, and
+    // copilot, along with their vulnerable Netty 4.1.116 and
+    // commons-fileupload2 2.0.0-M1 dependencies.
+    implementation(libs.vok.db) {
+        exclude(group = "com.vaadin")
+    }
     implementation(libs.hikaricp)
     implementation(libs.h2)
     implementation(libs.flyway.core)
@@ -43,6 +50,15 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.grpc.inprocess)
     testImplementation(libs.grpc.testing)
+
+    // Security-driven transitive version pins. Each line below fixes a CVE
+    // reported by OWASP dependency-check; drop a pin once the root dep that
+    // pulls in the vulnerable version is itself upgraded past the fix.
+    constraints {
+        implementation("org.apache.commons:commons-lang3:3.20.0") {
+            because("CVE-2025-48924: ClassUtils.getClass uncontrolled recursion (fixed in 3.18.0)")
+        }
+    }
 }
 
 java {
@@ -67,7 +83,7 @@ protobuf {
             artifact = "io.grpc:protoc-gen-grpc-java:${libs.versions.grpc.get()}"
         }
         create("grpckt") {
-            artifact = "io.grpc:protoc-gen-grpc-kotlin:1.4.1:jdk8@jar"
+            artifact = "io.grpc:protoc-gen-grpc-kotlin:1.5.0:jdk8@jar"
         }
     }
     generateProtoTasks {
@@ -93,9 +109,11 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
 }
 
-// OWASP dependency-check: report all CVEs but don't fail the build
+// OWASP dependency-check: fail on HIGH+ CVEs (CVSS >= 7.0). Lower-severity
+// findings are still reported but don't break the build. Node/npm analyzers are
+// disabled here — the Angular web-app is scanned separately via `npm audit`.
 dependencyCheck {
-    failBuildOnCVSS = 0f
+    failBuildOnCVSS = 7.0f
     failOnError = false
     suppressionFile = "owasp-suppressions.xml"
     analyzers.apply {

@@ -54,7 +54,7 @@ protobuf {
             artifact = "io.grpc:protoc-gen-grpc-java:${libs.versions.grpc.get()}"
         }
         create("grpckt") {
-            artifact = "io.grpc:protoc-gen-grpc-kotlin:1.4.1:jdk8@jar"
+            artifact = "io.grpc:protoc-gen-grpc-kotlin:1.5.0:jdk8@jar"
         }
     }
     generateProtoTasks {

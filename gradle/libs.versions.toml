@@ -3,9 +3,9 @@ vok = "0.18.1"
 kotlin = "2.3.10"
 slf4j = "2.0.17"
 micrometer = "1.14.4"
-grpc = "1.78.0"
-protobuf = "4.29.3"
-armeria = "1.37.0"
+grpc = "1.80.0"
+protobuf = "4.34.1"
+armeria = "1.38.0"
 webauthn4j = "0.28.4.RELEASE"
 
 [libraries]
@@ -23,7 +23,7 @@ openpdf = "com.github.librepdf:openpdf:2.0.3"
 zxing-core = "com.google.zxing:core:3.5.3"
 zxing-javase = "com.google.zxing:javase:3.5.3"
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
-grpc-kotlin-stub = "io.grpc:grpc-kotlin-stub:1.4.1"
+grpc-kotlin-stub = "io.grpc:grpc-kotlin-stub:1.5.0"
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 armeria-grpc = { module = "com.linecorp.armeria:armeria-grpc", version.ref = "armeria" }
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }

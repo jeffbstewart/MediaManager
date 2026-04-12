@@ -38,4 +38,50 @@
         <cve>CVE-2023-35116</cve>
     </suppress>
 
+    <!-- grpc-kotlin-stub and protoc-gen-grpc-kotlin: CPE false positives. NVD's
+         "grpc:grpc" CPE matches by version string, so version 1.5.0 of the
+         Kotlin stub (released Sep 2025) gets flagged with CVEs that apply to
+         grpc-core 1.5.0 (released 2017). Different software, same version
+         number. protoc-gen-grpc-kotlin is additionally a build-time-only
+         artifact (protoc plugin) and never reaches the runtime classpath. -->
+    <suppress>
+        <notes>CPE mismatch: grpc-kotlin-stub 1.5.0 != grpc-core 1.5.0 (different software)</notes>
+        <packageUrl regex="true">^pkg:maven/io\.grpc/grpc-kotlin-stub@.*$</packageUrl>
+        <cve>CVE-2023-32732</cve>
+        <cve>CVE-2023-33953</cve>
+        <cve>CVE-2023-44487</cve>
+        <cve>CVE-2024-7246</cve>
+        <cve>CVE-2026-33186</cve>
+    </suppress>
+    <suppress>
+        <notes>CPE mismatch + build-time only: protoc-gen-grpc-kotlin is a protoc plugin, not runtime. Version 1.5.0 is Kotlin-specific, not grpc-core 1.5.0.</notes>
+        <packageUrl regex="true">^pkg:maven/io\.grpc/protoc-gen-grpc-kotlin@.*$</packageUrl>
+        <cve>CVE-2020-7768</cve>
+        <cve>CVE-2023-32732</cve>
+        <cve>CVE-2023-33953</cve>
+        <cve>CVE-2023-44487</cve>
+        <cve>CVE-2024-7246</cve>
+        <cve>CVE-2026-33186</cve>
+    </suppress>
+
+    <!-- protobuf: CVE-2026-0994 is a Python-only JSON recursion DoS in
+         google.protobuf.json_format.ParseDict(), a Python API that does not
+         exist in the Java/Kotlin bindings. NVD's "protobuf:protobuf" CPE
+         doesn't distinguish language bindings. -->
+    <suppress>
+        <notes>Python-only: CVE affects google.protobuf.json_format.ParseDict() (Python API), not Java/Kotlin</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-java@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+    <suppress>
+        <notes>Python-only: CVE affects Python ParseDict(), not Kotlin protobuf</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-kotlin@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+    <suppress>
+        <notes>Python-only: CVE affects Python ParseDict(), not Java protobuf-java-util</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-java-util@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+
 </suppressions>
