@@ -123,9 +123,21 @@ dependencyCheck {
     }
 }
 
+// npm audit for the Angular web-app. OWASP dependency-check's built-in node
+// analyzers query the same GitHub Advisory data less reliably; running npm's
+// own audit is authoritative for npm packages. --audit-level=high matches the
+// CVSS 7.0 threshold used for Java/Kotlin deps above.
+tasks.register<Exec>("npmAudit") {
+    description = "Run `npm audit --audit-level=high` in web-app/"
+    group = "verification"
+    workingDir = file("web-app")
+    val npm = if (org.gradle.internal.os.OperatingSystem.current().isWindows) "npm.cmd" else "npm"
+    commandLine(npm, "audit", "--audit-level=high")
+}
+
 tasks.register("recordDepScan") {
-    description = "Run OWASP dependency-check and record the scan timestamp"
-    dependsOn("dependencyCheckAnalyze")
+    description = "Run OWASP (Java/Kotlin) + npm (Angular) dependency audits and record the scan timestamp"
+    dependsOn("dependencyCheckAnalyze", "npmAudit")
     notCompatibleWithConfigurationCache("OWASP dependency-check uses Task.project at execution time")
     doLast {
         val sentinel = File("data/last-dep-scan")

@@ -4112,3 +4112,20 @@ Session 2 (Mar 25):
 - Note: npm audit of web-app/ still pending; OWASP scan does not cover
   Angular deps (nodeEnabled is false in build.gradle.kts)
 ===
+
+=== 2026-04-12 18:35 — npm audit + Gradle integration ===
+- Ran `npm audit` in web-app/: 4 vulnerabilities (3 moderate, 1 high)
+  - vite 7.0.0-7.3.1 (path traversal, fs.deny bypass, dev server file read)
+  - hono, @hono/node-server (cookie/middleware bypass)
+  - All dev-time tooling, not shipped to browser
+- `npm audit fix` cleared the 3 hono findings but @angular/build 21.2.5 held
+  vite at 7.3.1. Upgraded @angular/build 21.2.5 -> 21.2.7 (needed
+  --legacy-peer-deps to bypass a phantom @angular/compiler-cli peer warning);
+  pulled vite to 7.3.2 which is out of the vulnerable range
+- Final: `npm audit` -> 0 vulnerabilities
+- Wired npm audit into Gradle via a new `npmAudit` Exec task (--audit-level=high
+  to match the CVSS 7.0 threshold). `recordDepScan` now depends on both
+  dependencyCheckAnalyze AND npmAudit, so `./gradlew recordDepScan` runs a
+  full Java/Kotlin + npm audit in one pass
+- Files: build.gradle.kts, web-app/package.json, web-app/package-lock.json
+===
