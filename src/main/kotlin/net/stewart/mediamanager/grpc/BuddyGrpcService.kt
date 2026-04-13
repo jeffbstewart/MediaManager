@@ -257,6 +257,16 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
             if (complete.hasProbe()) {
                 storeProbe(lease.transcode_id, lease.relative_path, complete.probe, encoder)
             }
+            // Mobile completions carry an encoder-preset version so the server
+            // can detect later when a preset change has orphaned this output
+            // and schedule a re-transcode at the lowest priority.
+            if (lease.lease_type == LeaseType.MOBILE_TRANSCODE.name && complete.mobileEncoderVersion > 0) {
+                val tc = Transcode.findById(lease.transcode_id)
+                if (tc != null && tc.mobile_encoder_version != complete.mobileEncoderVersion) {
+                    tc.mobile_encoder_version = complete.mobileEncoderVersion
+                    tc.save()
+                }
+            }
         }
 
         private fun handleReportFailure(failure: ReportFailure) {

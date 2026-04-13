@@ -67,33 +67,58 @@ data class EncoderProfile(
         }
 
         /**
+         * Current version of the mobile encoder preset. Bump this whenever the
+         * preset changes in a way that produces materially different output
+         * (size, quality, codec); existing ForMobile files with a lower version
+         * stamped on their Transcode row will be picked up for re-transcoding
+         * at the lowest priority.
+         *
+         * History:
+         *   1 — ABR at fixed 5 Mbps, 1080p cap. Produced bloated SD output.
+         *   2 — CQ/CRF 23 with 5 Mbps maxrate cap, 720p cap. Content-adaptive.
+         */
+        const val CURRENT_MOBILE_ENCODER_VERSION = 2
+
+        /**
          * Returns a mobile-optimized variant of the given encoder profile.
-         * Uses ABR at 5 Mbps (max 7.5 Mbps) for predictable file sizes.
-         * 1080p H.264 High, AAC stereo 160k.
+         *
+         * Uses constant-quality VBR (CQ/CRF 23) rather than fixed ABR so file
+         * size scales with content complexity and output resolution — an SD
+         * source doesn't burn 5 Mbps just because the preset allows it. A
+         * 5 Mbps maxrate cap is kept as a safety ceiling for pathological
+         * complex scenes. AAC stereo 160 k for audio.
+         *
+         * Output resolution is capped at 720p in TranscodeCommand.buildMobile
+         * (mobile devices don't benefit from 1080p on small screens).
          */
         fun mobileVariant(base: EncoderProfile): EncoderProfile {
             val args = when (base.name) {
                 "nvenc" -> listOf(
                     "-pix_fmt", "yuv420p", "-c:v", "h264_nvenc",
                     "-preset", "p7", "-rc", "vbr",
-                    "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
+                    "-cq", "23", "-b:v", "0",
+                    "-maxrate", "5M", "-bufsize", "10M",
                     "-profile:v", "high", "-rc-lookahead", "32"
                 )
                 "qsv" -> listOf(
                     "-pix_fmt", "yuv420p", "-c:v", "h264_qsv",
                     "-preset", "veryslow",
-                    "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
+                    "-global_quality", "23",
+                    "-maxrate", "5M", "-bufsize", "10M",
                     "-profile:v", "high"
                 )
                 "videotoolbox" -> listOf(
+                    // VideoToolbox doesn't support CRF-style quality. Use a lower
+                    // ABR target appropriate for mobile (vs. the 8M base profile).
                     "-pix_fmt", "yuv420p", "-c:v", "h264_videotoolbox",
-                    "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
+                    "-b:v", "1500k", "-maxrate", "3M", "-bufsize", "6M",
                     "-profile:v", "high"
                 )
                 else -> listOf(
                     "-pix_fmt", "yuv420p", "-c:v", "libx264",
                     "-preset", "medium",
-                    "-b:v", "5M", "-maxrate", "7.5M", "-bufsize", "10M",
+                    "-crf", "23",
+                    "-maxrate", "5M", "-bufsize", "10M",
                     "-profile:v", "high"
                 )
             }

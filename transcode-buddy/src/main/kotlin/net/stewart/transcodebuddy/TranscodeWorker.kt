@@ -9,6 +9,8 @@ import net.stewart.transcode.probeVideo
 import net.stewart.transcode.sanitizeFfmpegOutput
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -415,7 +417,7 @@ class TranscodeWorker(
                 return false
             }
 
-            if (!tmpFile.renameTo(mp4File)) {
+            if (!replaceAtomically(tmpFile, mp4File)) {
                 log.error("Failed to rename {} -> {}", tmpFile.absolutePath, mp4File.absolutePath)
                 tmpFile.delete()
                 apiClient.reportFailure(leaseId, "Failed to rename .tmp to .mp4")
@@ -526,7 +528,7 @@ class TranscodeWorker(
                 return false
             }
 
-            if (!tmpFile.renameTo(mp4File)) {
+            if (!replaceAtomically(tmpFile, mp4File)) {
                 log.error("Failed to rename {} -> {}", tmpFile.absolutePath, mp4File.absolutePath)
                 tmpFile.delete()
                 apiClient.reportFailure(leaseId, "Failed to rename .tmp to .mp4")
@@ -536,7 +538,13 @@ class TranscodeWorker(
             log.info("Mobile transcode complete: {} (size={})", mp4File.absolutePath, mp4File.length())
 
             reportWithRetry("reportComplete mobile lease $leaseId") {
-                apiClient.reportComplete(leaseId, encoderName, null, mp4File.length())
+                apiClient.reportComplete(
+                    leaseId,
+                    encoderName,
+                    null,
+                    mp4File.length(),
+                    mobileEncoderVersion = EncoderProfile.CURRENT_MOBILE_ENCODER_VERSION
+                )
             }
             return true
 
@@ -871,5 +879,20 @@ class TranscodeWorker(
         val sizeBytes = file.length()
         val estimatedSeconds = sizeBytes / (2.0 * 1024 * 1024)
         return (estimatedSeconds / 60).toInt().coerceAtLeast(1)
+    }
+
+    /**
+     * Moves [src] to [dst], replacing any existing destination. File.renameTo
+     * returns false on Windows when the destination exists (common for mobile
+     * re-transcodes that overwrite an older, bloated output). Files.move with
+     * REPLACE_EXISTING handles that portably. ATOMIC_MOVE is not requested
+     * because it isn't supported on SMB mounts that back the NAS.
+     */
+    private fun replaceAtomically(src: File, dst: File): Boolean = try {
+        Files.move(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        true
+    } catch (e: Exception) {
+        log.warn("Files.move {} -> {} failed: {}", src.absolutePath, dst.absolutePath, e.message)
+        false
     }
 }

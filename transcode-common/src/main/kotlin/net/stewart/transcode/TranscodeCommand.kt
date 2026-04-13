@@ -80,9 +80,12 @@ object TranscodeCommand {
     }
 
     /**
-     * Builds an FFmpeg command for ForMobile transcoding (1080p, 5 Mbps ABR).
+     * Builds an FFmpeg command for ForMobile transcoding.
      * Always re-encodes video (never copies) to ensure consistent output.
-     * Caps resolution at 1080p without upscaling smaller sources.
+     * Caps resolution at 720p without upscaling smaller sources — mobile
+     * devices don't benefit from 1080p on small screens, and the lower cap
+     * keeps file sizes proportional to the actual viewing surface. Bitrate
+     * behavior is content-adaptive CQ/CRF (see EncoderProfile.mobileVariant).
      */
     fun buildMobile(
         ffmpegPath: String,
@@ -99,8 +102,8 @@ object TranscodeCommand {
             filters.add("scale=trunc(iw*sar/2)*2:trunc(ih/2)*2")
             filters.add("setsar=1:1")
         }
-        // Cap at 1080p without upscaling; maintain aspect ratio; round to even
-        filters.add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2")
+        // Cap at 720p without upscaling; maintain aspect ratio; round to even
+        filters.add("scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2")
 
         val command = mutableListOf(
             ffmpegPath,

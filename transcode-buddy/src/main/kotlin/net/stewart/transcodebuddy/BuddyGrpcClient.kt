@@ -297,7 +297,13 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
         return null // No response expected; lease renewal is implicit
     }
 
-    fun reportComplete(leaseId: Long, encoder: String?, probeResult: ForBrowserProbeResult? = null, fileSize: Long? = null): Boolean {
+    fun reportComplete(
+        leaseId: Long,
+        encoder: String?,
+        probeResult: ForBrowserProbeResult? = null,
+        fileSize: Long? = null,
+        mobileEncoderVersion: Int? = null
+    ): Boolean {
         val builder = ReportComplete.newBuilder()
             .setLeaseId(leaseId)
         if (encoder != null) builder.encoder = encoder
@@ -305,6 +311,7 @@ class BuddyGrpcClient(private val config: BuddyConfig) {
             builder.probe = buildProbeData(probeResult, fileSize)
         }
         if (fileSize != null && fileSize > 0) builder.outputSizeBytes = fileSize
+        if (mobileEncoderVersion != null) builder.mobileEncoderVersion = mobileEncoderVersion
         return send(BuddyMessage.newBuilder().setReportComplete(builder).build())
     }
 

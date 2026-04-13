@@ -134,6 +134,12 @@ message ReportComplete {
 
   // Actual output file size in bytes (all lease types that produce files)
   int64 output_size_bytes = 5;
+
+  // For LOW_STORAGE_TRANSCODE only: which mobile encoder preset version the
+  // buddy used (EncoderProfile.CURRENT_MOBILE_ENCODER_VERSION at build time).
+  // Server stamps this on Transcode.mobile_encoder_version so it can detect
+  // when a re-transcode is needed after a preset change.
+  int32 mobile_encoder_version = 6;
 }
 
 // Work failed.

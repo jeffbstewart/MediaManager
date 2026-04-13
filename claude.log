@@ -4129,3 +4129,44 @@ Session 2 (Mar 25):
   full Java/Kotlin + npm audit in one pass
 - Files: build.gradle.kts, web-app/package.json, web-app/package-lock.json
 ===
+
+=== 2026-04-12 21:05 — ForMobile preset fix + re-transcode prioritization ===
+- Ffprobe'd an Airwolf episode: ForMobile (1.77 GB) was 2x the ForBrowser
+  (0.90 GB) size and bigger than the source MKV. Root cause was two bugs
+  cooperating in EncoderProfile.mobileVariant() + TranscodeCommand.buildMobile:
+  - Mobile preset used fixed ABR at 5 Mbps (1080p target) regardless of
+    source resolution
+  - 1080p cap filter was a no-op for SD content so 720x480 DVDs got
+    flooded with HD-target bitrate
+- Rewrote mobileVariant to mirror the browser CQ/CRF 23 with a 5M
+  maxrate cap. Dropped the output cap to 720p (small screens don't
+  benefit from 1080p).
+- Added mobile_encoder_version stamping: new column on transcode,
+  migration V072 sets existing rows to v1, const bumped to v2 in
+  EncoderProfile. Eligibility check picks up version-mismatched rows
+  as re-transcode candidates. Buddy reports the version it used in
+  ReportComplete (added proto field); server stamps on receipt.
+- Discovered priority bug: Xena re-transcodes were starving Airwolf
+  first-pass (27 first-pass items dominated by 2542 re-transcodes
+  because Xena had a wish-vote-driven transcode_priority bump). The
+  sort tiered priorityCounts above isReTranscode, so any prioritized
+  title's re-transcodes jumped every other title's first-pass work.
+  Fix: swap tiers — isReTranscode is now the outermost key, priority
+  bumps only order within tiers.
+- Fixed separate bug: buddy's File.renameTo(.mp4) silently failed when
+  a previous bloated output existed (Windows doesn't overwrite). Added
+  replaceAtomically() helper using Files.move(REPLACE_EXISTING).
+- Fixed cache-tier bug: the cached-transcode preference previously
+  walked the full sorted list, letting cached re-transcodes jump
+  ahead of uncached first-pass. Now only applies within the top tier.
+- Extracted sort + pick helpers to internal funcs (sortWorkItems,
+  pickWinnerId) so unit tests can exercise priority rules directly.
+  14 new tests covering first-pass-vs-retranscode, cache preference,
+  priority bumps, and for_mobile_requested tier.
+- Verified fix: MOBILE PICK log shows top5 is all Airwolf first-pass
+  after the redeploy.
+- Files: EncoderProfile.kt, TranscodeCommand.kt, proto/buddy.proto,
+  BuddyGrpcClient.kt, TranscodeWorker.kt, V072__mobile_encoder_version.sql,
+  Transcode.kt, BuddyGrpcService.kt, TranscodeLeaseService.kt;
+  new tests in test/transcode/ and test/service/
+===

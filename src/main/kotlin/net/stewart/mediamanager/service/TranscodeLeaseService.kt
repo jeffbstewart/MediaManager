@@ -2,6 +2,7 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.*
+import net.stewart.transcode.EncoderProfile
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.time.Duration
@@ -33,15 +34,88 @@ object TranscodeLeaseService {
 
     /**
      * Work item representing a single piece of work (transcode, thumbnail, subtitle, or chapter)
-     * for unified priority sorting.
+     * for unified priority sorting. Visibility is `internal` so the unit tests in
+     * `TranscodeLeaseSortTest` can construct fixtures.
      */
-    private data class WorkItem(
+    internal data class WorkItem(
         val transcode: Transcode,
         val leaseType: LeaseType,
         val titleId: Long,
         /** 0 = TRANSCODE, 1 = THUMBNAILS, 2 = SUBTITLES, 3 = CHAPTERS — order within a title */
-        val typeOrder: Int
+        val typeOrder: Int,
+        /**
+         * True if this item is a re-transcode of an already-available artifact
+         * (e.g. a ForMobile output produced with an older preset that has since
+         * been revised). Re-transcodes sort after all first-pass work so they
+         * never delay getting new content onto phones.
+         */
+        val isReTranscode: Boolean = false
     )
+
+    /**
+     * Sorts a list of [WorkItem]s by the full priority chain used by [claimWork].
+     *
+     * Extracted as a pure function so unit tests can verify priority behavior
+     * without needing a DB or filesystem. See TranscodeLeaseSortTest.
+     *
+     * Order (earlier beats later):
+     *   1. First-pass work beats re-transcodes. This is the outermost tier —
+     *      a title's wish-vote-driven `transcode_priority` bump cannot drag
+     *      its re-transcodes ahead of other titles' first-pass work. (The
+     *      bump's original intent was to accelerate first-pass; treating it
+     *      as applicable to re-transcodes would let a popular show's
+     *      preset-refresh starve a new show's initial transcoding.)
+     *   2. Manual `transcode_priority` bump orders within the first-pass and
+     *      re-transcode tiers independently.
+     *   3. User-requested mobile jumps ahead of unrequested mobile.
+     *   4. TMDB popularity (higher first).
+     *   5. Type order within a single title (TRANSCODE, THUMBNAILS, ...).
+     */
+    internal fun sortWorkItems(
+        workItems: List<WorkItem>,
+        priorityCounts: Map<Long, Int>,
+        popularityByTitle: Map<Long, Double>
+    ): List<WorkItem> = workItems.sortedWith(
+        compareBy<WorkItem> { if (it.isReTranscode) 1 else 0 }
+            .thenByDescending { priorityCounts[it.titleId] ?: 0 }
+            .thenByDescending {
+                if (it.leaseType == LeaseType.MOBILE_TRANSCODE && it.transcode.for_mobile_requested) 1 else 0
+            }
+            .thenByDescending { popularityByTitle[it.titleId] ?: Double.MIN_VALUE }
+            .thenBy { it.typeOrder }
+    )
+
+    /**
+     * Picks the winning transcode_id for the next bundle. Returns null if
+     * [workItems] is empty.
+     *
+     * Cache preference (preferring a transcode whose source is already on the
+     * buddy's disk, avoiding a multi-GB re-copy) is applied only WITHIN the
+     * top tier — the set of items that tie on manual priority and first-pass
+     * vs re-transcode. Otherwise a cached re-transcode would jump ahead of
+     * an uncached first-pass, which defeats the whole priority scheme.
+     */
+    internal fun pickWinnerId(
+        workItems: List<WorkItem>,
+        priorityCounts: Map<Long, Int>,
+        popularityByTitle: Map<Long, Double>,
+        cachedTranscodeIds: Set<Long>
+    ): Long? {
+        if (workItems.isEmpty()) return null
+        val sorted = sortWorkItems(workItems, priorityCounts, popularityByTitle)
+        val top = sorted.first()
+        val topPriorityCount = priorityCounts[top.titleId] ?: 0
+        val topTier = sorted.filter {
+            (priorityCounts[it.titleId] ?: 0) == topPriorityCount &&
+                it.isReTranscode == top.isReTranscode
+        }
+        val topTierIds = topTier.map { it.transcode.id!! }.distinct()
+        return if (cachedTranscodeIds.isNotEmpty()) {
+            topTierIds.firstOrNull { it in cachedTranscodeIds } ?: topTierIds.first()
+        } else {
+            topTierIds.first()
+        }
+    }
 
     /**
      * Claims all outstanding work for the highest-priority file as a bundle.
@@ -160,41 +234,41 @@ object TranscodeLeaseService {
             }
 
             // --- Check MOBILE_TRANSCODE eligibility ---
+            //
+            // Two cases produce a work item:
+            //   1. First-pass: no ForMobile output exists yet for this transcode.
+            //   2. Re-transcode: an output exists but was produced by an older
+            //      encoder preset (mobile_encoder_version < CURRENT). These run
+            //      at the lowest priority so they never delay first-pass work.
             if (LeaseType.MOBILE_TRANSCODE.name !in skipTypes &&
                 isForMobileEnabled() &&
                 tc.id !in activeMobileIds &&
                 tc.id !in mobilePoisonPillIds &&
-                !tc.for_mobile_available &&
-                !TranscoderAgent.isMobileTranscoded(nasRoot, filePath) &&
                 File(filePath).exists()
             ) {
-                workItems.add(WorkItem(tc, LeaseType.MOBILE_TRANSCODE, tc.title_id, 4))
+                val fileOnDisk = TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
+                val needsFirstPass = !tc.for_mobile_available && !fileOnDisk
+                val needsReTranscode = tc.for_mobile_available &&
+                    tc.mobile_encoder_version < EncoderProfile.CURRENT_MOBILE_ENCODER_VERSION
+                if (needsFirstPass || needsReTranscode) {
+                    workItems.add(WorkItem(
+                        tc, LeaseType.MOBILE_TRANSCODE, tc.title_id, 4,
+                        isReTranscode = needsReTranscode
+                    ))
+                }
             }
         }
 
         if (workItems.isEmpty()) return null
 
-        // Unified sort: lifecycle/transcode-priority count first, then mobile-requested first,
-        // then popularity, then work type within title.
-        val sorted = workItems.sortedWith(
-            compareByDescending<WorkItem> {
-                priorityCounts[it.titleId] ?: 0
-            }.thenByDescending {
-                if (it.leaseType == LeaseType.MOBILE_TRANSCODE && it.transcode.for_mobile_requested) 1 else 0
-            }.thenByDescending {
-                titles[it.titleId]?.popularity ?: Double.MIN_VALUE
-            }.thenBy {
-                it.typeOrder
+        val popularityByTitle: Map<Long, Double> = titles.values
+            .mapNotNull { t ->
+                val id = t.id ?: return@mapNotNull null
+                val pop = t.popularity ?: return@mapNotNull null
+                id to pop
             }
-        )
-
-        // Pick the best transcode_id: prefer cached files, then highest priority
-        val orderedTranscodeIds = sorted.map { it.transcode.id!! }.distinct()
-        val winnerId = if (cachedTranscodeIds.isNotEmpty()) {
-            orderedTranscodeIds.firstOrNull { it in cachedTranscodeIds } ?: orderedTranscodeIds.first()
-        } else {
-            orderedTranscodeIds.first()
-        }
+            .toMap()
+        val winnerId = pickWinnerId(workItems, priorityCounts, popularityByTitle, cachedTranscodeIds) ?: return null
 
         // Create leases for ALL outstanding work on the winning file
         val winnerItems = workItems.filter { it.transcode.id == winnerId }
@@ -450,9 +524,14 @@ object TranscodeLeaseService {
             }
 
             if (TranscodeLeaseService.isForMobileEnabled() &&
-                tc.id !in activeMobileIds && tc.id !in mobilePoisonPillIds &&
-                !tc.for_mobile_available && !TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
-            ) { pending.add(tc.id!!); continue }
+                tc.id !in activeMobileIds && tc.id !in mobilePoisonPillIds
+            ) {
+                val fileOnDisk = TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
+                val needsFirstPass = !tc.for_mobile_available && !fileOnDisk
+                val needsReTranscode = tc.for_mobile_available &&
+                    tc.mobile_encoder_version < EncoderProfile.CURRENT_MOBILE_ENCODER_VERSION
+                if (needsFirstPass || needsReTranscode) { pending.add(tc.id!!); continue }
+            }
         }
 
         return pending.toList()
@@ -740,13 +819,14 @@ object TranscodeLeaseService {
                 pendingChapters++
             }
 
-            // ForMobile transcoding
-            if (mobileEnabled &&
-                tc.id !in activeMobileIds && tc.id !in mobilePoisonIds &&
-                !tc.for_mobile_available &&
-                !TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
-            ) {
-                pendingMobile++
+            // ForMobile transcoding — count both first-pass and re-transcodes
+            // (older preset versions eligible for backfill).
+            if (mobileEnabled && tc.id !in activeMobileIds && tc.id !in mobilePoisonIds) {
+                val fileOnDisk = TranscoderAgent.isMobileTranscoded(nasRoot, filePath)
+                val needsFirstPass = !tc.for_mobile_available && !fileOnDisk
+                val needsReTranscode = tc.for_mobile_available &&
+                    tc.mobile_encoder_version < EncoderProfile.CURRENT_MOBILE_ENCODER_VERSION
+                if (needsFirstPass || needsReTranscode) pendingMobile++
             }
         }
 
