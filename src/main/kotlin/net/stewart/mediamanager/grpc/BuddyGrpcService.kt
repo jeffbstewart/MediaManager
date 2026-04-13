@@ -175,7 +175,26 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
 
             // Cancel any pending reconnect-grace expiry for this buddy
             val previousSession = activeSessions.put(name, BuddySession(this))
-            previousSession?.cancelGraceTimer()
+            if (previousSession != null) {
+                // Normal reconnect within the grace window: the previous
+                // session is still in memory, waiting for us. Keep any
+                // in-flight leases; the buddy will continue working on them.
+                previousSession.cancelGraceTimer()
+            } else {
+                // No prior session in memory but the DB may still hold
+                // CLAIMED/IN_PROGRESS leases under this buddy_name from a
+                // dead server process (JVM crash or redeploy destroyed the
+                // grace timer). The buddy has no resumption protocol — it
+                // logs the "resumable leases" count and otherwise ignores
+                // them. If we leave those rows alone, renewLeases() on the
+                // next message will happily extend their expiry forever.
+                // Release them now so the work queue can re-enqueue.
+                val released = TranscodeLeaseService.releaseLeases(name)
+                if (released > 0) {
+                    log.info("Buddy '{}' reconnected without prior session; released {} orphaned lease(s)",
+                        name, released)
+                }
+            }
 
             startIdleTimeout()
 

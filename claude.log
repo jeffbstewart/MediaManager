@@ -4170,3 +4170,24 @@ Session 2 (Mar 25):
   Transcode.kt, BuddyGrpcService.kt, TranscodeLeaseService.kt;
   new tests in test/transcode/ and test/service/
 ===
+
+=== 2026-04-13 15:55 — Zombie lease on server restart ===
+- User reported a transcode lease persisting across a server restart
+- Traced the flaw: on server redeploy, the JVM dies with active
+  BuddySession objects in memory holding grace timers. Those timers
+  never fire — the new JVM starts with an empty activeSessions map.
+  Buddy reconnects, handleConnect finds no prior session (previousSession
+  is null), takes no cleanup action. First message from the buddy hits
+  renewLeases() which blanket-extends every CLAIMED/IN_PROGRESS lease
+  under that buddy_name — including the ghost lease from pre-restart.
+  Server sends a Connected message with resumable leases, but the buddy
+  just logs the count and ignores them. No resumption protocol exists.
+- Fix in BuddyGrpcService.handleConnect: when activeSessions.put returns
+  null, call TranscodeLeaseService.releaseLeases(name) to kill any
+  pre-existing orphaned leases under this buddy name. Normal reconnect
+  within the 60s grace window is unaffected (previousSession is non-null,
+  grace timer cancelled as before).
+- Deployed as mediamanager:202604131549. The deploy itself exercises
+  the fix — buddy reconnect triggered the orphan cleanup.
+- Files: src/main/kotlin/net/stewart/mediamanager/grpc/BuddyGrpcService.kt
+===
