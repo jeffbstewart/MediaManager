@@ -44,6 +44,7 @@ import net.stewart.mediamanager.grpc.reportProgressRequest
 import net.stewart.mediamanager.grpc.transcodeIdRequest
 import net.stewart.mediamanager.tv.auth.AuthManager
 import net.stewart.mediamanager.tv.grpc.GrpcClient
+import net.stewart.mediamanager.tv.log.TvLog
 
 /**
  * @param titleId Required for TV shows to find the next episode. Pass 0 for movies.
@@ -104,11 +105,33 @@ fun VideoPlayerScreen(
             }
     }
 
-    // Listen for playback end
+    // Listen for playback end + emit lifecycle log events
     DisposableEffect(exoPlayer) {
+        val playbackAttrs = mapOf(
+            "transcode_id" to transcodeId.toString(),
+            "title_id" to titleId.toString(),
+            "season" to seasonNumber.toString(),
+            "episode" to episodeNumber.toString()
+        )
+        TvLog.info("playback", "playback started", playbackAttrs)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) playbackEnded = true
+                if (state == Player.STATE_ENDED) {
+                    playbackEnded = true
+                    TvLog.info("playback", "playback ended", playbackAttrs)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                TvLog.info(
+                    "playback",
+                    if (isPlaying) "playback resumed" else "playback paused",
+                    playbackAttrs
+                )
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                TvLog.error("playback", "playback error", error, playbackAttrs)
             }
         }
         exoPlayer.addListener(listener)

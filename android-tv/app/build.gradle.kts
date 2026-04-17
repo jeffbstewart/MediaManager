@@ -64,6 +64,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Use the shared proto definitions at the repo root — single source of truth

@@ -18,6 +18,7 @@ import net.stewart.mediamanager.grpc.CatalogServiceGrpcKt
 import net.stewart.mediamanager.grpc.ImageServiceGrpcKt
 import net.stewart.mediamanager.grpc.InfoServiceGrpcKt
 import net.stewart.mediamanager.grpc.LiveServiceGrpcKt
+import net.stewart.mediamanager.grpc.ObservabilityServiceGrpcKt
 import net.stewart.mediamanager.grpc.PlaybackServiceGrpcKt
 import net.stewart.mediamanager.grpc.ProfileServiceGrpcKt
 import net.stewart.mediamanager.grpc.WishListServiceGrpcKt
@@ -64,6 +65,9 @@ class GrpcClient(private val authManager: AuthManager) {
 
     fun profileService(): ProfileServiceGrpcKt.ProfileServiceCoroutineStub =
         ProfileServiceGrpcKt.ProfileServiceCoroutineStub(getChannel())
+
+    fun observabilityService(): ObservabilityServiceGrpcKt.ObservabilityServiceCoroutineStub =
+        ObservabilityServiceGrpcKt.ObservabilityServiceCoroutineStub(getChannel())
 
     fun resetChannel() {
         channel?.shutdownNow()

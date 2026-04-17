@@ -1,16 +1,20 @@
 package net.stewart.mediamanager.tv
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import net.stewart.mediamanager.tv.log.TvLog
 import net.stewart.mediamanager.grpc.MediaType
 import net.stewart.mediamanager.tv.auth.AccountPickerScreen
 import net.stewart.mediamanager.tv.auth.AppState
 import net.stewart.mediamanager.tv.auth.AuthManager
+import net.stewart.mediamanager.tv.auth.LegalAgreementScreen
 import net.stewart.mediamanager.tv.auth.LoginScreen
 import net.stewart.mediamanager.tv.auth.ServerSetupScreen
 import net.stewart.mediamanager.tv.catalog.ActorScreen
@@ -37,11 +41,25 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
             AppState.NEEDS_SERVER -> "setup"
             AppState.NEEDS_LOGIN -> "login"
             AppState.PICK_ACCOUNT -> "picker"
-            AppState.AUTHENTICATED -> "home"
+            // Run the compliance check on every cold start: a server-side
+            // terms-version bump needs to re-prompt existing users.
+            AppState.AUTHENTICATED -> "legal"
         }
     }
 
     val navController = rememberNavController()
+
+    // Navigation events — one write per destination enter. TvLog auto-tags
+    // the record with the active username so Binnacle queries can attribute
+    // screens to the viewer who opened them.
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            val route = destination.route ?: "(unknown)"
+            TvLog.info("nav", "enter: $route")
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
 
     NavHost(navController = navController, startDestination = initialRoute) {
 
@@ -62,7 +80,8 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 grpcClient = grpcClient,
                 onLoginSuccess = {
                     grpcClient.resetChannel()
-                    navController.navigate("home") { popUpTo(0) { inclusive = true } }
+                    // Post-login: gate through legal agreement before home.
+                    navController.navigate("legal") { popUpTo(0) { inclusive = true } }
                 },
                 onChangeServer = {
                     authManager.clearServer()
@@ -79,10 +98,26 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 authManager = authManager,
                 onAccountSelected = { username ->
                     authManager.selectAccount(username)
+                    TvLog.info("auth", "account selected from picker: '$username'")
                     grpcClient.resetChannel()
-                    navController.navigate("home") { popUpTo(0) { inclusive = true } }
+                    // Post-switch: re-check compliance before the new user sees home.
+                    navController.navigate("legal") { popUpTo(0) { inclusive = true } }
                 },
                 onAddAccount = { navController.navigate("login") }
+            )
+        }
+        composable("legal") {
+            LegalAgreementScreen(
+                grpcClient = grpcClient,
+                onCompliant = {
+                    navController.navigate("home") { popUpTo(0) { inclusive = true } }
+                },
+                onSignOut = {
+                    authManager.deselectAccount()
+                    grpcClient.resetChannel()
+                    val next = if (authManager.getAccountUsernames().isNotEmpty()) "picker" else "login"
+                    navController.navigate(next) { popUpTo(0) { inclusive = true } }
+                }
             )
         }
 
