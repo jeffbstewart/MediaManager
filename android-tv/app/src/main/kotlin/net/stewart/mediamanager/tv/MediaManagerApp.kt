@@ -222,7 +222,10 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 onTagClick = { id -> navController.navigate("tag/$id") },
                 onSeasonClick = { id -> navController.navigate("seasons/$id") },
                 onCollectionClick = { id -> navController.navigate("collection/$id") },
-                onPlay = { tcId -> navController.navigate("play/$tcId") },
+                // Movies use the same 4-arg route as episodes (season=0,
+                // episode=0) so VideoPlayerScreen always has the title id
+                // and can resolve a human-readable name.
+                onPlay = { tcId -> navController.navigate("play/$tcId/$titleId/0/0") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -303,20 +306,8 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
 
         // ── Video player ─────────────────────────────────────────
 
-        // Movie playback (no next-episode)
-        composable("play/{transcodeId}", arguments = listOf(
-            navArgument("transcodeId") { type = NavType.LongType }
-        )) {
-            val tcId = it.arguments?.getLong("transcodeId") ?: return@composable
-            VideoPlayerScreen(
-                transcodeId = tcId,
-                authManager = authManager,
-                grpcClient = grpcClient,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        // Episode playback (with next-episode support)
+        // Movies use season=0 / episode=0. Episodes use the real values,
+        // which unlocks next-episode lookup inside VideoPlayerScreen.
         composable(
             "play/{transcodeId}/{titleId}/{season}/{episode}",
             arguments = listOf(

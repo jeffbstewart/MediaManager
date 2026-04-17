@@ -41,6 +41,7 @@ import net.stewart.mediamanager.grpc.SkipSegmentType
 import net.stewart.mediamanager.grpc.listEpisodesRequest
 import net.stewart.mediamanager.grpc.playbackOffset
 import net.stewart.mediamanager.grpc.reportProgressRequest
+import net.stewart.mediamanager.grpc.titleIdRequest
 import net.stewart.mediamanager.grpc.transcodeIdRequest
 import net.stewart.mediamanager.tv.auth.AuthManager
 import net.stewart.mediamanager.tv.grpc.GrpcClient
@@ -74,6 +75,30 @@ fun VideoPlayerScreen(
     var nextEpisode by remember { mutableStateOf<Episode?>(null) }
     var showNextEpisode by remember { mutableStateOf(false) }
     var playbackEnded by remember { mutableStateOf(false) }
+    // Resolved once the server responds so playback log records carry the
+    // title name instead of a bare transcode id.
+    var titleName by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(titleId) {
+        if (titleId <= 0L) return@LaunchedEffect
+        try {
+            val detail = grpcClient.withAuth {
+                grpcClient.catalogService().getTitleDetail(titleIdRequest { this.titleId = titleId })
+            }
+            titleName = detail.title.name
+            val label = if (seasonNumber > 0) {
+                "viewing player: \"${detail.title.name}\" S${seasonNumber}E${episodeNumber}"
+            } else {
+                "viewing player: \"${detail.title.name}\""
+            }
+            TvLog.info("nav", label, mapOf(
+                "title_id" to titleId.toString(),
+                "transcode_id" to transcodeId.toString()
+            ))
+        } catch (_: Exception) {
+            // Non-fatal — logs will fall back to the id-only attrs.
+        }
+    }
 
     val dataSourceFactory = remember {
         DefaultHttpDataSource.Factory()

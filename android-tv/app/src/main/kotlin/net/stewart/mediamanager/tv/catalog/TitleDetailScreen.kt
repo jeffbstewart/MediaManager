@@ -42,6 +42,7 @@ import net.stewart.mediamanager.grpc.titleIdRequest
 import net.stewart.mediamanager.tv.auth.AuthManager
 import net.stewart.mediamanager.tv.grpc.GrpcClient
 import net.stewart.mediamanager.tv.image.CachedImage
+import net.stewart.mediamanager.tv.log.TvLog
 import net.stewart.mediamanager.tv.image.backdropRef
 import net.stewart.mediamanager.tv.image.headshotRef
 import net.stewart.mediamanager.tv.image.posterRef
@@ -65,9 +66,13 @@ fun TitleDetailScreen(
 
     LaunchedEffect(titleId) {
         try {
-            detail = grpcClient.withAuth { grpcClient.catalogService().getTitleDetail(titleIdRequest { this.titleId = titleId }) }
+            val loaded = grpcClient.withAuth { grpcClient.catalogService().getTitleDetail(titleIdRequest { this.titleId = titleId }) }
+            detail = loaded
+            TvLog.info("nav", "viewing title: \"${loaded.title.name}\"",
+                mapOf("title_id" to titleId.toString()))
         } catch (e: Exception) {
             error = e.message ?: "Failed to load title"
+            TvLog.warn("nav", "failed to load title", e, mapOf("title_id" to titleId.toString()))
         } finally {
             loading = false
         }
