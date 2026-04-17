@@ -119,10 +119,12 @@ object ArmeriaServer {
         val meterRegistry = net.stewart.mediamanager.service.MetricsRegistry.registry
 
         val slowHandlerDecorator = net.stewart.mediamanager.armeria.SlowHandlerDecorator()
+        val accessLogDecorator = net.stewart.mediamanager.armeria.AccessLogDecorator()
 
         val sb = Server.builder()
             .http(port)
             .meterRegistry(meterRegistry)
+            .decorator(accessLogDecorator)
             .decorator(slowHandlerDecorator)
             .service(grpcService)
 
