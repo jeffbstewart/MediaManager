@@ -71,5 +71,8 @@ class BufferingLogger(loggerName: String) : LegacyAbstractLogger() {
         if (levelName == "INFO" || levelName == "WARN" || levelName == "ERROR") {
             AppLogBuffer.add(levelName, shortName, formatted ?: "", actualThrowable)
         }
+
+        // Ship to Binnacle (no-op if not configured or not yet initialized)
+        BinnacleExporter.emit(level, name, formatted ?: "", actualThrowable, threadName)
     }
 }

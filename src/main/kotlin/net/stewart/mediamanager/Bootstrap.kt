@@ -29,6 +29,8 @@ import net.stewart.mediamanager.service.PopulateSeasonsUpdater
 import net.stewart.mediamanager.service.MigrateAuxFilesUpdater
 import net.stewart.mediamanager.service.SchemaUpdaterRunner
 import net.stewart.mediamanager.service.UnlinkMovieEpisodesUpdater
+import net.stewart.mediamanager.logging.BinnacleExporter
+import net.stewart.mediamanager.logging.BinnacleExporter.Status
 import org.flywaydb.core.Flyway
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -39,6 +41,8 @@ object Bootstrap {
     fun init() {
         loadEnvFile()
         loadEnvironmentVariables()
+        initBinnacle()
+        log.info("Bootstrap.init starting")
 
         log.info("Initializing database")
         val h2Password = System.getProperty("H2_PASSWORD") ?: System.getenv("H2_PASSWORD")
@@ -373,6 +377,19 @@ object Bootstrap {
         log.warn("=== DATABASE RESTORE COMPLETE ===")
     }
 
+    private fun initBinnacle() {
+        when (BinnacleExporter.init()) {
+            Status.ENABLED -> {
+                log.info("Binnacle log export enabled")
+                Runtime.getRuntime().addShutdownHook(Thread { BinnacleExporter.shutdown() })
+            }
+            Status.NOT_CONFIGURED ->
+                log.info("Binnacle not configured (set BINNACLE_ENDPOINT and BINNACLE_API_KEY in secrets/.env to enable)")
+            Status.PROBE_FAILED ->
+                log.error("Binnacle probe failed — log export disabled: {}", BinnacleExporter.probeError)
+        }
+    }
+
     private fun loadEnvFile() {
         val envFile = File("secrets/.env")
         if (!envFile.exists()) {
@@ -400,7 +417,7 @@ object Bootstrap {
      * Only sets a property if not already set (by .env file), so .env takes precedence.
      */
     private fun loadEnvironmentVariables() {
-        val envKeys = listOf("TMDB_API_KEY", "TMDB_API_READ_ACCESS_TOKEN")
+        val envKeys = listOf("TMDB_API_KEY", "TMDB_API_READ_ACCESS_TOKEN", "BINNACLE_ENDPOINT", "BINNACLE_API_KEY")
         var count = 0
         for (key in envKeys) {
             if (System.getProperty(key) != null) continue
