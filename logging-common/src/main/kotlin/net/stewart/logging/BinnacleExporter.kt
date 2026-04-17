@@ -9,6 +9,7 @@ import io.opentelemetry.sdk.resources.Resource
 import org.slf4j.event.Level
 import java.net.InetAddress
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -40,6 +41,45 @@ object BinnacleExporter {
 
     @Volatile
     private var otelLogger: io.opentelemetry.api.logs.Logger? = null
+
+    /** Endpoint/apiKey captured at [init] time so follow-on pipelines reuse the same transport. */
+    @Volatile
+    private var endpointUrl: String? = null
+
+    @Volatile
+    private var apiKey: String? = null
+
+    /**
+     * Lazily-built pipelines keyed by "$serviceName|$serviceVersion", used by
+     * [emitFor] to ship records from iOS / TV / web clients under their own
+     * `service.name` so Binnacle attributes them correctly.
+     */
+    private val clientProviders = ConcurrentHashMap<String, Pair<SdkLoggerProvider, io.opentelemetry.api.logs.Logger>>()
+
+    /** Test-only capture of an [emitFor] record, in the order it was emitted. */
+    data class CapturedRecord(
+        val serviceName: String,
+        val serviceVersion: String,
+        val timestamp: Instant,
+        val level: Level,
+        val loggerName: String,
+        val message: String,
+        val exceptionType: String?,
+        val exceptionMessage: String?,
+        val exceptionStackTrace: String?,
+        val attributes: Map<String, String>
+    )
+
+    /**
+     * Test-only hook. When set, [emitFor] bypasses the OTel pipeline and
+     * delegates to this callback instead, returning true as if the record
+     * had been queued. Never set in production.
+     *
+     * Public (not `internal`) because consuming modules' tests need to set
+     * it; there is no production path that writes to this field.
+     */
+    @Volatile
+    var captureForTests: ((CapturedRecord) -> Unit)? = null
 
     /** Result of [init]: why the exporter is or isn't running. */
     enum class Status {
@@ -75,8 +115,8 @@ object BinnacleExporter {
         if (otelLogger != null) return Status.ENABLED
 
         val endpoint = System.getProperty(PROP_ENDPOINT)
-        val apiKey = System.getProperty(PROP_API_KEY)
-        if (endpoint.isNullOrBlank() || apiKey.isNullOrBlank()) {
+        val key = System.getProperty(PROP_API_KEY)
+        if (endpoint.isNullOrBlank() || key.isNullOrBlank()) {
             return Status.NOT_CONFIGURED
         }
 
@@ -100,7 +140,7 @@ object BinnacleExporter {
 
         val exporter = OtlpHttpLogRecordExporter.builder()
             .setEndpoint(fullEndpoint)
-            .addHeader("X-Logging-Api-Key", apiKey)
+            .addHeader("X-Logging-Api-Key", key)
             .build()
 
         val processor = BatchLogRecordProcessor.builder(exporter).build()
@@ -132,6 +172,8 @@ object BinnacleExporter {
 
         loggerProvider = provider
         otelLogger = probeLogger
+        endpointUrl = fullEndpoint
+        apiKey = key
         return Status.ENABLED
     }
 
@@ -172,12 +214,114 @@ object BinnacleExporter {
     }
 
     /**
+     * Ships a record from a separate client service (iOS, Android TV, web)
+     * to Binnacle under its own `service.name`. Pipelines are built lazily
+     * and cached by `"$serviceName|$serviceVersion"` so clients can stream
+     * continuously without repeated setup cost.
+     *
+     * Returns true if the record was handed off to the exporter, false if
+     * Binnacle is not configured or the caller's service identity is
+     * blank. Never throws.
+     */
+    fun emitFor(
+        serviceName: String,
+        serviceVersion: String,
+        timestamp: Instant,
+        level: Level,
+        loggerName: String,
+        message: String,
+        exceptionType: String?,
+        exceptionMessage: String?,
+        exceptionStackTrace: String?,
+        attributes: Map<String, String>
+    ): Boolean {
+        if (serviceName.isBlank()) return false
+        // Test-only bypass: capture records in memory and skip the OTLP path.
+        val hook = captureForTests
+        if (hook != null) {
+            hook(CapturedRecord(
+                serviceName, serviceVersion, timestamp, level, loggerName, message,
+                exceptionType, exceptionMessage, exceptionStackTrace, attributes
+            ))
+            return true
+        }
+        val endpoint = endpointUrl ?: return false
+        val key = apiKey ?: return false
+        val logger = getOrCreateClientLogger(serviceName, serviceVersion, endpoint, key)
+        try {
+            val builder = logger.logRecordBuilder()
+                .setTimestamp(timestamp)
+                .setSeverity(mapSeverity(level))
+                .setSeverityText(level.name)
+                .setBody(message)
+                .setAttribute(ATTR_CODE_NAMESPACE, loggerName)
+
+            if (exceptionType != null) {
+                builder.setAttribute(ATTR_EXCEPTION_TYPE, exceptionType)
+            }
+            if (exceptionMessage != null) {
+                builder.setAttribute(ATTR_EXCEPTION_MESSAGE, exceptionMessage)
+            }
+            if (exceptionStackTrace != null) {
+                builder.setAttribute(ATTR_EXCEPTION_STACKTRACE, exceptionStackTrace)
+            }
+            for ((k, v) in attributes) {
+                builder.setAttribute(AttributeKey.stringKey(k), v)
+            }
+
+            builder.emit()
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    private fun getOrCreateClientLogger(
+        serviceName: String,
+        serviceVersion: String,
+        endpoint: String,
+        key: String
+    ): io.opentelemetry.api.logs.Logger {
+        val cacheKey = "$serviceName|$serviceVersion"
+        val existing = clientProviders[cacheKey]
+        if (existing != null) return existing.second
+
+        return clientProviders.computeIfAbsent(cacheKey) {
+            val hostname = try {
+                InetAddress.getLocalHost().hostName
+            } catch (_: Exception) {
+                "unknown"
+            }
+            val resource = Resource.builder()
+                .put(AttributeKey.stringKey("service.name"), serviceName)
+                .put(AttributeKey.stringKey("service.version"),
+                    serviceVersion.ifBlank { "unknown" })
+                .put(AttributeKey.stringKey("service.instance.id"), hostname)
+                .build()
+            val exporter = OtlpHttpLogRecordExporter.builder()
+                .setEndpoint(endpoint)
+                .addHeader("X-Logging-Api-Key", key)
+                .build()
+            val processor = BatchLogRecordProcessor.builder(exporter).build()
+            val provider = SdkLoggerProvider.builder()
+                .setResource(resource)
+                .addLogRecordProcessor(processor)
+                .build()
+            provider to provider.get("net.stewart.logging.client")
+        }.second
+    }
+
+    /**
      * Flushes pending records and shuts down the exporter. Called from
      * the shutdown hook so in-flight logs land in Binnacle before the
      * process exits.
      */
     fun shutdown() {
         loggerProvider?.shutdown()?.join(5, TimeUnit.SECONDS)
+        for ((_, bundle) in clientProviders) {
+            bundle.first.shutdown().join(2, TimeUnit.SECONDS)
+        }
+        clientProviders.clear()
     }
 
     private fun mapSeverity(level: Level): Severity = when (level) {

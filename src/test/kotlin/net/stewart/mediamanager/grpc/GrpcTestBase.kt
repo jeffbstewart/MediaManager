@@ -73,7 +73,8 @@ open class GrpcTestBase {
                 WishListGrpcService(),
                 ProfileGrpcService(),
                 LiveGrpcService(),
-                AdminGrpcService()
+                AdminGrpcService(),
+                ObservabilityGrpcService()
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()

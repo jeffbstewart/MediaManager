@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// Client log forwarding to Binnacle. iOS / Android TV / web clients
+// open one long-lived client-streaming RPC and emit LogRecord messages
+// as they occur. The server proxies each record into Binnacle under the
+// client-declared service.name so logs from different apps are
+// distinguishable in Binnacle's UI.
+service ObservabilityService {
+  // Authenticated client-streaming. The stream stays open for the
+  // lifetime of the client; the server acknowledges totals when the
+  // client closes the send half (e.g. at app suspend/exit).
+  rpc StreamLogs(stream LogRecord) returns (StreamLogsAck);
+}
+
+// Severity mirrors OTel / SLF4J levels.
+enum LogSeverity {
+  LOG_SEVERITY_UNKNOWN = 0;
+  LOG_SEVERITY_TRACE = 1;
+  LOG_SEVERITY_DEBUG = 2;
+  LOG_SEVERITY_INFO = 3;
+  LOG_SEVERITY_WARN = 4;
+  LOG_SEVERITY_ERROR = 5;
+}
+
+message LogRecord {
+  // Client identity. Required on every record (so individual records
+  // remain meaningful even if the server drops/resumes the stream mid-
+  // flight). Examples: "mediamanager-ios", "mediamanager-android-tv".
+  string service_name = 1;
+
+  // Client build identifier, e.g. "2.1.0-build-483". Optional.
+  string service_version = 2;
+
+  // When the event occurred on the client. The server uses this as the
+  // Binnacle record timestamp so ordering survives buffering/retries.
+  Timestamp timestamp = 3;
+
+  LogSeverity severity = 4;
+
+  // Short logger / subsystem name, e.g. "playback", "auth", "network".
+  string logger_name = 5;
+
+  string message = 6;
+
+  // Optional exception context. If set, mapped onto Binnacle's
+  // exception.type / exception.message / exception.stacktrace.
+  optional string exception_type = 7;
+  optional string exception_message = 8;
+  optional string exception_stacktrace = 9;
+
+  // Optional key/value attributes attached to this single record
+  // (e.g. device model, locale, screen, user-action id). These ride
+  // on the OTel LogRecord as attributes and are queryable in Binnacle.
+  map<string, string> attributes = 10;
+}
+
+message StreamLogsAck {
+  // How many records the server successfully forwarded to Binnacle.
+  int64 records_forwarded = 1;
+
+  // How many records were rejected (e.g. missing service_name).
+  int64 records_rejected = 2;
+}
