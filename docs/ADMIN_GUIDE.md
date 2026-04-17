@@ -642,13 +642,9 @@ Generates a downloadable PDF and CSV inventory summary. The PDF includes:
 
 ## Monitoring
 
-### Request Log
-
-**`/admin/requests`** (internal port 8081, not on main app port) &mdash; In-memory log of the last 200 HTTP requests. Filterable by user-agent, path, and status code. Access via `http://<nas-ip>:16002/admin/requests` on your LAN. Not internet-accessible.
-
-### Application Log
-
-**`/admin/logs`** (internal port 8081, not on main app port) &mdash; Recent application log messages (errors, warnings, info) in a color-coded table. Stack traces are expandable. Filterable by severity and logger name. Access via `http://<nas-ip>:16002/admin/logs` on your LAN. Not internet-accessible.
+HTTP access logs and application log records are shipped to Binnacle via
+SLF4J (`http.access` and per-class loggers flow through `BinnacleExporter`).
+Query them there rather than on the server itself.
 
 ### Health Check
 

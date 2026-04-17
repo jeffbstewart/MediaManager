@@ -10,7 +10,6 @@ import com.linecorp.armeria.server.file.HttpFile
 import com.linecorp.armeria.server.grpc.GrpcService
 import io.grpc.ServerInterceptors
 import java.nio.file.Path
-import net.stewart.mediamanager.armeria.AppLogHttpService
 import net.stewart.mediamanager.armeria.ArmeriaAuthDecorator
 import net.stewart.mediamanager.armeria.BackdropHttpService
 import net.stewart.mediamanager.armeria.CollectionPosterHttpService
@@ -22,7 +21,6 @@ import net.stewart.mediamanager.armeria.OwnershipPhotoHttpService
 import net.stewart.mediamanager.armeria.PairingHttpService
 import net.stewart.mediamanager.armeria.PlaybackProgressHttpService
 import net.stewart.mediamanager.armeria.PosterHttpService
-import net.stewart.mediamanager.armeria.RequestLogHttpService
 import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.ActorHttpService
 import net.stewart.mediamanager.armeria.CameraListHttpService
@@ -69,8 +67,8 @@ import org.slf4j.LoggerFactory
  * Listens on two ports:
  * - **Main port** (default 9090): gRPC (HTTP/2) + /health for HAProxy checks.
  *   Will later also serve REST API, static files, and ported servlets.
- * - **Internal port** (default 8081): /health, /metrics, /admin/logs, /admin/requests.
- *   LAN-only, not port-forwarded through the router.
+ * - **Internal port** (default 8081): /health, /metrics. LAN-only, not
+ *   port-forwarded through the router.
  */
 object ArmeriaServer {
 
@@ -169,8 +167,6 @@ object ArmeriaServer {
             // Restrict monitoring endpoints to the internal port only
             val internalOnly = internalOnlyDecorator(internalPort)
             sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(MetricsHttpService())
-            sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(AppLogHttpService())
-            sb.annotatedService().decorator(internalOnly).useBlockingTaskExecutor(true).build(RequestLogHttpService())
         }
 
         server = sb.build()
@@ -268,7 +264,7 @@ object ArmeriaServer {
 
     /**
      * Returns a decorator that rejects requests not arriving on the specified port.
-     * Used to keep /metrics, /admin/logs, /admin/requests off the internet-facing port.
+     * Used to keep /metrics off the internet-facing port.
      */
     private fun internalOnlyDecorator(allowedPort: Int) = DecoratingHttpServiceFunction { delegate, ctx, req ->
         if (ctx.localAddress().port == allowedPort) {

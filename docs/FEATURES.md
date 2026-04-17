@@ -25,8 +25,6 @@ see git history for full specifications.
 | Wish Lists | Per-user media and transcode wish lists with priority transcoding |
 | Security Hardening | TLS, rate limiting, input validation, session policies |
 | Roku App | BrightScript channel with feed, playback, QR pairing |
-| Request Log | In-memory HTTP request log at `/admin/requests` |
-| App Log | In-memory application log at `/admin/logs` |
 | Roku Debug Logging | `[MM]`-prefixed print statements throughout channel code |
 | Roku Deploy | `roku-deploy.sh` sideloading automation |
 | Roku Debug Tailing | `roku-debug.sh` for streaming debug console output |

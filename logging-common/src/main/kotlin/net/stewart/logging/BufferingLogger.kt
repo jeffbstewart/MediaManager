@@ -8,8 +8,8 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * SLF4J Logger that writes to stderr (like slf4j-simple) and also captures
- * INFO/WARN/ERROR messages into [AppLogBuffer] ring buffers.
+ * SLF4J Logger that writes to stderr (like slf4j-simple) and ships log
+ * records to Binnacle via [BinnacleExporter].
  */
 class BufferingLogger(loggerName: String) : LegacyAbstractLogger() {
 
@@ -64,12 +64,6 @@ class BufferingLogger(loggerName: String) : LegacyAbstractLogger() {
         val threadName = Thread.currentThread().name
         System.err.println("$timestamp [$threadName] $level $shortName - $formatted")
         actualThrowable?.printStackTrace(System.err)
-
-        // Capture to buffer (INFO, WARN, ERROR only)
-        val levelName = level.name
-        if (levelName == "INFO" || levelName == "WARN" || levelName == "ERROR") {
-            AppLogBuffer.add(levelName, shortName, formatted ?: "", actualThrowable)
-        }
 
         // Ship to Binnacle (no-op if not configured or not yet initialized)
         BinnacleExporter.emit(level, name, formatted ?: "", actualThrowable, threadName)

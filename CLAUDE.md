@@ -51,7 +51,7 @@ For Watchtower config, health/metrics server, and Prometheus setup, see `docs/AD
 - **Connection Pool:** HikariCP
 - **Migrations:** Flyway — SQL files in `src/main/resources/db/migration/`, naming convention `V{NNN}__{description}.sql`
 - **ORM:** vok-framework-vokdb (jdbi-orm under the hood)
-- **Logging:** SLF4J with custom BufferingServiceProvider (stderr + in-memory ring buffers at `/admin/logs`)
+- **Logging:** SLF4J with custom BufferingServiceProvider (stderr + Binnacle export)
 - **Build:** Gradle 9.3.1 with Kotlin DSL, version catalog in `gradle/libs.versions.toml`
 - **JDK:** Corretto 25 (Java 21+ required by Vaadin 25.x)
 - **Package:** net.stewart.mediamanager
