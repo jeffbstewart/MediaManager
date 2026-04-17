@@ -1,4 +1,4 @@
-package net.stewart.mediamanager.logging
+package net.stewart.logging
 
 import org.slf4j.ILoggerFactory
 import org.slf4j.IMarkerFactory
@@ -10,7 +10,7 @@ import org.slf4j.spi.SLF4JServiceProvider
 /**
  * SLF4J 2.x service provider that creates [BufferingLogger] instances.
  * Logs to stderr (like slf4j-simple) and captures INFO/WARN/ERROR to
- * [net.stewart.mediamanager.service.AppLogBuffer] ring buffers.
+ * [AppLogBuffer] ring buffers.
  *
  * Fields are eagerly initialized because SLF4J's LoggerFactory.bind() calls
  * getMDCAdapter() before initialize().

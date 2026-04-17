@@ -8,6 +8,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -56,6 +57,7 @@ class PriceLookupAgent(
         @Volatile var instance: PriceLookupAgent? = null
 
         private val BATCH_INTERVAL = 62.seconds
+        private val IDLE_INTERVAL = 1.hours
         private val DISABLED_CHECK_INTERVAL = 5.minutes
         private val STARTUP_DELAY = 30.seconds
         private const val STALENESS_DAYS = 30L
@@ -88,8 +90,9 @@ class PriceLookupAgent(
                     }
                     status = "processing batch #${totalBatches + 1}..."
                     processBatch(config)
-                    status = if (lastEligibleCount == 0) "idle (all items priced)" else "sleeping ${BATCH_INTERVAL.inWholeSeconds}s (${lastEligibleCount} eligible)"
-                    clock.sleep(BATCH_INTERVAL)
+                    val interval = if (lastEligibleCount == 0) IDLE_INTERVAL else BATCH_INTERVAL
+                    status = if (lastEligibleCount == 0) "idle (all items priced, next check in ${IDLE_INTERVAL.inWholeMinutes}min)" else "sleeping ${BATCH_INTERVAL.inWholeSeconds}s (${lastEligibleCount} eligible)"
+                    clock.sleep(interval)
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
@@ -135,7 +138,7 @@ class PriceLookupAgent(
         val eligible = findEligibleItems()
         lastEligibleCount = eligible.size
         if (eligible.isEmpty()) {
-            log.info("No items eligible for pricing")
+            log.debug("No items eligible for pricing")
             return
         }
 

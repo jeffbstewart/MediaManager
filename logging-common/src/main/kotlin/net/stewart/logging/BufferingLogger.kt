@@ -1,6 +1,5 @@
-package net.stewart.mediamanager.logging
+package net.stewart.logging
 
-import net.stewart.mediamanager.service.AppLogBuffer
 import org.slf4j.Marker
 import org.slf4j.event.Level
 import org.slf4j.helpers.LegacyAbstractLogger

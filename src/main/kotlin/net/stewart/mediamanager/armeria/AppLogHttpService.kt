@@ -7,7 +7,7 @@ import com.linecorp.armeria.common.MediaType
 import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
-import net.stewart.mediamanager.service.AppLogBuffer
+import net.stewart.logging.AppLogBuffer
 import java.time.format.DateTimeFormatter
 
 class AppLogHttpService {
@@ -94,9 +94,9 @@ pre.stack { color: #f87171; font-size: 11px; margin: 4px 0 0 0; white-space: pre
             sb.append("<td class=\"$levelClass\">${e.level}</td>")
             sb.append("<td class=\"logger\">${escapeHtml(e.loggerName)}</td>")
             sb.append("<td class=\"msg\">$escapedMsg")
-            if (e.stackTrace != null) {
+            e.stackTrace?.let { trace ->
                 sb.append("<details><summary>Stack trace</summary>")
-                sb.append("<pre class=\"stack\">${escapeHtml(e.stackTrace)}</pre>")
+                sb.append("<pre class=\"stack\">${escapeHtml(trace)}</pre>")
                 sb.append("</details>")
             }
             sb.append("</td></tr>\n")

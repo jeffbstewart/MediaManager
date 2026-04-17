@@ -14,8 +14,8 @@ repositories {
 
 dependencies {
     implementation(project(":transcode-common"))
+    implementation(project(":logging-common"))
     implementation(libs.gson)
-    implementation(libs.slf4j.simple)
 
     // gRPC client
     implementation(libs.grpc.stub)
