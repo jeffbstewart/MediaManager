@@ -25,7 +25,11 @@ data class BuddyConfig(
     /** Dedicated temp directory for staging source files locally before processing bundles. */
     val localTempDir: String? = null,
     /** Port for the local status page HTTP server. */
-    val statusPort: Int = 8090
+    val statusPort: Int = 8090,
+    /** OTLP/HTTP base URL for Binnacle log export (e.g. http://172.16.4.12:4318). Null disables. */
+    val binnacleEndpoint: String? = null,
+    /** Shared write-path API key for Binnacle. Null disables. */
+    val binnacleApiKey: String? = null
 ) {
     companion object {
         fun load(path: String): BuddyConfig {
@@ -69,7 +73,9 @@ data class BuddyConfig(
                 whisperDevice = props.getProperty("whisper_device", "cuda"),
                 whisperComputeType = props.getProperty("whisper_compute_type", "float16"),
                 localTempDir = props.getProperty("local_temp_dir"),
-                statusPort = props.getProperty("status_port", "8090").toInt()
+                statusPort = props.getProperty("status_port", "8090").toInt(),
+                binnacleEndpoint = props.getProperty("binnacle_endpoint")?.takeIf { it.isNotBlank() },
+                binnacleApiKey = props.getProperty("binnacle_api_key")?.takeIf { it.isNotBlank() }
             )
         }
 
