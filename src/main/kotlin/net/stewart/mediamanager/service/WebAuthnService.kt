@@ -192,8 +192,8 @@ object WebAuthnService {
         credential.save()
         hasAnyPasskeys = true
 
-        log.info("AUDIT: Passkey registered for user_id={} credentialId={}...{}", userId,
-            credentialId.take(8), credentialId.takeLast(4))
+        log.info("AUDIT: Passkey registered for user='{}' credentialId={}...{}",
+            AppUser.usernameFor(userId), credentialId.take(8), credentialId.takeLast(4))
         return credential
     }
 
@@ -305,7 +305,7 @@ object WebAuthnService {
         if (cred == null || cred.user_id != userId) return false
         cred.delete()
         refreshHasAnyPasskeys()
-        log.info("AUDIT: Passkey deleted id={} for user_id={}", credentialId, userId)
+        log.info("AUDIT: Passkey deleted id={} for user='{}'", credentialId, AppUser.usernameFor(userId))
         return true
     }
 
@@ -314,7 +314,7 @@ object WebAuthnService {
         creds.forEach { it.delete() }
         refreshHasAnyPasskeys()
         if (creds.isNotEmpty()) {
-            log.info("AUDIT: All {} passkeys deleted for user_id={}", creds.size, userId)
+            log.info("AUDIT: All {} passkeys deleted for user='{}'", creds.size, AppUser.usernameFor(userId))
         }
         return creds.size
     }
@@ -325,7 +325,7 @@ object WebAuthnService {
         val userId = cred.user_id
         cred.delete()
         refreshHasAnyPasskeys()
-        log.info("AUDIT: Admin deleted passkey id={} for user_id={}", credentialId, userId)
+        log.info("AUDIT: Admin deleted passkey id={} for user='{}'", credentialId, AppUser.usernameFor(userId))
         return true
     }
 

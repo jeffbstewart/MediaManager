@@ -157,7 +157,7 @@ object PairingService {
                 .execute()
         }
         if (deleted > 0) {
-            log.info("AUDIT: Revoked {} device tokens for user_id={}", deleted, userId)
+            log.info("AUDIT: Revoked {} device tokens for user='{}'", deleted, AppUser.usernameFor(userId))
         }
     }
 
@@ -167,7 +167,7 @@ object PairingService {
     fun revokeToken(tokenId: Long): Boolean {
         val token = DeviceToken.findById(tokenId) ?: return false
         token.delete()
-        log.info("AUDIT: Revoked device token id={} for user_id={}", tokenId, token.user_id)
+        log.info("AUDIT: Revoked device token id={} for user='{}'", tokenId, AppUser.usernameFor(token.user_id))
         return true
     }
 
@@ -179,7 +179,7 @@ object PairingService {
         val token = DeviceToken.findById(tokenId) ?: return false
         if (token.user_id != userId) return false
         token.delete()
-        log.info("AUDIT: Revoked device token id={} for user_id={}", tokenId, token.user_id)
+        log.info("AUDIT: Revoked device token id={} for user='{}'", tokenId, AppUser.usernameFor(token.user_id))
         return true
     }
 

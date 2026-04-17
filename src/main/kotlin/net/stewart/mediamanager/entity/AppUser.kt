@@ -24,7 +24,10 @@ data class AppUser(
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
-    companion object : Dao<AppUser, Long>(AppUser::class.java)
+    companion object : Dao<AppUser, Long>(AppUser::class.java) {
+        /** Returns the username for [id], or `"id=<n>"` if no such user exists. For audit logs. */
+        fun usernameFor(id: Long): String = findById(id)?.username ?: "id=$id"
+    }
 
     fun isAdmin(): Boolean = access_level >= 2
 

@@ -50,7 +50,7 @@ object JwtService {
     private const val ACCESS_TOKEN_SECONDS = 900 // 15 minutes
     private const val REFRESH_TOKEN_DAYS = 30L
     private const val GRACE_PERIOD_SECONDS = 60L
-    private const val MAX_REFRESH_TOKENS_PER_USER = 10
+    private const val MAX_REFRESH_FAMILIES_PER_USER = 10
     private const val CONFIG_KEY_SIGNING = "jwt_signing_key"
     private const val CONFIG_KEY_SIGNING_PREVIOUS = "jwt_signing_key_previous"
 
@@ -110,7 +110,7 @@ object JwtService {
         } ?: return RefreshResult.InvalidToken
 
         if (rt.revoked) {
-            log.warn("AUDIT: Revoked refresh token used for user_id={}", rt.userId)
+            log.warn("AUDIT: Revoked refresh token used for user='{}'", AppUser.usernameFor(rt.userId))
             return RefreshResult.InvalidToken
         }
 
@@ -126,14 +126,14 @@ object JwtService {
                 val user = AppUser.findById(rt.userId) ?: return RefreshResult.InvalidToken
                 val newRefreshToken = createRefreshToken(user, rt.deviceName, rt.familyId)
                 val newAccessToken = createAccessToken(user)
-                log.info("AUDIT: Refresh token grace period reuse for user_id={} family={}", rt.userId, rt.familyId)
+                log.info("AUDIT: Refresh token grace period reuse for user='{}' family={}", user.username, rt.familyId)
                 return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS))
             } else {
                 // Token theft detected — revoke entire family
                 revokeFamily(rt.familyId)
                 log.warn(
-                    "AUDIT: Refresh token reuse after grace period — family {} revoked for user_id={}",
-                    rt.familyId, rt.userId
+                    "AUDIT: Refresh token reuse after grace period — family {} revoked for user='{}'",
+                    rt.familyId, AppUser.usernameFor(rt.userId)
                 )
                 return RefreshResult.FamilyRevoked
             }
@@ -157,7 +157,7 @@ object JwtService {
         }
 
         val newAccessToken = createAccessToken(user)
-        log.info("AUDIT: Refresh token rotated for user_id={} family={}", rt.userId, rt.familyId)
+        log.info("AUDIT: Refresh token rotated for user='{}' family={}", user.username, rt.familyId)
         return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS))
     }
 
@@ -187,7 +187,7 @@ object JwtService {
                 .execute()
         }
         if (revoked > 0) {
-            log.info("AUDIT: Revoked {} refresh tokens for user_id={}", revoked, userId)
+            log.info("AUDIT: Revoked {} refresh tokens for user='{}'", revoked, AppUser.usernameFor(userId))
         }
     }
 
@@ -224,7 +224,12 @@ object JwtService {
         val tokenHash = hashToken(token)
         val now = LocalDateTime.now()
 
-        enforceTokenCap(user.id!!)
+        // Only enforce the cap for brand-new logins. Rotations stay inside
+        // an existing family and don't add to the family count, so a chatty
+        // device can refresh without evicting other devices.
+        if (familyId == null) {
+            enforceFamilyCap(user.id!!)
+        }
 
         RefreshToken(
             user_id = user.id!!,
@@ -239,28 +244,39 @@ object JwtService {
         return token
     }
 
-    private fun enforceTokenCap(userId: Long) {
-        val activeTokenIds = JdbiOrm.jdbi().withHandle<List<Long>, Exception> { handle ->
+    /**
+     * Caps the number of concurrent logged-in devices (families) per user.
+     * Each login creates a new family; rotations stay inside it. When a new
+     * login would exceed the cap, the oldest family (by its most recent
+     * token's created_at) is revoked entirely.
+     */
+    private fun enforceFamilyCap(userId: Long) {
+        val families = JdbiOrm.jdbi().withHandle<List<String>, Exception> { handle ->
             handle.createQuery(
-                """SELECT id FROM refresh_token
+                """SELECT family_id
+                   FROM refresh_token
                    WHERE user_id = :uid AND revoked = FALSE AND expires_at > :now
-                   ORDER BY created_at DESC"""
+                   GROUP BY family_id
+                   ORDER BY MAX(created_at) DESC"""
             )
                 .bind("uid", userId)
                 .bind("now", LocalDateTime.now())
-                .mapTo(Long::class.java)
+                .mapTo(String::class.java)
                 .list()
         }
-        if (activeTokenIds.size >= MAX_REFRESH_TOKENS_PER_USER) {
-            val toRevoke = activeTokenIds.drop(MAX_REFRESH_TOKENS_PER_USER - 1)
-            JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+        if (families.size >= MAX_REFRESH_FAMILIES_PER_USER) {
+            val toRevoke = families.drop(MAX_REFRESH_FAMILIES_PER_USER - 1)
+            val revoked = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
                 handle.createUpdate(
-                    "UPDATE refresh_token SET revoked = TRUE WHERE id IN (<ids>)"
+                    "UPDATE refresh_token SET revoked = TRUE WHERE family_id IN (<fids>) AND revoked = FALSE"
                 )
-                    .bindList("ids", toRevoke)
+                    .bindList("fids", toRevoke)
                     .execute()
             }
-            log.info("AUDIT: Revoked {} oldest refresh tokens for user_id={} (cap enforcement)", toRevoke.size, userId)
+            log.info(
+                "AUDIT: Revoked {} token(s) across {} oldest families for user='{}' (cap enforcement)",
+                revoked, toRevoke.size, AppUser.usernameFor(userId)
+            )
         }
     }
 

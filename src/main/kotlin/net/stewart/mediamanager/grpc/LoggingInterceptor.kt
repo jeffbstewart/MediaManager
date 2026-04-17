@@ -46,28 +46,27 @@ class LoggingInterceptor : ServerInterceptor {
         val wrappedCall = object : SimpleForwardingServerCall<ReqT, RespT>(call) {
             override fun close(status: Status, trailers: Metadata) {
                 val elapsedMs = (System.nanoTime() - startNanos) / 1_000_000
-                val username = try { USER_CONTEXT_KEY.get()?.username } catch (_: Exception) { null }
-                val userStr = if (username != null) " user=$username" else ""
+                val username = try { USER_CONTEXT_KEY.get()?.username } catch (_: Exception) { null } ?: "-"
 
                 when {
                     status.isOk -> {
-                        log.info("OK {}{}  {}ms", method, userStr, elapsedMs)
+                        log.info("OK {} {}ms user={}", method, elapsedMs, username)
                     }
                     isClientError(status) -> {
                         // Client errors: log at WARN with the description
                         // Redact description for auth methods (may contain username-as-password)
                         val desc = if (method in AUTH_METHODS) "[redacted]"
                             else (status.description ?: status.code.name)
-                        log.warn("{} {}{}  {}ms  {}", status.code, method, userStr, elapsedMs, desc)
+                        log.warn("{} {} {}ms user={} {}", status.code, method, elapsedMs, username, desc)
                     }
                     else -> {
                         // Server errors: log at ERROR
                         val desc = status.description ?: status.code.name
                         val cause = status.cause
                         if (cause != null) {
-                            log.error("{} {}{}  {}ms  {}", status.code, method, userStr, elapsedMs, desc, cause)
+                            log.error("{} {} {}ms user={} {}", status.code, method, elapsedMs, username, desc, cause)
                         } else {
-                            log.error("{} {}{}  {}ms  {}", status.code, method, userStr, elapsedMs, desc)
+                            log.error("{} {} {}ms user={} {}", status.code, method, elapsedMs, username, desc)
                         }
                     }
                 }

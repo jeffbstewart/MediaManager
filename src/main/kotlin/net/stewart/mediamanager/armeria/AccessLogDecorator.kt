@@ -38,6 +38,7 @@ class AccessLogDecorator : DecoratingHttpServiceFunction {
             val elapsedMs = Duration.ofNanos(requestLog.responseDurationNanos()).toMillis()
             val responseSize = requestLog.responseLength()
             val clientIp = ctx.clientAddress().hostAddress
+            val username = ArmeriaAuthDecorator.getUser(ctx)?.username ?: "-"
 
             // Skip gRPC — those are logged with proper granularity by
             // LoggingInterceptor at grpc.access.
@@ -52,8 +53,8 @@ class AccessLogDecorator : DecoratingHttpServiceFunction {
                 return@thenAccept
             }
 
-            log.info("{} {} {} {}ms {}B {}",
-                method, uri, status, elapsedMs, responseSize, clientIp)
+            log.info("{} {} {} {}ms {}B {} user={}",
+                method, uri, status, elapsedMs, responseSize, clientIp, username)
         }
 
         return delegate.serve(ctx, req)

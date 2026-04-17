@@ -407,7 +407,7 @@ object AuthService {
                 .execute()
         }
         if (deleted > 0) {
-            log.info("AUDIT: Invalidated {} sessions for user_id={}", deleted, userId)
+            log.info("AUDIT: Invalidated {} sessions for user='{}'", deleted, AppUser.usernameFor(userId))
         }
         PairingService.revokeAllForUser(userId)
         JwtService.revokeAllForUser(userId)
@@ -424,7 +424,7 @@ object AuthService {
         if (currentTokenHash != null && token.token_hash == currentTokenHash) return false
         evictTokenCache(token.token_hash)
         token.delete()
-        log.info("AUDIT: Session token id={} revoked for user_id={}", tokenId, token.user_id)
+        log.info("AUDIT: Session token id={} revoked for user='{}'", tokenId, AppUser.usernameFor(token.user_id))
         return true
     }
 
@@ -451,7 +451,7 @@ object AuthService {
             }
         }
         if (deleted > 0) {
-            log.info("AUDIT: Revoked {} sessions for user_id={} (kept current)", deleted, userId)
+            log.info("AUDIT: Revoked {} sessions for user='{}' (kept current)", deleted, AppUser.usernameFor(userId))
         }
     }
 
