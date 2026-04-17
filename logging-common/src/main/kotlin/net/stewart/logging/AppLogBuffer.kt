@@ -1,4 +1,4 @@
-package net.stewart.mediamanager.service
+package net.stewart.logging
 
 import java.io.PrintWriter
 import java.io.StringWriter

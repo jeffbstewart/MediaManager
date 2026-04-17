@@ -1,4 +1,4 @@
-package net.stewart.mediamanager.logging
+package net.stewart.logging
 
 import org.slf4j.ILoggerFactory
 import org.slf4j.Logger

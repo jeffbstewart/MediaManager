@@ -1,4 +1,4 @@
-package net.stewart.mediamanager.logging
+package net.stewart.logging
 
 import io.opentelemetry.api.common.AttributeKey
 import io.opentelemetry.api.logs.Severity
@@ -12,22 +12,21 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
- * Ships log records from MediaManager's custom SLF4J pipeline to a
- * Binnacle instance via OTLP/HTTP. Backed by the OTel Java SDK's
+ * Ships log records from the custom SLF4J pipeline to a Binnacle
+ * instance via OTLP/HTTP. Backed by the OTel Java SDK's
  * [BatchLogRecordProcessor] so the logging path is never blocked on
  * network I/O — records are queued in memory and flushed in the
  * background.
  *
- * The singleton follows the same opt-in pattern as other external
- * integrations (TMDB, Keepa): if the env vars are absent, [init]
- * returns [Status.NOT_CONFIGURED] and [emit] is a no-op.
+ * Opt-in: if the env vars are absent, [init] returns
+ * [Status.NOT_CONFIGURED] and [emit] is a no-op.
  */
 object BinnacleExporter {
 
-    /** System property read from secrets/.env. Base URL, e.g. http://172.16.4.12:4318. */
+    /** System property read from the environment. Base URL, e.g. http://172.16.4.12:4318. */
     private const val PROP_ENDPOINT = "BINNACLE_ENDPOINT"
 
-    /** System property read from secrets/.env. Shared write-path API key. */
+    /** System property read from the environment. Shared write-path API key. */
     private const val PROP_API_KEY = "BINNACLE_API_KEY"
 
     private val ATTR_THREAD_NAME = AttributeKey.stringKey("thread.name")
@@ -64,8 +63,15 @@ object BinnacleExporter {
      * torn down and [emit] remains a no-op.
      *
      * Safe to call more than once — subsequent calls are no-ops.
+     *
+     * @param serviceName OTel `service.name` resource attribute. Each
+     *   app using this module passes its own identity (e.g.
+     *   `mediamanager-server`, `mediamanager-buddy`, `mediamanager-tv`)
+     *   so Binnacle can filter by it.
+     * @param serviceVersion OTel `service.version` resource attribute.
+     *   Defaults to `"dev"` if the caller doesn't have a version string.
      */
-    fun init(): Status {
+    fun init(serviceName: String, serviceVersion: String = "dev"): Status {
         if (otelLogger != null) return Status.ENABLED
 
         val endpoint = System.getProperty(PROP_ENDPOINT)
@@ -81,8 +87,8 @@ object BinnacleExporter {
         }
 
         val resource = Resource.builder()
-            .put(AttributeKey.stringKey("service.name"), "mediamanager-server")
-            .put(AttributeKey.stringKey("service.version"), javaClass.`package`?.implementationVersion ?: "dev")
+            .put(AttributeKey.stringKey("service.name"), serviceName)
+            .put(AttributeKey.stringKey("service.version"), serviceVersion)
             .put(AttributeKey.stringKey("service.instance.id"), hostname)
             .build()
 
@@ -109,12 +115,12 @@ object BinnacleExporter {
         // URL, and auth header that production records will use — if
         // the key is wrong or the endpoint is unreachable, the flush
         // fails and we tear down before enabling the exporter.
-        val probeLogger = provider.get("mediamanager")
+        val probeLogger = provider.get("net.stewart.logging")
         probeLogger.logRecordBuilder()
             .setTimestamp(Instant.now())
             .setSeverity(Severity.INFO)
             .setSeverityText("INFO")
-            .setBody("mediamanager-server log export starting")
+            .setBody("$serviceName log export starting")
             .emit()
 
         val result = provider.forceFlush().join(5, TimeUnit.SECONDS)

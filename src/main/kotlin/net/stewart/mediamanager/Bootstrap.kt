@@ -29,8 +29,8 @@ import net.stewart.mediamanager.service.PopulateSeasonsUpdater
 import net.stewart.mediamanager.service.MigrateAuxFilesUpdater
 import net.stewart.mediamanager.service.SchemaUpdaterRunner
 import net.stewart.mediamanager.service.UnlinkMovieEpisodesUpdater
-import net.stewart.mediamanager.logging.BinnacleExporter
-import net.stewart.mediamanager.logging.BinnacleExporter.Status
+import net.stewart.logging.BinnacleExporter
+import net.stewart.logging.BinnacleExporter.Status
 import org.flywaydb.core.Flyway
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -378,7 +378,9 @@ object Bootstrap {
     }
 
     private fun initBinnacle() {
-        when (BinnacleExporter.init()) {
+        // Read version from the server jar's manifest, not logging-common's.
+        val version = Bootstrap::class.java.`package`?.implementationVersion ?: "dev"
+        when (BinnacleExporter.init("mediamanager-server", version)) {
             Status.ENABLED -> {
                 log.info("Binnacle log export enabled")
                 Runtime.getRuntime().addShutdownHook(Thread { BinnacleExporter.shutdown() })
