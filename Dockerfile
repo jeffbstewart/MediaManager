@@ -19,6 +19,7 @@ COPY proto/ proto/
 COPY src/ src/
 COPY transcode-common/ transcode-common/
 COPY transcode-buddy/ transcode-buddy/
+COPY logging-common/ logging-common/
 RUN ./gradlew --no-daemon --max-workers=2 installDist
 
 # Stage 2: Runtime (Alpine for smaller image)
