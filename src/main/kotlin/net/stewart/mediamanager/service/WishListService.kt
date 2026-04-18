@@ -715,4 +715,126 @@ object WishListService {
                 it.open_library_work_id == openLibraryWorkId
         }
 
+    // --- Album wishes (M3). Keyed on musicbrainz_release_group_id. See docs/MUSIC.md. ---
+
+    data class AlbumWishInput(
+        val musicBrainzReleaseGroupId: String,
+        val title: String,
+        /**
+         * Display primary artist. For single-artist albums this is the artist
+         * name; for compilations the caller should pass "Various Artists" and
+         * set [isCompilation] = true, which triggers the compilation-aware
+         * Wishlist rendering (docs/MUSIC.md Q9).
+         */
+        val primaryArtist: String?,
+        val year: Int?,
+        /** Release MBID used by Cover Art Archive for the cover thumbnail. */
+        val coverReleaseId: String?,
+        val isCompilation: Boolean
+    )
+
+    /**
+     * Idempotent add: an existing ACTIVE wish returns unchanged; CANCELLED /
+     * FULFILLED wishes resurrect to ACTIVE rather than inserting a duplicate.
+     */
+    fun addAlbumWishForUser(userId: Long, input: AlbumWishInput): WishListItem {
+        val existing = findAlbumWish(userId, input.musicBrainzReleaseGroupId)
+        if (existing != null) {
+            val needsResurrect = existing.status != WishStatus.ACTIVE.name
+            if (needsResurrect) {
+                existing.status = WishStatus.ACTIVE.name
+                existing.fulfilled_at = null
+            }
+            existing.album_title = input.title
+            existing.album_primary_artist = input.primaryArtist
+            existing.album_year = input.year
+            existing.album_cover_release_id = input.coverReleaseId
+            existing.album_is_compilation = input.isCompilation
+            existing.save()
+            if (needsResurrect) {
+                log.info("Album wish resurrected: user={} releaseGroup={}",
+                    userId, input.musicBrainzReleaseGroupId)
+            }
+            return existing
+        }
+
+        val wish = WishListItem(
+            user_id = userId,
+            wish_type = WishType.ALBUM.name,
+            status = WishStatus.ACTIVE.name,
+            musicbrainz_release_group_id = input.musicBrainzReleaseGroupId,
+            album_title = input.title,
+            album_primary_artist = input.primaryArtist,
+            album_year = input.year,
+            album_cover_release_id = input.coverReleaseId,
+            album_is_compilation = input.isCompilation,
+            created_at = LocalDateTime.now()
+        )
+        wish.save()
+        log.info("Album wish added: user={} releaseGroup={} title=\"{}\"",
+            userId, input.musicBrainzReleaseGroupId, input.title)
+        return wish
+    }
+
+    fun removeAlbumWishForUser(userId: Long, musicBrainzReleaseGroupId: String): Boolean {
+        val wish = findAlbumWish(userId, musicBrainzReleaseGroupId) ?: return false
+        if (wish.status != WishStatus.ACTIVE.name) return false
+        wish.status = WishStatus.CANCELLED.name
+        wish.save()
+        log.info("Album wish cancelled: user={} releaseGroup={}",
+            userId, musicBrainzReleaseGroupId)
+        return true
+    }
+
+    fun getActiveAlbumWishesForUser(userId: Long): List<WishListItem> =
+        WishListItem.findAll()
+            .filter {
+                it.user_id == userId &&
+                    it.wish_type == WishType.ALBUM.name &&
+                    it.status == WishStatus.ACTIVE.name
+            }
+            .sortedByDescending { it.created_at }
+
+    /** Fast membership check for ArtistScreen's Other Works rendering. */
+    fun activeAlbumWishReleaseGroupIdsForUser(userId: Long): Set<String> =
+        WishListItem.findAll()
+            .asSequence()
+            .filter {
+                it.user_id == userId &&
+                    it.wish_type == WishType.ALBUM.name &&
+                    it.status == WishStatus.ACTIVE.name
+            }
+            .mapNotNull { it.musicbrainz_release_group_id }
+            .toSet()
+
+    /**
+     * On album ingest, flip any ACTIVE ALBUM wish for this release-group
+     * across all users to FULFILLED. Called by [MusicIngestionService.ingest]
+     * after a title is created/reused.
+     */
+    fun fulfillAlbumWishes(musicBrainzReleaseGroupId: String) {
+        val wishes = WishListItem.findAll().filter {
+            it.wish_type == WishType.ALBUM.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.musicbrainz_release_group_id == musicBrainzReleaseGroupId
+        }
+        if (wishes.isEmpty()) return
+
+        val now = LocalDateTime.now()
+        for (wish in wishes) {
+            wish.status = WishStatus.FULFILLED.name
+            wish.fulfilled_at = now
+            wish.save()
+        }
+        log.info("Fulfilled {} album wish(es) for release-group {}",
+            wishes.size, musicBrainzReleaseGroupId)
+    }
+
+    private fun findAlbumWish(userId: Long, musicBrainzReleaseGroupId: String): WishListItem? =
+        WishListItem.findAll().firstOrNull {
+            it.user_id == userId &&
+                it.wish_type == WishType.ALBUM.name &&
+                it.musicbrainz_release_group_id == musicBrainzReleaseGroupId
+        }
+
 }

@@ -58,5 +58,39 @@
     } @else {
       <p class="empty-state">No albums in your collection by this artist yet.</p>
     }
+
+    @if (a.other_works && a.other_works.length > 0) {
+      <h2>Other Works</h2>
+      <p class="muted">Albums by this artist from MusicBrainz that aren't in your collection. Tap the heart to wish-list.</p>
+      <div class="poster-grid">
+        @for (work of a.other_works; track work.release_group_id) {
+          <div class="poster-card unowned">
+            <div class="poster-wrapper">
+              @if (work.cover_url) {
+                <img [src]="work.cover_url" [alt]="work.title" class="poster-img"
+                     loading="lazy" decoding="async" />
+              } @else {
+                <div class="poster-placeholder cover-placeholder">
+                  <mat-icon>album</mat-icon>
+                </div>
+              }
+              <button class="wish-btn" [class.wished]="work.already_wished"
+                      type="button"
+                      [attr.aria-label]="work.already_wished ? 'Remove from wish list' : 'Add to wish list'"
+                      (click)="toggleWish(work)">
+                <mat-icon>{{ work.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+              </button>
+            </div>
+            <span class="poster-title">{{ work.title }}</span>
+            <span class="poster-meta">
+              @if (work.is_compilation) { Compilation }
+              @if (work.year) {
+                @if (work.is_compilation) { &nbsp;·&nbsp; }{{ work.year }}
+              }
+            </span>
+          </div>
+        }
+      </div>
+    }
   }
 </div>

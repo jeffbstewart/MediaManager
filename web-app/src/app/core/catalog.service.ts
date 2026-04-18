@@ -349,6 +349,7 @@ export interface WishListResponse {
   media_wishes: MediaWish[];
   transcode_wishes: TranscodeWish[];
   book_wishes: BookWish[];
+  album_wishes?: AlbumWish[];
   has_any_media_wish: boolean;
 }
 
@@ -476,6 +477,7 @@ export interface ArtistDetail {
   end_date: string | null;
   musicbrainz_artist_id: string | null;
   owned_albums: ArtistOwnedAlbum[];
+  other_works: ArtistOtherWork[];
 }
 
 export interface ArtistOwnedAlbum {
@@ -484,6 +486,36 @@ export interface ArtistOwnedAlbum {
   poster_url: string | null;
   release_year: number | null;
   track_count: number | null;
+}
+
+export interface ArtistOtherWork {
+  release_group_id: string;
+  title: string;
+  year: number | null;
+  primary_type: string | null;
+  secondary_types: string[];
+  is_compilation: boolean;
+  cover_url: string | null;
+  already_wished: boolean;
+}
+
+export interface AlbumWishInput {
+  release_group_id: string;
+  title: string;
+  primary_artist: string | null;
+  year: number | null;
+  cover_release_id: string | null;
+  is_compilation: boolean;
+}
+
+export interface AlbumWish {
+  id: number;
+  release_group_id: string;
+  title: string;
+  primary_artist: string | null;
+  year: number | null;
+  cover_url: string | null;
+  is_compilation: boolean;
 }
 
 export interface BookSeriesVolume {
@@ -610,6 +642,15 @@ export class CatalogService {
 
   async removeBookWish(olWorkId: string): Promise<{ removed: boolean }> {
     return firstValueFrom(this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/books/${olWorkId}`));
+  }
+
+  async addAlbumWish(input: AlbumWishInput): Promise<{ id: number; status: string }> {
+    return firstValueFrom(this.http.post<{ id: number; status: string }>('/api/v2/wishlist/albums', input));
+  }
+
+  async removeAlbumWish(releaseGroupId: string): Promise<{ removed: boolean }> {
+    return firstValueFrom(
+      this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/albums/${releaseGroupId}`));
   }
 
   async getReadingProgress(mediaItemId: number): Promise<ReadingProgress> {

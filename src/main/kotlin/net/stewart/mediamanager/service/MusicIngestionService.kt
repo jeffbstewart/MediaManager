@@ -90,6 +90,9 @@ object MusicIngestionService {
             OwnershipPhotoService.resolveOrphans(effectiveUpc, mediaItem.id!!)
         }
 
+        // Fulfill any active album wishes for this release-group (across users).
+        WishListService.fulfillAlbumWishes(lookup.musicBrainzReleaseGroupId)
+
         log.info(
             "Album ingested: upc={} mediaFormat={} releaseGroup={} title='{}' titleReused={}",
             effectiveUpc, mediaFormat.name, lookup.musicBrainzReleaseGroupId, lookup.title, reused

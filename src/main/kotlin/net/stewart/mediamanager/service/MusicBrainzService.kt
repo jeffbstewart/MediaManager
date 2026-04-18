@@ -76,6 +76,34 @@ sealed class MusicBrainzResult {
     data class Error(val message: String, val rateLimited: Boolean = false) : MusicBrainzResult()
 }
 
+/**
+ * One release-group from an artist's discography (`/ws/2/release-group`).
+ * Used to populate ArtistScreen's "Other Works" panel. No tracklist yet —
+ * the user clicks through to wishlist, so we don't need per-track detail
+ * on the artist page.
+ */
+data class ArtistReleaseGroupRef(
+    val musicBrainzReleaseGroupId: String,
+    val title: String,
+    /** "Album", "EP", "Single", ... from MB's `primary-type`. */
+    val primaryType: String?,
+    /**
+     * Secondary types like "Compilation" / "Live" / "Soundtrack". Drives the
+     * compilation-aware display rule on Wishlist rendering (docs/MUSIC.md Q9).
+     */
+    val secondaryTypes: List<String>,
+    val firstReleaseYear: Int?,
+    /**
+     * One representative release MBID for Cover Art Archive lookups. MB's
+     * release-group endpoint doesn't return the releases themselves, so
+     * this is null at the listing step — the wishlist-add flow resolves it
+     * lazily when the user clicks the heart.
+     */
+    val representativeReleaseId: String?
+) {
+    val isCompilation: Boolean get() = secondaryTypes.any { it.equals("Compilation", ignoreCase = true) }
+}
+
 interface MusicBrainzService {
     /**
      * Looks up a release by its EAN-13 / UPC barcode. Returns the first
@@ -86,6 +114,16 @@ interface MusicBrainzService {
 
     /** Looks up a specific release by MBID. Used when the caller already has an ID. */
     fun lookupByReleaseMbid(releaseMbid: String): MusicBrainzResult
+
+    /**
+     * Returns up to [limit] release-groups from an artist's discography,
+     * filtered to type=Album (primary type) so EPs / singles / compilation
+     * appearances don't dominate the Other Works grid. Secondary types
+     * still carry through so the caller can distinguish compilations.
+     * Empty list on error — callers treat "no discography" and "fetch
+     * failed" the same way for UI.
+     */
+    fun listArtistReleaseGroups(artistMbid: String, limit: Int = 100): List<ArtistReleaseGroupRef>
 
     companion object {
         /** Path the image proxy exposes for a release's cover art. */
@@ -157,6 +195,53 @@ class MusicBrainzHttpService : MusicBrainzService {
             log.warn("MusicBrainz release parse failed for {}: {}", releaseMbid, e.message)
             MusicBrainzResult.Error("parse failed: ${e.message}")
         }
+    }
+
+    override fun listArtistReleaseGroups(artistMbid: String, limit: Int): List<ArtistReleaseGroupRef> {
+        if (!MBID_RE.matches(artistMbid)) return emptyList()
+        val url = "$BASE/release-group?artist=$artistMbid&type=album&limit=$limit&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited listing release-groups for artist {}", artistMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz list-release-groups failed for {}: {}", artistMbid, e.message)
+            return emptyList()
+        }
+
+        return try {
+            parseArtistReleaseGroups(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz release-group parse failed for {}: {}", artistMbid, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseArtistReleaseGroups(body: String): List<ArtistReleaseGroupRef> {
+        val root = mapper.readTree(body)
+        val groups = root.path("release-groups")
+        if (!groups.isArray) return emptyList()
+        val out = mutableListOf<ArtistReleaseGroupRef>()
+        for (g in groups) {
+            val id = g.textOrNull("id") ?: continue
+            val title = g.textOrNull("title") ?: continue
+            val primary = g.textOrNull("primary-type")
+            val secondaryNode = g.path("secondary-types")
+            val secondary = if (secondaryNode.isArray) {
+                secondaryNode.mapNotNull { n -> n.takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() } }
+            } else emptyList()
+            val year = g.textOrNull("first-release-date")?.let { extractYear(it) }
+            out += ArtistReleaseGroupRef(
+                musicBrainzReleaseGroupId = id,
+                title = title,
+                primaryType = primary,
+                secondaryTypes = secondary,
+                firstReleaseYear = year,
+                representativeReleaseId = null
+            )
+        }
+        return out
     }
 
     internal fun pickFirstReleaseMbid(body: String): String? {

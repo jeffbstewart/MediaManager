@@ -34,6 +34,15 @@ data class WishListItem(
     var book_series_id: Long? = null,
     var book_series_number: java.math.BigDecimal? = null,
 
+    // ALBUM wish fields — see docs/MUSIC.md M3.
+    var musicbrainz_release_group_id: String? = null,
+    var album_title: String? = null,
+    var album_primary_artist: String? = null,
+    var album_year: Int? = null,
+    /** MB release MBID for Cover Art Archive fetch (separate from the release-group dedup key). */
+    var album_cover_release_id: String? = null,
+    var album_is_compilation: Boolean = false,
+
     var notes: String? = null,
     var created_at: LocalDateTime? = null,
     var fulfilled_at: LocalDateTime? = null

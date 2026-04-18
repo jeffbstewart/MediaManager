@@ -16,6 +16,9 @@ import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.service.MusicBrainzHttpService
+import net.stewart.mediamanager.service.MusicBrainzService
+import net.stewart.mediamanager.service.WishListService
 
 /**
  * Artist browse surface. Mirrors [AuthorHttpService] but reads from the
@@ -24,7 +27,9 @@ import net.stewart.mediamanager.entity.TitleArtist
  * M2 version shows bio, headshot, begin/end dates, and the owned albums.
  */
 @Blocking
-class ArtistHttpService {
+class ArtistHttpService(
+    private val musicBrainz: MusicBrainzService = MusicBrainzHttpService()
+) {
 
     private val gson = Gson()
 
@@ -82,6 +87,13 @@ class ArtistHttpService {
             { (it["title_name"] as? String)?.lowercase() ?: "" }
         ))
 
+        // "Other Works" — MusicBrainz discography filtered to release-groups
+        // the user doesn't already own. Each entry carries `already_wished`
+        // so the UI renders the heart in the right state without a second
+        // fetch. Empty when the artist has no musicbrainz_artist_id (shouldn't
+        // happen for M1-ingested artists).
+        val otherWorks = buildOtherWorks(artist, user.id!!, titles)
+
         val result = mapOf(
             "id" to artist.id,
             "name" to artist.name,
@@ -92,9 +104,45 @@ class ArtistHttpService {
             "begin_date" to artist.begin_date?.toString(),
             "end_date" to artist.end_date?.toString(),
             "musicbrainz_artist_id" to artist.musicbrainz_artist_id,
-            "owned_albums" to ownedAlbums
+            "owned_albums" to ownedAlbums,
+            "other_works" to otherWorks
         )
         return jsonResponse(gson.toJson(result))
+    }
+
+    private fun buildOtherWorks(
+        artist: Artist,
+        userId: Long,
+        ownedTitles: List<Title>
+    ): List<Map<String, Any?>> {
+        val mbid = artist.musicbrainz_artist_id ?: return emptyList()
+
+        val ownedReleaseGroupIds = ownedTitles
+            .asSequence()
+            .mapNotNull { it.musicbrainz_release_group_id }
+            .toSet()
+
+        val wishedIds = WishListService.activeAlbumWishReleaseGroupIdsForUser(userId)
+
+        return musicBrainz.listArtistReleaseGroups(mbid, limit = 100)
+            .asSequence()
+            .filter { it.musicBrainzReleaseGroupId !in ownedReleaseGroupIds }
+            .map { rg ->
+                mapOf(
+                    "release_group_id" to rg.musicBrainzReleaseGroupId,
+                    "title" to rg.title,
+                    "year" to rg.firstReleaseYear,
+                    "primary_type" to rg.primaryType,
+                    "secondary_types" to rg.secondaryTypes,
+                    "is_compilation" to rg.isCompilation,
+                    // No cover URL yet — would require a second MB round trip
+                    // per release-group to resolve a representative release.
+                    // Wishlist "add" resolves it lazily when the heart is clicked.
+                    "cover_url" to null,
+                    "already_wished" to (rg.musicBrainzReleaseGroupId in wishedIds)
+                )
+            }
+            .toList()
     }
 
     /**

@@ -78,6 +78,7 @@ class EnrichmentIntegrationTest {
     private class StubMusicBrainzService : MusicBrainzService {
         override fun lookupByBarcode(barcode: String) = MusicBrainzResult.NotFound
         override fun lookupByReleaseMbid(releaseMbid: String) = MusicBrainzResult.NotFound
+        override fun listArtistReleaseGroups(artistMbid: String, limit: Int) = emptyList<ArtistReleaseGroupRef>()
     }
 
     /** TMDB service that returns controlled responses without making HTTP calls. */

@@ -103,10 +103,29 @@ class WishListHttpService {
             )
         }
 
+        // Album wishes — M3. Compilation-shaped rows (is_compilation=true,
+        // or >2 artists at the album-level credit — here the primary_artist
+        // string is "Various Artists") are rendered title-first on the
+        // client per docs/MUSIC.md Q9; we expose the raw fields and let the
+        // UI apply the display rule.
+        val albumWishes = WishListService.getActiveAlbumWishesForUser(userId).map { w ->
+            mapOf(
+                "id" to w.id,
+                "release_group_id" to w.musicbrainz_release_group_id,
+                "title" to w.album_title,
+                "primary_artist" to w.album_primary_artist,
+                "year" to w.album_year,
+                "cover_url" to w.album_cover_release_id
+                    ?.let { rel -> "/proxy/caa/release/$rel/front-500" },
+                "is_compilation" to w.album_is_compilation
+            )
+        }
+
         return jsonResponse(gson.toJson(mapOf(
             "media_wishes" to mediaWishes,
             "transcode_wishes" to transcodeItems,
             "book_wishes" to bookWishes,
+            "album_wishes" to albumWishes,
             "has_any_media_wish" to hasAnyMediaWish
         )))
     }
@@ -148,6 +167,46 @@ class WishListHttpService {
     ): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         val removed = WishListService.removeBookWishForUser(user.id!!, olWorkId)
+        return jsonResponse(gson.toJson(mapOf("removed" to removed)))
+    }
+
+    /** Add an album to the user's wishlist, keyed on MusicBrainz release-group MBID. */
+    @Post("/api/v2/wishlist/albums")
+    fun addAlbumWish(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+
+        val rgId = (body["release_group_id"] as? String)?.ifBlank { null }
+            ?: return badRequest("release_group_id required")
+        val title = (body["title"] as? String)?.ifBlank { null }
+            ?: return badRequest("title required")
+        val primaryArtist = body["primary_artist"] as? String
+        val year = (body["year"] as? Number)?.toInt()
+        val coverReleaseId = body["cover_release_id"] as? String
+        val isCompilation = body["is_compilation"] as? Boolean ?: false
+
+        val wish = WishListService.addAlbumWishForUser(
+            user.id!!,
+            WishListService.AlbumWishInput(
+                musicBrainzReleaseGroupId = rgId,
+                title = title,
+                primaryArtist = primaryArtist,
+                year = year,
+                coverReleaseId = coverReleaseId,
+                isCompilation = isCompilation
+            )
+        )
+        return jsonResponse(gson.toJson(mapOf("id" to wish.id, "status" to wish.status)))
+    }
+
+    /** Remove an album wish by MusicBrainz release-group MBID. */
+    @Delete("/api/v2/wishlist/albums/{releaseGroupId}")
+    fun removeAlbumWish(
+        ctx: ServiceRequestContext,
+        @Param("releaseGroupId") releaseGroupId: String
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val removed = WishListService.removeAlbumWishForUser(user.id!!, releaseGroupId)
         return jsonResponse(gson.toJson(mapOf("removed" to removed)))
     }
 

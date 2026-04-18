@@ -142,6 +142,30 @@
     </div>
   }
 
+  <!-- Album Wishes. Compilation entries render title-first with a
+       "Compilation · year" subtitle; single-artist entries read
+       "Artist · year". See docs/MUSIC.md Q9. -->
+  @if (albumWishes().length > 0) {
+    <h3>Album Wishes</h3>
+    <div class="transcode-list">
+      @for (wish of albumWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.cover_url) {
+            <img [src]="wish.cover_url" [alt]="wish.title" class="transcode-poster"
+                 loading="lazy" decoding="async" />
+          }
+          <span class="transcode-title">
+            {{ wish.title }}
+            <span class="book-wish-author"> &nbsp;·&nbsp; {{ albumWishSubtitle(wish) }}</span>
+          </span>
+          <button class="remove-btn" (click)="removeAlbumWish(wish)" aria-label="Remove from wish list">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
   <!-- First-wish interstitial -->
   @if (showInterstitial()) {
     <div class="modal-overlay" (click)="cancelInterstitial()">

@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
-  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish, tmdbImageUrl,
+  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish, AlbumWish, tmdbImageUrl,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 import { WishInterstitialService } from '../../core/wish-interstitial.service';
@@ -26,6 +26,7 @@ export class WishListComponent implements OnInit {
   readonly mediaWishes = signal<MediaWish[]>([]);
   readonly transcodeWishes = signal<TranscodeWish[]>([]);
   readonly bookWishes = signal<BookWish[]>([]);
+  readonly albumWishes = signal<AlbumWish[]>([]);
   readonly hasAnyMediaWish = signal(false);
 
   readonly searchQuery = signal('');
@@ -48,6 +49,7 @@ export class WishListComponent implements OnInit {
       this.mediaWishes.set(data.media_wishes);
       this.transcodeWishes.set(data.transcode_wishes);
       this.bookWishes.set(data.book_wishes ?? []);
+      this.albumWishes.set(data.album_wishes ?? []);
       this.hasAnyMediaWish.set(data.has_any_media_wish);
     } catch {
       this.error.set('Failed to load wish list');
@@ -138,6 +140,26 @@ export class WishListComponent implements OnInit {
   async removeBookWish(wish: BookWish): Promise<void> {
     await this.catalog.removeBookWish(wish.ol_work_id);
     await this.refresh();
+  }
+
+  async removeAlbumWish(wish: AlbumWish): Promise<void> {
+    await this.catalog.removeAlbumWish(wish.release_group_id);
+    await this.refresh();
+  }
+
+  /**
+   * Compilation-aware subtitle for an album wish. Matches docs/MUSIC.md Q9:
+   * compilation-flagged entries render "Compilation · year" rather than
+   * leading with "Various Artists" or a long artist list.
+   */
+  albumWishSubtitle(wish: AlbumWish): string {
+    if (wish.is_compilation) {
+      return wish.year != null ? `Compilation \u00B7 ${wish.year}` : 'Compilation';
+    }
+    const parts: string[] = [];
+    if (wish.primary_artist) parts.push(wish.primary_artist);
+    if (wish.year != null) parts.push(String(wish.year));
+    return parts.join(' \u00B7 ');
   }
 
   posterUrl(path: string): string { return tmdbImageUrl(path, 'w185')!; }

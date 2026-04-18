@@ -2,8 +2,9 @@ import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@ang
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { CatalogService, ArtistDetail } from '../../core/catalog.service';
+import { CatalogService, ArtistDetail, ArtistOtherWork } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
+import { WishInterstitialService } from '../../core/wish-interstitial.service';
 
 @Component({
   selector: 'app-artist',
@@ -15,6 +16,7 @@ import { AppRoutes } from '../../core/routes';
 export class ArtistComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
+  private readonly wishInterstitial = inject(WishInterstitialService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -43,6 +45,40 @@ export class ArtistComponent implements OnInit {
    * Renders "1965 – 1973" for a disbanded group, "1965 – present" for an active
    * group, "Born 1949" for an individual, etc. Date strings are ISO.
    */
+  /**
+   * Toggles the heart icon on an Other-Works entry. Uses the existing
+   * wish-interstitial confirmation so new wishlisters see the "visible
+   * to admins" disclosure once per session. Compilation shape propagates
+   * to the wish row so the Wishlist page renders title-first.
+   */
+  async toggleWish(work: ArtistOtherWork): Promise<void> {
+    const a = this.artist();
+    if (!a) return;
+
+    if (work.already_wished) {
+      await this.catalog.removeAlbumWish(work.release_group_id);
+      work.already_wished = false;
+    } else {
+      if (await this.wishInterstitial.needsInterstitial()) {
+        if (!confirm('Your wish list entries are visible to administrators to help inform purchase decisions. Continue?')) return;
+        this.wishInterstitial.acknowledge();
+      }
+      await this.catalog.addAlbumWish({
+        release_group_id: work.release_group_id,
+        title: work.title,
+        // For compilation-shaped entries we record "Various Artists" as the
+        // display string, per docs/MUSIC.md Q9. Otherwise the current
+        // artist's name is the primary credit.
+        primary_artist: work.is_compilation ? 'Various Artists' : a.name,
+        year: work.year,
+        cover_release_id: null,
+        is_compilation: work.is_compilation,
+      });
+      work.already_wished = true;
+    }
+    this.artist.update(v => v ? { ...v } : v);
+  }
+
   formatLifespan(): string {
     const a = this.artist();
     if (!a?.begin_date) return '';
