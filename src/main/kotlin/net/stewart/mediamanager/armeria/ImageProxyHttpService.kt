@@ -34,13 +34,14 @@ class ImageProxyHttpService {
         private val TMDB_FILE = Regex("^[a-zA-Z0-9]{20,64}\\.(jpg|jpeg|png|webp)$")
 
         /** OL cover kinds we allow. */
-        private val OL_KINDS = setOf("isbn", "olid", "author")
+        private val OL_KINDS = setOf("isbn", "olid", "author", "cover")
         private val OL_SIZES = setOf("S", "M", "L")
 
         private val ISBN_RE = Regex("^\\d{10,13}$")
         private val OL_EDITION_RE = Regex("^OL\\d+M$")        // edition
         private val OL_WORK_RE = Regex("^OL\\d+W$")           // work (some clients pass these)
         private val OL_AUTHOR_RE = Regex("^OL\\d+A$")         // author
+        private val OL_COVER_ID_RE = Regex("^\\d{1,12}$")     // OL numeric cover-image ID
     }
 
     // ------------------------------------------------------------------
@@ -77,6 +78,7 @@ class ImageProxyHttpService {
             "isbn" -> ISBN_RE.matches(key)
             "olid" -> OL_EDITION_RE.matches(key) || OL_WORK_RE.matches(key)
             "author" -> OL_AUTHOR_RE.matches(key)
+            "cover" -> OL_COVER_ID_RE.matches(key)
             else -> false
         }
         if (!keyOk) return refuse("ol", HttpStatus.BAD_REQUEST, "bad key")
@@ -84,10 +86,12 @@ class ImageProxyHttpService {
         // OL cover URLs:
         //   /b/isbn/{isbn}-{size}.jpg       book covers by ISBN
         //   /b/olid/{olid}-{size}.jpg       book covers by OL edition/work
+        //   /b/id/{cover_id}-{size}.jpg     book covers by OL numeric cover ID
         //   /a/olid/{author-olid}-{size}.jpg author photos
         val path = when (kind) {
             "isbn" -> "/b/isbn/$key-$size.jpg"
             "olid" -> "/b/olid/$key-$size.jpg"
+            "cover" -> "/b/id/$key-$size.jpg"
             "author" -> "/a/olid/$key-$size.jpg"
             else -> return refuse("ol", HttpStatus.BAD_REQUEST, "bad kind")
         }

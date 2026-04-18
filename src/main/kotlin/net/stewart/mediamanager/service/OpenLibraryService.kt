@@ -90,15 +90,17 @@ interface OpenLibraryService {
 
     companion object {
         /**
-         * Cover URL for an ISBN via OL's cover CDN. Size 'L' for detail screens,
-         * 'M' for list rows. Predictable — no API call.
+         * Same-origin URL pointing at our Open Library image proxy for this
+         * ISBN. The proxy (see ImageProxyHttpService + ImageProxyService)
+         * enforces the SSRF guards and caches the bytes to disk, so clients
+         * never talk to covers.openlibrary.org directly.
          */
         fun coverUrlByIsbn(isbn: String, size: CoverSize = CoverSize.L): String =
-            "https://covers.openlibrary.org/b/isbn/$isbn-${size.name}.jpg"
+            "/proxy/ol/isbn/$isbn/${size.name}"
 
-        /** Cover URL for an OL cover-CDN numeric ID (what the works endpoint returns). */
+        /** Proxy URL for an OL numeric cover ID (what /authors/.../works.json returns). */
         fun coverUrlByCoverId(coverId: Long, size: CoverSize = CoverSize.M): String =
-            "https://covers.openlibrary.org/b/id/$coverId-${size.name}.jpg"
+            "/proxy/ol/cover/$coverId/${size.name}"
     }
 
     enum class CoverSize { S, M, L }

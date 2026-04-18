@@ -144,9 +144,7 @@ class AuthorHttpService(
     }
 
     private fun headshotUrl(author: Author): String? = author.headshot_path
-        ?: author.open_library_author_id?.let { id ->
-            "https://covers.openlibrary.org/a/olid/$id-M.jpg"
-        }
+        ?: author.open_library_author_id?.let { id -> "/proxy/ol/author/$id/M" }
 
     private fun jsonResponse(json: String): HttpResponse {
         val bytes = json.toByteArray(Charsets.UTF_8)

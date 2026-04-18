@@ -219,7 +219,7 @@ class BookSeriesHttpService(
     private fun posterUrl(series: BookSeries): String? =
         series.poster_path?.let { path ->
             if (path.startsWith("isbn/")) {
-                "https://covers.openlibrary.org/b/isbn/${path.removePrefix("isbn/")}-M.jpg"
+                "/proxy/ol/isbn/${path.removePrefix("isbn/")}/M"
             } else path
         }
 

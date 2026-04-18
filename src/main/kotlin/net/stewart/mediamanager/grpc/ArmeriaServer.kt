@@ -125,12 +125,14 @@ object ArmeriaServer {
 
         val slowHandlerDecorator = net.stewart.mediamanager.armeria.SlowHandlerDecorator()
         val accessLogDecorator = net.stewart.mediamanager.armeria.AccessLogDecorator()
+        val cspDecorator = net.stewart.mediamanager.armeria.CspDecorator()
 
         val sb = Server.builder()
             .http(port)
             .meterRegistry(meterRegistry)
             .decorator(accessLogDecorator)
             .decorator(slowHandlerDecorator)
+            .decorator(cspDecorator)
             .service(grpcService)
 
         // All annotated HTTP services run on the blocking executor by default.
@@ -210,6 +212,10 @@ object ArmeriaServer {
 
         // Health check (no auth, lightweight — but blocking is harmless and consistent)
         blockingNoAuth(HealthHttpService())
+
+        // CSP violation sink — unauthenticated by design (violations can fire
+        // on the login page). Paired with CspDecorator.
+        blockingNoAuth(net.stewart.mediamanager.armeria.CspReportHttpService())
 
         // Image endpoints
         blocking(PosterHttpService())

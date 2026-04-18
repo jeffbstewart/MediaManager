@@ -149,7 +149,10 @@ class CollectionHttpService {
                 mapOf(
                     "tmdb_movie_id" to part.tmdb_movie_id,
                     "title_name" to part.title,
-                    "poster_url" to part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                    // Proxy through /proxy/tmdb so client IPs stay on our origin.
+                    // part.poster_path carries a leading slash, so the
+                    // concatenated URL lands as /proxy/tmdb/w185/abc.jpg.
+                    "poster_url" to part.poster_path?.let { "/proxy/tmdb/w185$it" },
                     "release_year" to part.release_date?.take(4)?.toIntOrNull(),
                     "owned" to false,
                     "playable" to false,

@@ -97,9 +97,7 @@ class WishListHttpService {
                 "ol_work_id" to w.open_library_work_id,
                 "title" to w.book_title,
                 "author" to w.book_author,
-                "cover_url" to w.book_cover_isbn?.let { isbn ->
-                    "https://covers.openlibrary.org/b/isbn/$isbn-M.jpg"
-                },
+                "cover_url" to w.book_cover_isbn?.let { isbn -> "/proxy/ol/isbn/$isbn/M" },
                 "series_id" to w.book_series_id,
                 "series_number" to w.book_series_number?.toPlainString()
             )
