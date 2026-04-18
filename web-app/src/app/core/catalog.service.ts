@@ -114,6 +114,12 @@ export interface TitleDetail {
   family_members: { id: number; name: string }[];
   similar_titles: CarouselTitle[];
   collection: { id: number; name: string } | null;
+  // Book-specific. Null/empty for non-book titles.
+  authors?: { id: number; name: string }[];
+  book_series?: { id: number; name: string; number: number | null } | null;
+  page_count?: number | null;
+  first_publication_year?: number | null;
+  open_library_work_id?: string | null;
 }
 
 export interface TranscodeInfo {

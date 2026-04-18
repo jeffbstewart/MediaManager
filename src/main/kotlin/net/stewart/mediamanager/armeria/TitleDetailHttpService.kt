@@ -11,6 +11,8 @@ import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.BookSeries
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.Episode
 import net.stewart.mediamanager.entity.FamilyMember
@@ -24,6 +26,7 @@ import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Tag
 import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.entity.TitleGenre
 import net.stewart.mediamanager.entity.TitleSeason
 import net.stewart.mediamanager.entity.TmdbCollection
@@ -222,6 +225,34 @@ class TitleDetailHttpService {
             } else null
         } else null
 
+        // Book-specific enrichment: authors, series link, physical metadata.
+        // Only populated when media_type = BOOK; always null-or-empty on
+        // movies / TV / personal so the client can treat them uniformly.
+        val isBook = title.media_type == MMMediaType.BOOK.name
+        val bookAuthors = if (isBook) {
+            val orderedLinks = TitleAuthor.findAll()
+                .filter { it.title_id == titleId }
+                .sortedBy { it.author_order }
+            val authorsById = Author.findAll()
+                .filter { a -> orderedLinks.any { it.author_id == a.id } }
+                .associateBy { it.id }
+            orderedLinks.mapNotNull { link ->
+                authorsById[link.author_id]?.let { a ->
+                    mapOf("id" to a.id, "name" to a.name)
+                }
+            }
+        } else emptyList()
+
+        val bookSeries = if (isBook && title.book_series_id != null) {
+            BookSeries.findById(title.book_series_id!!)?.let { s ->
+                mapOf(
+                    "id" to s.id,
+                    "name" to s.name,
+                    "number" to title.series_number
+                )
+            }
+        } else null
+
         // Digital editions for book titles — enumerated so the client can
         // render a "Read" button per edition. EPUB and PDF only; physical
         // editions don't belong here.
@@ -267,7 +298,12 @@ class TitleDetailHttpService {
             "seasons" to seasons,
             "family_members" to familyMembers,
             "similar_titles" to similarTitles,
-            "collection" to collection
+            "collection" to collection,
+            "authors" to bookAuthors,
+            "book_series" to bookSeries,
+            "page_count" to title.page_count,
+            "first_publication_year" to title.first_publication_year,
+            "open_library_work_id" to title.open_library_work_id
         )
 
         return HttpResponse.builder()

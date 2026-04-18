@@ -96,6 +96,39 @@
   flex-wrap: wrap;
 }
 
+// "by Author1 & Author2" — directly under the title, distinct from the
+// muted meta-row so the byline reads as part of the heading cluster.
+.byline {
+  font-size: 1rem;
+  opacity: 0.85;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+
+    &:hover {
+      border-bottom-color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+// "#3 of Foundation Series" — same visual weight as a caption.
+.series-line {
+  font-size: 0.875rem;
+  opacity: 0.7;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+
+    &:hover {
+      border-bottom-color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
 .rating-badge {
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;

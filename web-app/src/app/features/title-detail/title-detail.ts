@@ -43,6 +43,7 @@ export class TitleDetailComponent implements OnInit {
 
   get isPersonal(): boolean { return this.title()?.media_type === 'PERSONAL'; }
   get isTv(): boolean { return this.title()?.media_type === 'TV'; }
+  get isBook(): boolean { return this.title()?.media_type === 'BOOK'; }
 
   /** The transcode with saved progress (for resume button). */
   get resumeTranscode() {

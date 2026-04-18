@@ -31,9 +31,48 @@
             </button>
           </div>
 
+          <!-- Authors (books) — prominent byline directly under the title,
+               mirrors the "cast" surface for movies/TV. -->
+          @if (isBook && t.authors && t.authors.length > 0) {
+            <div class="byline">
+              by
+              @for (a of t.authors; track a.id; let last = $last) {
+                <a [routerLink]="routes.author(a.id)">{{ a.name }}</a>@if (!last) { & }
+              }
+            </div>
+          }
+
+          <!-- Series (books) — "#3 of Foundation Series" linked to the
+               series browse page. Omits the number when series_number is
+               null (OL sometimes doesn't know the volume). -->
+          @if (isBook && t.book_series; as bs) {
+            <div class="series-line">
+              @if (bs.number != null) {
+                <span>#{{ bs.number }} of </span>
+              } @else {
+                <span>Part of </span>
+              }
+              <a [routerLink]="routes.series(bs.id)">{{ bs.name }}</a>
+            </div>
+          }
+
           <!-- Metadata -->
           <div class="meta-row">
-            @if (!isPersonal) {
+            @if (isBook) {
+              @if (t.first_publication_year) {
+                <span [title]="t.release_year && t.release_year !== t.first_publication_year ? 'Original publication (this edition: ' + t.release_year + ')' : ''">
+                  First published {{ t.first_publication_year }}
+                </span>
+              } @else if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.page_count) {
+                <span>{{ t.page_count | number }} pages</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else if (!isPersonal) {
               @if (t.release_year) {
                 <span>{{ t.release_year }}</span>
               }
