@@ -34,6 +34,7 @@ export const AppRoutes = {
   adminTranscodeLinked: () => '/admin/transcodes/linked',
   adminTranscodeBacklog: () => '/admin/transcodes/backlog',
   adminUsers: () => '/admin/users',
+  adminBooksUnmatched: () => '/admin/books/unmatched',
   adminSettings: () => '/admin/settings',
   adminValuation: () => '/admin/valuation',
   adminPurchaseWishes: () => '/admin/purchase-wishes',

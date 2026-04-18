@@ -175,7 +175,7 @@ class BookScannerAgent(
                 filePath, metadata.isbn, when (lookup) {
                     is OpenLibraryResult.NotFound -> "NOT_FOUND"
                     is OpenLibraryResult.Error -> "ERROR(${lookup.message})"
-                    else -> "?"
+                    is OpenLibraryResult.Success -> "?"
                 })
         }
 

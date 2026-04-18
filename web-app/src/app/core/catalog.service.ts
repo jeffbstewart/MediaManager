@@ -86,6 +86,7 @@ export interface FeatureFlags {
   is_admin: boolean;
   wish_ready_count: number;
   unmatched_count: number;
+  unmatched_books_count?: number;
   data_quality_count: number;
   open_reports_count: number;
 }

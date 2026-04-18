@@ -103,7 +103,7 @@ class HealthWatchdog(private val mainPort: Int) {
 
         for ((thread, stack) in sorted) {
             sb.appendLine()
-            sb.appendLine("\"${thread.name}\" #${thread.id} ${thread.state}" +
+            sb.appendLine("\"${thread.name}\" #${thread.threadId()} ${thread.state}" +
                 if (thread.isDaemon) " daemon" else "" +
                 if (thread == Thread.currentThread()) " [WATCHDOG]" else "")
             for (frame in stack) {

@@ -61,6 +61,20 @@
     border-radius: 9999px;
     line-height: 1;
   }
+
+  // Red pill for admin-action items that should grab attention
+  // (e.g. unmatched ebooks awaiting resolution).
+  .red-badge {
+    background-color: #ef4444;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    line-height: 1;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
 }
 
 .top-toolbar {

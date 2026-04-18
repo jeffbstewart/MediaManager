@@ -13,6 +13,7 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.MediaFormat
+import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.UnmatchedBook
 import net.stewart.mediamanager.entity.UnmatchedBookStatus
 import net.stewart.mediamanager.service.BookIngestionService
@@ -85,7 +86,7 @@ class UnmatchedBookHttpService(
                 "error" to when (lookup) {
                     is OpenLibraryResult.NotFound -> "Open Library has no record of that ISBN"
                     is OpenLibraryResult.Error -> "Open Library error: ${lookup.message}"
-                    else -> "Unknown lookup failure"
+                    is OpenLibraryResult.Success -> "Unreachable: handled above"
                 }
             )))
         }
@@ -108,6 +109,104 @@ class UnmatchedBookHttpService(
             "title_name" to result.title.name,
             "reused" to result.titleReused
         )))
+    }
+
+    /**
+     * Admin picks an existing [Title] to link the file to, bypassing
+     * Open Library entirely. Useful when the parsed ISBN is wrong or the
+     * title is already in the catalog from a physical edition.
+     */
+    @Post("/api/v2/admin/unmatched-books/{id}/link-title")
+    fun linkByTitle(
+        ctx: ServiceRequestContext,
+        @Param("id") id: Long
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val row = UnmatchedBook.findById(id) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+        val titleId = (body["title_id"] as? Number)?.toLong()
+            ?: return badRequest("title_id required")
+
+        val title = Title.findById(titleId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        if (title.media_type != net.stewart.mediamanager.entity.MediaType.BOOK.name) {
+            return badRequest("title is not a book")
+        }
+
+        val format = runCatching { MediaFormat.valueOf(row.media_format) }.getOrDefault(MediaFormat.EBOOK_EPUB)
+        val result = BookIngestionService.linkDigitalEditionToTitle(
+            filePath = row.file_path,
+            fileFormat = format,
+            title = title
+        )
+        row.match_status = UnmatchedBookStatus.LINKED.name
+        row.linked_title_id = result.title.id
+        row.linked_at = LocalDateTime.now()
+        row.save()
+
+        return jsonResponse(gson.toJson(mapOf(
+            "ok" to true,
+            "title_id" to result.title.id,
+            "title_name" to result.title.name
+        )))
+    }
+
+    /**
+     * Free-text search against Open Library. Used when the parsed ISBN is
+     * wrong or missing and the admin wants to find the right work by title
+     * / author. Results include a pre-picked ISBN (when OL has one for the
+     * work) so the client can just hit [linkByIsbn] with that value.
+     */
+    @Get("/api/v2/admin/unmatched-books/search-ol")
+    fun searchOpenLibrary(ctx: ServiceRequestContext, @Param("q") query: String): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val q = query.trim()
+        if (q.length < 2) return jsonResponse(gson.toJson(mapOf("results" to emptyList<Any>())))
+
+        val hits = openLibrary.searchWorks(q, limit = 10)
+        val results = hits.map { h ->
+            mapOf(
+                "work_id" to h.workId,
+                "title" to h.title,
+                "authors" to h.authors,
+                "year" to h.firstPublishYear,
+                "cover_url" to h.coverId?.let { OpenLibraryService.coverUrlByCoverId(it) },
+                "isbn" to h.isbn
+            )
+        }
+        return jsonResponse(gson.toJson(mapOf("results" to results)))
+    }
+
+    /** Search BOOK titles in the catalog for manual linking. */
+    @Get("/api/v2/admin/unmatched-books/search-titles")
+    fun searchBookTitles(ctx: ServiceRequestContext, @Param("q") query: String): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val q = query.trim()
+        if (q.length < 2) return jsonResponse(gson.toJson(mapOf("titles" to emptyList<Any>())))
+
+        val lower = q.lowercase()
+        val matches = Title.findAll()
+            .filter { !it.hidden && it.media_type == net.stewart.mediamanager.entity.MediaType.BOOK.name }
+            .filter {
+                it.name.lowercase().contains(lower) ||
+                    (it.sort_name?.lowercase()?.contains(lower) == true)
+            }
+            .sortedBy { it.name.lowercase() }
+            .take(20)
+
+        val results = matches.map { t ->
+            mapOf(
+                "id" to t.id,
+                "name" to t.name,
+                "release_year" to t.release_year
+            )
+        }
+        return jsonResponse(gson.toJson(mapOf("titles" to results)))
     }
 
     @Post("/api/v2/admin/unmatched-books/{id}/ignore")

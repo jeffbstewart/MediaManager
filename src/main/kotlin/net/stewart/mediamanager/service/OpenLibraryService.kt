@@ -66,6 +66,28 @@ sealed class OpenLibraryResult {
     data class Error(val message: String, val rateLimited: Boolean = false) : OpenLibraryResult()
 }
 
+/**
+ * A single hit from Open Library's free-text search
+ * (`/search.json?q=<query>`). The hit carries enough metadata to render a
+ * picker row (title, authors, year, cover) and, for the ones we can act on,
+ * a pre-selected ISBN so the admin can link by re-running the ingestion
+ * path without any further OL round-trip.
+ */
+data class OpenLibrarySearchHit(
+    val workId: String,
+    val title: String,
+    val authors: List<String>,
+    val firstPublishYear: Int?,
+    /** Numeric OL cover ID. Null when the search hit has no cover on file. */
+    val coverId: Long?,
+    /**
+     * Best-available ISBN for a known edition of the work. Prefers ISBN-13,
+     * falls back to ISBN-10. Null when OL has no ISBN for any edition —
+     * those results are non-actionable in the admin UI.
+     */
+    val isbn: String?
+)
+
 /** A single work from an author's bibliography (Open Library `/authors/{olid}/works.json`). */
 data class AuthorWorkRef(
     val openLibraryWorkId: String,
@@ -87,6 +109,16 @@ interface OpenLibraryService {
      * callers treat "no bibliography" and "fetch failed" identically for UI.
      */
     fun listAuthorWorks(openLibraryAuthorId: String, limit: Int = 200): List<AuthorWorkRef>
+
+    /**
+     * Free-text search against Open Library's `/search.json` endpoint, used
+     * by admins resolving ebook files whose parsed ISBN failed to resolve.
+     * Returns at most [limit] matches. Errors return an empty list (the
+     * admin can just try a different query); we don't propagate failures
+     * because there's no useful distinction between "no results" and
+     * "network hiccup" at the UI layer.
+     */
+    fun searchWorks(query: String, limit: Int = 10): List<OpenLibrarySearchHit>
 
     companion object {
         /**
@@ -237,6 +269,73 @@ class OpenLibraryHttpService : OpenLibraryService {
 
         worksCache[openLibraryAuthorId] = WorksCacheEntry(works, System.currentTimeMillis())
         return works.take(limit)
+    }
+
+    override fun searchWorks(query: String, limit: Int): List<OpenLibrarySearchHit> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        // `q` is a free-text search; OL accepts "title: foo author: bar" if
+        // the admin wants to be explicit, but plain text works fine too.
+        val encoded = java.net.URLEncoder.encode(trimmed, Charsets.UTF_8)
+        val url = "$BASE/search.json?q=$encoded&limit=$limit" +
+            "&fields=key,title,author_name,first_publish_year,cover_i,isbn"
+        val body = try {
+            fetch(url)
+        } catch (e: Exception) {
+            log.warn("searchWorks failed for '{}': {}", trimmed, e.message)
+            null
+        } ?: return emptyList()
+        return try {
+            parseSearchDocs(body)
+        } catch (e: Exception) {
+            log.warn("searchWorks parse failed for '{}': {}", trimmed, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseSearchDocs(body: String): List<OpenLibrarySearchHit> {
+        val root = mapper.readTree(body)
+        val docs = root.path("docs")
+        if (!docs.isArray) return emptyList()
+        val out = mutableListOf<OpenLibrarySearchHit>()
+        for (doc in docs) {
+            val workKey = doc.olKey("key") ?: continue
+            val workId = workKey.removePrefix("/works/")
+            val title = doc.textOrNull("title") ?: continue
+            val authors = doc.path("author_name").mapNotNull {
+                it.takeIf { it.isTextual }?.asText()?.takeIf { s -> s.isNotBlank() }
+            }
+            val year = doc.get("first_publish_year")?.takeIf { it.isInt }?.asInt()
+            val coverId = doc.get("cover_i")?.takeIf { it.isNumber && it.asLong() > 0 }?.asLong()
+            val isbn = pickBestIsbn(doc.path("isbn"))
+            out += OpenLibrarySearchHit(
+                workId = workId,
+                title = title,
+                authors = authors,
+                firstPublishYear = year,
+                coverId = coverId,
+                isbn = isbn
+            )
+        }
+        return out
+    }
+
+    /** Picks ISBN-13 if present, else first ISBN-10. Ignores malformed values. */
+    private fun pickBestIsbn(node: JsonNode): String? {
+        if (!node.isArray) return null
+        var firstTen: String? = null
+        for (entry in node) {
+            val s = entry.takeIf { it.isTextual }?.asText()?.trim().orEmpty()
+            if (s.isEmpty()) continue
+            val cleaned = s.replace("-", "").replace(" ", "")
+            if (cleaned.length == 13 && cleaned.all { it.isDigit() }) return cleaned
+            if (cleaned.length == 10 && firstTen == null &&
+                cleaned.dropLast(1).all { it.isDigit() } &&
+                (cleaned.last().isDigit() || cleaned.last() == 'X' || cleaned.last() == 'x')) {
+                firstTen = cleaned.dropLast(1) + cleaned.last().uppercaseChar()
+            }
+        }
+        return firstTen
     }
 
     internal fun parseAuthorWorks(body: String): List<AuthorWorkRef> {

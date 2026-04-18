@@ -25,6 +25,7 @@ export class FeatureService {
   readonly isAdmin = () => this.flags().is_admin;
   readonly wishReadyCount = () => this.flags().wish_ready_count;
   readonly unmatchedCount = () => this.flags().unmatched_count;
+  readonly unmatchedBooksCount = () => this.flags().unmatched_books_count ?? 0;
   readonly dataQualityCount = () => this.flags().data_quality_count;
   readonly openReportsCount = () => this.flags().open_reports_count;
 

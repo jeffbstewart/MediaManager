@@ -49,6 +49,12 @@ object PosterCacheService {
     fun cacheAndServe(title: Title, size: PosterSize): Path? {
         val posterPath = title.poster_path ?: return null
 
+        // TMDB poster paths always start with "/" (e.g. "/abc123.jpg"). Book
+        // titles store non-TMDB sentinels like "isbn/<isbn>" meant for the
+        // Open Library proxy — those are served by the caller after this
+        // returns null, not by fetching from image.tmdb.org.
+        if (!posterPath.startsWith("/")) return null
+
         // Determine or generate the cache UUID
         val existingCacheId = title.poster_cache_id
         if (existingCacheId != null) {

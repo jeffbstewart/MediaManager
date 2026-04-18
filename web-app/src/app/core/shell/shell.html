@@ -156,6 +156,14 @@
           </a>
         }
 
+        <a mat-list-item [routerLink]="routes.adminBooksUnmatched()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>menu_book</mat-icon>
+          <span matListItemTitle>Unmatched Books</span>
+          @if (features.unmatchedBooksCount() > 0) {
+            <span matListItemMeta class="red-badge">{{ features.unmatchedBooksCount() }}</span>
+          }
+        </a>
+
         <a mat-list-item [routerLink]="routes.adminUsers()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>people</mat-icon>
           <span matListItemTitle>Users</span>

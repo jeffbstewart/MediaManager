@@ -43,6 +43,13 @@ object ImageProxyService {
     /** Absolute cap on any single proxied response. 10 MiB is generous for a cover image. */
     private const val MAX_BYTES = 10L * 1024 * 1024
 
+    /**
+     * Cap on redirect hops. OL often 302s cover requests to archive.org
+     * mirrors (or a default placeholder) — one hop is enough; we cap at 2
+     * defensively in case a mirror redirects onward.
+     */
+    private const val MAX_REDIRECTS = 2
+
     private val cacheRoot: Path = Path.of("data", "image-proxy-cache")
 
     /** HTTPS only, no automatic redirect-following, reasonable timeouts. */
@@ -99,28 +106,64 @@ object ImageProxyService {
     }
 
     private fun fetchAndCache(upstream: ProxiedUpstream, destPath: Path): Result {
-        // SSRF guard: resolve the hostname ourselves, reject private ranges.
-        val reject = resolveAndScreenHost(upstream.provider.host)
-        if (reject != null) {
-            log.warn("Image proxy refused {}: {}", upstream.url, reject)
-            countProxy("blocked_host")
-            return Result.Failure(502, reject)
+        // OL frequently 302s cover requests to a default placeholder or to
+        // archive.org mirrors. We manually follow up to [MAX_REDIRECTS] hops
+        // so we don't lose the initial-host SSRF screen: JDK's built-in
+        // follower would happily follow to any public address, but could
+        // also follow to a compromised CDN's redirect into private space.
+        var currentUrl = upstream.url
+        var response: HttpResponse<InputStream>? = null
+        var hops = 0
+        while (hops <= MAX_REDIRECTS) {
+            val host = runCatching { URI.create(currentUrl).host }.getOrNull()
+                ?: return Result.Failure(502, "invalid redirect target")
+            val reject = resolveAndScreenHost(host)
+            if (reject != null) {
+                log.warn("Image proxy refused {}: {}", currentUrl, reject)
+                countProxy("blocked_host")
+                return Result.Failure(502, reject)
+            }
+
+            val request = HttpRequest.newBuilder()
+                .uri(URI.create(currentUrl))
+                .timeout(Duration.ofSeconds(20))
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "image/*")
+                .GET()
+                .build()
+
+            response = try {
+                httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
+            } catch (e: Exception) {
+                log.warn("Image proxy fetch failed {}: {}", currentUrl, e.message)
+                countProxy("fetch_error")
+                return Result.Failure(502, "upstream fetch failed")
+            }
+
+            val status = response.statusCode()
+            if (status in 300..399 && status != 304) {
+                val location = response.headers().firstValue("Location").orElse(null)
+                    ?: return run {
+                        countProxy("upstream_${status}_no_location")
+                        Result.Failure(502, "upstream http $status without Location")
+                    }
+                response.body()?.close()
+                val next = runCatching { URI.create(currentUrl).resolve(location).toString() }
+                    .getOrNull() ?: return Result.Failure(502, "invalid redirect target")
+                if (!next.startsWith("https://")) {
+                    countProxy("insecure_redirect")
+                    return Result.Failure(502, "upstream redirected to non-HTTPS")
+                }
+                currentUrl = next
+                hops++
+                continue
+            }
+            break
         }
-
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(upstream.url))
-            .timeout(Duration.ofSeconds(20))
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "image/*")
-            .GET()
-            .build()
-
-        val response: HttpResponse<InputStream> = try {
-            httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        } catch (e: Exception) {
-            log.warn("Image proxy fetch failed {}: {}", upstream.url, e.message)
-            countProxy("fetch_error")
-            return Result.Failure(502, "upstream fetch failed")
+        response ?: return Result.Failure(502, "upstream returned no response")
+        if (hops > MAX_REDIRECTS) {
+            countProxy("too_many_redirects")
+            return Result.Failure(502, "too many redirects")
         }
 
         if (response.statusCode() == 404) {
@@ -128,7 +171,6 @@ object ImageProxyService {
             return Result.Failure(404, "not found")
         }
         if (response.statusCode() >= 300) {
-            // We don't follow redirects on purpose; treat any 3xx as a no.
             countProxy("upstream_${response.statusCode()}")
             return Result.Failure(502, "upstream http ${response.statusCode()}")
         }

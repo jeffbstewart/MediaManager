@@ -121,6 +121,11 @@ class HomeFeedHttpService {
         val unmatchedCount = if (user.isAdmin()) {
             DiscoveredFile.findAll().count { it.match_status == DiscoveredFileStatus.UNMATCHED.name }
         } else 0
+        val unmatchedBooksCount = if (user.isAdmin()) {
+            net.stewart.mediamanager.entity.UnmatchedBook.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedBookStatus.UNMATCHED.name
+            }
+        } else 0
         val dataQualityCount = if (user.isAdmin()) {
             allTitles.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
         } else 0
@@ -133,6 +138,7 @@ class HomeFeedHttpService {
             "is_admin" to user.isAdmin(),
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
             "unmatched_count" to unmatchedCount,
+            "unmatched_books_count" to unmatchedBooksCount,
             "data_quality_count" to dataQualityCount,
             "open_reports_count" to if (user.isAdmin()) {
                 ProblemReport.findAll().count { it.status == ReportStatus.OPEN.name }
