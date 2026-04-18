@@ -36,6 +36,12 @@
           <span matListItemTitle>Books</span>
         </a>
       }
+      @if (features.hasMusic()) {
+        <a mat-list-item [routerLink]="routes.music()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>album</mat-icon>
+          <span matListItemTitle>Music</span>
+        </a>
+      }
       @if (features.hasCameras()) {
         <a mat-list-item [routerLink]="routes.cameras()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>videocam</mat-icon>

@@ -96,6 +96,81 @@
   flex-wrap: wrap;
 }
 
+// Track list (albums) — one row per track within a disc group.
+.disc-header {
+  font-size: 0.875rem;
+  opacity: 0.55;
+  margin: 1rem 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.375rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: rgba(255, 255, 255, 0.03); }
+}
+
+.track-number {
+  width: 2rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.track-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.track-name {
+  font-size: 0.9375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-artist {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.track-duration {
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.track-play-btn {
+  flex-shrink: 0;
+  opacity: 0.35;
+  // Disabled until M5 wires playback.
+}
+
 // "by Author1 & Author2" — directly under the title, distinct from the
 // muted meta-row so the byline reads as part of the heading cluster.
 .byline {

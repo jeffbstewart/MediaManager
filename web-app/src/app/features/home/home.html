@@ -113,6 +113,32 @@
       </section>
     }
 
+    @if (feed.recently_added_albums && feed.recently_added_albums.length > 0) {
+      <section class="carousel-section">
+        <h2>Recently Added Albums</h2>
+        <div class="carousel-row">
+          @for (album of feed.recently_added_albums; track album.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(album.title_id)">
+              <div class="poster-wrapper">
+                @if (album.poster_url) {
+                  <img [src]="album.poster_url" [alt]="album.title_name" class="poster-img"
+                       loading="lazy" decoding="async" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ album.title_name }}</span>
+              @if (album.artist_name) {
+                <span class="poster-meta">{{ album.artist_name }}</span>
+              } @else if (album.release_year) {
+                <span class="poster-meta">{{ album.release_year }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
     @if (feed.recently_watched.length > 0) {
       <section class="carousel-section">
         <h2>Recently Watched</h2>

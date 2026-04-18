@@ -44,6 +44,41 @@ export class TitleDetailComponent implements OnInit {
   get isPersonal(): boolean { return this.title()?.media_type === 'PERSONAL'; }
   get isTv(): boolean { return this.title()?.media_type === 'TV'; }
   get isBook(): boolean { return this.title()?.media_type === 'BOOK'; }
+  get isAlbum(): boolean { return this.title()?.media_type === 'ALBUM'; }
+
+  /** Album total-duration formatter: "48 min" or "1 h 24 min". */
+  formatAlbumDuration(seconds: number | null | undefined): string | null {
+    if (!seconds || seconds < 1) return null;
+    const totalMin = Math.round(seconds / 60);
+    if (totalMin < 60) return `${totalMin} min`;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return m === 0 ? `${h} h` : `${h} h ${m} min`;
+  }
+
+  /** Per-track duration formatter: "3:42" or "12:03". */
+  formatTrackDuration(seconds: number | null | undefined): string {
+    if (!seconds || seconds < 1) return '—';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  /** Album tracks grouped by disc_number; preserves track_number order. */
+  get albumDiscs(): { discNumber: number; tracks: NonNullable<TitleDetail['tracks']> }[] {
+    const t = this.title();
+    const tracks = t?.tracks ?? [];
+    if (tracks.length === 0) return [];
+    const byDisc = new Map<number, NonNullable<TitleDetail['tracks']>>();
+    for (const track of tracks) {
+      const list = byDisc.get(track.disc_number) ?? [];
+      list.push(track);
+      byDisc.set(track.disc_number, list);
+    }
+    return [...byDisc.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([discNumber, tracks]) => ({ discNumber, tracks }));
+  }
 
   /** The transcode with saved progress (for resume button). */
   get resumeTranscode() {

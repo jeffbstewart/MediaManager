@@ -50,7 +50,7 @@ export interface TitleListResponse {
   available_ratings: string[];
 }
 
-export type MediaType = 'MOVIE' | 'TV' | 'PERSONAL' | 'BOOK';
+export type MediaType = 'MOVIE' | 'TV' | 'PERSONAL' | 'BOOK' | 'ALBUM';
 
 /**
  * Returns a same-origin URL that proxies a TMDB image through
@@ -81,6 +81,7 @@ export interface TitleListParams {
 export interface FeatureFlags {
   has_personal_videos: boolean;
   has_books?: boolean;
+  has_music?: boolean;
   has_cameras: boolean;
   has_live_tv: boolean;
   is_admin: boolean;
@@ -120,6 +121,24 @@ export interface TitleDetail {
   page_count?: number | null;
   first_publication_year?: number | null;
   open_library_work_id?: string | null;
+  // Album-specific. Null/empty for non-album titles.
+  artists?: { id: number; name: string; artist_type: string }[];
+  tracks?: AlbumTrack[];
+  track_count?: number | null;
+  total_duration_seconds?: number | null;
+  label?: string | null;
+  musicbrainz_release_group_id?: string | null;
+  musicbrainz_release_id?: string | null;
+}
+
+export interface AlbumTrack {
+  track_id: number;
+  disc_number: number;
+  track_number: number;
+  name: string;
+  duration_seconds: number | null;
+  /** Populated only when the per-track performer differs from the album-level credit (compilations). */
+  track_artists: { id: number; name: string }[];
 }
 
 export interface TranscodeInfo {
@@ -172,6 +191,7 @@ export interface HomeFeed {
   continue_watching: ContinueWatchingItem[];
   recently_added: CarouselTitle[];
   recently_added_books: RecentBook[];
+  recently_added_albums?: RecentAlbum[];
   resume_reading?: ResumeReadingItem[];
   recently_watched: CarouselTitle[];
   missing_seasons: MissingSeason[];
@@ -196,6 +216,15 @@ export interface RecentBook {
   author_name: string | null;
   series_name: string | null;
   series_number: string | null;
+}
+
+export interface RecentAlbum {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  artist_name: string | null;
+  track_count: number | null;
 }
 
 export interface CollectionCard {
@@ -436,6 +465,27 @@ export interface AuthorOtherWork {
   already_wished: boolean;
 }
 
+export interface ArtistDetail {
+  id: number;
+  name: string;
+  sort_name: string;
+  artist_type: string;
+  biography: string | null;
+  headshot_url: string | null;
+  begin_date: string | null;
+  end_date: string | null;
+  musicbrainz_artist_id: string | null;
+  owned_albums: ArtistOwnedAlbum[];
+}
+
+export interface ArtistOwnedAlbum {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  track_count: number | null;
+}
+
 export interface BookSeriesVolume {
   title_id: number;
   title_name: string;
@@ -532,6 +582,10 @@ export class CatalogService {
 
   async getAuthorDetail(authorId: number): Promise<AuthorDetail> {
     return firstValueFrom(this.http.get<AuthorDetail>(`/api/v2/catalog/authors/${authorId}`));
+  }
+
+  async getArtistDetail(artistId: number): Promise<ArtistDetail> {
+    return firstValueFrom(this.http.get<ArtistDetail>(`/api/v2/catalog/artists/${artistId}`));
   }
 
   async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {

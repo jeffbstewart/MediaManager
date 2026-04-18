@@ -60,6 +60,8 @@ export const routes: Routes = [
       { path: 'tag/:tagId', loadComponent: () => import('./features/content/tag-detail').then(m => m.TagDetailComponent) },
       { path: 'content/family', loadComponent: () => import('./features/content/personal-videos').then(m => m.PersonalVideosComponent) },
       { path: 'content/books', loadComponent: () => import('./features/content/books').then(m => m.BooksComponent) },
+      { path: 'content/music', loadComponent: () => import('./features/content/music').then(m => m.MusicComponent) },
+      { path: 'artist/:artistId', loadComponent: () => import('./features/artist/artist').then(m => m.ArtistComponent) },
       { path: 'wishlist', loadComponent: () => import('./features/wishlist/wishlist').then(m => m.WishListComponent) },
       { path: 'cameras', loadComponent: () => import('./features/cameras/cameras').then(m => m.CamerasComponent) },
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },

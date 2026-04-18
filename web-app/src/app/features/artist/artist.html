@@ -1,0 +1,62 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (artist(); as a) {
+
+    <div class="hero">
+      @if (a.headshot_url) {
+        <img [src]="a.headshot_url" [alt]="a.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder">
+          <mat-icon>{{ a.artist_type === 'PERSON' ? 'person' : 'groups' }}</mat-icon>
+        </div>
+      }
+      <div class="hero-info">
+        <h1>{{ a.name }}</h1>
+        @if (formatLifespan()) {
+          <span class="lifespan">{{ formatLifespan() }}</span>
+        }
+        @if (a.biography) {
+          <p class="biography">
+            {{ bioExpanded() || a.biography.length <= 500 ? a.biography : a.biography.substring(0, 500) + '...' }}
+          </p>
+          @if (a.biography.length > 500) {
+            <button class="bio-toggle" (click)="bioExpanded.set(!bioExpanded())">
+              {{ bioExpanded() ? 'Show less' : 'Show more' }}
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (a.owned_albums.length > 0) {
+      <h2>Albums in Your Collection</h2>
+      <div class="poster-grid">
+        @for (album of a.owned_albums; track album.title_id) {
+          <a class="poster-card" [routerLink]="routes.title(album.title_id)">
+            <div class="poster-wrapper">
+              @if (album.poster_url) {
+                <img [src]="album.poster_url" [alt]="album.title_name" class="poster-img"
+                     loading="lazy" decoding="async" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+            </div>
+            <span class="poster-title">{{ album.title_name }}</span>
+            @if (album.release_year) {
+              <span class="poster-meta">
+                {{ album.release_year }}@if (album.track_count) { &nbsp;·&nbsp; {{ album.track_count }} tracks }
+              </span>
+            } @else if (album.track_count) {
+              <span class="poster-meta">{{ album.track_count }} tracks</span>
+            }
+          </a>
+        }
+      </div>
+    } @else {
+      <p class="empty-state">No albums in your collection by this artist yet.</p>
+    }
+  }
+</div>

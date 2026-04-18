@@ -56,9 +56,36 @@
             </div>
           }
 
+          <!-- Artists (albums) — album-level byline, each linked to the
+               artist detail page. Mirrors the book byline. -->
+          @if (isAlbum && t.artists && t.artists.length > 0) {
+            <div class="byline">
+              by
+              @for (a of t.artists; track a.id; let last = $last) {
+                <a [routerLink]="routes.artist(a.id)">{{ a.name }}</a>@if (!last) { & }
+              }
+            </div>
+          }
+
           <!-- Metadata -->
           <div class="meta-row">
-            @if (isBook) {
+            @if (isAlbum) {
+              @if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.label) {
+                <span>{{ t.label }}</span>
+              }
+              @if (t.track_count) {
+                <span>{{ t.track_count }} tracks</span>
+              }
+              @if (formatAlbumDuration(t.total_duration_seconds); as dur) {
+                <span>{{ dur }}</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else if (isBook) {
               @if (t.first_publication_year) {
                 <span [title]="t.release_year && t.release_year !== t.first_publication_year ? 'Original publication (this edition: ' + t.release_year + ')' : ''">
                   First published {{ t.first_publication_year }}
@@ -195,6 +222,42 @@
             </div>
           }
         </div>
+      </section>
+    }
+
+    <!-- Tracks (albums) — grouped by disc, with per-track artist credit shown
+         only when it differs from the album-level byline (compilations).
+         Play buttons are disabled placeholders until M5 wires audio playback. -->
+    @if (isAlbum && albumDiscs.length > 0) {
+      <section class="section">
+        <h3>Tracks</h3>
+        @for (disc of albumDiscs; track disc.discNumber) {
+          @if (albumDiscs.length > 1) {
+            <h4 class="disc-header">Disc {{ disc.discNumber }}</h4>
+          }
+          <div class="track-list">
+            @for (track of disc.tracks; track track.track_id) {
+              <div class="track-row">
+                <span class="track-number">{{ track.track_number }}</span>
+                <div class="track-info">
+                  <span class="track-name">{{ track.name }}</span>
+                  @if (track.track_artists.length > 0) {
+                    <span class="track-artist">
+                      @for (a of track.track_artists; track a.id; let last = $last) {
+                        <a [routerLink]="routes.artist(a.id)">{{ a.name }}</a>@if (!last) { , }
+                      }
+                    </span>
+                  }
+                </div>
+                <span class="track-duration">{{ formatTrackDuration(track.duration_seconds) }}</span>
+                <button mat-icon-button class="track-play-btn" disabled
+                        title="Audio playback coming in M5">
+                  <mat-icon>play_circle</mat-icon>
+                </button>
+              </div>
+            }
+          </div>
+        }
       </section>
     }
 

@@ -14,6 +14,7 @@ import net.stewart.mediamanager.service.HealthWatchdog
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.SsdpResponder
+import net.stewart.mediamanager.service.ArtistEnrichmentAgent
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookScannerAgent
 import net.stewart.mediamanager.service.CollectionRefreshAgent
@@ -87,6 +88,10 @@ fun main(args: Array<String>) {
     val authorEnrichmentAgent = AuthorEnrichmentAgent()
     authorEnrichmentAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { authorEnrichmentAgent.stop() })
+
+    val artistEnrichmentAgent = ArtistEnrichmentAgent()
+    artistEnrichmentAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { artistEnrichmentAgent.stop() })
 
     val bookScannerAgent = BookScannerAgent()
     bookScannerAgent.start()

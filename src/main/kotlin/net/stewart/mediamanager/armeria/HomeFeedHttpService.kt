@@ -80,9 +80,13 @@ class HomeFeedHttpService {
         val recentlyAddedBooks = if (hasBooks) recentlyAddedBooks(user, 10) else emptyList()
         val resumeReading = if (hasBooks) resumeReading(user, 10) else emptyList()
 
+        val hasMusic = allTitlesForFeatures.any { it.media_type == MMMediaType.ALBUM.name }
+        val recentlyAddedAlbums = if (hasMusic) recentlyAddedAlbums(user, 10) else emptyList()
+
         val features = mapOf(
             "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
             "has_books" to hasBooks,
+            "has_music" to hasMusic,
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
@@ -99,6 +103,7 @@ class HomeFeedHttpService {
             "continue_watching" to continueWatching,
             "recently_added" to recentlyAdded,
             "recently_added_books" to recentlyAddedBooks,
+            "recently_added_albums" to recentlyAddedAlbums,
             "resume_reading" to resumeReading,
             "recently_watched" to recentlyWatched,
             "missing_seasons" to missingSeasons,
@@ -133,6 +138,7 @@ class HomeFeedHttpService {
         val features = mapOf(
             "has_personal_videos" to allTitles.any { it.media_type == MMMediaType.PERSONAL.name },
             "has_books" to allTitles.any { it.media_type == MMMediaType.BOOK.name },
+            "has_music" to allTitles.any { it.media_type == MMMediaType.ALBUM.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
@@ -299,6 +305,56 @@ class HomeFeedHttpService {
     }
 
     /**
+     * Recently added albums, patterned on [recentlyAddedBooks]. Looks at
+     * the newest physical + digital music MediaItems, joins to the linked
+     * ALBUM Title, and surfaces artist + release year for the carousel.
+     */
+    private fun recentlyAddedAlbums(
+        user: net.stewart.mediamanager.entity.AppUser,
+        limit: Int
+    ): List<Map<String, Any?>> {
+        val allTitles = Title.findAll().associateBy { it.id }
+        val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
+        val artistsByTitle = net.stewart.mediamanager.entity.TitleArtist.findAll()
+            .sortedBy { it.artist_order }
+            .groupBy { it.title_id }
+        val artists = net.stewart.mediamanager.entity.Artist.findAll().associateBy { it.id }
+
+        val seen = mutableSetOf<Long>()
+        val rows = mutableListOf<Map<String, Any?>>()
+        val musicItems = MediaItem.findAll()
+            .filter { it.media_format in MUSIC_FORMAT_NAMES && it.created_at != null }
+            .sortedByDescending { it.created_at }
+
+        for (item in musicItems) {
+            if (rows.size >= limit) break
+            val titleIds = links[item.id]?.map { it.title_id }.orEmpty()
+            for (titleId in titleIds) {
+                if (titleId in seen) continue
+                val title = allTitles[titleId] ?: continue
+                if (title.media_type != MMMediaType.ALBUM.name) continue
+                if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+                seen += titleId
+
+                val artistList = artistsByTitle[titleId]
+                    ?.mapNotNull { artists[it.artist_id]?.name }
+                    .orEmpty()
+
+                rows += mapOf(
+                    "title_id" to titleId,
+                    "title_name" to title.name,
+                    "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
+                    "release_year" to title.release_year,
+                    "artist_name" to artistList.firstOrNull(),
+                    "track_count" to title.track_count
+                )
+                if (rows.size >= limit) break
+            }
+        }
+        return rows
+    }
+
+    /**
      * "Resume Reading" — most recent reading_progress rows, joined to the
      * title they're reading (via the media_item_id). Parallel to
      * Continue Watching on the video side. See docs/BOOKS.md (M5).
@@ -336,5 +392,11 @@ class HomeFeedHttpService {
         /** Format enum names that represent a book edition. Mirrors MediaFormat.BOOK_FORMATS. */
         private val BOOK_FORMAT_NAMES: Set<String> = net.stewart.mediamanager.entity.MediaFormat
             .BOOK_FORMATS.mapTo(mutableSetOf()) { it.name }
+
+        /** Format enum names that represent a music edition (CD / vinyl / digital audio). */
+        private val MUSIC_FORMAT_NAMES: Set<String> =
+            (net.stewart.mediamanager.entity.MediaFormat.PHYSICAL_MUSIC_FORMATS +
+                net.stewart.mediamanager.entity.MediaFormat.DIGITAL_AUDIO_FORMATS)
+                .mapTo(mutableSetOf()) { it.name }
     }
 }

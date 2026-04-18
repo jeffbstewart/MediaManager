@@ -11,10 +11,14 @@ import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.BookSeries
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.Episode
+import net.stewart.mediamanager.entity.Track
+import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.entity.TrackArtist
 import net.stewart.mediamanager.entity.FamilyMember
 import net.stewart.mediamanager.entity.TitleFamilyMember
 import net.stewart.mediamanager.entity.Genre
@@ -253,6 +257,63 @@ class TitleDetailHttpService {
             }
         } else null
 
+        // Album-specific: artists (album-level), tracks with disc grouping,
+        // per-track performer credits when they differ from the album-level
+        // credit (compilation-shape). Empty for non-album titles.
+        val isAlbum = title.media_type == MMMediaType.ALBUM.name
+        val albumArtists = if (isAlbum) {
+            val orderedLinks = TitleArtist.findAll()
+                .filter { it.title_id == titleId }
+                .sortedBy { it.artist_order }
+            val artistsById = Artist.findAll()
+                .filter { a -> orderedLinks.any { it.artist_id == a.id } }
+                .associateBy { it.id }
+            orderedLinks.mapNotNull { link ->
+                artistsById[link.artist_id]?.let { a ->
+                    mapOf(
+                        "id" to a.id,
+                        "name" to a.name,
+                        "artist_type" to a.artist_type
+                    )
+                }
+            }
+        } else emptyList()
+
+        val albumTracks = if (isAlbum) {
+            val tracks = Track.findAll()
+                .filter { it.title_id == titleId }
+                .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
+
+            // Per-track artist credits are sparse (only populated for tracks
+            // whose performer differs from the album-level credit) — one
+            // query fetches all of them at once.
+            val trackIds = tracks.mapNotNull { it.id }.toSet()
+            val trackArtistLinks = if (trackIds.isEmpty()) emptyList()
+                else TrackArtist.findAll().filter { it.track_id in trackIds }
+            val perTrackArtistsById = Artist.findAll()
+                .filter { a -> trackArtistLinks.any { it.artist_id == a.id } }
+                .associateBy { it.id }
+
+            tracks.map { track ->
+                val perTrack = trackArtistLinks
+                    .filter { it.track_id == track.id }
+                    .sortedBy { it.artist_order }
+                    .mapNotNull { link ->
+                        perTrackArtistsById[link.artist_id]?.let { a ->
+                            mapOf("id" to a.id, "name" to a.name)
+                        }
+                    }
+                mapOf(
+                    "track_id" to track.id,
+                    "disc_number" to track.disc_number,
+                    "track_number" to track.track_number,
+                    "name" to track.name,
+                    "duration_seconds" to track.duration_seconds,
+                    "track_artists" to perTrack
+                )
+            }
+        } else emptyList()
+
         // Digital editions for book titles — enumerated so the client can
         // render a "Read" button per edition. EPUB and PDF only; physical
         // editions don't belong here.
@@ -303,7 +364,15 @@ class TitleDetailHttpService {
             "book_series" to bookSeries,
             "page_count" to title.page_count,
             "first_publication_year" to title.first_publication_year,
-            "open_library_work_id" to title.open_library_work_id
+            "open_library_work_id" to title.open_library_work_id,
+            // Album-specific. Null/empty for non-album titles.
+            "artists" to albumArtists,
+            "tracks" to albumTracks,
+            "track_count" to title.track_count,
+            "total_duration_seconds" to title.total_duration_seconds,
+            "label" to title.label,
+            "musicbrainz_release_group_id" to title.musicbrainz_release_group_id,
+            "musicbrainz_release_id" to title.musicbrainz_release_id
         )
 
         return HttpResponse.builder()
