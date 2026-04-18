@@ -51,6 +51,7 @@ import net.stewart.mediamanager.armeria.InventoryReportHttpService
 import net.stewart.mediamanager.armeria.MediaItemEditHttpService
 import net.stewart.mediamanager.armeria.LinkedTranscodesHttpService
 import net.stewart.mediamanager.armeria.EbookHttpService
+import net.stewart.mediamanager.armeria.ImageProxyHttpService
 import net.stewart.mediamanager.armeria.ReadingProgressHttpService
 import net.stewart.mediamanager.armeria.UnmatchedBookHttpService
 import net.stewart.mediamanager.armeria.UnmatchedHttpService
@@ -244,6 +245,7 @@ object ArmeriaServer {
         blocking(UnmatchedBookHttpService())
         blocking(EbookHttpService())
         blocking(ReadingProgressHttpService())
+        blocking(ImageProxyHttpService())
         blocking(LinkedTranscodesHttpService())
         blocking(BacklogHttpService())
         blocking(TagManagementHttpService())
