@@ -33,7 +33,11 @@ declare global {
   interface Window { ePub?: (url: string) => EpubJsBook; }
 }
 
-const EPUB_JS_CDN = 'https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js';
+// Vendored under web-app/public/vendor/ — see THIRD_PARTY_LICENSES.md.
+// epub.js's UMD wrapper expects window.JSZip to exist when it loads, so
+// JSZip must be injected first.
+const JSZIP_SRC = 'vendor/jszip.min.js';
+const EPUB_JS_SRC = 'vendor/epub.min.js';
 const PROGRESS_REPORT_MS = 10_000;
 
 @Component({
@@ -115,7 +119,8 @@ export class ReaderComponent implements OnInit, OnDestroy {
   }
 
   private async bootEpub(resumeCfi: string | null): Promise<void> {
-    await loadScriptOnce(EPUB_JS_CDN);
+    await loadScriptOnce(JSZIP_SRC);
+    await loadScriptOnce(EPUB_JS_SRC);
     const el = this.container()?.nativeElement;
     if (!el) throw new Error('epub container missing');
     if (!window.ePub) throw new Error('epub.js failed to load');

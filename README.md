@@ -50,3 +50,7 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 ## License
 
 [MIT License](LICENSE) — Copyright (c) 2026 Jeffrey B. Stewart
+
+Third-party libraries whose source is vendored in this repository are
+enumerated in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), with
+the corresponding license texts sitting beside each vendored file.
