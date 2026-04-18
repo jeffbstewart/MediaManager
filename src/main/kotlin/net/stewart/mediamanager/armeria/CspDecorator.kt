@@ -62,7 +62,7 @@ class CspDecorator : DecoratingHttpServiceFunction {
 
     companion object {
         /** Flip to `true` to enforce. Leave at `false` during the bake-in period. */
-        private const val ENFORCING = false
+        private const val ENFORCING = true
 
         /** Reporting API endpoint binding — consumed by `report-to csp-endpoint` below. */
         private const val REPORTING_ENDPOINTS = "csp-endpoint=\"/csp-report\""
