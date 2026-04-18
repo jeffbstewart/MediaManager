@@ -44,11 +44,13 @@ object ImageProxyService {
     private const val MAX_BYTES = 10L * 1024 * 1024
 
     /**
-     * Cap on redirect hops. OL often 302s cover requests to archive.org
-     * mirrors (or a default placeholder) — one hop is enough; we cap at 2
-     * defensively in case a mirror redirects onward.
+     * Cap on redirect hops. OL covers chain:
+     * covers.openlibrary.org → archive.org/download/... → ia8NNNN mirror,
+     * and an occasional canonicalization hop on top of that. Four is
+     * generous enough to absorb those without giving an upstream a way
+     * to bounce us indefinitely.
      */
-    private const val MAX_REDIRECTS = 2
+    private const val MAX_REDIRECTS = 4
 
     private val cacheRoot: Path = Path.of("data", "image-proxy-cache")
 
@@ -116,7 +118,10 @@ object ImageProxyService {
         var hops = 0
         while (hops <= MAX_REDIRECTS) {
             val host = runCatching { URI.create(currentUrl).host }.getOrNull()
-                ?: return Result.Failure(502, "invalid redirect target")
+                ?: run {
+                    log.warn("Image proxy: invalid redirect target url={} origin={}", currentUrl, upstream.url)
+                    return Result.Failure(502, "invalid redirect target")
+                }
             val reject = resolveAndScreenHost(host)
             if (reject != null) {
                 log.warn("Image proxy refused {}: {}", currentUrl, reject)
@@ -144,16 +149,25 @@ object ImageProxyService {
             if (status in 300..399 && status != 304) {
                 val location = response.headers().firstValue("Location").orElse(null)
                     ?: return run {
+                        log.warn("Image proxy: upstream HTTP {} without Location header url={} origin={}",
+                            status, currentUrl, upstream.url)
                         countProxy("upstream_${status}_no_location")
                         Result.Failure(502, "upstream http $status without Location")
                     }
                 response.body()?.close()
                 val next = runCatching { URI.create(currentUrl).resolve(location).toString() }
-                    .getOrNull() ?: return Result.Failure(502, "invalid redirect target")
+                    .getOrNull() ?: run {
+                        log.warn("Image proxy: invalid redirect Location='{}' from url={} origin={}",
+                            location, currentUrl, upstream.url)
+                        return Result.Failure(502, "invalid redirect target")
+                    }
                 if (!next.startsWith("https://")) {
+                    log.warn("Image proxy: refused non-HTTPS redirect from {} to {} (origin={})",
+                        currentUrl, next, upstream.url)
                     countProxy("insecure_redirect")
                     return Result.Failure(502, "upstream redirected to non-HTTPS")
                 }
+                log.info("Image proxy: following redirect ({} → {}) for origin={}", currentUrl, next, upstream.url)
                 currentUrl = next
                 hops++
                 continue
@@ -162,21 +176,36 @@ object ImageProxyService {
         }
         response ?: return Result.Failure(502, "upstream returned no response")
         if (hops > MAX_REDIRECTS) {
+            log.warn("Image proxy: too many redirects (> {}) origin={}", MAX_REDIRECTS, upstream.url)
             countProxy("too_many_redirects")
             return Result.Failure(502, "too many redirects")
         }
 
         if (response.statusCode() == 404) {
+            log.info("Image proxy: upstream 404 url={} origin={}", currentUrl, upstream.url)
             countProxy("upstream_404")
             return Result.Failure(404, "not found")
         }
         if (response.statusCode() >= 300) {
+            log.warn("Image proxy: upstream HTTP {} url={} origin={}",
+                response.statusCode(), currentUrl, upstream.url)
             countProxy("upstream_${response.statusCode()}")
             return Result.Failure(502, "upstream http ${response.statusCode()}")
         }
 
-        val contentType = response.headers().firstValue("Content-Type").orElse("")
+        val rawContentType = response.headers().firstValue("Content-Type").orElse("").trim()
+        // covers.openlibrary.org occasionally omits Content-Type entirely.
+        // Fall back to our extension-based guess (the upstream path is
+        // allowlisted and carries a known extension, so this is safe and
+        // avoids dropping otherwise-valid image responses).
+        val contentType = if (rawContentType.isEmpty()) {
+            log.info("Image proxy: blank Content-Type, inferring from extension='{}' url={}",
+                upstream.extension, currentUrl)
+            guessContentType(upstream.extension)
+        } else rawContentType
         if (!contentType.lowercase().startsWith("image/")) {
+            log.warn("Image proxy: non-image Content-Type '{}' url={} origin={}",
+                rawContentType, currentUrl, upstream.url)
             countProxy("wrong_content_type")
             response.body()?.close()
             return Result.Failure(502, "upstream returned non-image")

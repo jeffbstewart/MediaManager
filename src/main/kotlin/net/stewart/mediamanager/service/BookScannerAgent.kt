@@ -41,6 +41,18 @@ class BookScannerAgent(
     private val log = LoggerFactory.getLogger(BookScannerAgent::class.java)
     internal val running = AtomicBoolean(false)
     private var thread: Thread? = null
+    // Guards scanOnce() so the daemon tick and a manual trigger don't walk
+    // the books root concurrently (handleFile isn't idempotent across
+    // parallel callers — it would double-ingest files).
+    private val scanMutex = Any()
+
+    init {
+        // Snapshot the most recently constructed agent so callers outside
+        // this class (e.g. NasScannerService after a manual NAS scan) can
+        // kick off an ebook scan without threading the instance through
+        // every caller.
+        INSTANCE = this
+    }
 
     companion object {
         /** app_config key pointing at the folder containing .epub / .pdf files. */
@@ -52,6 +64,19 @@ class BookScannerAgent(
 
         /** Max files walked per cycle — keeps the scan bounded on large shelves. */
         private const val MAX_FILES_PER_CYCLE = 500
+
+        @Volatile
+        private var INSTANCE: BookScannerAgent? = null
+
+        /**
+         * Trigger a one-off scan on the active agent, if any. Intended for
+         * manual triggers (e.g. an admin-initiated NAS scan that should
+         * also pick up new ebooks without waiting an hour). No-op when no
+         * agent has been constructed yet.
+         */
+        fun scanNowIfAvailable() {
+            INSTANCE?.scanNow()
+        }
     }
 
     fun start() {
@@ -62,7 +87,7 @@ class BookScannerAgent(
             try { clock.sleep(STARTUP_DELAY) } catch (_: InterruptedException) { return@Thread }
             while (running.get()) {
                 try {
-                    scanOnce()
+                    synchronized(scanMutex) { scanOnce() }
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
@@ -81,6 +106,22 @@ class BookScannerAgent(
         running.set(false)
         thread?.interrupt()
         thread = null
+    }
+
+    /**
+     * One-off scan, synchronized with the daemon thread so at most one
+     * scan runs at a time. Blocks the calling thread until the walk
+     * finishes; callers that don't want to block (e.g. NasScannerService
+     * at the end of a scan) should dispatch to their own thread.
+     */
+    fun scanNow() {
+        synchronized(scanMutex) {
+            try {
+                scanOnce()
+            } catch (e: Exception) {
+                log.error("BookScannerAgent.scanNow error: {}", e.message, e)
+            }
+        }
     }
 
     internal fun scanOnce() {

@@ -4,25 +4,26 @@
 
 # Competitive Analysis
 
-*Updated April 3, 2026*
+*Updated April 18, 2026*
 
 ---
 
 ## Executive Summary
 
-MediaManager occupies a unique position in the home media management space: it is the only product that integrates **physical disc cataloging** (barcode scanning, purchase tracking, valuation, insurance reporting) with **digital playback** (NAS-based transcoding, in-browser and Roku streaming) in a single self-hosted application. The competitive landscape splits into two categories that MediaManager bridges: **media servers** (Plex, Jellyfin, Emby) that stream digital files but ignore physical ownership, and **collection catalogs** (CLZ Movies, DVD Profiler) that track what you own but don't play anything. No competitor does both.
+MediaManager occupies a unique position in the home media management space: it is the only product that integrates **physical media cataloging across formats** -- DVDs, Blu-rays, UHDs, **and books** (barcode scanning, purchase tracking, valuation, insurance reporting) -- with **digital playback** (NAS-based transcoding for video, in-browser EPUB/PDF reader for ebooks, Roku streaming) in a single self-hosted application. The competitive landscape splits into three categories that MediaManager bridges: **media servers** (Plex, Jellyfin, Emby) that stream digital video but ignore physical ownership; **ebook servers** (Calibre-Web, Kavita, Booklore, Audiobookshelf) that catalog and stream digital books but not video or physical media; and **collection catalogs** (CLZ Movies, DVD Profiler) that track what you own on various formats but don't play anything and require separate apps per media type. No competitor unifies all three.
 
-This is both the product's greatest strength and its strategic challenge: it competes on two fronts simultaneously, and is currently behind dedicated solutions on each front individually. However, rapid development in early 2026 has significantly closed the gap on both fronts -- the Roku channel is feature-complete with search, personalized home rows, auto-play next episode, seek thumbnails, actor/tag/collection landing pages, and multi-user support. The cataloging side gained automated replacement value estimation, mobile barcode scanning, and comprehensive insurance reporting. And the biggest gap -- mobile app coverage -- has been addressed with the launch of a native iOS app featuring full catalog browsing, video playback with a custom player (subtitles, skip segments, thumbnail scrubbing), wish list management, cameras, live TV, and admin views.
+This is both the product's greatest strength and its strategic challenge: it competes on three fronts simultaneously, and is currently behind dedicated solutions on each front individually. However, rapid development in early 2026 has significantly closed the gap -- the Roku channel is feature-complete with search, personalized home rows, auto-play next episode, seek thumbnails, actor/tag/collection landing pages, and multi-user support. The cataloging side gained automated replacement value estimation, mobile barcode scanning, and comprehensive insurance reporting. Two native client apps shipped: a **native iOS app** (custom video player with subtitles, skip segments, thumbnail scrubbing, wish list, cameras, live TV, admin views, offline downloads) and a **native Android TV / Google TV app** built with Jetpack Compose for TV (multi-user picker, home carousels, ExoPlayer playback with subtitles and skip intro/credits and auto-next, wish list + TMDB search, cameras, live TV, search, TLS). Most recently, the catalog extended beyond video into **books** -- physical books catalogue by ISBN barcode scan (Open Library metadata), .epub / .pdf files from a NAS directory ingest automatically, and the web app ships an in-browser paginated EPUB reader plus native PDF viewing, with linked author and series browse pages and wishlist-for-books end-to-end.
 
 **Notable competitive shifts since the last analysis:**
-- **Plex** expanded the remote streaming paywall to all remaining TV platforms (March 23, 2026). Custom Metadata Providers API entered beta in PMS 1.43.0, replacing the legacy Python agent system. HEVC hardware encoding moved from preview to production for Plex Pass holders (preserves HDR metadata). Remote Watch Pass introductory pricing ($1.99/mo, $19.99/yr) ends June 2026, rising to $2.99/mo and $29.99/yr.
-- **Jellyfin** released Server 10.11.7 (April 1, 2026) -- a critical security update addressing four CVEs with an urgent upgrade advisory. The team is considering dropping the major version "10" prefix, making the next major release 12.0. Swiftfin 1.4 shipped with a navigation overhaul. Xbox gained gamepad support and 4K/HDR.
-- **Emby** released Beta 4.10.0.8 (March 27, 2026). Samsung Smart TV 2.1.0 shipped with auto-skip intros. A native Linux app beta was announced. Premiere pricing unchanged: $4.99/mo, $54/yr, $119 lifetime.
-- **CLZ Movies** released v10.3 (April 1, 2026) with faster CLZ Cloud down-syncing. Custom Fields (launched Feb 2026) remains their marquee 2026 feature. Pricing unchanged: $3.95/mo or $39.95/yr (web), $1.99/mo or $19.99/yr (mobile).
-- **Seerr** released v3.1.0 (Feb 28, 2026) -- critical security release addressing three CVEs. Added TheTVDB as a metadata provider for better Sonarr compatibility. Post-merger feature freeze lifted; active development resumed. Legacy Overseerr/Jellyseerr projects now deprecated.
-- **Mydia** remains at 0.9.0. Now available as a TrueNAS app. Still pre-1.0 with expected breaking changes.
+- **Plex** remote playback paywall now fully enforced across all TV platforms (Samsung, LG, Vizio, PlayStation, Xbox, Fire TV) as of March 31, 2026. PMS 1.43.1.10611 is the current stable. Smart TV app UI refresh planned for all platforms by end of 2026. Remote Watch Pass introductory pricing ($1.99/mo, $19.99/yr) still ends June 1, 2026, rising to $2.99/mo and $29.99/yr.
+- **Jellyfin** released Server 10.11.8 (April 2026) shortly after 10.11.7 -- a bugfix release cleaning up regressions from the critical security patch, with the explicit goal of getting users onto an updated build before the four CVEs in 10.11.7 were publicly disclosed. 10.11.8 improves subtitle saving, media language filtering, and folder handling.
+- **Emby** shipped Beta 4.10.0.10 on April 11, 2026. Stable remains 4.9.3.0 (Jan 8, 2026). Beta adds SQLite 3.51.3, a "played" filter and display mode options on home-screen sections, and fixes realtime-monitor failures for directories containing periods. Native Linux app beta continues. Premiere pricing unchanged: $4.99/mo, $54/yr, $119 lifetime.
+- **CLZ Movies** pushed mobile down-sync optimizations on April 14, 2026 (follow-on to the v10.3 faster-sync release from April 1). Pricing and feature set otherwise unchanged since the last analysis.
+- **Seerr** no material change since v3.1.0 (Feb 28, 2026). Legacy Overseerr/Jellyseerr removal deadline of end-March 2026 has passed; those projects are now officially deprecated.
+- **Mydia** still 0.9.0. Cross-platform P2P player announced in February remains the highlight. Pre-1.0 breaking-change warning still applies.
+- **Ebook servers** (new category relevant to MediaManager's book launch) -- Calibre-Web remains the most mature self-hosted option; Kavita continues to specialize in manga/comics/light novels; Booklore has gained attention as a modern Calibre alternative with a built-in OPDS server; Audiobookshelf covers audiobooks + podcasts. None cross into physical-disc cataloging or video playback.
 - **DVD Profiler** website recovered after August 2025 server migration, but the software itself has not been updated since version 4.0.0 (~2017). Android app unpublished from Google Play in 2021. Effectively dormant.
-- **MediaManager** completed mobile offline playback with low-fidelity transcodes ([#5](https://github.com/jeffbstewart/MediaManager/issues/5) Done), relocated thumbnails/subtitles alongside source files ([#56](https://github.com/jeffbstewart/MediaManager/issues/56) Done), overhauled transcode buddy reliability (staging heartbeat to prevent idle stream timeout, bundle-level heartbeat, lease invalidation detection with mid-flight abort, retry with reconnection for completion reports), added UTC timestamp serialization for proper client-side timezone display, and fixed data quality duplicate TMDB assignment crash.
+- **MediaManager** launched a native **Android TV / Google TV app** (Jetpack Compose for TV) covering multi-user, home carousels, ExoPlayer playback with subtitles and skip intro/credits and auto-next, wish list, cameras, live TV, search, and TLS -- closing the single biggest remaining TV-platform gap alongside the Roku channel. Also launched full books support: ISBN barcode scanning via Open Library, .epub / .pdf scanner for NAS directories, in-browser paginated EPUB reader (epub.js, full-viewport route) with resume, native PDF viewing, author and series browse pages with "Other Works" / "Missing Volumes" from OL, wishlist-for-books with one-click heart actions, and an **Unmatched Books** admin queue with three resolution paths (by ISBN, by OL title/author search, by existing catalogue title). Completed custom web progress bar ([#57](https://github.com/jeffbstewart/MediaManager/issues/57) Done) and chapter seeking in the video player ([#55](https://github.com/jeffbstewart/MediaManager/issues/55) Done). H2_FILE_PASSWORD rotation support shipped ([#24](https://github.com/jeffbstewart/MediaManager/issues/24) Done). Hardened the image proxy (SSRF re-screening on every redirect hop up to 4, Content-Type inference fallback for OL covers that omit the header, `?default=false` on OL URLs to prevent caching of 1&times;1 placeholder GIFs). Added a server-side Wikipedia author-headshot cache so Wikimedia URLs never reach the client (keeps CSP `img-src 'self'`). Post-NAS-scan trigger now kicks the ebook scanner automatically.
 
 ---
 
@@ -33,14 +34,14 @@ This is both the product's greatest strength and its strategic challenge: it com
 | Feature | **Plex** | **Jellyfin** | **Emby** | **MediaManager** |
 |---------|----------|-------------|----------|-----------------|
 | **License** | Freemium (Plex Pass: $6.99/mo, $69.99/yr, or $249.99 lifetime; Remote Watch Pass: $1.99/mo intro rising to $2.99/mo after Jun 2026, or $19.99/yr rising to $29.99/yr) | Free, open-source | Freemium (Emby Premiere: $4.99/mo, $54/yr, or $119 lifetime) | Free, self-hosted |
-| **Client apps** | 20+ platforms (smart TVs, mobile, web, Roku, Fire TV, Apple TV, gaming consoles) | 10+ platforms (web, mobile, Roku, Android TV, Apple TV -- community-maintained) | 15+ platforms (similar to Plex; new native Linux app beta) | Web browser + custom Roku channel + **native iOS app** ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) -- [#5](https://github.com/jeffbstewart/MediaManager/issues/5) mobile offline |
+| **Client apps** | 20+ platforms (smart TVs, mobile, web, Roku, Fire TV, Apple TV, gaming consoles) | 10+ platforms (web, mobile, Roku, Android TV, Apple TV -- community-maintained) | 15+ platforms (similar to Plex; new native Linux app beta) | Web browser + custom Roku channel + **native iOS app** ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) + **native Android TV / Google TV app** (Jetpack Compose for TV) -- [#5](https://github.com/jeffbstewart/MediaManager/issues/5) mobile offline |
 | **Transcoding** | Excellent; hardware accel behind paywall | Excellent; hardware accel free; Dolby Vision tone-mapping | Excellent; hardware accel behind paywall | FFmpeg-based; CPU and NVENC GPU; background pre-transcoding |
 | **Library scanning** | Automatic file detection + rich metadata | Automatic file detection + metadata | Automatic file detection + metadata | Automatic NAS scanning + TMDB enrichment + TMDB collection tracking |
 | **User management** | Multi-user with managed/shared accounts | Multi-user with parental controls | Multi-user with parental controls | Multi-user with access levels and content rating ceilings; Roku multi-user picker ([#30](https://github.com/jeffbstewart/MediaManager/issues/30) Done) |
 | **Remote access** | Cloud relay (requires Plex Pass or Remote Watch Pass for TV apps) | Manual (reverse proxy) | Built-in option | Manual (reverse proxy) |
 | **Live TV/DVR** | Yes (premium) | Yes (via plugins) | Yes (premium) | Live TV via HDHomeRun ([#27](https://github.com/jeffbstewart/MediaManager/issues/27) cameras Done, [#41](https://github.com/jeffbstewart/MediaManager/issues/41) tuner Done); no DVR yet |
 | **Mobile apps** | Yes (iOS, Android -- no longer requires Plex Pass or $4.99 fee) | Yes (community) | Yes | **Yes** (native iOS app with custom player, subtitles, skip segments, thumbnail scrubbing, offline downloads -- [#1](https://github.com/jeffbstewart/MediaManager/issues/1), [#5](https://github.com/jeffbstewart/MediaManager/issues/5) Done); no Android yet |
-| **Smart TV apps** | Yes (all major platforms) | Yes (expanding; Roku app v3.1.7 with Dolby Vision/HDR10+/HLG; Xbox with gamepad + 4K/HDR) | Yes (Samsung Smart TV 2.1.0 with auto-skip intros) | Roku only (custom sideloaded) |
+| **Smart TV apps** | Yes (all major platforms) | Yes (expanding; Roku app v3.1.7 with Dolby Vision/HDR10+/HLG; Xbox with gamepad + 4K/HDR) | Yes (Samsung Smart TV 2.1.0 with auto-skip intros) | Roku (custom sideloaded) + **Android TV / Google TV** (native Compose for TV app). No Fire TV, Apple TV, or Samsung/LG/Vizio yet. |
 | **Seek thumbnails** | Yes (premium) | Yes (trickplay, free -- 100x faster in 10.11) | Yes (premium) | **Yes** (BIF trick play on Roku + thumbnail scrubbing on iOS -- [#39](https://github.com/jeffbstewart/MediaManager/issues/39) Done) |
 | **Subtitle support** | Excellent (multiple formats, download) | Excellent (OpenSubtitles plugin) | Excellent | SRT generation from transcodes; VTT rendering on iOS; auto-enabled -- [#40](https://github.com/jeffbstewart/MediaManager/issues/40) Roku subtitle toggle |
 | **Watch history sync** | Cross-device | Cross-device | Cross-device | Cross-device (browser <-> Roku <-> iOS via server) |
@@ -48,6 +49,7 @@ This is both the product's greatest strength and its strategic challenge: it com
 | **Search** | Yes (full-text, voice) | Yes (search, genre browsing) | Yes | **Yes** (text + voice search, genre/tag/collection/actor browsing -- [#31](https://github.com/jeffbstewart/MediaManager/issues/31), [#32](https://github.com/jeffbstewart/MediaManager/issues/32) Done) |
 | **Auto-play next episode** | Yes | Yes | Yes | **Yes** ([#33](https://github.com/jeffbstewart/MediaManager/issues/33) Done) |
 | **Home/personal videos** | No | No | No | **Yes** (personal/home video support -- [#28](https://github.com/jeffbstewart/MediaManager/issues/28) Done) |
+| **Ebooks (EPUB/PDF) in same catalog** | No (audiobooks only, via music library hack) | No | No | **Yes** (ISBN scan + .epub/.pdf scanner, Open Library metadata, in-browser paginated reader, author/series browse, wishlist) |
 
 ### Category 2: Collection Catalogs
 
@@ -56,7 +58,8 @@ This is both the product's greatest strength and its strategic challenge: it com
 | **License** | $1.99/mo or $19.99/yr (mobile); $3.95/mo or $39.95/yr (web) | Dormant (no updates since 4.0.0, ~2017) | Free/premium | Free, self-hosted |
 | **Barcode scanning** | Yes (camera, 98% hit rate; new one-by-one mode) | N/A (discontinued) | Yes | **Yes** (phone camera via PWA + UPC lookup -- [#42](https://github.com/jeffbstewart/MediaManager/issues/42) Done) |
 | **Metadata source** | IMDb | N/A | Multiple | TMDB (posters, cast, genres, descriptions, popularity, collections) |
-| **Physical format tracking** | DVD, Blu-ray, 4K UHD, HD-DVD, LaserDisc, VHS, UMD | N/A | DVD, Blu-ray | DVD, Blu-ray, UHD (auto-detected via FFprobe resolution) |
+| **Physical format tracking** | DVD, Blu-ray, 4K UHD, HD-DVD, LaserDisc, VHS, UMD | N/A | DVD, Blu-ray | DVD, Blu-ray, UHD (auto-detected via FFprobe resolution); **physical and digital books** (mass-market paperback, trade paperback, hardcover, EPUB, PDF) |
+| **Books in the same catalog** | No (separate CLZ Books app, ~$20/yr) | N/A | No | **Yes** (unified catalogue across video and books; no additional app or subscription) |
 | **Purchase price tracking** | Yes (purchase price, store, date; new currency selection) | N/A | No | **Yes** (valuation, Amazon import, automated Keepa pricing, insurance reporting) |
 | **Multi-pack detection** | No | N/A | No | **Yes** (double features, trilogies, box sets auto-detected) |
 | **Wish list** | Basic | N/A | No | **Yes** (TMDB search, admin review, season lifecycle, vote aggregation) -- [#43](https://github.com/jeffbstewart/MediaManager/issues/43) shareable wish lists |
@@ -74,7 +77,16 @@ This is both the product's greatest strength and its strategic challenge: it com
 | **Seerr** (v3.1.0, merged from Overseerr + Jellyseerr; legacy projects deprecated, feature freeze lifted) | Users request movies/TV; integrates with Sonarr/Radarr to auto-download; supports Plex, Jellyfin, and Emby; TheTVDB metadata provider | MediaManager's wish list serves the same "users request, admin fulfills" workflow, but for *physical media purchases* rather than automated downloads. MediaManager's season lifecycle tracking ([#25](https://github.com/jeffbstewart/MediaManager/issues/25) Done) adds structured fulfillment that Seerr lacks for physical media. |
 | **Ombi** | Similar request management for Plex/Emby/Jellyfin | Likely to lose users to the unified Seerr project |
 
-### Category 4: New Entrants
+### Category 4: Ebook Servers (Adjacent, Relevant to Books Launch)
+
+| Tool | Purpose | Relationship to MediaManager |
+|------|---------|------------------------------|
+| **Calibre-Web** | The most mature self-hosted ebook server; web interface over a Calibre library with user management, in-browser reading, OPDS feeds, and format conversion. | Dedicated ebook workflow, strong format conversion. MediaManager does not convert formats or expose OPDS, but unifies books with the rest of the physical catalogue and adds wishlist/fulfillment + author & series browse grounded in Open Library rather than Calibre's local metadata. |
+| **Kavita** | Self-hosted digital library with first-class manga, comic, and light-novel support (right-to-left, double-page spreads). | Specialized for comic formats MediaManager does not target. Non-overlapping. |
+| **Booklore** | Modern Calibre-alternative with built-in OPDS server and a cleaner onboarding. | Same space as Calibre-Web; same lack of overlap with physical-disc cataloguing or video. |
+| **Audiobookshelf** | Self-hosted audiobooks and podcasts with phone apps. | MediaManager does not catalogue audiobooks yet; the ingestion pipeline could be extended, but this is not on the near-term roadmap. |
+
+### Category 5: New Entrants
 
 | Tool | Purpose | Relationship to MediaManager |
 |------|---------|------------------------------|
@@ -117,15 +129,21 @@ Integration of personal and home videos alongside the commercial media library (
 ### 11. Native iOS App with Offline Playback
 A full-featured native iOS app ([#1](https://github.com/jeffbstewart/MediaManager/issues/1)) with SwiftUI, featuring SSDP server auto-discovery, gRPC-based app data access, title detail with cast, a custom video player with subtitles (VTT parser), skip segments, and thumbnail scrubbing, wish list management with TMDB search, security cameras, live TV, admin transcode status views, and offline downloads with low-fidelity mobile transcodes ([#5](https://github.com/jeffbstewart/MediaManager/issues/5) Done). This addresses what was previously the #1 competitive weakness and puts MediaManager ahead of CLZ Movies (which has no playback) while narrowing the gap with Plex/Jellyfin on mobile.
 
-### 12. API Rate Limiting and Security Hardening
-The pairing API is rate-limited per-IP with a global cap on active pair codes ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done). Buddy API hardening completed with device-token pairing ([#7](https://github.com/jeffbstewart/MediaManager/issues/7) Done), lease limits, probe validation, and audit logging ([#13](https://github.com/jeffbstewart/MediaManager/issues/13) Done). Remaining: [#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#24](https://github.com/jeffbstewart/MediaManager/issues/24) H2 password rotation.
+### 11a. Native Android TV / Google TV App
+A Jetpack Compose for TV app (see [Android TV Guide](ANDROID_TV_GUIDE.md)) with multi-user picker, home-screen poster carousels, movies/TV/family grids with sorting, title detail with cast/genres/tags/backdrop, episode picker with resume progress, ExoPlayer playback with subtitles and skip intro/credits and auto-next-episode, cross-device progress sync, wish list browsing + voting + TMDB search, live camera streaming with go2rtc warm-up, live TV via HDHomeRun, categorized search, and TLS support through HAProxy. This gives MediaManager native coverage of two of the three big living-room platforms (Android TV/Google TV + Roku); only Apple TV and Fire TV remain.
+
+### 12. Unified Books + Video Catalogue
+Books are first-class alongside movies and TV. Physical books catalogue by ISBN-13 barcode scan (978/979 prefixes route to Open Library instead of UPCitemdb); EPUB and PDF files on the NAS ingest automatically (EPUBs with embedded ISBNs auto-catalogue; PDFs sitting next to a catalogued EPUB auto-link as sibling editions). The web app ships an in-browser paginated EPUB reader (epub.js) with font-size controls and resume, plus native PDF viewing. Author and series pages mirror the actor/collection pages in the video catalogue, with "Other Works" and "Missing Volumes" pulled from Open Library and one-click heart icons to wishlist. The **Unmatched Books** admin queue handles ingestion edge cases with three resolution paths (by corrected ISBN, by OL title/author search, by linking to an existing catalogue title). CLZ covers books in a separate $20/yr app; Calibre-Web and Kavita only do ebooks. No competitor unifies physical books, ebooks, and physical video in one catalogue.
+
+### 13. API Rate Limiting and Security Hardening
+The pairing API is rate-limited per-IP with a global cap on active pair codes ([#53](https://github.com/jeffbstewart/MediaManager/issues/53) Done). Buddy API hardening completed with device-token pairing ([#7](https://github.com/jeffbstewart/MediaManager/issues/7) Done), lease limits, probe validation, and audit logging ([#13](https://github.com/jeffbstewart/MediaManager/issues/13) Done). H2 database password rotation support shipped ([#24](https://github.com/jeffbstewart/MediaManager/issues/24) Done). Image proxy rejects non-HTTPS redirects, re-runs SSRF host screening on every hop (up to 4), and caps response size. Remaining: [#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#59](https://github.com/jeffbstewart/MediaManager/issues/59) JWT bind cookie for cookie-auth hardening.
 
 ---
 
 ## MediaManager Weaknesses
 
 ### 1. Client App Coverage (Narrowing Gap)
-Web browser, sideloaded Roku channel, and native iOS app with offline downloads. No Android app, no Apple TV, no Fire TV, no Android TV, no smart TV apps. Plex and Jellyfin support 10-20+ platforms. The iOS app with offline playback ([#5](https://github.com/jeffbstewart/MediaManager/issues/5) Done) significantly narrows this gap -- the most common mobile platform now has a full-featured client including offline viewing -- but Android users and non-Roku smart TV owners remain unserved.
+Web browser, sideloaded Roku channel, native iOS app with offline downloads, and native Android TV / Google TV app. No Android phone/tablet app, no Apple TV, no Fire TV, no Samsung/LG/Vizio TV app. Plex and Jellyfin support 10-20+ platforms. The combination of iOS (phones + iPads) and Android TV (living-room big screen) covers the two highest-leverage surfaces outside of Roku, but an Android phone app and additional TV platforms remain open gaps.
 
 ### 2. No Remote Access Out of the Box
 Plex's cloud relay provides zero-config remote streaming (though now paywalled for TV apps). MediaManager requires manual reverse proxy setup (nginx, Caddy, etc.) for access outside the LAN. This is a barrier for less technical users and for watching media away from home.
@@ -153,18 +171,19 @@ No Trakt.tv sync, no Sonarr/Radarr integration, no OpenSubtitles plugin, no DLNA
 
 | Feature | Why It Matters | Competitive Effect | Tracked In |
 |---------|---------------|-------------------|------------|
-| **Android streaming app** | iOS app shipped; Android remains unserved. Most households have a mix of iOS and Android devices | Completes mobile coverage | -- |
+| **Android phone/tablet app** | iOS and Android TV apps shipped; Android phones/tablets remain unserved. Most households have a mix of iOS and Android devices | Completes mobile coverage | -- |
 | **On-the-fly transcoding** (or adaptive bitrate) | Eliminates the "wait for transcode queue" delay and reduces storage | Matches Plex/Jellyfin's core streaming experience | -- |
-| **Additional TV platform apps** (Fire TV, Apple TV, Android TV) | Expands device coverage beyond Roku | Addresses client app coverage gap | -- |
+| **Additional TV platform apps** (Fire TV, Apple TV) | Roku and Android TV / Google TV both shipped; Fire TV and Apple TV remain | Addresses remaining client-app coverage gap | -- |
 
 ### Medium Impact, Low Effort (Quick Wins)
 
 | Feature | Why It Matters | Competitive Effect | Tracked In |
 |---------|---------------|-------------------|------------|
 | **Roku subtitle toggle** | User control over an existing feature | Matches Plex/Jellyfin UX expectations | [#40](https://github.com/jeffbstewart/MediaManager/issues/40) |
-| **Shareable wish lists** | Gift-giving workflow for birthdays/holidays | No competitor offers this | [#43](https://github.com/jeffbstewart/MediaManager/issues/43) |
+| **Shareable wish lists** | Gift-giving workflow for birthdays/holidays, now spanning books and video | No competitor offers this | [#43](https://github.com/jeffbstewart/MediaManager/issues/43) |
 | **Roku quick actions** (hide, star) | Power-user title management from the couch | Quality-of-life improvement | [#38](https://github.com/jeffbstewart/MediaManager/issues/38) |
 | **Roku wish list view** | Browse and manage wishes from the TV | Completes the wish list experience on Roku | [#37](https://github.com/jeffbstewart/MediaManager/issues/37) |
+| **Books on Roku / iOS / Android TV** | Book catalog currently web-only; TV and phone surfaces would close the coverage gap | Extends the unique unified-catalogue strength to every surface | -- |
 
 ### Strategic Differentiators (Unique to MediaManager)
 
@@ -183,16 +202,16 @@ These features lean into what competitors *don't* do, rather than chasing parity
 
 MediaManager should **not** try to be a Plex/Jellyfin replacement. It cannot win on client app breadth, ecosystem integrations, or transcoding sophistication -- those projects have years of development and large communities.
 
-Instead, MediaManager should position as: **"The complete physical media management system -- from purchase to playback."**
+Instead, MediaManager should position as: **"The complete physical media management system -- from purchase to playback, across every format you own."**
 
-The target user is a physical media collector (DVD/Blu-ray/4K UHD) who:
-- Wants to catalog what they own (barcodes, metadata, purchase history)
-- Wants to play their collection without swapping discs (NAS + transcoding)
-- Wants household members to browse and request new titles (wish lists)
+The target user is a physical media collector (DVD/Blu-ray/4K UHD **and books**) who:
+- Wants to catalog what they own (barcodes, metadata, purchase history) across formats in one app
+- Wants to play or read their collection without swapping discs or hunting for files (NAS + transcoding for video; in-browser EPUB/PDF reader for books)
+- Wants household members to browse and request new titles (wish lists for both movies and books)
 - Values ownership and self-hosting over streaming subscriptions
 - Wants insurance documentation and collection value tracking
 
-The competitive moat is the **integration between physical ownership tracking and digital playback** -- a workflow that requires duct-taping 2-3 products together with any other solution (CLZ + Plex + Seerr, for example). Plex's 2025-2026 price increases and remote streaming paywalls strengthen this positioning: users paying $250 for a Plex lifetime pass still can't track what discs they own, what they paid, or generate an insurance report.
+The competitive moat is the **integration between physical ownership tracking, digital playback, and now books** -- a workflow that otherwise requires duct-taping four or more products together (CLZ Movies + CLZ Books + Plex + Calibre-Web + Seerr, for example). Plex's 2025-2026 price increases and remote streaming paywalls strengthen the video side of this positioning; the books launch extends the same "unified physical catalogue" value proposition into a category where CLZ charges a separate subscription and the self-hosted options (Calibre-Web, Kavita) only handle digital files.
 
 ### Priority Roadmap
 
@@ -208,12 +227,17 @@ The competitive moat is the **integration between physical ownership tracking an
 9. ~~Thumbnail/subtitle relocation~~ ([#56](https://github.com/jeffbstewart/MediaManager/issues/56) Done) -- Thumbnails and subtitles stored alongside source files
 10. ~~Transcode buddy reliability~~ -- Staging heartbeat, bundle-level heartbeat, lease invalidation detection with mid-flight abort, retry with reconnection for completion reports
 11. ~~UTC timestamp handling~~ -- Server sends UTC ISO-8601 timestamps; clients format in local timezone
+12. ~~Chapter seeking in video player~~ ([#55](https://github.com/jeffbstewart/MediaManager/issues/55) Done)
+13. ~~Custom progress bar for web video player~~ ([#57](https://github.com/jeffbstewart/MediaManager/issues/57) Done)
+14. ~~H2_FILE_PASSWORD rotation support~~ ([#24](https://github.com/jeffbstewart/MediaManager/issues/24) Done)
+15. ~~Books support~~ -- Physical books (ISBN barcode scan + Open Library), .epub/.pdf NAS scanner, in-browser paginated EPUB reader and native PDF viewing, author and series browse, wishlist-for-books with "Missing Volumes" fill-gap, Unmatched Books admin queue, Wikipedia author headshot cache, image-proxy hardening for OL covers
+16. ~~Native Android TV / Google TV app~~ -- Jetpack Compose for TV with multi-user, home carousels, ExoPlayer playback (subtitles, skip segments, auto-next), wish list, cameras, live TV, search, TLS
 
 **Next priorities:**
 1. **Roku polish** ([#40](https://github.com/jeffbstewart/MediaManager/issues/40) subtitle toggle, [#38](https://github.com/jeffbstewart/MediaManager/issues/38) quick actions, [#37](https://github.com/jeffbstewart/MediaManager/issues/37) wish list view) -- Completes the Roku experience for parity with Jellyfin's Roku app on core UX
-2. **Player polish** ([#55](https://github.com/jeffbstewart/MediaManager/issues/55) chapter seeking, [#57](https://github.com/jeffbstewart/MediaManager/issues/57) custom web progress bar) -- Deepens the playback experience across platforms
-3. **Shareable wish lists** ([#43](https://github.com/jeffbstewart/MediaManager/issues/43)) -- Leans into the unique "physical media household" positioning
-4. **Security hardening** ([#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#24](https://github.com/jeffbstewart/MediaManager/issues/24) H2 password rotation, [#59](https://github.com/jeffbstewart/MediaManager/issues/59) cookie auth hardening) -- Necessary for confidence in internet-exposed deployment
+2. **Shareable wish lists** ([#43](https://github.com/jeffbstewart/MediaManager/issues/43)) -- Leans into the unique "physical media household" positioning, now spanning books and video
+3. **Security hardening** ([#12](https://github.com/jeffbstewart/MediaManager/issues/12) Docker secrets, [#59](https://github.com/jeffbstewart/MediaManager/issues/59) JWT bind cookie) -- Necessary for confidence in internet-exposed deployment
+4. **Transcode buddy Windows service installer** ([#58](https://github.com/jeffbstewart/MediaManager/issues/58)) -- Removes the last rough edge of the buddy deployment story on Windows hosts
 
 ---
 
@@ -268,6 +292,16 @@ The competitive moat is the **integration between physical ownership tracking an
 - [Seerr v3.1.0 Security Release](https://docs.seerr.dev/blog/seerr-3-1-0-security-release)
 - [Mydia TrueNAS App](https://apps.truenas.com/catalog/mydia/)
 - [DVD Profiler Server Migration (Invelos)](https://www.invelos.com/)
+- [Jellyfin 10.11.8 Release (TechSpot)](https://www.techspot.com/downloads/7165-jellyfin.html)
+- [Jellyfin Release Notes (Releasebot)](https://releasebot.io/updates/jellyfin)
+- [Emby Server 4.10.0.10 Beta (VideoHelp)](https://www.videohelp.com/software/Emby)
+- [CLZ Movies What's New 2026](https://clz.com/movies/whatsnew)
+- [Plex Media Server 1.43.1.10611 (VideoHelp)](https://www.videohelp.com/software/Plex)
+- [Plex Remote Playback Requirements (Support)](https://support.plex.tv/articles/requirements-for-remote-playback-of-personal-media/)
+- [Self-Hosted Ebook Servers 2026 (AlternativeTo)](https://alternativeto.net/software/calibre/?platform=self-hosted)
+- [Calibre Alternatives 2026 (Technical Wall)](https://technicalwall.com/alternatives/best-calibre-alternatives/)
+- [Best Self-Hosted Ebook Servers 2026 (selfhosting.sh)](https://selfhosting.sh/best/ebooks-reading/)
+- [Open Library Covers API](https://openlibrary.org/dev/docs/api/covers)
 
 ---
 

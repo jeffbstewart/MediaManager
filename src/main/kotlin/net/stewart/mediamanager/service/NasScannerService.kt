@@ -102,6 +102,7 @@ object NasScannerService {
         }
 
         val personalVideoDir = getPersonalVideoDir()
+        val booksRoot = getBooksRoot()
 
         // Reclassify existing discovered files from the personal video directory
         if (personalVideoDir != null) {
@@ -123,6 +124,15 @@ object NasScannerService {
             if (personalVideoDir != null && dir.fileName.toString().equals(personalVideoDir, ignoreCase = true)) {
                 log.info("Directory '{}' classified as PERSONAL (configured personal_video_nas_dir)", dir.fileName)
                 discoverRecursive(dir, MediaType.PERSONAL.name, discovered)
+                continue
+            }
+
+            // Books directory: owned by BookScannerAgent, which walks .epub/.pdf
+            // files on its own cadence. The NAS scanner only cares about video,
+            // so we skip the directory entirely rather than classifying it
+            // EMPTY and scaring the admin.
+            if (booksRoot != null && isSameDir(dir, booksRoot)) {
+                log.info("Directory '{}' classified as BOOKS (configured books_root_path; handled by BookScannerAgent)", dir.fileName)
                 continue
             }
 
@@ -223,6 +233,22 @@ object NasScannerService {
             matched = matchedCount, unmatched = unmatchedCount, deleted = deletedCount,
             message = "Scan complete: ${newFiles.size} new files ($matchedCount matched, $unmatchedCount unmatched), $deletedCount deleted"
         ))
+
+        // Kick the book scanner on a daemon thread so a manual NAS scan
+        // picks up new ebooks immediately instead of waiting for the next
+        // hourly BookScannerAgent tick. Fire-and-forget — the NAS scan's
+        // COMPLETE broadcast has already gone out, and scanNow() is
+        // mutexed internally so we never race the daemon.
+        Thread({
+            try {
+                BookScannerAgent.scanNowIfAvailable()
+            } catch (e: Exception) {
+                log.warn("Post-NAS-scan book trigger failed: {}", e.message)
+            }
+        }, "post-nas-book-scan").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     private fun discoverFlat(dir: Path, mediaType: String, out: MutableList<DiscoveredFileCandidate>) {
@@ -668,6 +694,22 @@ object NasScannerService {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "nas_root_path" }
             ?.config_val
+    }
+
+    /** Absolute books_root_path setting, or null if unset. */
+    private fun getBooksRoot(): String? =
+        AppConfig.findAll()
+            .firstOrNull { it.config_key == BookScannerAgent.CONFIG_KEY_BOOKS_ROOT }
+            ?.config_val
+            ?.ifBlank { null }
+
+    /** Returns true when [dir] resolves to the same filesystem location as [other]. */
+    private fun isSameDir(dir: Path, other: String): Boolean = try {
+        dir.toRealPath() == Path.of(other).toRealPath()
+    } catch (_: Exception) {
+        // Fall back to string compare if either side can't be resolved
+        // (missing dir, permission issue). Less precise but safe.
+        dir.toAbsolutePath().toString().equals(other, ignoreCase = true)
     }
 
     private fun getPersonalVideoDir(): String? {

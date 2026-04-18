@@ -6,8 +6,8 @@
 
 <p align="center">
   <strong>Your physical media collection, digitized and streamable.</strong><br>
-  Catalog DVDs, Blu-rays, and UHDs by barcode. Enrich with TMDB metadata.<br>
-  Stream from your NAS to any browser or Roku.
+  Catalog DVDs, Blu-rays, UHDs, and books by barcode. Enrich with TMDB or Open Library metadata.<br>
+  Stream videos and read ebooks (EPUB / PDF) from your NAS to any browser or Roku.
 </p>
 
 ---

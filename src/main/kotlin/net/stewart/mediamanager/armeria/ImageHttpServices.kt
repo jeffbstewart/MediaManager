@@ -109,7 +109,8 @@ class PosterHttpService {
             }
             return serveProxied(
                 ImageProxyService.Provider.OPEN_LIBRARY,
-                "/b/isbn/$isbn-$olSize.jpg",
+                // ?default=false → 404 instead of 1x1 placeholder GIF.
+                "/b/isbn/$isbn-$olSize.jpg?default=false",
                 "jpg",
                 "poster"
             )

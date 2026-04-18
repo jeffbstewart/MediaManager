@@ -268,6 +268,33 @@ On the Roku channel, Live TV channels appear as a carousel row on the home scree
 
 ---
 
+## Books
+
+When the collection includes books, **Content &rarr; Books** appears in the sidebar. Physical books (catalogued by ISBN) and ebooks (.epub / .pdf files scanned from a configured directory) live in the same catalog as your movies and TV.
+
+### Browsing
+
+The Books page mirrors the movie catalog &mdash; cover grid with sort options, click a cover to open the title detail. On the detail page:
+
+- **Author byline** &mdash; Each author under the title links to that author's page, which lists every book of theirs you own (and an **Other Works** section populated from Open Library for books you don't yet own).
+- **Series line** &mdash; When the book is part of a series, a "#3 of Foundation" line links to the series page. The series page shows all volumes you own plus **Missing Volumes** from Open Library, with a "Wishlist all missing" button for filling gaps.
+- **Edition metadata** &mdash; First publication year, this edition's year (tooltip), page count, and genres sit below the byline.
+
+### Reading
+
+For .epub and .pdf titles, the detail page shows a **Read** action per edition. Click it to open the full-viewport reader:
+
+- **EPUB** &mdash; Paginated layout via epub.js. Use &larr; / &rarr; or the on-screen arrows to page. Font size controls live in the header. Reading position is saved every 10 seconds; reopening the book resumes where you left off.
+- **PDF** &mdash; Rendered by your browser's native PDF viewer. Position tracking for PDFs is coming in a future update.
+
+Close the reader with the X in the top-left to return to the catalog.
+
+### Wishlist for Books
+
+The wish-list search box accepts book titles too. Matches from Open Library appear alongside TMDB movie/TV results; click the heart icon to add a book wish. On author and series pages, each unowned title and missing volume has its own heart button for one-click wish-listing. Fulfillment works the same as for videos: once the admin catalogues the book, the wish shows "Added to collection" and can be dismissed.
+
+---
+
 ## Roku Playback
 
 Media Manager includes a custom Roku channel for TV playback. See the [Roku Setup Guide](ROKU_GUIDE.md) for installation. Once paired, your library appears on the Roku with poster art, episode grids, and playback progress synced with the browser. The Roku channel also supports full-text search with landing pages for collections, tags, genres, and actors, plus wishlist integration from actor pages.

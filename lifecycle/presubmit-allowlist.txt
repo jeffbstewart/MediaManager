@@ -24,6 +24,7 @@
 4.10.0.5
 4.10.0.6
 4.10.0.8
+4.10.0.10
 
 # Third-party minified libraries (skip entire file)
 file:hls.min.js

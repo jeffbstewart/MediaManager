@@ -88,11 +88,15 @@ class ImageProxyHttpService {
         //   /b/olid/{olid}-{size}.jpg       book covers by OL edition/work
         //   /b/id/{cover_id}-{size}.jpg     book covers by OL numeric cover ID
         //   /a/olid/{author-olid}-{size}.jpg author photos
+        //
+        // ?default=false tells OL to return 404 instead of a 1x1 "no cover"
+        // placeholder when no real cover exists. The client falls back to
+        // its own placeholder in that case.
         val path = when (kind) {
-            "isbn" -> "/b/isbn/$key-$size.jpg"
-            "olid" -> "/b/olid/$key-$size.jpg"
-            "cover" -> "/b/id/$key-$size.jpg"
-            "author" -> "/a/olid/$key-$size.jpg"
+            "isbn" -> "/b/isbn/$key-$size.jpg?default=false"
+            "olid" -> "/b/olid/$key-$size.jpg?default=false"
+            "cover" -> "/b/id/$key-$size.jpg?default=false"
+            "author" -> "/a/olid/$key-$size.jpg?default=false"
             else -> return refuse("ol", HttpStatus.BAD_REQUEST, "bad kind")
         }
 

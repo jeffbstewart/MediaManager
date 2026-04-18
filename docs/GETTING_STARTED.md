@@ -102,6 +102,8 @@ Once the server is running and you've created your admin account:
 
 7. **Generate subtitles** &mdash; See [Generating Subtitles](GENERATING_SUBTITLES.md) to set up Whisper AI subtitle generation.
 
+8. **Catalog books** &mdash; Scan a book's ISBN barcode on **Add Item** to add physical books (Open Library resolves the work and its metadata). To also ingest .epub / .pdf files you already have, set an **EBook Directory** under **Settings**; the background scanner picks up new files every hour, or immediately after a NAS scan. See the [Admin Guide](ADMIN_GUIDE.md#books) for the unmatched-books triage queue.
+
 ---
 
 ## iOS App Development

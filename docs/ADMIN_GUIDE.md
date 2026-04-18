@@ -534,6 +534,51 @@ The price lookup agent uses the **Keepa API** to estimate replacement values by 
 
 ---
 
+## Books
+
+Book support is always on &mdash; no enablement flag. The feature covers both physical books (catalogued by ISBN barcode scan) and ebooks (.epub / .pdf files discovered from a configured directory on the NAS). Metadata comes from [Open Library](https://openlibrary.org) (free, no API key); author biographies are enriched from Wikipedia.
+
+### Configuration
+
+**Sidebar &rarr; Settings &rarr; Books**
+
+| Setting | Purpose |
+|---------|---------|
+| **EBook Directory** | Absolute path (as visible inside the server container) to a directory holding .epub / .pdf files. Leave blank to disable the ebook scanner. |
+
+The ebook scanner walks this directory once an hour and also immediately after a NAS scan finishes. A NAS scan classifies the directory as `BOOKS` and hands it off to the ebook scanner rather than trying to match video files there.
+
+### Ingestion paths
+
+| Source | Entry point | What happens |
+|--------|-------------|--------------|
+| Physical book (ISBN barcode) | **Add Item &rarr; Scan Barcode** | ISBN-13 prefixes (978/979) route to Open Library instead of UPCitemdb. OL resolves the work, edition, authors, and series; a Title + MediaItem are created. |
+| Physical book (title/author) | **Add Item &rarr; Search Books** | Free-text query against OL. Each result pre-picks a best-available ISBN; clicking **Add** runs the same ISBN ingestion path as a scan. Use this when a scan fails or the book has no barcode. |
+| Ebook file (.epub / .pdf) | Background scanner | EPUBs with embedded ISBNs auto-catalogue via OL. PDFs and EPUBs without ISBNs park in the **Unmatched Books** queue. A PDF sitting next to a catalogued EPUB of the same name auto-links as a sibling edition. |
+
+### Unmatched Books queue
+
+**Sidebar &rarr; Unmatched Books** (red badge shows pending count)
+
+Files that couldn't auto-resolve go here. The **Link** dialog offers three resolution paths:
+
+- **Look up by ISBN** &mdash; Supply a corrected ISBN; server re-queries Open Library and ingests.
+- **Search Open Library** &mdash; Title/author search against OL, same UX as the Add Item tab. Results with a known ISBN are selectable; the Add action delegates to the ISBN lookup path.
+- **Link to existing catalogue title** &mdash; Pick an already-catalogued book title to attach this file as another edition. Useful when the parsed ISBN is wrong or you already own a different edition.
+
+**Ignore** marks the row as IGNORED (stops re-triaging in the queue) without deleting the file on disk.
+
+### Cover and headshot image proxy
+
+All third-party images (book covers from `covers.openlibrary.org`, author photos from `upload.wikimedia.org`) route through a server-side proxy with disk cache so client IPs never leak to those CDNs and the CSP stays `img-src 'self'`:
+
+- Book covers: `/posters/{size}/{titleId}` falls back to `/proxy/ol/isbn/{isbn}/{S|M|L}` when the title is a book. `?default=false` is appended so OL 404s instead of returning a 1&times;1 placeholder.
+- Author photos: `/author-headshots/{authorId}` downloads the Wikipedia thumbnail once and serves subsequent requests from disk.
+
+The image proxy enforces a host allowlist, re-runs an SSRF screen on every redirect hop (up to 4), and rejects non-image content types. Failures are logged at WARN; successful fetches count toward the `mm_image_proxy_total` metric.
+
+---
+
 ## User Management
 
 **Sidebar &rarr; Users**
