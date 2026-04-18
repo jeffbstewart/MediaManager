@@ -81,7 +81,7 @@ enum class MatchMethod {
     AUTO_EXACT, AUTO_NORMALIZED, MANUAL
 }
 
-enum class WishType { MEDIA, TRANSCODE }
+enum class WishType { MEDIA, TRANSCODE, BOOK }
 
 enum class WishStatus { ACTIVE, CANCELLED, FULFILLED, DISMISSED }
 

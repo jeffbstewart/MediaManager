@@ -82,6 +82,9 @@ object BookIngestionService {
 
         OwnershipPhotoService.resolveOrphans(isbn, mediaItem.id!!)
 
+        // Fulfill any active wishes for this work (across all users).
+        WishListService.fulfillBookWishes(lookup.openLibraryWorkId)
+
         log.info("Book ingested: ISBN={} workId={} title='{}' titleReused={}",
             isbn, lookup.openLibraryWorkId, lookup.workTitle, reused)
 

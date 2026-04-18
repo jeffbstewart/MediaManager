@@ -90,11 +90,67 @@ class WishListHttpService {
             it.user_id == userId && it.wish_type == WishType.MEDIA.name
         }
 
+        // Book wishes — M3. Rendered in their own section on the wishlist page.
+        val bookWishes = WishListService.getActiveBookWishesForUser(userId).map { w ->
+            mapOf(
+                "id" to w.id,
+                "ol_work_id" to w.open_library_work_id,
+                "title" to w.book_title,
+                "author" to w.book_author,
+                "cover_url" to w.book_cover_isbn?.let { isbn ->
+                    "https://covers.openlibrary.org/b/isbn/$isbn-M.jpg"
+                },
+                "series_id" to w.book_series_id,
+                "series_number" to w.book_series_number?.toPlainString()
+            )
+        }
+
         return jsonResponse(gson.toJson(mapOf(
             "media_wishes" to mediaWishes,
             "transcode_wishes" to transcodeItems,
+            "book_wishes" to bookWishes,
             "has_any_media_wish" to hasAnyMediaWish
         )))
+    }
+
+    /** Add a book to the user's wishlist, keyed on Open Library work ID. */
+    @Post("/api/v2/wishlist/books")
+    fun addBookWish(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+
+        val workId = (body["ol_work_id"] as? String)?.ifBlank { null }
+            ?: return badRequest("ol_work_id required")
+        val title = (body["title"] as? String)?.ifBlank { null }
+            ?: return badRequest("title required")
+        val author = body["author"] as? String
+        val coverIsbn = body["cover_isbn"] as? String
+        val seriesId = (body["series_id"] as? Number)?.toLong()
+        val seriesNumber = (body["series_number"] as? String)?.toBigDecimalOrNull()
+
+        val wish = WishListService.addBookWishForUser(
+            user.id!!,
+            WishListService.BookWishInput(
+                openLibraryWorkId = workId,
+                title = title,
+                author = author,
+                coverIsbn = coverIsbn,
+                seriesId = seriesId,
+                seriesNumber = seriesNumber
+            )
+        )
+        return jsonResponse(gson.toJson(mapOf("id" to wish.id, "status" to wish.status)))
+    }
+
+    /** Remove a book wish by OL work ID (the stable key). */
+    @Delete("/api/v2/wishlist/books/{olWorkId}")
+    fun removeBookWish(
+        ctx: ServiceRequestContext,
+        @Param("olWorkId") olWorkId: String
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        val removed = WishListService.removeBookWishForUser(user.id!!, olWorkId)
+        return jsonResponse(gson.toJson(mapOf("removed" to removed)))
     }
 
     /** Search TMDB for movies and TV shows. */

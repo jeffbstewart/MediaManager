@@ -1,6 +1,8 @@
 .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
+.muted { color: var(--mat-sys-on-surface-variant, #888); font-size: 0.875rem; margin: 0.25rem 0 1rem; }
+.empty-state { color: var(--mat-sys-on-surface-variant, #888); font-style: italic; padding: 1rem 0; }
 
 // Hero
 .hero {

@@ -26,7 +26,7 @@
     </div>
 
     @if (s.volumes.length > 0) {
-      <h2>Volumes</h2>
+      <h2>Volumes in Your Collection</h2>
       <div class="poster-grid">
         @for (v of s.volumes; track v.title_id) {
           <a class="poster-card" [routerLink]="routes.title(v.title_id)">
@@ -46,6 +46,51 @@
           </a>
         }
       </div>
+    }
+
+    @if (s.can_fill_gaps) {
+      @if (s.missing_volumes.length > 0) {
+        <div class="section-header-row">
+          <h2>Missing Volumes</h2>
+          @if (bulkAdding()) {
+            <mat-spinner diameter="24" />
+          } @else {
+            <button mat-flat-button color="primary" type="button" (click)="wishlistAllGaps()">
+              Wishlist all missing
+            </button>
+          }
+        </div>
+        @if (bulkMessage()) {
+          <p class="muted">{{ bulkMessage() }}</p>
+        }
+        <div class="poster-grid">
+          @for (v of s.missing_volumes; track v.ol_work_id) {
+            <div class="poster-card unowned">
+              <div class="poster-wrapper">
+                @if (v.cover_url) {
+                  <img [src]="v.cover_url" [alt]="v.title" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+                <button class="wish-btn" [class.wished]="v.already_wished"
+                        type="button"
+                        [attr.aria-label]="v.already_wished ? 'Remove from wish list' : 'Add to wish list'"
+                        (click)="toggleWish(v)">
+                  <mat-icon>{{ v.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+                </button>
+              </div>
+              <span class="poster-title">
+                @if (v.series_number) { <strong>#{{ v.series_number }}</strong> &nbsp; }{{ v.title }}
+              </span>
+              @if (v.year) {
+                <span class="poster-meta">{{ v.year }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    } @else if (s.volumes.length > 0) {
+      <p class="muted">We don't know this series's full volume list yet. Scan or add more volumes to enable gap-filling.</p>
     }
   }
 </div>

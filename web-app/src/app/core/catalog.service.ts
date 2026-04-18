@@ -267,7 +267,18 @@ export interface TranscodeWish {
 export interface WishListResponse {
   media_wishes: MediaWish[];
   transcode_wishes: TranscodeWish[];
+  book_wishes: BookWish[];
   has_any_media_wish: boolean;
+}
+
+export interface BookWish {
+  id: number;
+  ol_work_id: string;
+  title: string;
+  author: string | null;
+  cover_url: string | null;
+  series_id: number | null;
+  series_number: string | null;
 }
 
 export interface TmdbSearchResultItem {
@@ -361,6 +372,16 @@ export interface AuthorDetail {
   death_date: string | null;
   open_library_author_id: string | null;
   owned_books: AuthorOwnedBook[];
+  other_works: AuthorOtherWork[];
+}
+
+export interface AuthorOtherWork {
+  ol_work_id: string;
+  title: string;
+  year: number | null;
+  cover_url: string | null;
+  series_raw: string | null;
+  already_wished: boolean;
 }
 
 export interface BookSeriesVolume {
@@ -379,6 +400,26 @@ export interface BookSeriesDetail {
   poster_url: string | null;
   author: { id: number; name: string } | null;
   volumes: BookSeriesVolume[];
+  missing_volumes: BookSeriesMissingVolume[];
+  can_fill_gaps: boolean;
+}
+
+export interface BookSeriesMissingVolume {
+  ol_work_id: string;
+  title: string;
+  series_number: string | null;
+  year: number | null;
+  cover_url: string | null;
+  already_wished: boolean;
+}
+
+export interface BookWishInput {
+  ol_work_id: string;
+  title: string;
+  author?: string | null;
+  cover_isbn?: string | null;
+  series_id?: number | null;
+  series_number?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -455,6 +496,20 @@ export class CatalogService {
 
   async addMediaWish(item: { tmdb_id: number; title: string; media_type: string; poster_path: string | null; release_year: number | null; popularity: number | null }): Promise<{ ok: boolean }> {
     return firstValueFrom(this.http.post<{ ok: boolean }>('/api/v2/wishlist/add', item));
+  }
+
+  async addBookWish(input: BookWishInput): Promise<{ id: number; status: string }> {
+    return firstValueFrom(this.http.post<{ id: number; status: string }>('/api/v2/wishlist/books', input));
+  }
+
+  async removeBookWish(olWorkId: string): Promise<{ removed: boolean }> {
+    return firstValueFrom(this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/books/${olWorkId}`));
+  }
+
+  async wishlistSeriesGaps(seriesId: number): Promise<{ added: number; already_wished: number; error?: string }> {
+    return firstValueFrom(
+      this.http.post<{ added: number; already_wished: number; error?: string }>(
+        `/api/v2/catalog/series/${seriesId}/wishlist-gaps`, {}));
   }
 
   async cancelWish(wishId: number): Promise<void> {

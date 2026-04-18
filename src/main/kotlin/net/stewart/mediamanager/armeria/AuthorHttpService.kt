@@ -17,6 +17,9 @@ import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TitleAuthor
+import net.stewart.mediamanager.service.OpenLibraryHttpService
+import net.stewart.mediamanager.service.OpenLibraryService
+import net.stewart.mediamanager.service.WishListService
 
 /**
  * Author browse surface. See docs/BOOKS.md — mirrors the ActorHttpService
@@ -26,7 +29,9 @@ import net.stewart.mediamanager.entity.TitleAuthor
  * books the user owns by this author.
  */
 @Blocking
-class AuthorHttpService {
+class AuthorHttpService(
+    private val openLibrary: OpenLibraryService = OpenLibraryHttpService()
+) {
 
     private val gson = Gson()
 
@@ -87,6 +92,11 @@ class AuthorHttpService {
             { (it["title_name"] as? String) ?: "" }
         ))
 
+        // "Other Works" — Open Library bibliography filtered to works the user
+        // doesn't already own. Each entry carries an `already_wished` boolean
+        // so the UI renders the heart in the right state without a second fetch.
+        val otherWorks = buildOtherWorks(author, user.id!!, linkedTitleIds)
+
         val result = mapOf(
             "id" to author.id,
             "name" to author.name,
@@ -95,9 +105,42 @@ class AuthorHttpService {
             "birth_date" to author.birth_date?.toString(),
             "death_date" to author.death_date?.toString(),
             "open_library_author_id" to author.open_library_author_id,
-            "owned_books" to ownedBooks
+            "owned_books" to ownedBooks,
+            "other_works" to otherWorks
         )
         return jsonResponse(gson.toJson(result))
+    }
+
+    private fun buildOtherWorks(
+        author: Author,
+        userId: Long,
+        ownedTitleIds: Set<Long?>
+    ): List<Map<String, Any?>> {
+        val olid = author.open_library_author_id ?: return emptyList()
+
+        // Works already in the catalog, keyed by OL work ID — excluded from "other works".
+        val ownedWorkIds = Title.findAll()
+            .asSequence()
+            .filter { it.id in ownedTitleIds && !it.open_library_work_id.isNullOrBlank() }
+            .mapNotNull { it.open_library_work_id }
+            .toSet()
+
+        val wishedIds = WishListService.activeBookWishWorkIdsForUser(userId)
+
+        return openLibrary.listAuthorWorks(olid, limit = 200)
+            .asSequence()
+            .filter { it.openLibraryWorkId !in ownedWorkIds }
+            .map { work ->
+                mapOf(
+                    "ol_work_id" to work.openLibraryWorkId,
+                    "title" to work.title,
+                    "year" to work.firstPublishYear,
+                    "cover_url" to work.coverUrl,
+                    "series_raw" to work.seriesRaw,
+                    "already_wished" to (work.openLibraryWorkId in wishedIds)
+                )
+            }
+            .toList()
     }
 
     private fun headshotUrl(author: Author): String? = author.headshot_path

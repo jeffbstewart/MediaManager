@@ -26,6 +26,14 @@ data class WishListItem(
     // MEDIA wish: optional season number (e.g., "I want season 5 of this show")
     var season_number: Int? = null,
 
+    // BOOK wish fields — see docs/BOOKS.md M3.
+    var open_library_work_id: String? = null,
+    var book_title: String? = null,
+    var book_author: String? = null,
+    var book_cover_isbn: String? = null,
+    var book_series_id: Long? = null,
+    var book_series_number: java.math.BigDecimal? = null,
+
     var notes: String? = null,
     var created_at: LocalDateTime? = null,
     var fulfilled_at: LocalDateTime? = null

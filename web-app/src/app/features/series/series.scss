@@ -1,6 +1,14 @@
 .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.muted { color: var(--mat-sys-on-surface-variant, #888); font-size: 0.875rem; margin: 0.25rem 0 1rem; }
 
 // Hero
 .hero {

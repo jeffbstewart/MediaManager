@@ -55,5 +55,33 @@
     } @else {
       <p class="empty-state">No books in your collection by this author yet.</p>
     }
+
+    @if (a.other_works.length > 0) {
+      <h2>Other Works</h2>
+      <p class="muted">Books by this author from Open Library that aren't in your collection. Tap the heart to wish-list.</p>
+      <div class="poster-grid">
+        @for (work of a.other_works; track work.ol_work_id) {
+          <div class="poster-card unowned">
+            <div class="poster-wrapper">
+              @if (work.cover_url) {
+                <img [src]="work.cover_url" [alt]="work.title" class="poster-img" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+              <button class="wish-btn" [class.wished]="work.already_wished"
+                      type="button"
+                      [attr.aria-label]="work.already_wished ? 'Remove from wish list' : 'Add to wish list'"
+                      (click)="toggleWish(work)">
+                <mat-icon>{{ work.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+              </button>
+            </div>
+            <span class="poster-title">{{ work.title }}</span>
+            @if (work.year) {
+              <span class="poster-meta">{{ work.year }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
   }
 </div>

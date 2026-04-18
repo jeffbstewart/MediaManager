@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
-  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem,
+  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 import { WishInterstitialService } from '../../core/wish-interstitial.service';
@@ -25,6 +25,7 @@ export class WishListComponent implements OnInit {
   readonly error = signal('');
   readonly mediaWishes = signal<MediaWish[]>([]);
   readonly transcodeWishes = signal<TranscodeWish[]>([]);
+  readonly bookWishes = signal<BookWish[]>([]);
   readonly hasAnyMediaWish = signal(false);
 
   readonly searchQuery = signal('');
@@ -46,6 +47,7 @@ export class WishListComponent implements OnInit {
       const data = await this.catalog.getWishList();
       this.mediaWishes.set(data.media_wishes);
       this.transcodeWishes.set(data.transcode_wishes);
+      this.bookWishes.set(data.book_wishes ?? []);
       this.hasAnyMediaWish.set(data.has_any_media_wish);
     } catch {
       this.error.set('Failed to load wish list');
@@ -130,6 +132,11 @@ export class WishListComponent implements OnInit {
 
   async removeTranscodeWish(wish: TranscodeWish): Promise<void> {
     await this.catalog.removeTranscodeWish(wish.id);
+    await this.refresh();
+  }
+
+  async removeBookWish(wish: BookWish): Promise<void> {
+    await this.catalog.removeBookWish(wish.ol_work_id);
     await this.refresh();
   }
 

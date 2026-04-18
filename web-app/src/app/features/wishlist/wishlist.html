@@ -116,6 +116,32 @@
     </div>
   }
 
+  <!-- Book Wishes -->
+  @if (bookWishes().length > 0) {
+    <h3>Book Wishes</h3>
+    <div class="transcode-list">
+      @for (wish of bookWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.cover_url) {
+            <img [src]="wish.cover_url" [alt]="wish.title" class="transcode-poster" />
+          }
+          <span class="transcode-title">
+            {{ wish.title }}
+            @if (wish.author) { <span class="book-wish-author"> by {{ wish.author }}</span> }
+            @if (wish.series_id) {
+              &nbsp;·&nbsp;<a [routerLink]="routes.series(wish.series_id)">
+                Series@if (wish.series_number) { #{{ wish.series_number }} }
+              </a>
+            }
+          </span>
+          <button class="remove-btn" (click)="removeBookWish(wish)" aria-label="Remove from wish list">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
   <!-- First-wish interstitial -->
   @if (showInterstitial()) {
     <div class="modal-overlay" (click)="cancelInterstitial()">

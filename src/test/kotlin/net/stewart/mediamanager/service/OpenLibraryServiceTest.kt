@@ -144,4 +144,54 @@ class OpenLibraryServiceTest {
             """{"key":"/books/OLxM","title":"Orphan"}""", { null }, { null })
         assertTrue(result is OpenLibraryResult.Error)
     }
+
+    @Test
+    fun `parseAuthorWorks extracts id, title, year, cover, series`() {
+        val body = """
+            {
+              "entries": [
+                {
+                  "key": "/works/OL46125W",
+                  "title": "Foundation",
+                  "first_publish_date": "1951",
+                  "covers": [8739161],
+                  "series": ["Foundation #1"]
+                },
+                {
+                  "key": "/works/OL46126W",
+                  "title": "Foundation and Empire",
+                  "first_publish_date": "1952",
+                  "series": ["Foundation #2"]
+                },
+                {
+                  "key": "/works/OL46127W",
+                  "title": "The Caves of Steel",
+                  "first_publish_date": "1954"
+                }
+              ]
+            }
+        """.trimIndent()
+        val works = OpenLibraryHttpService().parseAuthorWorks(body)
+        assertEquals(3, works.size)
+        assertEquals("OL46125W", works[0].openLibraryWorkId)
+        assertEquals("Foundation", works[0].title)
+        assertEquals(1951, works[0].firstPublishYear)
+        assertTrue(works[0].coverUrl?.contains("8739161") == true)
+        assertEquals("Foundation #1", works[0].seriesRaw)
+
+        assertNull(works[1].coverUrl, "Covers entry absent → null coverUrl")
+        assertNull(works[2].seriesRaw, "Series entry absent → null seriesRaw")
+    }
+
+    @Test
+    fun `parseAuthorWorks handles empty and malformed inputs`() {
+        val svc = OpenLibraryHttpService()
+        assertTrue(svc.parseAuthorWorks("""{"entries":[]}""").isEmpty())
+        assertTrue(svc.parseAuthorWorks("""{"other":"shape"}""").isEmpty())
+        // Skip entries missing required fields rather than crashing.
+        val partial = """{"entries":[{"title":"no key"},{"key":"/works/W","title":"ok"}]}"""
+        val result = svc.parseAuthorWorks(partial)
+        assertEquals(1, result.size)
+        assertEquals("W", result[0].openLibraryWorkId)
+    }
 }

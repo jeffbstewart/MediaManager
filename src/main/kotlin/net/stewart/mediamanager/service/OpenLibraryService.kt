@@ -66,8 +66,27 @@ sealed class OpenLibraryResult {
     data class Error(val message: String, val rateLimited: Boolean = false) : OpenLibraryResult()
 }
 
+/** A single work from an author's bibliography (Open Library `/authors/{olid}/works.json`). */
+data class AuthorWorkRef(
+    val openLibraryWorkId: String,
+    val title: String,
+    val firstPublishYear: Int?,
+    /** First associated ISBN — built from the OL cover ID if an ISBN isn't known, null otherwise. */
+    val coverUrl: String?,
+    /** Raw series string if OL has it ("Foundation #1"). Parsed by [parseSeriesLine] later. */
+    val seriesRaw: String?
+)
+
 interface OpenLibraryService {
     fun lookupByIsbn(isbn: String): OpenLibraryResult
+
+    /**
+     * Returns up to [limit] works from an author's bibliography. Results come from
+     * Open Library's `/authors/{olid}/works.json` endpoint, which is paginated but
+     * the first page is sufficient for M3 UX. Returns an empty list on error —
+     * callers treat "no bibliography" and "fetch failed" identically for UI.
+     */
+    fun listAuthorWorks(openLibraryAuthorId: String, limit: Int = 200): List<AuthorWorkRef>
 
     companion object {
         /**
@@ -76,6 +95,10 @@ interface OpenLibraryService {
          */
         fun coverUrlByIsbn(isbn: String, size: CoverSize = CoverSize.L): String =
             "https://covers.openlibrary.org/b/isbn/$isbn-${size.name}.jpg"
+
+        /** Cover URL for an OL cover-CDN numeric ID (what the works endpoint returns). */
+        fun coverUrlByCoverId(coverId: Long, size: CoverSize = CoverSize.M): String =
+            "https://covers.openlibrary.org/b/id/$coverId-${size.name}.jpg"
     }
 
     enum class CoverSize { S, M, L }
@@ -180,6 +203,67 @@ class OpenLibraryHttpService : OpenLibraryService {
     private fun fetchAuthorName(authorId: String): String? {
         val body = fetch("$BASE/authors/$authorId.json") ?: return null
         return mapper.readTree(body).textOrNull("name")
+    }
+
+    /** Very small in-process cache for author bibliographies. ~1 hour TTL. */
+    private data class WorksCacheEntry(val works: List<AuthorWorkRef>, val fetchedAt: Long)
+    private val worksCache = java.util.concurrent.ConcurrentHashMap<String, WorksCacheEntry>()
+    private val worksCacheTtlMs: Long = 60 * 60 * 1000L
+
+    override fun listAuthorWorks(openLibraryAuthorId: String, limit: Int): List<AuthorWorkRef> {
+        val cached = worksCache[openLibraryAuthorId]
+        if (cached != null && (System.currentTimeMillis() - cached.fetchedAt) < worksCacheTtlMs) {
+            return cached.works.take(limit)
+        }
+
+        val body = try {
+            fetch("$BASE/authors/$openLibraryAuthorId/works.json?limit=$limit")
+        } catch (e: Exception) {
+            log.warn("listAuthorWorks failed for {}: {}", openLibraryAuthorId, e.message)
+            null
+        } ?: return emptyList()
+
+        val works = try {
+            parseAuthorWorks(body)
+        } catch (e: Exception) {
+            log.warn("listAuthorWorks parse failed for {}: {}", openLibraryAuthorId, e.message)
+            emptyList()
+        }
+
+        worksCache[openLibraryAuthorId] = WorksCacheEntry(works, System.currentTimeMillis())
+        return works.take(limit)
+    }
+
+    internal fun parseAuthorWorks(body: String): List<AuthorWorkRef> {
+        val root = mapper.readTree(body)
+        val entries = root.path("entries")
+        if (!entries.isArray) return emptyList()
+        val out = mutableListOf<AuthorWorkRef>()
+        for (entry in entries) {
+            val key = entry.olKey("key")?.removePrefix("/works/") ?: continue
+            val title = entry.textOrNull("title") ?: continue
+            val year = entry.textOrNull("first_publish_date")?.let { extractYear(it) }
+
+            val covers = entry.path("covers")
+            val coverUrl = if (covers.isArray && !covers.isEmpty) {
+                covers.firstOrNull { it.isNumber && it.asLong() > 0 }?.asLong()
+                    ?.let { OpenLibraryService.coverUrlByCoverId(it) }
+            } else null
+
+            val seriesNode = entry.path("series")
+            val seriesRaw = if (seriesNode.isArray && !seriesNode.isEmpty) {
+                seriesNode.firstOrNull()?.asText()?.takeIf { it.isNotBlank() }
+            } else null
+
+            out += AuthorWorkRef(
+                openLibraryWorkId = key,
+                title = title,
+                firstPublishYear = year,
+                coverUrl = coverUrl,
+                seriesRaw = seriesRaw
+            )
+        }
+        return out
     }
 
     /** Sends an HTTP GET; returns null on 404, throws [RateLimitedException] on 429. */

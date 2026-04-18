@@ -599,4 +599,120 @@ object WishListService {
         return true
     }
 
+    // --- Book wishes (M3). Keyed on open_library_work_id. See docs/BOOKS.md. ---
+
+    data class BookWishInput(
+        val openLibraryWorkId: String,
+        val title: String,
+        val author: String?,
+        val coverIsbn: String?,
+        val seriesId: Long?,
+        val seriesNumber: java.math.BigDecimal?
+    )
+
+    /**
+     * Idempotent add. If an ACTIVE wish exists for this (user, work), returns
+     * it unchanged. If a CANCELLED or FULFILLED wish exists, resurrect it to
+     * ACTIVE rather than inserting a duplicate — matches the unique index on
+     * `(user_id, open_library_work_id)`.
+     */
+    fun addBookWishForUser(userId: Long, input: BookWishInput): WishListItem {
+        val existing = findBookWish(userId, input.openLibraryWorkId)
+        if (existing != null) {
+            val needsResurrect = existing.status != WishStatus.ACTIVE.name
+            if (needsResurrect) {
+                existing.status = WishStatus.ACTIVE.name
+                existing.fulfilled_at = null
+            }
+            // Refresh display fields from the latest input — OL may have
+            // updated the canonical title or cover since the wish was created.
+            existing.book_title = input.title
+            existing.book_author = input.author
+            existing.book_cover_isbn = input.coverIsbn
+            existing.book_series_id = input.seriesId
+            existing.book_series_number = input.seriesNumber
+            existing.save()
+            if (needsResurrect) {
+                log.info("Book wish resurrected: user={} work={}", userId, input.openLibraryWorkId)
+            }
+            return existing
+        }
+
+        val wish = WishListItem(
+            user_id = userId,
+            wish_type = WishType.BOOK.name,
+            status = WishStatus.ACTIVE.name,
+            open_library_work_id = input.openLibraryWorkId,
+            book_title = input.title,
+            book_author = input.author,
+            book_cover_isbn = input.coverIsbn,
+            book_series_id = input.seriesId,
+            book_series_number = input.seriesNumber,
+            created_at = LocalDateTime.now()
+        )
+        wish.save()
+        log.info("Book wish added: user={} work={} title=\"{}\"",
+            userId, input.openLibraryWorkId, input.title)
+        return wish
+    }
+
+    fun removeBookWishForUser(userId: Long, openLibraryWorkId: String): Boolean {
+        val wish = findBookWish(userId, openLibraryWorkId) ?: return false
+        if (wish.status != WishStatus.ACTIVE.name) return false
+        wish.status = WishStatus.CANCELLED.name
+        wish.save()
+        log.info("Book wish cancelled: user={} work={}", userId, openLibraryWorkId)
+        return true
+    }
+
+    fun getActiveBookWishesForUser(userId: Long): List<WishListItem> =
+        WishListItem.findAll()
+            .filter {
+                it.user_id == userId &&
+                    it.wish_type == WishType.BOOK.name &&
+                    it.status == WishStatus.ACTIVE.name
+            }
+            .sortedByDescending { it.created_at }
+
+    /** Fast membership check for AuthorScreen / SeriesScreen rendering. */
+    fun activeBookWishWorkIdsForUser(userId: Long): Set<String> =
+        WishListItem.findAll()
+            .asSequence()
+            .filter {
+                it.user_id == userId &&
+                    it.wish_type == WishType.BOOK.name &&
+                    it.status == WishStatus.ACTIVE.name
+            }
+            .mapNotNull { it.open_library_work_id }
+            .toSet()
+
+    /**
+     * On book scan, flip any ACTIVE BOOK wish for this work across all users to
+     * FULFILLED. Mirrors [fulfillTranscodeWishes] for the movie side. Called by
+     * [BookIngestionService.ingest] after a title is created/reused.
+     */
+    fun fulfillBookWishes(openLibraryWorkId: String) {
+        val wishes = WishListItem.findAll().filter {
+            it.wish_type == WishType.BOOK.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.open_library_work_id == openLibraryWorkId
+        }
+        if (wishes.isEmpty()) return
+
+        val now = LocalDateTime.now()
+        for (wish in wishes) {
+            wish.status = WishStatus.FULFILLED.name
+            wish.fulfilled_at = now
+            wish.save()
+        }
+        log.info("Fulfilled {} book wish(es) for work {}", wishes.size, openLibraryWorkId)
+    }
+
+    private fun findBookWish(userId: Long, openLibraryWorkId: String): WishListItem? =
+        WishListItem.findAll().firstOrNull {
+            it.user_id == userId &&
+                it.wish_type == WishType.BOOK.name &&
+                it.open_library_work_id == openLibraryWorkId
+        }
+
 }
