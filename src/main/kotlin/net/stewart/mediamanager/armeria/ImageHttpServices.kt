@@ -17,6 +17,7 @@ import net.stewart.mediamanager.entity.TmdbCollection
 import net.stewart.mediamanager.service.BackdropCacheService
 import net.stewart.mediamanager.service.CollectionPosterCacheService
 import net.stewart.mediamanager.service.HeadshotCacheService
+import net.stewart.mediamanager.service.ImageProxyService
 import net.stewart.mediamanager.service.LocalImageService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.OwnershipPhotoService
@@ -39,9 +40,27 @@ private fun serveFile(path: Path, contentType: String, metric: String, cacheCont
     return HttpResponse.of(headers, HttpData.wrap(Files.readAllBytes(path)))
 }
 
-private fun redirect(url: String, metric: String): HttpResponse {
-    MetricsRegistry.countHttpResponse(metric, 302)
-    return HttpResponse.ofRedirect(url)
+/**
+ * Fetches a third-party image through [ImageProxyService] and serves the
+ * bytes from our origin. Replaces the previous 302-redirect fallback so
+ * client IPs no longer leak to TMDB / Open Library when the local UUID-
+ * keyed cache hasn't populated yet (cache misses here are quickly filled
+ * by the proxy's own disk cache under data/image-proxy-cache/).
+ */
+private fun serveProxied(
+    provider: ImageProxyService.Provider,
+    path: String,
+    extension: String,
+    metric: String
+): HttpResponse {
+    val upstream = ImageProxyService.ProxiedUpstream(provider, path, extension)
+    return when (val r = ImageProxyService.serve(upstream)) {
+        is ImageProxyService.Result.Hit -> serveFile(r.file, r.contentType, metric)
+        is ImageProxyService.Result.Failure -> {
+            MetricsRegistry.countHttpResponse(metric, r.httpStatus)
+            HttpResponse.of(HttpStatus.valueOf(r.httpStatus))
+        }
+    }
 }
 
 private fun notFound(metric: String): HttpResponse {
@@ -79,17 +98,28 @@ class PosterHttpService {
         }
 
         val path = title.poster_path!!
-        // Books store "isbn/<isbn>" — resolve to the Open Library cover CDN.
+        // Books store "isbn/<isbn>" — serve via the OL proxy.
         if (path.startsWith("isbn/")) {
             val isbn = path.removePrefix("isbn/")
             val olSize = when (posterSize) {
                 PosterSize.THUMBNAIL -> "M"
                 PosterSize.FULL -> "L"
             }
-            return redirect("https://covers.openlibrary.org/b/isbn/$isbn-$olSize.jpg", "poster")
+            return serveProxied(
+                ImageProxyService.Provider.OPEN_LIBRARY,
+                "/b/isbn/$isbn-$olSize.jpg",
+                "jpg",
+                "poster"
+            )
         }
         if (!isValidTmdbPath(path)) return notFound("poster")
-        return redirect("https://image.tmdb.org/t/p/${posterSize.pathSegment}$path", "poster")
+        val extension = path.substringAfterLast('.', "jpg")
+        return serveProxied(
+            ImageProxyService.Provider.TMDB,
+            "/t/p/${posterSize.pathSegment}$path",
+            extension,
+            "poster"
+        )
     }
 }
 
@@ -108,7 +138,13 @@ class HeadshotHttpService {
 
         val path = castMember.profile_path!!
         if (!isValidTmdbPath(path)) return notFound("headshot")
-        return redirect("https://image.tmdb.org/t/p/w185$path", "headshot")
+        val extension = path.substringAfterLast('.', "jpg")
+        return serveProxied(
+            ImageProxyService.Provider.TMDB,
+            "/t/p/w185$path",
+            extension,
+            "headshot"
+        )
     }
 }
 
@@ -130,7 +166,13 @@ class BackdropHttpService {
 
         val path = title.backdrop_path!!
         if (!isValidTmdbPath(path)) return notFound("backdrop")
-        return redirect("https://image.tmdb.org/t/p/w1280$path", "backdrop")
+        val extension = path.substringAfterLast('.', "jpg")
+        return serveProxied(
+            ImageProxyService.Provider.TMDB,
+            "/t/p/w1280$path",
+            extension,
+            "backdrop"
+        )
     }
 }
 
@@ -149,7 +191,13 @@ class CollectionPosterHttpService {
 
         val path = collection.poster_path!!
         if (!isValidTmdbPath(path)) return notFound("collection-poster")
-        return redirect("https://image.tmdb.org/t/p/w500$path", "collection-poster")
+        val extension = path.substringAfterLast('.', "jpg")
+        return serveProxied(
+            ImageProxyService.Provider.TMDB,
+            "/t/p/w500$path",
+            extension,
+            "collection-poster"
+        )
     }
 }
 
