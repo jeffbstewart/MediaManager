@@ -9,7 +9,9 @@ import { FeatureService } from '../../core/feature.service';
 import {
   CatalogService,
   HomeFeed,
+  ResumeListeningItem,
 } from '../../core/catalog.service';
+import { PlaybackQueueService } from '../../core/playback-queue.service';
 
 @Component({
   selector: 'app-home',
@@ -27,6 +29,7 @@ import {
 export class HomeComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
   private readonly features = inject(FeatureService);
+  private readonly playbackQueue = inject(PlaybackQueueService);
 
   readonly routes = AppRoutes;
   readonly loading = signal(true);
@@ -43,6 +46,27 @@ export class HomeComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Starts a single-track queue from the Continue Listening carousel.
+   * The bottom-bar player resumes at the saved position via the effect
+   * that seeks when positionSeconds > element currentTime + 1.5s —
+   * seeding the queue's positionSeconds signal kicks the seek.
+   */
+  resumeListening(item: ResumeListeningItem): void {
+    this.playbackQueue.playSingleTrack({
+      trackId: item.track_id,
+      trackName: item.track_name,
+      durationSeconds: item.duration_seconds > 0 ? item.duration_seconds : null,
+      albumTitleId: item.title_id,
+      albumName: item.title_name,
+      albumPosterUrl: item.poster_url,
+      primaryArtistName: item.artist_name,
+    });
+    // Seed the saved position so the player picks up where we left off.
+    // The audio element's canplay + seek effect handles the mechanics.
+    this.playbackQueue.seek(item.position_seconds);
   }
 
   async dismissProgress(event: Event, transcodeId: number): Promise<void> {

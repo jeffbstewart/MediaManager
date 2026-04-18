@@ -193,6 +193,7 @@ export interface HomeFeed {
   recently_added: CarouselTitle[];
   recently_added_books: RecentBook[];
   recently_added_albums?: RecentAlbum[];
+  resume_listening?: ResumeListeningItem[];
   resume_reading?: ResumeReadingItem[];
   recently_watched: CarouselTitle[];
   missing_seasons: MissingSeason[];
@@ -226,6 +227,19 @@ export interface RecentAlbum {
   release_year: number | null;
   artist_name: string | null;
   track_count: number | null;
+}
+
+export interface ResumeListeningItem {
+  track_id: number;
+  track_name: string;
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  artist_name: string | null;
+  position_seconds: number;
+  duration_seconds: number;
+  percent: number;
+  updated_at: string | null;
 }
 
 export interface CollectionCard {

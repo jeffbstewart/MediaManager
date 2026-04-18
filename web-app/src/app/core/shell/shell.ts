@@ -12,6 +12,7 @@ import { CatalogService, SearchResult } from '../catalog.service';
 import { FeatureService } from '../feature.service';
 import { AppRoutes } from '../routes';
 import { ReportProblemDialogComponent } from './report-problem-dialog';
+import { AudioPlayerComponent } from '../../shared/audio-player/audio-player';
 
 @Component({
   selector: 'app-shell',
@@ -28,6 +29,7 @@ import { ReportProblemDialogComponent } from './report-problem-dialog';
     MatMenuModule,
     MatDividerModule,
     ReportProblemDialogComponent,
+    AudioPlayerComponent,
   ],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',

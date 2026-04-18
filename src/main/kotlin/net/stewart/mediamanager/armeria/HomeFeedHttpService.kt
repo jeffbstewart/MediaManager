@@ -82,6 +82,7 @@ class HomeFeedHttpService {
 
         val hasMusic = allTitlesForFeatures.any { it.media_type == MMMediaType.ALBUM.name }
         val recentlyAddedAlbums = if (hasMusic) recentlyAddedAlbums(user, 10) else emptyList()
+        val resumeListening = if (hasMusic) resumeListening(user, 10) else emptyList()
 
         val features = mapOf(
             "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
@@ -104,6 +105,7 @@ class HomeFeedHttpService {
             "recently_added" to recentlyAdded,
             "recently_added_books" to recentlyAddedBooks,
             "recently_added_albums" to recentlyAddedAlbums,
+            "resume_listening" to resumeListening,
             "resume_reading" to resumeReading,
             "recently_watched" to recentlyWatched,
             "missing_seasons" to missingSeasons,
@@ -306,6 +308,57 @@ class HomeFeedHttpService {
                 )
                 if (rows.size >= limit) break
             }
+        }
+        return rows
+    }
+
+    /**
+     * "Continue Listening" — most recent listening_progress rows, joined
+     * to the track and album. Parallel to [resumeReading] for books.
+     */
+    private fun resumeListening(
+        user: net.stewart.mediamanager.entity.AppUser,
+        limit: Int
+    ): List<Map<String, Any?>> {
+        val recent = net.stewart.mediamanager.service.ListeningProgressService.recentForUser(user.id!!, limit * 2)
+        if (recent.isEmpty()) return emptyList()
+
+        val trackIds = recent.map { it.track_id }.toSet()
+        val tracks = net.stewart.mediamanager.entity.Track.findAll()
+            .filter { it.id in trackIds }
+            .associateBy { it.id }
+        val titleIds = tracks.values.map { it.title_id }.toSet()
+        val titles = Title.findAll().filter { it.id in titleIds }.associateBy { it.id }
+        val artistsByTitle = net.stewart.mediamanager.entity.TitleArtist.findAll()
+            .filter { it.title_id in titleIds && it.artist_order == 0 }
+            .associate { it.title_id to it.artist_id }
+        val artists = net.stewart.mediamanager.entity.Artist.findAll().associateBy { it.id }
+
+        val rows = mutableListOf<Map<String, Any?>>()
+        for (progress in recent) {
+            if (rows.size >= limit) break
+            val track = tracks[progress.track_id] ?: continue
+            val title = titles[track.title_id] ?: continue
+            if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+
+            val artistName = artistsByTitle[title.id]?.let { artists[it]?.name }
+            val duration = progress.duration_seconds ?: track.duration_seconds ?: 0
+            val percent = if (duration > 0) {
+                (progress.position_seconds.toDouble() / duration).coerceIn(0.0, 1.0)
+            } else 0.0
+
+            rows += mapOf(
+                "track_id" to track.id,
+                "track_name" to track.name,
+                "title_id" to title.id,
+                "title_name" to title.name,
+                "poster_url" to title.posterUrl(net.stewart.mediamanager.entity.PosterSize.THUMBNAIL),
+                "artist_name" to artistName,
+                "position_seconds" to progress.position_seconds,
+                "duration_seconds" to duration,
+                "percent" to percent,
+                "updated_at" to progress.updated_at?.toString()
+            )
         }
         return rows
     }

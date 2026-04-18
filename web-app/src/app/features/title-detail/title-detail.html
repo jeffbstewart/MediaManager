@@ -159,6 +159,17 @@
               {{ resumeLabel(rc) }}
             </a>
           }
+
+          <!-- Play Album (albums) — only enabled when there's at least one
+               track with a playable file on the NAS. Clicking queues every
+               track on the album and starts the first. -->
+          @if (isAlbum && t.tracks && t.tracks.length > 0) {
+            <button mat-flat-button color="primary" class="resume-btn"
+                    (click)="playAlbum(0)">
+              <mat-icon>play_arrow</mat-icon>
+              Play Album
+            </button>
+          }
         </div>
       </div>
     </div>
@@ -250,8 +261,9 @@
                   }
                 </div>
                 <span class="track-duration">{{ formatTrackDuration(track.duration_seconds) }}</span>
-                <button mat-icon-button class="track-play-btn" disabled
-                        title="Audio playback coming in M5">
+                <button mat-icon-button class="track-play-btn"
+                        (click)="playTrackAt((t.tracks ?? []).indexOf(track))"
+                        aria-label="Play this track">
                   <mat-icon>play_circle</mat-icon>
                 </button>
               </div>

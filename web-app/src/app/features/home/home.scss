@@ -159,3 +159,42 @@ a.poster-title {
   font-size: 0.6875rem;
   opacity: 0.5;
 }
+
+// Continue Listening card renders as a button (no route), so it needs to
+// reset native button chrome.
+.poster-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+// Album covers are square (1:1), not 2:3 like movie posters.
+.album-wrapper { aspect-ratio: 1 / 1; }
+
+.album-placeholder {
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  mat-icon {
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+    opacity: 0.3;
+  }
+}
+
+// Progress bar overlay on Continue Listening cards.
+.progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--mat-sys-primary, #bb86fc);
+  pointer-events: none;
+}

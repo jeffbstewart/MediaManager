@@ -15,6 +15,7 @@ import net.stewart.mediamanager.armeria.BackdropHttpService
 import net.stewart.mediamanager.armeria.CollectionPosterHttpService
 import net.stewart.mediamanager.armeria.ArtistHeadshotHttpService
 import net.stewart.mediamanager.armeria.ArtistHttpService
+import net.stewart.mediamanager.armeria.AudioStreamHttpService
 import net.stewart.mediamanager.armeria.AuthorHeadshotHttpService
 import net.stewart.mediamanager.armeria.HeadshotHttpService
 import net.stewart.mediamanager.armeria.HealthHttpService
@@ -251,6 +252,7 @@ object ArmeriaServer {
         blocking(ActorHttpService())
         blocking(AuthorHttpService())
         blocking(ArtistHttpService())
+        blocking(AudioStreamHttpService())
         blocking(BookSeriesHttpService())
         blocking(SearchHttpService())
         blocking(TranscodeStatusHttpService())

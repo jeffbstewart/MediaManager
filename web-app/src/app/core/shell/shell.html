@@ -293,6 +293,12 @@
   </mat-sidenav-content>
 </mat-sidenav-container>
 
+<!-- Persistent audio player (M5). Rendered outside mat-sidenav-container
+     so the bottom-bar's position:fixed hits the viewport rather than a
+     transformed sidenav-content ancestor. -->
+<app-audio-player />
+
+
 <app-report-problem-dialog
   [open]="reportDialogOpen()"
   [titleId]="reportTitleId()"

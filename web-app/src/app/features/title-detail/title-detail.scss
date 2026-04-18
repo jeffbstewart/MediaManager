@@ -167,8 +167,11 @@
 
 .track-play-btn {
   flex-shrink: 0;
-  opacity: 0.35;
-  // Disabled until M5 wires playback.
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s;
+
+  .track-row:hover & { opacity: 1; }
+  &:hover { color: var(--mat-sys-primary, #bb86fc); }
 }
 
 // "by Author1 & Author2" — directly under the title, distinct from the

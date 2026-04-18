@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { AppRoutes } from '../../core/routes';
 import { CatalogService, TitleDetail } from '../../core/catalog.service';
 import { FeatureService } from '../../core/feature.service';
+import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
 
 @Component({
   selector: 'app-title-detail',
@@ -34,6 +35,7 @@ export class TitleDetailComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
   private readonly http = inject(HttpClient);
   readonly features = inject(FeatureService);
+  private readonly playbackQueue = inject(PlaybackQueueService);
 
   readonly routes = AppRoutes;
   readonly loading = signal(true);
@@ -62,6 +64,38 @@ export class TitleDetailComponent implements OnInit {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Play the whole album starting at [startIndex]. Builds a queue where
+   * each entry carries the album context (poster, name, artist) so the
+   * bottom-bar player can render without additional fetches.
+   */
+  playAlbum(startIndex: number = 0): void {
+    const t = this.title();
+    const tracks = t?.tracks ?? [];
+    if (!t || tracks.length === 0) return;
+
+    const primaryArtist = t.artists?.[0]?.name ?? null;
+    const queued: QueuedTrack[] = tracks.map(track => ({
+      trackId: track.track_id,
+      trackName: track.name,
+      durationSeconds: track.duration_seconds,
+      albumTitleId: t.title_id,
+      albumName: t.title_name,
+      albumPosterUrl: t.poster_url,
+      primaryArtistName: primaryArtist,
+      // Per-track artist (compilation case) overrides the album-level name.
+      trackArtistName: track.track_artists.length > 0
+        ? track.track_artists.map(a => a.name).join(', ')
+        : null,
+    }));
+    this.playbackQueue.playAlbum(queued, startIndex);
+  }
+
+  /** Play a single track; queues the rest of the album behind it. */
+  playTrackAt(index: number): void {
+    this.playAlbum(index);
   }
 
   /** Album tracks grouped by disc_number; preserves track_number order. */

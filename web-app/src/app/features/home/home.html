@@ -65,6 +65,36 @@
       </section>
     }
 
+    @if (feed.resume_listening && feed.resume_listening.length > 0) {
+      <section class="carousel-section">
+        <h2>Continue Listening</h2>
+        <div class="carousel-row">
+          @for (item of feed.resume_listening; track item.track_id) {
+            <button class="poster-card poster-button" type="button"
+                    (click)="resumeListening(item)"
+                    [title]="'Resume: ' + item.track_name">
+              <div class="poster-wrapper album-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img"
+                       loading="lazy" decoding="async" />
+                } @else {
+                  <div class="poster-placeholder album-placeholder">
+                    <mat-icon>album</mat-icon>
+                  </div>
+                }
+                <div class="progress-bar"
+                     [style.width.%]="(item.percent * 100).toFixed(0)"></div>
+              </div>
+              <span class="poster-title">{{ item.track_name }}</span>
+              <span class="poster-meta">
+                @if (item.artist_name) { {{ item.artist_name }} } @else { {{ item.title_name }} }
+              </span>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
     @if (feed.resume_reading && feed.resume_reading.length > 0) {
       <section class="carousel-section">
         <h2>Resume Reading</h2>

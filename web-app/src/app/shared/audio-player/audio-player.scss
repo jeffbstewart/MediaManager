@@ -1,0 +1,135 @@
+// Fixed bottom bar. Sits above most page content and is hidden via
+// display:none when the queue is empty so the layout doesn't have a
+// dead strip reserved at the bottom of every screen.
+.audio-player {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  height: 72px;
+  padding: 0 1rem;
+  background: rgba(20, 20, 22, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(260px, 2fr) auto;
+  gap: 1rem;
+  align-items: center;
+
+  &.visible { display: grid; }
+}
+
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+
+  &:hover .track-name { text-decoration: underline; }
+}
+
+.cover, .cover-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.cover-placeholder {
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  mat-icon { opacity: 0.5; }
+}
+
+.track-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.track-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-meta {
+  font-size: 0.75rem;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-album { opacity: 0.9; }
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.play-btn mat-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.scrubber {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.scrubber input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--mat-sys-primary, #bb86fc);
+  cursor: pointer;
+}
+
+.time {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  min-width: 3ch;
+  text-align: center;
+}
+
+.extras {
+  display: flex;
+  gap: 0.125rem;
+
+  button.active {
+    color: var(--mat-sys-primary, #bb86fc);
+  }
+}
+
+// Narrow: collapse to two rows. The scrubber moves below the now-playing
+// + transport cluster. Extras stay but tighten.
+@media (max-width: 720px) {
+  .audio-player {
+    height: auto;
+    padding: 0.5rem 0.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "nowplaying transport"
+      "scrubber   scrubber";
+    gap: 0.5rem;
+  }
+  .now-playing { grid-area: nowplaying; }
+  .transport { grid-area: transport; }
+  .scrubber { grid-area: scrubber; }
+  .extras { display: none; }
+}
