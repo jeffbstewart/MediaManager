@@ -77,6 +77,36 @@ sealed class MusicBrainzResult {
 }
 
 /**
+ * One personnel credit on a single track. [role] maps onto
+ * [net.stewart.mediamanager.entity.CreditRole]; [instrument] carries the
+ * raw MB instrument string when the role is PERFORMER (e.g. "drums",
+ * "lead vocals", "Fender Rhodes") and is null for COMPOSER / PRODUCER etc.
+ */
+data class MusicBrainzRecordingCredit(
+    val musicBrainzRecordingId: String,
+    val creditArtist: MusicBrainzArtistCredit,
+    val role: String,
+    val instrument: String?
+)
+
+/**
+ * One band-lineup relationship with optional tenure. [groupMbid] is the
+ * band / orchestra; [memberMbid] is the person. Both sides always present
+ * — the caller decides which one to render as the link.
+ */
+data class MusicBrainzMembership(
+    val groupMbid: String,
+    val groupName: String,
+    val memberMbid: String,
+    val memberName: String,
+    val memberSortName: String,
+    val beginDate: String?,
+    val endDate: String?,
+    /** Freeform list MB returns, e.g. ["vocals", "guitar"]. Empty when not specified. */
+    val instruments: List<String>
+)
+
+/**
  * One release-group from an artist's discography (`/ws/2/release-group`).
  * Used to populate ArtistScreen's "Other Works" panel. No tracklist yet —
  * the user clicks through to wishlist, so we don't need per-track detail
@@ -124,6 +154,24 @@ interface MusicBrainzService {
      * failed" the same way for UI.
      */
     fun listArtistReleaseGroups(artistMbid: String, limit: Int = 100): List<ArtistReleaseGroupRef>
+
+    /**
+     * Per-track personnel credits for every recording on a release. Fetches
+     * `/ws/2/release/{mbid}?inc=recordings+artist-credits+artist-rels+recording-rels`
+     * and flattens the `relations` arrays inside each track's recording into
+     * typed [MusicBrainzRecordingCredit] rows. Empty list when MB has no
+     * relations for the release (common for older, less-documented records)
+     * or when the fetch fails.
+     */
+    fun listReleaseRecordingCredits(releaseMbid: String): List<MusicBrainzRecordingCredit>
+
+    /**
+     * Band-lineup relationships on an artist, from
+     * `/ws/2/artist/{mbid}?inc=artist-rels`. For a GROUP artist, returns
+     * the members; for a PERSON, returns the bands they're in. Same result
+     * shape; caller decides which direction to render.
+     */
+    fun listArtistMemberships(artistMbid: String): List<MusicBrainzMembership>
 
     companion object {
         /** Path the image proxy exposes for a release's cover art. */
@@ -243,6 +291,204 @@ class MusicBrainzHttpService : MusicBrainzService {
         }
         return out
     }
+
+    override fun listReleaseRecordingCredits(releaseMbid: String): List<MusicBrainzRecordingCredit> {
+        if (!MBID_RE.matches(releaseMbid)) return emptyList()
+        // `inc=recordings+artist-credits+artist-rels+recording-rels` returns
+        // each track's recording with its personnel relations inline —
+        // one request per album instead of one per track.
+        val url = "$BASE/release/$releaseMbid?inc=recordings+artist-credits+artist-rels+recording-rels&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited fetching recording credits for release {}", releaseMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz recording-credits fetch failed for {}: {}", releaseMbid, e.message)
+            return emptyList()
+        }
+        return try {
+            parseRecordingCredits(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz recording-credits parse failed for {}: {}", releaseMbid, e.message)
+            emptyList()
+        }
+    }
+
+    override fun listArtistMemberships(artistMbid: String): List<MusicBrainzMembership> {
+        if (!MBID_RE.matches(artistMbid)) return emptyList()
+        val url = "$BASE/artist/$artistMbid?inc=artist-rels&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited fetching memberships for artist {}", artistMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz membership fetch failed for {}: {}", artistMbid, e.message)
+            return emptyList()
+        }
+        return try {
+            parseArtistMemberships(body, artistMbid)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz membership parse failed for {}: {}", artistMbid, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseRecordingCredits(body: String): List<MusicBrainzRecordingCredit> {
+        val root = mapper.readTree(body)
+        val out = mutableListOf<MusicBrainzRecordingCredit>()
+        val media = root.path("media")
+        if (!media.isArray) return out
+        for (medium in media) {
+            val tracks = medium.path("tracks")
+            if (!tracks.isArray) continue
+            for (t in tracks) {
+                val recording = t.path("recording")
+                val recordingId = recording.textOrNull("id") ?: continue
+                val relations = recording.path("relations")
+                if (!relations.isArray) continue
+                for (rel in relations) {
+                    val targetType = rel.textOrNull("target-type") ?: continue
+                    if (targetType != "artist") continue
+                    val artistNode = rel.path("artist")
+                    val artistMbid = artistNode.textOrNull("id") ?: continue
+                    val artistName = artistNode.textOrNull("name") ?: continue
+                    val sortName = artistNode.textOrNull("sort-name") ?: artistName
+                    val artistType = artistNode.textOrNull("type")
+                    val relType = rel.textOrNull("type").orEmpty()
+
+                    val (role, instrument) = mapMbRelation(relType, rel)
+                    if (role == null) continue
+
+                    out += MusicBrainzRecordingCredit(
+                        musicBrainzRecordingId = recordingId,
+                        creditArtist = MusicBrainzArtistCredit(
+                            musicBrainzArtistId = artistMbid,
+                            name = artistName,
+                            type = artistType,
+                            sortName = sortName
+                        ),
+                        role = role,
+                        instrument = instrument
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    internal fun parseArtistMemberships(body: String, selfMbid: String): List<MusicBrainzMembership> {
+        val root = mapper.readTree(body)
+        val selfName = root.textOrNull("name") ?: selfMbid
+        val selfSort = root.textOrNull("sort-name") ?: selfName
+        val selfType = root.textOrNull("type")
+        val relations = root.path("relations")
+        if (!relations.isArray) return emptyList()
+
+        val out = mutableListOf<MusicBrainzMembership>()
+        for (rel in relations) {
+            val relType = rel.textOrNull("type") ?: continue
+            if (relType != "member of band") continue
+            val direction = rel.textOrNull("direction")
+            val targetArtist = rel.path("artist")
+            val targetMbid = targetArtist.textOrNull("id") ?: continue
+            val targetName = targetArtist.textOrNull("name") ?: continue
+            val targetSort = targetArtist.textOrNull("sort-name") ?: targetName
+
+            // `direction = backward` means the relation target is the group
+            // and the queried artist is the member (i.e. the queried person
+            // was a member of that band). `forward` means the reverse —
+            // the queried group had the target as a member.
+            val (groupMbid, groupName, memberMbid, memberName, memberSort) =
+                if (direction == "backward") {
+                    MembershipTuple(targetMbid, targetName, selfMbid, selfName, selfSort)
+                } else {
+                    MembershipTuple(selfMbid, selfName, targetMbid, targetName, targetSort)
+                }
+
+            val begin = rel.textOrNull("begin")
+            val end = rel.textOrNull("end")
+            val attrs = rel.path("attributes")
+            val instruments = if (attrs.isArray) {
+                attrs.mapNotNull { n -> n.takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() } }
+            } else emptyList()
+
+            // Skip the weird case where MB relates a group to itself.
+            if (groupMbid == memberMbid) continue
+            // Skip when neither side is the queried artist (shouldn't happen,
+            // but defensive: we only want rows touching selfMbid).
+            if (selfMbid != groupMbid && selfMbid != memberMbid) continue
+            // Only keep rows with a plausible group + person pairing when
+            // the self-type tells us which side we are. MB relations are
+            // typed, so if we're a PERSON but direction says self=group,
+            // the data is wrong — drop.
+            out += MusicBrainzMembership(
+                groupMbid = groupMbid,
+                groupName = groupName,
+                memberMbid = memberMbid,
+                memberName = memberName,
+                memberSortName = memberSort,
+                beginDate = begin,
+                endDate = end,
+                instruments = instruments
+            )
+            // selfType is referenced here only to log-decide; quiet warn if ever needed.
+            if (selfType == "Person" && groupMbid == selfMbid) {
+                log.debug("MB gave a Person as a group on membership rel: self={} target={}",
+                    selfMbid, targetMbid)
+            }
+        }
+        return out
+    }
+
+    /**
+     * Map a MusicBrainz recording-rel type to a [net.stewart.mediamanager.entity.CreditRole]
+     * and optional instrument string.
+     *
+     * MB's taxonomy is rich — we project it into the six roles the UI
+     * renders. Unknown types return null, and the caller skips the row.
+     */
+    private fun mapMbRelation(
+        relType: String,
+        rel: com.fasterxml.jackson.databind.JsonNode
+    ): Pair<String?, String?> {
+        val lowered = relType.lowercase()
+        // Instrument / vocal performances carry the specific instrument in
+        // the `attributes` array; fall back to the relation type's friendly
+        // form if nothing's there.
+        val attrs = rel.path("attributes")
+        val firstAttr = if (attrs.isArray && !attrs.isEmpty) {
+            attrs.firstOrNull { it.isTextual }?.asText()?.takeIf { it.isNotBlank() }
+        } else null
+
+        return when {
+            lowered == "instrument" ||
+                lowered == "vocal" ||
+                lowered == "performer" ||
+                lowered == "performance" ->
+                "PERFORMER" to (firstAttr ?: relType)
+            lowered == "composer" || lowered == "lyricist" || lowered == "writer" ->
+                "COMPOSER" to null
+            lowered == "producer" || lowered == "executive producer" ->
+                "PRODUCER" to null
+            lowered == "recording" || lowered == "engineer" ||
+                lowered == "mastering" || lowered == "sound" ->
+                "ENGINEER" to null
+            lowered == "mix" || lowered == "mix-dj" ->
+                "MIXER" to null
+            else -> null to null
+        }
+    }
+
+    /** Tiny tuple for destructuring memberships; inner data class keeps Kotlin happy. */
+    private data class MembershipTuple(
+        val groupMbid: String,
+        val groupName: String,
+        val memberMbid: String,
+        val memberName: String,
+        val memberSortName: String
+    )
 
     internal fun pickFirstReleaseMbid(body: String): String? {
         val root = mapper.readTree(body)

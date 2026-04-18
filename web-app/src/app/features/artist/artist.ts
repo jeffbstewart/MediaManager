@@ -41,10 +41,19 @@ export class ArtistComponent implements OnInit {
   }
 
   /**
-   * Bands: formation year, breakup year if disbanded. Individuals: birth / death.
-   * Renders "1965 – 1973" for a disbanded group, "1965 – present" for an active
-   * group, "Born 1949" for an individual, etc. Date strings are ISO.
+   * Tenure label for a membership row. "1965 – 1971", "Since 1965", or
+   * blank when MB has neither date. Drives both band-members and member-of
+   * lists.
    */
+  formatTenure(begin: string | null, end: string | null): string {
+    const b = begin?.substring(0, 4);
+    const e = end?.substring(0, 4);
+    if (b && e) return `${b} \u2013 ${e}`;
+    if (b) return `Since ${b}`;
+    if (e) return `until ${e}`;
+    return '';
+  }
+
   /**
    * Toggles the heart icon on an Other-Works entry. Uses the existing
    * wish-interstitial confirmation so new wishlisters see the "visible

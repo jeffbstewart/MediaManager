@@ -79,6 +79,8 @@ class EnrichmentIntegrationTest {
         override fun lookupByBarcode(barcode: String) = MusicBrainzResult.NotFound
         override fun lookupByReleaseMbid(releaseMbid: String) = MusicBrainzResult.NotFound
         override fun listArtistReleaseGroups(artistMbid: String, limit: Int) = emptyList<ArtistReleaseGroupRef>()
+        override fun listReleaseRecordingCredits(releaseMbid: String) = emptyList<MusicBrainzRecordingCredit>()
+        override fun listArtistMemberships(artistMbid: String) = emptyList<MusicBrainzMembership>()
     }
 
     /** TMDB service that returns controlled responses without making HTTP calls. */

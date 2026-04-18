@@ -10,7 +10,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AppRoutes } from '../../core/routes';
-import { CatalogService, TitleDetail } from '../../core/catalog.service';
+import { CatalogService, TitleDetail, AlbumPersonnelEntry } from '../../core/catalog.service';
 import { FeatureService } from '../../core/feature.service';
 import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
 
@@ -96,6 +96,34 @@ export class TitleDetailComponent implements OnInit {
   /** Play a single track; queues the rest of the album behind it. */
   playTrackAt(index: number): void {
     this.playAlbum(index);
+  }
+
+  /** Personnel section expanded state (collapsed by default — M6). */
+  readonly personnelExpanded = signal<boolean>(false);
+
+  /**
+   * Personnel credits grouped by role, in the display order the UI shows.
+   * A role bucket renders one linked artist per row with an instrument /
+   * per-track context line. Empty buckets are omitted from the list.
+   */
+  get personnelByRole(): { role: string; label: string; entries: AlbumPersonnelEntry[] }[] {
+    const personnel = this.title()?.personnel ?? [];
+    if (personnel.length === 0) return [];
+    const order: { role: string; label: string }[] = [
+      { role: 'PERFORMER', label: 'Performers' },
+      { role: 'COMPOSER', label: 'Composers' },
+      { role: 'PRODUCER', label: 'Producers' },
+      { role: 'ENGINEER', label: 'Engineers' },
+      { role: 'MIXER', label: 'Mix' },
+      { role: 'OTHER', label: 'Other' },
+    ];
+    return order
+      .map(({ role, label }) => ({
+        role,
+        label,
+        entries: personnel.filter(p => p.role === role),
+      }))
+      .filter(bucket => bucket.entries.length > 0);
   }
 
   /** Album tracks grouped by disc_number; preserves track_number order. */

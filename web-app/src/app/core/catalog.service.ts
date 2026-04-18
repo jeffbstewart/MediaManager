@@ -130,6 +130,21 @@ export interface TitleDetail {
   label?: string | null;
   musicbrainz_release_group_id?: string | null;
   musicbrainz_release_id?: string | null;
+  /** Personnel credits (M6). Empty when MB hasn't documented the album yet. */
+  personnel?: AlbumPersonnelEntry[];
+}
+
+export interface AlbumPersonnelEntry {
+  artist_id: number;
+  artist_name: string;
+  /** CreditRole enum name: PERFORMER / COMPOSER / PRODUCER / ENGINEER / MIXER / OTHER. */
+  role: string;
+  /** Instrument string for PERFORMER; null for other roles. */
+  instrument: string | null;
+  track_id: number;
+  track_name: string | null;
+  disc_number: number | null;
+  track_number: number | null;
 }
 
 export interface AlbumTrack {
@@ -493,6 +508,19 @@ export interface ArtistDetail {
   musicbrainz_artist_id: string | null;
   owned_albums: ArtistOwnedAlbum[];
   other_works: ArtistOtherWork[];
+  /** Members of this band, for GROUP / ORCHESTRA / CHOIR artists (M6). */
+  band_members?: ArtistMembershipEntry[];
+  /** Bands this person has been in, for PERSON artists (M6). */
+  member_of?: ArtistMembershipEntry[];
+}
+
+export interface ArtistMembershipEntry {
+  id: number;
+  name: string;
+  artist_type: string;
+  begin_date: string | null;
+  end_date: string | null;
+  instruments: string | null;
 }
 
 export interface ArtistOwnedAlbum {

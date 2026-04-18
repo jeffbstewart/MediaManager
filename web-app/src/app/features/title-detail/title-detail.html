@@ -273,6 +273,50 @@
       </section>
     }
 
+    <!-- Personnel (albums, M6). Collapsed by default so the track list
+         stays the focus; click to expand and see who played what. Hidden
+         entirely when MusicBrainz hasn't documented the album's personnel. -->
+    @if (isAlbum && personnelByRole.length > 0) {
+      <section class="section">
+        <button type="button" class="personnel-toggle"
+                (click)="personnelExpanded.set(!personnelExpanded())">
+          <mat-icon class="expand-chevron" [class.expanded]="personnelExpanded()">
+            chevron_right
+          </mat-icon>
+          <h3>Personnel</h3>
+          @if (!personnelExpanded()) {
+            <span class="personnel-hint">
+              {{ (t.personnel ?? []).length }} credits documented by MusicBrainz
+            </span>
+          }
+        </button>
+        @if (personnelExpanded()) {
+          <div class="personnel-groups">
+            @for (bucket of personnelByRole; track bucket.role) {
+              <div class="personnel-group">
+                <h4 class="personnel-role">{{ bucket.label }}</h4>
+                <ul class="personnel-list">
+                  @for (entry of bucket.entries; track entry.artist_id + '-' + entry.track_id + '-' + (entry.instrument ?? '')) {
+                    <li class="personnel-entry">
+                      <a [routerLink]="routes.artist(entry.artist_id)" class="personnel-name">
+                        {{ entry.artist_name }}
+                      </a>
+                      @if (entry.instrument) {
+                        <span class="personnel-instrument">{{ entry.instrument }}</span>
+                      }
+                      @if (entry.track_name) {
+                        <span class="personnel-track">on {{ entry.track_name }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
     <!-- Readable editions (books) -->
     @if (t.readable_editions && t.readable_editions.length > 0) {
       <section class="section">

@@ -12,6 +12,8 @@ import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.ArtistMembership
+import net.stewart.mediamanager.entity.ArtistType
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
@@ -94,6 +96,13 @@ class ArtistHttpService(
         // happen for M1-ingested artists).
         val otherWorks = buildOtherWorks(artist, user.id!!, titles)
 
+        // Band-lineup relationships (M6). For GROUP / ORCHESTRA / CHOIR
+        // artists this lists the people who've played in the band with
+        // tenure dates. For PERSON artists it lists the bands they've
+        // been in. Empty when PersonnelEnrichmentAgent hasn't populated
+        // memberships yet.
+        val (bandMembers, memberOf) = buildMemberships(artist)
+
         val result = mapOf(
             "id" to artist.id,
             "name" to artist.name,
@@ -105,7 +114,9 @@ class ArtistHttpService(
             "end_date" to artist.end_date?.toString(),
             "musicbrainz_artist_id" to artist.musicbrainz_artist_id,
             "owned_albums" to ownedAlbums,
-            "other_works" to otherWorks
+            "other_works" to otherWorks,
+            "band_members" to bandMembers,
+            "member_of" to memberOf
         )
         return jsonResponse(gson.toJson(result))
     }
@@ -154,6 +165,57 @@ class ArtistHttpService(
      * [net.stewart.mediamanager.service.ArtistEnrichmentAgent] populates it
      * in the background.
      */
+    /**
+     * Build the two directional membership lists off a single
+     * `artist_membership` query, returning (bandMembers, memberOf).
+     *
+     * - `bandMembers` applies to groups: the people who've been in the band.
+     * - `memberOf` applies to individuals: the bands they've played with.
+     *
+     * Sorted by begin_date (most recent first) so the UI's default render
+     * leads with current or recent lineup.
+     */
+    private fun buildMemberships(artist: Artist): Pair<List<Map<String, Any?>>, List<Map<String, Any?>>> {
+        val id = artist.id ?: return emptyList<Map<String, Any?>>() to emptyList()
+        val memberships = ArtistMembership.findAll().filter {
+            it.group_artist_id == id || it.member_artist_id == id
+        }
+        if (memberships.isEmpty()) return emptyList<Map<String, Any?>>() to emptyList()
+
+        val otherIds = memberships.flatMap { listOf(it.group_artist_id, it.member_artist_id) }
+            .filter { it != id }
+            .toSet()
+        val others = Artist.findAll().filter { it.id in otherIds }.associateBy { it.id }
+
+        val asGroup = memberships.filter { it.group_artist_id == id }
+            .sortedByDescending { it.begin_date }
+            .mapNotNull { m ->
+                val person = others[m.member_artist_id] ?: return@mapNotNull null
+                mapOf(
+                    "id" to person.id,
+                    "name" to person.name,
+                    "artist_type" to person.artist_type,
+                    "begin_date" to m.begin_date?.toString(),
+                    "end_date" to m.end_date?.toString(),
+                    "instruments" to m.primary_instruments
+                )
+            }
+        val asMember = memberships.filter { it.member_artist_id == id }
+            .sortedByDescending { it.begin_date }
+            .mapNotNull { m ->
+                val group = others[m.group_artist_id] ?: return@mapNotNull null
+                mapOf(
+                    "id" to group.id,
+                    "name" to group.name,
+                    "artist_type" to group.artist_type,
+                    "begin_date" to m.begin_date?.toString(),
+                    "end_date" to m.end_date?.toString(),
+                    "instruments" to m.primary_instruments
+                )
+            }
+        return asGroup to asMember
+    }
+
     private fun headshotUrl(artist: Artist): String? = when {
         !artist.headshot_path.isNullOrBlank() && artist.id != null -> "/artist-headshots/${artist.id}"
         else -> null

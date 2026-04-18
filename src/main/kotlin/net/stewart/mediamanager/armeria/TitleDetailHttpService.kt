@@ -16,6 +16,7 @@ import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.BookSeries
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.Episode
+import net.stewart.mediamanager.entity.RecordingCredit
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.TitleArtist
 import net.stewart.mediamanager.entity.TrackArtist
@@ -372,7 +373,8 @@ class TitleDetailHttpService {
             "total_duration_seconds" to title.total_duration_seconds,
             "label" to title.label,
             "musicbrainz_release_group_id" to title.musicbrainz_release_group_id,
-            "musicbrainz_release_id" to title.musicbrainz_release_id
+            "musicbrainz_release_id" to title.musicbrainz_release_id,
+            "personnel" to albumPersonnel(titleId, isAlbum)
         )
 
         return HttpResponse.builder()
@@ -427,6 +429,54 @@ class TitleDetailHttpService {
         SearchIndexService.onTitleChanged(titleId)
 
         return jsonOk(mapOf("ok" to true))
+    }
+
+    /**
+     * Per-album personnel credits (M6), grouped by [CreditRole]. Empty
+     * for non-album titles; also empty when MusicBrainz hasn't
+     * documented personnel for this release yet. The client groups the
+     * rendered output by role and collapses the section by default.
+     */
+    private fun albumPersonnel(titleId: Long, isAlbum: Boolean): List<Map<String, Any?>> {
+        if (!isAlbum) return emptyList()
+        val trackIds = Track.findAll()
+            .asSequence()
+            .filter { it.title_id == titleId }
+            .mapNotNull { it.id }
+            .toSet()
+        if (trackIds.isEmpty()) return emptyList()
+
+        val credits = RecordingCredit.findAll().filter { it.track_id in trackIds }
+        if (credits.isEmpty()) return emptyList()
+
+        val artists = net.stewart.mediamanager.entity.Artist.findAll()
+            .filter { a -> credits.any { it.artist_id == a.id } }
+            .associateBy { it.id }
+        val tracksById = Track.findAll()
+            .filter { it.id in trackIds }
+            .associateBy { it.id }
+
+        return credits
+            .sortedWith(compareBy(
+                { it.role },
+                { tracksById[it.track_id]?.disc_number ?: 0 },
+                { tracksById[it.track_id]?.track_number ?: 0 },
+                { it.credit_order }
+            ))
+            .mapNotNull { credit ->
+                val artist = artists[credit.artist_id] ?: return@mapNotNull null
+                val track = tracksById[credit.track_id]
+                mapOf(
+                    "artist_id" to artist.id,
+                    "artist_name" to artist.name,
+                    "role" to credit.role,
+                    "instrument" to credit.instrument,
+                    "track_id" to credit.track_id,
+                    "track_name" to track?.name,
+                    "disc_number" to track?.disc_number,
+                    "track_number" to track?.track_number
+                )
+            }
     }
 
     private fun jsonOk(data: Any): HttpResponse =
