@@ -23,6 +23,8 @@ import net.stewart.mediamanager.armeria.PlaybackProgressHttpService
 import net.stewart.mediamanager.armeria.PosterHttpService
 import net.stewart.mediamanager.armeria.AuthRestService
 import net.stewart.mediamanager.armeria.ActorHttpService
+import net.stewart.mediamanager.armeria.AuthorHttpService
+import net.stewart.mediamanager.armeria.BookSeriesHttpService
 import net.stewart.mediamanager.armeria.CameraListHttpService
 import net.stewart.mediamanager.armeria.CameraSettingsHttpService
 import net.stewart.mediamanager.armeria.DataQualityHttpService
@@ -231,6 +233,8 @@ object ArmeriaServer {
         blocking(WishListHttpService())
         blocking(ProfileHttpService())
         blocking(ActorHttpService())
+        blocking(AuthorHttpService())
+        blocking(BookSeriesHttpService())
         blocking(SearchHttpService())
         blocking(TranscodeStatusHttpService())
         blocking(UnmatchedHttpService())

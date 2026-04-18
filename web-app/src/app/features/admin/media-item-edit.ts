@@ -1,6 +1,7 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { AppRoutes } from '../../core/routes';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,7 +14,8 @@ interface TitleLink {
   poster_url: string | null; seasons: string | null;
 }
 
-interface BookSeriesInfo { name: string; volume: string | null; }
+interface BookAuthor { id: number; name: string; }
+interface BookSeriesInfo { id: number; name: string; volume: string | null; }
 
 interface MediaItemDetail {
   media_item_id: number; display_name: string; upc: string | null;
@@ -22,7 +24,7 @@ interface MediaItemDetail {
   storage_location: string | null;
   purchase_place: string | null; purchase_date: string | null;
   purchase_price: number | null; amazon_order_id: string | null;
-  authors: string[];
+  authors: BookAuthor[];
   book_series: BookSeriesInfo | null;
   titles: TitleLink[]; photo_count: number;
   photos: { id: string; captured_at: string | null }[];
@@ -47,6 +49,7 @@ interface AmazonOrder {
 export class MediaItemEditComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
+  readonly routes = AppRoutes;
 
   readonly loading = signal(true);
   readonly item = signal<MediaItemDetail | null>(null);

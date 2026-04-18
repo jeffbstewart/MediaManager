@@ -8,6 +8,8 @@ export const AppRoutes = {
   catalog: () => '/catalog',
   title: (titleId: number) => `/title/${titleId}`,
   actor: (personId: number) => `/actor/${personId}`,
+  author: (authorId: number) => `/author/${authorId}`,
+  series: (seriesId: number) => `/series/${seriesId}`,
   search: (query?: string) => query ? `/search?q=${encodeURIComponent(query)}` : '/search',
   movies: () => '/content/movies',
   tvShows: () => '/content/tv',

@@ -87,20 +87,25 @@
     }
 
     @if (isBook) {
-      <!-- Book-specific read-only summary from the ISBN scan. See docs/BOOKS.md. -->
+      <!-- Book-specific summary from the ISBN scan. Author + series are
+           linked to the new /author/:id and /series/:id browse screens. -->
       <h3>Book Details</h3>
       <div class="purchase-grid">
         @if (data.authors.length > 0) {
           <div class="field-group">
             <label class="field-label">Author{{ data.authors.length > 1 ? 's' : '' }}</label>
-            <div class="field-readonly">{{ data.authors.join(' & ') }}</div>
+            <div class="field-readonly">
+              @for (author of data.authors; track author.id; let last = $last) {
+                <a [routerLink]="routes.author(author.id)">{{ author.name }}</a>@if (!last) { & }
+              }
+            </div>
           </div>
         }
-        @if (data.book_series) {
+        @if (data.book_series; as series) {
           <div class="field-group">
             <label class="field-label">Series</label>
             <div class="field-readonly">
-              {{ data.book_series.name }}@if (data.book_series.volume) { #{{ data.book_series.volume }} }
+              <a [routerLink]="routes.series(series.id)">{{ series.name }}</a>@if (series.volume) { #{{ series.volume }} }
             </div>
           </div>
         }

@@ -74,11 +74,17 @@ class MediaItemEditHttpService {
             TitleAuthor.findAll()
                 .filter { it.title_id == primaryTitle.id }
                 .sortedBy { it.author_order }
-                .mapNotNull { Author.findById(it.author_id)?.name }
-        } else emptyList()
+                .mapNotNull { link ->
+                    Author.findById(link.author_id)?.let { a ->
+                        mapOf("id" to a.id, "name" to a.name)
+                    }
+                }
+        } else emptyList<Map<String, Any?>>()
         val bookSeries = if (primaryTitle?.media_type == MMMediaType.BOOK.name && primaryTitle.book_series_id != null) {
             val series = BookSeries.findById(primaryTitle.book_series_id!!)
-            series?.let { mapOf("name" to it.name, "volume" to primaryTitle.series_number?.toPlainString()) }
+            series?.let {
+                mapOf("id" to it.id, "name" to it.name, "volume" to primaryTitle.series_number?.toPlainString())
+            }
         } else null
 
         val result = mapOf(

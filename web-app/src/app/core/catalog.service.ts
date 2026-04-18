@@ -329,6 +329,46 @@ export interface ActorCredit {
   already_wished: boolean;
 }
 
+// ---- Books ----
+
+export interface AuthorOwnedBook {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  series_name: string | null;
+  series_number: string | null;
+}
+
+export interface AuthorDetail {
+  id: number;
+  name: string;
+  biography: string | null;
+  headshot_url: string | null;
+  birth_date: string | null;
+  death_date: string | null;
+  open_library_author_id: string | null;
+  owned_books: AuthorOwnedBook[];
+}
+
+export interface BookSeriesVolume {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  series_number: string | null;
+  first_publication_year: number | null;
+  owned: boolean;
+}
+
+export interface BookSeriesDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  poster_url: string | null;
+  author: { id: number; name: string } | null;
+  volumes: BookSeriesVolume[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -383,6 +423,14 @@ export class CatalogService {
 
   async getActorDetail(personId: number): Promise<ActorDetail> {
     return firstValueFrom(this.http.get<ActorDetail>(`/api/v2/catalog/actor/${personId}`));
+  }
+
+  async getAuthorDetail(authorId: number): Promise<AuthorDetail> {
+    return firstValueFrom(this.http.get<AuthorDetail>(`/api/v2/catalog/authors/${authorId}`));
+  }
+
+  async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {
+    return firstValueFrom(this.http.get<BookSeriesDetail>(`/api/v2/catalog/series/${seriesId}`));
   }
 
   async getWishList(): Promise<WishListResponse> {

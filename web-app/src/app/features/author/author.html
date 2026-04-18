@@ -1,0 +1,59 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (author(); as a) {
+
+    <div class="hero">
+      @if (a.headshot_url) {
+        <img [src]="a.headshot_url" [alt]="a.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder"><mat-icon>person</mat-icon></div>
+      }
+      <div class="hero-info">
+        <h1>{{ a.name }}</h1>
+        @if (formatLifespan()) {
+          <span class="lifespan">{{ formatLifespan() }}</span>
+        }
+        @if (a.biography) {
+          <p class="biography">
+            {{ bioExpanded() || a.biography.length <= 500 ? a.biography : a.biography.substring(0, 500) + '...' }}
+          </p>
+          @if (a.biography.length > 500) {
+            <button class="bio-toggle" (click)="bioExpanded.set(!bioExpanded())">
+              {{ bioExpanded() ? 'Show less' : 'Show more' }}
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (a.owned_books.length > 0) {
+      <h2>Books in Your Collection</h2>
+      <div class="poster-grid">
+        @for (book of a.owned_books; track book.title_id) {
+          <a class="poster-card" [routerLink]="routes.title(book.title_id)">
+            <div class="poster-wrapper">
+              @if (book.poster_url) {
+                <img [src]="book.poster_url" [alt]="book.title_name" class="poster-img" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+            </div>
+            <span class="poster-title">{{ book.title_name }}</span>
+            @if (book.series_name) {
+              <span class="poster-meta">
+                {{ book.series_name }}@if (book.series_number) { #{{ book.series_number }} }
+              </span>
+            } @else if (book.release_year) {
+              <span class="poster-meta">{{ book.release_year }}</span>
+            }
+          </a>
+        }
+      </div>
+    } @else {
+      <p class="empty-state">No books in your collection by this author yet.</p>
+    }
+  }
+</div>

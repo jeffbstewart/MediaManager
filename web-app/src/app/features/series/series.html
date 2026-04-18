@@ -1,0 +1,51 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (series(); as s) {
+
+    <div class="hero">
+      @if (s.poster_url) {
+        <img [src]="s.poster_url" [alt]="s.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder"><mat-icon>auto_stories</mat-icon></div>
+      }
+      <div class="hero-info">
+        <h1>{{ s.name }}</h1>
+        @if (s.author) {
+          <span class="known-for">
+            by <a [routerLink]="routes.author(s.author.id)">{{ s.author.name }}</a>
+          </span>
+        }
+        @if (s.description) {
+          <p class="biography">{{ s.description }}</p>
+        }
+        <span class="lifespan">{{ s.volumes.length }} volume{{ s.volumes.length === 1 ? '' : 's' }} in your collection</span>
+      </div>
+    </div>
+
+    @if (s.volumes.length > 0) {
+      <h2>Volumes</h2>
+      <div class="poster-grid">
+        @for (v of s.volumes; track v.title_id) {
+          <a class="poster-card" [routerLink]="routes.title(v.title_id)">
+            <div class="poster-wrapper">
+              @if (v.poster_url) {
+                <img [src]="v.poster_url" [alt]="v.title_name" class="poster-img" />
+              } @else {
+                <div class="poster-placeholder"></div>
+              }
+            </div>
+            <span class="poster-title">
+              @if (v.series_number) { <strong>#{{ v.series_number }}</strong> &nbsp; }{{ v.title_name }}
+            </span>
+            @if (v.first_publication_year) {
+              <span class="poster-meta">{{ v.first_publication_year }}</span>
+            }
+          </a>
+        }
+      </div>
+    }
+  }
+</div>

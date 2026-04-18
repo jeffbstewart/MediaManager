@@ -41,6 +41,8 @@ export const routes: Routes = [
       { path: '', loadComponent: () => import('./features/home/home').then(m => m.HomeComponent) },
       { path: 'title/:titleId', loadComponent: () => import('./features/title-detail/title-detail').then(m => m.TitleDetailComponent) },
       { path: 'actor/:personId', loadComponent: () => import('./features/actor/actor').then(m => m.ActorComponent) },
+      { path: 'author/:authorId', loadComponent: () => import('./features/author/author').then(m => m.AuthorComponent) },
+      { path: 'series/:seriesId', loadComponent: () => import('./features/series/series').then(m => m.SeriesComponent) },
       { path: 'search', loadComponent: () => import('./features/search/search').then(m => m.SearchComponent) },
       { path: 'content/movies', loadComponent: () => import('./features/content/movies').then(m => m.MoviesComponent) },
       { path: 'content/tv', loadComponent: () => import('./features/content/tv-shows').then(m => m.TvShowsComponent) },
