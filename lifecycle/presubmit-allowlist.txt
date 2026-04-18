@@ -19,6 +19,9 @@
 # Example IP in Roku PairScreen placeholder text
 192.168.1.100
 
+# MusicBrainz canonical "Various Artists" MBID (docs/MUSIC.md)
+89ad4ac3-39f7-470e-963a-56509c546377
+
 # Emby version numbers that look like IP addresses (competitive analysis)
 4.9.3.0
 4.10.0.5
