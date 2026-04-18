@@ -45,8 +45,11 @@ object InventoryReportGenerator {
                 .list()
         }
 
+    /** Digital editions (EPUB / PDF / digital audiobook) are not insurable — excluded. */
+    private val DIGITAL_FORMATS: Set<String> = setOf("EBOOK_EPUB", "EBOOK_PDF", "AUDIOBOOK_DIGITAL")
+
     private fun loadData(): ReportData {
-        val allItems = MediaItem.findAll()
+        val allItems = MediaItem.findAll().filter { it.media_format !in DIGITAL_FORMATS }
         val allLinks = MediaItemTitle.findAll()
         val allTitles = Title.findAll().associateBy { it.id }
         return ReportData(allItems, allLinks.groupBy { it.media_item_id }, allTitles)
@@ -129,7 +132,14 @@ object InventoryReportGenerator {
         val grand = valued.mapNotNull { it.purchase_price }.fold(BigDecimal.ZERO, BigDecimal::add)
         val repl = data.allItems.mapNotNull { it.replacement_value }.fold(BigDecimal.ZERO, BigDecimal::add)
         val replCount = data.allItems.count { it.replacement_value != null }
-        val fmts = listOf("DVD", "BLURAY", "UHD_BLURAY", "HD_DVD").mapNotNull { f -> data.allItems.groupBy { it.media_format }[f]?.size?.let { "$it ${f.replace("_", " ")}" } }
+        // Include every format actually present in the inventory. Previously this was a
+        // hardcoded list of disc formats — books and future formats were silently dropped.
+        // Digital book editions are excluded (nothing to insure).
+        val physicalBookFormats = listOf("MASS_MARKET_PAPERBACK", "TRADE_PAPERBACK", "HARDBACK", "AUDIOBOOK_CD")
+        val formatLabels = listOf("DVD", "BLURAY", "UHD_BLURAY", "HD_DVD") + physicalBookFormats
+        val fmts = formatLabels.mapNotNull { f ->
+            data.allItems.groupBy { it.media_format }[f]?.size?.let { "$it ${f.replace("_", " ")}" }
+        }
 
         val st = PdfPTable(2).apply { widthPercentage = 70f; horizontalAlignment = Element.ALIGN_LEFT; setWidths(floatArrayOf(2f, 3f)) }
         fun sr(l: String, v: String) { st.addCell(PdfPCell(Phrase(l, slF)).apply { border = Rectangle.NO_BORDER; setPadding(3f) }); st.addCell(PdfPCell(Phrase(v, svF)).apply { border = Rectangle.NO_BORDER; setPadding(3f) }) }

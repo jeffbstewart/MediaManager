@@ -67,16 +67,34 @@ class MediaItemEditHttpService {
             )
         }
 
+        // Book-specific read-only fields: authors and series name, when the
+        // primary title is a book. Lets the admin verify the scan populated
+        // the right metadata.
+        val bookAuthors = if (primaryTitle?.media_type == MMMediaType.BOOK.name) {
+            TitleAuthor.findAll()
+                .filter { it.title_id == primaryTitle.id }
+                .sortedBy { it.author_order }
+                .mapNotNull { Author.findById(it.author_id)?.name }
+        } else emptyList()
+        val bookSeries = if (primaryTitle?.media_type == MMMediaType.BOOK.name && primaryTitle.book_series_id != null) {
+            val series = BookSeries.findById(primaryTitle.book_series_id!!)
+            series?.let { mapOf("name" to it.name, "volume" to primaryTitle.series_number?.toPlainString()) }
+        } else null
+
         val result = mapOf(
             "media_item_id" to item.id,
             "display_name" to displayName,
             "upc" to item.upc,
             "product_name" to item.product_name,
             "media_format" to item.media_format,
+            "media_type" to primaryTitle?.media_type,
+            "storage_location" to item.storage_location,
             "purchase_place" to item.purchase_place,
             "purchase_date" to item.purchase_date?.format(dtf),
             "purchase_price" to item.purchase_price?.toDouble(),
             "amazon_order_id" to item.amazon_order_id,
+            "authors" to bookAuthors,
+            "book_series" to bookSeries,
             "titles" to titleList,
             "photo_count" to photos.size,
             "photos" to photos.map { p ->
@@ -193,6 +211,7 @@ class MediaItemEditHttpService {
         val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
 
         if (body.containsKey("purchase_place")) item.purchase_place = (body["purchase_place"] as? String)?.ifBlank { null }
+        if (body.containsKey("storage_location")) item.storage_location = (body["storage_location"] as? String)?.ifBlank { null }
         if (body.containsKey("purchase_date")) {
             val dateStr = body["purchase_date"] as? String
             item.purchase_date = dateStr?.let { LocalDate.parse(it) }

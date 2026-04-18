@@ -79,6 +79,15 @@ class PosterHttpService {
         }
 
         val path = title.poster_path!!
+        // Books store "isbn/<isbn>" — resolve to the Open Library cover CDN.
+        if (path.startsWith("isbn/")) {
+            val isbn = path.removePrefix("isbn/")
+            val olSize = when (posterSize) {
+                PosterSize.THUMBNAIL -> "M"
+                PosterSize.FULL -> "L"
+            }
+            return redirect("https://covers.openlibrary.org/b/isbn/$isbn-$olSize.jpg", "poster")
+        }
         if (!isValidTmdbPath(path)) return notFound("poster")
         return redirect("https://image.tmdb.org/t/p/${posterSize.pathSegment}$path", "poster")
     }

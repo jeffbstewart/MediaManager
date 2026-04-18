@@ -107,7 +107,7 @@ object RokuSearchService {
         if (trimmed.isEmpty()) return SearchResponse(query, emptyList(), emptyMap())
 
         val nasRoot = TranscoderAgent.getNasRoot()
-        val allTitles = Title.findAll()
+        val allTitles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = allTitles.associateBy { it.id }
@@ -277,7 +277,7 @@ object RokuSearchService {
             .sortedBy { it.position }
 
         // Find owned titles by tmdb_id (movie type)
-        val allTitles = Title.findAll()
+        val allTitles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesByTmdbId = allTitles
@@ -347,7 +347,7 @@ object RokuSearchService {
 
     private fun getGroupedTitleDetail(name: String, titleIds: List<Long>, baseUrl: String, apiKey: String, user: AppUser): TagDetail {
         val nasRoot = TranscoderAgent.getNasRoot()
-        val allTitles = Title.findAll()
+        val allTitles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = allTitles.associateBy { it.id }
@@ -382,7 +382,7 @@ object RokuSearchService {
             "$baseUrl/headshots/${headshotMember.id}?key=$apiKey"
         } else null
 
-        val allTitles = Title.findAll()
+        val allTitles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = allTitles.associateBy { it.id }

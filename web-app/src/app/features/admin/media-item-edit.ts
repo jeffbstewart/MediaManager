@@ -13,11 +13,17 @@ interface TitleLink {
   poster_url: string | null; seasons: string | null;
 }
 
+interface BookSeriesInfo { name: string; volume: string | null; }
+
 interface MediaItemDetail {
   media_item_id: number; display_name: string; upc: string | null;
   product_name: string | null; media_format: string | null;
+  media_type: string | null;
+  storage_location: string | null;
   purchase_place: string | null; purchase_date: string | null;
   purchase_price: number | null; amazon_order_id: string | null;
+  authors: string[];
+  book_series: BookSeriesInfo | null;
   titles: TitleLink[]; photo_count: number;
   photos: { id: string; captured_at: string | null }[];
 }
@@ -61,6 +67,9 @@ export class MediaItemEditComponent implements OnInit {
   readonly purchasePlace = signal('');
   readonly purchaseDate = signal('');
   readonly purchasePrice = signal('');
+  // Physical location on shelf / bookcase. Shown for any media, first
+  // user of it is books.
+  readonly storageLocation = signal('');
 
   private itemId = 0;
 
@@ -79,6 +88,7 @@ export class MediaItemEditComponent implements OnInit {
       this.purchasePlace.set(data.purchase_place ?? '');
       this.purchaseDate.set(data.purchase_date ?? '');
       this.purchasePrice.set(data.purchase_price?.toString() ?? '');
+      this.storageLocation.set(data.storage_location ?? '');
 
       // Init TMDB search with title name
       const primary = data.titles[0];
@@ -186,6 +196,7 @@ export class MediaItemEditComponent implements OnInit {
       purchase_place: this.purchasePlace() || null,
       purchase_date: this.purchaseDate() || null,
       purchase_price: this.purchasePrice() ? parseFloat(this.purchasePrice()) : null,
+      storage_location: this.storageLocation() || null,
     };
     await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${this.itemId}/purchase`, body));
     this.flash('Purchase info saved');
@@ -194,6 +205,9 @@ export class MediaItemEditComponent implements OnInit {
   updatePurchasePlace(event: Event): void { this.purchasePlace.set((event.target as HTMLInputElement).value); }
   updatePurchaseDate(event: Event): void { this.purchaseDate.set((event.target as HTMLInputElement).value); }
   updatePurchasePrice(event: Event): void { this.purchasePrice.set((event.target as HTMLInputElement).value); }
+  updateStorageLocation(event: Event): void { this.storageLocation.set((event.target as HTMLInputElement).value); }
+
+  get isBook(): boolean { return this.item()?.media_type === 'BOOK'; }
 
   // --- Amazon Orders ---
   updateAmazonQuery(event: Event): void { this.amazonQuery.set((event.target as HTMLInputElement).value); }

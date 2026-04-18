@@ -32,6 +32,8 @@ object ReclassifyService {
         MediaFormat.HD_DVD -> throw IllegalArgumentException("HD_DVD reclassification not supported")
         MediaFormat.UNKNOWN -> throw IllegalArgumentException("UNKNOWN format cannot be reclassified")
         MediaFormat.OTHER -> throw IllegalArgumentException("OTHER format cannot be reclassified")
+        in MediaFormat.BOOK_FORMATS -> throw IllegalArgumentException("Book formats cannot be reclassified")
+        else -> throw IllegalArgumentException("Unsupported format: $format")
     }
 
     /**

@@ -57,7 +57,7 @@ object RokuHomeService {
     fun generateHomeFeed(baseUrl: String, apiKey: String, user: AppUser): HomeFeed {
         val nasRoot = TranscoderAgent.getNasRoot()
 
-        val titles = Title.findAll()
+        val titles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { user.canSeeRating(it.content_rating) }
         val titlesById = titles.associateBy { it.id }

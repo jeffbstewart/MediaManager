@@ -35,10 +35,24 @@ data class Title(
     var event_group_id: Long? = null,                              // FK to event_group (personal videos)
     var transcode_priority: Int = 0,                                 // Admin/user boost for transcoding queue (added to wish vote count)
     var popularity_refreshed_at: LocalDateTime? = null,             // Last time popularity was refreshed from TMDB
+    // Book-specific fields — null unless media_type = BOOK. See docs/BOOKS.md.
+    var open_library_work_id: String? = null,                      // Dedup key for book works (e.g. "OL46125W")
+    var book_series_id: Long? = null,                              // FK to book_series (nullable)
+    var series_number: java.math.BigDecimal? = null,               // Position within series; decimal to support 0.5 etc.
+    var page_count: Int? = null,
+    var first_publication_year: Int? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
-    companion object : Dao<Title, Long>(Title::class.java)
+    companion object : Dao<Title, Long>(Title::class.java) {
+        /**
+         * Returns every non-book title. Roku / video surfaces use this to avoid
+         * pulling book records through queries whose downstream `when`
+         * expressions on [MediaFormat] don't cover book formats.
+         */
+        fun findAllVideo(): List<Title> =
+            findAll().filter { it.media_type != MediaType.BOOK.name }
+    }
 
     /** Returns a poster URL routed through the local cache servlet, or null if no poster. */
     fun posterUrl(size: PosterSize): String? {

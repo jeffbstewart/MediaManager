@@ -1,12 +1,29 @@
 package net.stewart.mediamanager.entity
 
 enum class MediaFormat {
-    DVD, BLURAY, UHD_BLURAY, HD_DVD, UNKNOWN, OTHER
+    DVD, BLURAY, UHD_BLURAY, HD_DVD,
+    // Book formats — see docs/BOOKS.md.
+    MASS_MARKET_PAPERBACK, TRADE_PAPERBACK, HARDBACK,
+    EBOOK_EPUB, EBOOK_PDF,
+    AUDIOBOOK_CD, AUDIOBOOK_DIGITAL,
+    UNKNOWN, OTHER;
+
+    companion object {
+        /** Formats that represent a physical or digital book edition. */
+        val BOOK_FORMATS: Set<MediaFormat> = setOf(
+            MASS_MARKET_PAPERBACK, TRADE_PAPERBACK, HARDBACK,
+            EBOOK_EPUB, EBOOK_PDF,
+            AUDIOBOOK_CD, AUDIOBOOK_DIGITAL
+        )
+    }
 }
 
 enum class MediaType {
-    MOVIE, TV, PERSONAL
+    MOVIE, TV, PERSONAL, BOOK
 }
+
+/** Whether a book_series poster was auto-set from volume 1 or chosen manually. */
+enum class PosterSource { AUTO, MANUAL }
 
 enum class TagSourceType {
     MANUAL,      // User-created tag, manually populated

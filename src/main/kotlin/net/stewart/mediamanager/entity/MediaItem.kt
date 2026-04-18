@@ -26,6 +26,11 @@ data class MediaItem(
     var replacement_value: BigDecimal? = null,
     var replacement_value_updated_at: LocalDateTime? = null,
     var override_asin: String? = null,
+    // Post-acquisition physical location (e.g. "Living room bookcase, shelf 3").
+    // Added for books; applies to any physical media.
+    var storage_location: String? = null,
+    // NAS path for digital editions (EPUB / PDF / digital audiobook). Null for physical editions.
+    var file_path: String? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

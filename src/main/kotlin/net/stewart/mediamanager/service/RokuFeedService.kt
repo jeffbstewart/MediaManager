@@ -37,7 +37,7 @@ object RokuFeedService {
     fun generateFeed(baseUrl: String, apiKey: String, user: AppUser? = null): String {
         val nasRoot = TranscoderAgent.getNasRoot()
 
-        val titles = Title.findAll()
+        val titles = Title.findAllVideo()
             .filter { !it.hidden && it.enrichment_status == EnrichmentStatus.ENRICHED.name }
             .filter { title -> user?.canSeeRating(title.content_rating) ?: true }
         val transcodes = Transcode.findAll().filter { it.file_path != null }

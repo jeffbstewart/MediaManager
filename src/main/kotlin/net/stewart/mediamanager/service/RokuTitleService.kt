@@ -365,7 +365,7 @@ object RokuTitleService {
     ): List<SimilarItem> {
         val titleId = title.id ?: return emptyList()
 
-        val allTitles = Title.findAll().filter {
+        val allTitles = Title.findAllVideo().filter {
             it.id != titleId && !it.hidden &&
                 it.enrichment_status == EnrichmentStatus.ENRICHED.name &&
                 user.canSeeRating(it.content_rating)

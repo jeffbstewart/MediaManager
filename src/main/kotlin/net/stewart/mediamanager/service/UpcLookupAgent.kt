@@ -14,6 +14,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class UpcLookupAgent(
     private val lookupService: UpcLookupService = UpcItemDbLookupService(),
+    private val openLibraryService: OpenLibraryService = OpenLibraryHttpService(),
     private val clock: Clock = SystemClock
 ) {
     private val log = LoggerFactory.getLogger(UpcLookupAgent::class.java)
@@ -88,6 +89,13 @@ class UpcLookupAgent(
 
         log.info("Looking up UPC: {} (scan #{})", scan.upc, scan.id)
         lastLookupTime = clock.currentTimeMillis()
+
+        // ISBN barcodes (EAN-13 with 978/979 prefix) route to Open Library
+        // instead of UPCitemdb. See docs/BOOKS.md.
+        if (isIsbnBarcode(scan.upc)) {
+            return handleIsbn(scan)
+        }
+
         val result = lookupService.lookup(scan.upc)
 
         if (result.apiError) {
@@ -194,5 +202,54 @@ class UpcLookupAgent(
     private fun findOldestPending(): BarcodeScan? {
         return BarcodeScan.findAll(BarcodeScan::scanned_at.asc)
             .firstOrNull { it.lookup_status == LookupStatus.NOT_LOOKED_UP.name }
+    }
+
+    /**
+     * EAN-13 barcodes starting with 978 or 979 are Bookland — ISBNs. Any
+     * other 13-digit barcode (or any 12-digit UPC) is routed through the
+     * movie/product pipeline.
+     */
+    internal fun isIsbnBarcode(code: String): Boolean =
+        code.length == 13 && (code.startsWith("978") || code.startsWith("979"))
+
+    private fun handleIsbn(scan: BarcodeScan): Duration {
+        val result = openLibraryService.lookupByIsbn(scan.upc)
+        when (result) {
+            is OpenLibraryResult.Success -> {
+                countLookup("found")
+                val ingest = BookIngestionService.ingest(scan.upc, result.book, clock)
+                var notes = "${result.book.workTitle} (${result.book.editionYear ?: "?"}) - ${result.book.mediaFormat ?: "Book"}"
+                if (ingest.titleReused) notes += " [existing work]"
+                scan.lookup_status = LookupStatus.FOUND.name
+                scan.media_item_id = ingest.mediaItem.id
+                scan.notes = notes
+                scan.save()
+
+                QuotaTracker.increment()
+                Broadcaster.broadcast(ScanUpdateEvent(
+                    scanId = scan.id!!,
+                    upc = scan.upc,
+                    newStatus = scan.lookup_status,
+                    notes = scan.notes
+                ))
+                log.info("FOUND BOOK: {} -> {}", scan.upc, notes)
+            }
+            is OpenLibraryResult.NotFound -> {
+                countLookup("not_found")
+                handleNotFound(scan)
+                QuotaTracker.increment()
+                Broadcaster.broadcast(ScanUpdateEvent(scan.id!!, scan.upc, scan.lookup_status, scan.notes))
+            }
+            is OpenLibraryResult.Error -> {
+                countLookup("error")
+                log.warn("Open Library error for ISBN {}: {}", scan.upc, result.message)
+                if (result.rateLimited) {
+                    return RATE_LIMITED_BACKOFF
+                }
+                // Leave as NOT_LOOKED_UP for retry — don't count against quota.
+                return POLL_INTERVAL
+            }
+        }
+        return POLL_INTERVAL
     }
 }

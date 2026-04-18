@@ -86,6 +86,27 @@
       }
     }
 
+    @if (isBook) {
+      <!-- Book-specific read-only summary from the ISBN scan. See docs/BOOKS.md. -->
+      <h3>Book Details</h3>
+      <div class="purchase-grid">
+        @if (data.authors.length > 0) {
+          <div class="field-group">
+            <label class="field-label">Author{{ data.authors.length > 1 ? 's' : '' }}</label>
+            <div class="field-readonly">{{ data.authors.join(' & ') }}</div>
+          </div>
+        }
+        @if (data.book_series) {
+          <div class="field-group">
+            <label class="field-label">Series</label>
+            <div class="field-readonly">
+              {{ data.book_series.name }}@if (data.book_series.volume) { #{{ data.book_series.volume }} }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
     <!-- Purchase Info -->
     <h3>Purchase Info</h3>
     @if (data.amazon_order_id) {
@@ -106,6 +127,11 @@
           <span class="prefix">$</span>
           <input class="field-input" type="number" step="0.01" [value]="purchasePrice()" (input)="updatePurchasePrice($event)" />
         </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Storage Location</label>
+        <input class="field-input" type="text" [value]="storageLocation()" (input)="updateStorageLocation($event)"
+               placeholder="e.g. Living room bookcase, shelf 3" />
       </div>
     </div>
     <button mat-flat-button color="primary" class="save-btn" (click)="savePurchase()">Save Purchase Info</button>
