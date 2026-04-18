@@ -84,6 +84,28 @@ class HomeFeedHttpService {
         val recentlyAddedAlbums = if (hasMusic) recentlyAddedAlbums(user, 10) else emptyList()
         val resumeListening = if (hasMusic) resumeListening(user, 10) else emptyList()
 
+        // Admin-only queue counts drive the red-badge pills next to the
+        // corresponding nav items. Keep these in sync with the parallel
+        // block in the /api/v2/catalog/features endpoint below — both
+        // responses feed the same Angular FeatureService, and the
+        // home feed is what loads at app start, so badges need their
+        // values here or they silently stay at zero.
+        val unmatchedTranscodeCount = if (user.isAdmin()) {
+            net.stewart.mediamanager.entity.DiscoveredFile.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.DiscoveredFileStatus.UNMATCHED.name
+            }
+        } else 0
+        val unmatchedBooksCount = if (user.isAdmin()) {
+            net.stewart.mediamanager.entity.UnmatchedBook.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedBookStatus.UNMATCHED.name
+            }
+        } else 0
+        val unmatchedAudioCount = if (user.isAdmin()) {
+            net.stewart.mediamanager.entity.UnmatchedAudio.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedAudioStatus.UNMATCHED.name
+            }
+        } else 0
+
         val features = mapOf(
             "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
             "has_books" to hasBooks,
@@ -92,6 +114,9 @@ class HomeFeedHttpService {
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
+            "unmatched_count" to unmatchedTranscodeCount,
+            "unmatched_books_count" to unmatchedBooksCount,
+            "unmatched_audio_count" to unmatchedAudioCount,
             "data_quality_count" to if (user.isAdmin()) {
                 allTitlesForFeatures.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name && it.media_type != MMMediaType.BOOK.name }
             } else 0,

@@ -28,10 +28,13 @@ import com.linecorp.armeria.server.ServiceRequestContext
  *   images (book cover URLs constructed in the reader etc.).
  * - `script-src 'self'` — no inline / remote JS. epub.js + JSZip are
  *   vendored locally.
- * - `style-src 'self' 'unsafe-inline'` — Angular emits component-scoped
+ * - `style-src 'self' 'unsafe-inline' blob:` — Angular emits component-scoped
  *   styles inline at runtime. Tightening to nonces is a separate
  *   `ngCspNonce` refactor; `'unsafe-inline'` on styles is a widely-
  *   accepted pragmatic tradeoff for Angular apps.
+ *   `blob:` is required for the EPUB reader: epub.js renders book pages
+ *   inside srcdoc iframes and attaches book-stylesheet contents as Blob
+ *   URLs. Without `blob:` the reader falls back to unstyled text.
  * - `font-src 'self'` — Roboto + Material Icons vendored locally.
  * - `connect-src 'self'` — XHR / fetch / WebSocket to our origin only.
  * - `frame-src 'self'` — the PDF reader iframes `/ebook/{id}`.
@@ -83,7 +86,7 @@ class CspDecorator : DecoratingHttpServiceFunction {
             "img-src 'self' data: blob:",
             "object-src 'none'",
             "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' blob:",
             "report-uri /csp-report",
             "report-to csp-endpoint"
         ).joinToString("; ")
