@@ -15,6 +15,7 @@ import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LiveTvStreamManager
 import net.stewart.mediamanager.service.SsdpResponder
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
+import net.stewart.mediamanager.service.BookScannerAgent
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
 import net.stewart.mediamanager.service.PriceLookupAgent
@@ -86,6 +87,10 @@ fun main(args: Array<String>) {
     val authorEnrichmentAgent = AuthorEnrichmentAgent()
     authorEnrichmentAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { authorEnrichmentAgent.stop() })
+
+    val bookScannerAgent = BookScannerAgent()
+    bookScannerAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { bookScannerAgent.stop() })
 
     val collectionAgent = CollectionRefreshAgent()
     collectionAgent.start()

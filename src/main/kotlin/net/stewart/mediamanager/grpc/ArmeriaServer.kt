@@ -50,6 +50,7 @@ import net.stewart.mediamanager.armeria.LiveTvSettingsHttpService
 import net.stewart.mediamanager.armeria.InventoryReportHttpService
 import net.stewart.mediamanager.armeria.MediaItemEditHttpService
 import net.stewart.mediamanager.armeria.LinkedTranscodesHttpService
+import net.stewart.mediamanager.armeria.UnmatchedBookHttpService
 import net.stewart.mediamanager.armeria.UnmatchedHttpService
 import net.stewart.mediamanager.armeria.WishListHttpService
 import net.stewart.mediamanager.armeria.FamilyVideosHttpService
@@ -238,6 +239,7 @@ object ArmeriaServer {
         blocking(SearchHttpService())
         blocking(TranscodeStatusHttpService())
         blocking(UnmatchedHttpService())
+        blocking(UnmatchedBookHttpService())
         blocking(LinkedTranscodesHttpService())
         blocking(BacklogHttpService())
         blocking(TagManagementHttpService())

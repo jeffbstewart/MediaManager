@@ -35,7 +35,49 @@ object BookIngestionService {
         val titleReused: Boolean
     )
 
-    fun ingest(isbn: String, lookup: OpenLibraryBookLookup, clock: Clock = SystemClock): IngestResult {
+    /**
+     * Physical-book scan path. [isbn] is the EAN-13 the user scanned. The
+     * MediaItem's `media_format` falls back to [lookup.mediaFormat] and
+     * then to [MediaFormat.MASS_MARKET_PAPERBACK] — a reasonable default
+     * for unlabeled physical editions.
+     */
+    fun ingest(isbn: String, lookup: OpenLibraryBookLookup, clock: Clock = SystemClock): IngestResult =
+        ingestInternal(
+            isbn = isbn,
+            filePath = null,
+            fileFormat = null,
+            lookup = lookup,
+            clock = clock
+        )
+
+    /**
+     * Digital-edition ingestion path (M4). Called by the NAS book scanner when
+     * an .epub / .pdf file has a resolvable ISBN. [filePath] is stored on the
+     * MediaItem and [fileFormat] overrides the format derived from OL (which
+     * would otherwise be a physical hint like "Paperback").
+     */
+    fun ingestDigital(
+        filePath: String,
+        fileFormat: MediaFormat,
+        isbn: String?,
+        lookup: OpenLibraryBookLookup,
+        clock: Clock = SystemClock
+    ): IngestResult =
+        ingestInternal(
+            isbn = isbn,
+            filePath = filePath,
+            fileFormat = fileFormat,
+            lookup = lookup,
+            clock = clock
+        )
+
+    private fun ingestInternal(
+        isbn: String?,
+        filePath: String?,
+        fileFormat: MediaFormat?,
+        lookup: OpenLibraryBookLookup,
+        clock: Clock
+    ): IngestResult {
         val now = clock.now()
 
         val authors = lookup.authors.map { upsertAuthor(it, now) }
@@ -57,19 +99,26 @@ object BookIngestionService {
         }
 
         // series poster auto-fill on first creation
-        if (series != null && series.poster_path == null && series.poster_source == PosterSource.AUTO.name) {
-            series.poster_path = "isbn/$isbn"
+        val posterIsbn = isbn ?: lookup.isbn
+        if (series != null && series.poster_path == null && series.poster_source == PosterSource.AUTO.name
+            && posterIsbn != null) {
+            series.poster_path = "isbn/$posterIsbn"
             series.updated_at = now
             series.save()
         }
 
+        val resolvedFormat = fileFormat?.name
+            ?: lookup.mediaFormat
+            ?: MediaFormat.MASS_MARKET_PAPERBACK.name
+
         val mediaItem = MediaItem(
             upc = isbn,
-            media_format = lookup.mediaFormat ?: MediaFormat.MASS_MARKET_PAPERBACK.name,
+            media_format = resolvedFormat,
             title_count = 1,
             expansion_status = ExpansionStatus.SINGLE.name,
             upc_lookup_json = lookup.rawJson,
             product_name = lookup.workTitle,
+            file_path = filePath,
             created_at = now,
             updated_at = now
         )
@@ -80,13 +129,15 @@ object BookIngestionService {
             title_id = title.id!!
         ).save()
 
-        OwnershipPhotoService.resolveOrphans(isbn, mediaItem.id!!)
+        if (isbn != null) {
+            OwnershipPhotoService.resolveOrphans(isbn, mediaItem.id!!)
+        }
 
         // Fulfill any active wishes for this work (across all users).
         WishListService.fulfillBookWishes(lookup.openLibraryWorkId)
 
-        log.info("Book ingested: ISBN={} workId={} title='{}' titleReused={}",
-            isbn, lookup.openLibraryWorkId, lookup.workTitle, reused)
+        log.info("Book ingested: ISBN={} filePath={} workId={} title='{}' titleReused={}",
+            isbn, filePath, lookup.openLibraryWorkId, lookup.workTitle, reused)
 
         return IngestResult(mediaItem, title, reused)
     }
