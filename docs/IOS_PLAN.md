@@ -109,6 +109,46 @@ The generated Swift files are written into the app's generated sources directory
 
 Offline downloads are backed by the server's `ForMobile` transcode tier. The app uses gRPC to discover what is downloadable and HTTP to transfer the actual media files.
 
+### Book downloads (M6 contract)
+
+A matching pair of gRPC methods on `DownloadService` handles books — same
+streaming chunk shape, different source lookup. See `docs/BOOKS.md` for
+the schema context.
+
+| RPC | Request | Response |
+|---|---|---|
+| `GetBookManifest` | `{media_item_id}` | `{media_item_id, title_id, title_name, file_size_bytes, media_format, suggested_filename}` |
+| `DownloadBookFile` | `{media_item_id, offset, length}` | `stream DownloadChunk` (same as video) |
+
+**Client flow**:
+
+1. Call `GetBookManifest` with the `MediaItem.id` returned by
+   `CatalogService.GetTitleDetail.readable_editions[*]`. Use the
+   returned `file_size_bytes` to show progress and
+   `suggested_filename` to store on disk.
+2. Call `DownloadBookFile` with `offset = 0, length = 0` for a full
+   download, or `offset = <already-received bytes>` to resume.
+3. Reassemble `DownloadChunk.data` in order — server guarantees
+   monotonically-increasing `offset` values. `is_last = true` on the
+   terminal chunk; `total_size` echoes the manifest size on every
+   chunk so clients can validate.
+4. On disk the file is ready to hand to the native reader (`PDFKit`
+   for `EBOOK_PDF`, an EPUB reader for `EBOOK_EPUB`). The
+   `media_format` string matches what the catalog serves, so a
+   simple `when`-dispatch picks the right viewer.
+
+**Error codes**:
+
+- `NOT_FOUND` — unknown media_item_id or backing file missing on disk.
+- `FAILED_PRECONDITION` — the media_item isn't a digital edition
+  (no `file_path`, or `media_format` isn't in the book set).
+- `PERMISSION_DENIED` — caller's rating ceiling blocks the linked title.
+
+No server work is required to land iOS's book reader — the RPC is
+already implemented, tested end-to-end
+(`DownloadBookFileTest`), and matches the shape iOS already uses for
+video downloads.
+
 ## Historical Note
 
 If you encounter old references to `/api/v1` in conversation history, design notes, or commit messages, treat them as archival context only. They do not describe the current iOS/server integration.

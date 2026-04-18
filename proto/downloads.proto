@@ -22,6 +22,17 @@ service DownloadService {
   // Server-streaming file download. Streams the ForMobile transcode
   // file in ~1MB chunks. Supports resume via offset parameter.
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadChunk);
+
+  // --- Book downloads (M6). Parallel to the video pair above but
+  // keyed on media_item_id, since books have no transcodes. Reuses
+  // the DownloadChunk message so clients share chunk reassembly.
+
+  // Metadata for a single book edition (size, format). Client decides
+  // whether to download and how to tag the file on disk.
+  rpc GetBookManifest(BookManifestRequest) returns (BookManifest);
+
+  // Server-streaming download of an EPUB / PDF / digital audiobook.
+  rpc DownloadBookFile(DownloadBookFileRequest) returns (stream DownloadChunk);
 }
 
 message ManifestRequest {
@@ -79,4 +90,33 @@ message DownloadChunk {
   int64 offset = 2;             // byte offset of this chunk in the file
   int64 total_size = 3;         // total file size
   bool is_last = 4;             // true on the final chunk
+}
+
+// --- Book download messages ---
+
+message BookManifestRequest {
+  int64 media_item_id = 1;
+}
+
+message BookManifest {
+  int64 media_item_id = 1;
+  int64 title_id = 2;
+  string title_name = 3;
+  int64 file_size_bytes = 4;
+  // Enum name string: "EBOOK_EPUB", "EBOOK_PDF", "AUDIOBOOK_DIGITAL".
+  // Not a typed enum because the client uses it primarily as a file
+  // extension / content-type hint, and the catalog uses string-valued
+  // enums throughout.
+  string media_format = 5;
+  // Suggested filename the client can use when saving to disk.
+  // Generated from title + format, sanitized — no path separators.
+  string suggested_filename = 6;
+}
+
+message DownloadBookFileRequest {
+  int64 media_item_id = 1;
+  // Resume from byte offset. Zero means start from beginning.
+  int64 offset = 2;
+  // Max bytes to return. Zero means stream to end of file.
+  int64 length = 3;
 }

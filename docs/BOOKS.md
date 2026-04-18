@@ -253,7 +253,7 @@ An "Add book" flow runs an Open Library title/author search in the same UI shell
 
 Phases are ordered so each one ships a usable increment. Milestones prefixed **M**. Each phase assumes the previous is done.
 
-**Status (2026-04-17):** M1 and M2 shipped. M3 (book wishlists) is the next planned milestone, carved out of what was originally M2's "other works" / "fill the gaps" scope so that the multi-surface wishlist integration gets the attention it deserves.
+**Status (2026-04-18):** M1–M6 shipped. The only remaining milestone is M7 (iOS reader), scoped separately and out of this document's timeline. The server-side download contract M6 settles is already documented for iOS in `docs/IOS_PLAN.md` (§ Downloads → Book downloads).
 
 ### **M1 — Schema + physical book scanning** *(smallest shippable inventory feature)* ✅
 
@@ -284,7 +284,7 @@ Phases are ordered so each one ships a usable increment. Milestones prefixed **M
 
 **Deliverable:** Books are browseable by author and by series. Every ingested book has a canonical hero page reachable from the admin edit view and the home carousel. Catalog feels complete for the physical-inventory use case.
 
-### **M3 — Book wishlists, "other works", and "fill the gaps"**
+### **M3 — Book wishlists, "other works", and "fill the gaps"** ✅
 
 Adds the first wish-list-dependent surfaces. The `WishListItem` schema today is keyed on `(tmdb_id, media_type)` — books need a parallel identity based on `open_library_work_id`.
 
@@ -298,7 +298,7 @@ Adds the first wish-list-dependent surfaces. The `WishListItem` schema today is 
 
 **Deliverable:** From an AuthorScreen you can wishlist any of that author's books you don't own. From a SeriesScreen you can one-click the missing volumes. The main Wishlist shows both media and book wishes in one place.
 
-### **M4 — Ebook ingestion**
+### **M4 — Ebook ingestion** ✅
 
 - NAS scanner extension for `.epub` / `.pdf`. Configurable `books_root` in `app_config`.
 - EPUB metadata reader (JVM library: `epublib` or similar). PDF metadata reader (`PDFBox`).
@@ -308,7 +308,7 @@ Adds the first wish-list-dependent surfaces. The `WishListItem` schema today is 
 
 **Deliverable:** Drop an EPUB into the books folder; it appears under its title's editions list. No reader yet.
 
-### **M5 — Web reader + reading progress**
+### **M5 — Web reader + reading progress** ✅
 
 - New servlet `/ebook/{mediaItemId}` — authenticated, streams the file with range requests. Auth same as `/stream/`.
 - New `/reader/{mediaItemId}` Angular route hosting epub.js or PDF.js based on `media_format`.
@@ -319,7 +319,7 @@ Adds the first wish-list-dependent surfaces. The `WishListItem` schema today is 
 
 **Deliverable:** Click Read on an EPUB or PDF edition. Browser reader opens at the right page. Closing and re-opening resumes. Home page shows what you're in the middle of.
 
-### **M6 — Download support polish** *(no new UX, just the RPC contract proven)*
+### **M6 — Download support polish** *(no new UX, just the RPC contract proven)* ✅
 
 - Confirm `DownloadService.DownloadFile` works for EPUB/PDF with the existing chunk protocol. Integration test sending a 5 MB EPUB through the RPC and reassembling it.
 - Document the client contract in `docs/ANGULAR_MIGRATION.md` / `docs/IOS_PLAN.md` so the iOS phase can slot in with no new server work.

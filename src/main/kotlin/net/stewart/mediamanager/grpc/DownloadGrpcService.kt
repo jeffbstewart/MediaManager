@@ -1,10 +1,14 @@
 package net.stewart.mediamanager.grpc
 
+import com.github.vokorm.findAll
 import com.google.protobuf.ByteString
 import io.grpc.Status
 import io.grpc.StatusException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import net.stewart.mediamanager.entity.MediaFormat
+import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.Title as TitleEntity
@@ -13,6 +17,7 @@ import net.stewart.mediamanager.service.TranscoderAgent
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.RandomAccessFile
+import java.nio.file.Path
 
 class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBase() {
 
@@ -116,6 +121,124 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
         } finally {
             raf.close()
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Book downloads (M6). Separate from the video pair above: books live
+    // on media_item.file_path, have no ForMobile mirror, and their
+    // "manifest" is just size + format.
+    // ------------------------------------------------------------------
+
+    override suspend fun getBookManifest(request: BookManifestRequest): BookManifest {
+        val (item, title, path) = resolveBookSource(request.mediaItemId)
+        val size = runCatching { java.nio.file.Files.size(path) }.getOrElse {
+            throw StatusException(Status.NOT_FOUND.withDescription("File missing"))
+        }
+        return bookManifest {
+            mediaItemId = item.id!!
+            titleId = title.id!!
+            titleName = title.name
+            fileSizeBytes = size
+            mediaFormat = item.media_format
+            suggestedFilename = suggestedBookFilename(title.name, item.media_format)
+        }
+    }
+
+    override fun downloadBookFile(request: DownloadBookFileRequest): Flow<DownloadChunk> = flow {
+        val (item, title, path) = resolveBookSource(request.mediaItemId)
+        val file = path.toFile()
+        val totalSize = file.length()
+        val startOffset = request.offset.coerceIn(0, totalSize)
+        val maxBytes = if (request.length > 0) request.length else (totalSize - startOffset)
+        val endOffset = (startOffset + maxBytes).coerceAtMost(totalSize)
+
+        log.info("Book download starting: media_item={} title='{}' file={} offset={} size={}",
+            item.id, title.name, file.name, startOffset, totalSize)
+
+        val raf = RandomAccessFile(file, "r")
+        try {
+            raf.seek(startOffset)
+            val buffer = ByteArray(CHUNK_SIZE)
+            var position = startOffset
+            var totalBytesStreamed = 0L
+            while (position < endOffset) {
+                val remaining = (endOffset - position).coerceAtMost(CHUNK_SIZE.toLong()).toInt()
+                val bytesRead = raf.read(buffer, 0, remaining)
+                if (bytesRead <= 0) break
+                val isLast = (position + bytesRead) >= endOffset
+                emit(downloadChunk {
+                    data = ByteString.copyFrom(buffer, 0, bytesRead)
+                    offset = position
+                    this.totalSize = totalSize
+                    this.isLast = isLast
+                })
+                position += bytesRead
+                totalBytesStreamed += bytesRead
+                MetricsRegistry.countDownloadBytes("book", bytesRead.toLong())
+            }
+            MetricsRegistry.countDownloadFile("book_complete")
+            log.info("Book download complete: media_item={} bytes={}", item.id, totalBytesStreamed)
+        } catch (e: Exception) {
+            MetricsRegistry.countDownloadFile("book_error")
+            log.warn("Book download failed: media_item={} error={} type={}",
+                item.id, e.message, e.javaClass.simpleName, e)
+            throw e
+        } finally {
+            raf.close()
+        }
+    }
+
+    /**
+     * Shared lookup path for the book RPCs — validates the media_item
+     * exists, carries a file_path, has a book format with a file on disk,
+     * and the user's rating ceiling allows the linked title. Returns a
+     * triple so callers can emit title-aware log lines without re-querying.
+     */
+    private fun resolveBookSource(mediaItemId: Long): Triple<MediaItem, TitleEntity, Path> {
+        val user = currentUser()
+        val item = MediaItem.findById(mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+        val filePath = item.file_path
+            ?: throw StatusException(Status.FAILED_PRECONDITION.withDescription("Not a digital edition"))
+
+        // Only ebooks / digital audiobooks. Physical edition formats would
+        // have a null file_path already, but be defensive.
+        val format = runCatching { MediaFormat.valueOf(item.media_format) }
+            .getOrNull()
+        if (format !in MediaFormat.BOOK_FORMATS) {
+            throw StatusException(Status.FAILED_PRECONDITION.withDescription("Not a book edition"))
+        }
+
+        val linkedTitleIds = MediaItemTitle.findAll()
+            .filter { it.media_item_id == mediaItemId }
+            .map { it.title_id }
+        val title = linkedTitleIds.mapNotNull { TitleEntity.findById(it) }.firstOrNull()
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("No linked title"))
+        if (title.hidden || !user.canSeeRating(title.content_rating)) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("Content restricted"))
+        }
+
+        val path = Path.of(filePath)
+        if (!java.nio.file.Files.isRegularFile(path)) {
+            throw StatusException(Status.NOT_FOUND.withDescription("File missing on disk"))
+        }
+        return Triple(item, title, path)
+    }
+
+    /** Sanitized "Foundation.epub" / "The Caves of Steel.pdf" — no path separators. */
+    internal fun suggestedBookFilename(titleName: String, mediaFormat: String): String {
+        val ext = when (mediaFormat) {
+            MediaFormat.EBOOK_EPUB.name -> "epub"
+            MediaFormat.EBOOK_PDF.name -> "pdf"
+            MediaFormat.AUDIOBOOK_DIGITAL.name -> "m4b"
+            else -> "bin"
+        }
+        val safe = titleName
+            .replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), "")
+            .trim()
+            .take(120)
+            .ifBlank { "book" }
+        return "$safe.$ext"
     }
 
     private fun buildManifest(transcodeId: Long): DownloadManifest? {
