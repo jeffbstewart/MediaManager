@@ -24,6 +24,7 @@ class AddItemHttpService {
 
     private val gson = Gson()
     private val tmdbService = TmdbService()
+    private val openLibrary: OpenLibraryService = OpenLibraryHttpService()
 
     /** Submit a UPC barcode for lookup. */
     @Post("/api/v2/admin/add-item/scan")
@@ -99,7 +100,7 @@ class AddItemHttpService {
                 "display_name" to (scan.upc), "upc" to scan.upc,
                 "format" to null, "enrichment_status" to scan.lookup_status,
                 "poster_url" to null, "has_purchase" to false, "photo_count" to 0,
-                "entry_source" to "UPC", "created_at" to toIsoUtc(scan.scanned_at)
+                "entry_source" to EntrySource.UPC_SCAN.name, "created_at" to toIsoUtc(scan.scanned_at)
             ))
         }
 
@@ -171,6 +172,44 @@ class AddItemHttpService {
         WishListService.fulfillMediaWishes(tmdbKey)
 
         return jsonResponse(gson.toJson(mapOf("ok" to true, "title_name" to title.name, "media_item_id" to item.id)))
+    }
+
+    /**
+     * Add a physical book by ISBN. Resolves via Open Library and calls
+     * [BookIngestionService.ingest] (no file_path — this is a physical
+     * edition being catalogued, not a NAS file).
+     *
+     * Used by the "Search Books" tab after the admin picks a work from
+     * OL's search results.
+     */
+    @Post("/api/v2/admin/add-item/add-from-isbn")
+    fun addFromIsbn(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java)
+        val rawIsbn = (map["isbn"] as? String)?.trim()?.replace("-", "")?.replace(" ", "")
+            ?: return badRequest("isbn required")
+
+        val lookup = openLibrary.lookupByIsbn(rawIsbn)
+        if (lookup !is OpenLibraryResult.Success) {
+            val reason = when (lookup) {
+                is OpenLibraryResult.NotFound -> "Open Library has no record of that ISBN"
+                is OpenLibraryResult.Error -> "Open Library error: ${lookup.message}"
+                is OpenLibraryResult.Success -> "Unreachable"
+            }
+            return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to reason)))
+        }
+
+        val result = BookIngestionService.ingest(rawIsbn, lookup.book)
+        return jsonResponse(gson.toJson(mapOf(
+            "ok" to true,
+            "title_name" to result.title.name,
+            "title_id" to result.title.id,
+            "media_item_id" to result.mediaItem.id,
+            "reused" to result.titleReused
+        )))
     }
 
     /** Delete a media item and cascade to all dependents (undo an add). */

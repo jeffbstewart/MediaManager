@@ -10,10 +10,12 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.CastMember
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TmdbCollection
+import net.stewart.mediamanager.service.AuthorHeadshotCacheService
 import net.stewart.mediamanager.service.BackdropCacheService
 import net.stewart.mediamanager.service.CollectionPosterCacheService
 import net.stewart.mediamanager.service.HeadshotCacheService
@@ -145,6 +147,21 @@ class HeadshotHttpService {
             extension,
             "headshot"
         )
+    }
+}
+
+class AuthorHeadshotHttpService {
+
+    @Blocking
+    @Get("/author-headshots/{authorId}")
+    fun authorHeadshot(@Param("authorId") authorId: Long): HttpResponse {
+        val author = Author.findById(authorId) ?: return notFound("author-headshot")
+        val cached = AuthorHeadshotCacheService.cacheAndServe(author)
+        return if (cached != null && Files.exists(cached)) {
+            serveFile(cached, "image/jpeg", "author-headshot")
+        } else {
+            notFound("author-headshot")
+        }
     }
 }
 

@@ -42,7 +42,8 @@
       <a class="poster-card" [routerLink]="routes.title(title.title_id)">
         <div class="poster-wrapper">
           @if (title.poster_url) {
-            <img [src]="title.poster_url" [alt]="title.title_name" class="poster-img" />
+            <img [src]="title.poster_url" [alt]="title.title_name" class="poster-img"
+                 loading="lazy" decoding="async" />
           } @else {
             <div class="poster-placeholder"></div>
           }

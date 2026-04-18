@@ -30,7 +30,12 @@ interface EpubJsBook {
   destroy(): void;
 }
 declare global {
-  interface Window { ePub?: (url: string) => EpubJsBook; }
+  interface Window {
+    // `openAs: 'epub'` forces the library to treat the URL as a binary
+    // archive (default is to sniff by file extension, which fails for our
+    // /ebook/{id} paths that don't end in ".epub").
+    ePub?: (url: string, options?: { openAs?: 'epub' | 'directory' | 'binary' }) => EpubJsBook;
+  }
 }
 
 // Vendored under web-app/public/vendor/ — see THIRD_PARTY_LICENSES.md.
@@ -84,16 +89,23 @@ export class ReaderComponent implements OnInit, OnDestroy {
       const fmt: 'EBOOK_EPUB' | 'EBOOK_PDF' =
         ct.includes('application/pdf') ? 'EBOOK_PDF' : 'EBOOK_EPUB';
       this.mediaFormat.set(fmt);
+      // Flip loading off *before* bootEpub so the #epubContainer branch of
+      // the template enters the DOM. Otherwise viewChild() resolves to
+      // undefined and bootEpub throws "epub container missing".
+      this.loading.set(false);
 
       if (fmt === 'EBOOK_EPUB') {
+        // Wait one animation frame so Angular commits the DOM change from
+        // the loading/mediaFormat signal updates above. afterNextRender
+        // would be stricter, but rAF is simpler and sufficient here.
+        await new Promise<void>(r => requestAnimationFrame(() => r()));
         await this.bootEpub(progress.cfi);
       }
       // PDF path: the template binds an <iframe> to ebookSrc(); nothing else to do.
     } catch (e) {
       this.error.set('Failed to load book');
-      console.error('reader init', e);
-    } finally {
       this.loading.set(false);
+      console.error('reader init', e);
     }
   }
 
@@ -125,7 +137,7 @@ export class ReaderComponent implements OnInit, OnDestroy {
     if (!el) throw new Error('epub container missing');
     if (!window.ePub) throw new Error('epub.js failed to load');
 
-    const book = window.ePub(this.ebookSrc());
+    const book = window.ePub(this.ebookSrc(), { openAs: 'epub' });
     this.book = book;
     const rendition = book.renderTo(el, {
       width: '100%',

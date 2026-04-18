@@ -143,8 +143,15 @@ class AuthorHttpService(
             .toList()
     }
 
-    private fun headshotUrl(author: Author): String? = author.headshot_path
-        ?: author.open_library_author_id?.let { id -> "/proxy/ol/author/$id/M" }
+    private fun headshotUrl(author: Author): String? = when {
+        // Wikimedia-sourced headshots route through our server-side cache
+        // (AuthorHeadshotCacheService → /author-headshots/{id}). The raw
+        // upload.wikimedia.org URL can't be used directly: CSP img-src is
+        // 'self' only, and we don't want to leak client IPs to Wikimedia.
+        !author.headshot_path.isNullOrBlank() && author.id != null -> "/author-headshots/${author.id}"
+        author.open_library_author_id != null -> "/proxy/ol/author/${author.open_library_author_id}/M"
+        else -> null
+    }
 
     private fun jsonResponse(json: String): HttpResponse {
         val bytes = json.toByteArray(Charsets.UTF_8)

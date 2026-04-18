@@ -13,6 +13,7 @@ import java.nio.file.Path
 import net.stewart.mediamanager.armeria.ArmeriaAuthDecorator
 import net.stewart.mediamanager.armeria.BackdropHttpService
 import net.stewart.mediamanager.armeria.CollectionPosterHttpService
+import net.stewart.mediamanager.armeria.AuthorHeadshotHttpService
 import net.stewart.mediamanager.armeria.HeadshotHttpService
 import net.stewart.mediamanager.armeria.HealthHttpService
 import net.stewart.mediamanager.armeria.LocalImageHttpService
@@ -220,6 +221,7 @@ object ArmeriaServer {
         // Image endpoints
         blocking(PosterHttpService())
         blocking(HeadshotHttpService())
+        blocking(AuthorHeadshotHttpService())
         blocking(BackdropHttpService())
         blocking(CollectionPosterHttpService())
         blocking(LocalImageHttpService())

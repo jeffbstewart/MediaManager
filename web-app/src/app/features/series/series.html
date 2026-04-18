@@ -32,7 +32,8 @@
           <a class="poster-card" [routerLink]="routes.title(v.title_id)">
             <div class="poster-wrapper">
               @if (v.poster_url) {
-                <img [src]="v.poster_url" [alt]="v.title_name" class="poster-img" />
+                <img [src]="v.poster_url" [alt]="v.title_name" class="poster-img"
+                     loading="lazy" decoding="async" />
               } @else {
                 <div class="poster-placeholder"></div>
               }
@@ -68,7 +69,8 @@
             <div class="poster-card unowned">
               <div class="poster-wrapper">
                 @if (v.cover_url) {
-                  <img [src]="v.cover_url" [alt]="v.title" class="poster-img" />
+                  <img [src]="v.cover_url" [alt]="v.title" class="poster-img"
+                       loading="lazy" decoding="async" />
                 } @else {
                   <div class="poster-placeholder"></div>
                 }

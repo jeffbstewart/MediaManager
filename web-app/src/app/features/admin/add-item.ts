@@ -21,6 +21,15 @@ interface RecentItem {
 
 interface TmdbResult { tmdb_id: number; title: string; media_type: string; release_year: number | null; poster_path: string | null; overview: string | null; }
 
+interface OlBookResult {
+  work_id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  cover_url: string | null;
+  isbn: string | null;
+}
+
 @Component({
   selector: 'app-add-item',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,13 +55,20 @@ export class AddItemComponent implements OnInit, OnDestroy {
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private zxingControls: { stop: () => void } | null = null;
 
-  // Search tab
+  // Search TMDB tab
   readonly searchQuery = signal('');
   readonly searchType = signal<'MOVIE' | 'TV'>('MOVIE');
   readonly searchResults = signal<TmdbResult[]>([]);
   readonly searching = signal(false);
   readonly addFormat = signal('BLURAY');
   readonly addSeasons = signal('');
+
+  // Search Books tab — queries Open Library by title/author and lets
+  // admin add physical books that couldn't be resolved by ISBN scan.
+  readonly bookQuery = signal('');
+  readonly bookResults = signal<OlBookResult[]>([]);
+  readonly bookSearching = signal(false);
+  readonly bookAdding = signal(false);
 
   // Recent items
   readonly items = signal<RecentItem[]>([]);
@@ -165,6 +181,49 @@ export class AddItemComponent implements OnInit, OnDestroy {
       this.searchResults.set(d.results);
     } catch { /* ignore */ }
     this.searching.set(false);
+  }
+
+  async searchBooks(event?: Event): Promise<void> {
+    if (event) this.bookQuery.set((event.target as HTMLInputElement).value);
+    const q = this.bookQuery().trim();
+    if (q.length < 2) { this.bookResults.set([]); return; }
+    this.bookSearching.set(true);
+    try {
+      const d = await firstValueFrom(
+        this.http.get<{ results: OlBookResult[] }>(
+          '/api/v2/admin/unmatched-books/search-ol', { params: { q } }
+        )
+      );
+      this.bookResults.set(d.results);
+    } catch { /* ignore */ }
+    this.bookSearching.set(false);
+  }
+
+  async addFromOl(hit: OlBookResult): Promise<void> {
+    if (!hit.isbn) return;
+    this.bookAdding.set(true);
+    try {
+      const r = await firstValueFrom(
+        this.http.post<{ ok: boolean; title_name?: string; error?: string }>(
+          '/api/v2/admin/add-item/add-from-isbn', { isbn: hit.isbn }
+        )
+      );
+      if (r.ok) {
+        this.scanMessage.set(`Added: ${r.title_name ?? hit.title}`);
+        this.scanSuccess.set(true);
+        this.bookResults.set([]);
+        this.bookQuery.set('');
+        await this.refreshItems();
+      } else {
+        this.scanMessage.set(r.error ?? 'Failed to add book');
+        this.scanSuccess.set(false);
+      }
+    } catch {
+      this.scanMessage.set('Request failed');
+      this.scanSuccess.set(false);
+    } finally {
+      this.bookAdding.set(false);
+    }
   }
 
   async addFromTmdb(result: TmdbResult): Promise<void> {

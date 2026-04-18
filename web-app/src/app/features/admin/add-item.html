@@ -78,6 +78,43 @@
         }
       </div>
     </mat-tab>
+
+    <!-- Search Books Tab — Open Library by title/author. Use when the ISBN
+         scan fails or the physical book has no barcode. -->
+    <mat-tab label="Search Books">
+      <div class="tab-content">
+        <div class="search-row">
+          <input class="field-input flex" type="text" placeholder="Title or author..."
+                 [value]="bookQuery()" (input)="searchBooks($event)" (keydown.enter)="searchBooks()" />
+        </div>
+
+        @if (bookSearching()) { <mat-spinner diameter="24" /> }
+        @if (bookResults().length > 0) {
+          <div class="tmdb-results">
+            @for (hit of bookResults(); track hit.work_id) {
+              <div class="tmdb-row">
+                @if (hit.cover_url) {
+                  <img [src]="hit.cover_url" class="tmdb-poster" alt="" loading="lazy" decoding="async" />
+                }
+                <div class="tmdb-info">
+                  <span class="tmdb-title">{{ hit.title }}</span>
+                  <span class="tmdb-meta">
+                    {{ hit.authors.join(', ') }}{{ hit.year ? ' · ' + hit.year : '' }}
+                    @if (!hit.isbn) { <em> · no ISBN</em> }
+                  </span>
+                </div>
+                <button mat-flat-button color="primary" class="small-btn"
+                        (click)="addFromOl(hit)"
+                        [disabled]="bookAdding() || !hit.isbn"
+                        [title]="hit.isbn ? '' : 'OL has no ISBN for this work'">Add</button>
+              </div>
+            }
+          </div>
+        } @else if (!bookSearching() && bookQuery().length >= 2) {
+          <span class="empty-text">No matching books in Open Library.</span>
+        }
+      </div>
+    </mat-tab>
   </mat-tab-group>
 
   <!-- Recent Items Grid -->
@@ -115,7 +152,7 @@
         </ng-container>
         <ng-container matColumnDef="source">
           <th mat-header-cell *matHeaderCellDef>Source</th>
-          <td mat-cell *matCellDef="let r">{{ r.entry_source === 'UPC_SCAN' ? 'UPC' : 'TMDB' }}</td>
+          <td mat-cell *matCellDef="let r">{{ r.entry_source === 'UPC_SCAN' ? 'UPC' : 'Manual' }}</td>
         </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>

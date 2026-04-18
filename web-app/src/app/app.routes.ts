@@ -34,6 +34,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/player/player').then(m => m.PlayerComponent),
   },
   {
+    // Top-level so the reader owns the viewport — otherwise the side nav
+    // clips the epub.js paginated layout, and the browser <dialog> escape
+    // hatch we use elsewhere isn't a great fit for a persistent page.
+    path: 'reader/:mediaItemId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/reader/reader').then(m => m.ReaderComponent),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./core/shell/shell').then(m => m.ShellComponent),
@@ -52,7 +60,6 @@ export const routes: Routes = [
       { path: 'tag/:tagId', loadComponent: () => import('./features/content/tag-detail').then(m => m.TagDetailComponent) },
       { path: 'content/family', loadComponent: () => import('./features/content/personal-videos').then(m => m.PersonalVideosComponent) },
       { path: 'content/books', loadComponent: () => import('./features/content/books').then(m => m.BooksComponent) },
-      { path: 'reader/:mediaItemId', loadComponent: () => import('./features/reader/reader').then(m => m.ReaderComponent) },
       { path: 'wishlist', loadComponent: () => import('./features/wishlist/wishlist').then(m => m.WishListComponent) },
       { path: 'cameras', loadComponent: () => import('./features/cameras/cameras').then(m => m.CamerasComponent) },
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },
