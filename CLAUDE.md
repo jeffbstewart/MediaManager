@@ -341,6 +341,71 @@ The Playwright MCP server is available for browser automation and visual verific
 
 Console logs are stored in `.playwright-mcp/` (gitignored).
 
+## Querying Binnacle Logs
+
+All MediaManager server, iOS, and Android TV logs forward to Binnacle
+(`http://172.16.4.12:8088`) via the custom SLF4J exporter in
+`logging-common/`. Binnacle exposes a small JSON query API that's more
+useful than scraping the HTML viewer for debugging. Source is at
+`/c/programming/github/Binnacle/` — check there when the shape of a
+parameter is unclear.
+
+### Endpoint
+
+```
+GET http://172.16.4.12:8088/api/logs/query
+```
+
+Response is JSON `{ "records": [...], "count_returned": N }`. Records
+carry `time` (RFC3339), `ingest`, `severity`, `service`, `instance`,
+`version`, `logger`, `message`, and an `attrs` map including
+`thread.name` and `code.namespace`. Stack traces ride along on an
+`exception` field when present. Records come back newest-first.
+
+### Filter parameters
+
+| Param | Purpose | Shape |
+|-------|---------|-------|
+| `service` | Exact match; repeatable for OR | e.g. `service=mediamanager-server` or `service=mediamanager-android-tv` |
+| `severity` | **Minimum** severity (ERROR returns ERROR+FATAL) | Label or int — `INFO` / `WARN` / `ERROR` / `FATAL` |
+| `since` | `time >=` | RFC3339 (e.g. `2026-04-18T00:00:00Z`) |
+| `until` | `time <` | RFC3339 |
+| `limit` | Page size | Default 100, hard-capped at 1000 |
+
+There is **no free-text search parameter** — the query endpoint filters
+only on service / severity / time / limit. For text matching use jq /
+grep on the response body:
+
+```bash
+# Every WARN from the main server, filter locally for CSP reports:
+curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&severity=WARN&limit=1000' \
+  | jq -r '.records[] | select(.message | test("CSP violation")) | "\(.time) \(.message)"'
+
+# Recent errors across a specific time window:
+curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&severity=ERROR&since=2026-04-18T00:00:00Z&limit=500' \
+  | jq '.records[] | {time, message, thread: .attrs["thread.name"]}'
+
+# Anything from a specific logger:
+curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&limit=1000' \
+  | jq '.records[] | select(.logger == "net.stewart.mediamanager.armeria.CspReportHttpService")'
+```
+
+### Services registered
+
+- `mediamanager-server` — the main backend
+- `mediamanager-ios` — the iOS app
+- `mediamanager-android-tv` — the Android TV app
+
+### Other endpoints
+
+- `GET /logs` — HTML viewer (redirect from `/`). Useful for eyeball
+  scanning but awkward to script against.
+- `GET /api/logs/health` — health probe.
+- `GET /metrics` — Prometheus scrape (separate from query).
+
+The read path is unauthenticated by design — Binnacle assumes it's
+behind a trusted network. Ingest is API-key gated on a different port.
+
 ## Conversation Transcript
 
 All Claude Code conversations for this project must be logged to `claude.log` in the project root. Log **every substantive exchange** — not just at session end, but as the conversation progresses. Each entry must include a date and timestamp. Format:
