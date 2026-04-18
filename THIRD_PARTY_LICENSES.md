@@ -36,6 +36,38 @@ Located under `web-app/public/vendor/`. Each entry has a sibling
 
 ---
 
+## Web-app vendored fonts
+
+Located under `web-app/public/vendor/fonts/`. Loaded via
+`vendor/fonts/fonts.css` from `index.html`.
+
+### Roboto
+
+- **Files:** `web-app/public/vendor/fonts/roboto-latin.woff2`
+- **Source:** Google Fonts (`fonts.gstatic.com/.../roboto/v51/...`),
+  upstream [googlefonts/roboto-2](https://github.com/googlefonts/roboto-2)
+- **License:** Apache License 2.0
+- **License text:** `web-app/public/vendor/fonts/roboto.LICENSE`
+- **Scope:** Latin Unicode subset only — the app is English-language and
+  doesn't exercise the Cyrillic / Greek / Vietnamese subsets. The single
+  vendored woff2 is the variable-font file Google Fonts serves, covering
+  weights 100–900 inclusive. The `@font-face` block uses `font-weight:
+  100 900` so CSS rules calling for weight 300 / 400 / 500 all resolve
+  to this file.
+
+### Material Icons
+
+- **File:** `web-app/public/vendor/fonts/material-icons.woff2`
+- **Source:** Google Fonts (`fonts.gstatic.com/.../materialicons/v145/...`),
+  upstream [google/material-design-icons](https://github.com/google/material-design-icons)
+- **License:** Apache License 2.0
+- **License text:** `web-app/public/vendor/fonts/material-icons.LICENSE`
+- **Notes:** Classic static icon font — matches the `@font-face` block
+  Google Fonts serves for the same family. `font-display: block` so
+  icon glyphs don't flash as letter placeholders during load.
+
+---
+
 ## How to add an entry
 
 When vendoring a new library:
