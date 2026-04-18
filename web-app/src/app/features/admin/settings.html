@@ -46,6 +46,20 @@
           <span class="helper-text">Directory name inside the NAS root (not a full path).</span>
         </div>
 
+        <!-- Books -->
+        <h3>Books</h3>
+        <div class="field-group">
+          <label class="field-label">EBook Directory</label>
+          <input class="field-input" type="text" [value]="settings()['books_root_path']"
+                 (input)="updateSetting('books_root_path', $event)"
+                 placeholder="e.g., /cache/nas/EBOOKS" />
+          <span class="helper-text">
+            Absolute path (as visible inside the server container) to a directory holding
+            .epub / .pdf files. Scanned hourly; empty stops future scans. EPUBs with embedded
+            ISBNs are auto-catalogued; others land in the Unmatched Books queue.
+          </span>
+        </div>
+
         <!-- Transcode Buddy -->
         <h3>Transcode Buddy</h3>
         <div class="buddy-header">

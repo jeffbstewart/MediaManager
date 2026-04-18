@@ -33,6 +33,9 @@ class SettingsHttpService {
     private val configKeys = listOf(
         "nas_root_path", "ffmpeg_path", "roku_base_url",
         "personal_video_enabled", "personal_video_nas_dir",
+        // Books — BookScannerAgent scans this directory every hour for
+        // .epub / .pdf files. Empty = scanner idle. See docs/BOOKS.md.
+        "books_root_path",
         "buddy_lease_duration_minutes",
         "keepa_enabled", "keepa_api_key", "keepa_tokens_per_minute",
         "privacy_policy_url", "privacy_policy_version",
