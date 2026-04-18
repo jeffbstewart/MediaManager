@@ -67,7 +67,13 @@ export const routes: Routes = [
       { path: 'admin/transcodes/linked', loadComponent: () => import('./features/admin/transcode-linked').then(m => m.TranscodeLinkedComponent) },
       { path: 'admin/transcodes/backlog', loadComponent: () => import('./features/admin/transcode-backlog').then(m => m.TranscodeBacklogComponent) },
       { path: 'admin/users', loadComponent: () => import('./features/admin/users').then(m => m.UsersComponent) },
-      { path: 'admin/settings', loadComponent: () => import('./features/admin/settings').then(m => m.SettingsComponent) },
+      {
+        path: 'admin/settings',
+        loadComponent: () => import('./features/admin/settings').then(m => m.SettingsComponent),
+        canDeactivate: [
+          async (c: import('./features/admin/settings').SettingsComponent) => c.canDeactivate(),
+        ],
+      },
       { path: 'admin/valuation', loadComponent: () => import('./features/admin/valuation').then(m => m.ValuationComponent) },
       { path: 'admin/purchase-wishes', loadComponent: () => import('./features/admin/purchase-wishes').then(m => m.PurchaseWishesComponent) },
       { path: 'admin/import', loadComponent: () => import('./features/admin/amazon-import').then(m => m.AmazonImportComponent) },

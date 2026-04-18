@@ -76,9 +76,31 @@ h3 {
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
+// Pinned variant — stays visible at the top of the scroll container
+// so the user always has the Save button reachable on long forms.
+.save-row.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-top: 0;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-top: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  // Opaque backdrop so form rows scrolling behind it don't bleed
+  // through. Uses the Material card background so it blends in.
+  background: var(--mat-sys-surface-container, #1e1f23);
+}
+
 .saved-label {
   display: flex; align-items: center; gap: 0.25rem;
   color: #4caf50; font-size: 0.875rem;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.dirty-label {
+  display: flex; align-items: center; gap: 0.25rem;
+  color: #ffb74d; font-size: 0.875rem;
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
 

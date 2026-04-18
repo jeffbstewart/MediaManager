@@ -7,6 +7,20 @@
     <mat-card class="settings-card">
       <mat-card-content>
 
+        <!-- Sticky save bar — pinned to the top of the card so it
+             stays reachable when scrolling through long forms. -->
+        <div class="save-row sticky">
+          <button mat-flat-button color="primary" (click)="save()" [disabled]="saving() || !isDirty()">
+            @if (saving()) { <mat-spinner diameter="16" /> }
+            Save
+          </button>
+          @if (saved() && !isDirty()) {
+            <span class="saved-label"><mat-icon>check</mat-icon> Saved</span>
+          } @else if (isDirty()) {
+            <span class="dirty-label"><mat-icon>edit</mat-icon> Unsaved changes</span>
+          }
+        </div>
+
         <!-- Basic Configuration -->
         <h3>Basic Configuration</h3>
         <div class="field-group">
@@ -196,17 +210,6 @@
                  (input)="updateSetting('webauthn_rp_name', $event)"
                  placeholder="Media Manager" />
           <span class="helper-text">Shown in the browser's passkey dialog. Defaults to "Media Manager" if blank.</span>
-        </div>
-
-        <!-- Save -->
-        <div class="save-row">
-          <button mat-flat-button color="primary" (click)="save()" [disabled]="saving()">
-            @if (saving()) { <mat-spinner diameter="16" /> }
-            Save
-          </button>
-          @if (saved()) {
-            <span class="saved-label"><mat-icon>check</mat-icon> Saved</span>
-          }
         </div>
 
       </mat-card-content>

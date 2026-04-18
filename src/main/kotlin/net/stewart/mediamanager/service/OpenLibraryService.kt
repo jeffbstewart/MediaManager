@@ -110,8 +110,11 @@ class OpenLibraryHttpService : OpenLibraryService {
 
     private val log = LoggerFactory.getLogger(OpenLibraryHttpService::class.java)
     private val mapper = ObjectMapper()
+    // OL's /isbn/{isbn}.json endpoint replies with a 302 to /books/OL...M.json;
+    // NORMAL follows same-protocol redirects but blocks HTTPS→HTTP downgrades.
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
+        .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
     override fun lookupByIsbn(isbn: String): OpenLibraryResult {
