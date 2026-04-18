@@ -88,6 +88,39 @@ class EbookMetadataTest {
     }
 
     @Test
+    fun `findIsbnIn picks 13-digit ISBN out of a keywords string`() {
+        val hit = EbookMetadataExtractor.findIsbnIn(listOf(
+            "fiction, sci-fi, ISBN 978-0-553-29335-7"
+        ))
+        assertEquals("9780553293357", hit)
+    }
+
+    @Test
+    fun `findIsbnIn picks ISBN-10 with X checksum`() {
+        val hit = EbookMetadataExtractor.findIsbnIn(listOf(
+            "Subject: see catalog — isbn: 043942089X"
+        ))
+        assertEquals("043942089X", hit)
+    }
+
+    @Test
+    fun `findIsbnIn returns null when nothing matches`() {
+        val hit = EbookMetadataExtractor.findIsbnIn(listOf(
+            "no valid identifier, not here either"
+        ))
+        assertNull(hit)
+    }
+
+    @Test
+    fun `findIsbnIn picks the first valid ISBN across multiple candidates`() {
+        val hit = EbookMetadataExtractor.findIsbnIn(listOf(
+            "some keywords without any identifier",
+            "ISBN 978-0-553-29335-7 and also 978-0-123-45678-9"
+        ))
+        assertEquals("9780553293357", hit)
+    }
+
+    @Test
     fun `parseOpf returns nulls when metadata is missing`() {
         val opf = """
             <?xml version="1.0"?>

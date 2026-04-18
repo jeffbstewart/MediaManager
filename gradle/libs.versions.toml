@@ -8,11 +8,13 @@ protobuf = "4.34.1"
 armeria = "1.38.0"
 webauthn4j = "0.28.4.RELEASE"
 opentelemetry = "1.47.0"
+pdfbox = "3.0.4"
 
 [libraries]
 vok-db = { module = "eu.vaadinonkotlin:vok-framework-vokdb", version.ref = "vok" }
 hikaricp = "com.zaxxer:HikariCP:5.1.0"
 h2 = "com.h2database:h2:2.4.240"
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 flyway-core = "org.flywaydb:flyway-core:10.15.2"
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }

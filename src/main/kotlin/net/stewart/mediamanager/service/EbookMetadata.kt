@@ -9,15 +9,16 @@ import javax.xml.parsers.DocumentBuilderFactory
 /**
  * Extracts [EbookMetadata] from an on-disk .epub / .pdf file.
  *
- * EPUBs are a zip containing `META-INF/container.xml` → an OPF manifest
- * with `dc:title` / `dc:creator` / `dc:identifier` entries. We parse
- * these directly with `java.util.zip` + the built-in XML parser so no
- * extra Gradle dependency is needed.
- *
- * PDFs don't universally have ISBNs and extracting their metadata cleanly
- * needs a PDF library. For M4 we return an empty metadata record for PDFs
- * — they fall into the unmatched queue for admin resolution. PDF support
- * can pull in PDFBox when it becomes a priority.
+ * - EPUBs are a zip containing `META-INF/container.xml` → an OPF
+ *   manifest with `dc:title` / `dc:creator` / `dc:identifier`. Parsed
+ *   directly with `java.util.zip` + the built-in XML parser.
+ * - PDFs use Apache PDFBox (Apache 2.0) for the `/Info` dictionary and
+ *   XMP metadata. ISBNs in PDFs live in unpredictable places — most
+ *   commonly `/Keywords` or `/Subject`, sometimes the XMP `dc:identifier`
+ *   — so we scrape the handful of likely fields and run each through
+ *   [normalizeIsbn]; the first 10/13-digit hit wins. Best-effort: PDFs
+ *   without any ISBN (or with a malformed one) still fall through to
+ *   the unmatched queue.
  */
 data class EbookMetadata(
     val title: String?,
@@ -37,9 +38,54 @@ object EbookMetadataExtractor {
             name.endsWith(".epub") -> runCatching { extractEpub(file) }
                 .onFailure { log.warn("EPUB parse failed for {}: {}", file, it.message) }
                 .getOrElse { EbookMetadata.EMPTY }
-            name.endsWith(".pdf") -> EbookMetadata.EMPTY
+            name.endsWith(".pdf") -> runCatching { extractPdf(file) }
+                .onFailure { log.warn("PDF parse failed for {}: {}", file, it.message) }
+                .getOrElse { EbookMetadata.EMPTY }
             else -> EbookMetadata.EMPTY
         }
+    }
+
+    /**
+     * PDFBox-backed read of a PDF's `/Info` dictionary + XMP metadata.
+     * Scrapes title / author from the standard `/Title` + `/Author` fields.
+     * For ISBN: checks dedicated XMP `dc:identifier` first, then scans
+     * `/Keywords`, `/Subject`, and the XMP description for any 10/13-digit
+     * ISBN-shaped substring.
+     */
+    internal fun extractPdf(file: File): EbookMetadata {
+        org.apache.pdfbox.Loader.loadPDF(file).use { doc ->
+            val info = doc.documentInformation
+            val title = info?.title?.trim()?.ifBlank { null }
+            val author = info?.author?.trim()?.ifBlank { null }
+
+            val searchables = mutableListOf<String>()
+            info?.keywords?.let(searchables::add)
+            info?.subject?.let(searchables::add)
+
+            // XMP metadata (optional) — pull raw bytes and scan as a string.
+            // Good enough for finding ISBN-shaped substrings; we don't need
+            // to fully parse the RDF/XML.
+            runCatching {
+                doc.documentCatalog?.metadata?.exportXMPMetadata()
+                    ?.use { stream -> searchables.add(stream.readBytes().toString(Charsets.UTF_8)) }
+            }
+
+            val isbn = findIsbnIn(searchables)
+            return EbookMetadata(title, author, isbn)
+        }
+    }
+
+    /** Scans each input string for the first ISBN-10 / ISBN-13 shaped substring. */
+    internal fun findIsbnIn(candidates: List<String>): String? {
+        val pattern = Regex("""(?i)(?:isbn[:\s-]*)?([0-9][0-9\- ]{8,17}[0-9Xx])""")
+        for (text in candidates) {
+            pattern.findAll(text).forEach { m ->
+                val candidate = m.groupValues[1].replace(Regex("[\\s-]+"), "")
+                val normalized = normalizeIsbn(candidate)
+                if (normalized != null) return normalized
+            }
+        }
+        return null
     }
 
     internal fun extractEpub(file: File): EbookMetadata {

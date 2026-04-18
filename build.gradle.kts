@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.java.jwt)
     implementation(libs.webauthn4j.core)
     implementation(libs.openpdf)
+    implementation(libs.pdfbox)
     implementation(libs.zxing.core)
     implementation(libs.zxing.javase)
     implementation(project(":transcode-common"))
