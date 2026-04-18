@@ -65,6 +65,27 @@
       </section>
     }
 
+    @if (feed.resume_reading && feed.resume_reading.length > 0) {
+      <section class="carousel-section">
+        <h2>Resume Reading</h2>
+        <div class="carousel-row">
+          @for (item of feed.resume_reading; track item.media_item_id) {
+            <a class="poster-card" [routerLink]="routes.reader(item.media_item_id)">
+              <div class="poster-wrapper">
+                @if (item.poster_url) {
+                  <img [src]="item.poster_url" [alt]="item.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ item.title_name }}</span>
+              <span class="poster-meta">{{ (item.percent * 100) | number:'1.0-0' }}% read</span>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
     @if (feed.recently_added_books && feed.recently_added_books.length > 0) {
       <section class="carousel-section">
         <h2>Recently Added Books</h2>

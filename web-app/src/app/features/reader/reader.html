@@ -1,0 +1,43 @@
+<div class="reader-shell">
+  <header class="reader-bar">
+    <button mat-icon-button type="button" (click)="close()" aria-label="Close">
+      <mat-icon>close</mat-icon>
+    </button>
+    @if (mediaFormat() === 'EBOOK_EPUB') {
+      <div class="spacer"></div>
+      <button mat-icon-button type="button" (click)="decreaseFont()" aria-label="Decrease font size">
+        <mat-icon>text_decrease</mat-icon>
+      </button>
+      <span class="font-size-indicator">{{ fontSize() }}%</span>
+      <button mat-icon-button type="button" (click)="increaseFont()" aria-label="Increase font size">
+        <mat-icon>text_increase</mat-icon>
+      </button>
+      <div class="spacer"></div>
+      <span class="percent">{{ percent() }}%</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <div class="error">
+      <p>{{ error() }}</p>
+    </div>
+  } @else if (mediaFormat() === 'EBOOK_PDF') {
+    <!-- Browsers render PDF natively in an iframe; no JS integration needed
+         for MVP. Reading-progress for PDFs comes with a future PDF.js pass. -->
+    <iframe class="pdf-frame" [src]="ebookSrc()" title="PDF reader"></iframe>
+  } @else {
+    <!-- epub.js paginated layout. Prev/next buttons are overlaid on the
+         content area so the toolbar stays thin on the reading surface. -->
+    <div class="epub-area">
+      <button class="nav-arrow left" type="button" (click)="prevPage()" aria-label="Previous page">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+      <div #epubContainer class="epub-container"></div>
+      <button class="nav-arrow right" type="button" (click)="nextPage()" aria-label="Next page">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+    </div>
+  }
+</div>

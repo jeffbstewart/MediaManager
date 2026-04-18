@@ -23,6 +23,7 @@ export const AppRoutes = {
   cameras: () => '/cameras',
   liveTv: () => '/live-tv',
   play: (transcodeId: number) => `/play/${transcodeId}`,
+  reader: (mediaItemId: number) => `/reader/${mediaItemId}`,
   profile: () => '/profile',
   help: () => '/help',
 

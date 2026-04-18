@@ -1,4 +1,5 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
@@ -23,6 +24,7 @@ import { FeatureService } from '../../core/feature.service';
     MatProgressSpinnerModule,
     MatDividerModule,
     MatTabsModule,
+    DecimalPipe,
   ],
   templateUrl: './title-detail.html',
   styleUrl: './title-detail.scss',

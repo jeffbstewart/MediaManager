@@ -30,6 +30,7 @@ import net.stewart.mediamanager.service.ContinueWatchingItem
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PlaybackProgressService
+import net.stewart.mediamanager.service.ReadingProgressService
 import net.stewart.mediamanager.service.WishListService
 
 /**
@@ -77,6 +78,7 @@ class HomeFeedHttpService {
         val hasBooks = allTitlesForFeatures.any { it.media_type == MMMediaType.BOOK.name }
 
         val recentlyAddedBooks = if (hasBooks) recentlyAddedBooks(user, 10) else emptyList()
+        val resumeReading = if (hasBooks) resumeReading(user, 10) else emptyList()
 
         val features = mapOf(
             "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
@@ -97,6 +99,7 @@ class HomeFeedHttpService {
             "continue_watching" to continueWatching,
             "recently_added" to recentlyAdded,
             "recently_added_books" to recentlyAddedBooks,
+            "resume_reading" to resumeReading,
             "recently_watched" to recentlyWatched,
             "missing_seasons" to missingSeasons,
             "features" to features
@@ -287,6 +290,40 @@ class HomeFeedHttpService {
             }
         }
         return rows
+    }
+
+    /**
+     * "Resume Reading" — most recent reading_progress rows, joined to the
+     * title they're reading (via the media_item_id). Parallel to
+     * Continue Watching on the video side. See docs/BOOKS.md (M5).
+     */
+    private fun resumeReading(
+        user: net.stewart.mediamanager.entity.AppUser,
+        limit: Int
+    ): List<Map<String, Any?>> {
+        val rows = ReadingProgressService.recentForUser(user.id!!, limit)
+        if (rows.isEmpty()) return emptyList()
+
+        val itemsById = MediaItem.findAll().associateBy { it.id }
+        val allTitles = Title.findAll().associateBy { it.id }
+        val linksByItem = MediaItemTitle.findAll().groupBy { it.media_item_id }
+
+        return rows.mapNotNull { progress ->
+            val item = itemsById[progress.media_item_id] ?: return@mapNotNull null
+            val title = linksByItem[item.id]?.firstNotNullOfOrNull { allTitles[it.title_id] }
+                ?: return@mapNotNull null
+            if (title.hidden || !user.canSeeRating(title.content_rating)) return@mapNotNull null
+
+            mapOf(
+                "media_item_id" to item.id,
+                "title_id" to title.id,
+                "title_name" to title.name,
+                "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
+                "percent" to progress.percent,
+                "media_format" to item.media_format,
+                "updated_at" to progress.updated_at?.toString()
+            )
+        }
     }
 
     companion object {

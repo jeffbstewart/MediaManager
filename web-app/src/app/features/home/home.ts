@@ -1,4 +1,5 @@
 import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,6 +19,7 @@ import {
     MatIconModule,
     MatButtonModule,
     MatProgressSpinnerModule,
+    DecimalPipe,
   ],
   templateUrl: './home.html',
   styleUrl: './home.scss',

@@ -88,6 +88,7 @@ export interface TitleDetail {
   tags: { id: number; name: string; bg_color: string; text_color: string }[];
   formats: string[];
   transcodes: TranscodeInfo[];
+  readable_editions?: ReadableEdition[];
   cast: CastInfo[];
   episodes: EpisodeInfo[];
   seasons: { season_number: number; acquisition_status: string }[];
@@ -106,6 +107,21 @@ export interface TranscodeInfo {
   season_number?: number;
   episode_number?: number;
   episode_name?: string;
+}
+
+export interface ReadableEdition {
+  media_item_id: number;
+  media_format: 'EBOOK_EPUB' | 'EBOOK_PDF' | string;
+  percent: number;
+  cfi: string | null;
+  updated_at: string | null;
+}
+
+export interface ReadingProgress {
+  media_item_id: number;
+  cfi: string | null;
+  percent: number;
+  updated_at: string | null;
 }
 
 export interface CastInfo {
@@ -131,9 +147,20 @@ export interface HomeFeed {
   continue_watching: ContinueWatchingItem[];
   recently_added: CarouselTitle[];
   recently_added_books: RecentBook[];
+  resume_reading?: ResumeReadingItem[];
   recently_watched: CarouselTitle[];
   missing_seasons: MissingSeason[];
   features: FeatureFlags;
+}
+
+export interface ResumeReadingItem {
+  media_item_id: number;
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  percent: number;
+  media_format: string;
+  updated_at: string | null;
 }
 
 export interface RecentBook {
@@ -504,6 +531,14 @@ export class CatalogService {
 
   async removeBookWish(olWorkId: string): Promise<{ removed: boolean }> {
     return firstValueFrom(this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/books/${olWorkId}`));
+  }
+
+  async getReadingProgress(mediaItemId: number): Promise<ReadingProgress> {
+    return firstValueFrom(this.http.get<ReadingProgress>(`/api/v2/reading-progress/${mediaItemId}`));
+  }
+
+  async saveReadingProgress(mediaItemId: number, cfi: string, percent: number): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/reading-progress/${mediaItemId}`, { cfi, percent }));
   }
 
   async wishlistSeriesGaps(seriesId: number): Promise<{ added: number; already_wished: number; error?: string }> {

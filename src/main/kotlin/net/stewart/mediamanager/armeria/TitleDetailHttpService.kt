@@ -217,6 +217,29 @@ class TitleDetailHttpService {
             } else null
         } else null
 
+        // Digital editions for book titles — enumerated so the client can
+        // render a "Read" button per edition. EPUB and PDF only; physical
+        // editions don't belong here.
+        val readableEditions = if (title.media_type == MMMediaType.BOOK.name) {
+            MediaItem.findAll()
+                .asSequence()
+                .filter { it.id in mediaItemIds }
+                .filter { it.file_path != null &&
+                    (it.media_format == MediaFormat.EBOOK_EPUB.name ||
+                     it.media_format == MediaFormat.EBOOK_PDF.name) }
+                .map { item ->
+                    val progress = net.stewart.mediamanager.service.ReadingProgressService.get(userId, item.id!!)
+                    mapOf(
+                        "media_item_id" to item.id,
+                        "media_format" to item.media_format,
+                        "percent" to (progress?.percent ?: 0.0),
+                        "cfi" to progress?.cfi,
+                        "updated_at" to progress?.updated_at?.toString()
+                    )
+                }
+                .toList()
+        } else emptyList()
+
         val response = mapOf(
             "title_id" to title.id,
             "title_name" to title.name,
@@ -233,6 +256,7 @@ class TitleDetailHttpService {
             "tags" to tags,
             "formats" to formats,
             "transcodes" to transcodeList,
+            "readable_editions" to readableEditions,
             "cast" to cast,
             "episodes" to episodes,
             "seasons" to seasons,

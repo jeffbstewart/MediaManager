@@ -159,6 +159,26 @@
       </section>
     }
 
+    <!-- Readable editions (books) -->
+    @if (t.readable_editions && t.readable_editions.length > 0) {
+      <section class="section">
+        <h3>Read</h3>
+        @for (ed of t.readable_editions; track ed.media_item_id) {
+          <div class="transcode-row">
+            <span class="format-badge small">{{ ed.media_format === 'EBOOK_EPUB' ? 'EPUB' : 'PDF' }}</span>
+            <span class="tc-spacer"></span>
+            @if (ed.percent > 0) {
+              <span class="tc-resume">{{ (ed.percent * 100) | number:'1.0-0' }}% read</span>
+            }
+            <a [routerLink]="routes.reader(ed.media_item_id)" class="tc-play-link"
+               [attr.aria-label]="ed.percent > 0 ? 'Resume reading' : 'Read'">
+              <mat-icon class="tc-play">menu_book</mat-icon>
+            </a>
+          </div>
+        }
+      </section>
+    }
+
     <!-- Transcodes / Watch -->
     @if (t.transcodes.length > 0) {
       <section class="section">

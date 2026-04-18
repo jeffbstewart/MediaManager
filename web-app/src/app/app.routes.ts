@@ -52,6 +52,7 @@ export const routes: Routes = [
       { path: 'tag/:tagId', loadComponent: () => import('./features/content/tag-detail').then(m => m.TagDetailComponent) },
       { path: 'content/family', loadComponent: () => import('./features/content/personal-videos').then(m => m.PersonalVideosComponent) },
       { path: 'content/books', loadComponent: () => import('./features/content/books').then(m => m.BooksComponent) },
+      { path: 'reader/:mediaItemId', loadComponent: () => import('./features/reader/reader').then(m => m.ReaderComponent) },
       { path: 'wishlist', loadComponent: () => import('./features/wishlist/wishlist').then(m => m.WishListComponent) },
       { path: 'cameras', loadComponent: () => import('./features/cameras/cameras').then(m => m.CamerasComponent) },
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },
