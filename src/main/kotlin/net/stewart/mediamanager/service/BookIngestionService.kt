@@ -71,6 +71,42 @@ object BookIngestionService {
             clock = clock
         )
 
+    /**
+     * Registers a digital edition [filePath] as a new [MediaItem] linked to an
+     * already-known [title], skipping the Open Library round-trip entirely.
+     * Used by the NAS scanner to auto-link a PDF that sits next to an already-
+     * catalogued EPUB of the same work (matching directory + basename). See
+     * [net.stewart.mediamanager.service.BookScannerAgent.findSibling].
+     *
+     * Does **not** touch author / series records — those were established when
+     * the sibling was first ingested, and we're only adding a format row.
+     */
+    fun linkDigitalEditionToTitle(
+        filePath: String,
+        fileFormat: MediaFormat,
+        title: Title,
+        clock: Clock = SystemClock
+    ): IngestResult {
+        val now = clock.now()
+        val mediaItem = MediaItem(
+            media_format = fileFormat.name,
+            title_count = 1,
+            expansion_status = ExpansionStatus.SINGLE.name,
+            product_name = title.name,
+            file_path = filePath,
+            created_at = now,
+            updated_at = now
+        )
+        mediaItem.save()
+        MediaItemTitle(
+            media_item_id = mediaItem.id!!,
+            title_id = title.id!!
+        ).save()
+        log.info("Sibling edition linked: filePath={} format={} title='{}'",
+            filePath, fileFormat.name, title.name)
+        return IngestResult(mediaItem, title, titleReused = true)
+    }
+
     private fun ingestInternal(
         isbn: String?,
         filePath: String?,

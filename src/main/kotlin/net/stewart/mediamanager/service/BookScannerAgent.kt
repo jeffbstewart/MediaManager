@@ -4,6 +4,8 @@ import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.MediaFormat
 import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
+import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.UnmatchedBook
 import net.stewart.mediamanager.entity.UnmatchedBookStatus
 import org.slf4j.LoggerFactory
@@ -95,36 +97,55 @@ class BookScannerAgent(
         val knownMediaItemPaths = MediaItem.findAll().mapNotNullTo(HashSet()) { it.file_path }
         val knownUnmatchedPaths = UnmatchedBook.findAll().mapTo(HashSet()) { it.file_path }
 
-        var processed = 0
+        // Collect then sort: EPUB before PDF so sibling auto-link sees an
+        // already-catalogued MediaItem when the pair arrives in one pass.
+        // Secondary sort by path is alphabetical for deterministic ordering
+        // across filesystems / JVM implementations.
+        val raw = mutableListOf<Pair<Path, String>>()
         Files.walk(root).use { stream ->
-            for (path in stream) {
-                if (!running.get()) break
-                if (processed >= MAX_FILES_PER_CYCLE) {
-                    log.info("BookScannerAgent: hit MAX_FILES_PER_CYCLE={}, will continue next cycle",
-                        MAX_FILES_PER_CYCLE)
-                    break
-                }
-                if (!Files.isRegularFile(path)) continue
-                val ext = path.fileName.toString().substringAfterLast('.', "").lowercase()
+            for (p in stream) {
+                if (!Files.isRegularFile(p)) continue
+                val ext = p.fileName.toString().substringAfterLast('.', "").lowercase()
                 if (ext !in BOOK_EXTENSIONS) continue
-                val canonical = path.toString()
+                val canonical = p.toString()
                 if (canonical in knownMediaItemPaths || canonical in knownUnmatchedPaths) continue
+                raw += p to ext
+            }
+        }
+        val candidates = raw.sortedWith(
+            compareBy({ extensionPriority(it.second) }, { it.first.toString() })
+        )
 
-                processed++
-                try {
-                    handleFile(path.toFile(), ext)
-                    // Track so we don't re-handle inside the same cycle either.
-                    knownMediaItemPaths += canonical
-                    knownUnmatchedPaths += canonical
-                } catch (e: Exception) {
-                    log.warn("BookScannerAgent: failed to ingest {}: {}", canonical, e.message, e)
-                }
+        var processed = 0
+        for ((path, ext) in candidates) {
+            if (!running.get()) break
+            if (processed >= MAX_FILES_PER_CYCLE) {
+                log.info("BookScannerAgent: hit MAX_FILES_PER_CYCLE={}, will continue next cycle",
+                    MAX_FILES_PER_CYCLE)
+                break
+            }
+            val canonical = path.toString()
+            processed++
+            try {
+                handleFile(path.toFile(), ext)
+                // Track so we don't re-handle inside the same cycle either.
+                knownMediaItemPaths += canonical
+                knownUnmatchedPaths += canonical
+            } catch (e: Exception) {
+                log.warn("BookScannerAgent: failed to ingest {}: {}", canonical, e.message, e)
             }
         }
 
         if (processed > 0) {
             log.info("BookScannerAgent: processed {} new ebook file(s) under {}", processed, rootStr)
         }
+    }
+
+    /** Lower is earlier. EPUBs (metadata-rich) before PDFs (metadata-poor). */
+    internal fun extensionPriority(ext: String): Int = when (ext) {
+        "epub" -> 0
+        "pdf" -> 1
+        else -> 2
     }
 
     internal fun handleFile(file: File, extension: String) {
@@ -158,8 +179,53 @@ class BookScannerAgent(
                 })
         }
 
-        // No ISBN or no OL match — stage for admin resolution.
+        // Before giving up to admin resolution, check if there's an
+        // already-catalogued sibling file with the same directory and
+        // basename — a common pattern is Foundation.epub alongside
+        // Foundation.pdf. The EPUB is metadata-rich and gets catalogued
+        // first (see extensionPriority in scanOnce), so the PDF can
+        // piggyback on its Title without needing its own ISBN.
+        val siblingTitle = findSiblingTitle(file)
+        if (siblingTitle != null) {
+            BookIngestionService.linkDigitalEditionToTitle(
+                filePath = filePath,
+                fileFormat = format,
+                title = siblingTitle
+            )
+            log.info("Ebook {} auto-linked as sibling edition of title '{}'",
+                filePath, siblingTitle.name)
+            return
+        }
+
+        // Nothing to link against — stage for admin resolution.
         stageUnmatched(file, format, metadata)
+    }
+
+    /**
+     * Returns the [Title] of an already-catalogued [MediaItem] whose
+     * `file_path` is in the same directory as [file] with the same basename
+     * (case-insensitive) and a different extension. Null if no such sibling
+     * exists.
+     */
+    internal fun findSiblingTitle(file: File): Title? {
+        val dirPath = file.parentFile?.absolutePath ?: return null
+        val baseName = file.nameWithoutExtension
+        val ext = file.extension.lowercase()
+
+        val sibling = MediaItem.findAll()
+            .asSequence()
+            .mapNotNull { mi -> mi.file_path?.let { mi to File(it) } }
+            .firstOrNull { (_, siblingFile) ->
+                siblingFile.parentFile?.absolutePath.equals(dirPath, ignoreCase = true) &&
+                    siblingFile.nameWithoutExtension.equals(baseName, ignoreCase = true) &&
+                    siblingFile.extension.lowercase() != ext
+            } ?: return null
+
+        val (mediaItem, _) = sibling
+        val titleId = MediaItemTitle.findAll()
+            .firstOrNull { it.media_item_id == mediaItem.id }
+            ?.title_id ?: return null
+        return Title.findById(titleId)
     }
 
     private fun stageUnmatched(file: File, format: MediaFormat, metadata: EbookMetadata) {
