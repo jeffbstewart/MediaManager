@@ -103,6 +103,7 @@ object NasScannerService {
 
         val personalVideoDir = getPersonalVideoDir()
         val booksRoot = getBooksRoot()
+        val musicRoot = getMusicRoot()
 
         // Reclassify existing discovered files from the personal video directory
         if (personalVideoDir != null) {
@@ -133,6 +134,12 @@ object NasScannerService {
             // EMPTY and scaring the admin.
             if (booksRoot != null && isSameDir(dir, booksRoot)) {
                 log.info("Directory '{}' classified as BOOKS (configured books_root_path; handled by BookScannerAgent)", dir.fileName)
+                continue
+            }
+
+            // Music directory: owned by MusicScannerAgent. Same treatment.
+            if (musicRoot != null && isSameDir(dir, musicRoot)) {
+                log.info("Directory '{}' classified as MUSIC (configured music_root_path; handled by MusicScannerAgent)", dir.fileName)
                 continue
             }
 
@@ -234,10 +241,10 @@ object NasScannerService {
             message = "Scan complete: ${newFiles.size} new files ($matchedCount matched, $unmatchedCount unmatched), $deletedCount deleted"
         ))
 
-        // Kick the book scanner on a daemon thread so a manual NAS scan
-        // picks up new ebooks immediately instead of waiting for the next
-        // hourly BookScannerAgent tick. Fire-and-forget — the NAS scan's
-        // COMPLETE broadcast has already gone out, and scanNow() is
+        // Kick the book + music scanners on daemon threads so a manual NAS
+        // scan picks up new ebooks and audio rips immediately instead of
+        // waiting for the next hourly tick. Fire-and-forget — the NAS
+        // scan's COMPLETE broadcast has already gone out, and scanNow() is
         // mutexed internally so we never race the daemon.
         Thread({
             try {
@@ -246,6 +253,16 @@ object NasScannerService {
                 log.warn("Post-NAS-scan book trigger failed: {}", e.message)
             }
         }, "post-nas-book-scan").apply {
+            isDaemon = true
+            start()
+        }
+        Thread({
+            try {
+                MusicScannerAgent.scanNowIfAvailable()
+            } catch (e: Exception) {
+                log.warn("Post-NAS-scan music trigger failed: {}", e.message)
+            }
+        }, "post-nas-music-scan").apply {
             isDaemon = true
             start()
         }
@@ -700,6 +717,13 @@ object NasScannerService {
     private fun getBooksRoot(): String? =
         AppConfig.findAll()
             .firstOrNull { it.config_key == BookScannerAgent.CONFIG_KEY_BOOKS_ROOT }
+            ?.config_val
+            ?.ifBlank { null }
+
+    /** Absolute music_root_path setting, or null if unset. */
+    private fun getMusicRoot(): String? =
+        AppConfig.findAll()
+            .firstOrNull { it.config_key == MusicScannerAgent.CONFIG_KEY_MUSIC_ROOT }
             ?.config_val
             ?.ifBlank { null }
 

@@ -77,6 +77,7 @@ export const routes: Routes = [
       { path: 'admin/transcodes/backlog', loadComponent: () => import('./features/admin/transcode-backlog').then(m => m.TranscodeBacklogComponent) },
       { path: 'admin/users', loadComponent: () => import('./features/admin/users').then(m => m.UsersComponent) },
       { path: 'admin/books/unmatched', loadComponent: () => import('./features/admin/unmatched-books').then(m => m.UnmatchedBooksComponent) },
+      { path: 'admin/music/unmatched', loadComponent: () => import('./features/admin/unmatched-audio').then(m => m.UnmatchedAudioComponent) },
       {
         path: 'admin/settings',
         loadComponent: () => import('./features/admin/settings').then(m => m.SettingsComponent),

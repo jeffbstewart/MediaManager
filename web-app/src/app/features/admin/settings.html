@@ -74,6 +74,21 @@
           </span>
         </div>
 
+        <!-- Music -->
+        <h3>Music</h3>
+        <div class="field-group">
+          <label class="field-label">Music Directory</label>
+          <input class="field-input" type="text" [value]="settings()['music_root_path']"
+                 (input)="updateSetting('music_root_path', $event)"
+                 placeholder="e.g., /cache/nas/MUSIC" />
+          <span class="helper-text">
+            Absolute path to a directory holding .flac / .mp3 / .m4a / .ogg / .wav rips.
+            Scanned hourly and immediately after a NAS scan. Tracks with MusicBrainz IDs
+            from dBpoweramp-tagged rips auto-link; files with missing or ambiguous tags
+            land in the Unmatched Audio queue.
+          </span>
+        </div>
+
         <!-- Transcode Buddy -->
         <h3>Transcode Buddy</h3>
         <div class="buddy-header">

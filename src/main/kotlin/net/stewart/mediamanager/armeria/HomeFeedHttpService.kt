@@ -131,6 +131,11 @@ class HomeFeedHttpService {
                 it.match_status == net.stewart.mediamanager.entity.UnmatchedBookStatus.UNMATCHED.name
             }
         } else 0
+        val unmatchedAudioCount = if (user.isAdmin()) {
+            net.stewart.mediamanager.entity.UnmatchedAudio.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedAudioStatus.UNMATCHED.name
+            }
+        } else 0
         val dataQualityCount = if (user.isAdmin()) {
             allTitles.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
         } else 0
@@ -145,6 +150,7 @@ class HomeFeedHttpService {
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
             "unmatched_count" to unmatchedCount,
             "unmatched_books_count" to unmatchedBooksCount,
+            "unmatched_audio_count" to unmatchedAudioCount,
             "data_quality_count" to dataQualityCount,
             "open_reports_count" to if (user.isAdmin()) {
                 ProblemReport.findAll().count { it.status == ReportStatus.OPEN.name }

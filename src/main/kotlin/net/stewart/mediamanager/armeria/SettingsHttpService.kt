@@ -36,6 +36,10 @@ class SettingsHttpService {
         // Books — BookScannerAgent scans this directory every hour for
         // .epub / .pdf files. Empty = scanner idle. See docs/BOOKS.md.
         "books_root_path",
+        // Music — MusicScannerAgent scans this directory every hour (and
+        // immediately after a NAS scan) for .flac / .mp3 / .m4a / .ogg /
+        // .wav files. Empty = scanner idle. See docs/MUSIC.md.
+        "music_root_path",
         "buddy_lease_duration_minutes",
         "keepa_enabled", "keepa_api_key", "keepa_tokens_per_minute",
         "privacy_policy_url", "privacy_policy_version",

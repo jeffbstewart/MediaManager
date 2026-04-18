@@ -170,6 +170,14 @@
           }
         </a>
 
+        <a mat-list-item [routerLink]="routes.adminAudioUnmatched()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>album</mat-icon>
+          <span matListItemTitle>Unmatched Audio</span>
+          @if (features.unmatchedAudioCount() > 0) {
+            <span matListItemMeta class="red-badge">{{ features.unmatchedAudioCount() }}</span>
+          }
+        </a>
+
         <a mat-list-item [routerLink]="routes.adminUsers()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>people</mat-icon>
           <span matListItemTitle>Users</span>

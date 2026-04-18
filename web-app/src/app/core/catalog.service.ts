@@ -88,6 +88,7 @@ export interface FeatureFlags {
   wish_ready_count: number;
   unmatched_count: number;
   unmatched_books_count?: number;
+  unmatched_audio_count?: number;
   data_quality_count: number;
   open_reports_count: number;
 }
