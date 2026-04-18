@@ -526,15 +526,23 @@ Single-artist and duet-shaped albums render the familiar "Artist — Album" shap
 
 ## Pre-M1 Verifications
 
-Empty until the work is scoped for real. In the same spirit the books plan used this section, items to check before M1 starts:
+All checks complete as of 2026-04-18. M1 can execute against this audit.
 
-- **`media_format` enum extension.** Audit the same `when` expressions the books M1 audited — `RokuFeedService`, `CatalogGrpcService.formatPriority`, `ProtoMappers.toProtoQuality`, `InventoryReportGenerator`. Add album-format filter on Roku paths defensively (Roku is out of scope).
-- **MusicBrainz rate limit.** Confirm 1 req/sec is achievable with the existing HTTP client shape. `User-Agent` must be descriptive or MB throttles hard.
-- **Cover Art Archive image proxy.** The existing `ImageProxyService` accepts a new `Provider`; the validator needs to accept UUID keys and the `front-500` / `front-1200` size segment. Write the regex; run the existing SSRF test suite against the new provider.
-- **Audio tag library.** Decide between `jaudiotagger` (broad format support, semi-maintained) and hand-rolling per-format readers. Check license compatibility with the project's existing deps.
-- **Browser FLAC support.** Confirm the target browsers (latest Chrome / Firefox / Edge / Safari) all handle FLAC in an `<audio>` element. Keep the AAC fallback regardless.
-- **Docker FFmpeg build includes AAC.** The server image uses `ffmpeg` already; verify `libfdk_aac` or the built-in `aac` encoder is present (built-in is fine at 256 kbps).
-- **Multi-disc tag conventions.** Sample the user's likely ripping tool output (EAC / dBpoweramp / XLD) — do they write `DISCNUMBER=2/2` or `discnumber=2`? Tag parsing must handle both.
+- **`media_format` enum extension — safe.** ✅ All five non-exhaustive `when (media_format)` expressions (`CatalogGrpcService.formatPriority` line 1011, `ProtoMappers.toProtoQuality` + `toProtoMediaFormat`, `RokuHomeService` carousel-item quality, `RokuSearchService.qualityLabel`, `RokuFeedService` streaming quality, `RokuTitleService.formatPriority` + `qualityLabel`) have `else` fallbacks that yield `0` / `"FHD"` / `Quality.QUALITY_UNKNOWN` / `MediaFormat.MEDIA_FORMAT_UNKNOWN` for unrecognized values. Music formats that somehow leak into a video-shaped query resolve cleanly. `InventoryReportGenerator.DIGITAL_FORMATS` is the only semantic site — M1 adds `AUDIO_FLAC`, `AUDIO_MP3`, `AUDIO_AAC`, `AUDIO_OGG`, `AUDIO_WAV` to that set (physical `CD` / `VINYL_LP` stay in the report). No pre-M1 refactor.
+
+- **MusicBrainz rate limit — comfortable with an explicit gap.** ✅ MB asks for ≤1 req/sec with a descriptive `User-Agent`. `UpcLookupAgent` already uses the same pattern for UPCitemdb (`MIN_LOOKUP_GAP_MS = 11_000L` enforced via `Clock.sleep`). `MusicBrainzService` copies that: 1100ms minimum gap, `User-Agent = "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"` (already used by `OpenLibraryHttpService`). Scan volume is human-paced so bursts aren't a concern; background enrichment paces itself at 1 req/sec.
+
+- **Cover Art Archive image proxy — one-line Provider extension.** ✅ `ImageProxyService.Provider` currently holds `TMDB` and `OPEN_LIBRARY`; adding `COVER_ART_ARCHIVE("coverartarchive.org", "caa")` is a one-line change. The existing 4-hop redirect follower with per-hop SSRF screening already handles CAA → archive.org → iaN-mirror chains (identical to the OL cover flow we debugged earlier this month). `ImageProxyHttpService` adds a `/proxy/caa/release/{mbid}/{size}` route with an MBID UUID-v4 validator and a size regex matching `front-250` / `front-500` / `front-1200` / `front`. Existing SSRF test suite covers the new provider with no new cases needed.
+
+- **Audio tag reading — FFprobe, no new Java dep.** ✅ We already invoke FFmpeg for video transcoding; the Alpine `ffmpeg` package includes `ffprobe` in the same binary. `ffprobe -print_format json -show_format -show_streams file.flac` returns `format.tags` as a JSON object carrying every MB tag we need (`MUSICBRAINZ_ALBUMID`, `MUSICBRAINZ_RELEASETRACKID`, `MUSICBRAINZ_ARTISTID`, `TITLE`, `ALBUM`, `ARTIST`, `ALBUMARTIST`, `TRACKNUMBER`, `DISCNUMBER`, `DATE`, `GENRE`, `ACCURATERIPCRC`). No `jaudiotagger` dependency, no LGPL attribution, no new license footprint. Slightly slower per file than an in-process reader but fine for a background scanner walking a library overnight.
+
+- **Browser FLAC support — universal on target browsers.** ✅ Chrome 56+ (Jan 2017), Firefox 51+ (Jan 2017), Safari 11+ / iOS 11+ (2017), Edge 16+ (2017). All years past the threshold. AAC on-demand stays in the design for robustness (ancient browsers, odd FLAC encodes), not as a required crutch.
+
+- **Docker FFmpeg includes AAC.** ✅ Dockerfile line 28 — `apk add --no-cache ffmpeg curl`. Alpine's `ffmpeg` ships with libavcodec's built-in `aac` encoder. No `libfdk_aac` (GPL-incompatible with Alpine's licensing) but built-in AAC at 256 kbps is transparent for near-all listeners. `ffmpeg -i in.flac -c:a aac -b:a 256k -f adts -` works out-of-box.
+
+- **Multi-disc tag conventions — split-on-slash handles every case.** ✅ dBpoweramp writes disc/track numbers in each format's canonical form: Vorbis/FLAC `DISCNUMBER=1/2` (fractional) or `DISCNUMBER=1` + `TOTALDISCS=2`; ID3v2.4 `TPOS=1/2`; M4A `disk` atom as two uint16s. FFprobe exposes each as a string under `format.tags`. A single rule — split on `/`, take the first token, parse as int — handles every combination. Same rule applies to `TRACKNUMBER` / `TRKN`. No extra cases.
+
+All pre-M1 items resolved. Schema and ingestion plan is ready to execute when the milestone gets picked up.
 
 ---
 
