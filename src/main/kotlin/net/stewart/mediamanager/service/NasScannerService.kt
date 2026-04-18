@@ -728,7 +728,7 @@ object NasScannerService {
             ?.ifBlank { null }
 
     /** Returns true when [dir] resolves to the same filesystem location as [other]. */
-    private fun isSameDir(dir: Path, other: String): Boolean = try {
+    internal fun isSameDir(dir: Path, other: String): Boolean = try {
         dir.toRealPath() == Path.of(other).toRealPath()
     } catch (_: Exception) {
         // Fall back to string compare if either side can't be resolved
