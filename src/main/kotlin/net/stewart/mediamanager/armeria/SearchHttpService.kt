@@ -96,7 +96,8 @@ class SearchHttpService {
                     "type" to "actor",
                     "person_id" to cm.tmdb_person_id,
                     "name" to cm.name,
-                    "headshot_url" to if (cm.headshot_cache_id != null) "/headshots/${cm.id}" else null,
+                    // Gate on profile_path — see note in TitleDetailHttpService.
+                    "headshot_url" to if (cm.profile_path != null) "/headshots/${cm.id}" else null,
                     "score" to (cm.popularity ?: 0.0)
                 ))
             }

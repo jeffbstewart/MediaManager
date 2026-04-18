@@ -138,7 +138,12 @@ class TitleDetailHttpService {
                         "id" to cm.id,
                         "name" to cm.name,
                         "character_name" to cm.character_name,
-                        "headshot_url" to if (cm.headshot_cache_id != null) "/headshots/${cm.id}" else null,
+                        // Gate on profile_path (TMDB has a headshot for this person),
+                        // not headshot_cache_id — the /headshots/{id} endpoint lazily
+                        // populates the cache_id on first call, so gating on cache_id
+                        // would prevent the endpoint from ever being called for any
+                        // new cast member. Chicken-and-egg.
+                        "headshot_url" to if (cm.profile_path != null) "/headshots/${cm.id}" else null,
                         "tmdb_person_id" to cm.tmdb_person_id
                     )
                 }

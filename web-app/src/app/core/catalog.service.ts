@@ -51,6 +51,24 @@ export interface TitleListResponse {
 }
 
 export type MediaType = 'MOVIE' | 'TV' | 'PERSONAL' | 'BOOK';
+
+/**
+ * Returns a same-origin URL that proxies a TMDB image through
+ * `/proxy/tmdb/{size}/{file}`. Callers pass the raw `poster_path` /
+ * `profile_path` / `backdrop_path` string TMDB returned (it carries a
+ * leading slash; this helper strips it). Returns `null` when the input
+ * is nullish so templates can render a placeholder.
+ *
+ * Centralized here so future routing changes (e.g., signed URLs, a
+ * different cache path) are one-line edits.
+ */
+export function tmdbImageUrl(
+  path: string | null | undefined,
+  size: string = 'w92'
+): string | null {
+  if (!path) return null;
+  return `/proxy/tmdb/${size}/${path.replace(/^\/+/, '')}`;
+}
 export type SortMode = 'name' | 'year' | 'recent' | 'popular';
 
 export interface TitleListParams {

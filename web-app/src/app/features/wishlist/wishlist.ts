@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
-  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish,
+  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish, tmdbImageUrl,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 import { WishInterstitialService } from '../../core/wish-interstitial.service';
@@ -140,9 +140,7 @@ export class WishListComponent implements OnInit {
     await this.refresh();
   }
 
-  posterUrl(path: string): string {
-    return `https://image.tmdb.org/t/p/w185${path}`;
-  }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w185')!; }
 
   lifecycleColor(stage: string): string {
     switch (stage) {

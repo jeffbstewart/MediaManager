@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface UnmatchedFile {
   id: number;
@@ -152,5 +153,5 @@ export class TranscodeUnmatchedComponent implements OnInit {
     this.closeLinkDialog();
   }
 
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 }

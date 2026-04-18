@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface LinkedTitle { title_id: number; name: string; release_year: number | null; poster_url: string | null; disc_number: number; }
 interface ExpandItem { id: number; upc: string | null; product_name: string | null; media_format: string; title_count: number; linked_titles: LinkedTitle[]; }
@@ -77,7 +78,7 @@ export class ExpandComponent implements OnInit {
     const resp = await firstValueFrom(this.http.post<{ ok: boolean; title_id: number; title_name: string; disc_number: number }>(
       `/api/v2/admin/expand/${item.id}/add-title`, { tmdb_id: result.tmdb_id, media_type: result.media_type }));
     if (resp.ok) {
-      this.dialogTitles.update(t => [...t, { title_id: resp.title_id, name: resp.title_name, release_year: result.release_year, poster_url: result.poster_path ? `https://image.tmdb.org/t/p/w92${result.poster_path}` : null, disc_number: resp.disc_number }]);
+      this.dialogTitles.update(t => [...t, { title_id: resp.title_id, name: resp.title_name, release_year: result.release_year, poster_url: tmdbImageUrl(result.poster_path, 'w92'), disc_number: resp.disc_number }]);
     }
   }
 
@@ -104,5 +105,5 @@ export class ExpandComponent implements OnInit {
     await this.refresh();
   }
 
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 }

@@ -10,6 +10,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface RecentItem {
   type: string; media_item_id?: number; scan_id?: number; title_id?: number;
@@ -216,5 +217,5 @@ export class AddItemComponent implements OnInit, OnDestroy {
       case 'PENDING': case 'REASSIGNMENT_REQUESTED': case 'NOT_LOOKED_UP': return 'var(--mat-sys-primary, #bb86fc)'; default: return 'rgba(255,255,255,0.5)'; }
   }
 
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 }

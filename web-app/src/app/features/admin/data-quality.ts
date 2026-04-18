@@ -10,6 +10,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface DqRow {
   title_id: number; name: string; poster_url: string | null;
@@ -128,7 +129,7 @@ export class DataQualityComponent implements OnInit {
     this.tmdbResults.set([]);
   }
 
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 
   statusLabel(s: string): string {
     switch (s) { case '': return 'All'; case 'NEEDS_ATTENTION': return 'Needs Attention'; case 'ENRICHED': return 'Enriched'; case 'FAILED': return 'Failed'; case 'PENDING': return 'Pending';

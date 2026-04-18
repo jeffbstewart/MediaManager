@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@ang
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { CatalogService, ActorDetail, ActorCredit } from '../../core/catalog.service';
+import { CatalogService, ActorDetail, ActorCredit, tmdbImageUrl } from '../../core/catalog.service';
 import { WishInterstitialService } from '../../core/wish-interstitial.service';
 import { AppRoutes } from '../../core/routes';
 
@@ -58,13 +58,8 @@ export class ActorComponent implements OnInit {
     this.actor.update(a => a ? { ...a } : a);
   }
 
-  profileImgUrl(path: string): string {
-    return `https://image.tmdb.org/t/p/w185${path}`;
-  }
-
-  posterUrl(path: string): string {
-    return `https://image.tmdb.org/t/p/w185${path}`;
-  }
+  profileImgUrl(path: string): string { return tmdbImageUrl(path, 'w185')!; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w185')!; }
 
   formatLifespan(): string {
     const a = this.actor();

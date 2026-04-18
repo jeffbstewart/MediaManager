@@ -7,6 +7,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface TitleLink {
   join_id: number; title_id: number; title_name: string;
@@ -191,7 +192,7 @@ export class MediaItemEditComponent implements OnInit {
     }
   }
 
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w92${path}`; }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 
   // --- Purchase Info ---
   async savePurchase(): Promise<void> {

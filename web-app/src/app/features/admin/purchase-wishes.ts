@@ -6,6 +6,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { firstValueFrom } from 'rxjs';
+import { tmdbImageUrl } from '../../core/catalog.service';
 
 interface WishAggregate {
   tmdb_id: number;
@@ -67,9 +68,7 @@ export class PurchaseWishesComponent implements OnInit {
     await this.refresh();
   }
 
-  posterUrl(path: string): string {
-    return `https://image.tmdb.org/t/p/w92${path}`;
-  }
+  posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 
   stageColor(stage: string): string {
     switch (stage) {
