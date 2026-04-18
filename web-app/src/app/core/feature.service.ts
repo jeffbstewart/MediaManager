@@ -19,6 +19,7 @@ export class FeatureService {
   });
 
   readonly hasPersonalVideos = () => this.flags().has_personal_videos;
+  readonly hasBooks = () => this.flags().has_books ?? false;
   readonly hasCameras = () => this.flags().has_cameras;
   readonly hasLiveTv = () => this.flags().has_live_tv;
   readonly isAdmin = () => this.flags().is_admin;

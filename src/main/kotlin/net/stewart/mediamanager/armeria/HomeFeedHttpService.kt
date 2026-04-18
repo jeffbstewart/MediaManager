@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.armeria
 
+import com.github.vokorm.findAll
 import com.google.gson.Gson
 import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
@@ -11,10 +12,15 @@ import com.linecorp.armeria.server.annotation.Delete
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.BookSeries
 import net.stewart.mediamanager.entity.DiscoveredFile
 import net.stewart.mediamanager.entity.DiscoveredFileStatus
+import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
@@ -68,14 +74,19 @@ class HomeFeedHttpService {
             }
 
         val allTitlesForFeatures = Title.findAll()
+        val hasBooks = allTitlesForFeatures.any { it.media_type == MMMediaType.BOOK.name }
+
+        val recentlyAddedBooks = if (hasBooks) recentlyAddedBooks(user, 10) else emptyList()
+
         val features = mapOf(
             "has_personal_videos" to allTitlesForFeatures.any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_books" to hasBooks,
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
             "wish_ready_count" to WishListService.getReadyToWatchWishCountForUser(user.id!!),
             "data_quality_count" to if (user.isAdmin()) {
-                allTitlesForFeatures.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name }
+                allTitlesForFeatures.count { it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name && it.media_type != MMMediaType.PERSONAL.name && it.media_type != MMMediaType.BOOK.name }
             } else 0,
             "open_reports_count" to if (user.isAdmin()) {
                 ProblemReport.findAll().count { it.status == ReportStatus.OPEN.name }
@@ -85,6 +96,7 @@ class HomeFeedHttpService {
         val feed = mapOf(
             "continue_watching" to continueWatching,
             "recently_added" to recentlyAdded,
+            "recently_added_books" to recentlyAddedBooks,
             "recently_watched" to recentlyWatched,
             "missing_seasons" to missingSeasons,
             "features" to features
@@ -112,6 +124,7 @@ class HomeFeedHttpService {
 
         val features = mapOf(
             "has_personal_videos" to allTitles.any { it.media_type == MMMediaType.PERSONAL.name },
+            "has_books" to allTitles.any { it.media_type == MMMediaType.BOOK.name },
             "has_cameras" to Camera.findAll().any { it.enabled },
             "has_live_tv" to LiveTvTuner.findAll().any { it.enabled },
             "is_admin" to user.isAdmin(),
@@ -222,4 +235,63 @@ class HomeFeedHttpService {
         "poster_url" to posterUrl(PosterSize.THUMBNAIL),
         "release_year" to release_year
     )
+
+    /**
+     * "Recently added books" — books carousel on the home page, parallel to
+     * [getRecentlyAddedForUser] on the movie/TV side. Sorted newest-first by
+     * MediaItem.created_at, deduped by title (we own a book once regardless
+     * of how many editions we have of it), respecting the user's rating
+     * ceiling.
+     */
+    private fun recentlyAddedBooks(
+        user: net.stewart.mediamanager.entity.AppUser,
+        limit: Int
+    ): List<Map<String, Any?>> {
+        val allTitles = Title.findAll().associateBy { it.id }
+        val allSeries = BookSeries.findAll().associateBy { it.id }
+        val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
+        val authorsByTitle = TitleAuthor.findAll()
+            .sortedBy { it.author_order }
+            .groupBy { it.title_id }
+        val authors = Author.findAll().associateBy { it.id }
+
+        val seen = mutableSetOf<Long>()
+        val rows = mutableListOf<Map<String, Any?>>()
+        val bookItems = MediaItem.findAll()
+            .filter { it.media_format in BOOK_FORMAT_NAMES && it.created_at != null }
+            .sortedByDescending { it.created_at }
+
+        for (item in bookItems) {
+            if (rows.size >= limit) break
+            val titleIds = links[item.id]?.map { it.title_id }.orEmpty()
+            for (titleId in titleIds) {
+                if (titleId in seen) continue
+                val title = allTitles[titleId] ?: continue
+                if (title.media_type != MMMediaType.BOOK.name) continue
+                if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+                seen += titleId
+
+                val series = title.book_series_id?.let { allSeries[it] }
+                val authorList = authorsByTitle[titleId]?.mapNotNull { authors[it.author_id]?.name }.orEmpty()
+
+                rows += mapOf(
+                    "title_id" to titleId,
+                    "title_name" to title.name,
+                    "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
+                    "release_year" to (title.first_publication_year ?: title.release_year),
+                    "author_name" to authorList.firstOrNull(),
+                    "series_name" to series?.name,
+                    "series_number" to title.series_number?.toPlainString()
+                )
+                if (rows.size >= limit) break
+            }
+        }
+        return rows
+    }
+
+    companion object {
+        /** Format enum names that represent a book edition. Mirrors MediaFormat.BOOK_FORMATS. */
+        private val BOOK_FORMAT_NAMES: Set<String> = net.stewart.mediamanager.entity.MediaFormat
+            .BOOK_FORMATS.mapTo(mutableSetOf()) { it.name }
+    }
 }

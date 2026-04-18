@@ -1,10 +1,12 @@
 package net.stewart.mediamanager.service
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.Author
 import org.slf4j.LoggerFactory
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -48,7 +50,12 @@ class AuthorEnrichmentAgent(
         private val STARTUP_DELAY = 30.seconds
         private const val BATCH_SIZE = 20
         private const val BASE = "https://openlibrary.org"
+        private const val WIKIDATA_BASE = "https://www.wikidata.org"
+        private const val WIKIPEDIA_BASE = "https://en.wikipedia.org"
         private const val USER_AGENT = "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"
+
+        /** Bios under this length trigger Wikipedia fallback to pick up a richer extract. */
+        private const val SHORT_BIO_THRESHOLD = 200
     }
 
     fun start() {
@@ -83,7 +90,7 @@ class AuthorEnrichmentAgent(
     internal fun enrichBatch() {
         val candidates = Author.findAll()
             .asSequence()
-            .filter { it.biography.isNullOrBlank() && !it.open_library_author_id.isNullOrBlank() }
+            .filter { needsEnrichment(it) }
             .take(BATCH_SIZE)
             .toList()
 
@@ -107,7 +114,36 @@ class AuthorEnrichmentAgent(
         }
     }
 
+    /**
+     * Pick up authors missing any of: bio (from OL), wikidata_id (from OL),
+     * or when a wikidata_id is set, missing a good-length bio or a headshot
+     * (which Wikipedia's richer data can fill).
+     */
+    internal fun needsEnrichment(a: Author): Boolean {
+        val olHasWork = !a.open_library_author_id.isNullOrBlank()
+        val missingFromOl = olHasWork && (
+            a.biography.isNullOrBlank() ||
+                a.wikidata_id.isNullOrBlank() ||
+                a.birth_date == null
+        )
+        val canUseWikipedia = !a.wikidata_id.isNullOrBlank() && (
+            a.biography.isNullOrBlank() ||
+                (a.biography?.length ?: 0) < SHORT_BIO_THRESHOLD ||
+                a.headshot_path.isNullOrBlank()
+        )
+        return missingFromOl || canUseWikipedia
+    }
+
     internal fun enrichOne(author: Author) {
+        enrichFromOpenLibrary(author)
+        if (!author.wikidata_id.isNullOrBlank() && needsWikipediaData(author)) {
+            // Space the Wikidata/Wikipedia calls away from the previous OL call.
+            try { clock.sleep(API_GAP) } catch (_: InterruptedException) { return }
+            enrichFromWikipedia(author)
+        }
+    }
+
+    private fun enrichFromOpenLibrary(author: Author) {
         val olid = author.open_library_author_id ?: return
         val body = fetch("$BASE/authors/$olid.json") ?: return
         val node = mapper.readTree(body)
@@ -130,7 +166,57 @@ class AuthorEnrichmentAgent(
         if (dirty) {
             author.updated_at = LocalDateTime.now()
             author.save()
-            log.info("Enriched author id={} '{}'", author.id, author.name)
+            log.info("Enriched author id={} '{}' from Open Library", author.id, author.name)
+        }
+    }
+
+    private fun needsWikipediaData(a: Author): Boolean =
+        a.biography.isNullOrBlank() ||
+            (a.biography?.length ?: 0) < SHORT_BIO_THRESHOLD ||
+            a.headshot_path.isNullOrBlank()
+
+    /**
+     * Resolve the wikidata_id to an English Wikipedia page, then fetch that
+     * page's REST summary for an extract and thumbnail. Fills biography if
+     * the current one is short/empty; sets headshot_path if none set.
+     */
+    private fun enrichFromWikipedia(author: Author) {
+        val wikidataId = author.wikidata_id ?: return
+
+        val entityBody = fetch("$WIKIDATA_BASE/wiki/Special:EntityData/$wikidataId.json") ?: return
+        val entity = mapper.readTree(entityBody)
+        val enwikiTitle = entity.path("entities").path(wikidataId).path("sitelinks").path("enwiki").path("title")
+            .asText().takeIf { it.isNotBlank() } ?: return
+
+        try { clock.sleep(API_GAP) } catch (_: InterruptedException) { return }
+
+        val encoded = URLEncoder.encode(enwikiTitle.replace(' ', '_'), Charsets.UTF_8)
+        val summaryBody = fetch("$WIKIPEDIA_BASE/api/rest_v1/page/summary/$encoded") ?: return
+        val summary = mapper.readTree(summaryBody)
+
+        val extract = summary.path("extract").asText().takeIf { it.isNotBlank() }
+        val thumbnail = summary.path("thumbnail").path("source").asText().takeIf { it.isNotBlank() }
+
+        var dirty = false
+        // Replace bio only when the current one is short or missing, and
+        // Wikipedia's is substantive. Avoid overwriting a long OL bio
+        // with a shorter Wikipedia extract.
+        if (!extract.isNullOrBlank() && extract.length >= 100 &&
+            (author.biography.isNullOrBlank() || (author.biography?.length ?: 0) < extract.length)
+        ) {
+            author.biography = extract
+            dirty = true
+        }
+        if (!thumbnail.isNullOrBlank() && author.headshot_path.isNullOrBlank()) {
+            author.headshot_path = thumbnail
+            dirty = true
+        }
+
+        if (dirty) {
+            author.updated_at = LocalDateTime.now()
+            author.save()
+            log.info("Enriched author id={} '{}' from Wikipedia ({})",
+                author.id, author.name, enwikiTitle)
         }
     }
 

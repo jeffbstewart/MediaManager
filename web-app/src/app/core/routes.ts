@@ -18,6 +18,7 @@ export const AppRoutes = {
   tags: () => '/content/tags',
   tag: (tagId: number) => `/tag/${tagId}`,
   personalVideos: () => '/content/family',
+  books: () => '/content/books',
   wishlist: () => '/wishlist',
   cameras: () => '/cameras',
   liveTv: () => '/live-tv',

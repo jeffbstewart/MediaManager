@@ -30,6 +30,12 @@
           <span matListItemTitle>Family</span>
         </a>
       }
+      @if (features.hasBooks()) {
+        <a mat-list-item [routerLink]="routes.books()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>auto_stories</mat-icon>
+          <span matListItemTitle>Books</span>
+        </a>
+      }
       @if (features.hasCameras()) {
         <a mat-list-item [routerLink]="routes.cameras()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>videocam</mat-icon>

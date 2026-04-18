@@ -65,6 +65,33 @@
       </section>
     }
 
+    @if (feed.recently_added_books && feed.recently_added_books.length > 0) {
+      <section class="carousel-section">
+        <h2>Recently Added Books</h2>
+        <div class="carousel-row">
+          @for (book of feed.recently_added_books; track book.title_id) {
+            <a class="poster-card" [routerLink]="routes.title(book.title_id)">
+              <div class="poster-wrapper">
+                @if (book.poster_url) {
+                  <img [src]="book.poster_url" [alt]="book.title_name" class="poster-img" />
+                } @else {
+                  <div class="poster-placeholder"></div>
+                }
+              </div>
+              <span class="poster-title">{{ book.title_name }}</span>
+              @if (book.series_name) {
+                <span class="poster-meta">
+                  {{ book.series_name }}@if (book.series_number) { #{{ book.series_number }} }
+                </span>
+              } @else if (book.author_name) {
+                <span class="poster-meta">{{ book.author_name }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
     @if (feed.recently_watched.length > 0) {
       <section class="carousel-section">
         <h2>Recently Watched</h2>

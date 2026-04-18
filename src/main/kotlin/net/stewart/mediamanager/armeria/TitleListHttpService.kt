@@ -52,6 +52,7 @@ class TitleListHttpService {
             "MOVIE" -> MMMediaType.MOVIE
             "TV" -> MMMediaType.TV
             "PERSONAL" -> MMMediaType.PERSONAL
+            "BOOK" -> MMMediaType.BOOK
             else -> return HttpResponse.builder()
                 .status(HttpStatus.BAD_REQUEST)
                 .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("error" to "Invalid media_type")))
@@ -96,8 +97,9 @@ class TitleListHttpService {
             titles = titles.filter { it.content_rating in ratingFilter }
         }
 
-        // Playable filter
-        if (playableOnly) {
+        // Playable filter. Books have no transcodes and nothing is "playable"
+        // in the M1 video sense — so skip the filter entirely for BOOK.
+        if (playableOnly && mmType != MMMediaType.BOOK) {
             titles = titles.filter { it.id in playableTitleIds }
         }
 

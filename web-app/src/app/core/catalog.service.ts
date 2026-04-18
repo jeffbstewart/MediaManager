@@ -50,7 +50,7 @@ export interface TitleListResponse {
   available_ratings: string[];
 }
 
-export type MediaType = 'MOVIE' | 'TV' | 'PERSONAL';
+export type MediaType = 'MOVIE' | 'TV' | 'PERSONAL' | 'BOOK';
 export type SortMode = 'name' | 'year' | 'recent' | 'popular';
 
 export interface TitleListParams {
@@ -62,6 +62,7 @@ export interface TitleListParams {
 
 export interface FeatureFlags {
   has_personal_videos: boolean;
+  has_books?: boolean;
   has_cameras: boolean;
   has_live_tv: boolean;
   is_admin: boolean;
@@ -129,9 +130,20 @@ export interface EpisodeInfo {
 export interface HomeFeed {
   continue_watching: ContinueWatchingItem[];
   recently_added: CarouselTitle[];
+  recently_added_books: RecentBook[];
   recently_watched: CarouselTitle[];
   missing_seasons: MissingSeason[];
   features: FeatureFlags;
+}
+
+export interface RecentBook {
+  title_id: number;
+  title_name: string;
+  poster_url: string | null;
+  release_year: number | null;
+  author_name: string | null;
+  series_name: string | null;
+  series_number: string | null;
 }
 
 export interface CollectionCard {
