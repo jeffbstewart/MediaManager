@@ -6,6 +6,9 @@ enum class MediaFormat {
     MASS_MARKET_PAPERBACK, TRADE_PAPERBACK, HARDBACK,
     EBOOK_EPUB, EBOOK_PDF,
     AUDIOBOOK_CD, AUDIOBOOK_DIGITAL,
+    // Music formats — see docs/MUSIC.md.
+    CD, VINYL_LP,
+    AUDIO_FLAC, AUDIO_MP3, AUDIO_AAC, AUDIO_OGG, AUDIO_WAV,
     UNKNOWN, OTHER;
 
     companion object {
@@ -15,11 +18,29 @@ enum class MediaFormat {
             EBOOK_EPUB, EBOOK_PDF,
             AUDIOBOOK_CD, AUDIOBOOK_DIGITAL
         )
+
+        /** Physical music formats (count toward insurance replacement value). */
+        val PHYSICAL_MUSIC_FORMATS: Set<MediaFormat> = setOf(CD, VINYL_LP)
+
+        /** Digital-audio rip formats (excluded from insurance the same way ebooks are). */
+        val DIGITAL_AUDIO_FORMATS: Set<MediaFormat> = setOf(
+            AUDIO_FLAC, AUDIO_MP3, AUDIO_AAC, AUDIO_OGG, AUDIO_WAV
+        )
     }
 }
 
 enum class MediaType {
-    MOVIE, TV, PERSONAL, BOOK
+    MOVIE, TV, PERSONAL, BOOK, ALBUM
+}
+
+/** MusicBrainz 'type' field on an artist. Drives UI (band vs person) and which relationships apply. */
+enum class ArtistType {
+    PERSON, GROUP, ORCHESTRA, CHOIR, OTHER
+}
+
+/** Role carried on a recording_credit row — who-did-what on a specific track. */
+enum class CreditRole {
+    PERFORMER, COMPOSER, PRODUCER, ENGINEER, MIXER, OTHER
 }
 
 /** Whether a book_series poster was auto-set from volume 1 or chosen manually. */
@@ -81,7 +102,7 @@ enum class MatchMethod {
     AUTO_EXACT, AUTO_NORMALIZED, MANUAL
 }
 
-enum class WishType { MEDIA, TRANSCODE, BOOK }
+enum class WishType { MEDIA, TRANSCODE, BOOK, ALBUM }
 
 enum class WishStatus { ACTIVE, CANCELLED, FULFILLED, DISMISSED }
 

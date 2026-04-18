@@ -9,6 +9,8 @@ data class Transcode(
     var title_id: Long = 0,
     var media_item_id: Long? = null,
     var episode_id: Long? = null,
+    /** Nullable; set when the transcode row is a track on an album (parallel to episode_id for TV). */
+    var track_id: Long? = null,
     var file_path: String? = null,
     var file_size_bytes: Long? = null,
     var status: String = TranscodeStatus.NOT_STARTED.name,

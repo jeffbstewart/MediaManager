@@ -15,6 +15,7 @@ import kotlin.time.Duration.Companion.seconds
 class UpcLookupAgent(
     private val lookupService: UpcLookupService = UpcItemDbLookupService(),
     private val openLibraryService: OpenLibraryService = OpenLibraryHttpService(),
+    private val musicBrainzService: MusicBrainzService = MusicBrainzHttpService(),
     private val clock: Clock = SystemClock
 ) {
     private val log = LoggerFactory.getLogger(UpcLookupAgent::class.java)
@@ -94,6 +95,24 @@ class UpcLookupAgent(
         // instead of UPCitemdb. See docs/BOOKS.md.
         if (isIsbnBarcode(scan.upc)) {
             return handleIsbn(scan)
+        }
+
+        // Non-ISBN barcodes try MusicBrainz first (for CDs), then fall
+        // back to UPCitemdb for DVDs/Blu-rays/consumer products. MB returns
+        // nothing for non-music barcodes at negligible cost; a confident
+        // match is structurally richer than UPCitemdb's flat product name.
+        // See docs/MUSIC.md.
+        val musicResult = musicBrainzService.lookupByBarcode(scan.upc)
+        if (musicResult is MusicBrainzResult.Success) {
+            countLookup("found_music")
+            handleMusicFound(scan, musicResult.release)
+            QuotaTracker.increment()
+            Broadcaster.broadcast(ScanUpdateEvent(scan.id!!, scan.upc, scan.lookup_status, scan.notes))
+            return POLL_INTERVAL
+        }
+        if (musicResult is MusicBrainzResult.Error && musicResult.rateLimited) {
+            log.info("MusicBrainz rate limited; skipping music branch for this scan")
+            // Fall through to UPCitemdb — MB rate-limit shouldn't block DVD lookup.
         }
 
         val result = lookupService.lookup(scan.upc)
@@ -197,6 +216,24 @@ class UpcLookupAgent(
         scan.save()
 
         log.info("NOT_FOUND: {}", scan.upc)
+    }
+
+    private fun handleMusicFound(scan: BarcodeScan, release: MusicBrainzReleaseLookup) {
+        val ingest = MusicIngestionService.ingest(
+            upc = scan.upc,
+            mediaFormat = MediaFormat.CD,
+            lookup = release,
+            clock = clock
+        )
+        val primaryArtist = release.albumArtistCredits.firstOrNull()?.name ?: "Unknown Artist"
+        var notes = "$primaryArtist — ${release.title} (${release.releaseYear ?: "?"}) — ${release.tracks.size} tracks"
+        if (ingest.titleReused) notes += " [existing release-group]"
+        scan.lookup_status = LookupStatus.FOUND.name
+        scan.media_item_id = ingest.mediaItem.id
+        scan.notes = notes
+        scan.save()
+
+        log.info("FOUND ALBUM: {} -> {}", scan.upc, notes)
     }
 
     private fun findOldestPending(): BarcodeScan? {

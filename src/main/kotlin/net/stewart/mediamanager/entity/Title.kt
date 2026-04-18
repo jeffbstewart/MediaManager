@@ -41,6 +41,12 @@ data class Title(
     var series_number: java.math.BigDecimal? = null,               // Position within series; decimal to support 0.5 etc.
     var page_count: Int? = null,
     var first_publication_year: Int? = null,
+    // Album-specific fields — null unless media_type = ALBUM. See docs/MUSIC.md.
+    var musicbrainz_release_group_id: String? = null,              // Dedup key across pressings (MBID UUID)
+    var musicbrainz_release_id: String? = null,                    // The specific scanned pressing
+    var track_count: Int? = null,
+    var total_duration_seconds: Int? = null,
+    var label: String? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
@@ -51,7 +57,10 @@ data class Title(
          * expressions on [MediaFormat] don't cover book formats.
          */
         fun findAllVideo(): List<Title> =
-            findAll().filter { it.media_type != MediaType.BOOK.name }
+            findAll().filter {
+                it.media_type != MediaType.BOOK.name &&
+                it.media_type != MediaType.ALBUM.name
+            }
     }
 
     /** Returns a poster URL routed through the local cache servlet, or null if no poster. */

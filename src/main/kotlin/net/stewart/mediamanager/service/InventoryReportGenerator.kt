@@ -45,8 +45,16 @@ object InventoryReportGenerator {
                 .list()
         }
 
-    /** Digital editions (EPUB / PDF / digital audiobook) are not insurable — excluded. */
-    private val DIGITAL_FORMATS: Set<String> = setOf("EBOOK_EPUB", "EBOOK_PDF", "AUDIOBOOK_DIGITAL")
+    /**
+     * Digital editions aren't insurable — excluded. Covers EPUB / PDF /
+     * digital audiobook (from books) plus audio rip formats (from music).
+     * Physical formats (CD, VINYL_LP, DVD, BLURAY, etc.) remain in the
+     * report even when pricing is missing ("—" in the price column).
+     */
+    private val DIGITAL_FORMATS: Set<String> = setOf(
+        "EBOOK_EPUB", "EBOOK_PDF", "AUDIOBOOK_DIGITAL",
+        "AUDIO_FLAC", "AUDIO_MP3", "AUDIO_AAC", "AUDIO_OGG", "AUDIO_WAV"
+    )
 
     private fun loadData(): ReportData {
         val allItems = MediaItem.findAll().filter { it.media_format !in DIGITAL_FORMATS }

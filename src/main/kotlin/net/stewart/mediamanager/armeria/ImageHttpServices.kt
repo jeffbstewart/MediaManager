@@ -115,6 +115,20 @@ class PosterHttpService {
                 "poster"
             )
         }
+        // Albums store "caa/<release-mbid>" — serve via the Cover Art Archive proxy.
+        if (path.startsWith("caa/")) {
+            val mbid = path.removePrefix("caa/")
+            val caaSize = when (posterSize) {
+                PosterSize.THUMBNAIL -> "front-250"
+                PosterSize.FULL -> "front-500"
+            }
+            return serveProxied(
+                ImageProxyService.Provider.COVER_ART_ARCHIVE,
+                "/release/$mbid/$caaSize.jpg",
+                "jpg",
+                "poster"
+            )
+        }
         if (!isValidTmdbPath(path)) return notFound("poster")
         val extension = path.substringAfterLast('.', "jpg")
         return serveProxied(

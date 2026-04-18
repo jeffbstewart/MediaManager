@@ -70,6 +70,16 @@ class EnrichmentIntegrationTest {
         }
     }
 
+    /**
+     * MusicBrainz stub that always returns NotFound. Existing tests don't
+     * exercise the music path; without this stub, UpcLookupAgent's default
+     * [MusicBrainzHttpService] would make real HTTP calls in-test.
+     */
+    private class StubMusicBrainzService : MusicBrainzService {
+        override fun lookupByBarcode(barcode: String) = MusicBrainzResult.NotFound
+        override fun lookupByReleaseMbid(releaseMbid: String) = MusicBrainzResult.NotFound
+    }
+
     /** TMDB service that returns controlled responses without making HTTP calls. */
     private class TestTmdbService(
         private val movieResponses: Map<String, TmdbSearchResult> = emptyMap(),
@@ -146,7 +156,7 @@ class EnrichmentIntegrationTest {
         insertScan("883929301843")
 
         // 2. UPC lookup agent processes it (comma-separated article is typical UPCitemdb format)
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "883929301843" to UpcLookupResult(
                 found = true,
                 productName = "Dark Knight, The (Blu-ray)",
@@ -398,7 +408,7 @@ class EnrichmentIntegrationTest {
     fun `multi-pack UPC creates NEEDS_EXPANSION media item with SKIPPED placeholder`() {
         insertScan("111222333444")
 
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "111222333444" to UpcLookupResult(
                 found = true,
                 productName = "Pulp Fiction / Reservoir Dogs Double Feature",
@@ -427,7 +437,7 @@ class EnrichmentIntegrationTest {
     fun `single-title UPC creates SINGLE media item with PENDING title`() {
         insertScan("999888777666")
 
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "999888777666" to UpcLookupResult(
                 found = true,
                 productName = "The Dark Knight (Blu-ray)",
@@ -450,7 +460,7 @@ class EnrichmentIntegrationTest {
     fun `UPC not found does not create title or media item`() {
         insertScan("000000000000")
 
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "000000000000" to UpcLookupResult(found = false)
         )))
         upcAgent.processNext()
@@ -467,7 +477,7 @@ class EnrichmentIntegrationTest {
     fun `season detection populates join row during UPC lookup`() {
         insertScan("555666777888")
 
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "555666777888" to UpcLookupResult(
                 found = true,
                 productName = "Breaking Bad Season 1 [Blu-ray]",
@@ -490,7 +500,7 @@ class EnrichmentIntegrationTest {
     fun `non-season UPC has null seasons on join`() {
         insertScan("999888777666")
 
-        val upcAgent = UpcLookupAgent(TestUpcLookupService(mapOf(
+        val upcAgent = UpcLookupAgent(musicBrainzService = StubMusicBrainzService(), lookupService = TestUpcLookupService(mapOf(
             "999888777666" to UpcLookupResult(
                 found = true,
                 productName = "The Dark Knight (Blu-ray)",

@@ -67,7 +67,8 @@ object ImageProxyService {
     /** Providers we'll ever reach. Code change gates any new entry. */
     enum class Provider(val host: String, val cacheBucket: String) {
         TMDB("image.tmdb.org", "tmdb"),
-        OPEN_LIBRARY("covers.openlibrary.org", "ol");
+        OPEN_LIBRARY("covers.openlibrary.org", "ol"),
+        COVER_ART_ARCHIVE("coverartarchive.org", "caa");
 
         companion object {
             fun of(host: String): Provider? = entries.firstOrNull { it.host == host }

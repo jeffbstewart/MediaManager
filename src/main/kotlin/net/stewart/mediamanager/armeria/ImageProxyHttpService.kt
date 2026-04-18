@@ -42,6 +42,11 @@ class ImageProxyHttpService {
         private val OL_WORK_RE = Regex("^OL\\d+W$")           // work (some clients pass these)
         private val OL_AUTHOR_RE = Regex("^OL\\d+A$")         // author
         private val OL_COVER_ID_RE = Regex("^\\d{1,12}$")     // OL numeric cover-image ID
+
+        /** MusicBrainz MBID — UUID v4 shape. */
+        private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        /** Cover Art Archive size segments. Closed enum per CAA docs. */
+        private val CAA_SIZES = setOf("front-250", "front-500", "front-1200", "front")
     }
 
     // ------------------------------------------------------------------
@@ -103,6 +108,29 @@ class ImageProxyHttpService {
         val upstream = ImageProxyService.ProxiedUpstream(
             provider = ImageProxyService.Provider.OPEN_LIBRARY,
             path = path,
+            extension = "jpg"
+        )
+        return serve(upstream)
+    }
+
+    // ------------------------------------------------------------------
+    // Cover Art Archive — album covers keyed by MusicBrainz release MBID
+    // ------------------------------------------------------------------
+
+    @Get("/proxy/caa/release/{mbid}/{size}")
+    fun coverArtArchive(
+        @Param("mbid") mbid: String,
+        @Param("size") size: String
+    ): HttpResponse {
+        if (!MBID_RE.matches(mbid)) return refuse("caa", HttpStatus.BAD_REQUEST, "bad mbid")
+        if (size !in CAA_SIZES) return refuse("caa", HttpStatus.BAD_REQUEST, "bad size")
+
+        // CAA URL shape: /release/{mbid}/{size}.jpg. The service redirects
+        // (typically to archive.org/download/...); the image-proxy
+        // redirect-follower with per-hop SSRF screening handles that chain.
+        val upstream = ImageProxyService.ProxiedUpstream(
+            provider = ImageProxyService.Provider.COVER_ART_ARCHIVE,
+            path = "/release/$mbid/$size.jpg",
             extension = "jpg"
         )
         return serve(upstream)
