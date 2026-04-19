@@ -146,10 +146,11 @@ class ArtistHttpService(
                     "primary_type" to rg.primaryType,
                     "secondary_types" to rg.secondaryTypes,
                     "is_compilation" to rg.isCompilation,
-                    // No cover URL yet — would require a second MB round trip
-                    // per release-group to resolve a representative release.
-                    // Wishlist "add" resolves it lazily when the heart is clicked.
-                    "cover_url" to null,
+                    // Cover Art Archive serves release-group cover art
+                    // directly — no extra MB round trip needed. CAA returns
+                    // 404 when MB has no cover for the group; the UI shows
+                    // the album-icon placeholder in that case.
+                    "cover_url" to "/proxy/caa/release-group/${rg.musicBrainzReleaseGroupId}/front-250",
                     "already_wished" to (rg.musicBrainzReleaseGroupId in wishedIds)
                 )
             }

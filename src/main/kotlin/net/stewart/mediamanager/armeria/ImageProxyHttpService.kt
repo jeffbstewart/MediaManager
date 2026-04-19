@@ -136,6 +136,28 @@ class ImageProxyHttpService {
         return serve(upstream)
     }
 
+    /**
+     * Cover-art lookup by MusicBrainz release-group MBID. Used for the
+     * Other Works grid on the artist page: we have the release-group but
+     * not a specific release MBID, and CAA serves the canonical
+     * release-group cover directly — no extra MB round trip required.
+     * Falls back with 404 when MB has no cover art for the group.
+     */
+    @Get("/proxy/caa/release-group/{rgid}/{size}")
+    fun coverArtArchiveReleaseGroup(
+        @Param("rgid") rgid: String,
+        @Param("size") size: String
+    ): HttpResponse {
+        if (!MBID_RE.matches(rgid)) return refuse("caa", HttpStatus.BAD_REQUEST, "bad mbid")
+        if (size !in CAA_SIZES) return refuse("caa", HttpStatus.BAD_REQUEST, "bad size")
+        val upstream = ImageProxyService.ProxiedUpstream(
+            provider = ImageProxyService.Provider.COVER_ART_ARCHIVE,
+            path = "/release-group/$rgid/$size.jpg",
+            extension = "jpg"
+        )
+        return serve(upstream)
+    }
+
     // ------------------------------------------------------------------
     // Shared path
     // ------------------------------------------------------------------
