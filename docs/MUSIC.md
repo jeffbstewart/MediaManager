@@ -392,11 +392,35 @@ Parallels M3 for books — extends `wish_list_item` with `musicbrainz_release_gr
 
 **Deliverable:** Albums show who played what. Artist pages show band lineups over time.
 
+### **M7 — Start Radio (seeded from album or track)**
+
+Spotify-style "play music that's like what I'm playing now," bounded to the owned library. Full design behind the sketch later in this document; phase-ordered here:
+
+- **Foundations.** `LastFmService` (optional API key via the admin Settings page, stored as `app_config.lastfm_api_key`). 1 req/sec throttle, descriptive User-Agent. Graceful-degrade when no key is set.
+- **Cache.** `SimilarArtistService` reads `artist.lastfm_similar_json` / `similar_fetched_at` (columns already on the schema). Lazy-hydrates on miss, refreshes on >30 day staleness. Feature flag `has_music_radio` is true whenever the key is set *or* any artist row has cached similarity data — so removing the key doesn't hard-disable the feature for artists we've already radio'd from.
+- **Engine.** `RadioService.startFromAlbum(titleId, userId)` / `startFromTrack(trackId, userId)` / `nextBatch(seed, history)`. Pipeline: seed → similar-artists → intersect with owned (`track.file_path != null`) → 3 canonical tracks per owned similar-artist (Last.fm per-track popularity, fall back to earliest-release or album popularity) → round-robin interleave → tail-pad with deeper cuts from the seed-artist. Subtract history.
+- **Degenerate cases.** Similar ∩ owned < 3 → same-genre owned albums → same-era (`release_year ± 5`) → random owned. Compilation seed → draw artists from per-track `recording_credit` (M6 data). Single-track seed → same algorithm, smaller pool.
+- **Endpoints.** `POST /api/v2/radio/start` (body `{seed_type, seed_id}` → first batch + `radio_seed_id`), `POST /api/v2/radio/next` (body `{radio_seed_id, history}` → next batch). Skip-weighting within 30 s of track start down-weights that artist for the remainder of the session; seed state lives in-memory keyed by `radio_seed_id` with a 4 h TTL.
+- **UI.** Start-Radio button on the album detail page next to Play Album. Bottom-bar player shows a *"Radio: from {seed}"* chip + turn-off action when in RADIO mode. `PlaybackQueueService` gains a `queueMode` signal and auto-appends via `/api/v2/radio/next` when fewer than 5 tracks remain.
+- **Tests.** Unit tests for the engine against an in-memory owned fixture with pre-seeded similar-artist JSON; HTTP-layer test mirrors `SearchHttpServiceTest` shape.
+
+**Deliverable:** Click Start Radio on Kind of Blue; a continuously-refilling queue of owned tracks by similar artists plays, intelligently avoiding back-to-back same-artist and respecting skip signals. Works without a Last.fm key for any artist whose similarity data is already cached.
+
+### **M8 — Library-based recommendations**
+
+Reads the same similar-artist cache M7 builds, but points it at the *unowned* universe: "based on what's already in your library, here are some similar artists worth looking at."
+
+- **`RecommendationAgent` nightly pass** per user: for each owned artist, pull cached similar-artists; bucket suggestions by MBID summing match scores weighted by the number of owned albums per voter; drop any MBID already owned, already wishlisted, or dismissed; rank, take top N; resolve a representative release-group (via `listArtistReleaseGroups(artist, type=album)` earliest-or-popularity pick) for the "Start here" nudge.
+- **Schema.** New `recommended_artist` table: `(user_id, suggested_artist_mbid, score, voters_json, representative_release_group_id, created_at, dismissed_at)`. Dismissals persist across sessions.
+- **Endpoints.** `GET /api/v2/recommendations/artists` (top N with voter explanations + representative cover URL), `POST /api/v2/recommendations/dismiss`, `POST /api/v2/recommendations/refresh` (manual bypass of the daily schedule).
+- **UI.** New Discover page at `/app/discover` + home-feed carousel *"Artists you might like"*. Each card: release-group cover (via M7's CAA release-group proxy), artist name, voter-explanation line (*"because you have Duran Duran, Depeche Mode, and The Cure"*), two buttons — **Wishlist an album** (opens a picker of the artist's release-groups reusing the existing wishlist-add flow) and **Dismiss**. Gated on `has_music_radio`.
+
+**Deliverable:** A passive discovery surface that grows the wish list automatically as the library grows. Daily refresh keeps the cost bounded; dismissals give the user a sharp-enough tool to steer the recommendations without needing a full preference model.
+
 ### **Later**
 
 - **Audiobook playback** (already schema-accommodated via the books milestones) — HTML5 `<audio>` with chapter marker support + per-chapter resume.
 - **Persistent playback across route changes** — keep the `<audio>` element alive through Angular navigations. Moderate shell refactor; no rush.
-- **"Start Radio" from a seed album or track** — see the design sketch below.
 - **iOS player** — AVPlayer-backed player with background playback, offline downloads via the existing DownloadService contract.
 - **Android TV / Roku music surfaces** — native UI with DPAD navigation; most work is UI, the data model and servers are ready.
 - **Lyrics** — synced or unsynced, from MusicBrainz release-rels or LyricFind (paid) or a local `.lrc` sidecar file next to each track.
@@ -404,7 +428,7 @@ Parallels M3 for books — extends `wish_list_item` with `musicbrainz_release_gr
 - **Server-side CD ripping** — optional sidecar (cdparanoia + flac) for users who attach an optical drive to the NAS container.
 - **Playlists** — user-authored cross-album track lists. New `playlist` + `playlist_track` tables. Not needed for collection-management but obvious UX next step.
 
-### Design sketch: "Start Radio from this Album" *(post-M6)*
+### Design sketch: "Start Radio from this Album" *(implementation reference for M7)*
 
 Spotify-style "play music that's like what I'm playing now," bounded to the user's owned library. Three moving parts: **pick seeds**, **discover similar tracks**, **build a queue with variety**.
 
@@ -456,7 +480,7 @@ Radio is a continuously-generated queue, not a finite list:
 
 #### Milestone slot
 
-This is a **M8 or later** piece — behind audiobook playback in priority. Prerequisites from the current plan: M5 (queue infrastructure) and M6 (recording-credit data for compilation seeding). Self-contained after that.
+Scoped as **M7** (see Implementation Plan above). Prerequisites — M5 (queue infrastructure) and M6 (recording-credit data for compilation seeding) — are shipped.
 
 ---
 
