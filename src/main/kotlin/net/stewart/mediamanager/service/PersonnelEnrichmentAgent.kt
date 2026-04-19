@@ -114,15 +114,26 @@ class PersonnelEnrichmentAgent(
             .filter { !it.musicbrainz_artist_id.isNullOrBlank() }
             .filter { it.id !in touchedIds }
             .toList()
-        val queueBefore = queue.size
-        val candidates = queue.take(ARTIST_BATCH)
+
+        val now = clock.now()
+        val eligible = queue.filter {
+            EnrichmentBackoff.isEligibleForRetry(
+                it.membership_last_attempt_at, it.membership_no_progress_streak, now
+            )
+        }
+        val cooling = queue.size - eligible.size
+        val candidates = eligible.take(ARTIST_BATCH)
 
         if (candidates.isEmpty()) {
-            log.debug("No artists need membership enrichment")
+            if (cooling > 0) {
+                log.info("No artists eligible for membership enrichment; {} in cooldown", cooling)
+            } else {
+                log.debug("No artists need membership enrichment")
+            }
             return 0
         }
-        log.info("Enriching memberships for {} artist(s); queue size: {}",
-            candidates.size, queueBefore)
+        log.info("Enriching memberships for {} artist(s); queue={} eligible={} cooling={}",
+            candidates.size, queue.size, eligible.size, cooling)
 
         val byMbid = allArtists
             .asSequence()
@@ -138,26 +149,32 @@ class PersonnelEnrichmentAgent(
             if (i > 0) {
                 try { clock.sleep(MB_GAP) } catch (_: InterruptedException) { break }
             }
+            var madeProgress = false
             try {
                 val mbid = artist.musicbrainz_artist_id!!
                 val memberships = musicBrainz.listArtistMemberships(mbid)
                 if (memberships.isEmpty()) {
-                    // MB really has no membership data for this artist.
-                    // Today the design tolerates re-fetching such artists
-                    // every cycle (see per-artist log to see it happening).
-                    // When/if this becomes a dominant cost, consider a
-                    // `membership_fetched_at` timestamp column to back off.
                     emptyFromMb++
-                    log.info("Artist {} '{}' (mbid={}): MB has 0 memberships; will re-check next cycle",
-                        artist.id, artist.name, mbid)
-                    continue
+                    val nextRetry = EnrichmentBackoff.cooldownFor(artist.membership_no_progress_streak + 1)
+                    log.info("Artist {} '{}' (mbid={}): MB has 0 memberships; next try in {}",
+                        artist.id, artist.name, mbid, nextRetry)
+                } else {
+                    upsertMemberships(artist, memberships, byMbid)
+                    filledMemberships++
+                    madeProgress = true
                 }
-                upsertMemberships(artist, memberships, byMbid)
-                filledMemberships++
             } catch (e: Exception) {
                 log.warn("Membership enrichment failed for artist id={} mbid={}: {}",
                     artist.id, artist.musicbrainz_artist_id, e.message)
             }
+            // Reload in case upsertMemberships mutated the row (it doesn't
+            // today, but writing through the reloaded copy is the safe habit).
+            val reloaded = Artist.findById(artist.id!!) ?: continue
+            reloaded.membership_last_attempt_at = clock.now()
+            reloaded.membership_no_progress_streak = EnrichmentBackoff.nextStreak(
+                reloaded.membership_no_progress_streak, madeProgress
+            )
+            reloaded.save()
         }
 
         val queueAfter = Artist.findAll().count { a ->
@@ -166,8 +183,8 @@ class PersonnelEnrichmentAgent(
                     it.group_artist_id == a.id || it.member_artist_id == a.id
                 }
         }
-        log.info("Membership batch done: filled={} empty-from-mb={} queue={} (delta={})",
-            filledMemberships, emptyFromMb, queueAfter, queueAfter - queueBefore)
+        log.info("Membership batch done: filled={} empty-from-mb={} cooling={} queue={} (delta={})",
+            filledMemberships, emptyFromMb, cooling, queueAfter, queueAfter - queue.size)
         return candidates.size
     }
 
@@ -231,7 +248,7 @@ class PersonnelEnrichmentAgent(
         // has any recording_credit row. This is a coarse heuristic — some
         // MB releases only document a few track credits. Good enough: we
         // enrich once per album and stop hammering MB.
-        val titleCandidates = allTitles
+        val queue = allTitles
             .asSequence()
             .filter { it.media_type == MediaType.ALBUM.name }
             .filter { !it.musicbrainz_release_id.isNullOrBlank() }
@@ -239,14 +256,27 @@ class PersonnelEnrichmentAgent(
                 val trackIds = allTracks.filter { it.title_id == title.id }.mapNotNull { it.id }
                 trackIds.isNotEmpty() && trackIds.none { it in creditedTrackIds }
             }
-            .take(ALBUM_BATCH)
             .toList()
 
+        val now = clock.now()
+        val eligible = queue.filter {
+            EnrichmentBackoff.isEligibleForRetry(
+                it.personnel_last_attempt_at, it.personnel_no_progress_streak, now
+            )
+        }
+        val cooling = queue.size - eligible.size
+        val titleCandidates = eligible.take(ALBUM_BATCH)
+
         if (titleCandidates.isEmpty()) {
-            log.debug("No albums need personnel enrichment")
+            if (cooling > 0) {
+                log.info("No albums eligible for personnel enrichment; {} in cooldown", cooling)
+            } else {
+                log.debug("No albums need personnel enrichment")
+            }
             return 0
         }
-        log.info("Enriching personnel for {} album(s)", titleCandidates.size)
+        log.info("Enriching personnel for {} album(s); queue={} eligible={} cooling={}",
+            titleCandidates.size, queue.size, eligible.size, cooling)
 
         val byMbid = Artist.findAll()
             .asSequence()
@@ -254,31 +284,48 @@ class PersonnelEnrichmentAgent(
             .associateBy { it.musicbrainz_artist_id!! }
             .toMutableMap()
 
+        var filled = 0
+        var emptyFromMb = 0
+
         for ((i, title) in titleCandidates.withIndex()) {
             if (!running.get()) break
             if (i > 0) {
                 try { clock.sleep(MB_GAP) } catch (_: InterruptedException) { break }
             }
+            var inserted = 0
             try {
-                enrichAlbumPersonnel(title, allTracks.filter { it.title_id == title.id }, byMbid)
+                inserted = enrichAlbumPersonnel(title, allTracks.filter { it.title_id == title.id }, byMbid)
+                if (inserted > 0) filled++ else emptyFromMb++
             } catch (e: Exception) {
                 log.warn("Personnel enrichment failed for album id={} '{}': {}",
                     title.id, title.name, e.message)
             }
+            // Reload so we don't overwrite any updates enrichAlbumPersonnel
+            // might have made to the title. Today it doesn't mutate title,
+            // but writing through a reload stays correct if that changes.
+            val reloaded = Title.findById(title.id!!) ?: continue
+            reloaded.personnel_last_attempt_at = clock.now()
+            reloaded.personnel_no_progress_streak = EnrichmentBackoff.nextStreak(
+                reloaded.personnel_no_progress_streak, madeProgress = inserted > 0
+            )
+            reloaded.save()
         }
+        log.info("Album personnel batch done: filled={} empty-from-mb={} cooling={} queue={}",
+            filled, emptyFromMb, cooling, queue.size)
         return titleCandidates.size
     }
 
+    /** Returns the count of recording-credit rows inserted. */
     private fun enrichAlbumPersonnel(
         title: Title,
         tracks: List<Track>,
         byMbid: MutableMap<String, Artist>
-    ) {
-        val releaseMbid = title.musicbrainz_release_id ?: return
+    ): Int {
+        val releaseMbid = title.musicbrainz_release_id ?: return 0
         val credits = musicBrainz.listReleaseRecordingCredits(releaseMbid)
         if (credits.isEmpty()) {
             log.debug("No MB recording credits for album id={} release={}", title.id, releaseMbid)
-            return
+            return 0
         }
 
         val trackByRecordingId = tracks
@@ -318,6 +365,7 @@ class PersonnelEnrichmentAgent(
         }
         log.info("Inserted {} recording credit(s) on album id={} '{}'",
             inserted, title.id, title.name)
+        return inserted
     }
 
     // -------------------------------------------------------------------

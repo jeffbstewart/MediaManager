@@ -47,6 +47,10 @@ data class Title(
     var track_count: Int? = null,
     var total_duration_seconds: Int? = null,
     var label: String? = null,
+    /** Last PersonnelEnrichmentAgent per-track-personnel attempt (ALBUM only). */
+    var personnel_last_attempt_at: LocalDateTime? = null,
+    /** Consecutive no-progress personnel fetches (ALBUM only). */
+    var personnel_no_progress_streak: Int = 0,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

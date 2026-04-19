@@ -33,6 +33,10 @@ data class Artist(
     var enrichment_last_attempt_at: LocalDateTime? = null,
     /** Consecutive no-progress attempts. Resets to 0 on any progress. */
     var enrichment_no_progress_streak: Int = 0,
+    /** Last PersonnelEnrichmentAgent membership-fetch attempt. */
+    var membership_last_attempt_at: LocalDateTime? = null,
+    /** Consecutive no-progress membership fetches. */
+    var membership_no_progress_streak: Int = 0,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
