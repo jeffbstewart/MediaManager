@@ -8,6 +8,7 @@ import net.stewart.mediamanager.entity.Title
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
 import javax.imageio.ImageIO
@@ -34,11 +35,11 @@ object OwnershipPhotoService {
     private fun storeInternal(bytes: ByteArray, contentType: String, mediaItemId: Long?, upc: String?): String {
         val uuid = UUID.randomUUID().toString()
         val orientation = readExifOrientation(bytes)
+        val title = resolveTitleName(mediaItemId)
 
         // Compute semantic disk path via storage layer
         val diskPath = if (upc != null && upc.length >= 10) {
             val uniqueId = UpcUniqueId(upc)
-            val title = resolveTitleName(mediaItemId)
             OwnershipPhotoStorage.computePath(uniqueId, title, contentType)
         } else {
             // Fallback to legacy UUID-based path for items without a valid UPC
@@ -47,6 +48,7 @@ object OwnershipPhotoService {
 
         OwnershipPhotoStorage.writeFile(diskPath, bytes)
 
+        val capturedAt = LocalDateTime.now()
         OwnershipPhoto(
             id = uuid,
             media_item_id = mediaItemId,
@@ -54,8 +56,24 @@ object OwnershipPhotoService {
             content_type = contentType,
             orientation = orientation,
             disk_path = diskPath,
-            captured_at = LocalDateTime.now()
+            captured_at = capturedAt
         ).create()
+
+        // Sidecar metadata: best-effort, failure doesn't block the photo store.
+        // See docs/IMAGE_CACHE_MIGRATION.md.
+        val absolutePath = OwnershipPhotoStorage.resolveAbsolute(diskPath)
+        MetadataWriter.writeSidecar(
+            absolutePath,
+            ImageMetadata.ownershipPhoto(
+                photoId = uuid,
+                storageKey = upc,
+                mediaItemId = mediaItemId,
+                slugHint = title?.let { OwnershipPhotoStorage.slugify(it) },
+                sequence = OwnershipPhotoStorage.extractSeq(diskPath).takeIf { it > 0 },
+                capturedAt = capturedAt,
+                contentType = contentType
+            )
+        )
 
         log.info("Ownership photo stored: id={} diskPath={} mediaItemId={} upc={} size={} bytes", uuid, diskPath, mediaItemId, upc, bytes.size)
         return uuid

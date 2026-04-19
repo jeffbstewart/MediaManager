@@ -29,12 +29,29 @@ object LocalImageService {
         file.parentFile.mkdirs()
         file.writeBytes(bytes)
 
+        val createdAt = LocalDateTime.now()
         LocalImage(
             id = uuid,
             source_type = sourceType.name,
             content_type = contentType,
-            created_at = LocalDateTime.now()
+            created_at = createdAt
         ).create()
+
+        // Sidecar metadata — best effort, see docs/IMAGE_CACHE_MIGRATION.md.
+        // subject_type / subject_id are populated later by callers that know
+        // what this local image decorates; at store time we only know the
+        // source category (FRAME_EXTRACT / USER_UPLOAD / etc.).
+        MetadataWriter.writeSidecar(
+            file.toPath(),
+            ImageMetadata.localImage(
+                uuid = uuid,
+                subjectType = sourceType.name,
+                subjectId = null,
+                uploadedByUserId = null,
+                uploadedAt = createdAt,
+                contentType = contentType
+            )
+        )
 
         log.info("Local image stored: id={} type={} size={} bytes", uuid, sourceType, bytes.size)
         return uuid
@@ -57,7 +74,7 @@ object LocalImageService {
         return LocalImage.findById(uuid)?.content_type
     }
 
-    /** Deletes a local image (file + DB record). */
+    /** Deletes a local image (file + sidecar + DB record). */
     fun delete(uuid: String) {
         val record = LocalImage.findById(uuid)
         if (record != null) {
@@ -68,6 +85,7 @@ object LocalImageService {
             }
             val file = fileForId(uuid, ext)
             if (file.exists()) file.delete()
+            MetadataWriter.deleteSidecar(file.toPath())
             record.delete()
             log.info("Local image deleted: id={}", uuid)
         }

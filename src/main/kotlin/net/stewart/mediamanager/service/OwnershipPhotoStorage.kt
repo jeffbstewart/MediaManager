@@ -59,10 +59,12 @@ object OwnershipPhotoStorage {
         return if (file.exists()) file else null
     }
 
-    /** Delete the file at a disk path. */
+    /** Delete the file at a disk path, along with any sidecar metadata next to it. */
     fun deleteFile(diskPath: String) {
         val file = File("$BASE_DIR/$diskPath")
         if (file.exists()) file.delete()
+        // Sidecar follows the image — never orphan one.
+        MetadataWriter.deleteSidecar(file.toPath())
     }
 
     /**
@@ -95,6 +97,17 @@ object OwnershipPhotoStorage {
             val newFile = File("$BASE_DIR/$newPath")
             newFile.parentFile.mkdirs()
             if (oldFile.renameTo(newFile)) {
+                // Carry the sidecar along with the image so metadata stays
+                // paired. If the sidecar rename fails we just re-emit on the
+                // next backfill pass — the photo itself is the critical bit.
+                val oldSidecar = MetadataWriter.sidecarFor(oldFile.toPath()).toFile()
+                if (oldSidecar.exists()) {
+                    val newSidecar = MetadataWriter.sidecarFor(newFile.toPath()).toFile()
+                    if (!oldSidecar.renameTo(newSidecar)) {
+                        log.warn("Sidecar rename failed {} -> {}; backfill will recreate",
+                            oldSidecar, newSidecar)
+                    }
+                }
                 photo.disk_path = newPath
                 photo.save()
                 moved++
@@ -120,11 +133,15 @@ object OwnershipPhotoStorage {
     }
 
     /** Strip non-alphanumeric, lowercase, truncate to 15 chars. Returns null if result is empty. */
-    internal fun slugify(title: String): String? {
+    fun slugify(title: String): String? {
         val slug = title.lowercase().replace(Regex("[^a-z0-9]"), "")
         if (slug.isEmpty()) return null
         return slug.take(15)
     }
+
+    /** Resolve a relative diskPath to an absolute Path for sidecar / filesystem use. */
+    fun resolveAbsolute(diskPath: String): java.nio.file.Path =
+        File("$BASE_DIR/$diskPath").toPath()
 
     private fun nextSeq(storageKey: String): Int {
         val existing = OwnershipPhoto.findAll()
@@ -143,7 +160,7 @@ object OwnershipPhotoStorage {
     }
 
     /** Extract the seq number from a disk path filename */
-    internal fun extractSeq(diskPath: String): Int {
+    fun extractSeq(diskPath: String): Int {
         val filename = diskPath.substringAfterLast('/')
         val base = filename.substringBeforeLast('.')
         val parts = base.split('_')
