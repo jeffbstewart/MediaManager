@@ -96,30 +96,69 @@ class ArtistEnrichmentAgent(
 
     /** Returns the number of artists actually processed in this batch. */
     internal fun enrichBatch(): Int {
-        val candidates = Artist.findAll()
-            .asSequence()
-            .filter { needsEnrichment(it) }
-            .take(BATCH_SIZE)
-            .toList()
+        val allNeeding = Artist.findAll().filter { needsEnrichment(it) }
+        val queueBefore = allNeeding.size
+        val candidates = allNeeding.take(BATCH_SIZE)
         if (candidates.isEmpty()) {
             log.debug("No artists need enrichment")
             return 0
         }
-        log.info("Enriching {} artist(s)", candidates.size)
+        log.info("Enriching {} artist(s); queue size before batch: {}",
+            candidates.size, queueBefore)
+
+        var progressed = 0
+        var stuck = 0
 
         for ((i, artist) in candidates.withIndex()) {
             if (!running.get()) break
             if (i > 0) {
                 try { clock.sleep(MB_GAP) } catch (_: InterruptedException) { break }
             }
+            val before = gapsFor(artist)
             try {
                 enrichOne(artist)
             } catch (e: Exception) {
                 log.warn("Enrichment failed for artist id={} mbid={}: {}",
                     artist.id, artist.musicbrainz_artist_id, e.message)
             }
+            val after = gapsFor(artist)
+            val filled = before - after
+            if (filled.isNotEmpty()) {
+                progressed++
+                val stillMissing = if (after.isEmpty()) "done" else "still missing ${after.joinToString(",")}"
+                log.info("Artist {} '{}': filled {} ({})",
+                    artist.id, artist.name, filled.joinToString(","), stillMissing)
+            } else {
+                stuck++
+                log.info("Artist {} '{}': no progress, still missing {}",
+                    artist.id, artist.name, after.joinToString(","))
+            }
         }
+
+        val queueAfter = Artist.findAll().count { needsEnrichment(it) }
+        log.info("Batch done: progressed={} stuck={} queue={} (delta={})",
+            progressed, stuck, queueAfter, queueAfter - queueBefore)
         return candidates.size
+    }
+
+    /**
+     * Named gaps in a single artist's enrichment state. Drives the
+     * progress / stuck reporting in [enrichBatch]: same set before and
+     * after a pass means we fetched but nothing upstream filled the
+     * hole — the artist is stuck, not still-to-do.
+     */
+    private fun gapsFor(a: Artist): Set<String> {
+        val gaps = mutableSetOf<String>()
+        if (!a.musicbrainz_artist_id.isNullOrBlank()) {
+            if (a.wikidata_id.isNullOrBlank()) gaps += "wikidata_id"
+            if (a.begin_date == null) gaps += "begin_date"
+        }
+        if (!a.wikidata_id.isNullOrBlank()) {
+            if (a.biography.isNullOrBlank()) gaps += "biography"
+            else if ((a.biography?.length ?: 0) < SHORT_BIO_THRESHOLD) gaps += "biography_short"
+            if (a.headshot_path.isNullOrBlank()) gaps += "headshot"
+        }
+        return gaps
     }
 
     internal fun needsEnrichment(a: Artist): Boolean {

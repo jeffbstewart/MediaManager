@@ -109,26 +109,29 @@ class PersonnelEnrichmentAgent(
             .flatMap { listOf(it.group_artist_id, it.member_artist_id) }
             .toSet()
 
-        val candidates = allArtists
+        val queue = allArtists
             .asSequence()
             .filter { !it.musicbrainz_artist_id.isNullOrBlank() }
-            // Skip artists we've already fetched memberships for (rows
-            // touching them on either side).
             .filter { it.id !in touchedIds }
-            .take(ARTIST_BATCH)
             .toList()
+        val queueBefore = queue.size
+        val candidates = queue.take(ARTIST_BATCH)
 
         if (candidates.isEmpty()) {
             log.debug("No artists need membership enrichment")
             return 0
         }
-        log.info("Enriching memberships for {} artist(s)", candidates.size)
+        log.info("Enriching memberships for {} artist(s); queue size: {}",
+            candidates.size, queueBefore)
 
         val byMbid = allArtists
             .asSequence()
             .filter { !it.musicbrainz_artist_id.isNullOrBlank() }
             .associateBy { it.musicbrainz_artist_id!! }
             .toMutableMap()
+
+        var filledMemberships = 0
+        var emptyFromMb = 0
 
         for ((i, artist) in candidates.withIndex()) {
             if (!running.get()) break
@@ -139,21 +142,32 @@ class PersonnelEnrichmentAgent(
                 val mbid = artist.musicbrainz_artist_id!!
                 val memberships = musicBrainz.listArtistMemberships(mbid)
                 if (memberships.isEmpty()) {
-                    // Write a sentinel "no members found" by creating nothing —
-                    // but we need to avoid re-fetching this artist next cycle.
-                    // Insert a self-referencing sentinel? No — that'd show up
-                    // in the UI. Instead we tolerate some churn: artists with
-                    // no MB data get re-fetched every cycle, but that's OK at
-                    // 1 rps for a 10-artist batch.
-                    log.debug("No MB memberships for artist id={} '{}'", artist.id, artist.name)
+                    // MB really has no membership data for this artist.
+                    // Today the design tolerates re-fetching such artists
+                    // every cycle (see per-artist log to see it happening).
+                    // When/if this becomes a dominant cost, consider a
+                    // `membership_fetched_at` timestamp column to back off.
+                    emptyFromMb++
+                    log.info("Artist {} '{}' (mbid={}): MB has 0 memberships; will re-check next cycle",
+                        artist.id, artist.name, mbid)
                     continue
                 }
                 upsertMemberships(artist, memberships, byMbid)
+                filledMemberships++
             } catch (e: Exception) {
                 log.warn("Membership enrichment failed for artist id={} mbid={}: {}",
                     artist.id, artist.musicbrainz_artist_id, e.message)
             }
         }
+
+        val queueAfter = Artist.findAll().count { a ->
+            !a.musicbrainz_artist_id.isNullOrBlank() &&
+                ArtistMembership.findAll().none {
+                    it.group_artist_id == a.id || it.member_artist_id == a.id
+                }
+        }
+        log.info("Membership batch done: filled={} empty-from-mb={} queue={} (delta={})",
+            filledMemberships, emptyFromMb, queueAfter, queueAfter - queueBefore)
         return candidates.size
     }
 

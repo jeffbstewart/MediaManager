@@ -94,31 +94,67 @@ class AuthorEnrichmentAgent(
 
     /** Returns the number of authors actually processed in this batch. */
     internal fun enrichBatch(): Int {
-        val candidates = Author.findAll()
-            .asSequence()
-            .filter { needsEnrichment(it) }
-            .take(BATCH_SIZE)
-            .toList()
+        val allNeeding = Author.findAll().filter { needsEnrichment(it) }
+        val queueBefore = allNeeding.size
+        val candidates = allNeeding.take(BATCH_SIZE)
 
         if (candidates.isEmpty()) {
             log.debug("No authors need enrichment")
             return 0
         }
-        log.info("Enriching {} author(s)", candidates.size)
+        log.info("Enriching {} author(s); queue size before batch: {}",
+            candidates.size, queueBefore)
+
+        var progressed = 0
+        var stuck = 0
 
         for ((i, author) in candidates.withIndex()) {
             if (!running.get()) break
             if (i > 0) {
                 try { clock.sleep(API_GAP) } catch (_: InterruptedException) { break }
             }
+            val before = gapsFor(author)
             try {
                 enrichOne(author)
             } catch (e: Exception) {
                 log.warn("Enrichment failed for author id={} olid={}: {}",
                     author.id, author.open_library_author_id, e.message)
             }
+            val after = gapsFor(author)
+            val filled = before - after
+            if (filled.isNotEmpty()) {
+                progressed++
+                val stillMissing = if (after.isEmpty()) "done" else "still missing ${after.joinToString(",")}"
+                log.info("Author {} '{}': filled {} ({})",
+                    author.id, author.name, filled.joinToString(","), stillMissing)
+            } else {
+                stuck++
+                log.info("Author {} '{}': no progress, still missing {}",
+                    author.id, author.name, after.joinToString(","))
+            }
         }
+
+        val queueAfter = Author.findAll().count { needsEnrichment(it) }
+        log.info("Batch done: progressed={} stuck={} queue={} (delta={})",
+            progressed, stuck, queueAfter, queueAfter - queueBefore)
         return candidates.size
+    }
+
+    /** Named gaps in an author's state. See ArtistEnrichmentAgent.gapsFor. */
+    private fun gapsFor(a: Author): Set<String> {
+        val gaps = mutableSetOf<String>()
+        if (!a.open_library_author_id.isNullOrBlank()) {
+            if (a.biography.isNullOrBlank()) gaps += "biography"
+            if (a.wikidata_id.isNullOrBlank()) gaps += "wikidata_id"
+            if (a.birth_date == null) gaps += "birth_date"
+        }
+        if (!a.wikidata_id.isNullOrBlank()) {
+            if ((a.biography?.length ?: 0) < SHORT_BIO_THRESHOLD && "biography" !in gaps) {
+                gaps += "biography_short"
+            }
+            if (a.headshot_path.isNullOrBlank()) gaps += "headshot"
+        }
+        return gaps
     }
 
     /**
