@@ -200,13 +200,13 @@ class MusicScannerAgent(
             TaggedFile(path, ext, tags)
         }
 
-        val resolvedReleaseId = resolveReleaseIdForDir(tagged)
+        val resolved = resolveReleaseForDir(tagged)
 
         var linked = 0
         var staged = 0
 
-        if (resolvedReleaseId != null) {
-            val title = findOrIngestTitleByRelease(resolvedReleaseId)
+        if (resolved != null) {
+            val title = findOrIngestTitleByRelease(resolved.musicBrainzReleaseId, pre = resolved)
             if (title != null) {
                 val tracks = Track.findAll().filter { it.title_id == title.id }
                 for (tf in tagged) {
@@ -231,38 +231,113 @@ class MusicScannerAgent(
     }
 
     /**
-     * Walk the directory-level tier ladder and return the release MBID the
-     * files resolve to, or null when nothing matched.
+     * True when the MusicBrainz release has a track slot for every file in
+     * the directory. We reject candidates that don't — this is how we
+     * avoid the "resolved to a 3-track promo but files claim track 8"
+     * failure mode where a later fall-through tier would have done better.
+     *
+     * Files without a parsed track number don't constrain the match
+     * (we'll rely on recording-MBID or skip them in [linkTagged]).
      */
-    private fun resolveReleaseIdForDir(tagged: List<TaggedFile>): String? {
+    private fun candidateAccommodatesFiles(
+        lookup: MusicBrainzReleaseLookup,
+        tagged: List<TaggedFile>
+    ): Boolean {
+        val positions = lookup.tracks.map { it.discNumber to it.trackNumber }.toSet()
+        for (tf in tagged) {
+            val trackNum = tf.tags.trackNumber ?: continue
+            val disc = tf.tags.discNumber ?: 1
+            if ((disc to trackNum) !in positions) return false
+        }
+        return true
+    }
+
+    /**
+     * Fetch release detail from MB and validate that it accommodates the
+     * files' (disc, track) positions. Returns the lookup on accept, or
+     * null when MB can't resolve the MBID or the release has the wrong
+     * shape for our files (caller falls through to the next tier).
+     */
+    private fun tryCandidate(
+        mbid: String,
+        tagged: List<TaggedFile>,
+        tierLabel: String,
+        dirHint: String
+    ): MusicBrainzReleaseLookup? {
+        val lookup = when (val r = musicBrainz.lookupByReleaseMbid(mbid)) {
+            is MusicBrainzResult.Success -> r.release
+            is MusicBrainzResult.NotFound -> {
+                log.info("Dir {}: tier={} candidate {} not found on MB", dirHint, tierLabel, mbid)
+                return null
+            }
+            is MusicBrainzResult.Error -> {
+                log.warn("Dir {}: tier={} candidate {} MB error: {} (rateLimited={})",
+                    dirHint, tierLabel, mbid, r.message, r.rateLimited)
+                return null
+            }
+        }
+        if (!candidateAccommodatesFiles(lookup, tagged)) {
+            val releasePositions = lookup.tracks.map { "${it.discNumber}.${it.trackNumber}" }
+            val filePositions = tagged.mapNotNull {
+                it.tags.trackNumber?.let { tn -> "${it.tags.discNumber ?: 1}.$tn" }
+            }.distinct()
+            log.info("Dir {}: tier={} candidate {} rejected — release has tracks {} but files need {}",
+                dirHint, tierLabel, mbid, releasePositions, filePositions)
+            return null
+        }
+        return lookup
+    }
+
+    /**
+     * Walk the tier ladder and return the first MB release whose track
+     * list accommodates the files' claimed (disc, track) positions, or
+     * null when none do. Each candidate goes through [tryCandidate],
+     * which validates before committing — prevents the "picked the
+     * 3-track promo because it came first in MB's ranked search hits
+     * when the real 15-track album was candidate #2" failure mode.
+     *
+     * Tier ordering (first-match-wins after validation):
+     *   1. MUSICBRAINZ_ALBUMID tag (unambiguous MBID)
+     *   2. UPC / BARCODE → MB barcode search
+     *   3. CATALOGNUMBER (+ optional LABEL) → MB catno search
+     *   4. Per-track ISRC
+     *   5. ALBUM ARTIST + ALBUM fuzzy search
+     *
+     * Multi-candidate tiers (3, 4, 5) iterate through every candidate
+     * until one validates. Single-candidate tiers (1, 2) only try the
+     * one MBID; validation failure falls through to the next tier.
+     */
+    private fun resolveReleaseForDir(tagged: List<TaggedFile>): MusicBrainzReleaseLookup? {
         val dirHint = tagged.firstOrNull()?.path?.parent?.toString() ?: "(unknown dir)"
 
         // Tier 1: dominant MBID across tagged files.
         val dominantMbid = tagged
             .mapNotNull { it.tags.musicBrainzReleaseId }
-            .groupingBy { it }
-            .eachCount()
+            .groupingBy { it }.eachCount()
             .maxByOrNull { it.value }?.key
         if (dominantMbid != null) {
-            log.info("Dir {}: tier=MBID hit={}", dirHint, dominantMbid)
-            return dominantMbid
+            tryCandidate(dominantMbid, tagged, "MBID", dirHint)?.let {
+                log.info("Dir {}: tier=MBID accepted {}", dirHint, dominantMbid)
+                return it
+            }
         }
 
         // Tier 2: dominant UPC via barcode search.
         val dominantUpc = tagged
             .mapNotNull { it.tags.upc?.takeIf { s -> s.isNotBlank() } }
-            .groupingBy { it }
-            .eachCount()
+            .groupingBy { it }.eachCount()
             .maxByOrNull { it.value }?.key
         if (dominantUpc != null) {
-            val result = musicBrainz.lookupByBarcode(dominantUpc)
-            when (result) {
+            when (val result = musicBrainz.lookupByBarcode(dominantUpc)) {
                 is MusicBrainzResult.Success -> {
-                    log.info("Dir {}: tier=UPC({}) hit={}", dirHint, dominantUpc, result.release.musicBrainzReleaseId)
-                    return result.release.musicBrainzReleaseId
+                    val mbid = result.release.musicBrainzReleaseId
+                    tryCandidate(mbid, tagged, "UPC($dominantUpc)", dirHint)?.let {
+                        log.info("Dir {}: tier=UPC({}) accepted {}", dirHint, dominantUpc, mbid)
+                        return it
+                    }
                 }
                 is MusicBrainzResult.NotFound ->
-                    log.info("Dir {}: tier=UPC({}) MB returned no releases", dirHint, dominantUpc)
+                    log.info("Dir {}: tier=UPC({}) not indexed by MB — falling through", dirHint, dominantUpc)
                 is MusicBrainzResult.Error ->
                     log.warn("Dir {}: tier=UPC({}) MB error: {} (rateLimited={})",
                         dirHint, dominantUpc, result.message, result.rateLimited)
@@ -272,42 +347,54 @@ class MusicScannerAgent(
         // Tier 3: dominant catalog# (scoped by dominant label when present).
         val dominantCatno = tagged
             .mapNotNull { it.tags.catalogNumber?.takeIf { s -> s.isNotBlank() } }
-            .groupingBy { it }
-            .eachCount()
+            .groupingBy { it }.eachCount()
             .maxByOrNull { it.value }?.key
         if (dominantCatno != null) {
             val dominantLabel = tagged
                 .mapNotNull { it.tags.label?.takeIf { s -> s.isNotBlank() } }
-                .groupingBy { it }
-                .eachCount()
+                .groupingBy { it }.eachCount()
                 .maxByOrNull { it.value }?.key
             val candidates = musicBrainz.searchByCatalogNumber(dominantCatno, dominantLabel)
-            if (candidates.isNotEmpty()) return candidates.first()
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "Catno($dominantCatno/${dominantLabel ?: "-"})", dirHint)?.let {
+                    log.info("Dir {}: tier=Catno({}/{}) accepted {} (of {} candidates)",
+                        dirHint, dominantCatno, dominantLabel ?: "-", mbid, candidates.size)
+                    return it
+                }
+            }
         }
 
-        // Tier 4: per-track ISRC. Try the first few; stop at the first
-        // release MBID any recording points to.
+        // Tier 4: per-track ISRC.
         val isrcs = tagged.mapNotNull { it.tags.isrc?.takeIf { s -> s.isNotBlank() } }.distinct()
         for (isrc in isrcs.take(3)) {
             val candidates = musicBrainz.searchByIsrc(isrc)
-            if (candidates.isNotEmpty()) return candidates.first()
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "ISRC($isrc)", dirHint)?.let {
+                    log.info("Dir {}: tier=ISRC({}) accepted {}", dirHint, isrc, mbid)
+                    return it
+                }
+            }
         }
 
-        // Tier 5: album-artist + album fuzzy search. Pick the most common
-        // combo — tracks on the same album should all share these.
+        // Tier 5: album-artist + album fuzzy search.
         val artistAlbumPair = tagged
             .mapNotNull { tf ->
                 val artist = tf.tags.albumArtist?.takeIf { s -> s.isNotBlank() } ?: return@mapNotNull null
                 val album = tf.tags.album?.takeIf { s -> s.isNotBlank() } ?: return@mapNotNull null
                 artist to album
             }
-            .groupingBy { it }
-            .eachCount()
+            .groupingBy { it }.eachCount()
             .maxByOrNull { it.value }?.key
         if (artistAlbumPair != null) {
             val (artist, album) = artistAlbumPair
             val candidates = musicBrainz.searchReleaseByArtistAndAlbum(artist, album)
-            if (candidates.isNotEmpty()) return candidates.first()
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "Artist+Album($artist / $album)", dirHint)?.let {
+                    log.info("Dir {}: tier=Artist+Album({} / {}) accepted {} (of {} candidates)",
+                        dirHint, artist, album, mbid, candidates.size)
+                    return it
+                }
+            }
         }
 
         return null
@@ -331,132 +418,189 @@ class MusicScannerAgent(
             log.info("Unmatched-audio reprocess: END — nothing to do")
             return
         }
-        val rows = allUnmatched.take(REPROCESS_LIMIT)
+        // Backoff ladder — rows that failed last cycle aren't retried next
+        // cycle. See EnrichmentBackoff for the durations. Stops the
+        // previously-observed "reprocess same file on every restart, pick
+        // same wrong release, fail to link, repeat" loop.
+        val now = clock.now()
+        val eligible = allUnmatched.filter {
+            EnrichmentBackoff.isEligibleForRetry(
+                it.resolve_last_attempt_at, it.resolve_no_progress_streak, now
+            )
+        }
+        val cooling = allUnmatched.size - eligible.size
+        val rows = eligible.take(REPROCESS_LIMIT)
         val startMillis = System.currentTimeMillis()
-        log.info("Unmatched-audio reprocess: START — {} row(s) pending, processing {} this cycle (cap={})",
-            allUnmatched.size, rows.size, REPROCESS_LIMIT)
+        log.info("Unmatched-audio reprocess: START — total={} eligible={} cooling={} processing={} (cap={})",
+            allUnmatched.size, eligible.size, cooling, rows.size, REPROCESS_LIMIT)
         var resolved = 0
         var noResolve = 0
         var noTitle = 0
         var noLink = 0
         for (row in rows) {
             if (!running.get()) break
-            val releaseMbid = resolveReleaseIdForRow(row)
-            if (releaseMbid == null) {
+            val tf = rowToTaggedFile(row)
+            val singleFileList = listOf(tf)
+            val resolvedLookup = resolveReleaseForRow(row, tf)
+            if (resolvedLookup == null) {
                 noResolve++
+                recordReprocessAttempt(row, madeProgress = false)
                 continue
             }
             try {
-                val title = findOrIngestTitleByRelease(releaseMbid)
+                val title = findOrIngestTitleByRelease(resolvedLookup.musicBrainzReleaseId, pre = resolvedLookup)
                 if (title == null) {
                     noTitle++
                     log.warn("Reprocess {}: resolved MBID {} but title ingest failed",
-                        row.file_path, releaseMbid)
+                        row.file_path, resolvedLookup.musicBrainzReleaseId)
+                    recordReprocessAttempt(row, madeProgress = false)
                     continue
                 }
                 val tracks = Track.findAll().filter { it.title_id == title.id }
-                val tf = TaggedFile(
-                    path = Path.of(row.file_path),
-                    ext = row.file_path.substringAfterLast('.', "").lowercase(),
-                    tags = AudioTagReader.AudioTags(
-                        title = row.parsed_title,
-                        album = row.parsed_album,
-                        albumArtist = row.parsed_album_artist,
-                        trackArtist = row.parsed_track_artist,
-                        trackNumber = row.parsed_track_number,
-                        discNumber = row.parsed_disc_number,
-                        year = null,
-                        durationSeconds = row.parsed_duration_seconds,
-                        musicBrainzReleaseId = releaseMbid,
-                        musicBrainzReleaseGroupId = row.parsed_mb_release_group_id,
-                        musicBrainzRecordingId = row.parsed_mb_recording_id,
-                        musicBrainzArtistId = null,
-                        upc = row.parsed_upc,
-                        isrc = row.parsed_isrc,
-                        catalogNumber = row.parsed_catalog_number,
-                        label = row.parsed_label
-                    )
+                val tfWithResolvedMbid = tf.copy(
+                    tags = tf.tags.copy(musicBrainzReleaseId = resolvedLookup.musicBrainzReleaseId)
                 )
-                if (linkTagged(tf, tracks)) {
+                if (linkTagged(tfWithResolvedMbid, tracks)) {
                     row.delete()
                     resolved++
                     populateEmbeddedArtIfMissing(title, tf.path.toFile())
                     log.info("Reprocessed unmatched audio: {} → title {} via MBID {}",
-                        row.file_path, title.id, releaseMbid)
+                        row.file_path, title.id, resolvedLookup.musicBrainzReleaseId)
                 } else {
                     noLink++
-                    // linkTagged already logged the specific reason; this is
-                    // just the roll-up marker so summary counts line up.
                     log.info("Reprocess {}: resolved MBID {} → title {} but no track linked",
-                        row.file_path, releaseMbid, title.id)
+                        row.file_path, resolvedLookup.musicBrainzReleaseId, title.id)
+                    recordReprocessAttempt(row, madeProgress = false)
                 }
             } catch (e: Exception) {
                 log.warn("Reprocess failed for {}: {}", row.file_path, e.message, e)
+                recordReprocessAttempt(row, madeProgress = false)
             }
+            // singleFileList / tf scoped for future per-dir grouping; unused today
+            @Suppress("UNUSED_VARIABLE") val _unused = singleFileList
         }
         val elapsedSec = (System.currentTimeMillis() - startMillis) / 1000.0
         log.info("Unmatched-audio reprocess: END — resolved={} noResolve={} noTitle={} noLink={} " +
-            "remaining={} elapsed={}s",
-            resolved, noResolve, noTitle, noLink,
+            "cooling={} remaining={} elapsed={}s",
+            resolved, noResolve, noTitle, noLink, cooling,
             (allUnmatched.size - resolved), "%.1f".format(elapsedSec))
     }
 
-    private fun resolveReleaseIdForRow(row: UnmatchedAudio): String? {
+    /**
+     * Update an unmatched row's backoff state after a reprocess attempt.
+     * Rows that successfully link are deleted earlier in the loop, so
+     * this is only invoked on no-progress outcomes.
+     */
+    private fun recordReprocessAttempt(row: UnmatchedAudio, madeProgress: Boolean) {
+        row.resolve_last_attempt_at = clock.now()
+        row.resolve_no_progress_streak = EnrichmentBackoff.nextStreak(
+            row.resolve_no_progress_streak, madeProgress
+        )
+        row.save()
+    }
+
+    /** Translate an UnmatchedAudio row into a [TaggedFile] for linking. */
+    private fun rowToTaggedFile(row: UnmatchedAudio): TaggedFile = TaggedFile(
+        path = Path.of(row.file_path),
+        ext = row.file_path.substringAfterLast('.', "").lowercase(),
+        tags = AudioTagReader.AudioTags(
+            title = row.parsed_title,
+            album = row.parsed_album,
+            albumArtist = row.parsed_album_artist,
+            trackArtist = row.parsed_track_artist,
+            trackNumber = row.parsed_track_number,
+            discNumber = row.parsed_disc_number,
+            year = null,
+            durationSeconds = row.parsed_duration_seconds,
+            musicBrainzReleaseId = row.parsed_mb_release_id,
+            musicBrainzReleaseGroupId = row.parsed_mb_release_group_id,
+            musicBrainzRecordingId = row.parsed_mb_recording_id,
+            musicBrainzArtistId = null,
+            upc = row.parsed_upc,
+            isrc = row.parsed_isrc,
+            catalogNumber = row.parsed_catalog_number,
+            label = row.parsed_label
+        )
+    )
+
+    /**
+     * Per-row resolution ladder matching [resolveReleaseForDir] but
+     * keyed on a single file's parsed tags. Validates each candidate
+     * against the row's claimed (disc, track) position before returning.
+     */
+    private fun resolveReleaseForRow(row: UnmatchedAudio, tf: TaggedFile): MusicBrainzReleaseLookup? {
         val who = row.file_path
-        row.parsed_mb_release_id?.takeIf { it.isNotBlank() }?.let {
-            log.info("Resolve {}: tier=MBID hit={}", who, it)
-            return it
+        val tagged = listOf(tf)
+
+        row.parsed_mb_release_id?.takeIf { it.isNotBlank() }?.let { mbid ->
+            tryCandidate(mbid, tagged, "MBID", who)?.let {
+                log.info("Resolve {}: tier=MBID accepted {}", who, mbid)
+                return it
+            }
         }
 
         row.parsed_upc?.takeIf { it.isNotBlank() }?.let { upc ->
-            val r = musicBrainz.lookupByBarcode(upc)
-            when (r) {
+            when (val r = musicBrainz.lookupByBarcode(upc)) {
                 is MusicBrainzResult.Success -> {
-                    log.info("Resolve {}: tier=UPC({}) hit={}", who, upc, r.release.musicBrainzReleaseId)
-                    return r.release.musicBrainzReleaseId
+                    val mbid = r.release.musicBrainzReleaseId
+                    tryCandidate(mbid, tagged, "UPC($upc)", who)?.let {
+                        log.info("Resolve {}: tier=UPC({}) accepted {}", who, upc, mbid)
+                        return it
+                    }
                 }
                 is MusicBrainzResult.NotFound ->
-                    log.info("Resolve {}: tier=UPC({}) MB returned no releases for that barcode", who, upc)
+                    log.info("Resolve {}: tier=UPC({}) not indexed by MB — falling through", who, upc)
                 is MusicBrainzResult.Error ->
                     log.warn("Resolve {}: tier=UPC({}) MB error: {} (rateLimited={})",
                         who, upc, r.message, r.rateLimited)
             }
         }
+
         row.parsed_catalog_number?.takeIf { it.isNotBlank() }?.let { catno ->
-            val hits = musicBrainz.searchByCatalogNumber(catno, row.parsed_label)
-            if (hits.isNotEmpty()) {
-                log.info("Resolve {}: tier=Catno({}/{}) hit={} (of {} candidates)",
-                    who, catno, row.parsed_label ?: "-", hits.first(), hits.size)
-                return hits.first()
-            } else {
+            val candidates = musicBrainz.searchByCatalogNumber(catno, row.parsed_label)
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "Catno($catno/${row.parsed_label ?: "-"})", who)?.let {
+                    log.info("Resolve {}: tier=Catno({}/{}) accepted {} (of {} candidates)",
+                        who, catno, row.parsed_label ?: "-", mbid, candidates.size)
+                    return it
+                }
+            }
+            if (candidates.isEmpty()) {
                 log.info("Resolve {}: tier=Catno({}/{}) no hits", who, catno, row.parsed_label ?: "-")
             }
         }
+
         row.parsed_isrc?.takeIf { it.isNotBlank() }?.let { isrc ->
-            val hits = musicBrainz.searchByIsrc(isrc)
-            if (hits.isNotEmpty()) {
-                log.info("Resolve {}: tier=ISRC({}) hit={} (of {} candidates)",
-                    who, isrc, hits.first(), hits.size)
-                return hits.first()
-            } else {
+            val candidates = musicBrainz.searchByIsrc(isrc)
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "ISRC($isrc)", who)?.let {
+                    log.info("Resolve {}: tier=ISRC({}) accepted {}", who, isrc, mbid)
+                    return it
+                }
+            }
+            if (candidates.isEmpty()) {
                 log.info("Resolve {}: tier=ISRC({}) no hits", who, isrc)
             }
         }
+
         val artist = row.parsed_album_artist?.takeIf { it.isNotBlank() }
         val album = row.parsed_album?.takeIf { it.isNotBlank() }
         if (artist != null && album != null) {
-            val hits = musicBrainz.searchReleaseByArtistAndAlbum(artist, album)
-            if (hits.isNotEmpty()) {
-                log.info("Resolve {}: tier=Artist+Album({} / {}) hit={} (of {} candidates)",
-                    who, artist, album, hits.first(), hits.size)
-                return hits.first()
-            } else {
+            val candidates = musicBrainz.searchReleaseByArtistAndAlbum(artist, album)
+            for (mbid in candidates) {
+                tryCandidate(mbid, tagged, "Artist+Album($artist / $album)", who)?.let {
+                    log.info("Resolve {}: tier=Artist+Album({} / {}) accepted {} (of {} candidates)",
+                        who, artist, album, mbid, candidates.size)
+                    return it
+                }
+            }
+            if (candidates.isEmpty()) {
                 log.info("Resolve {}: tier=Artist+Album({} / {}) no hits", who, artist, album)
             }
         } else {
             log.info("Resolve {}: tier=Artist+Album skipped (artist='{}' album='{}')", who, artist, album)
         }
-        log.warn("Resolve {}: no tier produced a release MBID (upc={}, catno={}, label={}, isrc={}, artist={}, album={})",
+        log.warn("Resolve {}: no tier produced a validated release (upc={}, catno={}, label={}, isrc={}, artist={}, album={})",
             who, row.parsed_upc, row.parsed_catalog_number, row.parsed_label,
             row.parsed_isrc, row.parsed_album_artist, row.parsed_album)
         return null
@@ -466,25 +610,33 @@ class MusicScannerAgent(
      * Returns the [Title] for the given MusicBrainz release MBID, ingesting
      * via MB if no matching Title exists yet. Null when MB itself can't
      * resolve the MBID or the lookup errors out.
+     *
+     * [pre] is an optional already-fetched MB release lookup — callers
+     * that validated a candidate can pass it through to skip the second
+     * round-trip to MusicBrainz.
      */
-    private fun findOrIngestTitleByRelease(releaseMbid: String): Title? {
+    private fun findOrIngestTitleByRelease(
+        releaseMbid: String,
+        pre: MusicBrainzReleaseLookup? = null
+    ): Title? {
         val existing = Title.findAll().firstOrNull {
             it.media_type == MediaType.ALBUM.name &&
                 it.musicbrainz_release_id == releaseMbid
         }
         if (existing != null) return existing
 
-        val result = musicBrainz.lookupByReleaseMbid(releaseMbid)
-        val success = when (result) {
-            is MusicBrainzResult.Success -> result
-            is MusicBrainzResult.NotFound -> {
-                log.warn("MusicBrainz release {} returned NotFound — can't ingest title", releaseMbid)
-                return null
-            }
-            is MusicBrainzResult.Error -> {
-                log.warn("MusicBrainz lookup for release {} failed: {} (rateLimited={})",
-                    releaseMbid, result.message, result.rateLimited)
-                return null
+        val release = pre ?: run {
+            when (val result = musicBrainz.lookupByReleaseMbid(releaseMbid)) {
+                is MusicBrainzResult.Success -> result.release
+                is MusicBrainzResult.NotFound -> {
+                    log.warn("MusicBrainz release {} returned NotFound — can't ingest title", releaseMbid)
+                    return null
+                }
+                is MusicBrainzResult.Error -> {
+                    log.warn("MusicBrainz lookup for release {} failed: {} (rateLimited={})",
+                        releaseMbid, result.message, result.rateLimited)
+                    return null
+                }
             }
         }
         // Digital edition — no UPC; the release-group key still dedupes
@@ -493,7 +645,7 @@ class MusicScannerAgent(
         val ingest = MusicIngestionService.ingest(
             upc = null,
             mediaFormat = MediaFormat.AUDIO_FLAC,
-            lookup = success.release,
+            lookup = release,
             clock = clock
         )
         return ingest.title

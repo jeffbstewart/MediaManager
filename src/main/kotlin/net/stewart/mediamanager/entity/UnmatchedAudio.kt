@@ -45,7 +45,11 @@ data class UnmatchedAudio(
     var match_status: String = UnmatchedAudioStatus.UNMATCHED.name,
     var linked_track_id: Long? = null,
     var discovered_at: LocalDateTime? = null,
-    var linked_at: LocalDateTime? = null
+    var linked_at: LocalDateTime? = null,
+    /** Last reprocess attempt (any outcome). Drives retry cooldown. */
+    var resolve_last_attempt_at: LocalDateTime? = null,
+    /** Consecutive no-progress reprocess attempts. Reset to 0 on progress. */
+    var resolve_no_progress_streak: Int = 0
 ) : KEntity<Long> {
     companion object : Dao<UnmatchedAudio, Long>(UnmatchedAudio::class.java)
 }
