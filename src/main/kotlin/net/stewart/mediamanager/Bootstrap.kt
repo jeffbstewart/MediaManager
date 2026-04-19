@@ -20,6 +20,7 @@ import net.stewart.mediamanager.service.PopulatePopularityUpdater
 import net.stewart.mediamanager.service.PopulateFileModifiedUpdater
 import net.stewart.mediamanager.service.PopulateCollectionUpdater
 import net.stewart.mediamanager.service.PopulateProductNameUpdater
+import net.stewart.mediamanager.service.BackfillFirstPartyImageSidecars
 import net.stewart.mediamanager.service.BulkTagUpdater
 import net.stewart.mediamanager.service.ManagedDirectoryService
 import net.stewart.mediamanager.service.MigrateOwnershipPhotosUpdater
@@ -139,6 +140,7 @@ object Bootstrap {
         SchemaUpdaterRunner.register(ClearOlImageCacheUpdater())
         SchemaUpdaterRunner.register(ClearUnmatchedAudioUpdater())
         SchemaUpdaterRunner.register(ClearAllAlbumsUpdater())
+        SchemaUpdaterRunner.register(BackfillFirstPartyImageSidecars())
         SchemaUpdaterRunner.runAll()
 
         ManagedDirectoryService.ensureManagedDirectories()
