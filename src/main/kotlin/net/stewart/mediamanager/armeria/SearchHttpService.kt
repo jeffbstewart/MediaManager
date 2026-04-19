@@ -41,8 +41,19 @@ class SearchHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx)
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
+        val results = searchForUser(query, user, limit)
+        return jsonResponse(gson.toJson(mapOf("results" to results, "query" to query)))
+    }
+
+    /**
+     * Core search logic, lifted out of the HTTP method so integration tests
+     * can exercise the full entity search matrix against an in-memory H2
+     * without needing an Armeria request context. Returns results sorted by
+     * descending score and capped at [limit].
+     */
+    internal fun searchForUser(query: String, user: AppUser, limit: Int = 100): List<Map<String, Any?>> {
         val q = query.trim().lowercase()
-        if (q.length < 2) return jsonResponse(gson.toJson(mapOf("results" to emptyList<Any>(), "query" to query)))
+        if (q.length < 2) return emptyList()
 
         val results = mutableListOf<Map<String, Any?>>()
         val queryTokens = q.split("\\s+".toRegex())
@@ -70,7 +81,17 @@ class SearchHttpService {
                 val type = when (title.media_type) {
                     MMMediaType.TV.name -> "tv"
                     MMMediaType.PERSONAL.name -> "personal"
+                    MMMediaType.BOOK.name -> "book"
+                    MMMediaType.ALBUM.name -> "album"
                     else -> "movie"
+                }
+                // "Playable" on search results means the video transcode is
+                // ready. Books and albums don't use that pipeline, so skip
+                // the transcode check for those media types — the library
+                // row on the title itself is what gates playback there.
+                val playable = when (title.media_type) {
+                    MMMediaType.BOOK.name, MMMediaType.ALBUM.name -> true
+                    else -> title.id in playableTitleIds
                 }
                 results.add(mapOf(
                     "type" to type,
@@ -78,7 +99,7 @@ class SearchHttpService {
                     "name" to title.name,
                     "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
                     "year" to title.release_year,
-                    "playable" to (title.id in playableTitleIds),
+                    "playable" to playable,
                     "score" to (title.popularity ?: 0.0)
                 ))
             }
@@ -99,6 +120,76 @@ class SearchHttpService {
                     // Gate on profile_path — see note in TitleDetailHttpService.
                     "headshot_url" to if (cm.profile_path != null) "/headshots/${cm.id}" else null,
                     "score" to (cm.popularity ?: 0.0)
+                ))
+            }
+        }
+
+        // --- 2b. Music artists (by name or biography) ---
+        // Name matches score higher than biography matches so "Miles Davis"
+        // surfaces the artist record ahead of unrelated artists whose bios
+        // happen to mention Miles.
+        for (a in Artist.findAll()) {
+            val nameLC = a.name.lowercase()
+            val nameHit = queryTokens.all { nameLC.contains(it) }
+            val bioHit = !nameHit && a.biography?.lowercase()?.let { bio ->
+                queryTokens.all { bio.contains(it) }
+            } == true
+            if (nameHit || bioHit) {
+                results.add(mapOf(
+                    "type" to "artist",
+                    "artist_id" to a.id,
+                    "name" to a.name,
+                    "headshot_url" to if (!a.headshot_path.isNullOrBlank() && a.id != null) "/artist-headshots/${a.id}" else null,
+                    // Score artists above collections/tags so a search like
+                    // "Miles Davis" puts the artist ahead of a tag named
+                    // "Miles", but below titles that actually match. Bio-only
+                    // matches score lower than name matches.
+                    "score" to if (nameHit) 7500.0 else 3500.0
+                ))
+            }
+        }
+
+        // --- 2c. Book authors (by name or biography) — same shape as artists. ---
+        for (a in Author.findAll()) {
+            val nameLC = a.name.lowercase()
+            val nameHit = queryTokens.all { nameLC.contains(it) }
+            val bioHit = !nameHit && a.biography?.lowercase()?.let { bio ->
+                queryTokens.all { bio.contains(it) }
+            } == true
+            if (nameHit || bioHit) {
+                results.add(mapOf(
+                    "type" to "author",
+                    "author_id" to a.id,
+                    "name" to a.name,
+                    "headshot_url" to if (!a.headshot_path.isNullOrBlank() && a.id != null) "/author-headshots/${a.id}" else null,
+                    "score" to if (nameHit) 7500.0 else 3500.0
+                ))
+            }
+        }
+
+        // --- 2d. Tracks (by song title) ---
+        // Resolve to the album title's detail page since there's no per-track
+        // surface. Dedup within an album if multiple tracks happen to share
+        // a token-identical name (unusual but possible on compilations).
+        val allTitlesByIdForTracks = Title.findAll().associateBy { it.id }
+        for (track in Track.findAll()) {
+            val nameLC = track.name.lowercase()
+            if (queryTokens.all { nameLC.contains(it) }) {
+                val album = allTitlesByIdForTracks[track.title_id] ?: continue
+                if (!user.canSeeRating(album.content_rating)) continue
+                if (album.hidden) continue
+                results.add(mapOf(
+                    "type" to "track",
+                    "track_id" to track.id,
+                    "title_id" to album.id,
+                    "name" to track.name,
+                    "album_name" to album.name,
+                    "poster_url" to album.posterUrl(PosterSize.THUMBNAIL),
+                    // Tracks sit just above collections/tags but below named
+                    // entities — a user typing a well-known song name usually
+                    // wants the track first, but if they typed a band name
+                    // the artist should still win.
+                    "score" to 5500.0
                 ))
             }
         }
@@ -166,9 +257,7 @@ class SearchHttpService {
         }
 
         // Sort by score descending, limit
-        val sorted = results.sortedByDescending { (it["score"] as? Number)?.toDouble() ?: 0.0 }.take(limit)
-
-        return jsonResponse(gson.toJson(mapOf("results" to sorted, "query" to query)))
+        return results.sortedByDescending { (it["score"] as? Number)?.toDouble() ?: 0.0 }.take(limit)
     }
 
     private fun jsonResponse(json: String): HttpResponse {

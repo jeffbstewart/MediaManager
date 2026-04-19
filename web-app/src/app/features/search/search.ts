@@ -56,8 +56,13 @@ export class SearchComponent implements OnInit, OnDestroy {
 
   resultRoute(item: SearchResult): string {
     switch (item.type) {
-      case 'movie': case 'tv': case 'personal': return `/title/${item.title_id}`;
+      case 'movie': case 'tv': case 'personal':
+      case 'book': case 'album':
+      case 'track':
+        return `/title/${item.title_id}`;
       case 'actor': return `/actor/${item.person_id}`;
+      case 'artist': return `/artist/${item.artist_id}`;
+      case 'author': return `/author/${item.author_id}`;
       case 'collection': return `/content/collection/${item.collection_id}`;
       case 'tag': return `/tag/${item.tag_id}`;
       case 'channel': return `/live-tv/${item.channel_id}`;
@@ -71,7 +76,12 @@ export class SearchComponent implements OnInit, OnDestroy {
       case 'movie': return 'Movie';
       case 'tv': return 'TV Show';
       case 'personal': return 'Family Video';
+      case 'book': return 'Book';
+      case 'album': return 'Album';
+      case 'track': return 'Track';
       case 'actor': return 'Actor';
+      case 'artist': return 'Artist';
+      case 'author': return 'Author';
       case 'collection': return 'Collection';
       case 'tag': return 'Tag';
       case 'channel': return 'TV Channel';

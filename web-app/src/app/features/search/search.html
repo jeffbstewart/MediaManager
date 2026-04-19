@@ -21,6 +21,13 @@
                 <mat-icon>
                   @switch (item.type) {
                     @case ('actor') { person }
+                    @case ('artist') { person }
+                    @case ('author') { person }
+                    @case ('book') { menu_book }
+                    @case ('album') { album }
+                    @case ('track') { music_note }
+                    @case ('tv') { tv }
+                    @case ('personal') { family_restroom }
                     @case ('collection') { collections_bookmark }
                     @case ('tag') { label }
                     @case ('channel') { live_tv }

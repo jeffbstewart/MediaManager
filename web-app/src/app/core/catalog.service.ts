@@ -408,16 +408,22 @@ export interface TmdbSearchResponse {
 }
 
 export interface SearchResult {
-  type: 'movie' | 'tv' | 'personal' | 'actor' | 'collection' | 'tag' | 'channel' | 'camera';
+  type: 'movie' | 'tv' | 'personal' | 'book' | 'album' | 'track'
+      | 'actor' | 'artist' | 'author'
+      | 'collection' | 'tag' | 'channel' | 'camera';
   name: string;
   title_id?: number;
+  track_id?: number;
   person_id?: number;
+  artist_id?: number;
+  author_id?: number;
   collection_id?: number;
   tag_id?: number;
   channel_id?: number;
   camera_id?: number;
   poster_url?: string | null;
   headshot_url?: string | null;
+  album_name?: string | null;
   year?: number | null;
   playable?: boolean;
   bg_color?: string;

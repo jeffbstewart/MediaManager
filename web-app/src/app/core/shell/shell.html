@@ -212,7 +212,8 @@
             @for (item of suggestions(); track item.name + item.type) {
               <a class="suggestion-item" [routerLink]="resultRoute(item)"
                  (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
-                @if (item.type === 'movie' || item.type === 'tv' || item.type === 'personal') {
+                @if (item.type === 'movie' || item.type === 'tv' || item.type === 'personal'
+                     || item.type === 'book' || item.type === 'album' || item.type === 'track') {
                   @if (item.poster_url) {
                     <img [src]="item.poster_url" class="suggestion-thumb" alt="" />
                   } @else {
@@ -220,9 +221,11 @@
                   }
                   <div class="suggestion-text">
                     <span class="suggestion-name">{{ item.name }}</span>
-                    <span class="suggestion-sub">{{ typeLabel(item.type) }}{{ item.year ? ' · ' + item.year : '' }}</span>
+                    <span class="suggestion-sub">
+                      {{ typeLabel(item.type) }}{{ item.year ? ' · ' + item.year : '' }}{{ item.album_name ? ' · ' + item.album_name : '' }}
+                    </span>
                   </div>
-                } @else if (item.type === 'actor') {
+                } @else if (item.type === 'actor' || item.type === 'artist' || item.type === 'author') {
                   @if (item.headshot_url) {
                     <img [src]="item.headshot_url" class="suggestion-thumb actor" alt="" />
                   } @else {
@@ -230,7 +233,7 @@
                   }
                   <div class="suggestion-text">
                     <span class="suggestion-name">{{ item.name }}</span>
-                    <span class="suggestion-sub">Actor</span>
+                    <span class="suggestion-sub">{{ typeLabel(item.type) }}</span>
                   </div>
                 } @else if (item.type === 'tag') {
                   <span class="suggestion-tag-pill"
