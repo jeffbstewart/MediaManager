@@ -8,6 +8,8 @@
     <div class="hero">
       @if (a.headshot_url) {
         <img [src]="a.headshot_url" [alt]="a.name" class="profile-img" />
+      } @else if (heroFallbackUrl(); as fallback) {
+        <img [src]="fallback" [alt]="a.name" class="profile-img fallback" />
       } @else {
         <div class="profile-placeholder">
           <mat-icon>{{ a.artist_type === 'PERSON' ? 'person' : 'groups' }}</mat-icon>

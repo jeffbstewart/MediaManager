@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -23,6 +23,14 @@ export class AuthorComponent implements OnInit {
   readonly error = signal('');
   readonly author = signal<AuthorDetail | null>(null);
   readonly bioExpanded = signal(false);
+
+  // Parallels ArtistComponent.heroFallbackUrl — book cover stands in for the
+  // portrait when the author hasn't been enriched yet.
+  readonly heroFallbackUrl = computed<string | null>(() => {
+    const a = this.author();
+    if (!a || a.headshot_url) return null;
+    return a.owned_books?.[0]?.poster_url ?? null;
+  });
 
   async ngOnInit(): Promise<void> {
     const id = Number(this.route.snapshot.paramMap.get('authorId'));

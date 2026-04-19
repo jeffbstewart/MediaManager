@@ -12,8 +12,8 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -44,7 +44,13 @@ class ArtistEnrichmentAgent(
         .build()
 
     companion object {
-        private val CYCLE_INTERVAL = 1.hours
+        // Cycle between batches. Long idle poll when the queue is empty,
+        // short active gap when there's more work queued up. MB's
+        // 1-req/sec rate limit is enforced inside a batch via MB_GAP;
+        // the inter-batch gap here only has to be long enough to keep
+        // the CPU + log noise down.
+        private val ACTIVE_CYCLE = 15.seconds
+        private val IDLE_CYCLE = 5.minutes
         private val MB_GAP = 1100.milliseconds               // 1.1s per MB's ask
         private val WIKI_GAP = 1.seconds                     // Wikipedia is more permissive
         private val STARTUP_DELAY = 45.seconds
@@ -60,18 +66,20 @@ class ArtistEnrichmentAgent(
     fun start() {
         if (running.getAndSet(true)) return
         thread = Thread({
-            log.info("ArtistEnrichmentAgent started (cycle every {}m, batch {})",
-                CYCLE_INTERVAL.inWholeMinutes, BATCH_SIZE)
+            log.info("ArtistEnrichmentAgent started (active {}s / idle {}m, batch {})",
+                ACTIVE_CYCLE.inWholeSeconds, IDLE_CYCLE.inWholeMinutes, BATCH_SIZE)
             try { clock.sleep(STARTUP_DELAY) } catch (_: InterruptedException) { return@Thread }
             while (running.get()) {
-                try {
+                val processed = try {
                     enrichBatch()
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
                     log.error("ArtistEnrichmentAgent error: {}", e.message, e)
+                    0
                 }
-                try { clock.sleep(CYCLE_INTERVAL) } catch (_: InterruptedException) { break }
+                val wait = if (processed > 0) ACTIVE_CYCLE else IDLE_CYCLE
+                try { clock.sleep(wait) } catch (_: InterruptedException) { break }
             }
             log.info("ArtistEnrichmentAgent stopped")
         }, "artist-enrichment").apply {
@@ -86,7 +94,8 @@ class ArtistEnrichmentAgent(
         thread = null
     }
 
-    internal fun enrichBatch() {
+    /** Returns the number of artists actually processed in this batch. */
+    internal fun enrichBatch(): Int {
         val candidates = Artist.findAll()
             .asSequence()
             .filter { needsEnrichment(it) }
@@ -94,7 +103,7 @@ class ArtistEnrichmentAgent(
             .toList()
         if (candidates.isEmpty()) {
             log.debug("No artists need enrichment")
-            return
+            return 0
         }
         log.info("Enriching {} artist(s)", candidates.size)
 
@@ -110,6 +119,7 @@ class ArtistEnrichmentAgent(
                     artist.id, artist.musicbrainz_artist_id, e.message)
             }
         }
+        return candidates.size
     }
 
     internal fun needsEnrichment(a: Artist): Boolean {

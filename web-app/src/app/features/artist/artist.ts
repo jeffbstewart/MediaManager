@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -23,6 +23,17 @@ export class ArtistComponent implements OnInit {
   readonly error = signal('');
   readonly artist = signal<ArtistDetail | null>(null);
   readonly bioExpanded = signal(false);
+
+  // When no headshot is cached (ArtistEnrichmentAgent hasn't reached this
+  // artist yet, or Wikipedia has no thumbnail), use the first owned album
+  // cover as a visual fallback. The small icon-only placeholder orphans a
+  // 200px tall box next to an empty bio column; an album cover gives the
+  // page an identity and matches the albums grid immediately below.
+  readonly heroFallbackUrl = computed<string | null>(() => {
+    const a = this.artist();
+    if (!a || a.headshot_url) return null;
+    return a.owned_albums?.[0]?.poster_url ?? null;
+  });
 
   async ngOnInit(): Promise<void> {
     const id = Number(this.route.snapshot.paramMap.get('artistId'));

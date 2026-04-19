@@ -14,7 +14,6 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -45,7 +44,11 @@ class AuthorEnrichmentAgent(
         .build()
 
     companion object {
-        private val CYCLE_INTERVAL = 1.hours
+        // Active cycle gap while there's a backlog; longer idle poll once
+        // we're caught up. Open Library is forgiving on rate limits, so
+        // the real constraint is API_GAP (1 req/sec) inside a batch.
+        private val ACTIVE_CYCLE = 15.seconds
+        private val IDLE_CYCLE = 5.minutes
         private val API_GAP = 1.seconds
         private val STARTUP_DELAY = 30.seconds
         private const val BATCH_SIZE = 20
@@ -61,18 +64,20 @@ class AuthorEnrichmentAgent(
     fun start() {
         if (running.getAndSet(true)) return
         thread = Thread({
-            log.info("AuthorEnrichmentAgent started (cycle every {}m, batch {})",
-                CYCLE_INTERVAL.inWholeMinutes, BATCH_SIZE)
+            log.info("AuthorEnrichmentAgent started (active {}s / idle {}m, batch {})",
+                ACTIVE_CYCLE.inWholeSeconds, IDLE_CYCLE.inWholeMinutes, BATCH_SIZE)
             try { clock.sleep(STARTUP_DELAY) } catch (_: InterruptedException) { return@Thread }
             while (running.get()) {
-                try {
+                val processed = try {
                     enrichBatch()
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
                     log.error("AuthorEnrichmentAgent error: {}", e.message, e)
+                    0
                 }
-                try { clock.sleep(CYCLE_INTERVAL) } catch (_: InterruptedException) { break }
+                val wait = if (processed > 0) ACTIVE_CYCLE else IDLE_CYCLE
+                try { clock.sleep(wait) } catch (_: InterruptedException) { break }
             }
             log.info("AuthorEnrichmentAgent stopped")
         }, "author-enrichment").apply {
@@ -87,7 +92,8 @@ class AuthorEnrichmentAgent(
         thread = null
     }
 
-    internal fun enrichBatch() {
+    /** Returns the number of authors actually processed in this batch. */
+    internal fun enrichBatch(): Int {
         val candidates = Author.findAll()
             .asSequence()
             .filter { needsEnrichment(it) }
@@ -96,7 +102,7 @@ class AuthorEnrichmentAgent(
 
         if (candidates.isEmpty()) {
             log.debug("No authors need enrichment")
-            return
+            return 0
         }
         log.info("Enriching {} author(s)", candidates.size)
 
@@ -112,6 +118,7 @@ class AuthorEnrichmentAgent(
                     author.id, author.open_library_author_id, e.message)
             }
         }
+        return candidates.size
     }
 
     /**

@@ -13,8 +13,8 @@ import org.slf4j.LoggerFactory
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -50,7 +50,10 @@ class PersonnelEnrichmentAgent(
     private var thread: Thread? = null
 
     companion object {
-        private val CYCLE_INTERVAL = 1.hours
+        // See ArtistEnrichmentAgent for the active/idle rationale. MB's
+        // 1 req/sec rate limit is honored inside each batch via MB_GAP.
+        private val ACTIVE_CYCLE = 15.seconds
+        private val IDLE_CYCLE = 5.minutes
         private val STARTUP_DELAY = 75.seconds
         private val MB_GAP = 1100.milliseconds
         private const val ARTIST_BATCH = 10
@@ -60,17 +63,20 @@ class PersonnelEnrichmentAgent(
     fun start() {
         if (running.getAndSet(true)) return
         thread = Thread({
-            log.info("PersonnelEnrichmentAgent started (cycle every {}m)", CYCLE_INTERVAL.inWholeMinutes)
+            log.info("PersonnelEnrichmentAgent started (active {}s / idle {}m)",
+                ACTIVE_CYCLE.inWholeSeconds, IDLE_CYCLE.inWholeMinutes)
             try { clock.sleep(STARTUP_DELAY) } catch (_: InterruptedException) { return@Thread }
             while (running.get()) {
-                try {
+                val processed = try {
                     enrichOnce()
                 } catch (_: InterruptedException) {
                     break
                 } catch (e: Exception) {
                     log.error("PersonnelEnrichmentAgent error: {}", e.message, e)
+                    0
                 }
-                try { clock.sleep(CYCLE_INTERVAL) } catch (_: InterruptedException) { break }
+                val wait = if (processed > 0) ACTIVE_CYCLE else IDLE_CYCLE
+                try { clock.sleep(wait) } catch (_: InterruptedException) { break }
             }
             log.info("PersonnelEnrichmentAgent stopped")
         }, "personnel-enrichment").apply {
@@ -85,16 +91,18 @@ class PersonnelEnrichmentAgent(
         thread = null
     }
 
-    internal fun enrichOnce() {
-        enrichArtistMemberships()
-        enrichAlbumPersonnel()
+    /** Returns the total number of artists + albums processed this cycle. */
+    internal fun enrichOnce(): Int {
+        val a = enrichArtistMemberships()
+        val b = enrichAlbumPersonnel()
+        return a + b
     }
 
     // -------------------------------------------------------------------
     // Pass 1: artist memberships
     // -------------------------------------------------------------------
 
-    private fun enrichArtistMemberships() {
+    private fun enrichArtistMemberships(): Int {
         val allArtists = Artist.findAll()
         val allMemberships = ArtistMembership.findAll()
         val touchedIds = allMemberships
@@ -112,7 +120,7 @@ class PersonnelEnrichmentAgent(
 
         if (candidates.isEmpty()) {
             log.debug("No artists need membership enrichment")
-            return
+            return 0
         }
         log.info("Enriching memberships for {} artist(s)", candidates.size)
 
@@ -146,6 +154,7 @@ class PersonnelEnrichmentAgent(
                     artist.id, artist.musicbrainz_artist_id, e.message)
             }
         }
+        return candidates.size
     }
 
     private fun upsertMemberships(
@@ -198,7 +207,7 @@ class PersonnelEnrichmentAgent(
     // Pass 2: per-track recording credits on owned albums
     // -------------------------------------------------------------------
 
-    private fun enrichAlbumPersonnel() {
+    private fun enrichAlbumPersonnel(): Int {
         val allTitles = Title.findAll()
         val allTracks = Track.findAll()
         val allCredits = RecordingCredit.findAll()
@@ -221,7 +230,7 @@ class PersonnelEnrichmentAgent(
 
         if (titleCandidates.isEmpty()) {
             log.debug("No albums need personnel enrichment")
-            return
+            return 0
         }
         log.info("Enriching personnel for {} album(s)", titleCandidates.size)
 
@@ -243,6 +252,7 @@ class PersonnelEnrichmentAgent(
                     title.id, title.name, e.message)
             }
         }
+        return titleCandidates.size
     }
 
     private fun enrichAlbumPersonnel(
