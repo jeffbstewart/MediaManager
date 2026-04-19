@@ -243,6 +243,13 @@ message Title {
   optional int32 resume_season_number = 21;
   optional int32 resume_episode_number = 22;
   optional string resume_episode_name = 23;
+
+  // Primary-credit context for book + album list cards. Server
+  // populates only when the credit is relevant — artist_name for
+  // ALBUM titles, author_name for BOOK titles. Absent on MOVIE /
+  // TV / PERSONAL titles.
+  optional string artist_name = 24;
+  optional string author_name = 25;
 }
 
 // Full title detail. Embeds Title to avoid field duplication, then adds

@@ -42,6 +42,10 @@ export interface TitleCard {
   content_rating: string | null;
   playable: boolean;
   progress_fraction: number | null;
+  /** Primary album artist — populated only when media_type is ALBUM. */
+  artist_name?: string | null;
+  /** Primary book author — populated only when media_type is BOOK. */
+  author_name?: string | null;
 }
 
 export interface TitleListResponse {
@@ -69,7 +73,7 @@ export function tmdbImageUrl(
   if (!path) return null;
   return `/proxy/tmdb/${size}/${path.replace(/^\/+/, '')}`;
 }
-export type SortMode = 'name' | 'year' | 'recent' | 'popular';
+export type SortMode = 'name' | 'year' | 'recent' | 'popular' | 'artist' | 'author';
 
 export interface TitleListParams {
   mediaType: MediaType;

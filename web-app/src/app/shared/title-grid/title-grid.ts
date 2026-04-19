@@ -38,12 +38,34 @@ export class TitleGridComponent implements OnInit {
   readonly selectedRatings = signal<Set<string>>(new Set());
   readonly sortMode = signal<SortMode>('name');
 
-  readonly sortOptions: { value: SortMode; label: string }[] = [
-    { value: 'name', label: 'Name' },
-    { value: 'year', label: 'Year' },
-    { value: 'recent', label: 'Recent' },
-    { value: 'popular', label: 'Popular' },
-  ];
+  // Sort chips vary by media type. Books and albums replace "Popular"
+  // (no ingestion populates it for those types) with the primary-credit
+  // sort — author for books, album artist for music.
+  readonly sortOptions = computed<{ value: SortMode; label: string }[]>(() => {
+    switch (this.mediaType()) {
+      case 'ALBUM':
+        return [
+          { value: 'name', label: 'Name' },
+          { value: 'artist', label: 'Artist' },
+          { value: 'year', label: 'Year' },
+          { value: 'recent', label: 'Recent' },
+        ];
+      case 'BOOK':
+        return [
+          { value: 'name', label: 'Name' },
+          { value: 'author', label: 'Author' },
+          { value: 'year', label: 'Year' },
+          { value: 'recent', label: 'Recent' },
+        ];
+      default:
+        return [
+          { value: 'name', label: 'Name' },
+          { value: 'year', label: 'Year' },
+          { value: 'recent', label: 'Recent' },
+          { value: 'popular', label: 'Popular' },
+        ];
+    }
+  });
 
   async ngOnInit(): Promise<void> {
     await this.refresh();

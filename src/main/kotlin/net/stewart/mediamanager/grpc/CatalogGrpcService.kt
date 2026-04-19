@@ -306,6 +306,8 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                 MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE.name
                 MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV.name
                 MediaType.MEDIA_TYPE_PERSONAL -> MediaTypeEnum.PERSONAL.name
+                MediaType.MEDIA_TYPE_BOOK -> MediaTypeEnum.BOOK.name
+                MediaType.MEDIA_TYPE_ALBUM -> MediaTypeEnum.ALBUM.name
                 else -> null
             }
             if (typeStr != null) {
@@ -342,11 +344,27 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             titles = titles.filter { it.id in playableTitleIds }
         }
 
-        // Sort
+        // Primary artist / author lookups, keyed by title_id. Loaded once
+        // per request so per-title proto construction stays O(1). Albums
+        // populate artist_name, books populate author_name.
+        val primaryArtistByTitle: Map<Long, String> = buildPrimaryArtistNameMap()
+        val primaryAuthorByTitle: Map<Long, String> = buildPrimaryAuthorNameMap()
+
+        // Sort. `artist` / `author` are media-type-specific; they fall
+        // through to a name tiebreaker so albums with no linked artist
+        // (or books with no author) don't cluster at random positions.
         titles = when (sort) {
             "name" -> titles.sortedBy { it.sort_name ?: it.name.lowercase() }
             "year" -> titles.sortedByDescending { it.release_year ?: 0 }
             "recent" -> titles.sortedByDescending { it.created_at }
+            "artist" -> titles.sortedWith(compareBy(
+                { primaryArtistByTitle[it.id ?: 0L]?.lowercase() ?: "\uFFFF" },
+                { (it.sort_name ?: it.name).lowercase() }
+            ))
+            "author" -> titles.sortedWith(compareBy(
+                { primaryAuthorByTitle[it.id ?: 0L]?.lowercase() ?: "\uFFFF" },
+                { (it.sort_name ?: it.name).lowercase() }
+            ))
             else -> titles.sortedByDescending { it.popularity ?: 0.0 }
         }
 
@@ -358,7 +376,13 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val familyNames = loadFamilyMemberNames()
         val protoTitles = pageTitles.map { title ->
             val tc = catalog.playableByTitle[title.id]?.firstOrNull()
-            title.toProto(tc, nasRoot, familyNames[title.id])
+            title.toProto(
+                tc,
+                nasRoot,
+                familyNames[title.id],
+                artistName = title.id?.let { primaryArtistByTitle[it] },
+                authorName = title.id?.let { primaryAuthorByTitle[it] }
+            )
         }
 
         return titlePageResponse {
@@ -748,6 +772,27 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             .minByOrNull { it.artist_order }
             ?: return null
         return Artist.findById(link.artist_id)?.name
+    }
+
+    // Bulk variants for list endpoints — one query for the whole page
+    // instead of one per title. Returns title_id → primary artist/author
+    // name, keyed on artist_order / author_order = 0.
+    private fun buildPrimaryArtistNameMap(): Map<Long, String> {
+        val primaryLinks = TitleArtist.findAll().filter { it.artist_order == 0 }
+        val artistIds = primaryLinks.map { it.artist_id }.toSet()
+        val artistsById = Artist.findAll().filter { it.id in artistIds }.associateBy { it.id }
+        return primaryLinks.mapNotNull { link ->
+            artistsById[link.artist_id]?.let { link.title_id to it.name }
+        }.toMap()
+    }
+
+    private fun buildPrimaryAuthorNameMap(): Map<Long, String> {
+        val primaryLinks = TitleAuthor.findAll().filter { it.author_order == 0 }
+        val authorIds = primaryLinks.map { it.author_id }.toSet()
+        val authorsById = Author.findAll().filter { it.id in authorIds }.associateBy { it.id }
+        return primaryLinks.mapNotNull { link ->
+            authorsById[link.author_id]?.let { link.title_id to it.name }
+        }.toMap()
     }
 
     // ========================================================================

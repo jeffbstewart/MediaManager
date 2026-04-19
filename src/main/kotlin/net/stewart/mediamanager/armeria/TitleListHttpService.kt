@@ -9,11 +9,15 @@ import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.UserTitleFlag
@@ -134,11 +138,32 @@ class TitleListHttpService {
         // Progress by title
         val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(userId)
 
-        // Sort
+        // Primary artist / author lookups — only populated for the media
+        // type that needs them (albums / books respectively). The list
+        // endpoint needs these so the grid can label cards with the
+        // performer, not just the title.
+        val primaryArtistByTitle: Map<Long, Artist> =
+            if (mmType == MMMediaType.ALBUM) buildPrimaryArtistMap() else emptyMap()
+        val primaryAuthorByTitle: Map<Long, Author> =
+            if (mmType == MMMediaType.BOOK) buildPrimaryAuthorMap() else emptyMap()
+
+        // Sort. `artist` / `author` are only meaningful for their respective
+        // media types and fall through to name sort otherwise. `popular` is
+        // a no-op for books + albums (neither carries popularity data yet),
+        // but the client hides the chip there so we never actually receive
+        // it — falling through to name is fine if someone hits the URL.
         titles = when (sort) {
             "year" -> titles.sortedByDescending { it.release_year ?: 0 }
             "recent" -> titles.sortedByDescending { it.created_at }
             "popular" -> titles.sortedByDescending { it.popularity ?: 0.0 }
+            "artist" -> titles.sortedWith(compareBy(
+                { primaryArtistByTitle[it.id ?: 0L]?.let { a -> a.sort_name.ifBlank { a.name } }?.lowercase() ?: "\uFFFF" },
+                { (it.sort_name ?: it.name).lowercase() }
+            ))
+            "author" -> titles.sortedWith(compareBy(
+                { primaryAuthorByTitle[it.id ?: 0L]?.let { a -> a.sort_name.ifBlank { a.name } }?.lowercase() ?: "\uFFFF" },
+                { (it.sort_name ?: it.name).lowercase() }
+            ))
             else -> titles.sortedBy { (it.sort_name ?: it.name).lowercase() }
         }
 
@@ -149,7 +174,7 @@ class TitleListHttpService {
                 (progress.position_seconds / dur).coerceIn(0.0, 1.0)
             } else null
 
-            mapOf(
+            val card = mutableMapOf<String, Any?>(
                 "title_id" to title.id,
                 "title_name" to title.name,
                 "poster_url" to title.posterUrl(PosterSize.THUMBNAIL),
@@ -158,6 +183,9 @@ class TitleListHttpService {
                 "playable" to (title.id in playableTitleIds),
                 "progress_fraction" to progressFraction
             )
+            primaryArtistByTitle[title.id ?: 0L]?.let { card["artist_name"] = it.name }
+            primaryAuthorByTitle[title.id ?: 0L]?.let { card["author_name"] = it.name }
+            card
         }
 
         val response = mapOf(
@@ -170,5 +198,25 @@ class TitleListHttpService {
             .status(HttpStatus.OK)
             .content(MediaType.JSON_UTF_8, gson.toJson(response))
             .build()
+    }
+
+    // title_id → primary (artist_order = 0) Artist. Loaded once per list
+    // request so the per-title loop stays O(1).
+    private fun buildPrimaryArtistMap(): Map<Long, Artist> {
+        val primaryLinks = TitleArtist.findAll().filter { it.artist_order == 0 }
+        val artistIds = primaryLinks.map { it.artist_id }.toSet()
+        val artistsById = Artist.findAll().filter { it.id in artistIds }.associateBy { it.id }
+        return primaryLinks.mapNotNull { link ->
+            artistsById[link.artist_id]?.let { link.title_id to it }
+        }.toMap()
+    }
+
+    private fun buildPrimaryAuthorMap(): Map<Long, Author> {
+        val primaryLinks = TitleAuthor.findAll().filter { it.author_order == 0 }
+        val authorIds = primaryLinks.map { it.author_id }.toSet()
+        val authorsById = Author.findAll().filter { it.id in authorIds }.associateBy { it.id }
+        return primaryLinks.mapNotNull { link ->
+            authorsById[link.author_id]?.let { link.title_id to it }
+        }.toMap()
     }
 }

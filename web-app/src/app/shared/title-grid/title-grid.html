@@ -20,7 +20,7 @@
   <!-- Sort chips -->
   <span class="chip-separator">&middot;</span>
   <mat-chip-set>
-    @for (opt of sortOptions; track opt.value) {
+    @for (opt of sortOptions(); track opt.value) {
       <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
         {{ opt.label }}
       </mat-chip>
@@ -59,6 +59,11 @@
           }
         </div>
         <span class="poster-title">{{ title.title_name }}</span>
+        @if (title.artist_name) {
+          <span class="poster-credit">{{ title.artist_name }}</span>
+        } @else if (title.author_name) {
+          <span class="poster-credit">{{ title.author_name }}</span>
+        }
         @if (title.release_year) {
           <span class="poster-meta">{{ title.release_year }}</span>
         }

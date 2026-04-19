@@ -220,7 +220,9 @@ fun hasSubtitleFile(transcode: TranscodeEntity, nasRoot: String?): Boolean {
 fun TitleEntity.toProto(
     bestTranscode: TranscodeEntity? = null,
     nasRoot: String? = null,
-    familyNames: List<String>? = null
+    familyNames: List<String>? = null,
+    artistName: String? = null,
+    authorName: String? = null
 ): Title = title {
     id = this@toProto.id!!
     name = this@toProto.name
@@ -240,6 +242,8 @@ fun TitleEntity.toProto(
     familyNames?.let { this.familyMembers.addAll(it) }
     highQualityTranscodeAvailable = bestTranscode?.file_path != null
     lowStorageTranscodeAvailable = bestTranscode?.for_mobile_available == true
+    artistName?.takeIf { it.isNotBlank() }?.let { this.artistName = it }
+    authorName?.takeIf { it.isNotBlank() }?.let { this.authorName = it }
 }
 
 fun TranscodeEntity.toProto(

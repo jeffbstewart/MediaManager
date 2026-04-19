@@ -124,3 +124,11 @@
   font-size: 0.6875rem;
   opacity: 0.5;
 }
+
+.poster-credit {
+  font-size: 0.6875rem;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
