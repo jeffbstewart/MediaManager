@@ -56,7 +56,16 @@ object ArtistHeadshotCacheService {
             return null
         }
 
-        return if (fetchAndWrite(source, dest)) dest else null
+        if (!fetchAndWrite(source, dest)) return null
+        MetadataWriter.writeSidecar(dest, ImageMetadata.internet(
+            provider = "wikimedia-artist",
+            cacheKey = artistId.toString(),
+            upstreamUrl = source,
+            subjectType = "artist",
+            subjectId = artistId,
+            contentType = "image/jpeg"
+        ))
+        return dest
     }
 
     private fun fetchAndWrite(url: String, dest: Path): Boolean {

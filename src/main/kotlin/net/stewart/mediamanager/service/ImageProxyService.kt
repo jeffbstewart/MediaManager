@@ -257,6 +257,20 @@ object ImageProxyService {
 
         log.debug("Image proxy cached {} ({} bytes)", upstream.url, written)
         countProxy("miss")
+
+        // Sidecar — proxy-cache entries don't carry a natural subject link
+        // (they're keyed by the upstream URL hash), so subject_type /
+        // subject_id stay null. upstream_url + provider + cache_key are
+        // sufficient to replay the fetch if the bytes are ever lost.
+        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+            provider = "proxy-${upstream.provider.cacheBucket}",
+            cacheKey = destPath.fileName.toString().substringBeforeLast('.'),
+            upstreamUrl = upstream.url,
+            subjectType = null,
+            subjectId = null,
+            contentType = contentType
+        ))
+
         return Result.Hit(destPath, contentType)
     }
 

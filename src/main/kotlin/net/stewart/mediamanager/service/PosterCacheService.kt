@@ -88,6 +88,16 @@ object PosterCacheService {
             }
         }
 
+        // Sidecar — see docs/IMAGE_CACHE_MIGRATION.md.
+        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+            provider = "tmdb-poster",
+            cacheKey = cacheId,
+            upstreamUrl = tmdbUrl,
+            subjectType = "title",
+            subjectId = title.id,
+            contentType = "image/jpeg"
+        ))
+
         return destPath
     }
 
@@ -109,6 +119,17 @@ object PosterCacheService {
                 title.poster_cache_id = cacheId
                 title.save()
             }
+            // Embedded posters come from local audio tag picture blocks, not
+            // an upstream URL — provider records the origin so a rebuild
+            // knows not to try refetching from TMDB.
+            MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+                provider = "embedded-cover",
+                cacheKey = cacheId,
+                upstreamUrl = null,
+                subjectType = "title",
+                subjectId = title.id,
+                contentType = "image/jpeg"
+            ))
             countCache("embedded")
             destPath
         } catch (e: Exception) {

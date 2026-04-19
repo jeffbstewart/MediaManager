@@ -52,6 +52,16 @@ object CollectionPosterCacheService {
         if (!fetched) return null
 
         cachedIds[collId] = true
+
+        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+            provider = "tmdb-collection",
+            cacheKey = collId.toString(),
+            upstreamUrl = url,
+            subjectType = "tmdb_collection",
+            subjectId = collId.toLong(),
+            contentType = "image/jpeg"
+        ))
+
         return destPath
     }
 

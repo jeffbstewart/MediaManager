@@ -72,6 +72,15 @@ object BackdropCacheService {
             }
         }
 
+        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+            provider = "tmdb-backdrop",
+            cacheKey = cacheId,
+            upstreamUrl = tmdbUrl,
+            subjectType = "title",
+            subjectId = title.id,
+            contentType = "image/jpeg"
+        ))
+
         return destPath
     }
 

@@ -61,7 +61,16 @@ object AuthorHeadshotCacheService {
             return null
         }
 
-        return if (fetchAndWrite(source, dest)) dest else null
+        if (!fetchAndWrite(source, dest)) return null
+        MetadataWriter.writeSidecar(dest, ImageMetadata.internet(
+            provider = "wikimedia-author",
+            cacheKey = authorId.toString(),
+            upstreamUrl = source,
+            subjectType = "author",
+            subjectId = authorId,
+            contentType = "image/jpeg"
+        ))
+        return dest
     }
 
     private fun fetchAndWrite(url: String, dest: Path): Boolean {

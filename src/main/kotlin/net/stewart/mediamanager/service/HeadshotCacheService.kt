@@ -70,6 +70,15 @@ object HeadshotCacheService {
             }
         }
 
+        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
+            provider = "tmdb-headshot",
+            cacheKey = cacheId,
+            upstreamUrl = tmdbUrl,
+            subjectType = "cast_member",
+            subjectId = castMember.id,
+            contentType = "image/jpeg"
+        ))
+
         return destPath
     }
 
