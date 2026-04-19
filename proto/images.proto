@@ -36,6 +36,10 @@ enum ImageType {
   IMAGE_TYPE_OWNERSHIP_PHOTO = 7;    // disc ownership documentation (admin only)
   IMAGE_TYPE_CAMERA_SNAPSHOT = 8;    // live camera frame (not cacheable)
   IMAGE_TYPE_TMDB_POSTER = 9;        // TMDB poster by tmdb_id (for unowned titles/wishes)
+  IMAGE_TYPE_ARTIST_HEADSHOT = 10;   // owned-artist headshot, keyed by artist_id
+  IMAGE_TYPE_AUTHOR_HEADSHOT = 11;   // owned-author headshot, keyed by author_id
+  IMAGE_TYPE_CAA_RELEASE_GROUP = 12; // Cover Art Archive release-group cover, by MBID
+  IMAGE_TYPE_OPENLIBRARY_COVER = 13; // OpenLibrary work cover, by OL work ID
 }
 
 // Identifies a specific image by type + type-specific key.
@@ -54,6 +58,10 @@ message ImageRef {
   string uuid = 5;                 // LOCAL_IMAGE, OWNERSHIP_PHOTO
   int64 camera_id = 6;             // CAMERA_SNAPSHOT
   TmdbMediaId tmdb_media = 7;      // TMDB_POSTER
+  int64 artist_id = 8;                        // ARTIST_HEADSHOT
+  int64 author_id = 9;                        // AUTHOR_HEADSHOT
+  string musicbrainz_release_group_id = 10;   // CAA_RELEASE_GROUP
+  string openlibrary_work_id = 11;            // OPENLIBRARY_COVER
 }
 
 // Composite key for a TMDB entity — pairs a TMDB numeric ID with its

@@ -157,6 +157,51 @@ object AudioTranscodeCache {
         log.info("Audio transcode cache evicted down to {} bytes", total)
     }
 
+    /** Admin summary. Returns (total bytes, file count, oldest mtime). */
+    fun status(): CacheStatus {
+        if (!Files.isDirectory(cacheRoot)) return CacheStatus(0, 0, null)
+        return try {
+            Files.walk(cacheRoot).use { stream ->
+                var total = 0L
+                var count = 0
+                var oldest: Long? = null
+                stream.filter { Files.isRegularFile(it) }.forEach { p ->
+                    total += Files.size(p)
+                    count++
+                    val mtime = Files.getLastModifiedTime(p).toMillis()
+                    if (oldest == null || mtime < oldest!!) oldest = mtime
+                }
+                CacheStatus(total, count, oldest)
+            }
+        } catch (e: Exception) {
+            log.warn("AudioTranscodeCache.status walk failed: {}", e.message)
+            CacheStatus(0, 0, null)
+        }
+    }
+
+    /** Admin: clear all cached entries. */
+    fun clearAll() {
+        if (!Files.isDirectory(cacheRoot)) return
+        try {
+            Files.walk(cacheRoot).use { stream ->
+                stream.filter { Files.isRegularFile(it) }.forEach { p ->
+                    runCatching { Files.deleteIfExists(p) }
+                }
+            }
+        } catch (e: Exception) {
+            log.warn("AudioTranscodeCache.clearAll walk failed: {}", e.message)
+        }
+    }
+
+    /** Admin: clear entries for a specific track across all target codecs. */
+    fun clearForTrack(trackId: Long) {
+        TargetCodec.entries.forEach { codec ->
+            runCatching { Files.deleteIfExists(shardedPath(trackId, codec)) }
+        }
+    }
+
+    data class CacheStatus(val totalBytes: Long, val entryCount: Int, val oldestMtimeEpochMs: Long?)
+
     private fun shardedPath(trackId: Long, codec: TargetCodec): Path {
         val id = trackId.toString().padStart(6, '0')
         val shard1 = id.takeLast(2)

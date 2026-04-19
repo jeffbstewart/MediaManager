@@ -18,6 +18,39 @@ service PlaybackService {
 
   // Chapter and skip segment data for the player UI.
   rpc GetChapters(TranscodeIdRequest) returns (ChaptersResponse);
+
+  // --- Audio listening progress (music track or digital audiobook). ---
+  rpc GetListeningProgress(ListeningProgressRequest) returns (ListeningProgress);
+  rpc ReportListeningProgress(ReportListeningProgressRequest) returns (Empty);
+  rpc ClearListeningProgress(ListeningProgressRequest) returns (Empty);
+
+  // --- Ebook reading progress. ---
+  rpc GetReadingProgress(ReadingProgressRequest) returns (ReadingProgress);
+  rpc ReportReadingProgress(ReportReadingProgressRequest) returns (Empty);
+  rpc ClearReadingProgress(ReadingProgressRequest) returns (Empty);
+}
+
+message ListeningProgressRequest {
+  // Exactly one of the two is required.
+  optional int64 track_id = 1;
+  optional int64 media_item_id = 2;
+}
+
+message ReportListeningProgressRequest {
+  optional int64 track_id = 1;
+  optional int64 media_item_id = 2;
+  PlaybackOffset position = 3;
+  optional PlaybackOffset duration = 4;
+}
+
+message ReadingProgressRequest {
+  int64 media_item_id = 1;
+}
+
+message ReportReadingProgressRequest {
+  int64 media_item_id = 1;
+  string locator = 2;                        // EPUB CFI or "/page/N" for PDF
+  optional double fraction = 3;              // 0.0–1.0, dimensionless
 }
 
 message ReportProgressRequest {

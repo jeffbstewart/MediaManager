@@ -28,6 +28,11 @@ import net.stewart.mediamanager.entity.WishType as WishTypeEnum
 import net.stewart.mediamanager.entity.WishStatus as WishStatusEnum
 import net.stewart.mediamanager.entity.TitleGenre
 import net.stewart.mediamanager.entity.TitleTag
+import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.Track
+import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TmdbService
@@ -435,6 +440,14 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         val familyNames = loadFamilyMemberNames()
 
+        val albumDetail = if (titleEntity.media_type == MediaTypeEnum.ALBUM.name) {
+            buildAlbumDetail(titleEntity)
+        } else null
+
+        val bookDetail = if (titleEntity.media_type == MediaTypeEnum.BOOK.name) {
+            buildBookDetail(user.id!!, titleEntity)
+        } else null
+
         return titleDetail {
             title = titleEntity.toProto(bestTc, nasRoot, familyNames[titleEntity.id])
             // Override playable on the title to reflect all transcodes, not just best
@@ -447,6 +460,61 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             this.isFavorite = isFavorite
             this.isHidden = isHidden
             this.wished = wished
+            albumDetail?.let { album = it }
+            bookDetail?.let { book = it }
+        }
+    }
+
+    private fun buildAlbumDetail(title: TitleEntity): Album {
+        val titleId = title.id!!
+        val artistLinks = TitleArtist.findAll()
+            .filter { it.title_id == titleId }
+            .sortedBy { it.artist_order }
+        val artistIds = artistLinks.map { it.artist_id }.toSet()
+        val artists = Artist.findAll().filter { it.id in artistIds }
+        val artistsById = artists.associateBy { it.id }
+
+        val tracks = Track.findAll()
+            .filter { it.title_id == titleId }
+            .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
+
+        val protoTitle = title.toProto()
+        return album {
+            this.title = protoTitle
+            albumArtists.addAll(artistLinks.mapNotNull { artistsById[it.artist_id]?.toProto() })
+            this.tracks.addAll(tracks.map { it.toProto() })
+            title.track_count?.let { trackCount = it }
+            title.total_duration_seconds?.let { totalDuration = it.toDouble().toPlaybackOffset() }
+            title.label?.takeIf { it.isNotBlank() }?.let { label = it }
+            title.musicbrainz_release_group_id?.takeIf { it.isNotBlank() }?.let { musicbrainzReleaseGroupId = it }
+            title.musicbrainz_release_id?.takeIf { it.isNotBlank() }?.let { musicbrainzReleaseId = it }
+        }
+    }
+
+    private fun buildBookDetail(userId: Long, title: TitleEntity): BookDetail {
+        val titleId = title.id!!
+        val authorLinks = TitleAuthor.findAll()
+            .filter { it.title_id == titleId }
+            .sortedBy { it.author_order }
+        val authorIds = authorLinks.map { it.author_id }.toSet()
+        val authors = Author.findAll().filter { it.id in authorIds }
+        val authorsById = authors.associateBy { it.id }
+
+        val mediaItemIds = MediaItemTitle.findAll()
+            .filter { it.title_id == titleId }
+            .map { it.media_item_id }
+            .toSet()
+        val editions = net.stewart.mediamanager.entity.MediaItem.findAll()
+            .filter { it.id in mediaItemIds }
+
+        val readingProgress = editions.mapNotNull { mi ->
+            net.stewart.mediamanager.service.ReadingProgressService.get(userId, mi.id!!)
+        }.firstOrNull()
+
+        return bookDetail {
+            this.authors.addAll(authorLinks.mapNotNull { authorsById[it.author_id]?.toProto() })
+            this.editions.addAll(editions.map { it.toBookEdition() })
+            readingProgress?.let { this.readingProgress = it.toProto() }
         }
     }
 
@@ -469,27 +537,114 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val results = mutableListOf<Pair<SearchResult, Double>>()
 
         // 1. Title search via SearchIndexService
+        // Legacy clients get video-only (MOVIE + SERIES). Books and albums
+        // are unlocked via the opt-in request flags.
         val matchingTitleIds = SearchIndexService.search(query)
         if (matchingTitleIds != null) {
             for (titleId in matchingTitleIds) {
-                if (titleId !in playableTitleIds) continue
                 val title = catalog.titlesById[titleId] ?: continue
-                val tc = catalog.playableByTitle[titleId]?.firstOrNull()
-                results.add(searchResult {
-                    resultType = if (title.media_type == MediaTypeEnum.TV.name) {
-                        SearchResultType.SEARCH_RESULT_TYPE_SERIES
-                    } else {
-                        SearchResultType.SEARCH_RESULT_TYPE_MOVIE
+                val mediaType = title.media_type
+                val isBook = mediaType == MediaTypeEnum.BOOK.name
+                val isAlbum = mediaType == MediaTypeEnum.ALBUM.name
+                val isVideo = mediaType == MediaTypeEnum.MOVIE.name ||
+                    mediaType == MediaTypeEnum.TV.name ||
+                    mediaType == MediaTypeEnum.PERSONAL.name
+
+                when {
+                    isVideo -> {
+                        if (titleId !in playableTitleIds) continue
+                        val tc = catalog.playableByTitle[titleId]?.firstOrNull()
+                        results.add(searchResult {
+                            resultType = if (mediaType == MediaTypeEnum.TV.name) {
+                                SearchResultType.SEARCH_RESULT_TYPE_SERIES
+                            } else {
+                                SearchResultType.SEARCH_RESULT_TYPE_MOVIE
+                            }
+                            name = title.name
+                            this.titleId = title.id!!
+                            title.posterUrl(PosterSize.FULL)?.let { posterUrl = it }
+                            title.release_year?.let { year = it }
+                            quality = tc?.media_format.toProtoQuality()
+                            contentRating = title.content_rating.toProtoContentRating()
+                            tc?.id?.let { transcodeId = it }
+                            this.mediaType = mediaType.toProtoMediaType()
+                        } to (title.popularity ?: 0.0))
                     }
-                    name = title.name
-                    this.titleId = title.id!!
-                    title.posterUrl(PosterSize.FULL)?.let { posterUrl = it }
-                    title.release_year?.let { year = it }
-                    quality = tc?.media_format.toProtoQuality()
-                    contentRating = title.content_rating.toProtoContentRating()
-                    tc?.id?.let { transcodeId = it }
-                    mediaType = title.media_type.toProtoMediaType()
-                } to (title.popularity ?: 0.0))
+                    isBook && request.includeBooks -> {
+                        results.add(searchResult {
+                            resultType = SearchResultType.SEARCH_RESULT_TYPE_BOOK
+                            name = title.name
+                            this.titleId = title.id!!
+                            title.posterUrl(PosterSize.FULL)?.let { posterUrl = it }
+                            title.release_year?.let { year = it }
+                            contentRating = title.content_rating.toProtoContentRating()
+                            this.mediaType = mediaType.toProtoMediaType()
+                        } to (title.popularity ?: 0.0))
+                    }
+                    isAlbum && request.includeAudio -> {
+                        val albumArtistName = titleArtistLeadName(title.id!!)
+                        results.add(searchResult {
+                            resultType = SearchResultType.SEARCH_RESULT_TYPE_ALBUM
+                            name = title.name
+                            this.titleId = title.id!!
+                            title.posterUrl(PosterSize.FULL)?.let { posterUrl = it }
+                            title.release_year?.let { year = it }
+                            contentRating = title.content_rating.toProtoContentRating()
+                            this.mediaType = mediaType.toProtoMediaType()
+                            albumArtistName?.let { artistName = it }
+                        } to (title.popularity ?: 0.0))
+                    }
+                }
+            }
+        }
+
+        // 1b. Artist search (when include_audio)
+        if (request.includeAudio) {
+            val queryTokensAudio = query.lowercase().split(Regex("\\s+"))
+            val ownedAlbumsByArtist = TitleArtist.findAll().groupingBy { it.artist_id }.eachCount()
+            for (artist in Artist.findAll()) {
+                if (!queryTokensAudio.all { artist.name.lowercase().contains(it) }) continue
+                val ownedCount = ownedAlbumsByArtist[artist.id] ?: 0
+                if (ownedCount == 0) continue
+                results.add(searchResult {
+                    resultType = SearchResultType.SEARCH_RESULT_TYPE_ARTIST
+                    name = artist.name
+                    artist.id?.let { artistId = it }
+                    titleCount = ownedCount
+                } to ownedCount.toDouble())
+            }
+
+            // 1c. Track search (when include_audio)
+            for (track in Track.findAll()) {
+                if (!queryTokensAudio.all { track.name.lowercase().contains(it) }) continue
+                val album = catalog.titlesById[track.title_id] ?: continue
+                val albumArtistName = titleArtistLeadName(album.id!!)
+                results.add(searchResult {
+                    resultType = SearchResultType.SEARCH_RESULT_TYPE_TRACK
+                    name = track.name
+                    trackId = track.id!!
+                    albumTitleId = album.id!!
+                    albumName = album.name
+                    albumArtistName?.let { artistName = it }
+                    album.posterUrl(PosterSize.FULL)?.let { posterUrl = it }
+                } to (album.popularity ?: 0.0))
+            }
+        }
+
+        // 1d. Author search (when include_books)
+        if (request.includeBooks) {
+            val queryTokensBooks = query.lowercase().split(Regex("\\s+"))
+            val ownedBooksByAuthor = TitleAuthor.findAll().groupingBy { it.author_id }.eachCount()
+            for (author in Author.findAll()) {
+                if (!queryTokensBooks.all { author.name.lowercase().contains(it) }) continue
+                val ownedCount = ownedBooksByAuthor[author.id] ?: 0
+                if (ownedCount == 0) continue
+                results.add(searchResult {
+                    resultType = SearchResultType.SEARCH_RESULT_TYPE_AUTHOR
+                    name = author.name
+                    author.id?.let { authorId = it }
+                    titleCount = ownedCount
+                } to ownedCount.toDouble())
             }
         }
 
@@ -583,6 +738,16 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             this.results.addAll(sorted)
             this.counts.putAll(countsByType)
         }
+    }
+
+    // Primary album artist name for a title_id. Returns null when no
+    // title_artist rows exist (non-album titles or unlinked albums).
+    private fun titleArtistLeadName(titleId: Long): String? {
+        val link = TitleArtist.findAll()
+            .filter { it.title_id == titleId }
+            .minByOrNull { it.artist_order }
+            ?: return null
+        return Artist.findById(link.artist_id)?.name
     }
 
     // ========================================================================

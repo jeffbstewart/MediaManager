@@ -133,6 +133,55 @@ service AdminService {
 
   // --- Inventory Report ---
   rpc GenerateInventoryReport(InventoryReportRequest) returns (InventoryReportResponse);
+
+  // --- Unmatched Books (M4 — ebook files awaiting admin action) ---
+  rpc ListUnmatchedBooks(Empty) returns (UnmatchedBookListResponse);
+  rpc LinkUnmatchedBookByIsbn(LinkUnmatchedBookByIsbnRequest) returns (LinkUnmatchedBookResponse);
+  rpc LinkUnmatchedBookToTitle(LinkUnmatchedBookToTitleRequest) returns (LinkUnmatchedBookResponse);
+  rpc IgnoreUnmatchedBook(UnmatchedBookIdRequest) returns (Empty);
+  rpc SearchOpenLibrary(SearchOpenLibraryRequest) returns (SearchOpenLibraryResponse);
+  rpc SearchCatalogTitles(SearchCatalogTitlesRequest) returns (SearchCatalogTitlesResponse);
+
+  // --- Unmatched Audio (M4 — audio files awaiting admin action) ---
+  rpc ListUnmatchedAudio(Empty) returns (UnmatchedAudioListResponse);
+  rpc LinkUnmatchedAudioToTrack(LinkUnmatchedAudioToTrackRequest) returns (LinkUnmatchedAudioResponse);
+  rpc IgnoreUnmatchedAudio(UnmatchedAudioIdRequest) returns (Empty);
+  rpc SearchCatalogTracks(SearchCatalogTracksRequest) returns (SearchCatalogTracksResponse);
+
+  // --- Author admin ---
+  rpc ListAdminAuthors(ListAdminAuthorsRequest) returns (AdminAuthorListResponse);
+  rpc UpdateAuthor(UpdateAuthorRequest) returns (Empty);
+  rpc DeleteAuthor(AdminAuthorIdRequest) returns (Empty);
+  rpc MergeAuthors(MergeAuthorsRequest) returns (Empty);
+
+  // --- Artist admin ---
+  rpc ListAdminArtists(ListAdminArtistsRequest) returns (AdminArtistListResponse);
+  rpc UpdateArtist(UpdateArtistRequest) returns (Empty);
+  rpc DeleteArtist(AdminArtistIdRequest) returns (Empty);
+  rpc MergeArtists(MergeArtistsRequest) returns (Empty);
+
+  // --- External identifier assignment + agent-specific re-enrichment ---
+  rpc AssignExternalIdentifier(AssignExternalIdentifierRequest) returns (AssignExternalIdentifierResponse);
+  rpc ReEnrichWithAgent(ReEnrichWithAgentRequest) returns (Empty);
+
+  // --- Book series admin ---
+  rpc ListBookSeries(ListBookSeriesRequest) returns (BookSeriesListResponse);
+  rpc UpdateBookSeries(UpdateBookSeriesRequest) returns (Empty);
+  rpc ReassignTitleToSeries(ReassignTitleToSeriesRequest) returns (Empty);
+
+  // --- Track metadata edits ---
+  rpc UpdateTrack(UpdateTrackRequest) returns (Empty);
+  rpc ReorderTracks(ReorderTracksRequest) returns (Empty);
+
+  // --- Artist membership (M6 lineup editing) ---
+  rpc ListArtistMemberships(AdminArtistIdRequest) returns (ArtistMembershipListResponse);
+  rpc UpsertArtistMembership(UpsertArtistMembershipRequest) returns (ArtistMembershipResponse);
+  rpc DeleteArtistMembership(MembershipIdRequest) returns (Empty);
+  rpc TriggerArtistEnrichment(AdminArtistIdRequest) returns (Empty);
+
+  // --- Audio transcode cache ---
+  rpc GetAudioTranscodeCacheStatus(Empty) returns (AudioTranscodeCacheStatus);
+  rpc ClearAudioTranscodeCache(ClearAudioTranscodeCacheRequest) returns (Empty);
 }
 
 // --- ID Requests ---
@@ -316,11 +365,25 @@ message ScanDetailResponse {
   optional CalendarDate purchase_date = 13;
   optional double purchase_price = 14;
   repeated OwnershipPhotoInfo photos = 15;
+
+  // --- Book-specific (populated when the scan resolved to a BOOK). ---
+  optional string isbn = 16;
+  optional string openlibrary_work_id = 17;
+
+  // --- Album-specific (populated when the scan resolved to an ALBUM). ---
+  optional string musicbrainz_release_id = 18;
+  optional string musicbrainz_release_group_id = 19;
+  optional int32 track_count = 20;
+  optional string parsed_label = 21;
+  optional string parsed_catalog_number = 22;
 }
 
 message OwnershipPhotoInfo {
   string photo_id = 1;
-  string url = 2;
+  // Deprecated: clients must fetch bytes via ImageService using
+  // ImageRef{ type: IMAGE_TYPE_OWNERSHIP_PHOTO, uuid: photo_id }.
+  // Field retained for Android TV back-compat.
+  string url = 2 [deprecated = true];
   optional Timestamp captured_at = 3;
 }
 
@@ -446,12 +509,29 @@ enum DataQualityIssue {
   DATA_QUALITY_ISSUE_NO_GENRES = 8;
   DATA_QUALITY_ISSUE_ENRICHMENT_FAILED = 9;
   DATA_QUALITY_ISSUE_ENRICHMENT_ABANDONED = 10;
+  // Book-specific.
+  DATA_QUALITY_ISSUE_NO_OPENLIBRARY_ID = 11;
+  DATA_QUALITY_ISSUE_NO_AUTHORS = 12;
+  // Album-specific.
+  DATA_QUALITY_ISSUE_NO_MUSICBRAINZ_ID = 13;
+  DATA_QUALITY_ISSUE_NO_TRACKS = 14;
+  DATA_QUALITY_ISSUE_NO_ALBUM_ARTISTS = 15;
+}
+
+// Which media slice ListDataQuality surfaces issues from.
+// Default (UNKNOWN) preserves the pre-books/audio behavior: video titles only.
+enum DataQualityScope {
+  DATA_QUALITY_SCOPE_UNKNOWN = 0;
+  DATA_QUALITY_SCOPE_VIDEO = 1;
+  DATA_QUALITY_SCOPE_BOOK = 2;
+  DATA_QUALITY_SCOPE_AUDIO = 3;
 }
 
 message DataQualityRequest {
   int32 page = 1;
   int32 limit = 2;
   optional EnrichmentStatus status = 3;
+  DataQualityScope scope = 4;   // UNKNOWN → legacy video-only behavior
 }
 
 message DataQualityResponse {
@@ -473,6 +553,12 @@ message UpdateTitleMetadataRequest {
   optional string name = 2;
   optional string description = 3;
   optional int32 release_year = 4;
+  // --- Book-specific (ignored for non-BOOK titles). ---
+  optional int32 first_publication_year = 5;
+  optional int32 page_count = 6;
+  // --- Album-specific (ignored for non-ALBUM titles). ---
+  optional int32 track_count = 7;
+  optional string label = 8;
 }
 
 // --- Purchase Wishes ---
@@ -982,4 +1068,387 @@ message InventoryReportResponse {
   int32 total_items = 2;
   double total_purchase_value = 3;
   double total_replacement_value = 4;
+}
+
+// ============================================================================
+// Unmatched media: shared + book + audio
+// ============================================================================
+
+// Staging status for ebook / audio files the scanner couldn't auto-link.
+enum UnmatchedStatus {
+  UNMATCHED_STATUS_UNKNOWN = 0;
+  UNMATCHED_STATUS_UNMATCHED = 1;
+  UNMATCHED_STATUS_LINKED = 2;
+  UNMATCHED_STATUS_IGNORED = 3;
+}
+
+// --- Unmatched books ---
+
+message UnmatchedBookListResponse {
+  repeated UnmatchedBookItem items = 1;
+}
+
+message UnmatchedBookItem {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional int64 file_size_bytes = 4;
+  BookEditionFormat edition_format = 5;
+  optional string parsed_title = 6;
+  optional string parsed_author = 7;
+  optional string parsed_isbn = 8;
+  UnmatchedStatus status = 9;
+  optional int64 linked_title_id = 10;
+  optional Timestamp discovered_at = 11;
+  optional Timestamp linked_at = 12;
+}
+
+message UnmatchedBookIdRequest { int64 unmatched_book_id = 1; }
+
+message LinkUnmatchedBookByIsbnRequest {
+  int64 unmatched_book_id = 1;
+  string isbn = 2;              // 10- or 13-digit ISBN
+}
+
+message LinkUnmatchedBookToTitleRequest {
+  int64 unmatched_book_id = 1;
+  int64 title_id = 2;
+}
+
+message LinkUnmatchedBookResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  bool created_new_title = 3;
+}
+
+message SearchOpenLibraryRequest {
+  string query = 1;
+  int32 limit = 2;              // 0 → server default 10, max 50
+}
+
+message SearchOpenLibraryResponse {
+  repeated OpenLibraryHit hits = 1;
+}
+
+message OpenLibraryHit {
+  string openlibrary_work_id = 1;
+  string title = 2;
+  optional string author_name = 3;
+  optional int32 first_publish_year = 4;
+  // Cover fetch: ImageService + IMAGE_TYPE_OPENLIBRARY_COVER.
+}
+
+message SearchCatalogTitlesRequest {
+  string query = 1;
+  MediaType media_type = 2;     // MEDIA_TYPE_UNKNOWN = any
+  int32 limit = 3;
+}
+
+message SearchCatalogTitlesResponse {
+  repeated Title matches = 1;
+}
+
+// --- Unmatched audio ---
+
+message UnmatchedAudioListResponse {
+  repeated UnmatchedAudioItem items = 1;
+}
+
+message UnmatchedAudioItem {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional int64 file_size_bytes = 4;
+  // Parsed tag data — every field optional because tags are lossy.
+  optional string parsed_title = 5;
+  optional string parsed_album = 6;
+  optional string parsed_album_artist = 7;
+  optional string parsed_track_artist = 8;
+  optional int32 parsed_track_number = 9;
+  optional int32 parsed_disc_number = 10;
+  optional PlaybackOffset parsed_duration = 11;
+  optional string parsed_musicbrainz_release_id = 12;
+  optional string parsed_musicbrainz_release_group_id = 13;
+  optional string parsed_musicbrainz_recording_id = 14;
+  optional string parsed_upc = 15;
+  optional string parsed_isrc = 16;
+  optional string parsed_catalog_number = 17;
+  optional string parsed_label = 18;
+  UnmatchedStatus status = 19;
+  optional int64 linked_track_id = 20;
+  optional Timestamp discovered_at = 21;
+  optional Timestamp linked_at = 22;
+}
+
+message UnmatchedAudioIdRequest { int64 unmatched_audio_id = 1; }
+
+message LinkUnmatchedAudioToTrackRequest {
+  int64 unmatched_audio_id = 1;
+  int64 track_id = 2;
+}
+
+message LinkUnmatchedAudioResponse {
+  int64 track_id = 1;
+  int64 album_title_id = 2;
+  string track_name = 3;
+  string album_name = 4;
+}
+
+message SearchCatalogTracksRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchCatalogTracksResponse {
+  repeated TrackSearchMatch matches = 1;
+}
+
+message TrackSearchMatch {
+  int64 track_id = 1;
+  int64 album_title_id = 2;
+  string track_name = 3;
+  string album_name = 4;
+  optional string album_artist_name = 5;
+  optional int32 disc_number = 6;
+  optional int32 track_number = 7;
+}
+
+// ============================================================================
+// Author + artist admin
+// ============================================================================
+
+message AdminAuthorIdRequest { int64 author_id = 1; }
+message AdminArtistIdRequest { int64 artist_id = 1; }
+
+message ListAdminAuthorsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+  // When true, only surfaces authors with data-quality issues
+  // (no OpenLibrary ID, no headshot, no biography).
+  bool issues_only = 4;
+}
+
+message AdminAuthorListResponse {
+  repeated AdminAuthorItem authors = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AdminAuthorItem {
+  int64 id = 1;
+  string name = 2;
+  string sort_name = 3;
+  bool has_biography = 4;
+  bool has_headshot = 5;
+  optional string openlibrary_id = 6;
+  int32 owned_book_count = 7;
+}
+
+// Tri-state field semantics: absent = no change, present = set (empty clears).
+message UpdateAuthorRequest {
+  int64 author_id = 1;
+  optional string name = 2;
+  optional string sort_name = 3;
+  optional string biography = 4;
+  optional string openlibrary_id = 5;
+  optional string wikidata_id = 6;
+  optional CalendarDate birth_date = 7;
+  optional CalendarDate death_date = 8;
+}
+
+message MergeAuthorsRequest {
+  int64 keep_author_id = 1;
+  int64 drop_author_id = 2;     // title_author rows re-pointed, then author deleted
+}
+
+message ListAdminArtistsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+  bool issues_only = 4;
+}
+
+message AdminArtistListResponse {
+  repeated AdminArtistItem artists = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AdminArtistItem {
+  int64 id = 1;
+  string name = 2;
+  string sort_name = 3;
+  ArtistType artist_type = 4;
+  bool has_biography = 5;
+  bool has_headshot = 6;
+  optional string musicbrainz_artist_id = 7;
+  int32 owned_album_count = 8;
+}
+
+message UpdateArtistRequest {
+  int64 artist_id = 1;
+  optional string name = 2;
+  optional string sort_name = 3;
+  // ARTIST_TYPE_UNKNOWN = no change.
+  ArtistType artist_type = 4;
+  optional string biography = 5;
+  optional string musicbrainz_artist_id = 6;
+  optional string wikidata_id = 7;
+  optional CalendarDate begin_date = 8;
+  optional CalendarDate end_date = 9;
+}
+
+message MergeArtistsRequest {
+  int64 keep_artist_id = 1;
+  int64 drop_artist_id = 2;
+}
+
+// ============================================================================
+// External identifier assignment + agent-specific re-enrichment
+// ============================================================================
+
+// Successor to AssignTmdbRequest — supports OpenLibrary + MusicBrainz.
+// AssignTmdbRequest stays for Android TV back-compat.
+enum ExternalIdentifierKind {
+  EXTERNAL_IDENTIFIER_KIND_UNKNOWN = 0;
+  EXTERNAL_IDENTIFIER_KIND_TMDB = 1;
+  EXTERNAL_IDENTIFIER_KIND_OPENLIBRARY_WORK = 2;
+  EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE_GROUP = 3;
+  EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE = 4;
+}
+
+message AssignExternalIdentifierRequest {
+  int64 title_id = 1;
+  ExternalIdentifierKind kind = 2;
+  // Server validates value-shape against kind (int for TMDB,
+  // OL work regex for OPENLIBRARY_WORK, MBID regex for MB kinds).
+  string value = 3;
+  // Required when kind = TMDB to disambiguate movie/TV namespace.
+  MediaType media_type = 4;
+}
+
+message AssignExternalIdentifierResponse {
+  bool merged = 1;
+  optional string merged_title_name = 2;
+}
+
+enum EnrichmentAgent {
+  ENRICHMENT_AGENT_UNKNOWN = 0;
+  ENRICHMENT_AGENT_TMDB = 1;
+  ENRICHMENT_AGENT_OPENLIBRARY = 2;
+  ENRICHMENT_AGENT_MUSICBRAINZ = 3;
+  ENRICHMENT_AGENT_AUTHOR_HEADSHOT = 4;
+  ENRICHMENT_AGENT_ARTIST_HEADSHOT = 5;
+  ENRICHMENT_AGENT_ARTIST_PERSONNEL = 6;
+}
+
+message ReEnrichWithAgentRequest {
+  int64 title_id = 1;
+  EnrichmentAgent agent = 2;
+}
+
+// ============================================================================
+// Book series admin
+// ============================================================================
+
+message ListBookSeriesRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+}
+
+message BookSeriesListResponse {
+  repeated BookSeriesItem series = 1;
+  PaginationInfo pagination = 2;
+}
+
+message BookSeriesItem {
+  int64 id = 1;
+  string name = 2;
+  int32 volume_count = 3;
+  optional int64 primary_author_id = 4;
+}
+
+message UpdateBookSeriesRequest {
+  int64 series_id = 1;
+  optional string name = 2;
+  optional int64 primary_author_id = 3;
+}
+
+message ReassignTitleToSeriesRequest {
+  int64 title_id = 1;
+  // Absent = remove from series; present = assign.
+  optional int64 series_id = 2;
+  // Decimal-as-string to preserve fractional numbering (e.g. "1.5").
+  optional string series_number = 3;
+}
+
+// ============================================================================
+// Track metadata edits
+// ============================================================================
+
+message UpdateTrackRequest {
+  int64 track_id = 1;
+  optional string name = 2;
+  optional int32 track_number = 3;
+  optional int32 disc_number = 4;
+  optional string musicbrainz_recording_id = 5;
+}
+
+message ReorderTracksRequest {
+  int64 album_title_id = 1;
+  repeated TrackOrderEntry order = 2;
+}
+
+message TrackOrderEntry {
+  int64 track_id = 1;
+  int32 disc_number = 2;
+  int32 track_number = 3;
+}
+
+// ============================================================================
+// Artist membership (M6 lineup)
+// ============================================================================
+
+message ArtistMembershipListResponse {
+  repeated ArtistMembershipRow memberships = 1;
+}
+
+message ArtistMembershipRow {
+  int64 id = 1;
+  int64 group_artist_id = 2;
+  int64 member_artist_id = 3;
+  // Denormalized name columns so iOS doesn't need a second RPC.
+  string group_name = 4;
+  string member_name = 5;
+  optional CalendarDate begin_date = 6;
+  optional CalendarDate end_date = 7;
+  repeated string primary_instruments = 8;
+}
+
+message UpsertArtistMembershipRequest {
+  // Absent = create; present = update.
+  optional int64 id = 1;
+  int64 group_artist_id = 2;
+  int64 member_artist_id = 3;
+  optional CalendarDate begin_date = 4;
+  optional CalendarDate end_date = 5;
+  repeated string primary_instruments = 6;
+}
+
+message ArtistMembershipResponse { int64 id = 1; }
+message MembershipIdRequest { int64 membership_id = 1; }
+
+// ============================================================================
+// Audio transcode cache admin
+// ============================================================================
+
+message AudioTranscodeCacheStatus {
+  int64 total_size_bytes = 1;
+  int32 entry_count = 2;
+  optional Timestamp oldest_entry_at = 3;
+}
+
+message ClearAudioTranscodeCacheRequest {
+  // Absent = clear everything. Present = only entries for this track.
+  optional int64 track_id = 1;
 }

@@ -43,9 +43,33 @@ import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.service.TranscodeLeaseService
 import net.stewart.mediamanager.service.AmazonImportService
 import net.stewart.mediamanager.service.WishListService
+import net.stewart.mediamanager.entity.Artist as ArtistEntity
+import net.stewart.mediamanager.entity.ArtistMembership as ArtistMembershipEntity
+import net.stewart.mediamanager.entity.ArtistType as ArtistTypeEnum
+import net.stewart.mediamanager.entity.Author as AuthorEntity
+import net.stewart.mediamanager.entity.BookSeries as BookSeriesEntity
+import net.stewart.mediamanager.entity.MediaFormat as MediaFormatEnum
+import net.stewart.mediamanager.entity.MediaType as MediaTypeEnum
+import net.stewart.mediamanager.entity.Track as TrackEntity
+import net.stewart.mediamanager.entity.TitleArtist as TitleArtistEntity
+import net.stewart.mediamanager.entity.TitleAuthor as TitleAuthorEntity
+import net.stewart.mediamanager.entity.UnmatchedAudio as UnmatchedAudioEntity
+import net.stewart.mediamanager.entity.UnmatchedAudioStatus as UnmatchedAudioStatusEnum
+import net.stewart.mediamanager.entity.UnmatchedBook as UnmatchedBookEntity
+import net.stewart.mediamanager.entity.UnmatchedBookStatus as UnmatchedBookStatusEnum
+import net.stewart.mediamanager.service.ArtistEnrichmentAgent
+import net.stewart.mediamanager.service.AudioTranscodeCache
+import net.stewart.mediamanager.service.AuthorEnrichmentAgent
+import net.stewart.mediamanager.service.BookIngestionService
+import net.stewart.mediamanager.service.OpenLibraryHttpService
+import net.stewart.mediamanager.service.OpenLibraryResult
+import net.stewart.mediamanager.service.OpenLibraryService
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.math.BigDecimal
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 /**
  * Admin-only service. Auth interceptor enforces admin role for all RPCs.
@@ -503,7 +527,15 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     // ========================================================================
 
     override suspend fun listDataQuality(request: DataQualityRequest): DataQualityResponse {
-        var titles = TitleEntity.findAll()
+        // Scope maps to the set of media_type strings we consider. UNKNOWN
+        // preserves the original behavior (video only) for legacy callers.
+        val scopedMediaTypes: Set<String> = when (request.scope) {
+            DataQualityScope.DATA_QUALITY_SCOPE_BOOK -> setOf(MediaTypeEnum.BOOK.name)
+            DataQualityScope.DATA_QUALITY_SCOPE_AUDIO -> setOf(MediaTypeEnum.ALBUM.name)
+            else -> setOf(MediaTypeEnum.MOVIE.name, MediaTypeEnum.TV.name, MediaTypeEnum.PERSONAL.name)
+        }
+
+        var titles = TitleEntity.findAll().filter { it.media_type in scopedMediaTypes }
 
         // Filter by enrichment status if provided
         if (request.hasStatus()) {
@@ -523,9 +555,14 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
         titles = titles.sortedBy { it.name.lowercase() }
 
-        // Pre-load cast and genre data for issue detection
+        // Pre-load join data needed for the various scope-specific issue
+        // checks. Each branch below only uses the maps it cares about,
+        // but pre-loading once keeps the per-title loop O(1).
         val castByTitle = CastMemberEntity.findAll().groupBy { it.title_id }
         val genresByTitle = TitleGenre.findAll().groupBy { it.title_id }
+        val authorsByTitle = TitleAuthorEntity.findAll().groupBy { it.title_id }
+        val artistsByTitle = TitleArtistEntity.findAll().groupBy { it.title_id }
+        val tracksByTitle = TrackEntity.findAll().groupBy { it.title_id }
 
         val page = maxOf(request.page, 1)
         val limit = if (request.limit > 0) request.limit else 50
@@ -542,23 +579,10 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                     enrichmentStatus = title.enrichment_status.toProtoEnrichmentStatus()
                     mediaType = title.media_type.toProtoMediaType()
                     title.posterUrl(PosterSize.THUMBNAIL)?.let { posterUrl = it }
-                    // Compute issues
-                    val issueList = mutableListOf<DataQualityIssue>()
-                    if (title.poster_path == null) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_POSTER)
-                    if (title.description.isNullOrBlank()) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_DESCRIPTION)
-                    if (title.tmdb_id == null) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_TMDB_ID)
-                    if (title.release_year == null) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_YEAR)
-                    if (title.content_rating == null) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_CONTENT_RATING)
-                    if (title.backdrop_path == null) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_BACKDROP)
-                    if (castByTitle[title.id].isNullOrEmpty()) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_CAST)
-                    if (genresByTitle[title.id].isNullOrEmpty()) issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_GENRES)
-                    if (title.enrichment_status == EnrichmentStatusEnum.FAILED.name) {
-                        issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_ENRICHMENT_FAILED)
-                    }
-                    if (title.enrichment_status == EnrichmentStatusEnum.ABANDONED.name) {
-                        issueList.add(DataQualityIssue.DATA_QUALITY_ISSUE_ENRICHMENT_ABANDONED)
-                    }
-                    issues.addAll(issueList)
+                    issues.addAll(computeIssues(
+                        title, castByTitle, genresByTitle,
+                        authorsByTitle, artistsByTitle, tracksByTitle
+                    ))
                 }
             })
             pagination = paginationInfo {
@@ -568,6 +592,72 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
                 this.totalPages = totalPages
             }
         }
+    }
+
+    // Scope-aware issue detection. Each media_type runs only the checks
+    // that make sense for it — so an album never reports NO_TMDB_ID, a
+    // book never reports NO_CAST, etc.
+    private fun computeIssues(
+        title: TitleEntity,
+        castByTitle: Map<Long, List<CastMemberEntity>>,
+        genresByTitle: Map<Long, List<TitleGenre>>,
+        authorsByTitle: Map<Long, List<TitleAuthorEntity>>,
+        artistsByTitle: Map<Long, List<TitleArtistEntity>>,
+        tracksByTitle: Map<Long, List<TrackEntity>>
+    ): List<DataQualityIssue> {
+        val issues = mutableListOf<DataQualityIssue>()
+
+        // Universal: poster, description, year, enrichment state.
+        if (title.poster_path == null) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_POSTER)
+        if (title.description.isNullOrBlank()) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_DESCRIPTION)
+        if (title.release_year == null && title.first_publication_year == null) {
+            issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_YEAR)
+        }
+        if (title.enrichment_status == EnrichmentStatusEnum.FAILED.name) {
+            issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_ENRICHMENT_FAILED)
+        }
+        if (title.enrichment_status == EnrichmentStatusEnum.ABANDONED.name) {
+            issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_ENRICHMENT_ABANDONED)
+        }
+
+        when (title.media_type) {
+            MediaTypeEnum.BOOK.name -> {
+                // Content rating applies to books (kids vs adult); TMDB/cast/
+                // backdrop/genres do not — skip those.
+                if (title.content_rating == null) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_CONTENT_RATING)
+                }
+                if (title.open_library_work_id.isNullOrBlank()) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_OPENLIBRARY_ID)
+                }
+                if (authorsByTitle[title.id].isNullOrEmpty()) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_AUTHORS)
+                }
+            }
+            MediaTypeEnum.ALBUM.name -> {
+                // Albums don't carry content ratings, TMDB ids, cast, or
+                // backdrops. They DO have an MBID, tracks, and album artists.
+                if (title.musicbrainz_release_group_id.isNullOrBlank()) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_MUSICBRAINZ_ID)
+                }
+                if (tracksByTitle[title.id].isNullOrEmpty()) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_TRACKS)
+                }
+                if (artistsByTitle[title.id].isNullOrEmpty()) {
+                    issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_ALBUM_ARTISTS)
+                }
+            }
+            else -> {
+                // Video: MOVIE / TV / PERSONAL — original set of checks.
+                if (title.tmdb_id == null) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_TMDB_ID)
+                if (title.content_rating == null) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_CONTENT_RATING)
+                if (title.backdrop_path == null) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_BACKDROP)
+                if (castByTitle[title.id].isNullOrEmpty()) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_CAST)
+                if (genresByTitle[title.id].isNullOrEmpty()) issues.add(DataQualityIssue.DATA_QUALITY_ISSUE_NO_GENRES)
+            }
+        }
+
+        return issues
     }
 
     override suspend fun reEnrich(request: TitleIdRequest): Empty {
@@ -1042,6 +1132,8 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         private val SENSITIVE_SETTINGS = setOf(
             SettingKey.SETTING_KEY_KEEPA_API_KEY
         )
+        private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private val OL_WORK_RE = Regex("^OL\\d+W$")
     }
 
     override suspend fun updateSetting(request: UpdateSettingRequest): Empty {
@@ -1745,4 +1837,828 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             AppConfig(config_key = key, config_val = value).save()
         }
     }
+
+    // ========================================================================
+    // Unmatched Books (M4 admin queue)
+    // ========================================================================
+
+    private val openLibrary: OpenLibraryService = OpenLibraryHttpService()
+
+    override suspend fun listUnmatchedBooks(request: Empty): UnmatchedBookListResponse {
+        val rows = UnmatchedBookEntity.findAll()
+            .filter { it.match_status == UnmatchedBookStatusEnum.UNMATCHED.name }
+            .sortedByDescending { it.discovered_at }
+        return unmatchedBookListResponse {
+            items.addAll(rows.map { it.toProtoItem() })
+        }
+    }
+
+    override suspend fun linkUnmatchedBookByIsbn(
+        request: LinkUnmatchedBookByIsbnRequest
+    ): LinkUnmatchedBookResponse {
+        val row = UnmatchedBookEntity.findById(request.unmatchedBookId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("unmatched_book not found"))
+        val isbn = request.isbn.trim().replace("-", "")
+        if (isbn.length !in 10..13) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("isbn must be 10 or 13 digits"))
+        }
+
+        val lookup = openLibrary.lookupByIsbn(isbn)
+        if (lookup !is OpenLibraryResult.Success) {
+            val msg = when (lookup) {
+                is OpenLibraryResult.NotFound -> "Open Library has no record of that ISBN"
+                is OpenLibraryResult.Error -> "Open Library error: ${lookup.message}"
+                is OpenLibraryResult.Success -> "unreachable"
+            }
+            throw StatusException(Status.NOT_FOUND.withDescription(msg))
+        }
+
+        val format = runCatching { MediaFormatEnum.valueOf(row.media_format) }.getOrDefault(MediaFormatEnum.EBOOK_EPUB)
+        val result = BookIngestionService.ingestDigital(
+            filePath = row.file_path,
+            fileFormat = format,
+            isbn = isbn,
+            lookup = lookup.book
+        )
+        row.match_status = UnmatchedBookStatusEnum.LINKED.name
+        row.linked_title_id = result.title.id
+        row.linked_at = LocalDateTime.now()
+        row.save()
+
+        return linkUnmatchedBookResponse {
+            titleId = result.title.id!!
+            titleName = result.title.name
+            createdNewTitle = !result.titleReused
+        }
+    }
+
+    override suspend fun linkUnmatchedBookToTitle(
+        request: LinkUnmatchedBookToTitleRequest
+    ): LinkUnmatchedBookResponse {
+        val row = UnmatchedBookEntity.findById(request.unmatchedBookId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("unmatched_book not found"))
+        val title = TitleEntity.findById(request.titleId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("title not found"))
+        if (title.media_type != MediaTypeEnum.BOOK.name) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("title is not a book"))
+        }
+
+        val format = runCatching { MediaFormatEnum.valueOf(row.media_format) }.getOrDefault(MediaFormatEnum.EBOOK_EPUB)
+        val result = BookIngestionService.linkDigitalEditionToTitle(
+            filePath = row.file_path,
+            fileFormat = format,
+            title = title
+        )
+        row.match_status = UnmatchedBookStatusEnum.LINKED.name
+        row.linked_title_id = result.title.id
+        row.linked_at = LocalDateTime.now()
+        row.save()
+
+        return linkUnmatchedBookResponse {
+            titleId = result.title.id!!
+            titleName = result.title.name
+            createdNewTitle = false
+        }
+    }
+
+    override suspend fun ignoreUnmatchedBook(request: UnmatchedBookIdRequest): Empty {
+        val row = UnmatchedBookEntity.findById(request.unmatchedBookId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        row.match_status = UnmatchedBookStatusEnum.IGNORED.name
+        row.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun searchOpenLibrary(request: SearchOpenLibraryRequest): SearchOpenLibraryResponse {
+        val q = request.query.trim()
+        if (q.length < 2) return searchOpenLibraryResponse {}
+        val limit = if (request.limit <= 0) 10 else request.limit.coerceIn(1, 50)
+        val hits = openLibrary.searchWorks(q, limit)
+        return searchOpenLibraryResponse {
+            this.hits.addAll(hits.map { h ->
+                openLibraryHit {
+                    openlibraryWorkId = h.workId
+                    title = h.title
+                    h.authors.firstOrNull()?.let { authorName = it }
+                    h.firstPublishYear?.let { firstPublishYear = it }
+                }
+            })
+        }
+    }
+
+    override suspend fun searchCatalogTitles(request: SearchCatalogTitlesRequest): SearchCatalogTitlesResponse {
+        val q = request.query.trim()
+        if (q.length < 2) return searchCatalogTitlesResponse {}
+        val limit = if (request.limit <= 0) 20 else request.limit.coerceIn(1, 100)
+        val mediaTypeFilter = when (request.mediaType) {
+            MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE.name
+            MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV.name
+            MediaType.MEDIA_TYPE_PERSONAL -> MediaTypeEnum.PERSONAL.name
+            MediaType.MEDIA_TYPE_BOOK -> MediaTypeEnum.BOOK.name
+            MediaType.MEDIA_TYPE_ALBUM -> MediaTypeEnum.ALBUM.name
+            else -> null
+        }
+        val lower = q.lowercase()
+        val matches = TitleEntity.findAll()
+            .filter { !it.hidden }
+            .filter { mediaTypeFilter == null || it.media_type == mediaTypeFilter }
+            .filter {
+                it.name.lowercase().contains(lower) ||
+                    (it.sort_name?.lowercase()?.contains(lower) == true)
+            }
+            .sortedBy { it.name.lowercase() }
+            .take(limit)
+        return searchCatalogTitlesResponse {
+            this.matches.addAll(matches.map { it.toProto() })
+        }
+    }
+
+    // ========================================================================
+    // Unmatched Audio (M4 admin queue)
+    // ========================================================================
+
+    override suspend fun listUnmatchedAudio(request: Empty): UnmatchedAudioListResponse {
+        val rows = UnmatchedAudioEntity.findAll()
+            .filter { it.match_status == UnmatchedAudioStatusEnum.UNMATCHED.name }
+            .sortedByDescending { it.discovered_at }
+        return unmatchedAudioListResponse {
+            items.addAll(rows.map { it.toProtoItem() })
+        }
+    }
+
+    override suspend fun linkUnmatchedAudioToTrack(
+        request: LinkUnmatchedAudioToTrackRequest
+    ): LinkUnmatchedAudioResponse {
+        val row = UnmatchedAudioEntity.findById(request.unmatchedAudioId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("unmatched_audio not found"))
+        val track = TrackEntity.findById(request.trackId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("track not found"))
+        if (track.file_path != null && track.file_path != row.file_path) {
+            throw StatusException(Status.FAILED_PRECONDITION.withDescription("track already linked to a different file"))
+        }
+
+        val now = LocalDateTime.now()
+        track.file_path = row.file_path
+        track.updated_at = now
+        track.save()
+
+        row.match_status = UnmatchedAudioStatusEnum.LINKED.name
+        row.linked_track_id = track.id
+        row.linked_at = now
+        row.save()
+
+        val album = TitleEntity.findById(track.title_id)
+        return linkUnmatchedAudioResponse {
+            trackId = track.id!!
+            albumTitleId = track.title_id
+            trackName = track.name
+            albumName = album?.name ?: ""
+        }
+    }
+
+    override suspend fun ignoreUnmatchedAudio(request: UnmatchedAudioIdRequest): Empty {
+        val row = UnmatchedAudioEntity.findById(request.unmatchedAudioId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        row.match_status = UnmatchedAudioStatusEnum.IGNORED.name
+        row.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun searchCatalogTracks(request: SearchCatalogTracksRequest): SearchCatalogTracksResponse {
+        val q = request.query.trim()
+        if (q.length < 2) return searchCatalogTracksResponse {}
+        val limit = if (request.limit <= 0) 50 else request.limit.coerceIn(1, 200)
+        val lower = q.lowercase()
+
+        val albumTitles = TitleEntity.findAll()
+            .filter { it.media_type == MediaTypeEnum.ALBUM.name }
+            .associateBy { it.id }
+        val albumHitIds = albumTitles.values
+            .filter {
+                it.name.lowercase().contains(lower) ||
+                    (it.sort_name?.lowercase()?.contains(lower) == true)
+            }
+            .mapNotNull { it.id }
+            .toSet()
+
+        val primaryArtistByTitle = TitleArtistEntity.findAll()
+            .filter { it.artist_order == 0 }
+            .associate { it.title_id to it.artist_id }
+        val artistsById = ArtistEntity.findAll().associateBy { it.id }
+
+        val hits = TrackEntity.findAll()
+            .asSequence()
+            .filter { it.title_id in albumHitIds || it.name.lowercase().contains(lower) }
+            .sortedWith(compareBy(
+                { albumTitles[it.title_id]?.name?.lowercase() ?: "" },
+                { it.disc_number },
+                { it.track_number }
+            ))
+            .take(limit)
+            .mapNotNull { t ->
+                val album = albumTitles[t.title_id] ?: return@mapNotNull null
+                trackSearchMatch {
+                    trackId = t.id!!
+                    albumTitleId = album.id!!
+                    trackName = t.name
+                    albumName = album.name
+                    primaryArtistByTitle[album.id]?.let { aid -> artistsById[aid]?.name }?.let { albumArtistName = it }
+                    discNumber = t.disc_number
+                    trackNumber = t.track_number
+                }
+            }
+            .toList()
+        return searchCatalogTracksResponse {
+            this.matches.addAll(hits)
+        }
+    }
+
+    // ========================================================================
+    // Author admin
+    // ========================================================================
+
+    override suspend fun listAdminAuthors(request: ListAdminAuthorsRequest): AdminAuthorListResponse {
+        val countsByAuthor = TitleAuthorEntity.findAll().groupingBy { it.author_id }.eachCount()
+        val all = AuthorEntity.findAll()
+        val filtered = run {
+            val needle = if (request.hasQ()) request.q.trim().lowercase() else ""
+            all.asSequence()
+                .filter { needle.isEmpty() || it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
+                .filter { !request.issuesOnly || authorHasIssues(it) }
+                .toList()
+        }
+        val sorted = filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
+        val (paged, pagination) = paginate(sorted, request.page, request.limit)
+        return adminAuthorListResponse {
+            authors.addAll(paged.map { a ->
+                adminAuthorItem {
+                    id = a.id!!
+                    name = a.name
+                    sortName = a.sort_name
+                    hasBiography = !a.biography.isNullOrBlank()
+                    hasHeadshot = !a.headshot_path.isNullOrBlank()
+                    a.open_library_author_id?.takeIf { it.isNotBlank() }?.let { openlibraryId = it }
+                    ownedBookCount = countsByAuthor[a.id] ?: 0
+                }
+            })
+            this.pagination = pagination
+        }
+    }
+
+    override suspend fun updateAuthor(request: UpdateAuthorRequest): Empty {
+        val author = AuthorEntity.findById(request.authorId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("author not found"))
+        if (request.hasName()) author.name = request.name
+        if (request.hasSortName()) author.sort_name = request.sortName
+        if (request.hasBiography()) author.biography = request.biography.ifBlank { null }
+        if (request.hasOpenlibraryId()) author.open_library_author_id = request.openlibraryId.ifBlank { null }
+        if (request.hasWikidataId()) author.wikidata_id = request.wikidataId.ifBlank { null }
+        if (request.hasBirthDate()) author.birth_date = request.birthDate.toLocalDate()
+        if (request.hasDeathDate()) author.death_date = request.deathDate.toLocalDate()
+        author.updated_at = LocalDateTime.now()
+        author.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun deleteAuthor(request: AdminAuthorIdRequest): Empty {
+        val author = AuthorEntity.findById(request.authorId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        TitleAuthorEntity.findAll().filter { it.author_id == author.id }.forEach { it.delete() }
+        author.delete()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun mergeAuthors(request: MergeAuthorsRequest): Empty {
+        if (request.keepAuthorId == request.dropAuthorId) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("keep and drop must differ"))
+        }
+        val keep = AuthorEntity.findById(request.keepAuthorId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("keep author not found"))
+        val drop = AuthorEntity.findById(request.dropAuthorId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("drop author not found"))
+        val now = LocalDateTime.now()
+        // Re-point title_author rows, preserving ordering on the surviving author.
+        val keepTitleIds = TitleAuthorEntity.findAll()
+            .filter { it.author_id == keep.id }
+            .map { it.title_id }
+            .toSet()
+        TitleAuthorEntity.findAll()
+            .filter { it.author_id == drop.id }
+            .forEach { link ->
+                if (link.title_id in keepTitleIds) {
+                    link.delete()   // duplicate link — drop the extra row
+                } else {
+                    link.author_id = keep.id!!
+                    link.save()
+                }
+            }
+        drop.delete()
+        keep.updated_at = now
+        keep.save()
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Artist admin
+    // ========================================================================
+
+    override suspend fun listAdminArtists(request: ListAdminArtistsRequest): AdminArtistListResponse {
+        val countsByArtist = TitleArtistEntity.findAll().groupingBy { it.artist_id }.eachCount()
+        val all = ArtistEntity.findAll()
+        val filtered = run {
+            val needle = if (request.hasQ()) request.q.trim().lowercase() else ""
+            all.asSequence()
+                .filter { needle.isEmpty() || it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
+                .filter { !request.issuesOnly || artistHasIssues(it) }
+                .toList()
+        }
+        val sorted = filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
+        val (paged, pagination) = paginate(sorted, request.page, request.limit)
+        return adminArtistListResponse {
+            artists.addAll(paged.map { a ->
+                adminArtistItem {
+                    id = a.id!!
+                    name = a.name
+                    sortName = a.sort_name
+                    artistType = a.artist_type.toProtoArtistType()
+                    hasBiography = !a.biography.isNullOrBlank()
+                    hasHeadshot = !a.headshot_path.isNullOrBlank()
+                    a.musicbrainz_artist_id?.takeIf { it.isNotBlank() }?.let { musicbrainzArtistId = it }
+                    ownedAlbumCount = countsByArtist[a.id] ?: 0
+                }
+            })
+            this.pagination = pagination
+        }
+    }
+
+    override suspend fun updateArtist(request: UpdateArtistRequest): Empty {
+        val artist = ArtistEntity.findById(request.artistId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("artist not found"))
+        if (request.hasName()) artist.name = request.name
+        if (request.hasSortName()) artist.sort_name = request.sortName
+        if (request.artistType != ArtistType.ARTIST_TYPE_UNKNOWN) {
+            artist.artist_type = request.artistType.toEntityArtistType().name
+        }
+        if (request.hasBiography()) artist.biography = request.biography.ifBlank { null }
+        if (request.hasMusicbrainzArtistId()) artist.musicbrainz_artist_id = request.musicbrainzArtistId.ifBlank { null }
+        if (request.hasWikidataId()) artist.wikidata_id = request.wikidataId.ifBlank { null }
+        if (request.hasBeginDate()) artist.begin_date = request.beginDate.toLocalDate()
+        if (request.hasEndDate()) artist.end_date = request.endDate.toLocalDate()
+        artist.updated_at = LocalDateTime.now()
+        artist.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun deleteArtist(request: AdminArtistIdRequest): Empty {
+        val artist = ArtistEntity.findById(request.artistId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        TitleArtistEntity.findAll().filter { it.artist_id == artist.id }.forEach { it.delete() }
+        ArtistMembershipEntity.findAll()
+            .filter { it.group_artist_id == artist.id || it.member_artist_id == artist.id }
+            .forEach { it.delete() }
+        artist.delete()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun mergeArtists(request: MergeArtistsRequest): Empty {
+        if (request.keepArtistId == request.dropArtistId) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("keep and drop must differ"))
+        }
+        val keep = ArtistEntity.findById(request.keepArtistId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("keep artist not found"))
+        val drop = ArtistEntity.findById(request.dropArtistId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("drop artist not found"))
+        val keepTitleIds = TitleArtistEntity.findAll()
+            .filter { it.artist_id == keep.id }
+            .map { it.title_id }
+            .toSet()
+        TitleArtistEntity.findAll()
+            .filter { it.artist_id == drop.id }
+            .forEach { link ->
+                if (link.title_id in keepTitleIds) link.delete()
+                else { link.artist_id = keep.id!!; link.save() }
+            }
+        // Memberships re-pointed too; any membership where both ids were
+        // the same (drop↔drop) is dropped outright.
+        ArtistMembershipEntity.findAll()
+            .filter { it.group_artist_id == drop.id || it.member_artist_id == drop.id }
+            .forEach { m ->
+                if (m.group_artist_id == drop.id) m.group_artist_id = keep.id!!
+                if (m.member_artist_id == drop.id) m.member_artist_id = keep.id!!
+                if (m.group_artist_id == m.member_artist_id) m.delete() else m.save()
+            }
+        drop.delete()
+        keep.updated_at = LocalDateTime.now()
+        keep.save()
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // External identifier assignment + agent-specific re-enrichment
+    // ========================================================================
+
+    override suspend fun assignExternalIdentifier(
+        request: AssignExternalIdentifierRequest
+    ): AssignExternalIdentifierResponse {
+        val title = TitleEntity.findById(request.titleId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("title not found"))
+        val value = request.value.trim()
+        if (value.isEmpty()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("value required"))
+        }
+        when (request.kind) {
+            ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_TMDB -> {
+                val tmdbId = value.toIntOrNull()
+                    ?: throw StatusException(Status.INVALID_ARGUMENT.withDescription("TMDB value must be integer"))
+                title.tmdb_id = tmdbId
+                title.media_type = request.mediaType.toEntityMediaType().name
+            }
+            ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_OPENLIBRARY_WORK -> {
+                if (!value.matches(OL_WORK_RE)) {
+                    throw StatusException(Status.INVALID_ARGUMENT.withDescription("not an OL work id"))
+                }
+                title.open_library_work_id = value
+                title.media_type = MediaTypeEnum.BOOK.name
+            }
+            ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE_GROUP -> {
+                if (!value.matches(MBID_RE)) {
+                    throw StatusException(Status.INVALID_ARGUMENT.withDescription("not an MBID"))
+                }
+                title.musicbrainz_release_group_id = value
+                title.media_type = MediaTypeEnum.ALBUM.name
+            }
+            ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE -> {
+                if (!value.matches(MBID_RE)) {
+                    throw StatusException(Status.INVALID_ARGUMENT.withDescription("not an MBID"))
+                }
+                title.musicbrainz_release_id = value
+                title.media_type = MediaTypeEnum.ALBUM.name
+            }
+            else -> throw StatusException(Status.INVALID_ARGUMENT.withDescription("kind required"))
+        }
+        title.enrichment_status = EnrichmentStatusEnum.PENDING.name
+        title.updated_at = LocalDateTime.now()
+        title.save()
+        return assignExternalIdentifierResponse {
+            merged = false
+        }
+    }
+
+    override suspend fun reEnrichWithAgent(request: ReEnrichWithAgentRequest): Empty {
+        val title = TitleEntity.findById(request.titleId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        // Fire-and-forget — agents log their own failures.
+        val agentName = request.agent.name.removePrefix("ENRICHMENT_AGENT_")
+        Thread({
+            try {
+                when (request.agent) {
+                    EnrichmentAgent.ENRICHMENT_AGENT_TMDB,
+                    EnrichmentAgent.ENRICHMENT_AGENT_OPENLIBRARY,
+                    EnrichmentAgent.ENRICHMENT_AGENT_MUSICBRAINZ -> {
+                        // Bounce off the existing re-enrichment pipeline by
+                        // resetting status; the appropriate agent will pick
+                        // it up on its next sweep based on media_type.
+                        title.enrichment_status = EnrichmentStatusEnum.PENDING.name
+                        title.updated_at = LocalDateTime.now()
+                        title.save()
+                    }
+                    EnrichmentAgent.ENRICHMENT_AGENT_AUTHOR_HEADSHOT -> {
+                        // Run one-off enrichment over each author linked to this title.
+                        val authorIds = TitleAuthorEntity.findAll()
+                            .filter { it.title_id == title.id }
+                            .map { it.author_id }
+                            .toSet()
+                        val agent = AuthorEnrichmentAgent()
+                        AuthorEntity.findAll().filter { it.id in authorIds }.forEach {
+                            agent.enrichOne(it)
+                        }
+                    }
+                    EnrichmentAgent.ENRICHMENT_AGENT_ARTIST_HEADSHOT,
+                    EnrichmentAgent.ENRICHMENT_AGENT_ARTIST_PERSONNEL -> {
+                        val artistIds = TitleArtistEntity.findAll()
+                            .filter { it.title_id == title.id }
+                            .map { it.artist_id }
+                            .toSet()
+                        val agent = ArtistEnrichmentAgent()
+                        ArtistEntity.findAll().filter { it.id in artistIds }.forEach {
+                            agent.enrichOne(it)
+                        }
+                    }
+                    else -> log.warn("ReEnrichWithAgent called with UNKNOWN agent")
+                }
+            } catch (e: Exception) {
+                log.warn("ReEnrichWithAgent {} for title {} failed: {}", agentName, title.id, e.message)
+            }
+        }, "re-enrich-${agentName.lowercase()}-${title.id}").apply {
+            isDaemon = true
+            start()
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Book series admin
+    // ========================================================================
+
+    override suspend fun listBookSeries(request: ListBookSeriesRequest): BookSeriesListResponse {
+        val volumeCounts = TitleEntity.findAll()
+            .filter { it.media_type == MediaTypeEnum.BOOK.name && it.book_series_id != null }
+            .groupingBy { it.book_series_id!! }
+            .eachCount()
+        val needle = if (request.hasQ()) request.q.trim().lowercase() else ""
+        val filtered = BookSeriesEntity.findAll()
+            .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
+            .sortedBy { it.name.lowercase() }
+        val (paged, pagination) = paginate(filtered, request.page, request.limit)
+        return bookSeriesListResponse {
+            series.addAll(paged.map { s ->
+                bookSeriesItem {
+                    id = s.id!!
+                    name = s.name
+                    volumeCount = volumeCounts[s.id] ?: 0
+                    s.author_id?.let { primaryAuthorId = it }
+                }
+            })
+            this.pagination = pagination
+        }
+    }
+
+    override suspend fun updateBookSeries(request: UpdateBookSeriesRequest): Empty {
+        val series = BookSeriesEntity.findById(request.seriesId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        if (request.hasName()) series.name = request.name
+        if (request.hasPrimaryAuthorId()) series.author_id = request.primaryAuthorId
+        series.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun reassignTitleToSeries(request: ReassignTitleToSeriesRequest): Empty {
+        val title = TitleEntity.findById(request.titleId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        if (title.media_type != MediaTypeEnum.BOOK.name) {
+            throw StatusException(Status.FAILED_PRECONDITION.withDescription("title is not a book"))
+        }
+        title.book_series_id = if (request.hasSeriesId()) request.seriesId else null
+        title.series_number = if (request.hasSeriesNumber()) {
+            request.seriesNumber.takeIf { it.isNotBlank() }?.let {
+                try { BigDecimal(it) } catch (_: Exception) {
+                    throw StatusException(Status.INVALID_ARGUMENT.withDescription("series_number must be decimal"))
+                }
+            }
+        } else null
+        title.updated_at = LocalDateTime.now()
+        title.save()
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Track metadata edits
+    // ========================================================================
+
+    override suspend fun updateTrack(request: UpdateTrackRequest): Empty {
+        val track = TrackEntity.findById(request.trackId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        if (request.hasName()) track.name = request.name
+        if (request.hasTrackNumber()) track.track_number = request.trackNumber
+        if (request.hasDiscNumber()) track.disc_number = request.discNumber
+        if (request.hasMusicbrainzRecordingId()) {
+            track.musicbrainz_recording_id = request.musicbrainzRecordingId.ifBlank { null }
+        }
+        track.updated_at = LocalDateTime.now()
+        track.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun reorderTracks(request: ReorderTracksRequest): Empty {
+        val tracksByAlbum = TrackEntity.findAll()
+            .filter { it.title_id == request.albumTitleId }
+            .associateBy { it.id }
+        if (tracksByAlbum.isEmpty()) {
+            throw StatusException(Status.NOT_FOUND.withDescription("album has no tracks"))
+        }
+        // Verify every submitted id actually belongs to this album before
+        // we touch anything — reject the whole call on a mismatch so the
+        // server never persists a half-applied reorder.
+        for (entry in request.orderList) {
+            if (entry.trackId !in tracksByAlbum) {
+                throw StatusException(Status.INVALID_ARGUMENT.withDescription(
+                    "track ${entry.trackId} not on album ${request.albumTitleId}"
+                ))
+            }
+        }
+        val now = LocalDateTime.now()
+        for (entry in request.orderList) {
+            val t = tracksByAlbum[entry.trackId] ?: continue
+            t.disc_number = entry.discNumber
+            t.track_number = entry.trackNumber
+            t.updated_at = now
+            t.save()
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Artist membership (M6 lineup editing)
+    // ========================================================================
+
+    override suspend fun listArtistMemberships(request: AdminArtistIdRequest): ArtistMembershipListResponse {
+        val id = request.artistId
+        val memberships = ArtistMembershipEntity.findAll()
+            .filter { it.group_artist_id == id || it.member_artist_id == id }
+            .sortedByDescending { it.begin_date }
+        val otherIds = memberships.flatMap { listOf(it.group_artist_id, it.member_artist_id) }.toSet()
+        val artistsById = ArtistEntity.findAll().filter { it.id in otherIds }.associateBy { it.id }
+        return artistMembershipListResponse {
+            this.memberships.addAll(memberships.map { m ->
+                artistMembershipRow {
+                    this.id = m.id!!
+                    groupArtistId = m.group_artist_id
+                    memberArtistId = m.member_artist_id
+                    groupName = artistsById[m.group_artist_id]?.name ?: ""
+                    memberName = artistsById[m.member_artist_id]?.name ?: ""
+                    m.begin_date?.let { beginDate = it.toProtoCalendarDate() }
+                    m.end_date?.let { endDate = it.toProtoCalendarDate() }
+                    m.primary_instruments?.takeIf { it.isNotBlank() }
+                        ?.split(",")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotEmpty() }
+                        ?.let { primaryInstruments.addAll(it) }
+                }
+            })
+        }
+    }
+
+    override suspend fun upsertArtistMembership(
+        request: UpsertArtistMembershipRequest
+    ): ArtistMembershipResponse {
+        if (request.groupArtistId == request.memberArtistId) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("group and member must differ"))
+        }
+        ArtistEntity.findById(request.groupArtistId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("group artist not found"))
+        ArtistEntity.findById(request.memberArtistId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("member artist not found"))
+
+        val instruments = request.primaryInstrumentsList.joinToString(",").ifBlank { null }
+        val beginDate = if (request.hasBeginDate()) request.beginDate.toLocalDate() else null
+        val endDate = if (request.hasEndDate()) request.endDate.toLocalDate() else null
+
+        val row = if (request.hasId()) {
+            ArtistMembershipEntity.findById(request.id)
+                ?: throw StatusException(Status.NOT_FOUND.withDescription("membership not found"))
+        } else {
+            ArtistMembershipEntity()
+        }
+        row.group_artist_id = request.groupArtistId
+        row.member_artist_id = request.memberArtistId
+        row.begin_date = beginDate
+        row.end_date = endDate
+        row.primary_instruments = instruments
+        row.save()
+        return artistMembershipResponse { id = row.id!! }
+    }
+
+    override suspend fun deleteArtistMembership(request: MembershipIdRequest): Empty {
+        val row = ArtistMembershipEntity.findById(request.membershipId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        row.delete()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun triggerArtistEnrichment(request: AdminArtistIdRequest): Empty {
+        val artist = ArtistEntity.findById(request.artistId)
+            ?: throw StatusException(Status.NOT_FOUND)
+        val agent = ArtistEnrichmentAgent()
+        Thread({
+            try { agent.enrichOne(artist) }
+            catch (e: Exception) { log.warn("triggerArtistEnrichment {} failed: {}", artist.id, e.message) }
+        }, "artist-enrich-manual-${artist.id}").apply { isDaemon = true; start() }
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Audio transcode cache admin
+    // ========================================================================
+
+    override suspend fun getAudioTranscodeCacheStatus(request: Empty): AudioTranscodeCacheStatus {
+        val status = AudioTranscodeCache.status()
+        return audioTranscodeCacheStatus {
+            totalSizeBytes = status.totalBytes
+            entryCount = status.entryCount
+            status.oldestMtimeEpochMs?.let {
+                oldestEntryAt = timestamp { secondsSinceEpoch = it / 1000 }
+            }
+        }
+    }
+
+    override suspend fun clearAudioTranscodeCache(request: ClearAudioTranscodeCacheRequest): Empty {
+        if (request.hasTrackId()) {
+            AudioTranscodeCache.clearForTrack(request.trackId)
+        } else {
+            AudioTranscodeCache.clearAll()
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    // ========================================================================
+    // Helpers
+    // ========================================================================
+
+    private fun authorHasIssues(a: AuthorEntity): Boolean =
+        a.biography.isNullOrBlank() ||
+            a.headshot_path.isNullOrBlank() ||
+            a.open_library_author_id.isNullOrBlank()
+
+    private fun artistHasIssues(a: ArtistEntity): Boolean =
+        a.biography.isNullOrBlank() ||
+            a.headshot_path.isNullOrBlank() ||
+            a.musicbrainz_artist_id.isNullOrBlank()
+
+    private fun <T> paginate(items: List<T>, pageReq: Int, limitReq: Int): Pair<List<T>, PaginationInfo> {
+        val limit = if (limitReq <= 0) 50 else limitReq.coerceIn(1, 200)
+        val page = if (pageReq <= 0) 1 else pageReq
+        val total = items.size
+        val totalPages = if (total == 0) 1 else ((total + limit - 1) / limit)
+        val from = ((page - 1) * limit).coerceAtMost(total)
+        val to = (from + limit).coerceAtMost(total)
+        val info = paginationInfo {
+            this.total = total
+            this.page = page
+            this.limit = limit
+            this.totalPages = totalPages
+        }
+        return items.subList(from, to) to info
+    }
+
+    private fun CalendarDate.toLocalDate(): LocalDate? {
+        if (year == 0) return null
+        val m = if (month == Month.MONTH_UNKNOWN) 1 else month.number
+        val d = if (day == 0) 1 else day
+        return try { LocalDate.of(year, m, d) } catch (_: Exception) { null }
+    }
+
+    private fun ArtistType.toEntityArtistType(): ArtistTypeEnum = when (this) {
+        ArtistType.ARTIST_TYPE_PERSON -> ArtistTypeEnum.PERSON
+        ArtistType.ARTIST_TYPE_GROUP -> ArtistTypeEnum.GROUP
+        ArtistType.ARTIST_TYPE_ORCHESTRA -> ArtistTypeEnum.ORCHESTRA
+        ArtistType.ARTIST_TYPE_CHOIR -> ArtistTypeEnum.CHOIR
+        ArtistType.ARTIST_TYPE_OTHER -> ArtistTypeEnum.OTHER
+        else -> ArtistTypeEnum.OTHER
+    }
+
+    private fun UnmatchedBookEntity.toProtoItem(): UnmatchedBookItem = unmatchedBookItem {
+        id = this@toProtoItem.id!!
+        filePath = this@toProtoItem.file_path
+        fileName = this@toProtoItem.file_name
+        this@toProtoItem.file_size_bytes?.let { fileSizeBytes = it }
+        editionFormat = when (this@toProtoItem.media_format) {
+            MediaFormatEnum.EBOOK_EPUB.name -> BookEditionFormat.BOOK_EDITION_FORMAT_EBOOK_EPUB
+            MediaFormatEnum.EBOOK_PDF.name -> BookEditionFormat.BOOK_EDITION_FORMAT_EBOOK_PDF
+            MediaFormatEnum.AUDIOBOOK_DIGITAL.name -> BookEditionFormat.BOOK_EDITION_FORMAT_AUDIOBOOK_DIGITAL
+            else -> BookEditionFormat.BOOK_EDITION_FORMAT_UNKNOWN
+        }
+        this@toProtoItem.parsed_title?.takeIf { it.isNotBlank() }?.let { parsedTitle = it }
+        this@toProtoItem.parsed_author?.takeIf { it.isNotBlank() }?.let { parsedAuthor = it }
+        this@toProtoItem.parsed_isbn?.takeIf { it.isNotBlank() }?.let { parsedIsbn = it }
+        status = this@toProtoItem.match_status.toUnmatchedStatus()
+        this@toProtoItem.linked_title_id?.let { linkedTitleId = it }
+        this@toProtoItem.discovered_at?.let { discoveredAt = it.toProtoTimestamp() }
+        this@toProtoItem.linked_at?.let { linkedAt = it.toProtoTimestamp() }
+    }
+
+    private fun UnmatchedAudioEntity.toProtoItem(): UnmatchedAudioItem = unmatchedAudioItem {
+        id = this@toProtoItem.id!!
+        filePath = this@toProtoItem.file_path
+        fileName = this@toProtoItem.file_name
+        this@toProtoItem.file_size_bytes?.let { fileSizeBytes = it }
+        this@toProtoItem.parsed_title?.takeIf { it.isNotBlank() }?.let { parsedTitle = it }
+        this@toProtoItem.parsed_album?.takeIf { it.isNotBlank() }?.let { parsedAlbum = it }
+        this@toProtoItem.parsed_album_artist?.takeIf { it.isNotBlank() }?.let { parsedAlbumArtist = it }
+        this@toProtoItem.parsed_track_artist?.takeIf { it.isNotBlank() }?.let { parsedTrackArtist = it }
+        this@toProtoItem.parsed_track_number?.let { parsedTrackNumber = it }
+        this@toProtoItem.parsed_disc_number?.let { parsedDiscNumber = it }
+        this@toProtoItem.parsed_duration_seconds?.let { parsedDuration = it.toDouble().toPlaybackOffset() }
+        this@toProtoItem.parsed_mb_release_id?.takeIf { it.isNotBlank() }?.let { parsedMusicbrainzReleaseId = it }
+        this@toProtoItem.parsed_mb_release_group_id?.takeIf { it.isNotBlank() }?.let { parsedMusicbrainzReleaseGroupId = it }
+        this@toProtoItem.parsed_mb_recording_id?.takeIf { it.isNotBlank() }?.let { parsedMusicbrainzRecordingId = it }
+        this@toProtoItem.parsed_upc?.takeIf { it.isNotBlank() }?.let { parsedUpc = it }
+        this@toProtoItem.parsed_isrc?.takeIf { it.isNotBlank() }?.let { parsedIsrc = it }
+        this@toProtoItem.parsed_catalog_number?.takeIf { it.isNotBlank() }?.let { parsedCatalogNumber = it }
+        this@toProtoItem.parsed_label?.takeIf { it.isNotBlank() }?.let { parsedLabel = it }
+        status = this@toProtoItem.match_status.toUnmatchedStatus()
+        this@toProtoItem.linked_track_id?.let { linkedTrackId = it }
+        this@toProtoItem.discovered_at?.let { discoveredAt = it.toProtoTimestamp() }
+        this@toProtoItem.linked_at?.let { linkedAt = it.toProtoTimestamp() }
+    }
+
+    private fun String.toUnmatchedStatus(): UnmatchedStatus = when (this) {
+        UnmatchedBookStatusEnum.UNMATCHED.name,
+        UnmatchedAudioStatusEnum.UNMATCHED.name -> UnmatchedStatus.UNMATCHED_STATUS_UNMATCHED
+        UnmatchedBookStatusEnum.LINKED.name,
+        UnmatchedAudioStatusEnum.LINKED.name -> UnmatchedStatus.UNMATCHED_STATUS_LINKED
+        UnmatchedBookStatusEnum.IGNORED.name,
+        UnmatchedAudioStatusEnum.IGNORED.name -> UnmatchedStatus.UNMATCHED_STATUS_IGNORED
+        else -> UnmatchedStatus.UNMATCHED_STATUS_UNKNOWN
+    }
+
 }

@@ -25,6 +25,12 @@ import net.stewart.mediamanager.entity.MatchMethod as MatchMethodEnum
 import net.stewart.mediamanager.entity.AcquisitionStatus as AcquisitionStatusEnum
 import net.stewart.mediamanager.entity.LeaseStatus as LeaseStatusEnum
 import net.stewart.mediamanager.entity.LeaseType as LeaseTypeEnum
+import net.stewart.mediamanager.entity.ArtistType as ArtistTypeEnum
+import net.stewart.mediamanager.entity.Artist as ArtistEntity
+import net.stewart.mediamanager.entity.Author as AuthorEntity
+import net.stewart.mediamanager.entity.Track as TrackEntity
+import net.stewart.mediamanager.entity.ListeningProgress as ListeningProgressEntity
+import net.stewart.mediamanager.entity.ReadingProgress as ReadingProgressEntity
 import net.stewart.mediamanager.service.WishLifecycleStage
 import net.stewart.mediamanager.service.TranscoderAgent
 import java.io.File
@@ -62,6 +68,8 @@ fun String?.toProtoMediaType(): MediaType = when (this) {
     MediaTypeEnum.MOVIE.name -> MediaType.MEDIA_TYPE_MOVIE
     MediaTypeEnum.TV.name -> MediaType.MEDIA_TYPE_TV
     MediaTypeEnum.PERSONAL.name -> MediaType.MEDIA_TYPE_PERSONAL
+    MediaTypeEnum.BOOK.name -> MediaType.MEDIA_TYPE_BOOK
+    MediaTypeEnum.ALBUM.name -> MediaType.MEDIA_TYPE_ALBUM
     else -> MediaType.MEDIA_TYPE_UNKNOWN
 }
 
@@ -102,6 +110,8 @@ fun MediaType.toEntityMediaType(): MediaTypeEnum = when (this) {
     MediaType.MEDIA_TYPE_MOVIE -> MediaTypeEnum.MOVIE
     MediaType.MEDIA_TYPE_TV -> MediaTypeEnum.TV
     MediaType.MEDIA_TYPE_PERSONAL -> MediaTypeEnum.PERSONAL
+    MediaType.MEDIA_TYPE_BOOK -> MediaTypeEnum.BOOK
+    MediaType.MEDIA_TYPE_ALBUM -> MediaTypeEnum.ALBUM
     else -> MediaTypeEnum.MOVIE
 }
 
@@ -505,6 +515,9 @@ fun net.stewart.mediamanager.entity.Camera.toAdminProto(): AdminCamera = adminCa
 
 fun net.stewart.mediamanager.entity.OwnershipPhoto.toProtoPhotoInfo(): OwnershipPhotoInfo = ownershipPhotoInfo {
     photoId = this@toProtoPhotoInfo.id!!
+    // Legacy URL field for Android TV — iOS uses ImageService with
+    // IMAGE_TYPE_OWNERSHIP_PHOTO + uuid = photo_id instead.
+    @Suppress("DEPRECATION")
     url = "/ownership-photos/${this@toProtoPhotoInfo.id}"
     this@toProtoPhotoInfo.captured_at?.let { capturedAt = it.toProtoTimestamp() }
 }
@@ -514,4 +527,117 @@ fun net.stewart.mediamanager.entity.PasskeyCredential.toProto(): PasskeyCredenti
     displayName = this@toProto.display_name
     this@toProto.created_at?.let { createdAt = it.toProtoTimestamp() }
     this@toProto.last_used_at?.let { lastUsedAt = it.toProtoTimestamp() }
+}
+
+// ============================================================================
+// Audio / Books
+// ============================================================================
+
+fun String?.toProtoArtistType(): ArtistType = when (this) {
+    ArtistTypeEnum.PERSON.name -> ArtistType.ARTIST_TYPE_PERSON
+    ArtistTypeEnum.GROUP.name -> ArtistType.ARTIST_TYPE_GROUP
+    ArtistTypeEnum.ORCHESTRA.name -> ArtistType.ARTIST_TYPE_ORCHESTRA
+    ArtistTypeEnum.CHOIR.name -> ArtistType.ARTIST_TYPE_CHOIR
+    ArtistTypeEnum.OTHER.name -> ArtistType.ARTIST_TYPE_OTHER
+    else -> ArtistType.ARTIST_TYPE_UNKNOWN
+}
+
+// Maps a MusicBrainz release-group primary-type string to the proto enum.
+// Unrecognized values fall through to OTHER so the field carries information.
+fun String?.toProtoReleaseGroupType(): ReleaseGroupType = when (this?.lowercase()) {
+    "album" -> ReleaseGroupType.RELEASE_GROUP_TYPE_ALBUM
+    "ep" -> ReleaseGroupType.RELEASE_GROUP_TYPE_EP
+    "single" -> ReleaseGroupType.RELEASE_GROUP_TYPE_SINGLE
+    "compilation" -> ReleaseGroupType.RELEASE_GROUP_TYPE_COMPILATION
+    "soundtrack" -> ReleaseGroupType.RELEASE_GROUP_TYPE_SOUNDTRACK
+    "live" -> ReleaseGroupType.RELEASE_GROUP_TYPE_LIVE
+    "remix" -> ReleaseGroupType.RELEASE_GROUP_TYPE_REMIX
+    null, "" -> ReleaseGroupType.RELEASE_GROUP_TYPE_UNKNOWN
+    else -> ReleaseGroupType.RELEASE_GROUP_TYPE_OTHER
+}
+
+fun ArtistEntity.toProto(): Artist = artist {
+    id = this@toProto.id!!
+    name = this@toProto.name
+    this@toProto.sort_name.takeIf { it.isNotBlank() }?.let { sortName = it }
+    artistType = this@toProto.artist_type.toProtoArtistType()
+    this@toProto.musicbrainz_artist_id?.takeIf { it.isNotBlank() }?.let { musicbrainzArtistId = it }
+    this@toProto.begin_date?.year?.let { beginYear = it }
+    this@toProto.end_date?.year?.let { endYear = it }
+}
+
+fun ArtistEntity.toListItem(ownedAlbumCount: Int): ArtistListItem = artistListItem {
+    id = this@toListItem.id!!
+    name = this@toListItem.name
+    this@toListItem.sort_name.takeIf { it.isNotBlank() }?.let { sortName = it }
+    artistType = this@toListItem.artist_type.toProtoArtistType()
+    this.ownedAlbumCount = ownedAlbumCount
+}
+
+fun AuthorEntity.toProto(): Author = author {
+    id = this@toProto.id!!
+    name = this@toProto.name
+    this@toProto.biography?.takeIf { it.isNotBlank() }?.let { biography = it }
+    this@toProto.open_library_author_id?.takeIf { it.isNotBlank() }?.let { openlibraryId = it }
+    this@toProto.wikidata_id?.takeIf { it.isNotBlank() }?.let { wikidataId = it }
+    this@toProto.birth_date?.year?.let { birthYear = it }
+    this@toProto.death_date?.year?.let { deathYear = it }
+}
+
+fun AuthorEntity.toListItem(ownedBookCount: Int): AuthorListItem = authorListItem {
+    id = this@toListItem.id!!
+    name = this@toListItem.name
+    this.ownedBookCount = ownedBookCount
+}
+
+fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = track {
+    id = this@toProto.id!!
+    titleId = this@toProto.title_id
+    trackNumber = this@toProto.track_number
+    discNumber = this@toProto.disc_number
+    name = this@toProto.name
+    this@toProto.duration_seconds?.let { duration = it.toDouble().toPlaybackOffset() }
+    this@toProto.musicbrainz_recording_id?.takeIf { it.isNotBlank() }?.let { musicbrainzRecordingId = it }
+    playable = !this@toProto.file_path.isNullOrBlank()
+    if (trackArtistNames.isNotEmpty()) this.trackArtistNames.addAll(trackArtistNames)
+}
+
+fun ListeningProgressEntity.toProto(): ListeningProgress = listeningProgress {
+    trackId = this@toProto.track_id
+    position = this@toProto.position_seconds.toDouble().toPlaybackOffset()
+    this@toProto.duration_seconds?.let { duration = it.toDouble().toPlaybackOffset() }
+    this@toProto.updated_at?.let { updatedAt = it.toProtoTimestamp() }
+}
+
+fun net.stewart.mediamanager.entity.MediaItem.toBookEdition(): BookEdition {
+    val fmt = this.media_format
+    val editionFmt = when (fmt) {
+        MediaFormatEnum.EBOOK_EPUB.name -> BookEditionFormat.BOOK_EDITION_FORMAT_EBOOK_EPUB
+        MediaFormatEnum.EBOOK_PDF.name -> BookEditionFormat.BOOK_EDITION_FORMAT_EBOOK_PDF
+        MediaFormatEnum.AUDIOBOOK_DIGITAL.name -> BookEditionFormat.BOOK_EDITION_FORMAT_AUDIOBOOK_DIGITAL
+        MediaFormatEnum.MASS_MARKET_PAPERBACK.name,
+        MediaFormatEnum.TRADE_PAPERBACK.name -> BookEditionFormat.BOOK_EDITION_FORMAT_PAPERBACK
+        MediaFormatEnum.HARDBACK.name -> BookEditionFormat.BOOK_EDITION_FORMAT_HARDCOVER
+        else -> BookEditionFormat.BOOK_EDITION_FORMAT_UNKNOWN
+    }
+    val isDigital = fmt == MediaFormatEnum.EBOOK_EPUB.name ||
+        fmt == MediaFormatEnum.EBOOK_PDF.name ||
+        fmt == MediaFormatEnum.AUDIOBOOK_DIGITAL.name
+    val size = this.file_path?.let { path ->
+        try { java.io.File(path).takeIf { it.exists() }?.length() } catch (_: Exception) { null }
+    }
+    return bookEdition {
+        mediaItemId = this@toBookEdition.id!!
+        editionFormat = editionFmt
+        size?.let { fileSizeBytes = it }
+        this@toBookEdition.storage_location?.takeIf { it.isNotBlank() }?.let { storageLocation = it }
+        downloadable = isDigital && !this@toBookEdition.file_path.isNullOrBlank()
+    }
+}
+
+fun ReadingProgressEntity.toProto(): ReadingProgress = readingProgress {
+    mediaItemId = this@toProto.media_item_id
+    locator = this@toProto.cfi
+    fraction = this@toProto.percent
+    this@toProto.updated_at?.let { updatedAt = it.toProtoTimestamp() }
 }

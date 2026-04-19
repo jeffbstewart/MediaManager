@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// M8: passive "artists you might like" recommendations derived from the
+// user's owned artist set via similar-artist graph data. Representative
+// covers are fetched through ImageService using IMAGE_TYPE_CAA_RELEASE_GROUP.
+service RecommendationService {
+  rpc ListRecommendedArtists(ListRecommendedArtistsRequest) returns (ListRecommendedArtistsResponse);
+  rpc DismissRecommendation(DismissRecommendationRequest) returns (Empty);
+  rpc RefreshRecommendations(Empty) returns (RefreshRecommendationsResponse);
+}
+
+message ListRecommendedArtistsRequest {
+  int32 limit = 1;                        // 0 → server default (30)
+}
+
+message ListRecommendedArtistsResponse {
+  repeated RecommendedArtist artists = 1;
+  optional Timestamp last_refreshed = 2;
+}
+
+message RecommendedArtist {
+  string suggested_artist_mbid = 1;       // authoritative id
+  optional int64 suggested_artist_id = 2; // present if a local Artist row has been seeded
+  string suggested_artist_name = 3;
+  double score = 4;
+  repeated string voter_artist_names = 5; // owned artists that "voted" for this one
+  optional string representative_release_group_mbid = 6; // use with IMAGE_TYPE_CAA_RELEASE_GROUP
+  optional string representative_release_title = 7;
+}
+
+message DismissRecommendationRequest {
+  string suggested_artist_mbid = 1;
+}
+
+message RefreshRecommendationsResponse {
+  // True means a recompute was kicked off. Clients should re-list after
+  // a short delay to see the new data.
+  bool refresh_started = 1;
+}

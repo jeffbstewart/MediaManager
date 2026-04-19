@@ -9,9 +9,14 @@ import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TmdbCollection
 import net.stewart.mediamanager.entity.WishListItem
+import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.service.ArtistHeadshotCacheService
+import net.stewart.mediamanager.service.AuthorHeadshotCacheService
 import net.stewart.mediamanager.service.BackdropCacheService
 import net.stewart.mediamanager.service.CollectionPosterCacheService
 import net.stewart.mediamanager.service.HeadshotCacheService
+import net.stewart.mediamanager.service.ImageProxyService
 import net.stewart.mediamanager.service.LocalImageService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.PosterCacheService
@@ -29,6 +34,11 @@ import java.nio.file.Files
 class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(ImageGrpcService::class.java)
+
+    companion object {
+        private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private val OL_WORK_RE = Regex("^OL\\d+[WM]$")
+    }
 
     override fun streamImages(requests: Flow<ImageRequest>): Flow<ImageResponse> = flow {
         val user = currentUser()
@@ -116,6 +126,10 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
             ImageType.IMAGE_TYPE_OWNERSHIP_PHOTO -> resolveOwnershipPhoto(ref.uuid, ifNoneMatch)
             ImageType.IMAGE_TYPE_CAMERA_SNAPSHOT -> resolveCameraSnapshot(ref.cameraId)
             ImageType.IMAGE_TYPE_TMDB_POSTER -> resolveTmdbPoster(ref.tmdbMedia, ifNoneMatch)
+            ImageType.IMAGE_TYPE_ARTIST_HEADSHOT -> resolveArtistHeadshot(ref.artistId, ifNoneMatch)
+            ImageType.IMAGE_TYPE_AUTHOR_HEADSHOT -> resolveAuthorHeadshot(ref.authorId, ifNoneMatch)
+            ImageType.IMAGE_TYPE_CAA_RELEASE_GROUP -> resolveCaaReleaseGroup(ref.musicbrainzReleaseGroupId, ifNoneMatch)
+            ImageType.IMAGE_TYPE_OPENLIBRARY_COVER -> resolveOpenLibraryCover(ref.openlibraryWorkId, ifNoneMatch)
             else -> ImageResult.NotFound
         }
     }
@@ -258,6 +272,66 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
         }
 
         return null
+    }
+
+    private fun resolveArtistHeadshot(artistId: Long, ifNoneMatch: String?): ImageResult {
+        if (artistId <= 0) return ImageResult.NotFound
+        val artist = Artist.findById(artistId) ?: return ImageResult.NotFound
+        val source = artist.headshot_path?.takeIf { it.isNotBlank() } ?: return ImageResult.NotFound
+
+        val etag = "artist-$artistId-${source.hashCode()}"
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+        val path = ArtistHeadshotCacheService.cacheAndServe(artist) ?: return ImageResult.NotFound
+        if (!Files.exists(path)) return ImageResult.NotFound
+        return ImageResult.Found(Files.readAllBytes(path), "image/jpeg", etag)
+    }
+
+    private fun resolveAuthorHeadshot(authorId: Long, ifNoneMatch: String?): ImageResult {
+        if (authorId <= 0) return ImageResult.NotFound
+        val author = Author.findById(authorId) ?: return ImageResult.NotFound
+        val source = author.headshot_path?.takeIf { it.isNotBlank() } ?: return ImageResult.NotFound
+
+        val etag = "author-$authorId-${source.hashCode()}"
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+        val path = AuthorHeadshotCacheService.cacheAndServe(author) ?: return ImageResult.NotFound
+        if (!Files.exists(path)) return ImageResult.NotFound
+        return ImageResult.Found(Files.readAllBytes(path), "image/jpeg", etag)
+    }
+
+    private fun resolveCaaReleaseGroup(rgMbid: String, ifNoneMatch: String?): ImageResult {
+        if (rgMbid.isBlank() || !MBID_RE.matches(rgMbid)) return ImageResult.NotFound
+
+        val etag = "caa-rg-$rgMbid"
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+        val upstream = ImageProxyService.ProxiedUpstream(
+            provider = ImageProxyService.Provider.COVER_ART_ARCHIVE,
+            path = "/release-group/$rgMbid/front-500.jpg",
+            extension = "jpg"
+        )
+        return when (val r = ImageProxyService.serve(upstream)) {
+            is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
+            is ImageProxyService.Result.Failure -> ImageResult.NotFound
+        }
+    }
+
+    private fun resolveOpenLibraryCover(olWorkId: String, ifNoneMatch: String?): ImageResult {
+        if (olWorkId.isBlank() || !OL_WORK_RE.matches(olWorkId)) return ImageResult.NotFound
+
+        val etag = "ol-work-$olWorkId"
+        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+        val upstream = ImageProxyService.ProxiedUpstream(
+            provider = ImageProxyService.Provider.OPEN_LIBRARY,
+            path = "/b/olid/$olWorkId-L.jpg?default=false",
+            extension = "jpg"
+        )
+        return when (val r = ImageProxyService.serve(upstream)) {
+            is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
+            is ImageProxyService.Result.Failure -> ImageResult.NotFound
+        }
     }
 
     // TODO: Camera.snapshot_url field exists but isn't used — snapshots currently

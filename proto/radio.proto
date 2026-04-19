@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// M7: seeded "Start Radio" playback. Server maintains a 4h-TTL session
+// keyed by radio_session_id; the client submits per-track feedback so
+// the next batch can weight skips.
+service RadioService {
+  rpc StartRadio(StartRadioRequest) returns (StartRadioResponse);
+  rpc NextRadioBatch(NextRadioBatchRequest) returns (NextRadioBatchResponse);
+  rpc StopRadio(StopRadioRequest) returns (Empty);
+}
+
+enum RadioSeedType {
+  RADIO_SEED_TYPE_UNKNOWN = 0;
+  RADIO_SEED_TYPE_TRACK = 1;
+  RADIO_SEED_TYPE_ALBUM = 2;
+}
+
+message StartRadioRequest {
+  // Exactly one of the two is required.
+  optional int64 seed_track_id = 1;
+  optional int64 seed_album_id = 2;
+}
+
+message StartRadioResponse {
+  string radio_session_id = 1;           // opaque token, 4h TTL server-side
+  RadioSeed seed = 2;
+  repeated Track initial_batch = 3;
+}
+
+message RadioSeed {
+  RadioSeedType seed_type = 1;
+  int64 seed_id = 2;
+  string seed_name = 3;
+  string seed_artist_name = 4;
+}
+
+message NextRadioBatchRequest {
+  string radio_session_id = 1;
+  repeated RadioTrackHistory history = 2;
+}
+
+// Per-track feedback since the last batch.
+message RadioTrackHistory {
+  int64 track_id = 1;
+  // Absent: track played to completion.
+  // Present: offset within the track at which the user skipped.
+  optional PlaybackOffset skipped_at = 2;
+}
+
+message NextRadioBatchResponse {
+  repeated Track tracks = 1;
+}
+
+message StopRadioRequest { string radio_session_id = 1; }

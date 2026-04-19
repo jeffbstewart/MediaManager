@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "ArtistServiceProto";  // avoids collision with Artist message in common.proto
+option swift_prefix = "MM";
+
+import "common.proto";
+
+// Browse services for music artists and book authors.
+//
+// Headshots are fetched separately via ImageService using:
+//   IMAGE_TYPE_ARTIST_HEADSHOT + artist_id
+//   IMAGE_TYPE_AUTHOR_HEADSHOT + author_id
+service ArtistService {
+  rpc ListArtists(ListArtistsRequest) returns (ArtistListResponse);
+  rpc GetArtistDetail(ArtistIdRequest) returns (ArtistDetail);
+
+  rpc ListAuthors(ListAuthorsRequest) returns (AuthorListResponse);
+  rpc GetAuthorDetail(AuthorIdRequest) returns (AuthorDetail);
+}
+
+message ListArtistsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string sort = 3;              // "name", "recent", "popularity"
+  optional string q = 4;
+}
+
+message ArtistListResponse {
+  repeated ArtistListItem artists = 1;
+  PaginationInfo pagination = 2;
+}
+
+message ArtistListItem {
+  int64 id = 1;
+  string name = 2;
+  optional string sort_name = 3;
+  ArtistType artist_type = 4;
+  int32 owned_album_count = 5;
+}
+
+message ArtistIdRequest { int64 artist_id = 1; }
+
+message ListAuthorsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string sort = 3;
+  optional string q = 4;
+}
+
+message AuthorListResponse {
+  repeated AuthorListItem authors = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AuthorListItem {
+  int64 id = 1;
+  string name = 2;
+  int32 owned_book_count = 3;
+}
+
+message AuthorIdRequest { int64 author_id = 1; }

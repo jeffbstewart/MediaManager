@@ -17,6 +17,8 @@ enum MediaType {
   MEDIA_TYPE_MOVIE = 1;
   MEDIA_TYPE_TV = 2;
   MEDIA_TYPE_PERSONAL = 3;
+  MEDIA_TYPE_BOOK = 4;
+  MEDIA_TYPE_ALBUM = 5;
 }
 
 // Content ratings. TV and movie ratings occupy separate ranges so they
@@ -89,6 +91,44 @@ enum SearchResultType {
   SEARCH_RESULT_TYPE_COLLECTION = 4;
   SEARCH_RESULT_TYPE_TAG = 5;
   SEARCH_RESULT_TYPE_GENRE = 6;
+  SEARCH_RESULT_TYPE_BOOK = 7;
+  SEARCH_RESULT_TYPE_ALBUM = 8;
+  SEARCH_RESULT_TYPE_ARTIST = 9;
+  SEARCH_RESULT_TYPE_AUTHOR = 10;
+  SEARCH_RESULT_TYPE_TRACK = 11;
+}
+
+// MusicBrainz artist-type taxonomy. Mirrors the Kotlin ArtistType enum.
+enum ArtistType {
+  ARTIST_TYPE_UNKNOWN = 0;
+  ARTIST_TYPE_PERSON = 1;
+  ARTIST_TYPE_GROUP = 2;
+  ARTIST_TYPE_ORCHESTRA = 3;
+  ARTIST_TYPE_CHOIR = 4;
+  ARTIST_TYPE_OTHER = 5;
+}
+
+// MusicBrainz release-group type for unowned discography entries.
+enum ReleaseGroupType {
+  RELEASE_GROUP_TYPE_UNKNOWN = 0;
+  RELEASE_GROUP_TYPE_ALBUM = 1;
+  RELEASE_GROUP_TYPE_EP = 2;
+  RELEASE_GROUP_TYPE_SINGLE = 3;
+  RELEASE_GROUP_TYPE_COMPILATION = 4;
+  RELEASE_GROUP_TYPE_SOUNDTRACK = 5;
+  RELEASE_GROUP_TYPE_LIVE = 6;
+  RELEASE_GROUP_TYPE_REMIX = 7;
+  RELEASE_GROUP_TYPE_OTHER = 8;
+}
+
+// Digital + physical book edition formats.
+enum BookEditionFormat {
+  BOOK_EDITION_FORMAT_UNKNOWN = 0;
+  BOOK_EDITION_FORMAT_EBOOK_EPUB = 1;
+  BOOK_EDITION_FORMAT_EBOOK_PDF = 2;
+  BOOK_EDITION_FORMAT_AUDIOBOOK_DIGITAL = 3;
+  BOOK_EDITION_FORMAT_PAPERBACK = 4;
+  BOOK_EDITION_FORMAT_HARDCOVER = 5;
 }
 
 // User access level / role.
@@ -217,6 +257,10 @@ message TitleDetail {
   bool is_favorite = 7;
   bool is_hidden = 8;
   bool wished = 9;
+  // Populated only when title.media_type = MEDIA_TYPE_ALBUM.
+  optional Album album = 10;
+  // Populated only when title.media_type = MEDIA_TYPE_BOOK.
+  optional BookDetail book = 11;
 }
 
 message Transcode {
@@ -303,6 +347,16 @@ message SearchResult {
   optional string headshot_url = 12;
   optional int32 title_count = 13;
   optional int64 item_id = 14;
+  // --- Book/audio additions. Clients fetch any images via ImageService
+  // using the identifiers on this message (see images.proto for the
+  // new IMAGE_TYPE_* values). No URLs are sent on these fields. ---
+  optional int64 author_id = 15;
+  optional int64 artist_id = 16;
+  optional int64 track_id = 17;
+  optional int64 album_title_id = 18;       // parent album for TRACK results
+  optional string artist_name = 19;         // context line for ALBUM/TRACK
+  optional string album_name = 20;          // context line for TRACK
+  optional int64 media_item_id = 21;        // BOOK edition identifier
 }
 
 // ============================================================================
@@ -407,4 +461,124 @@ message MissingSeasonEntry {
   int32 season_number = 1;
   optional string name = 2;
   optional int32 episode_count = 3;
+}
+
+// ============================================================================
+// Audio / Books
+// ============================================================================
+//
+// All images referenced from this section are fetched via ImageService
+// using the identifiers on these messages. No URLs cross the gRPC wire.
+
+message Artist {
+  int64 id = 1;
+  string name = 2;
+  optional string sort_name = 3;
+  ArtistType artist_type = 4;
+  optional string musicbrainz_artist_id = 5;
+  optional int32 begin_year = 6;
+  optional int32 end_year = 7;
+  // Headshot: ImageService with IMAGE_TYPE_ARTIST_HEADSHOT + id.
+}
+
+message ArtistDetail {
+  Artist artist = 1;
+  optional string biography = 2;
+  repeated Title owned_albums = 3;
+  repeated DiscographyEntry other_works = 4;
+  repeated ArtistMemberEntry members = 5;    // populated when artist_type = GROUP
+  repeated ArtistMemberEntry member_of = 6;  // populated when artist_type = PERSON
+}
+
+message DiscographyEntry {
+  // Use with IMAGE_TYPE_CAA_RELEASE_GROUP via ImageService.
+  string musicbrainz_release_group_id = 1;
+  string name = 2;
+  optional int32 year = 3;
+  ReleaseGroupType release_group_type = 4;
+}
+
+message ArtistMemberEntry {
+  int64 artist_id = 1;
+  string name = 2;
+  optional int32 begin_year = 3;
+  optional int32 end_year = 4;
+}
+
+message Track {
+  int64 id = 1;
+  int64 title_id = 2;                        // parent album
+  int32 track_number = 3;
+  int32 disc_number = 4;
+  string name = 5;
+  optional PlaybackOffset duration = 6;
+  optional string musicbrainz_recording_id = 7;
+  bool playable = 8;                         // audio file present on NAS
+  repeated string track_artist_names = 9;    // when different from album credit
+}
+
+message Album {
+  Title title = 1;
+  repeated Artist album_artists = 2;
+  repeated Track tracks = 3;
+  optional int32 track_count = 4;
+  optional PlaybackOffset total_duration = 5;
+  optional string label = 6;
+  optional string musicbrainz_release_group_id = 7;
+  optional string musicbrainz_release_id = 8;
+}
+
+message Author {
+  int64 id = 1;
+  string name = 2;
+  optional string biography = 3;
+  optional string openlibrary_id = 4;
+  optional string wikidata_id = 5;
+  optional int32 birth_year = 6;
+  optional int32 death_year = 7;
+  // Headshot: ImageService with IMAGE_TYPE_AUTHOR_HEADSHOT + id.
+}
+
+message AuthorDetail {
+  Author author = 1;
+  repeated Title owned_books = 2;
+  repeated BibliographyEntry other_works = 3;
+}
+
+message BibliographyEntry {
+  // Use with IMAGE_TYPE_OPENLIBRARY_COVER via ImageService.
+  string openlibrary_work_id = 1;
+  string name = 2;
+  optional int32 year = 3;
+}
+
+message BookDetail {
+  repeated Author authors = 1;
+  repeated BookEdition editions = 2;
+  optional ReadingProgress reading_progress = 3;
+}
+
+message BookEdition {
+  int64 media_item_id = 1;
+  BookEditionFormat edition_format = 2;
+  optional int64 file_size_bytes = 3;
+  optional string storage_location = 4;      // physical shelf (non-digital only)
+  bool downloadable = 5;                     // true for digital editions
+}
+
+// Progress on a music track or digital audiobook.
+message ListeningProgress {
+  optional int64 track_id = 1;               // set when listening to a music track
+  optional int64 media_item_id = 2;          // set when listening to an audiobook
+  PlaybackOffset position = 3;
+  optional PlaybackOffset duration = 4;
+  optional Timestamp updated_at = 5;
+}
+
+// Progress within an ebook. Locator is an EPUB CFI or "/page/N" for PDF.
+message ReadingProgress {
+  int64 media_item_id = 1;
+  string locator = 2;
+  optional double fraction = 3;              // 0.0–1.0, dimensionless
+  optional Timestamp updated_at = 4;
 }

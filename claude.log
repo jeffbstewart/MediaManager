@@ -4228,3 +4228,182 @@ Session 2 (Mar 25):
   - src/test/kotlin/.../EnrichmentIntegrationTest.kt
   - web-app/src/app/features/admin/unmatched-audio.{ts,html,scss}
 ===
+
+=== 2026-04-19 10:07 — iOS-facing gRPC surface for books + audio + search ===
+- Goal: bring the recently-landed book and audio features (M4–M8) to the iOS
+  app over gRPC while preserving Android TV back-compat. Search also needed
+  opt-in flags so video-only clients keep their current behavior.
+- Ground rules carried through the design review:
+    * No URLs on any new proto field — images flow through the existing
+      ImageService with new typed identifiers.
+    * All time-valued fields use time.proto types; int for year-only.
+    * Enums with *_UNKNOWN = 0 for any field previously typed as a string.
+    * Additive-only proto changes so Android TV keeps compiling and running.
+- Proto diff (one batch, commit-ready):
+    * common.proto: MediaType += BOOK/ALBUM; SearchResultType += 5 new values;
+      new enums ArtistType / ReleaseGroupType / BookEditionFormat; 7 additive
+      SearchResult fields; TitleDetail.album + TitleDetail.book; new messages
+      Artist / ArtistDetail / DiscographyEntry / ArtistMemberEntry / Track /
+      Album / Author / AuthorDetail / BibliographyEntry / BookDetail /
+      BookEdition / ListeningProgress / ReadingProgress.
+    * images.proto: 4 new ImageTypes (ARTIST_HEADSHOT / AUTHOR_HEADSHOT /
+      CAA_RELEASE_GROUP / OPENLIBRARY_COVER) and matching ImageRef keys.
+    * catalog.proto: SearchRequest.include_books + include_audio (default false).
+    * playback.proto: 6 new RPCs — Report/Get/Clear ListeningProgress and
+      ReadingProgress.
+    * artist.proto (new): ArtistService — list/detail for artists AND authors.
+    * radio.proto (new): RadioService — M7 Start/Next/Stop with RadioSeedType
+      enum and PlaybackOffset-typed skipped_at.
+    * recommendations.proto (new): RecommendationService — M8 list/dismiss/
+      refresh, last_refreshed as Timestamp.
+    * admin.proto: OwnershipPhotoInfo.url marked `[deprecated = true]` with
+      comment pointing iOS at ImageService + IMAGE_TYPE_OWNERSHIP_PHOTO.
+      artist.proto needs `java_outer_classname = "ArtistServiceProto"` to
+      avoid colliding with the Artist message in common.proto.
+- Server implementation wired up:
+    * ProtoMappers: BOOK/ALBUM added to MediaType mapper pair; new enum
+      mappers (ArtistType / ReleaseGroupType); Artist / Author / Track /
+      ListeningProgress / ReadingProgress / MediaItem→BookEdition toProto
+      functions; list-item variants for Artist / Author. OwnershipPhoto.url
+      mapper now wraps the deprecated field with `@Suppress("DEPRECATION")`.
+    * ImageGrpcService: 4 new resolvers — artist + author headshots reuse
+      the existing ArtistHeadshotCacheService / AuthorHeadshotCacheService;
+      CAA release-group and OpenLibrary covers go through ImageProxyService
+      (same SSRF-screened proxy the HTTP tier uses). MBID and OL work-id
+      regex validation inlined.
+    * PlaybackGrpcService: 6 new RPCs delegating to ListeningProgressService
+      and ReadingProgressService. Track and MediaItem access checks parallel
+      the existing transcode check. Audiobook listening progress via
+      media_item_id returns UNIMPLEMENTED until we add a media_item→track
+      bridge.
+    * CatalogGrpcService.search: opt-in flags unlock BOOK + ALBUM result
+      types on the title loop, plus separate passes for artists, authors,
+      and tracks. Video behavior unchanged when flags are absent.
+    * CatalogGrpcService.getTitleDetail: album block populates tracks +
+      album_artists from title_artist; book block populates authors +
+      editions from media_item_title + reading progress.
+    * ArtistGrpcService (new): list + detail for artists and authors, ports
+      buildOtherWorks / buildMemberships from the HTTP services; pagination
+      helper respects page / limit; no URLs in responses.
+    * RadioGrpcService (new): startRadio / nextRadioBatch / stopRadio.
+      Added RadioSeedStore.remove() so StopRadio can explicitly end
+      sessions (HTTP tier had no stop endpoint). skipped_at < 30s treated
+      as an early skip for the existing HistoryEntry.skippedEarly signal.
+    * RecommendationGrpcService (new): list/dismiss/refresh; last_refreshed
+      returns the most recent created_at as a Timestamp. voters_json
+      decoded to a list of artist names for voter_artist_names.
+    * ArmeriaServer: three new services added to the interceptor chain
+      (LoggingInterceptor + AuthInterceptor applied automatically).
+- Build + test: `./gradlew build -x test` + `./gradlew test` both green.
+  Proto codegen succeeds against both main and transcode-buddy modules.
+- Follow-ups deliberately deferred (user called out after this batch):
+    * Admin gRPC API pass to bring OwnershipPhotoInfo in line with the
+      no-URL rule on iOS and sweep any other URL fields introduced pre-rule.
+    * Audiobook listening progress needs a media_item→track bridge before
+      iOS can report it via media_item_id.
+- Files touched (this session):
+  - proto/common.proto
+  - proto/images.proto
+  - proto/catalog.proto
+  - proto/playback.proto
+  - proto/admin.proto
+  - proto/artist.proto (new)
+  - proto/radio.proto (new)
+  - proto/recommendations.proto (new)
+  - src/main/kotlin/.../grpc/ProtoMappers.kt
+  - src/main/kotlin/.../grpc/ImageGrpcService.kt
+  - src/main/kotlin/.../grpc/PlaybackGrpcService.kt
+  - src/main/kotlin/.../grpc/CatalogGrpcService.kt
+  - src/main/kotlin/.../grpc/ArtistGrpcService.kt (new)
+  - src/main/kotlin/.../grpc/RadioGrpcService.kt (new)
+  - src/main/kotlin/.../grpc/RecommendationGrpcService.kt (new)
+  - src/main/kotlin/.../grpc/ArmeriaServer.kt
+  - src/main/kotlin/.../service/RadioSeedStore.kt
+===
+
+=== 2026-04-19 12:03 — Admin gRPC fill-in for books + audio ===
+- Goal: iOS must be able to do every admin task for books and audio
+  without ever visiting the web UI. Close the gap relative to the HTTP
+  admin surface (UnmatchedBookHttpService, UnmatchedAudioHttpService,
+  MediaItemEditHttpService, plus brand-new capabilities never exposed
+  over HTTP at all: author/artist CRUD, series reassignment, lineup
+  editing, audio cache admin).
+- Shipped three phases in one session, proto-first then implementation.
+- Proto additions (all additive, Android TV untouched):
+    * 31 new RPCs on AdminService — unmatched books (6), unmatched audio (4),
+      author admin (4), artist admin (4), external-id assignment + agent
+      re-enrichment (2), book series (3), track edits (2), membership
+      editing (4), audio cache admin (2).
+    * New enums: UnmatchedStatus, ExternalIdentifierKind, EnrichmentAgent,
+      DataQualityScope. Extended DataQualityIssue with NO_OPENLIBRARY_ID,
+      NO_AUTHORS, NO_MUSICBRAINZ_ID, NO_TRACKS, NO_ALBUM_ARTISTS.
+    * Extended messages (optional fields only):
+        - ScanDetailResponse: isbn, openlibrary_work_id, musicbrainz_release_id,
+          musicbrainz_release_group_id, track_count, parsed_label,
+          parsed_catalog_number.
+        - UpdateTitleMetadataRequest: first_publication_year, page_count,
+          track_count, label.
+        - DataQualityRequest: scope (default UNKNOWN preserves video-only).
+- Server implementation in AdminGrpcService.kt:
+    * All 31 RPCs implemented against the existing entity + service layer.
+    * Unmatched book/audio flows port directly from the HTTP services,
+      reusing BookIngestionService.ingestDigital/linkDigitalEditionToTitle
+      and manual track.file_path linkage respectively.
+    * Author + artist CRUD: tri-state optional-field semantics (absent =
+      no change, empty string = clear). MergeAuthors / MergeArtists
+      re-point all join rows and collapse duplicates before deleting the
+      dropped entity.
+    * AssignExternalIdentifier: shape-validates value against the kind
+      enum (integer for TMDB, MBID regex, OL work regex), sets the right
+      column on Title, flips enrichment_status = PENDING.
+    * ReEnrichWithAgent: routes to the matching enrichment pipeline on
+      a daemon thread. TMDB/OpenLibrary/MusicBrainz reset enrichment_status;
+      headshot/personnel agents walk the linked authors/artists and call
+      enrichOne() directly.
+    * Book series CRUD + ReassignTitleToSeries (series_number as
+      BigDecimal to preserve "#1.5" numbering).
+    * UpdateTrack / ReorderTracks (reorder validates all ids belong to
+      the album before touching anything — no half-applied reorders).
+    * Artist membership list/upsert/delete + TriggerArtistEnrichment
+      (M6 lineup editor backend).
+    * AudioTranscodeCache gained status() / clearAll() / clearForTrack()
+      in the service layer so the admin RPCs can surface cache state.
+- Build + tests: `./gradlew build test` green end-to-end.
+- Not done (out of scope / future work):
+    * Admin UI for the new RPCs — iOS implementation lands separately.
+    * ListDataQuality server-side scope handling (proto field added,
+      implementation still video-only; low-risk since default scope
+      preserves legacy behavior).
+    * AssignTmdb not yet formally deprecated; will mark in a future
+      cleanup pass once iOS has migrated.
+- Files touched:
+  - proto/admin.proto
+  - src/main/kotlin/.../grpc/AdminGrpcService.kt
+  - src/main/kotlin/.../service/AudioTranscodeCache.kt
+===
+
+=== 2026-04-19 12:15 — ListDataQuality scope handling ===
+- Finished the server-side implementation for DataQualityRequest.scope.
+  Previously the proto field existed but the handler ignored it and
+  always ran the video-only checks.
+- Behavior now:
+    * scope = UNKNOWN or VIDEO → today's behavior: MOVIE/TV/PERSONAL
+      titles, with NO_TMDB_ID / NO_CAST / NO_BACKDROP / NO_GENRES.
+    * scope = BOOK → only BOOK titles; checks NO_POSTER, NO_DESCRIPTION,
+      NO_YEAR, NO_CONTENT_RATING, NO_OPENLIBRARY_ID, NO_AUTHORS, plus
+      universal enrichment flags.
+    * scope = AUDIO → only ALBUM titles; checks NO_POSTER, NO_DESCRIPTION,
+      NO_YEAR, NO_MUSICBRAINZ_ID, NO_TRACKS, NO_ALBUM_ARTISTS, plus
+      universal enrichment flags. No content-rating / TMDB / cast /
+      backdrop / genre false-positives on albums.
+- Implementation: pulled the per-title issue logic out into a private
+  `computeIssues()` helper that switches on `title.media_type` so each
+  scope gets the checks that make sense for it. Year check also now
+  falls back to `first_publication_year` before flagging NO_YEAR on
+  books.
+- Pre-loaded TitleAuthor / TitleArtist / Track join maps alongside the
+  existing cast + genre maps so the per-title loop stays O(1).
+- Build + tests: green.
+- Files touched:
+  - src/main/kotlin/.../grpc/AdminGrpcService.kt
+===

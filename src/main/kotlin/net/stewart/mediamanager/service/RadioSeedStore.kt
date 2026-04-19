@@ -44,6 +44,11 @@ object RadioSeedStore {
         return entry.seed
     }
 
+    /** Explicit session end (StopRadio RPC). Safe to call on unknown ids. */
+    fun remove(id: String) {
+        store.remove(id)
+    }
+
     /** Test seam. */
     internal fun clear() { store.clear() }
 

@@ -3,10 +3,14 @@ package net.stewart.mediamanager.grpc
 import io.grpc.Status
 import io.grpc.StatusException
 import net.stewart.mediamanager.entity.Chapter
+import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.SkipSegment
+import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.Title as TitleEntity
+import net.stewart.mediamanager.service.ListeningProgressService
 import net.stewart.mediamanager.service.PlaybackProgressService
+import net.stewart.mediamanager.service.ReadingProgressService
 
 class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBase() {
 
@@ -46,6 +50,117 @@ class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBa
         val progress = PlaybackProgressService.getProgressForUser(user.id!!, request.transcodeId)
         progress?.delete()
         return Empty.getDefaultInstance()
+    }
+
+    // --- Audio listening progress ---
+
+    override suspend fun getListeningProgress(request: ListeningProgressRequest): ListeningProgress {
+        val user = currentUser()
+        val trackId = resolveListeningTrackId(request.hasTrackId(), request.trackId,
+            request.hasMediaItemId(), request.mediaItemId)
+        requireAccessToTrack(trackId)
+        val progress = ListeningProgressService.get(user.id!!, trackId)
+            ?: return listeningProgress { this.trackId = trackId }
+        return progress.toProto()
+    }
+
+    override suspend fun reportListeningProgress(request: ReportListeningProgressRequest): Empty {
+        val user = currentUser()
+        val trackId = resolveListeningTrackId(request.hasTrackId(), request.trackId,
+            request.hasMediaItemId(), request.mediaItemId)
+        requireAccessToTrack(trackId)
+        ListeningProgressService.save(
+            user.id!!,
+            trackId,
+            request.position.seconds.toInt(),
+            if (request.hasDuration()) request.duration.seconds.toInt() else null
+        )
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun clearListeningProgress(request: ListeningProgressRequest): Empty {
+        val user = currentUser()
+        val trackId = resolveListeningTrackId(request.hasTrackId(), request.trackId,
+            request.hasMediaItemId(), request.mediaItemId)
+        requireAccessToTrack(trackId)
+        ListeningProgressService.delete(user.id!!, trackId)
+        return Empty.getDefaultInstance()
+    }
+
+    // --- Ebook reading progress ---
+
+    override suspend fun getReadingProgress(request: ReadingProgressRequest): ReadingProgress {
+        val user = currentUser()
+        requireAccessToMediaItem(request.mediaItemId)
+        val progress = ReadingProgressService.get(user.id!!, request.mediaItemId)
+            ?: return readingProgress {
+                mediaItemId = request.mediaItemId
+                locator = ""
+            }
+        return progress.toProto()
+    }
+
+    override suspend fun reportReadingProgress(request: ReportReadingProgressRequest): Empty {
+        val user = currentUser()
+        requireAccessToMediaItem(request.mediaItemId)
+        val fraction = if (request.hasFraction()) request.fraction else 0.0
+        ReadingProgressService.save(user.id!!, request.mediaItemId, request.locator, fraction)
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun clearReadingProgress(request: ReadingProgressRequest): Empty {
+        val user = currentUser()
+        requireAccessToMediaItem(request.mediaItemId)
+        ReadingProgressService.delete(user.id!!, request.mediaItemId)
+        return Empty.getDefaultInstance()
+    }
+
+    // Audio listening progress keys off track_id. Audiobook clients could
+    // eventually pass media_item_id; no bridge exists yet, so we reject it
+    // with UNIMPLEMENTED rather than silently dropping writes.
+    private fun resolveListeningTrackId(
+        hasTrackId: Boolean, trackId: Long,
+        hasMediaItemId: Boolean, mediaItemId: Long
+    ): Long {
+        if (hasTrackId && trackId > 0) return trackId
+        if (hasMediaItemId && mediaItemId > 0) {
+            throw StatusException(
+                Status.UNIMPLEMENTED.withDescription(
+                    "Audiobook listening progress via media_item_id not yet supported"
+                )
+            )
+        }
+        throw StatusException(Status.INVALID_ARGUMENT.withDescription("track_id required"))
+    }
+
+    private fun requireAccessToTrack(trackId: Long) {
+        val user = currentUser()
+        val track = Track.findById(trackId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Track not found"))
+        val album = TitleEntity.findById(track.title_id)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Album not found"))
+        if (album.hidden || !user.canSeeRating(album.content_rating)) {
+            throw StatusException(Status.NOT_FOUND.withDescription("Track not found"))
+        }
+    }
+
+    private fun requireAccessToMediaItem(mediaItemId: Long) {
+        val user = currentUser()
+        MediaItem.findById(mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Book not found"))
+        // media_item ↔ title is many-to-many via media_item_title. A book
+        // edition typically has exactly one title; if any of them is
+        // blocked by the user's rating ceiling, deny.
+        val titleIds = net.stewart.mediamanager.entity.MediaItemTitle.findAll()
+            .filter { it.media_item_id == mediaItemId }
+            .map { it.title_id }
+        if (titleIds.isEmpty()) {
+            throw StatusException(Status.NOT_FOUND.withDescription("Book not found"))
+        }
+        val titles = TitleEntity.findAll().filter { it.id in titleIds }
+        if (titles.any { it.hidden || !user.canSeeRating(it.content_rating) }) {
+            throw StatusException(Status.NOT_FOUND.withDescription("Book not found"))
+        }
     }
 
     override suspend fun getChapters(request: TranscodeIdRequest): ChaptersResponse {

@@ -53,6 +53,11 @@ message ListTitlesRequest {
 
 message SearchRequest {
   string query = 1;
+  // Opt-in: include books (BOOK + AUTHOR results). Default false.
+  // Legacy clients that never set this keep receiving video-only results.
+  bool include_books = 2;
+  // Opt-in: include audio (ALBUM + ARTIST + TRACK results). Default false.
+  bool include_audio = 3;
 }
 
 message ListEpisodesRequest {

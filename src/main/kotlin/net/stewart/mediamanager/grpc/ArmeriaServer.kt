@@ -103,7 +103,10 @@ object ArmeriaServer {
             LiveGrpcService(),
             AdminGrpcService(),
             ImageGrpcService(),
-            ObservabilityGrpcService()
+            ObservabilityGrpcService(),
+            ArtistGrpcService(),
+            RadioGrpcService(),
+            RecommendationGrpcService()
         )
 
         val grpcServiceBuilder = GrpcService.builder()
