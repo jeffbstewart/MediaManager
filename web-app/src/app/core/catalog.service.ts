@@ -82,6 +82,7 @@ export interface FeatureFlags {
   has_personal_videos: boolean;
   has_books?: boolean;
   has_music?: boolean;
+  has_music_radio?: boolean;
   has_cameras: boolean;
   has_live_tv: boolean;
   is_admin: boolean;

@@ -42,6 +42,10 @@ class SettingsHttpService {
         "music_root_path",
         "buddy_lease_duration_minutes",
         "keepa_enabled", "keepa_api_key", "keepa_tokens_per_minute",
+        // Music — optional Last.fm API key drives Start Radio and the
+        // M8 library-recommendations surface. Both features gracefully
+        // degrade when absent; see docs/MUSIC.md.
+        "lastfm_api_key",
         "privacy_policy_url", "privacy_policy_version",
         "ios_terms_of_use_url", "ios_terms_of_use_version",
         "web_terms_of_use_url", "web_terms_of_use_version",

@@ -106,6 +106,9 @@ export class AudioPlayerComponent {
   }
 
   onEnded(): void {
+    // Natural end-of-track is not a skip — recordDepartingTrack inside
+    // next() inspects position vs. duration so the distinction is picked
+    // up automatically.
     this.queue.flushProgress();
     this.queue.next();
   }

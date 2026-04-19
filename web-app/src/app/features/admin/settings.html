@@ -89,6 +89,19 @@
           </span>
         </div>
 
+        <div class="field-group">
+          <label class="field-label">Last.fm API Key (optional)</label>
+          <input class="field-input" type="password" [value]="settings()['lastfm_api_key']"
+                 (input)="updateSetting('lastfm_api_key', $event)"
+                 placeholder="Paste your Last.fm API key" />
+          <span class="helper-text">
+            Enables Start Radio on album pages and recommendation surfaces.
+            Without a key these features stay hidden; once cached, similarity
+            data survives a key removal and keeps the feature working for
+            artists we've already looked up.
+          </span>
+        </div>
+
         <!-- Transcode Buddy -->
         <h3>Transcode Buddy</h3>
         <div class="buddy-header">

@@ -98,6 +98,24 @@ export class TitleDetailComponent implements OnInit {
     this.playAlbum(index);
   }
 
+  readonly radioStarting = signal<boolean>(false);
+
+  /** Gate the Start Radio button on the has_music_radio feature flag. */
+  hasMusicRadio(): boolean {
+    return this.features.hasMusicRadio();
+  }
+
+  async startRadio(): Promise<void> {
+    const t = this.title();
+    if (!t || !this.isAlbum) return;
+    this.radioStarting.set(true);
+    try {
+      await this.playbackQueue.startRadio('album', t.title_id);
+    } finally {
+      this.radioStarting.set(false);
+    }
+  }
+
   /** Personnel section expanded state (collapsed by default — M6). */
   readonly personnelExpanded = signal<boolean>(false);
 

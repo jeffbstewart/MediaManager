@@ -27,6 +27,14 @@
           @if (track.primaryArtistName && track.albumName) { &nbsp;·&nbsp; }
           <span class="track-album">{{ track.albumName }}</span>
         </span>
+        @if (queue.queueMode() === 'RADIO' && queue.radioSeed(); as seed) {
+          <span class="radio-chip" (click)="$event.stopPropagation(); $event.preventDefault(); queue.stopRadio()"
+                [attr.title]="'Click to turn off radio'">
+            <mat-icon class="radio-icon">graphic_eq</mat-icon>
+            Radio: from {{ seed.seed_name }}
+            <mat-icon class="close-icon">close</mat-icon>
+          </span>
+        }
       </div>
     </a>
 

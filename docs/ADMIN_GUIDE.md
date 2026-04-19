@@ -516,6 +516,7 @@ Temporary stream files are written to `data/live-tv-streams/` inside the contain
 | **Keepa API Key** | API key from keepa.com for automated replacement value estimation |
 | **Tokens per minute** | Keepa API rate limit (default 20, match to your subscription tier) |
 | **Enable Keepa** | Activates the background price lookup agent |
+| **Last.fm API Key** | Optional &mdash; API key from last.fm that enables Start Radio on album pages and the Library Recommendations discovery surface. See the Music section below. |
 | **WebAuthn RP ID** | Relying Party domain for passkey authentication. Must exactly match the domain in users' browser address bar, without protocol or port (e.g., `mm.example.com`; use `localhost` for local development) |
 | **WebAuthn RP Origin** | Full origin URL including protocol and port if non-standard (e.g., `https://mm.example.com:8443`). Leave blank to default to `https://<RP ID>` on port 443. Required when using a non-standard HTTPS port. |
 | **WebAuthn RP Name** | Display name shown in browser passkey prompts (defaults to "Media Manager") |
@@ -576,6 +577,67 @@ All third-party images (book covers from `covers.openlibrary.org`, author photos
 - Author photos: `/author-headshots/{authorId}` downloads the Wikipedia thumbnail once and serves subsequent requests from disk.
 
 The image proxy enforces a host allowlist, re-runs an SSRF screen on every redirect hop (up to 4), and rejects non-image content types. Failures are logged at WARN; successful fetches count toward the `mm_image_proxy_total` metric.
+
+---
+
+## Music
+
+Music support is always on &mdash; no enablement flag. Albums can be catalogued by CD barcode scan or discovered from ripped audio files on the NAS. Metadata comes from [MusicBrainz](https://musicbrainz.org) (free, no API key) with cover art from the [Cover Art Archive](https://coverartarchive.org); embedded cover art in the rip files is preferred when present. The optional **Start Radio** and **Library Recommendations** features additionally use [Last.fm](https://www.last.fm/api) and are gated on an API key &mdash; see below.
+
+### Configuration
+
+**Sidebar &rarr; Settings &rarr; Music**
+
+| Setting | Purpose |
+|---------|---------|
+| **Music Directory** | Absolute path (as visible inside the server container) to a directory holding .flac / .mp3 / .m4a / .ogg / .wav rips. Leave blank to disable the music scanner. |
+| **Last.fm API Key** | Optional. Enables Start Radio and Library Recommendations. Apply for a free non-commercial key at [last.fm/api/account/create](https://www.last.fm/api/account/create). |
+
+The music scanner walks the directory once an hour and also immediately after a NAS scan finishes. A NAS scan classifies the directory as `MUSIC` and hands it off to the music scanner rather than trying to match video files there.
+
+### Ingestion paths
+
+| Source | Entry point | What happens |
+|--------|-------------|--------------|
+| Physical CD (EAN-13 barcode) | **Add Item &rarr; Scan Barcode** | EAN-13s that don't look like book ISBNs route to MusicBrainz's barcode search. On a hit, a `Title` (media_type `ALBUM`) plus `Track` rows and album-level `TitleArtist` credits are created. Cover art comes from Cover Art Archive. |
+| Audio rip (.flac / .mp3 / .m4a / .ogg / .wav) | Background scanner | The scanner reads tags via `ffprobe` and walks a five-tier match ladder to identify the release: `MUSICBRAINZ_ALBUMID` &rarr; `UPC`/`BARCODE` tag &rarr; `CATALOGNUMBER` (+ `LABEL`) &rarr; any track's `ISRC` &rarr; fuzzy `ALBUMARTIST` + `ALBUM` search. First tier to hit wins. On match, each track's `file_path` is set; unresolved files park in **Unmatched Audio**. |
+
+Every scan cycle also reprocesses existing **Unmatched Audio** rows using the stored parsed identifiers &mdash; tag-only matches that couldn't resolve at staging time can resolve later when MusicBrainz data improves, without re-walking the filesystem.
+
+### Cover art
+
+Embedded cover art wins. The scanner extracts the first video stream (FLAC PICTURE / ID3 APIC / M4A `covr`) from whichever track linked first per album via ffmpeg and stashes JPEG bytes into the `poster-cache` directory, then sets `title.poster_cache_id`. Subsequent requests serve from disk, regardless of origin.
+
+When a rip has no embedded art, album covers fall through to the Cover Art Archive proxy at `/proxy/caa/release/{mbid}/front-500`. The unowned **Other Works** grid on the artist page uses `/proxy/caa/release-group/{rgid}/front-250` to render covers without a second MusicBrainz round trip.
+
+### Unmatched Audio queue
+
+**Sidebar &rarr; Unmatched Audio** (red badge shows pending count)
+
+Files the scanner couldn't auto-link go here. The admin table shows the file path, parsed tags (title / album / artist / track number / duration), and an **Identifiers** column with chips for any UPC / catalog # / ISRC / MBID that were read from the tags. Two resolution actions per row:
+
+- **Link** &mdash; Search the catalogue for the track this file should attach to, then click to associate. This sets `track.file_path` and marks the unmatched row `LINKED`. Useful when tags pointed at the wrong release.
+- **Ignore** &mdash; Mark `IGNORED` so the row stops re-triaging. The file stays on disk.
+
+### Start Radio (M7)
+
+Session-scoped radio queues seeded from an album or track. Gated on the `has_music_radio` feature flag, which is true whenever either (a) a Last.fm API key is configured *or* (b) at least one `artist` row has cached Last.fm similarity data &mdash; so the feature degrades gracefully if the key is later removed, continuing to work for artists that have already been radio'd from.
+
+**Setup.** Create a free non-commercial API account at [last.fm/api/account/create](https://www.last.fm/api/account/create), copy the API Key (the shared secret isn't needed &mdash; Media Manager only reads public data), and paste it into **Settings &rarr; Music &rarr; Last.fm API Key**. The Start Radio button appears on album detail pages once at least one similarity lookup has succeeded.
+
+**Data flow.** `LastFmService` calls `artist.getSimilar` at ≤1 req/sec with a descriptive User-Agent. Results cache on the `artist.lastfm_similar_json` column with a 30-day refresh horizon; subsequent radio sessions reading from the same seed artist hit the cache, not Last.fm. `NotFound` / `Error` responses cache an empty marker so the endpoint isn't pounded every hour.
+
+**Endpoint.** The Angular player calls `POST /api/v2/radio/start` (body `{seed_type, seed_id}`) to open a session and `POST /api/v2/radio/next` (body `{radio_seed_id, history}`) to top up the queue when fewer than five tracks remain. Session state (seed artist MBIDs + display name) lives in-memory with a 4-hour sliding TTL; skips within 30 s of track start flow into `history` and down-weight the skipped artist for the rest of the session. No database table involved.
+
+**Privacy.** No listening data is sent to Last.fm &mdash; the service only queries similarity by artist MBID. The key is stored in `app_config`, never logged, and never returned from non-admin APIs.
+
+### Troubleshooting
+
+**Start Radio button is missing.** Verify the key is configured in Settings *and* that at least one artist has similarity data cached. On a fresh install with a key set, this triggers on the first radio session; the button appears after MusicBrainz has seen at least one of your owned artists.
+
+**"No tracks to play" after pressing Start Radio.** The owned library has no artist overlap with the seed's similar-artist list and the fallback cascade (same genre &rarr; same era &rarr; any owned) didn't find anything either. Expect this on libraries under ~10 albums.
+
+**Repetitive queue.** The engine caps at 3 tracks per similar artist per batch and interleaves across artists before within an artist. If the queue still feels repetitive, your library likely has a narrow overlap with the seed &mdash; skip-early (within 30 s) to down-weight artists for the remainder of the session, or start radio from a different seed.
 
 ---
 

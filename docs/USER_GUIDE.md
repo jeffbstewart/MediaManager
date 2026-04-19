@@ -295,6 +295,47 @@ The wish-list search box accepts book titles too. Matches from Open Library appe
 
 ---
 
+## Music
+
+When the collection includes music, **Content &rarr; Music** appears in the sidebar. Albums (physical CDs catalogued by EAN barcode scan, and digital rips in .flac / .mp3 / .m4a / .ogg / .wav format) live in the same catalog as your movies and TV, but render with square cover art instead of the familiar 2:3 poster.
+
+### Browsing
+
+The Music page mirrors the movie catalog &mdash; cover grid with sort options, click a cover to open the album detail. On an album detail page:
+
+- **Artist byline** &mdash; Each credited artist links to that artist's page. The artist page shows a hero image and biography, the albums you own by that artist, and an **Other Works** grid of their discography from MusicBrainz with a heart icon to wish-list any album you don't yet own.
+- **Track list** &mdash; Grouped by disc, each row carries a track number, title, per-track artist (for compilations), and duration. A play button on each row plays that track and queues the rest of the album behind it.
+- **Personnel section** &mdash; When MusicBrainz has recording-credit data, an expandable Personnel block below the track list groups credits by role (Performers, Composers, Producers, Engineers) and lists each artist with instruments where applicable. Collapsed by default to keep the page clean.
+- **Band Members / Member Of** (artist pages) &mdash; For groups, the artist page shows past and current members with tenure dates. For individuals, it shows the bands they've been in. Both link across to the other artist's page.
+
+### Listening
+
+The **Play Album** button starts the album from the first track. Every track row has its own play button that queues the rest of the album behind the selected track. Playback drops a persistent player bar into the bottom of every screen with cover art, track name, transport controls (play / pause / prev / next), a scrubber, volume, shuffle, and repeat.
+
+Browsing around the app keeps playback going &mdash; the player bar survives route changes. Closing the tab stops playback, but a "Continue listening" shelf on the home page resumes where you left off.
+
+**What can I play?** Most rips (FLAC, MP3, AAC, Ogg Vorbis, Opus) stream directly to your browser. WAV sources transcode on-the-fly to AAC m4a the first time a track is requested, then serve from a small disk cache on replays &mdash; so the first scrub after picking a new track may take a second.
+
+### Start Radio
+
+When your admin has configured a Last.fm API key, a **Start Radio** button appears next to Play Album on each album page (and optionally on individual tracks). Start Radio plays music from *your owned library* by artists similar to the seed album's artist:
+
+1. Click **Start Radio** on, say, *Kind of Blue*. The player immediately starts playing owned tracks by artists related to Miles Davis.
+2. A small "Radio: from Kind of Blue" chip appears in the player bar so you can see where the queue came from.
+3. The queue refills itself as it gets thin &mdash; you can listen indefinitely.
+4. **Skip** within the first 30 seconds to signal you're not in the mood for that artist; the engine down-weights them for the rest of the session.
+5. Click the chip (or the X inside it) to turn radio off; whatever tracks have been generated keep playing, but no new ones will append.
+
+Radio is bounded to what you own &mdash; it can't surprise you with something you don't have ripped. If a seed produces a thin queue, the engine cascades through same-genre owned albums, same-era owned albums, and finally random picks from your library so the queue never goes empty.
+
+Radio sessions don't persist across browser tabs or full reloads &mdash; each listening session is independent.
+
+### Wishlist for Albums
+
+Wishlist entries in music are per specific album, never per artist. The wishlist search box matches album titles from MusicBrainz; on the artist page, each unowned album in the **Other Works** grid has a heart icon for one-click wish-listing. Compilation albums render with a "Compilation" badge instead of the "Various Artists" byline, so you don't wind up with a wishlist cluttered by unreadable multi-artist names.
+
+---
+
 ## Roku Playback
 
 Media Manager includes a custom Roku channel for TV playback. See the [Roku Setup Guide](ROKU_GUIDE.md) for installation. Once paired, your library appears on the Roku with poster art, episode grids, and playback progress synced with the browser. The Roku channel also supports full-text search with landing pages for collections, tags, genres, and actors, plus wishlist integration from actor pages.
