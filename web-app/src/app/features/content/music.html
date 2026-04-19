@@ -1,0 +1,64 @@
+<div class="content-page">
+  <div class="filter-bar">
+    <mat-chip-set>
+      <mat-chip [highlighted]="playableOnly()" (click)="togglePlayable()">Playable</mat-chip>
+    </mat-chip-set>
+
+    <span class="chip-separator">&middot;</span>
+
+    <mat-chip-set>
+      @for (opt of sortOptions; track opt.value) {
+        <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
+          {{ opt.label }}
+        </mat-chip>
+      }
+    </mat-chip-set>
+
+    <span class="chip-separator">&middot;</span>
+
+    <div class="search-wrapper">
+      <mat-icon class="search-icon">search</mat-icon>
+      <input type="search" class="search-input"
+             placeholder="Search artists"
+             [value]="query()"
+             (input)="onQueryInput($any($event.target).value)" />
+      @if (query()) {
+        <button class="search-clear" type="button" aria-label="Clear search" (click)="clearQuery()">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading() && artists().length === 0) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else {
+    <span class="status-label">{{ total() }} {{ total() === 1 ? 'artist' : 'artists' }}</span>
+
+    <div class="artist-grid">
+      @for (a of artists(); track a.id) {
+        <a class="artist-card" [routerLink]="routes.artist(a.id)">
+          <div class="artist-image">
+            @if (cardImageUrl(a); as src) {
+              <img [src]="src" [alt]="a.name" loading="lazy" decoding="async" />
+            } @else {
+              <div class="artist-placeholder">
+                <mat-icon>{{ placeholderIcon(a) }}</mat-icon>
+              </div>
+            }
+          </div>
+          <span class="artist-name">{{ a.name }}</span>
+          <span class="artist-meta">
+            {{ a.album_count }} {{ a.album_count === 1 ? 'album' : 'albums' }}
+          </span>
+        </a>
+      }
+    </div>
+
+    @if (artists().length === 0 && !loading()) {
+      <p class="empty-state">No artists match your filters.</p>
+    }
+  }
+</div>

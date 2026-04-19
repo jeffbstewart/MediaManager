@@ -75,6 +75,32 @@ export function tmdbImageUrl(
 }
 export type SortMode = 'name' | 'year' | 'recent' | 'popular' | 'artist' | 'author';
 
+/** Sort modes accepted by the artist exploration landing page. */
+export type ArtistsSortMode = 'albums' | 'name' | 'recent';
+
+export interface ArtistsListParams {
+  sort?: ArtistsSortMode;
+  q?: string;
+  /** Default true on the server; pass false to include artists with no playable albums. */
+  playableOnly?: boolean;
+}
+
+export interface ArtistsListItem {
+  id: number;
+  name: string;
+  sort_name: string | null;
+  artist_type: string;
+  headshot_url: string | null;
+  album_count: number;
+  /** First owned album poster — used as a hero fallback when headshot is missing. */
+  fallback_poster_url: string | null;
+}
+
+export interface ArtistsListResponse {
+  artists: ArtistsListItem[];
+  total: number;
+}
+
 export interface TitleListParams {
   mediaType: MediaType;
   sort?: SortMode;
@@ -713,6 +739,19 @@ export class CatalogService {
 
   async getArtistDetail(artistId: number): Promise<ArtistDetail> {
     return firstValueFrom(this.http.get<ArtistDetail>(`/api/v2/catalog/artists/${artistId}`));
+  }
+
+  /**
+   * Audio landing page driver — returns the artist exploration grid
+   * sorted by owned-album count (default), name, or recently-added.
+   * Supports an optional substring search and a playable-only filter.
+   */
+  async listArtists(params: ArtistsListParams = {}): Promise<ArtistsListResponse> {
+    const query: Record<string, string> = {};
+    if (params.sort) query['sort'] = params.sort;
+    if (params.q) query['q'] = params.q;
+    if (params.playableOnly === false) query['playable_only'] = 'false';
+    return firstValueFrom(this.http.get<ArtistsListResponse>('/api/v2/catalog/artists', { params: query }));
   }
 
   async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {

@@ -1,0 +1,154 @@
+.content-page {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  row-gap: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.chip-separator {
+  opacity: 0.3;
+  margin: 0 4px;
+}
+
+.search-wrapper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 4px 8px;
+  min-width: 220px;
+  position: relative;
+}
+
+.search-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  opacity: 0.6;
+  margin-right: 4px;
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  width: 100%;
+  padding: 4px;
+}
+
+.search-clear {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover { opacity: 1; }
+}
+
+.status-label {
+  display: block;
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  margin-bottom: 0.75rem;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error, #f44336);
+  text-align: center;
+  padding: 2rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  opacity: 0.6;
+}
+
+// Artists are people / groups: square headshots read better than the
+// 2:3 album-cover aspect of the title grid.
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.artist-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.artist-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.artist-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    opacity: 0.5;
+  }
+}
+
+.artist-name {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-meta {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
