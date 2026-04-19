@@ -190,6 +190,124 @@ object MusicIngestionService {
         }
     }
 
+    /**
+     * Manual ingest for the unmatched-audio admin path: derive a Title
+     * + Tracks + (Various-Artists) primary credit purely from the file
+     * tags the scanner already captured. The admin doesn't have to type
+     * anything — name, year, track list, durations, recording MBIDs all
+     * come from what's in the row.
+     *
+     * Used when MusicBrainz genuinely has nothing useful for the album.
+     * No release-group MBID is stored, so the record reads as
+     * "user-created" forever and won't be merged with future MB-sourced
+     * pressings.
+     */
+    fun ingestManualFromRows(
+        rows: List<net.stewart.mediamanager.entity.UnmatchedAudio>,
+        clock: Clock = SystemClock
+    ): Title {
+        require(rows.isNotEmpty()) { "ingestManualFromRows needs at least one row" }
+        val now = clock.now()
+
+        val albumName = dominant(rows) { it.parsed_album }?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("rows have no parsed_album to ingest as a title")
+
+        // Album-level artist: explicit album_artist tag wins; otherwise
+        // a single track_artist across every file is treated as the
+        // artist (single-artist album with no album_artist tag); else
+        // it's a Various Artists compilation.
+        val explicitAlbumArtist = dominant(rows) { it.parsed_album_artist }?.takeIf { it.isNotBlank() }
+        val uniqueTrackArtists = rows.mapNotNull { it.parsed_track_artist?.takeIf { s -> s.isNotBlank() } }
+            .distinct()
+        val albumArtistName = explicitAlbumArtist
+            ?: uniqueTrackArtists.singleOrNull()
+            ?: "Various Artists"
+
+        val albumArtist = upsertNamedArtist(albumArtistName, now)
+
+        val title = Title(
+            name = albumName,
+            media_type = MediaType.ALBUM.name,
+            raw_upc_title = albumName,
+            sort_name = titleSortName(albumName),
+            // Manually-created albums have no MB grounding; we mark them
+            // ENRICHED so downstream views don't try to re-enrich them.
+            enrichment_status = EnrichmentStatus.ENRICHED.name,
+            track_count = rows.size,
+            total_duration_seconds = rows.mapNotNull { it.parsed_duration_seconds }.sum().takeIf { it > 0 },
+            label = dominant(rows) { it.parsed_label },
+            created_at = now,
+            updated_at = now
+        )
+        title.save()
+
+        TitleArtist(
+            title_id = title.id!!,
+            artist_id = albumArtist.id!!,
+            artist_order = 0
+        ).save()
+
+        // One Track per file, ordered by (disc, track). track_number gaps
+        // are preserved — if the admin staged disc 1 tracks 5-12 only, the
+        // resulting Title shows them at 5-12 not renumbered.
+        val sorted = rows.sortedWith(
+            compareBy({ it.parsed_disc_number ?: 1 }, { it.parsed_track_number ?: 0 })
+        )
+        for (row in sorted) {
+            val track = Track(
+                title_id = title.id!!,
+                track_number = row.parsed_track_number ?: 0,
+                disc_number = row.parsed_disc_number ?: 1,
+                name = row.parsed_title?.takeIf { it.isNotBlank() } ?: row.file_name,
+                duration_seconds = row.parsed_duration_seconds,
+                musicbrainz_recording_id = row.parsed_mb_recording_id?.takeIf { it.isNotBlank() },
+                created_at = now,
+                updated_at = now
+            )
+            track.save()
+
+            // Per-track credit when the track artist diverges from the
+            // album credit — typical compilation shape ("Various Artists"
+            // album, real artist per track).
+            val trackArtistName = row.parsed_track_artist?.takeIf {
+                it.isNotBlank() && !it.equals(albumArtistName, ignoreCase = true)
+            }
+            if (trackArtistName != null) {
+                val trackArtist = upsertNamedArtist(trackArtistName, now)
+                TrackArtist(
+                    track_id = track.id!!,
+                    artist_id = trackArtist.id!!,
+                    artist_order = 0
+                ).save()
+            }
+        }
+
+        SearchIndexService.onTitleChanged(title.id!!)
+        log.info("Manual album ingested: title='{}' artist='{}' tracks={}",
+            albumName, albumArtistName, rows.size)
+        return title
+    }
+
+    /** Reuse-or-create an Artist row keyed on case-insensitive name match. */
+    private fun upsertNamedArtist(name: String, now: LocalDateTime): Artist {
+        val existing = Artist.findAll().firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (existing != null) return existing
+        val artist = Artist(
+            name = name,
+            sort_name = titleSortName(name),
+            artist_type = ArtistType.OTHER.name,
+            created_at = now,
+            updated_at = now
+        )
+        artist.save()
+        return artist
+    }
+
+    private fun <T> dominant(
+        rows: List<net.stewart.mediamanager.entity.UnmatchedAudio>,
+        picker: (net.stewart.mediamanager.entity.UnmatchedAudio) -> T?
+    ): T? = rows.mapNotNull(picker).groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+
     private fun mapArtistType(mb: String?): String = when (mb?.lowercase(Locale.ROOT)) {
         "person" -> ArtistType.PERSON.name
         "group" -> ArtistType.GROUP.name
