@@ -59,6 +59,7 @@ import net.stewart.mediamanager.entity.UnmatchedBook as UnmatchedBookEntity
 import net.stewart.mediamanager.entity.UnmatchedBookStatus as UnmatchedBookStatusEnum
 import net.stewart.mediamanager.service.ArtistEnrichmentAgent
 import net.stewart.mediamanager.service.AudioTranscodeCache
+import net.stewart.mediamanager.service.FirstPartyImageMigrationVerifier
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookIngestionService
 import net.stewart.mediamanager.service.OpenLibraryHttpService
@@ -2559,6 +2560,37 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         }
         return Empty.getDefaultInstance()
     }
+
+    // ========================================================================
+    // Image cache migration verifier (phase 4a)
+    // ========================================================================
+
+    override suspend fun verifyFirstPartyImageMigration(
+        request: Empty
+    ): VerifyFirstPartyImageMigrationResponse {
+        val report = FirstPartyImageMigrationVerifier.run()
+        return verifyFirstPartyImageMigrationResponse {
+            ownershipPhotos = report.ownership.toProto()
+            localImages = report.localImages.toProto()
+            safeToDeleteOldLayout = report.safeToDeleteOldLayout
+            auditedAt = LocalDateTime.now().toProtoTimestamp()
+        }
+    }
+
+    private fun FirstPartyImageMigrationVerifier.CategoryAudit.toProto(): FirstPartyCategoryAudit =
+        firstPartyCategoryAudit {
+            totalRows = this@toProto.totalRows
+            legacyMissing = this@toProto.legacyMissing
+            verified = this@toProto.verified
+            missingNewCopy = this@toProto.missingNewCopy
+            mismatchedBytes = this@toProto.mismatchedBytes
+            missingSidecar = this@toProto.missingSidecar
+            invalidSidecar = this@toProto.invalidSidecar
+            sampleMissingNewCopy.addAll(this@toProto.sampleMissingNewCopy)
+            sampleMismatchedBytes.addAll(this@toProto.sampleMismatchedBytes)
+            sampleMissingSidecar.addAll(this@toProto.sampleMissingSidecar)
+            sampleInvalidSidecar.addAll(this@toProto.sampleInvalidSidecar)
+        }
 
     // ========================================================================
     // Helpers

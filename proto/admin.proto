@@ -182,6 +182,12 @@ service AdminService {
   // --- Audio transcode cache ---
   rpc GetAudioTranscodeCacheStatus(Empty) returns (AudioTranscodeCacheStatus);
   rpc ClearAudioTranscodeCache(ClearAudioTranscodeCacheRequest) returns (Empty);
+
+  // --- Image cache migration verifier (phase 4a). Read-only audit of the
+  // first-party image cache migration: walks ownership_photo / local_image
+  // rows and checks each has a copy at the new FirstPartyImageStore layout
+  // plus a valid sidecar. Safe to call any time; never deletes.
+  rpc VerifyFirstPartyImageMigration(Empty) returns (VerifyFirstPartyImageMigrationResponse);
 }
 
 // --- ID Requests ---
@@ -1451,4 +1457,46 @@ message AudioTranscodeCacheStatus {
 message ClearAudioTranscodeCacheRequest {
   // Absent = clear everything. Present = only entries for this track.
   optional int64 track_id = 1;
+}
+
+// ============================================================================
+// Image cache migration verifier (phase 4a)
+// ============================================================================
+
+message VerifyFirstPartyImageMigrationResponse {
+  FirstPartyCategoryAudit ownership_photos = 1;
+  FirstPartyCategoryAudit local_images = 2;
+  // True when every category reports verified == total and every failure
+  // counter is zero. Phase 4b deletion is safe to consider only when this
+  // is true.
+  bool safe_to_delete_old_layout = 3;
+  Timestamp audited_at = 4;
+}
+
+message FirstPartyCategoryAudit {
+  // Total rows in the driving table (ownership_photo or local_image).
+  int32 total_rows = 1;
+  // Rows whose legacy file is missing — nothing to verify against, not
+  // necessarily broken (may have been intentionally deleted from disk).
+  int32 legacy_missing = 2;
+  // Rows where both legacy + new layout exist with matching bytes AND
+  // a parseable sidecar sits next to the new file. The happy path.
+  int32 verified = 3;
+  // Rows where the legacy file exists but no new-layout copy was found.
+  int32 missing_new_copy = 4;
+  // Rows where both copies exist but file sizes (treated as a
+  // byte-identity proxy; the copy updater does a byte-for-byte copy)
+  // disagree.
+  int32 mismatched_bytes = 5;
+  // Rows where the new-layout copy exists but no sidecar sits next to it.
+  int32 missing_sidecar = 6;
+  // Rows where a sidecar exists but doesn't parse as valid JSON.
+  int32 invalid_sidecar = 7;
+
+  // Up to SAMPLE_LIMIT example file paths per failure bucket so the admin
+  // can spot-check without running a separate tool.
+  repeated string sample_missing_new_copy = 10;
+  repeated string sample_mismatched_bytes = 11;
+  repeated string sample_missing_sidecar = 12;
+  repeated string sample_invalid_sidecar = 13;
 }
