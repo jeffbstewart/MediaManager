@@ -236,6 +236,14 @@ class UnmatchedAudioHttpService(
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
+        // MusicBrainz limits us to 1 req/sec, so 10 candidate detail
+        // lookups can take ~11 s. Plus 1-2 tier searches up front. The
+        // default Armeria request timeout (10 s) fires mid-flight and
+        // returns 503 to the admin while we keep working in the
+        // background. Extend the deadline so the candidate list arrives
+        // intact.
+        ctx.setRequestTimeout(java.time.Duration.ofSeconds(60))
+
         return runHandler("searchMusicBrainz") {
             val body = parseBody(ctx) ?: run {
                 log.warn("musicbrainz-search: invalid JSON body")
@@ -354,6 +362,10 @@ class UnmatchedAudioHttpService(
     fun linkAlbumToRelease(ctx: ServiceRequestContext): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        // One MB lookup + ingestion (which can fan out per-track) — keep
+        // the deadline well clear of the default 10 s.
+        ctx.setRequestTimeout(java.time.Duration.ofSeconds(30))
 
         return runHandler("linkAlbumToRelease") {
             val body = parseBody(ctx) ?: run {
