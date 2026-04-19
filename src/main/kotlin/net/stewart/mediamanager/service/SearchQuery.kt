@@ -36,7 +36,9 @@ object SearchQueryParser {
     fun parse(input: String): SearchQuery {
         if (input.isBlank()) return SearchQuery()
 
-        val lower = input.lowercase()
+        // Fold diacritics so queries like "Celine" match indexed "Céline".
+        // Must mirror SearchIndexService.tokenize, which folds at index time.
+        val lower = SearchIndexService.foldAccents(input).lowercase()
         val phrases = mutableListOf<String>()
         val requiredTerms = mutableListOf<String>()
         val excludedTerms = mutableListOf<String>()

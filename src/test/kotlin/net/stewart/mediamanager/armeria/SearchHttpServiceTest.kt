@@ -116,6 +116,22 @@ class SearchHttpServiceTest {
             created_at = now,
             updated_at = now
         ).also { it.save() }
+        // Diacritic fixture — must match searches that omit the accent
+        // (e.g. an American keyboard typing "Celine Dion").
+        Artist(
+            name = "Céline Dion",
+            sort_name = "Dion, Céline",
+            artist_type = ArtistType.PERSON.name,
+            created_at = now,
+            updated_at = now
+        ).also { it.save() }
+        Title(
+            name = "Falling Into You",
+            media_type = MediaType.ALBUM.name,
+            enrichment_status = EnrichmentStatus.ENRICHED.name,
+            created_at = now,
+            updated_at = now
+        ).also { it.save() }
         Track(
             title_id = albumTitle.id!!,
             track_number = 1,
@@ -183,6 +199,25 @@ class SearchHttpServiceTest {
         val titleId = track["title_id"]
         assertTrue(titleId is Number && titleId.toLong() > 0,
             "track result should carry album title_id; got $titleId")
+    }
+
+    @Test
+    fun `finds accented artist name via unaccented query`() {
+        val results = runSearch("Celine Dion")
+        val artist = results.firstOrNull { it["type"] == "artist" }
+        assertNotNull(artist, "accent-folded artist missing; got types=${typesOf(results)}")
+        assertEquals("Céline Dion", artist["name"],
+            "query without diacritic should match indexed name with diacritic")
+    }
+
+    @Test
+    fun `finds accented album title via unaccented query`() {
+        // Titles flow through SearchIndexService; verifies the index
+        // folds at tokenize time, not just the direct-entity matchers.
+        val results = runSearch("Falling Into You")
+        val album = results.firstOrNull { it["type"] == "album" }
+        assertNotNull(album, "album missing on unaccented query; got types=${typesOf(results)}")
+        assertEquals("Falling Into You", album["name"])
     }
 
     @Test

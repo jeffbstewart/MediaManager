@@ -51,11 +51,18 @@ class SearchHttpService {
      * without needing an Armeria request context. Returns results sorted by
      * descending score and capped at [limit].
      */
+    /** Normalize for accent-insensitive, case-insensitive substring matching. */
+    private fun foldMatch(s: String): String =
+        SearchIndexService.foldAccents(s).lowercase()
+
     internal fun searchForUser(query: String, user: AppUser, limit: Int = 100): List<Map<String, Any?>> {
-        val q = query.trim().lowercase()
+        val q = foldMatch(query.trim())
         if (q.length < 2) return emptyList()
 
         val results = mutableListOf<Map<String, Any?>>()
+        // Tokens used by the non-title matchers below. Each candidate name
+        // / biography is passed through `foldMatch` before comparison so
+        // the match is accent-insensitive on both sides.
         val queryTokens = q.split("\\s+".toRegex())
 
         // --- 1. Titles (movies, TV, personal) via SearchIndexService ---
@@ -110,7 +117,7 @@ class SearchHttpService {
         val castMembers = CastMember.findAll()
         for (cm in castMembers) {
             if (cm.tmdb_person_id in seenActors) continue
-            val nameLC = cm.name.lowercase()
+            val nameLC = cm.name.let(::foldMatch)
             if (queryTokens.all { nameLC.contains(it) }) {
                 seenActors.add(cm.tmdb_person_id)
                 results.add(mapOf(
@@ -129,9 +136,9 @@ class SearchHttpService {
         // surfaces the artist record ahead of unrelated artists whose bios
         // happen to mention Miles.
         for (a in Artist.findAll()) {
-            val nameLC = a.name.lowercase()
+            val nameLC = a.name.let(::foldMatch)
             val nameHit = queryTokens.all { nameLC.contains(it) }
-            val bioHit = !nameHit && a.biography?.lowercase()?.let { bio ->
+            val bioHit = !nameHit && a.biography?.let(::foldMatch)?.let { bio ->
                 queryTokens.all { bio.contains(it) }
             } == true
             if (nameHit || bioHit) {
@@ -151,9 +158,9 @@ class SearchHttpService {
 
         // --- 2c. Book authors (by name or biography) — same shape as artists. ---
         for (a in Author.findAll()) {
-            val nameLC = a.name.lowercase()
+            val nameLC = a.name.let(::foldMatch)
             val nameHit = queryTokens.all { nameLC.contains(it) }
-            val bioHit = !nameHit && a.biography?.lowercase()?.let { bio ->
+            val bioHit = !nameHit && a.biography?.let(::foldMatch)?.let { bio ->
                 queryTokens.all { bio.contains(it) }
             } == true
             if (nameHit || bioHit) {
@@ -173,7 +180,7 @@ class SearchHttpService {
         // a token-identical name (unusual but possible on compilations).
         val allTitlesByIdForTracks = Title.findAll().associateBy { it.id }
         for (track in Track.findAll()) {
-            val nameLC = track.name.lowercase()
+            val nameLC = track.name.let(::foldMatch)
             if (queryTokens.all { nameLC.contains(it) }) {
                 val album = allTitlesByIdForTracks[track.title_id] ?: continue
                 if (!user.canSeeRating(album.content_rating)) continue
@@ -197,7 +204,7 @@ class SearchHttpService {
         // --- 3. Collections ---
         val collections = TmdbCollection.findAll()
         for (col in collections) {
-            val nameLC = col.name.lowercase()
+            val nameLC = col.name.let(::foldMatch)
             if (queryTokens.all { nameLC.contains(it) }) {
                 results.add(mapOf(
                     "type" to "collection",
@@ -212,7 +219,7 @@ class SearchHttpService {
         val tags = TagService.getAllTags()
         val tagCounts = TagService.getTagTitleCounts()
         for (tag in tags) {
-            val nameLC = tag.name.lowercase()
+            val nameLC = tag.name.let(::foldMatch)
             if (queryTokens.all { nameLC.contains(it) }) {
                 results.add(mapOf(
                     "type" to "tag",
@@ -230,7 +237,7 @@ class SearchHttpService {
         val enabledTunerIds = LiveTvTuner.findAll().filter { it.enabled }.mapNotNull { it.id }.toSet()
         val channels = LiveTvChannel.findAll().filter { it.enabled && it.tuner_id in enabledTunerIds }
         for (ch in channels) {
-            val searchable = "${ch.guide_name} ${ch.network_affiliation ?: ""} ${ch.guide_number}".lowercase()
+            val searchable = "${ch.guide_name} ${ch.network_affiliation ?: ""} ${ch.guide_number}".let(::foldMatch)
             if (queryTokens.all { searchable.contains(it) }) {
                 results.add(mapOf(
                     "type" to "channel",
@@ -245,7 +252,7 @@ class SearchHttpService {
         // --- 6. Cameras ---
         val cameras = Camera.findAll().filter { it.enabled }
         for (cam in cameras) {
-            val nameLC = cam.name.lowercase()
+            val nameLC = cam.name.let(::foldMatch)
             if (queryTokens.all { nameLC.contains(it) }) {
                 results.add(mapOf(
                     "type" to "camera",

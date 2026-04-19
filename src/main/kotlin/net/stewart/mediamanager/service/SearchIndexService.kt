@@ -3,6 +3,7 @@ package net.stewart.mediamanager.service
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.*
 import org.slf4j.LoggerFactory
+import java.text.Normalizer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -39,14 +40,26 @@ object SearchIndexService {
     private val allTitleIds = HashSet<Long>()
 
     /**
-     * Tokenizes text for indexing or searching: lowercase, strip non-alphanumeric characters
-     * (except spaces), collapse whitespace, split on whitespace.
+     * Unicode-decompose + drop combining marks so accented letters fold
+     * to their ASCII base form before tokenization. Lets "Celine" match
+     * "Céline Dion" and "naive" match "naïve" without the caller having
+     * to type the diacritic. Applied on both index and query sides so
+     * the comparison space stays symmetric.
+     */
+    fun foldAccents(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+
+    /**
+     * Tokenizes text for indexing or searching: fold accents, lowercase,
+     * strip non-alphanumeric characters (except spaces), collapse
+     * whitespace, split on whitespace.
      *
      * Keeps articles ("the", "a", "an") unlike TranscodeMatcherService.normalize() —
      * needed for phrase matching `"the dark knight"`.
      */
     fun tokenize(text: String): List<String> {
-        return text.lowercase()
+        return foldAccents(text).lowercase()
             .replace(Regex("[^a-z0-9\\s]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
