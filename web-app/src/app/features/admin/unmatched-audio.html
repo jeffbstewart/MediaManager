@@ -170,17 +170,26 @@
 
   <!-- Last-action result toast -->
   @if (lastResult(); as r) {
-    <div class="result-toast" role="status">
-      <span>
-        Linked {{ r.linked }} files to <b>{{ r.title_name }}</b>
-        @if (r.failed.length) { &mdash; {{ r.failed.length }} failed }
-      </span>
+    <div class="result-toast" [class.result-toast-error]="r.failed.length > 0" role="status">
+      <div class="result-summary">
+        @if (r.linked > 0) {
+          <span>Linked {{ r.linked }} files to <b>{{ r.title_name }}</b></span>
+        }
+        @if (r.failed.length) {
+          <span class="result-failed-count">
+            {{ r.failed.length }} {{ r.failed.length === 1 ? 'file' : 'files' }} failed
+          </span>
+        }
+      </div>
       @if (r.failed.length) {
-        <details>
-          <summary>Failed files</summary>
+        <details open>
+          <summary>Failure reasons</summary>
           <ul>
             @for (f of r.failed; track f.file_path) {
-              <li>{{ f.file_path }} — {{ f.reason }}</li>
+              <li>
+                <span class="failure-reason">{{ f.reason }}</span>
+                <span class="failure-path">{{ f.file_path }}</span>
+              </li>
             }
           </ul>
         </details>

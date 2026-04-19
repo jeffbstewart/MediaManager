@@ -202,23 +202,70 @@ header {
   padding: 0.75rem 1rem;
   border-radius: 8px;
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  max-width: 90vw;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(720px, 90vw);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   z-index: 1000;
 
-  details {
-    margin-left: 0.5rem;
+  // Bump the border to amber when any file failed so the admin sees
+  // it's not a clean success at a glance.
+  &.result-toast-error {
+    border-left: 4px solid #ffb74d;
+  }
 
-    summary { cursor: pointer; font-size: 0.8125rem; opacity: 0.7; }
+  .result-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .result-failed-count {
+    color: #ffb74d;
+    font-weight: 500;
+  }
+
+  details {
+    summary {
+      cursor: pointer;
+      font-size: 0.8125rem;
+      opacity: 0.85;
+      margin-bottom: 0.25rem;
+    }
 
     ul {
-      max-height: 200px;
+      max-height: 240px;
       overflow-y: auto;
-      margin: 0.5rem 0 0;
-      padding-left: 1.25rem;
-      font-size: 0.75rem;
+      margin: 0.25rem 0 0;
+      padding-left: 1rem;
+      list-style: none;
     }
+
+    li {
+      font-size: 0.75rem;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+      &:last-child { border-bottom: none; }
+    }
+
+    .failure-reason {
+      display: block;
+      color: #ffb74d;
+      font-weight: 500;
+    }
+
+    .failure-path {
+      display: block;
+      opacity: 0.7;
+      font-family: monospace;
+      word-break: break-all;
+    }
+  }
+
+  > button {
+    align-self: flex-end;
+    margin-top: -0.5rem;
   }
 }

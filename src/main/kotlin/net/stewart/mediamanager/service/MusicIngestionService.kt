@@ -191,6 +191,62 @@ object MusicIngestionService {
     }
 
     /**
+     * Add Track rows for any (disc, track) positions in [lookup] that
+     * aren't already present on [titleId]. Used by the unmatched-audio
+     * admin flow when the admin picks an MB release that's a fuller
+     * pressing than what we previously ingested for the same
+     * release-group — without this the local Title still carries the
+     * old, smaller track list and files claiming higher positions can't
+     * link. Existing tracks are never touched (so any file_path /
+     * listening progress / per-track personnel attached to them is
+     * preserved). Returns the count of tracks added.
+     */
+    fun syncMissingTracks(
+        titleId: Long,
+        lookup: MusicBrainzReleaseLookup,
+        clock: Clock = SystemClock
+    ): Int {
+        val now = clock.now()
+        val existingPositions = Track.findAll()
+            .filter { it.title_id == titleId }
+            .map { it.disc_number to it.track_number }
+            .toSet()
+        var added = 0
+        for (mbTrack in lookup.tracks) {
+            val key = mbTrack.discNumber to mbTrack.trackNumber
+            if (key in existingPositions) continue
+            val track = Track(
+                title_id = titleId,
+                track_number = mbTrack.trackNumber,
+                disc_number = mbTrack.discNumber,
+                name = mbTrack.name,
+                duration_seconds = mbTrack.durationSeconds,
+                musicbrainz_recording_id = mbTrack.musicBrainzRecordingId,
+                created_at = now,
+                updated_at = now
+            )
+            track.save()
+            if (mbTrack.trackArtistCredits.isNotEmpty()) {
+                mbTrack.trackArtistCredits.forEachIndexed { i, credit ->
+                    val artist = upsertArtist(credit, now)
+                    TrackArtist(
+                        track_id = track.id!!,
+                        artist_id = artist.id!!,
+                        artist_order = i
+                    ).save()
+                }
+            }
+            added++
+        }
+        if (added > 0) {
+            log.info("syncMissingTracks: added {} track(s) on title {} from release {}",
+                added, titleId, lookup.musicBrainzReleaseId)
+            SearchIndexService.onTitleChanged(titleId)
+        }
+        return added
+    }
+
+    /**
      * Manual ingest for the unmatched-audio admin path: derive a Title
      * + Tracks + (Various-Artists) primary credit purely from the file
      * tags the scanner already captured. The admin doesn't have to type

@@ -408,8 +408,22 @@ class UnmatchedAudioHttpService(
                 mediaFormat = MediaFormat.AUDIO_FLAC,
                 lookup = lookup
             )
+            // Reused titles can have a smaller track list than the picked
+            // release (we previously ingested a different pressing of the
+            // same release-group). Backfill missing slots so files
+            // claiming higher track positions can link.
+            if (ingest.titleReused) {
+                val added = MusicIngestionService.syncMissingTracks(ingest.title.id!!, lookup)
+                if (added > 0) {
+                    log.info("link-album-to-release: backfilled {} missing track(s) on reused title {}",
+                        added, ingest.title.id)
+                }
+            }
             val tracks = Track.findAll().filter { it.title_id == ingest.title.id }
             val (linked, failed) = linkRowsToTracks(rows, tracks)
+            for (f in failed) {
+                log.warn("link-album-to-release: file {} failed: {}", f["file_path"], f["reason"])
+            }
             log.info("link-album-to-release: title={} linked={} failed={}",
                 ingest.title.id, linked.size, failed.size)
 

@@ -2121,6 +2121,13 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
             mediaFormat = net.stewart.mediamanager.entity.MediaFormat.AUDIO_FLAC,
             lookup = lookup
         )
+        // See HTTP linkAlbumToRelease — backfill any missing track slots
+        // when the reused title was ingested from a different pressing.
+        if (ingest.titleReused) {
+            net.stewart.mediamanager.service.MusicIngestionService.syncMissingTracks(
+                ingest.title.id!!, lookup
+            )
+        }
         val tracks = net.stewart.mediamanager.entity.Track.findAll()
             .filter { it.title_id == ingest.title.id }
         val (linked, failed) = linkUnmatchedAudioRowsToTracks(rows, tracks)
