@@ -19,6 +19,7 @@ import net.stewart.mediamanager.service.PersonnelEnrichmentAgent
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookScannerAgent
 import net.stewart.mediamanager.service.MusicScannerAgent
+import net.stewart.mediamanager.service.RecommendationAgent
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
 import net.stewart.mediamanager.service.PriceLookupAgent
@@ -106,6 +107,10 @@ fun main(args: Array<String>) {
     val musicScannerAgent = MusicScannerAgent()
     musicScannerAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { musicScannerAgent.stop() })
+
+    val recommendationAgent = RecommendationAgent()
+    recommendationAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread { recommendationAgent.stop() })
 
     val collectionAgent = CollectionRefreshAgent()
     collectionAgent.start()

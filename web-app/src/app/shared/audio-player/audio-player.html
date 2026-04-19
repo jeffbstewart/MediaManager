@@ -62,6 +62,18 @@
     </div>
 
     <div class="extras">
+      <div class="volume-cluster">
+        <button mat-icon-button (click)="queue.toggleMute()"
+                [attr.aria-label]="queue.muted() ? 'Unmute' : 'Mute'"
+                [attr.title]="queue.muted() ? 'Unmute' : 'Mute'">
+          <mat-icon>{{ volumeIcon() }}</mat-icon>
+        </button>
+        <input type="range" class="volume-slider"
+               min="0" max="1" step="0.01"
+               [value]="queue.muted() ? 0 : queue.volume()"
+               (input)="onVolume($event)"
+               aria-label="Volume" />
+      </div>
       <button mat-icon-button (click)="toggleQueuePanel()"
               [class.active]="queuePanelOpen()"
               [attr.aria-label]="queuePanelOpen() ? 'Hide queue' : 'Show queue'"

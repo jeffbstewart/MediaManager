@@ -13,6 +13,7 @@ import { FeatureService } from '../feature.service';
 import { AppRoutes } from '../routes';
 import { ReportProblemDialogComponent } from './report-problem-dialog';
 import { AudioPlayerComponent } from '../../shared/audio-player/audio-player';
+import { PlaybackQueueService } from '../playback-queue.service';
 
 @Component({
   selector: 'app-shell',
@@ -39,6 +40,7 @@ export class ShellComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
   private readonly router = inject(Router);
   readonly features = inject(FeatureService);
+  readonly playbackQueue = inject(PlaybackQueueService);
 
   readonly routes = AppRoutes;
 

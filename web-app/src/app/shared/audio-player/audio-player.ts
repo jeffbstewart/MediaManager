@@ -133,6 +133,22 @@ export class AudioPlayerComponent {
     if (!isNaN(value)) this.queue.seek(value);
   }
 
+  /** Volume slider: setting a non-zero value also un-mutes automatically. */
+  onVolume(event: Event): void {
+    const value = parseFloat((event.target as HTMLInputElement).value);
+    if (isNaN(value)) return;
+    this.queue.setVolume(value);
+    if (value > 0 && this.queue.muted()) this.queue.toggleMute();
+    if (value === 0 && !this.queue.muted()) this.queue.toggleMute();
+  }
+
+  /** Pick a volume icon that reflects the current level / mute state. */
+  volumeIcon(): string {
+    if (this.queue.muted() || this.queue.volume() === 0) return 'volume_off';
+    if (this.queue.volume() < 0.5) return 'volume_down';
+    return 'volume_up';
+  }
+
   onError(): void {
     const el = this.audioEl()?.nativeElement;
     const err = el?.error;

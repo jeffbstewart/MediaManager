@@ -439,6 +439,27 @@ export interface SearchResponse {
   query: string;
 }
 
+export interface RecommendationVoter {
+  mbid: string;
+  name: string;
+  album_count: number;
+}
+
+export interface ArtistRecommendation {
+  suggested_artist_mbid: string;
+  suggested_artist_name: string;
+  artist_id: number | null;
+  score: number;
+  voters: RecommendationVoter[];
+  representative_release_group_id: string | null;
+  representative_release_title: string | null;
+  cover_url: string | null;
+}
+
+export interface ArtistRecommendationsResponse {
+  artists: ArtistRecommendation[];
+}
+
 export interface ActorDetail {
   person_id: number;
   name: string;
@@ -612,6 +633,26 @@ export class CatalogService {
 
   async getHomeFeed(): Promise<HomeFeed> {
     return firstValueFrom(this.http.get<HomeFeed>('/api/v2/catalog/home'));
+  }
+
+  async getArtistRecommendations(limit: number = 30): Promise<ArtistRecommendationsResponse> {
+    return firstValueFrom(
+      this.http.get<ArtistRecommendationsResponse>('/api/v2/recommendations/artists', {
+        params: { limit: String(limit) }
+      })
+    );
+  }
+
+  async dismissArtistRecommendation(mbid: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post('/api/v2/recommendations/dismiss', { suggested_artist_mbid: mbid })
+    );
+  }
+
+  async refreshArtistRecommendations(): Promise<void> {
+    await firstValueFrom(
+      this.http.post('/api/v2/recommendations/refresh', {})
+    );
   }
 
   async getFeatures(): Promise<FeatureFlags> {

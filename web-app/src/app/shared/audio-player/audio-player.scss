@@ -2,6 +2,10 @@
 // display:none when the queue is empty so the layout doesn't have a
 // dead strip reserved at the bottom of every screen.
 .audio-player {
+  // Hidden by default — only shown when the queue has a current track
+  // via the `.visible` modifier. A duplicate `display: grid` was
+  // overriding this and causing the empty bar to render as a 72 px
+  // black strip on every page; removed.
   display: none;
   position: fixed;
   left: 0;
@@ -13,7 +17,6 @@
   background: rgba(20, 20, 22, 0.96);
   backdrop-filter: blur(8px);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: grid;
   grid-template-columns: minmax(220px, 1fr) auto minmax(260px, 2fr) auto;
   gap: 1rem;
   align-items: center;
@@ -130,11 +133,37 @@
 
 .extras {
   display: flex;
+  align-items: center;
   gap: 0.125rem;
 
   button.active {
     color: var(--mat-sys-primary, #bb86fc);
   }
+}
+
+// Volume cluster: icon + inline horizontal slider. The slider starts
+// small and hidden at very narrow widths; medium widths it expands on
+// hover over the cluster so the default look stays compact.
+.volume-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-right: 0.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  margin-right: 0.125rem;
+}
+
+.volume-slider {
+  width: 88px;
+  accent-color: var(--mat-sys-primary, #bb86fc);
+  cursor: pointer;
+}
+
+// Collapse the slider on medium-narrow viewports; the mute icon still
+// lets users cut sound. Full-narrow hides .extras entirely.
+@media (max-width: 980px) {
+  .volume-slider { display: none; }
+  .volume-cluster { border-right: none; padding-right: 0; }
 }
 
 // Narrow: collapse to two rows. The scrubber moves below the now-playing

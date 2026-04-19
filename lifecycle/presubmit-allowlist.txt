@@ -32,6 +32,16 @@
 66666666-6666-6666-6666-666666666666
 99999999-9999-9999-9999-999999999999
 
+# Synthetic MBIDs used by RecommendationServiceTest fixtures
+# (all-hex-letter UUIDs, not valid MusicBrainz identifiers).
+aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+cccccccc-cccc-cccc-cccc-cccccccccccc
+dddddddd-dddd-dddd-dddd-dddddddddddd
+eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee
+ffffffff-ffff-ffff-ffff-ffffffffffff
+abcdefab-abcd-abcd-abcd-abcdefabcdef
+
 # Emby version numbers that look like IP addresses (competitive analysis)
 4.9.3.0
 4.10.0.5

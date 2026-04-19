@@ -631,6 +631,22 @@ Session-scoped radio queues seeded from an album or track. Gated on the `has_mus
 
 **Privacy.** No listening data is sent to Last.fm &mdash; the service only queries similarity by artist MBID. The key is stored in `app_config`, never logged, and never returned from non-admin APIs.
 
+### Library Recommendations (M8)
+
+Reuses M7's similar-artist cache to surface a **Discover** page &mdash; for each user, a ranked list of unowned artists whose similar-artist votes overlap the user's owned library. Sidebar gains a "Discover" link under Music whenever `has_music_radio` is true (same gate as Start Radio; the cache is shared).
+
+**Compute.** `RecommendationService.recompute(userId)` aggregates similar-artist scores across every owned artist, weighting each voter's contribution by their owned-album count (so the artists a user listens to heavily push harder). Suggestions that match already-owned or previously-dismissed MBIDs drop out; the top 30 get representative release-group covers resolved via MusicBrainz (`listArtistReleaseGroups(mbid, type=album)` picking the earliest non-compilation) and get upserted into `recommended_artist` with a voters JSON blob for the "because you have X, Y, and Z" explanation.
+
+**Schedule.** `RecommendationAgent` runs on a 24 h cycle with a 3-minute startup delay; it walks every non-locked user in order and caps per-user work with the same limits. `POST /api/v2/recommendations/refresh` queues a manual recompute for the calling user via the same shared mutex.
+
+**Endpoints.**
+
+- `GET /api/v2/recommendations/artists?limit=30` &mdash; returns the current active (non-dismissed) recommendations, each with `cover_url` pointing at `/proxy/caa/release-group/{rgid}/front-250`.
+- `POST /api/v2/recommendations/dismiss` &mdash; body `{suggested_artist_mbid}`. Dismissals persist across recomputes so a no-thanks artist doesn't come back unless the user explicitly reverses the dismissal (no UI for that today &mdash; admins can clear `dismissed_at` in the DB).
+- `POST /api/v2/recommendations/refresh` &mdash; fire-and-forget; kicks the background recompute for the caller's user.
+
+**Schema.** `V082__recommended_artist.sql` creates the table with a unique index on `(user_id, suggested_artist_mbid)` plus a score-ordered covering index for list queries. FK to `app_user` has `ON DELETE CASCADE` so deleting a user purges their recommendations.
+
 ### Troubleshooting
 
 **Start Radio button is missing.** Verify the key is configured in Settings *and* that at least one artist has similarity data cached. On a fresh install with a key set, this triggers on the first radio session; the button appears after MusicBrainz has seen at least one of your owned artists.
@@ -638,6 +654,10 @@ Session-scoped radio queues seeded from an album or track. Gated on the `has_mus
 **"No tracks to play" after pressing Start Radio.** The owned library has no artist overlap with the seed's similar-artist list and the fallback cascade (same genre &rarr; same era &rarr; any owned) didn't find anything either. Expect this on libraries under ~10 albums.
 
 **Repetitive queue.** The engine caps at 3 tracks per similar artist per batch and interleaves across artists before within an artist. If the queue still feels repetitive, your library likely has a narrow overlap with the seed &mdash; skip-early (within 30 s) to down-weight artists for the remainder of the session, or start radio from a different seed.
+
+**Discover page is empty on a fresh install.** The agent runs on a 24 h cycle with a 3-minute startup delay; on a new install the user can hit **Refresh now** in the page header to kick it manually. The first refresh against a fresh library calls Last.fm once per owned artist (≤1 req/sec), so expect a minute or two of wall-clock time before the list populates.
+
+**MusicBrainz 429 bursts.** `MusicBrainzHttpService` shares a single `RATE_LIMITER` across every service instance (scanner, radio, recommendations, personnel enrichment). A 429 or 503 response penalises the limiter by 5 s so contending threads back off instead of hammering the 1-req/sec boundary. Occasional bursts during a first-time Discover refresh are expected and self-correct.
 
 ---
 

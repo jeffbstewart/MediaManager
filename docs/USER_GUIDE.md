@@ -310,11 +310,20 @@ The Music page mirrors the movie catalog &mdash; cover grid with sort options, c
 
 ### Listening
 
-The **Play Album** button starts the album from the first track. Every track row has its own play button that queues the rest of the album behind the selected track. Playback drops a persistent player bar into the bottom of every screen with cover art, track name, transport controls (play / pause / prev / next), a scrubber, volume, shuffle, and repeat.
+The **Play Album** button starts the album from the first track. Every track row has its own play button that queues the rest of the album behind the selected track. Playback drops a persistent player bar into the bottom of every screen with cover art, track name, transport controls (play / pause / prev / next), a scrubber, and an extras cluster described below.
 
 Browsing around the app keeps playback going &mdash; the player bar survives route changes. Closing the tab stops playback, but a "Continue listening" shelf on the home page resumes where you left off.
 
 **What can I play?** Most rips (FLAC, MP3, AAC, Ogg Vorbis, Opus) stream directly to your browser. WAV sources transcode on-the-fly to AAC m4a the first time a track is requested, then serve from a small disk cache on replays &mdash; so the first scrub after picking a new track may take a second.
+
+#### Player controls
+
+The extras cluster on the right side of the player bar carries:
+
+- **Volume &mdash;** mute toggle plus a horizontal slider. Dragging to zero mutes; dragging up un-mutes automatically. The icon reflects current level (`volume_off` / `volume_down` / `volume_up`). The slider hides on narrow viewports but the mute button stays.
+- **Queue panel &mdash;** a `queue_music` icon opens a drop-up panel above the player showing every track in the current queue. The currently-playing row is highlighted with an animated bar indicator; already-played rows dim out. Click any row to jump straight to it. In radio mode the panel's header shows the seed info and a reminder that the queue auto-refills.
+- **Shuffle &mdash;** randomises the queue order for subsequent track advances.
+- **Repeat &mdash;** cycles OFF &rarr; ALL (loop the queue) &rarr; ONE (loop the current track).
 
 ### Start Radio
 
@@ -333,6 +342,29 @@ Radio sessions don't persist across browser tabs or full reloads &mdash; each li
 ### Wishlist for Albums
 
 Wishlist entries in music are per specific album, never per artist. The wishlist search box matches album titles from MusicBrainz; on the artist page, each unowned album in the **Other Works** grid has a heart icon for one-click wish-listing. Compilation albums render with a "Compilation" badge instead of the "Various Artists" byline, so you don't wind up with a wishlist cluttered by unreadable multi-artist names.
+
+### Discover (library recommendations)
+
+When the server has the Last.fm integration enabled, a **Discover** link appears in the sidebar. The Discover page shows artists similar to what's already in your library &mdash; ranked by how much overlap there is with your taste, *and* filtered down to artists you don't already own.
+
+Each card carries:
+
+- **Album cover** for a representative release on that artist. Tapping **Wishlist** adds that album to your wish list in one click.
+- **Artist name**, with a "Start with *{album}*" hint pointing at the representative release.
+- A *"because you have X, Y, and Z"* line naming the top three owned artists whose taste overlap drove the suggestion.
+- **Dismiss** removes the card; the dismissal survives nightly refreshes so a no-thanks artist doesn't keep coming back.
+
+The recommendation job runs nightly. If the list is empty on a fresh install, click **Refresh now** in the page header to kick it manually. The first refresh for a fresh library can take a minute or two while Last.fm data hydrates for each owned artist.
+
+### Search
+
+Music participates in the unified search box at the top of every page. Matches surface with typed result kinds so you can tell what you're looking at:
+
+- **Album** &mdash; tap to open the album detail page.
+- **Artist** &mdash; tap to open the artist page.
+- **Track** &mdash; tap to open the track's album (there's no per-track surface).
+
+Diacritics are optional. Typing "Celine" matches "C&eacute;line"; "naive" matches "na&iuml;ve". Artist biographies are also searched as a fallback &mdash; typing "Birmingham 1978" surfaces Duran Duran even though neither token is in the band's name.
 
 ---
 

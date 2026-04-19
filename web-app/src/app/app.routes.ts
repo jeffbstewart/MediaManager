@@ -62,6 +62,7 @@ export const routes: Routes = [
       { path: 'content/books', loadComponent: () => import('./features/content/books').then(m => m.BooksComponent) },
       { path: 'content/music', loadComponent: () => import('./features/content/music').then(m => m.MusicComponent) },
       { path: 'artist/:artistId', loadComponent: () => import('./features/artist/artist').then(m => m.ArtistComponent) },
+      { path: 'discover', loadComponent: () => import('./features/discover/discover').then(m => m.DiscoverComponent) },
       { path: 'wishlist', loadComponent: () => import('./features/wishlist/wishlist').then(m => m.WishListComponent) },
       { path: 'cameras', loadComponent: () => import('./features/cameras/cameras').then(m => m.CamerasComponent) },
       { path: 'live-tv', loadComponent: () => import('./features/live-tv/live-tv').then(m => m.LiveTvComponent) },

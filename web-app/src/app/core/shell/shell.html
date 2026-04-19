@@ -8,38 +8,13 @@
         <span matListItemTitle>Home</span>
       </a>
 
-      <a mat-list-item [routerLink]="routes.movies()" routerLinkActive="active-link">
-        <mat-icon matListItemIcon>movie</mat-icon>
-        <span matListItemTitle>Movies</span>
-      </a>
-      <a mat-list-item [routerLink]="routes.tvShows()" routerLinkActive="active-link">
-        <mat-icon matListItemIcon>tv</mat-icon>
-        <span matListItemTitle>TV Shows</span>
-      </a>
-      <a mat-list-item [routerLink]="routes.collections()" routerLinkActive="active-link">
-        <mat-icon matListItemIcon>collections_bookmark</mat-icon>
-        <span matListItemTitle>Collections</span>
-      </a>
-      <a mat-list-item [routerLink]="routes.tags()" routerLinkActive="active-link">
-        <mat-icon matListItemIcon>label</mat-icon>
-        <span matListItemTitle>Tags</span>
-      </a>
-      @if (features.hasPersonalVideos()) {
-        <a mat-list-item [routerLink]="routes.personalVideos()" routerLinkActive="active-link">
-          <mat-icon matListItemIcon>family_restroom</mat-icon>
-          <span matListItemTitle>Family</span>
-        </a>
-      }
+      <!-- Non-admin nav sorted alphabetically after Home. Conditional
+           entries (Books, Cameras, Discover, Family, Live TV, Music)
+           drop out of the list when their feature flag is false. -->
       @if (features.hasBooks()) {
         <a mat-list-item [routerLink]="routes.books()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>auto_stories</mat-icon>
           <span matListItemTitle>Books</span>
-        </a>
-      }
-      @if (features.hasMusic()) {
-        <a mat-list-item [routerLink]="routes.music()" routerLinkActive="active-link">
-          <mat-icon matListItemIcon>album</mat-icon>
-          <span matListItemTitle>Music</span>
         </a>
       }
       @if (features.hasCameras()) {
@@ -48,19 +23,52 @@
           <span matListItemTitle>Cameras</span>
         </a>
       }
+      <a mat-list-item [routerLink]="routes.collections()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>collections_bookmark</mat-icon>
+        <span matListItemTitle>Collections</span>
+      </a>
+      @if (features.hasMusicRadio()) {
+        <a mat-list-item [routerLink]="routes.discover()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>auto_awesome</mat-icon>
+          <span matListItemTitle>Discover</span>
+        </a>
+      }
+      @if (features.hasPersonalVideos()) {
+        <a mat-list-item [routerLink]="routes.personalVideos()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>family_restroom</mat-icon>
+          <span matListItemTitle>Family</span>
+        </a>
+      }
       @if (features.hasLiveTv()) {
         <a mat-list-item [routerLink]="routes.liveTv()" routerLinkActive="active-link">
           <mat-icon matListItemIcon>live_tv</mat-icon>
           <span matListItemTitle>Live TV</span>
         </a>
       }
-
+      <a mat-list-item [routerLink]="routes.movies()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>movie</mat-icon>
+        <span matListItemTitle>Movies</span>
+      </a>
+      @if (features.hasMusic()) {
+        <a mat-list-item [routerLink]="routes.music()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>album</mat-icon>
+          <span matListItemTitle>Music</span>
+        </a>
+      }
       <a mat-list-item [routerLink]="routes.wishlist()" routerLinkActive="active-link">
         <mat-icon matListItemIcon>favorite</mat-icon>
         <span matListItemTitle>My Wish List</span>
         @if (features.wishReadyCount() > 0) {
           <span matListItemMeta class="wish-badge">{{ features.wishReadyCount() }}</span>
         }
+      </a>
+      <a mat-list-item [routerLink]="routes.tags()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>label</mat-icon>
+        <span matListItemTitle>Tags</span>
+      </a>
+      <a mat-list-item [routerLink]="routes.tvShows()" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>tv</mat-icon>
+        <span matListItemTitle>TV Shows</span>
       </a>
 
       <!-- Admin section -->
@@ -290,8 +298,16 @@
       </mat-menu>
     </mat-toolbar>
 
-    <div class="page-content">
+    <div class="page-content" [class.with-player]="playbackQueue.hasQueue()">
       <router-outlet />
+      @if (playbackQueue.hasQueue()) {
+        <!-- Spacer equal to the fixed audio-player height so scroll
+             extent reaches past the player bar. Uses a real DOM node
+             because padding-bottom on an overflow:auto container is
+             inconsistently included in the scroll extent across
+             browsers. -->
+        <div class="player-spacer" aria-hidden="true"></div>
+      }
     </div>
   </mat-sidenav-content>
 </mat-sidenav-container>

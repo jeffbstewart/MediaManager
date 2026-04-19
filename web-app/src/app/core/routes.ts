@@ -20,6 +20,7 @@ export const AppRoutes = {
   personalVideos: () => '/content/family',
   books: () => '/content/books',
   music: () => '/content/music',
+  discover: () => '/discover',
   artist: (artistId: number) => `/artist/${artistId}`,
   wishlist: () => '/wishlist',
   cameras: () => '/cameras',

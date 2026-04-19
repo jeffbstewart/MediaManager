@@ -1,0 +1,68 @@
+<div class="discover-page">
+  <div class="header">
+    <h1>Discover</h1>
+    <span class="subtitle">Artists similar to what's already in your library, ranked by how much overlap there is with your taste.</span>
+    @if (hasMusicRadio()) {
+      <button mat-stroked-button class="refresh-btn"
+              (click)="refresh()"
+              [disabled]="refreshing() || loading()">
+        <mat-icon>refresh</mat-icon>
+        {{ refreshing() ? 'Refreshing…' : 'Refresh now' }}
+      </button>
+    }
+  </div>
+
+  @if (!hasMusicRadio()) {
+    <div class="empty-state">
+      <mat-icon>library_music</mat-icon>
+      <p>Discovery needs the Last.fm integration to find similar artists.</p>
+      <p class="hint">Ask your admin to add a Last.fm API key in Settings → Music.</p>
+    </div>
+  } @else if (loading()) {
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (artists().length === 0) {
+    <div class="empty-state">
+      <mat-icon>graphic_eq</mat-icon>
+      <p>No recommendations yet.</p>
+      <p class="hint">The nightly job hasn't run against your library yet &mdash; hit <strong>Refresh now</strong> to kick it manually. The first refresh for a fresh library can take a minute or two while Last.fm similarity data hydrates for each owned artist.</p>
+    </div>
+  } @else {
+    <div class="card-grid">
+      @for (artist of artists(); track artist.suggested_artist_mbid) {
+        <div class="rec-card">
+          <div class="cover-wrapper">
+            @if (artist.cover_url) {
+              <img [src]="artist.cover_url" [alt]="artist.suggested_artist_name"
+                   class="cover" loading="lazy" decoding="async" />
+            } @else {
+              <div class="cover-placeholder"><mat-icon>album</mat-icon></div>
+            }
+          </div>
+          <div class="card-body">
+            <span class="artist-name">{{ artist.suggested_artist_name }}</span>
+            @if (artist.representative_release_title) {
+              <span class="album-hint">Start with <em>{{ artist.representative_release_title }}</em></span>
+            }
+            <span class="voter-line">{{ voterLine(artist) }}</span>
+          </div>
+          <div class="card-actions">
+            @if (artist.representative_release_group_id && artist.representative_release_title) {
+              <button mat-flat-button color="primary" class="wish-btn"
+                      (click)="wishlist(artist)"
+                      [disabled]="isWishSubmitting(artist.suggested_artist_mbid) || isWished(artist.suggested_artist_mbid)">
+                <mat-icon>{{ isWished(artist.suggested_artist_mbid) ? 'favorite' : 'favorite_border' }}</mat-icon>
+                <span class="btn-label">{{ isWished(artist.suggested_artist_mbid) ? 'Wishlisted' : 'Wishlist' }}</span>
+              </button>
+            }
+            <button mat-button class="dismiss-btn" (click)="dismiss(artist)">
+              <mat-icon>close</mat-icon>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -216,7 +216,6 @@ class MusicBrainzHttpService : MusicBrainzService {
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
-    private val rateLimiter = RateLimiter(MIN_GAP_MILLIS)
 
     override fun lookupByBarcode(barcode: String): MusicBrainzResult {
         val cleaned = barcode.trim()
@@ -710,7 +709,7 @@ class MusicBrainzHttpService : MusicBrainzService {
         credits.joinToString("|") { it.musicBrainzArtistId }
 
     private fun fetch(url: String): String? {
-        rateLimiter.awaitSlot()
+        RATE_LIMITER.awaitSlot()
         val request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .timeout(Duration.ofSeconds(15))
@@ -723,7 +722,14 @@ class MusicBrainzHttpService : MusicBrainzService {
         return when (response.statusCode()) {
             200 -> response.body()
             404 -> null
-            429, 503 -> throw RateLimitedException()
+            429, 503 -> {
+                // MB pushed back. Penalise the shared limiter so the next
+                // caller (possibly another agent on another thread) sees
+                // a real pause before attempting again, instead of
+                // hammering right at the 1-per-second boundary.
+                RATE_LIMITER.penalise(RATE_LIMIT_BACKOFF_MILLIS)
+                throw RateLimitedException()
+            }
             else -> throw RuntimeException("HTTP ${response.statusCode()} from $url")
         }
     }
@@ -744,14 +750,38 @@ class MusicBrainzHttpService : MusicBrainzService {
             }
             lastCall = System.currentTimeMillis()
         }
+
+        /**
+         * Mark a 429 / 503 rate-limit refusal — pushes the next-allowed
+         * timestamp forward so everyone contending for the limiter gets
+         * a real pause. Called from [fetch] when MB pushes back.
+         */
+        fun penalise(backoffMillis: Long) = lock.withLock {
+            lastCall = maxOf(lastCall, System.currentTimeMillis()) + backoffMillis - minGapMillis
+        }
     }
 
     companion object {
         private const val BASE = "https://musicbrainz.org/ws/2"
         private const val USER_AGENT =
             "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"
-        /** MB asks for ≤1 req/sec; 1100ms gives a 10 % margin. */
-        private const val MIN_GAP_MILLIS = 1100L
+        /**
+         * MB asks for ≤1 req/sec at the IP level; 1300 ms leaves headroom
+         * for clock skew between our wall clock and whatever MB measures
+         * inbound with. Observed behaviour with 1100 ms was 429 bursts
+         * when multiple agents (scanner + recommendations + personnel
+         * enrichment) fired concurrently.
+         */
+        private const val MIN_GAP_MILLIS = 1300L
+        /** Extra sleep injected after a 429 / 503 before the next attempt. */
+        private const val RATE_LIMIT_BACKOFF_MILLIS = 5_000L
+        /**
+         * Process-wide rate limiter. Every [MusicBrainzHttpService]
+         * instance shares this because MB rate-limits at the IP level,
+         * not per connection — six service instances each with their
+         * own lock is what gave us the observed 429 storm.
+         */
+        private val RATE_LIMITER = RateLimiter(MIN_GAP_MILLIS)
         private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         private val BARCODE_RE = Regex("^\\d{8,14}$")
         /** ISRC: 2-letter country, 3-char registrant, 2-digit year, 5-digit designation. */

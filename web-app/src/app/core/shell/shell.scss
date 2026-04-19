@@ -280,3 +280,11 @@
   height: calc(100vh - 64px);
   overflow-y: auto;
 }
+
+.player-spacer {
+  // Matches the fixed audio-player height. Guarantees the last row of
+  // page content can scroll above the player, regardless of whether
+  // the browser honours padding-bottom on the overflow container.
+  height: 72px;
+  flex-shrink: 0;
+}
