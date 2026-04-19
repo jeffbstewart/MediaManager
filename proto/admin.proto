@@ -188,6 +188,21 @@ service AdminService {
   // rows and checks each has a copy at the new FirstPartyImageStore layout
   // plus a valid sidecar. Safe to call any time; never deletes.
   rpc VerifyFirstPartyImageMigration(Empty) returns (VerifyFirstPartyImageMigrationResponse);
+
+  // --- Unmatched-audio group triage (admin flow for stuck whole-album
+  // bundles). Grouping collapses multi-disc sibling folders by
+  // (album_artist, album); MB search escalates when the scanner's
+  // auto-matcher picked the wrong release or gave up; link-album
+  // ingests + auto-links the whole group in one call; link-album-manual
+  // creates the title + tracks directly from file tags when MB has
+  // nothing useful for the album.
+  rpc ListUnmatchedAudioGroups(Empty) returns (UnmatchedAudioGroupListResponse);
+  rpc SearchMusicBrainzForUnmatchedAudio(SearchMusicBrainzForUnmatchedAudioRequest)
+      returns (SearchMusicBrainzForUnmatchedAudioResponse);
+  rpc LinkUnmatchedAudioAlbumToRelease(LinkUnmatchedAudioAlbumToReleaseRequest)
+      returns (LinkUnmatchedAudioAlbumResponse);
+  rpc LinkUnmatchedAudioAlbumManual(LinkUnmatchedAudioAlbumManualRequest)
+      returns (LinkUnmatchedAudioAlbumResponse);
 }
 
 // --- ID Requests ---
@@ -1457,6 +1472,111 @@ message AudioTranscodeCacheStatus {
 message ClearAudioTranscodeCacheRequest {
   // Absent = clear everything. Present = only entries for this track.
   optional int64 track_id = 1;
+}
+
+// ============================================================================
+// Unmatched-audio group triage
+// ============================================================================
+
+message UnmatchedAudioGroupListResponse {
+  repeated UnmatchedAudioGroup groups = 1;
+  int32 total_groups = 2;
+  int32 total_files = 3;
+}
+
+message UnmatchedAudioGroup {
+  // Stable derived id for referring to this group from client calls.
+  // SHA-256 prefix of the sorted member row ids — when the row set
+  // changes the id changes, which is fine: clients always re-list.
+  string group_id = 1;
+  repeated string dirs = 2;
+  optional string dominant_album = 3;
+  optional string dominant_album_artist = 4;
+  optional string dominant_upc = 5;
+  optional string dominant_mb_release_id = 6;
+  optional string dominant_label = 7;
+  optional string dominant_catalog_number = 8;
+  repeated int32 disc_numbers = 9;
+  int32 total_files = 10;
+  // How many files carry a MUSICBRAINZ_TRACKID tag. When this equals
+  // total_files, a matching MB release gives us the strongest possible
+  // link signal; when zero, we fall back to (disc, track) positions.
+  int32 recording_mbid_count = 11;
+  repeated int64 file_ids = 12;
+  repeated UnmatchedAudioGroupFile files = 13;
+}
+
+message UnmatchedAudioGroupFile {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional string parsed_title = 4;
+  optional string parsed_track_artist = 5;
+  optional int32 parsed_track_number = 6;
+  optional int32 parsed_disc_number = 7;
+  optional PlaybackOffset parsed_duration = 8;
+  optional string parsed_mb_recording_id = 9;
+}
+
+message SearchMusicBrainzForUnmatchedAudioRequest {
+  // File ids in the group. Server re-derives the group by computing
+  // dominant values across these rows.
+  repeated int64 unmatched_audio_ids = 1;
+  // Optional free-text override when the parsed tags' artist+album
+  // don't find the right MB record. "Artist - Album" is split on
+  // " - "; otherwise the value is treated as an album name.
+  optional string query_override = 2;
+}
+
+message SearchMusicBrainzForUnmatchedAudioResponse {
+  string search_artist = 1;
+  string search_album = 2;
+  repeated MusicBrainzReleaseCandidate candidates = 3;
+}
+
+message MusicBrainzReleaseCandidate {
+  string release_mbid = 1;
+  optional string release_group_mbid = 2;
+  string title = 3;
+  string artist_credit = 4;
+  optional int32 year = 5;
+  optional string label = 6;
+  optional string barcode = 7;
+  int32 track_count = 8;
+  int32 disc_count = 9;
+  // True when every file's (disc, track) position exists on the
+  // release. A false here means the scanner's current validator would
+  // also reject this candidate — the admin sees the reason and picks
+  // a different one.
+  bool accommodates_files = 10;
+  // Count of the group's files whose parsed_mb_recording_id appears
+  // on this release. Non-zero = high confidence; = total_files means
+  // gold-standard match (new ripper populates recording MBIDs).
+  int32 recording_mbid_coverage = 11;
+}
+
+message LinkUnmatchedAudioAlbumToReleaseRequest {
+  repeated int64 unmatched_audio_ids = 1;
+  string release_mbid = 2;
+}
+
+message LinkUnmatchedAudioAlbumManualRequest {
+  repeated int64 unmatched_audio_ids = 1;
+  // No admin overrides by design — the ripper already wrote album
+  // name, artist, track name, track number, disc number, duration
+  // into the files. Server derives everything from file tags.
+}
+
+message LinkUnmatchedAudioAlbumResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  int32 linked = 3;
+  repeated LinkUnmatchedAudioAlbumFailure failed = 4;
+}
+
+message LinkUnmatchedAudioAlbumFailure {
+  string file_path = 1;
+  string reason = 2;
 }
 
 // ============================================================================

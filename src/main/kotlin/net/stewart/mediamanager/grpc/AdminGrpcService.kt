@@ -2025,6 +2025,281 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         return Empty.getDefaultInstance()
     }
 
+    // ========================================================================
+    // Unmatched-audio group triage (parity with the HTTP admin endpoints)
+    // ========================================================================
+
+    private val unmatchedAudioMb: net.stewart.mediamanager.service.MusicBrainzService =
+        net.stewart.mediamanager.service.MusicBrainzHttpService()
+
+    override suspend fun listUnmatchedAudioGroups(request: Empty): UnmatchedAudioGroupListResponse {
+        val rows = UnmatchedAudioEntity.findAll()
+            .filter { it.match_status == UnmatchedAudioStatusEnum.UNMATCHED.name }
+        val groups = computeUnmatchedAudioGroups(rows)
+        return unmatchedAudioGroupListResponse {
+            this.groups.addAll(groups.map { it.toProto() })
+            totalGroups = groups.size
+            totalFiles = rows.size
+        }
+    }
+
+    override suspend fun searchMusicBrainzForUnmatchedAudio(
+        request: SearchMusicBrainzForUnmatchedAudioRequest
+    ): SearchMusicBrainzForUnmatchedAudioResponse {
+        val rows = UnmatchedAudioEntity.findAll().filter { it.id in request.unmatchedAudioIdsList.toSet() }
+        if (rows.isEmpty()) {
+            throw StatusException(Status.NOT_FOUND.withDescription("no rows found"))
+        }
+        val override = if (request.hasQueryOverride()) request.queryOverride.takeIf { it.isNotBlank() } else null
+
+        val mbids = mutableListOf<String>()
+
+        val dominantUpc = dominantString(rows) { it.parsed_upc }
+        if (override == null && dominantUpc != null) {
+            (unmatchedAudioMb.lookupByBarcode(dominantUpc)
+                as? net.stewart.mediamanager.service.MusicBrainzResult.Success)?.let {
+                mbids += it.release.musicBrainzReleaseId
+            }
+        }
+
+        val dominantArtist = dominantString(rows) { it.parsed_album_artist }
+        val dominantAlbum = dominantString(rows) { it.parsed_album }
+        val (searchArtist, searchAlbum) = if (override != null) {
+            val dash = override.indexOf(" - ")
+            if (dash > 0) override.substring(0, dash) to override.substring(dash + 3)
+            else (dominantArtist ?: "Various Artists") to override
+        } else {
+            (dominantArtist ?: "Various Artists") to (dominantAlbum ?: "")
+        }
+        if (searchAlbum.isNotBlank()) {
+            mbids += unmatchedAudioMb.searchReleaseByArtistAndAlbum(searchArtist, searchAlbum)
+        }
+
+        val ordered = mbids.distinct().take(10)
+        val candidates = ordered.mapNotNull { mbid ->
+            (unmatchedAudioMb.lookupByReleaseMbid(mbid)
+                as? net.stewart.mediamanager.service.MusicBrainzResult.Success)?.release
+                ?.let { lookup -> candidateProto(rows, lookup) }
+        }
+
+        return searchMusicBrainzForUnmatchedAudioResponse {
+            this.searchArtist = searchArtist
+            this.searchAlbum = searchAlbum
+            this.candidates.addAll(candidates)
+        }
+    }
+
+    override suspend fun linkUnmatchedAudioAlbumToRelease(
+        request: LinkUnmatchedAudioAlbumToReleaseRequest
+    ): LinkUnmatchedAudioAlbumResponse {
+        val rows = UnmatchedAudioEntity.findAll().filter { it.id in request.unmatchedAudioIdsList.toSet() }
+        if (rows.isEmpty()) throw StatusException(Status.NOT_FOUND.withDescription("no rows found"))
+
+        val lookup = (unmatchedAudioMb.lookupByReleaseMbid(request.releaseMbid)
+            as? net.stewart.mediamanager.service.MusicBrainzResult.Success)?.release
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("MB release not found"))
+
+        val ingest = net.stewart.mediamanager.service.MusicIngestionService.ingest(
+            upc = null,
+            mediaFormat = net.stewart.mediamanager.entity.MediaFormat.AUDIO_FLAC,
+            lookup = lookup
+        )
+        val tracks = net.stewart.mediamanager.entity.Track.findAll()
+            .filter { it.title_id == ingest.title.id }
+        val (linked, failed) = linkUnmatchedAudioRowsToTracks(rows, tracks)
+        return linkUnmatchedAudioAlbumResponse {
+            titleId = ingest.title.id!!
+            titleName = ingest.title.name
+            this.linked = linked.size
+            this.failed.addAll(failed)
+        }
+    }
+
+    override suspend fun linkUnmatchedAudioAlbumManual(
+        request: LinkUnmatchedAudioAlbumManualRequest
+    ): LinkUnmatchedAudioAlbumResponse {
+        val rows = UnmatchedAudioEntity.findAll().filter { it.id in request.unmatchedAudioIdsList.toSet() }
+        if (rows.isEmpty()) throw StatusException(Status.NOT_FOUND.withDescription("no rows found"))
+
+        val title = net.stewart.mediamanager.service.MusicIngestionService.ingestManualFromRows(rows)
+        val tracks = net.stewart.mediamanager.entity.Track.findAll()
+            .filter { it.title_id == title.id }
+        val (linked, failed) = linkUnmatchedAudioRowsToTracks(rows, tracks)
+        return linkUnmatchedAudioAlbumResponse {
+            titleId = title.id!!
+            titleName = title.name
+            this.linked = linked.size
+            this.failed.addAll(failed)
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Shared helpers (mirror UnmatchedAudioHttpService — keeping the two
+    // surfaces deliberately parallel so the iOS admin behaves identically
+    // to the web one).
+    // -------------------------------------------------------------------
+
+    private data class UnmatchedAudioGroupView(
+        val groupId: String,
+        val dirs: List<String>,
+        val dominantAlbum: String?,
+        val dominantAlbumArtist: String?,
+        val dominantUpc: String?,
+        val dominantMbReleaseId: String?,
+        val dominantLabel: String?,
+        val dominantCatalogNumber: String?,
+        val discNumbers: List<Int>,
+        val totalFiles: Int,
+        val recordingMbidCount: Int,
+        val files: List<UnmatchedAudioEntity>
+    )
+
+    private fun computeUnmatchedAudioGroups(
+        rows: List<UnmatchedAudioEntity>
+    ): List<UnmatchedAudioGroupView> {
+        if (rows.isEmpty()) return emptyList()
+        val byKey = rows.groupBy { mergeKeyForRow(it) }
+        return byKey.map { (_, members) ->
+            val sorted = members.sortedWith(
+                compareBy({ it.parsed_disc_number ?: 1 }, { it.parsed_track_number ?: 0 })
+            )
+            UnmatchedAudioGroupView(
+                groupId = unmatchedAudioGroupId(sorted.mapNotNull { it.id }),
+                dirs = sorted.map { parentDir(it.file_path) }.distinct().sorted(),
+                dominantAlbum = dominantString(sorted) { it.parsed_album },
+                dominantAlbumArtist = dominantString(sorted) { it.parsed_album_artist },
+                dominantUpc = dominantString(sorted) { it.parsed_upc },
+                dominantMbReleaseId = dominantString(sorted) { it.parsed_mb_release_id },
+                dominantLabel = dominantString(sorted) { it.parsed_label },
+                dominantCatalogNumber = dominantString(sorted) { it.parsed_catalog_number },
+                discNumbers = sorted.mapNotNull { it.parsed_disc_number }.distinct().sorted(),
+                totalFiles = sorted.size,
+                recordingMbidCount = sorted.count { !it.parsed_mb_recording_id.isNullOrBlank() },
+                files = sorted
+            )
+        }.sortedWith(
+            compareByDescending<UnmatchedAudioGroupView> { it.totalFiles }
+                .thenBy { it.dominantAlbum?.lowercase() ?: it.dirs.firstOrNull()?.lowercase() ?: "" }
+        )
+    }
+
+    private fun UnmatchedAudioGroupView.toProto(): UnmatchedAudioGroup = unmatchedAudioGroup {
+        groupId = this@toProto.groupId
+        dirs.addAll(this@toProto.dirs)
+        this@toProto.dominantAlbum?.let { dominantAlbum = it }
+        this@toProto.dominantAlbumArtist?.let { dominantAlbumArtist = it }
+        this@toProto.dominantUpc?.let { dominantUpc = it }
+        this@toProto.dominantMbReleaseId?.let { dominantMbReleaseId = it }
+        this@toProto.dominantLabel?.let { dominantLabel = it }
+        this@toProto.dominantCatalogNumber?.let { dominantCatalogNumber = it }
+        discNumbers.addAll(this@toProto.discNumbers)
+        totalFiles = this@toProto.totalFiles
+        recordingMbidCount = this@toProto.recordingMbidCount
+        fileIds.addAll(this@toProto.files.mapNotNull { it.id })
+        files.addAll(this@toProto.files.map { row ->
+            unmatchedAudioGroupFile {
+                id = row.id!!
+                filePath = row.file_path
+                fileName = row.file_name
+                row.parsed_title?.takeIf { it.isNotBlank() }?.let { parsedTitle = it }
+                row.parsed_track_artist?.takeIf { it.isNotBlank() }?.let { parsedTrackArtist = it }
+                row.parsed_track_number?.let { parsedTrackNumber = it }
+                row.parsed_disc_number?.let { parsedDiscNumber = it }
+                row.parsed_duration_seconds?.let { parsedDuration = it.toDouble().toPlaybackOffset() }
+                row.parsed_mb_recording_id?.takeIf { it.isNotBlank() }?.let { parsedMbRecordingId = it }
+            }
+        })
+    }
+
+    private fun candidateProto(
+        rows: List<UnmatchedAudioEntity>,
+        lookup: net.stewart.mediamanager.service.MusicBrainzReleaseLookup
+    ): MusicBrainzReleaseCandidate {
+        val positions = lookup.tracks.map { it.discNumber to it.trackNumber }.toSet()
+        val recordingIds = lookup.tracks.map { it.musicBrainzRecordingId }.toSet()
+        val accommodates = rows.all { row ->
+            val tn = row.parsed_track_number ?: return@all true
+            val dn = row.parsed_disc_number ?: 1
+            (dn to tn) in positions
+        }
+        val mbidHits = rows.count {
+            it.parsed_mb_recording_id in recordingIds && !it.parsed_mb_recording_id.isNullOrBlank()
+        }
+        return musicBrainzReleaseCandidate {
+            releaseMbid = lookup.musicBrainzReleaseId
+            releaseGroupMbid = lookup.musicBrainzReleaseGroupId
+            title = lookup.title
+            artistCredit = lookup.albumArtistCredits.joinToString(", ") { it.name }
+            lookup.releaseYear?.let { year = it }
+            lookup.label?.takeIf { it.isNotBlank() }?.let { label = it }
+            lookup.barcode?.takeIf { it.isNotBlank() }?.let { barcode = it }
+            trackCount = lookup.tracks.size
+            discCount = lookup.tracks.map { it.discNumber }.distinct().size
+            accommodatesFiles = accommodates
+            recordingMbidCoverage = mbidHits
+        }
+    }
+
+    private fun linkUnmatchedAudioRowsToTracks(
+        rows: List<UnmatchedAudioEntity>,
+        tracks: List<net.stewart.mediamanager.entity.Track>
+    ): Pair<List<UnmatchedAudioEntity>, List<LinkUnmatchedAudioAlbumFailure>> {
+        val now = LocalDateTime.now()
+        val linked = mutableListOf<UnmatchedAudioEntity>()
+        val failed = mutableListOf<LinkUnmatchedAudioAlbumFailure>()
+        for (row in rows) {
+            val target = tracks.firstOrNull {
+                !row.parsed_mb_recording_id.isNullOrBlank() &&
+                    it.musicbrainz_recording_id == row.parsed_mb_recording_id
+            } ?: tracks.firstOrNull {
+                row.parsed_track_number != null &&
+                    it.track_number == row.parsed_track_number &&
+                    it.disc_number == (row.parsed_disc_number ?: 1)
+            }
+            if (target == null || (target.file_path != null && target.file_path != row.file_path)) {
+                failed += linkUnmatchedAudioAlbumFailure {
+                    filePath = row.file_path
+                    reason = if (target == null) "no track slot match"
+                        else "track ${target.disc_number}/${target.track_number} already linked"
+                }
+                continue
+            }
+            target.file_path = row.file_path
+            target.updated_at = now
+            target.save()
+            row.match_status = UnmatchedAudioStatusEnum.LINKED.name
+            row.linked_track_id = target.id
+            row.linked_at = now
+            row.save()
+            linked += row
+        }
+        return linked to failed
+    }
+
+    private fun mergeKeyForRow(row: UnmatchedAudioEntity): String {
+        val album = row.parsed_album?.takeIf { it.isNotBlank() }
+        val artist = row.parsed_album_artist?.takeIf { it.isNotBlank() }
+        return when {
+            album != null -> "album|${album.lowercase()}|${artist?.lowercase().orEmpty()}"
+            else -> "dir|${parentDir(row.file_path)}"
+        }
+    }
+
+    private fun parentDir(path: String): String =
+        path.substringBeforeLast('/').ifEmpty { path.substringBeforeLast('\\') }
+
+    private fun dominantString(
+        rows: List<UnmatchedAudioEntity>,
+        picker: (UnmatchedAudioEntity) -> String?
+    ): String? = rows.mapNotNull { picker(it)?.takeIf { s -> s.isNotBlank() } }
+        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+
+    private fun unmatchedAudioGroupId(ids: List<Long>): String {
+        val joined = ids.sorted().joinToString(",")
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(joined.toByteArray())
+        return digest.take(8).joinToString("") { "%02x".format(it) }
+    }
+
     override suspend fun searchCatalogTracks(request: SearchCatalogTracksRequest): SearchCatalogTracksResponse {
         val q = request.query.trim()
         if (q.length < 2) return searchCatalogTracksResponse {}
