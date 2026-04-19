@@ -1,141 +1,192 @@
-<div class="unmatched-page">
-  <h2>Unmatched Audio</h2>
+<div class="page">
+  <header>
+    <h1>Unmatched Audio</h1>
+    <p class="muted">
+      Files the music scanner couldn't auto-link. Grouped by album so multi-disc
+      compilations resolve in one shot.
+    </p>
+  </header>
 
   @if (loading()) {
-    <div class="loading-container"><mat-spinner diameter="40" /></div>
-  } @else if (files().length === 0) {
-    <mat-card>
-      <mat-card-content>
-        <div class="empty-state">
-          <mat-icon>check_circle</mat-icon>
-          <span>No unmatched audio files. Nothing to do.</span>
-        </div>
-      </mat-card-content>
-    </mat-card>
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (groups().length === 0) {
+    <p class="empty">Nothing to triage. Every audio file is linked.</p>
   } @else {
-    <span class="status-label">{{ total() }} unmatched file{{ total() === 1 ? '' : 's' }}</span>
+    <p class="status">
+      {{ groups().length }} {{ groups().length === 1 ? 'album' : 'albums' }}
+      &mdash; {{ totalFiles() }} files queued
+    </p>
 
-    <div class="table-container">
-      <table mat-table [dataSource]="files()" class="unmatched-table">
-        <ng-container matColumnDef="file">
-          <th mat-header-cell *matHeaderCellDef>File</th>
-          <td mat-cell *matCellDef="let f" [title]="f.file_path">
-            <span class="file-name-cell">{{ f.file_name }}</span>
-            <span class="format-label">
-              {{ f.media_format.replace('AUDIO_', '') }}
-              @if (f.parsed_disc_number || f.parsed_track_number) {
-                &nbsp;·&nbsp; {{ formatDiscTrack(f.parsed_disc_number, f.parsed_track_number) }}
+    <div class="group-list">
+      @for (g of groups(); track g.group_id) {
+        <mat-card class="group-card">
+          <mat-card-header>
+            <mat-card-title>
+              {{ g.dominant_album ?? '(unknown album)' }}
+              @if (g.dominant_album_artist) {
+                <span class="artist"> &mdash; {{ g.dominant_album_artist }}</span>
+              } @else {
+                <span class="artist va"> &mdash; Various Artists</span>
               }
-            </span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="track">
-          <th mat-header-cell *matHeaderCellDef>Parsed Track</th>
-          <td mat-cell *matCellDef="let f">
-            <span class="parsed-cell" [title]="f.parsed_title ?? ''">{{ f.parsed_title ?? '—' }}</span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="album">
-          <th mat-header-cell *matHeaderCellDef>Parsed Album</th>
-          <td mat-cell *matCellDef="let f">
-            <span class="parsed-cell" [title]="f.parsed_album ?? ''">{{ f.parsed_album ?? '—' }}</span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="artist">
-          <th mat-header-cell *matHeaderCellDef>Parsed Artist</th>
-          <td mat-cell *matCellDef="let f">
-            <span class="parsed-cell" [title]="f.parsed_album_artist ?? f.parsed_track_artist ?? ''">
-              {{ f.parsed_album_artist ?? f.parsed_track_artist ?? '—' }}
-            </span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="ids">
-          <th mat-header-cell *matHeaderCellDef>Identifiers</th>
-          <td mat-cell *matCellDef="let f">
-            <div class="ids-cell">
-              @if (f.parsed_upc) { <span class="id-chip" title="UPC">UPC {{ f.parsed_upc }}</span> }
-              @if (f.parsed_catalog_number) {
-                <span class="id-chip" title="Catalog #">
-                  {{ f.parsed_catalog_number }}@if (f.parsed_label) { ({{ f.parsed_label }}) }
-                </span>
+            </mat-card-title>
+            <mat-card-subtitle>
+              {{ g.total_files }} files
+              @if (g.disc_numbers.length > 1) {
+                &middot; {{ g.disc_numbers.length }} discs
               }
-              @if (f.parsed_isrc) { <span class="id-chip" title="ISRC">ISRC {{ f.parsed_isrc }}</span> }
-              @if (f.parsed_mb_release_id) { <span class="id-chip" title="MB release MBID">MBID</span> }
-              @if (!f.parsed_upc && !f.parsed_catalog_number && !f.parsed_isrc && !f.parsed_mb_release_id) {
-                —
+              @if (g.recording_mbid_count > 0) {
+                &middot; <span class="mbid-chip">{{ g.recording_mbid_count }} files have recording MBIDs</span>
+              }
+            </mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <div class="meta-row">
+              @for (dir of g.dirs; track dir) {
+                <span class="dir">{{ shortDir(dir) }}</span>
               }
             </div>
-          </td>
-        </ng-container>
+            @if (g.dominant_upc) {
+              <div class="meta-row meta-tags"><b>UPC:</b> {{ g.dominant_upc }}</div>
+            }
+            @if (g.dominant_label || g.dominant_catalog_number) {
+              <div class="meta-row meta-tags">
+                @if (g.dominant_label) { <b>Label:</b> {{ g.dominant_label }} }
+                @if (g.dominant_catalog_number) {
+                  &nbsp; <b>Catno:</b> {{ g.dominant_catalog_number }}
+                }
+              </div>
+            }
 
-        <ng-container matColumnDef="duration">
-          <th mat-header-cell *matHeaderCellDef>Duration</th>
-          <td mat-cell *matCellDef="let f">{{ formatDuration(f.parsed_duration_seconds) }}</td>
-        </ng-container>
+            @if (isExpanded(g.group_id)) {
+              <div class="files">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Artist</th>
+                      <th>Length</th>
+                      <th>MBID?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (f of g.files; track f.id) {
+                      <tr>
+                        <td>{{ formatDiscTrack(f.parsed_disc_number, f.parsed_track_number) }}</td>
+                        <td>{{ f.parsed_title ?? f.file_name }}</td>
+                        <td>{{ f.parsed_track_artist ?? '—' }}</td>
+                        <td>{{ formatDuration(f.parsed_duration_seconds) }}</td>
+                        <td>{{ f.parsed_mb_recording_id ? '✓' : '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </mat-card-content>
 
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let f">
-            <div class="action-buttons">
-              <button mat-stroked-button class="small-btn" (click)="openLinkDialog(f)">Link</button>
-              <button mat-button class="small-btn muted" (click)="ignore(f)">Ignore</button>
-            </div>
-          </td>
-        </ng-container>
-
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns;"></tr>
-      </table>
+          <mat-card-actions>
+            <button mat-button type="button" (click)="toggleExpand(g.group_id)">
+              {{ isExpanded(g.group_id) ? 'Hide files' : 'Show files' }}
+            </button>
+            <button mat-flat-button color="primary" type="button" (click)="openMbDialog(g)">
+              <mat-icon>search</mat-icon>
+              Find on MusicBrainz
+            </button>
+            <button mat-stroked-button type="button" (click)="createFromTags(g)">
+              <mat-icon>label</mat-icon>
+              Create from file metadata
+            </button>
+            <button mat-button type="button" (click)="ignoreGroup(g)">
+              <mat-icon>visibility_off</mat-icon>
+              Ignore all
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      }
     </div>
   }
 
-  <!-- Link dialog: pick an existing track to attach this file to. -->
-  <dialog #linkDialog class="link-dialog" (close)="linkFile.set(null)">
-    @if (linkFile(); as file) {
-      <div class="modal-header">
-        <h3>Link: {{ file.parsed_title ?? file.file_name }}</h3>
-        <button class="close-btn" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
+  <!-- MusicBrainz candidate dialog -->
+  <dialog #mbDialog class="mb-dialog">
+    @if (mbGroup(); as g) {
+      <header class="mb-header">
+        <h2>{{ g.dominant_album ?? '(unknown album)' }}</h2>
+        <button mat-icon-button (click)="closeMbDialog()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="mb-search-row">
+        <input type="text" placeholder="Override search (Artist - Album, or just Album)"
+               [ngModel]="mbQueryOverride()" (ngModelChange)="mbQueryOverride.set($event)"
+               name="mbOverride" (keydown.enter)="runMbSearch()" />
+        <button mat-stroked-button type="button" (click)="runMbSearch()" [disabled]="mbBusy()">
+          Search
+        </button>
       </div>
 
-      @if (linkError()) {
-        <div class="link-error">{{ linkError() }}</div>
-      }
+      <p class="muted small">
+        Searching: <b>{{ mbSearchArtist() }}</b> &mdash; <b>{{ mbSearchAlbum() }}</b>
+      </p>
 
-      <h4 class="section-title">Find an existing track</h4>
-      <input class="search-input" type="text" placeholder="Search by track or album title..."
-             [value]="trackQuery()" (input)="updateTrackQuery($event)"
-             [disabled]="linkBusy()" />
-
-      @if (trackSearching()) {
-        <mat-spinner diameter="24" />
-      }
-
-      @if (trackResults().length > 0) {
-        <div class="link-results">
-          @for (candidate of trackResults(); track candidate.track_id) {
-            <div class="link-result-row" [class.disabled-row]="candidate.already_linked">
-              <div class="link-info">
-                <span class="link-title">
-                  {{ formatDiscTrack(candidate.disc_number, candidate.track_number) }}. {{ candidate.track_name }}
-                </span>
-                <span class="link-meta">
-                  {{ candidate.album_name }}@if (candidate.artist_name) { &nbsp;·&nbsp; {{ candidate.artist_name }} }
-                  @if (candidate.already_linked) { &nbsp;·&nbsp; <em>already linked</em> }
-                </span>
+      @if (mbBusy()) {
+        <div class="loading"><mat-spinner diameter="32" /></div>
+      } @else if (mbError()) {
+        <p class="error">{{ mbError() }}</p>
+      } @else if (mbCandidates().length === 0) {
+        <p class="muted">No candidates. Try an override search above.</p>
+      } @else {
+        <ul class="candidates">
+          @for (c of mbCandidates(); track c.release_mbid) {
+            <li class="candidate">
+              <div class="candidate-main">
+                <div class="candidate-title">{{ c.title }}</div>
+                <div class="candidate-meta">
+                  {{ c.artist_credit }}
+                  @if (c.year) { &middot; {{ c.year }} }
+                  @if (c.label) { &middot; {{ c.label }} }
+                  &middot; {{ c.track_count }} tracks
+                  @if (c.disc_count > 1) { ({{ c.disc_count }} discs) }
+                  @if (c.barcode) { &middot; UPC {{ c.barcode }} }
+                </div>
+                <div class="candidate-badge"
+                     [class]="'badge-' + candidateBadgeColor(c, g.total_files)">
+                  {{ candidateBadgeLabel(c, g.total_files) }}
+                </div>
               </div>
-              <button mat-flat-button color="primary" class="small-btn"
-                      (click)="linkToTrack(candidate)"
-                      [disabled]="linkBusy() || candidate.already_linked">Select</button>
-            </div>
+              <button mat-flat-button color="primary" type="button"
+                      (click)="pickCandidate(c)" [disabled]="mbBusy()">
+                Pick
+              </button>
+            </li>
           }
-        </div>
-      } @else if (!trackSearching() && trackQuery().length >= 2) {
-        <span class="no-results">No matching tracks in the catalog.</span>
+        </ul>
       }
     }
   </dialog>
+
+  <!-- Last-action result toast -->
+  @if (lastResult(); as r) {
+    <div class="result-toast" role="status">
+      <span>
+        Linked {{ r.linked }} files to <b>{{ r.title_name }}</b>
+        @if (r.failed.length) { &mdash; {{ r.failed.length }} failed }
+      </span>
+      @if (r.failed.length) {
+        <details>
+          <summary>Failed files</summary>
+          <ul>
+            @for (f of r.failed; track f.file_path) {
+              <li>{{ f.file_path }} — {{ f.reason }}</li>
+            }
+          </ul>
+        </details>
+      }
+      <button mat-icon-button type="button" (click)="dismissResult()" aria-label="Dismiss">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  }
 </div>

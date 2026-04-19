@@ -1,49 +1,80 @@
 import { Component, ElementRef, inject, signal, OnInit, ChangeDetectionStrategy, viewChild } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 
-interface UnmatchedAudio {
+interface UnmatchedAudioFile {
   id: number;
   file_path: string;
   file_name: string;
-  file_size_bytes: number | null;
-  media_format: string;
   parsed_title: string | null;
-  parsed_album: string | null;
-  parsed_album_artist: string | null;
   parsed_track_artist: string | null;
   parsed_track_number: number | null;
   parsed_disc_number: number | null;
   parsed_duration_seconds: number | null;
-  parsed_mb_release_id: string | null;
   parsed_mb_recording_id: string | null;
-  parsed_upc: string | null;
-  parsed_isrc: string | null;
-  parsed_catalog_number: string | null;
-  parsed_label: string | null;
-  discovered_at: string | null;
 }
 
-interface TrackCandidate {
-  track_id: number;
-  track_name: string;
-  disc_number: number;
-  track_number: number;
-  album_title_id: number;
-  album_name: string;
-  artist_name: string | null;
-  already_linked: boolean;
+interface UnmatchedAudioGroup {
+  group_id: string;
+  dirs: string[];
+  dominant_album: string | null;
+  dominant_album_artist: string | null;
+  dominant_upc: string | null;
+  dominant_mb_release_id: string | null;
+  dominant_label: string | null;
+  dominant_catalog_number: string | null;
+  disc_numbers: number[];
+  total_files: number;
+  recording_mbid_count: number;
+  file_ids: number[];
+  files: UnmatchedAudioFile[];
 }
 
+interface MusicBrainzCandidate {
+  release_mbid: string;
+  release_group_mbid: string | null;
+  title: string;
+  artist_credit: string;
+  year: number | null;
+  label: string | null;
+  barcode: string | null;
+  track_count: number;
+  disc_count: number;
+  accommodates_files: boolean;
+  recording_mbid_coverage: number;
+}
+
+interface LinkResult {
+  title_id: number;
+  title_name: string;
+  linked: number;
+  failed: { file_path: string; reason: string }[];
+}
+
+/**
+ * Admin triage for the unmatched-audio queue. The previous flat per-row
+ * link dialog couldn't help when a whole album was missing from the
+ * catalog (no Track rows to search against) — see docs/MUSIC.md M4
+ * follow-on. This view collapses files into albums via
+ * (album_artist, album), merges multi-disc sibling folders, and offers
+ * three resolution paths per album:
+ *   1. Find on MusicBrainz — search MB and pick a candidate release.
+ *   2. Create from file metadata — derive title + tracks from tags only.
+ *   3. Ignore all — when the files genuinely shouldn't be linked.
+ */
 @Component({
   selector: 'app-unmatched-audio',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatProgressSpinnerModule, MatTableModule, MatButtonModule, MatCardModule],
+  imports: [
+    FormsModule, MatIconModule, MatProgressSpinnerModule, MatButtonModule,
+    MatCardModule, MatChipsModule
+  ],
   templateUrl: './unmatched-audio.html',
   styleUrl: './unmatched-audio.scss',
 })
@@ -51,22 +82,22 @@ export class UnmatchedAudioComponent implements OnInit {
   private readonly http = inject(HttpClient);
 
   readonly loading = signal(true);
-  readonly files = signal<UnmatchedAudio[]>([]);
-  readonly total = signal(0);
+  readonly groups = signal<UnmatchedAudioGroup[]>([]);
+  readonly totalFiles = signal(0);
+  readonly expanded = signal<Set<string>>(new Set());
 
-  // Native <dialog> — renders in the browser's top layer (avoids
-  // mat-sidenav-content transform clipping). Same pattern as Unmatched Books.
-  readonly dialogRef = viewChild<ElementRef<HTMLDialogElement>>('linkDialog');
+  // MusicBrainz candidate dialog state
+  readonly mbDialogRef = viewChild<ElementRef<HTMLDialogElement>>('mbDialog');
+  readonly mbGroup = signal<UnmatchedAudioGroup | null>(null);
+  readonly mbBusy = signal(false);
+  readonly mbError = signal<string | null>(null);
+  readonly mbQueryOverride = signal('');
+  readonly mbSearchArtist = signal('');
+  readonly mbSearchAlbum = signal('');
+  readonly mbCandidates = signal<MusicBrainzCandidate[]>([]);
 
-  readonly linkFile = signal<UnmatchedAudio | null>(null);
-  readonly linkError = signal<string | null>(null);
-  readonly linkBusy = signal(false);
-
-  readonly trackQuery = signal('');
-  readonly trackSearching = signal(false);
-  readonly trackResults = signal<TrackCandidate[]>([]);
-
-  readonly columns = ['file', 'track', 'album', 'artist', 'ids', 'duration', 'actions'];
+  // Result toast — set after a successful link, shown for a few seconds
+  readonly lastResult = signal<LinkResult | null>(null);
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -76,79 +107,122 @@ export class UnmatchedAudioComponent implements OnInit {
     this.loading.set(true);
     try {
       const data = await firstValueFrom(
-        this.http.get<{ files: UnmatchedAudio[]; total: number }>('/api/v2/admin/unmatched-audio')
+        this.http.get<{ groups: UnmatchedAudioGroup[]; total_groups: number; total_files: number }>(
+          '/api/v2/admin/unmatched-audio/groups'
+        )
       );
-      this.files.set(data.files);
-      this.total.set(data.total);
+      this.groups.set(data.groups);
+      this.totalFiles.set(data.total_files);
     } catch { /* ignore */ }
     this.loading.set(false);
   }
 
-  async ignore(file: UnmatchedAudio): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/admin/unmatched-audio/${file.id}/ignore`, {}));
-    this.files.update(f => f.filter(x => x.id !== file.id));
-    this.total.update(n => n - 1);
+  toggleExpand(groupId: string): void {
+    this.expanded.update(set => {
+      const next = new Set(set);
+      if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+      return next;
+    });
   }
 
-  openLinkDialog(file: UnmatchedAudio): void {
-    this.linkFile.set(file);
-    this.linkError.set(null);
-    // Seed the search box with the best available guess — album name is
-    // the most useful starting point since admins usually remember the album.
-    const seed = file.parsed_album ?? file.parsed_title ?? '';
-    this.trackQuery.set(seed);
-    this.trackResults.set([]);
-    this.dialogRef()?.nativeElement.showModal();
-    if (seed.length >= 2) this.searchTracks(seed);
+  isExpanded(groupId: string): boolean {
+    return this.expanded().has(groupId);
   }
 
-  closeLinkDialog(): void {
-    this.dialogRef()?.nativeElement.close();
-    this.linkFile.set(null);
+  // ----- MusicBrainz search dialog -----
+
+  async openMbDialog(group: UnmatchedAudioGroup): Promise<void> {
+    this.mbGroup.set(group);
+    this.mbError.set(null);
+    this.mbQueryOverride.set('');
+    this.mbCandidates.set([]);
+    this.mbSearchArtist.set('');
+    this.mbSearchAlbum.set('');
+    this.mbDialogRef()?.nativeElement.showModal();
+    await this.runMbSearch();
   }
 
-  updateTrackQuery(event: Event): void {
-    const q = (event.target as HTMLInputElement).value;
-    this.trackQuery.set(q);
-    if (q.trim().length >= 2) this.searchTracks(q.trim());
-    else this.trackResults.set([]);
+  closeMbDialog(): void {
+    this.mbDialogRef()?.nativeElement.close();
+    this.mbGroup.set(null);
   }
 
-  async searchTracks(q: string): Promise<void> {
-    this.trackSearching.set(true);
+  async runMbSearch(): Promise<void> {
+    const group = this.mbGroup();
+    if (!group) return;
+    this.mbBusy.set(true);
+    this.mbError.set(null);
     try {
+      const body: Record<string, unknown> = { unmatched_audio_ids: group.file_ids };
+      const override = this.mbQueryOverride().trim();
+      if (override) body['query_override'] = override;
       const data = await firstValueFrom(
-        this.http.get<{ tracks: TrackCandidate[] }>(
-          '/api/v2/admin/unmatched-audio/search-tracks', { params: { q } }
+        this.http.post<{ search_artist: string; search_album: string; candidates: MusicBrainzCandidate[] }>(
+          '/api/v2/admin/unmatched-audio/musicbrainz-search', body
         )
       );
-      this.trackResults.set(data.tracks);
-    } catch { /* ignore */ }
-    this.trackSearching.set(false);
-  }
-
-  async linkToTrack(candidate: TrackCandidate): Promise<void> {
-    const file = this.linkFile();
-    if (!file) return;
-    if (candidate.already_linked) return;
-    this.linkBusy.set(true);
-    this.linkError.set(null);
-    try {
-      await firstValueFrom(
-        this.http.post(
-          `/api/v2/admin/unmatched-audio/${file.id}/link-track`,
-          { track_id: candidate.track_id }
-        )
-      );
-      this.files.update(f => f.filter(x => x.id !== file.id));
-      this.total.update(n => n - 1);
-      this.closeLinkDialog();
+      this.mbSearchArtist.set(data.search_artist);
+      this.mbSearchAlbum.set(data.search_album);
+      this.mbCandidates.set(data.candidates);
     } catch {
-      this.linkError.set('Link request failed');
+      this.mbError.set('MusicBrainz search failed');
     } finally {
-      this.linkBusy.set(false);
+      this.mbBusy.set(false);
     }
   }
+
+  async pickCandidate(candidate: MusicBrainzCandidate): Promise<void> {
+    const group = this.mbGroup();
+    if (!group) return;
+    this.mbBusy.set(true);
+    this.mbError.set(null);
+    try {
+      const result = await firstValueFrom(
+        this.http.post<LinkResult>(
+          '/api/v2/admin/unmatched-audio/link-album-to-release',
+          { unmatched_audio_ids: group.file_ids, release_mbid: candidate.release_mbid }
+        )
+      );
+      this.lastResult.set(result);
+      this.closeMbDialog();
+      await this.refresh();
+    } catch {
+      this.mbError.set('Link request failed');
+    } finally {
+      this.mbBusy.set(false);
+    }
+  }
+
+  // ----- Manual create -----
+
+  async createFromTags(group: UnmatchedAudioGroup): Promise<void> {
+    if (!confirm(`Create "${group.dominant_album ?? '(unnamed)'}" from file tags only? ` +
+      `Track names + numbers + duration come from the files themselves; no MusicBrainz match.`)) return;
+    try {
+      const result = await firstValueFrom(
+        this.http.post<LinkResult>(
+          '/api/v2/admin/unmatched-audio/link-album-manual',
+          { unmatched_audio_ids: group.file_ids }
+        )
+      );
+      this.lastResult.set(result);
+      await this.refresh();
+    } catch {
+      alert('Manual create failed');
+    }
+  }
+
+  // ----- Ignore -----
+
+  async ignoreGroup(group: UnmatchedAudioGroup): Promise<void> {
+    if (!confirm(`Ignore all ${group.total_files} files in "${group.dominant_album ?? group.dirs[0]}"?`)) return;
+    for (const file of group.files) {
+      await firstValueFrom(this.http.post(`/api/v2/admin/unmatched-audio/${file.id}/ignore`, {}));
+    }
+    await this.refresh();
+  }
+
+  // ----- Display helpers -----
 
   formatDuration(seconds: number | null): string {
     if (!seconds) return '—';
@@ -161,5 +235,29 @@ export class UnmatchedAudioComponent implements OnInit {
     if (disc == null && track == null) return '—';
     if (disc == null || disc === 1) return track?.toString() ?? '—';
     return `${disc}.${track ?? '?'}`;
+  }
+
+  shortDir(dir: string): string {
+    return dir.split('/').slice(-2).join('/');
+  }
+
+  candidateBadgeColor(c: MusicBrainzCandidate, totalFiles: number): 'gold' | 'green' | 'amber' | 'red' {
+    if (c.recording_mbid_coverage === totalFiles && totalFiles > 0) return 'gold';
+    if (c.accommodates_files) return 'green';
+    if (c.track_count >= totalFiles) return 'amber';
+    return 'red';
+  }
+
+  candidateBadgeLabel(c: MusicBrainzCandidate, totalFiles: number): string {
+    if (c.recording_mbid_coverage === totalFiles && totalFiles > 0) {
+      return `Exact: ${c.recording_mbid_coverage}/${totalFiles} recording MBIDs match`;
+    }
+    if (c.accommodates_files) return 'All track positions fit';
+    if (c.track_count >= totalFiles) return `Could fit (${c.track_count} tracks vs ${totalFiles})`;
+    return `Too small (${c.track_count} tracks)`;
+  }
+
+  dismissResult(): void {
+    this.lastResult.set(null);
   }
 }
