@@ -52,7 +52,6 @@ object ImageProxyService {
      */
     private const val MAX_REDIRECTS = 4
 
-    private val cacheRoot: Path = Path.of("data", "image-proxy-cache")
 
     /** HTTPS only, no automatic redirect-following, reasonable timeouts. */
     private val httpClient: HttpClient = HttpClient.newBuilder()
@@ -100,15 +99,22 @@ object ImageProxyService {
 
     /** Top-level entry. Serves from disk if cached; otherwise fetches and caches. */
     fun serve(upstream: ProxiedUpstream): Result {
-        val cachePath = cachePathFor(upstream)
+        val cacheKey = sha256(upstream.url)
+        val providerLabel = providerLabelFor(upstream.provider)
+        val cachePath = InternetImageStore.pathFor(providerLabel, cacheKey, upstream.extension)
         if (Files.exists(cachePath)) {
             countProxy("hit")
             return Result.Hit(cachePath, guessContentType(upstream.extension))
         }
-        return fetchAndCache(upstream, cachePath)
+        return fetchAndCache(upstream, cachePath, cacheKey, providerLabel)
     }
 
-    private fun fetchAndCache(upstream: ProxiedUpstream, destPath: Path): Result {
+    private fun fetchAndCache(
+        upstream: ProxiedUpstream,
+        destPath: Path,
+        cacheKey: String,
+        providerLabel: String
+    ): Result {
         // OL frequently 302s cover requests to a default placeholder or to
         // archive.org mirrors. We manually follow up to [MAX_REDIRECTS] hops
         // so we don't lose the initial-host SSRF screen: JDK's built-in
@@ -263,8 +269,8 @@ object ImageProxyService {
         // subject_id stay null. upstream_url + provider + cache_key are
         // sufficient to replay the fetch if the bytes are ever lost.
         MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-            provider = "proxy-${upstream.provider.cacheBucket}",
-            cacheKey = destPath.fileName.toString().substringBeforeLast('.'),
+            provider = providerLabel,
+            cacheKey = cacheKey,
             upstreamUrl = upstream.url,
             subjectType = null,
             subjectId = null,
@@ -272,6 +278,12 @@ object ImageProxyService {
         ))
 
         return Result.Hit(destPath, contentType)
+    }
+
+    private fun providerLabelFor(provider: Provider): String = when (provider) {
+        Provider.TMDB -> InternetImageStore.Provider.PROXY_TMDB
+        Provider.OPEN_LIBRARY -> InternetImageStore.Provider.PROXY_OL
+        Provider.COVER_ART_ARCHIVE -> InternetImageStore.Provider.PROXY_CAA
     }
 
     /**
@@ -311,17 +323,6 @@ object ImageProxyService {
         // unwraps these automatically, but belt and suspenders.
         addr is java.net.Inet6Address && addr.isIPv4CompatibleAddress -> "IPv4-compatible (legacy)"
         else -> null
-    }
-
-    private fun cachePathFor(upstream: ProxiedUpstream): Path {
-        val hash = sha256(upstream.url)
-        val shard1 = hash.substring(0, 2)
-        val shard2 = hash.substring(2, 4)
-        return cacheRoot
-            .resolve(upstream.provider.cacheBucket)
-            .resolve(shard1)
-            .resolve(shard2)
-            .resolve("$hash.${upstream.extension}")
     }
 
     private fun sha256(s: String): String {

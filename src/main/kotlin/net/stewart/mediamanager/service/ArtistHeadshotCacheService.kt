@@ -23,7 +23,6 @@ object ArtistHeadshotCacheService {
 
     private val log = LoggerFactory.getLogger(ArtistHeadshotCacheService::class.java)
 
-    private val cacheRoot: Path = Path.of("data", "artist-headshot-cache")
 
     /** Hosts we'll source artist headshots from. Expanded only by code change. */
     private val ALLOWED_HOSTS = setOf("upload.wikimedia.org")
@@ -42,8 +41,11 @@ object ArtistHeadshotCacheService {
         val artistId = artist.id ?: return null
         val source = artist.headshot_path?.takeIf { it.isNotBlank() } ?: return null
 
-        val dest = shardedPath(artistId)
-        if (Files.exists(dest)) return dest
+        val cacheKey = artistId.toString()
+        val existing = InternetImageStore.getImage(
+            InternetImageStore.Provider.WIKIMEDIA_ARTIST, cacheKey
+        )
+        if (existing != null) return existing
 
         val host = runCatching { URI.create(source).host }.getOrNull()
         if (host == null || host !in ALLOWED_HOSTS) {
@@ -56,19 +58,19 @@ object ArtistHeadshotCacheService {
             return null
         }
 
-        if (!fetchAndWrite(source, dest)) return null
-        MetadataWriter.writeSidecar(dest, ImageMetadata.internet(
-            provider = "wikimedia-artist",
-            cacheKey = artistId.toString(),
+        val bytes = fetchBytes(source) ?: return null
+        return InternetImageStore.commit(
+            provider = InternetImageStore.Provider.WIKIMEDIA_ARTIST,
+            cacheKey = cacheKey,
+            bytes = bytes,
+            contentType = "image/jpeg",
             upstreamUrl = source,
             subjectType = "artist",
-            subjectId = artistId,
-            contentType = "image/jpeg"
-        ))
-        return dest
+            subjectId = artistId
+        )
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -81,30 +83,20 @@ object ArtistHeadshotCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("Artist headshot fetch HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("Artist headshot fetch unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
             val body = response.body()
-            if (body.isEmpty()) return false
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            true
+            if (body.isEmpty()) return null
+            body
         } catch (e: Exception) {
             log.warn("Artist headshot fetch failed {}: {}", url, e.message)
-            false
+            null
         }
-    }
-
-    private fun shardedPath(artistId: Long): Path {
-        val id = artistId.toString().padStart(6, '0')
-        val shard1 = id.takeLast(2)
-        val shard2 = id.takeLast(4).take(2)
-        return cacheRoot.resolve(shard1).resolve(shard2).resolve("$artistId.jpg")
     }
 
     private const val USER_AGENT =

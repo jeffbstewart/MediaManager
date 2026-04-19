@@ -28,7 +28,6 @@ object AuthorHeadshotCacheService {
 
     private val log = LoggerFactory.getLogger(AuthorHeadshotCacheService::class.java)
 
-    private val cacheRoot: Path = Path.of("data", "author-headshot-cache")
 
     /** Hosts we'll source author headshots from. Expanded only by code change. */
     private val ALLOWED_HOSTS = setOf("upload.wikimedia.org")
@@ -47,8 +46,11 @@ object AuthorHeadshotCacheService {
         val authorId = author.id ?: return null
         val source = author.headshot_path?.takeIf { it.isNotBlank() } ?: return null
 
-        val dest = shardedPath(authorId)
-        if (Files.exists(dest)) return dest
+        val cacheKey = authorId.toString()
+        val existing = InternetImageStore.getImage(
+            InternetImageStore.Provider.WIKIMEDIA_AUTHOR, cacheKey
+        )
+        if (existing != null) return existing
 
         val host = runCatching { URI.create(source).host }.getOrNull()
         if (host == null || host !in ALLOWED_HOSTS) {
@@ -61,19 +63,19 @@ object AuthorHeadshotCacheService {
             return null
         }
 
-        if (!fetchAndWrite(source, dest)) return null
-        MetadataWriter.writeSidecar(dest, ImageMetadata.internet(
-            provider = "wikimedia-author",
-            cacheKey = authorId.toString(),
+        val bytes = fetchBytes(source) ?: return null
+        return InternetImageStore.commit(
+            provider = InternetImageStore.Provider.WIKIMEDIA_AUTHOR,
+            cacheKey = cacheKey,
+            bytes = bytes,
+            contentType = "image/jpeg",
             upstreamUrl = source,
             subjectType = "author",
-            subjectId = authorId,
-            contentType = "image/jpeg"
-        ))
-        return dest
+            subjectId = authorId
+        )
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -86,33 +88,20 @@ object AuthorHeadshotCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("Author headshot fetch HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("Author headshot fetch unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
             val body = response.body()
-            if (body.isEmpty()) return false
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            true
+            if (body.isEmpty()) return null
+            body
         } catch (e: Exception) {
             log.warn("Author headshot fetch failed {}: {}", url, e.message)
-            false
+            null
         }
-    }
-
-    private fun shardedPath(authorId: Long): Path {
-        val id = authorId.toString().padStart(6, '0')
-        val shard1 = id.takeLast(2)
-        val shard2 = id.takeLast(4).take(2)
-        // Content-Type from Wikimedia is consistently image/jpeg for thumb
-        // URLs; even PNG sources are rasterized to JPEG by the thumbor-like
-        // service. .jpg on disk keeps Content-Type resolution trivial.
-        return cacheRoot.resolve(shard1).resolve(shard2).resolve("$authorId.jpg")
     }
 
     private const val USER_AGENT =

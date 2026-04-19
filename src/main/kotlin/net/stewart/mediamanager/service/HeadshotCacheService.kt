@@ -23,17 +23,14 @@ import java.util.UUID
 object HeadshotCacheService {
 
     private val log = LoggerFactory.getLogger(HeadshotCacheService::class.java)
-    private val cacheRoot: Path = Path.of("data", "headshot-cache")
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
-    /** Maps a cache UUID to its sharded file path. Returns the path if the file exists, null otherwise. */
-    fun resolve(cacheId: String): Path? {
-        val path = shardedPath(cacheId)
-        return if (Files.exists(path)) path else null
-    }
+    /** Returns the cached file path for a cacheId if present on disk, else null. */
+    fun resolve(cacheId: String): Path? =
+        InternetImageStore.getImage(InternetImageStore.Provider.TMDB_HEADSHOT, cacheId)
 
     /**
      * Returns a cached headshot file path, fetching from TMDB if necessary.
@@ -53,14 +50,20 @@ object HeadshotCacheService {
         }
 
         val cacheId = existingCacheId ?: UUID.randomUUID().toString()
-        val destPath = shardedPath(cacheId)
 
-        // Fetch from TMDB CDN (w185 size for headshots)
         val tmdbUrl = "https://image.tmdb.org/t/p/w185$profilePath"
-        val fetched = fetchAndWrite(tmdbUrl, destPath)
-        if (!fetched) return null
+        val bytes = fetchBytes(tmdbUrl) ?: return null
 
-        // Persist the cache ID on the cast member if it was newly generated
+        val destPath = InternetImageStore.commit(
+            provider = InternetImageStore.Provider.TMDB_HEADSHOT,
+            cacheKey = cacheId,
+            bytes = bytes,
+            contentType = "image/jpeg",
+            upstreamUrl = tmdbUrl,
+            subjectType = "cast_member",
+            subjectId = castMember.id
+        )
+
         if (existingCacheId == null) {
             try {
                 castMember.headshot_cache_id = cacheId
@@ -70,19 +73,10 @@ object HeadshotCacheService {
             }
         }
 
-        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-            provider = "tmdb-headshot",
-            cacheKey = cacheId,
-            upstreamUrl = tmdbUrl,
-            subjectType = "cast_member",
-            subjectId = castMember.id,
-            contentType = "image/jpeg"
-        ))
-
         return destPath
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -93,35 +87,24 @@ object HeadshotCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("TMDB headshot fetch returned HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
 
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("TMDB headshot fetch returned unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
 
             val body = response.body()
             if (body.isEmpty()) {
                 log.warn("TMDB headshot fetch returned empty body for {}", url)
-                return false
+                return null
             }
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            log.debug("Cached headshot: {}", dest)
-            true
+            body
         } catch (e: Exception) {
-            log.error("Failed to fetch/write headshot from {}: {}", url, e.message)
-            false
+            log.error("Failed to fetch headshot from {}: {}", url, e.message)
+            null
         }
-    }
-
-    private fun shardedPath(uuid: String): Path {
-        val clean = uuid.replace("-", "")
-        val shard1 = clean.substring(0, 2)
-        val shard2 = clean.substring(2, 4)
-        return cacheRoot.resolve(shard1).resolve(shard2).resolve("$uuid.jpg")
     }
 }

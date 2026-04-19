@@ -25,17 +25,14 @@ import java.util.UUID
 object BackdropCacheService {
 
     private val log = LoggerFactory.getLogger(BackdropCacheService::class.java)
-    private val cacheRoot: Path = Path.of("data", "backdrop-cache")
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
-    /** Maps a cache UUID to its sharded file path. Returns the path if the file exists, null otherwise. */
-    fun resolve(cacheId: String): Path? {
-        val path = shardedPath(cacheId)
-        return if (Files.exists(path)) path else null
-    }
+    /** Returns the cached file path for a cacheId if present on disk, else null. */
+    fun resolve(cacheId: String): Path? =
+        InternetImageStore.getImage(InternetImageStore.Provider.TMDB_BACKDROP, cacheId)
 
     /**
      * Returns a cached backdrop file path, fetching from TMDB if necessary.
@@ -55,14 +52,20 @@ object BackdropCacheService {
         }
 
         val cacheId = existingCacheId ?: UUID.randomUUID().toString()
-        val destPath = shardedPath(cacheId)
 
-        // Fetch from TMDB CDN (w1280 for backdrops)
         val tmdbUrl = "https://image.tmdb.org/t/p/w1280$backdropPath"
-        val fetched = fetchAndWrite(tmdbUrl, destPath)
-        if (!fetched) return null
+        val bytes = fetchBytes(tmdbUrl) ?: return null
 
-        // Persist the cache ID on the title if it was newly generated
+        val destPath = InternetImageStore.commit(
+            provider = InternetImageStore.Provider.TMDB_BACKDROP,
+            cacheKey = cacheId,
+            bytes = bytes,
+            contentType = "image/jpeg",
+            upstreamUrl = tmdbUrl,
+            subjectType = "title",
+            subjectId = title.id
+        )
+
         if (existingCacheId == null) {
             try {
                 title.backdrop_cache_id = cacheId
@@ -72,19 +75,10 @@ object BackdropCacheService {
             }
         }
 
-        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-            provider = "tmdb-backdrop",
-            cacheKey = cacheId,
-            upstreamUrl = tmdbUrl,
-            subjectType = "title",
-            subjectId = title.id,
-            contentType = "image/jpeg"
-        ))
-
         return destPath
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -95,35 +89,24 @@ object BackdropCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("TMDB backdrop fetch returned HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
 
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("TMDB backdrop fetch returned unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
 
             val body = response.body()
             if (body.isEmpty()) {
                 log.warn("TMDB backdrop fetch returned empty body for {}", url)
-                return false
+                return null
             }
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            log.debug("Cached backdrop: {}", dest)
-            true
+            body
         } catch (e: Exception) {
-            log.error("Failed to fetch/write backdrop from {}: {}", url, e.message)
-            false
+            log.error("Failed to fetch backdrop from {}: {}", url, e.message)
+            null
         }
-    }
-
-    private fun shardedPath(uuid: String): Path {
-        val clean = uuid.replace("-", "")
-        val shard1 = clean.substring(0, 2)
-        val shard2 = clean.substring(2, 4)
-        return cacheRoot.resolve(shard1).resolve(shard2).resolve("$uuid.jpg")
     }
 }

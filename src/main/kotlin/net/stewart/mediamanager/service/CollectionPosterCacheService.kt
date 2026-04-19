@@ -21,51 +21,49 @@ object CollectionPosterCacheService {
 
     private val log = LoggerFactory.getLogger(CollectionPosterCacheService::class.java)
 
-    private val cacheRoot: Path = Path.of("data", "collection-poster-cache")
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
-    /** In-memory map of collection IDs that have been cached (avoids repeated disk checks). */
+    /** In-memory set of collection IDs that have been cached (avoids repeated disk checks). */
     private val cachedIds = ConcurrentHashMap<Int, Boolean>()
 
     fun cacheAndServe(collection: TmdbCollection): Path? {
         val posterPath = collection.poster_path ?: return null
         val collId = collection.tmdb_collection_id
+        val cacheKey = collId.toString()
 
-        val destPath = cacheRoot.resolve("$collId.jpg")
-
-        // Fast path: already cached
-        if (cachedIds.containsKey(collId) && Files.exists(destPath)) {
-            return destPath
+        // Fast path: cache hit — either in the in-memory set or confirmed on disk.
+        if (cachedIds.containsKey(collId)) {
+            val existing = InternetImageStore.getImage(InternetImageStore.Provider.TMDB_COLLECTION, cacheKey)
+            if (existing != null) return existing
         }
 
-        if (Files.exists(destPath)) {
+        val existing = InternetImageStore.getImage(InternetImageStore.Provider.TMDB_COLLECTION, cacheKey)
+        if (existing != null) {
             cachedIds[collId] = true
-            return destPath
+            return existing
         }
 
         // Fetch from TMDB CDN
         val url = "https://image.tmdb.org/t/p/w500$posterPath"
-        val fetched = fetchAndWrite(url, destPath)
-        if (!fetched) return null
+        val bytes = fetchBytes(url) ?: return null
 
-        cachedIds[collId] = true
-
-        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-            provider = "tmdb-collection",
-            cacheKey = collId.toString(),
+        val destPath = InternetImageStore.commit(
+            provider = InternetImageStore.Provider.TMDB_COLLECTION,
+            cacheKey = cacheKey,
+            bytes = bytes,
+            contentType = "image/jpeg",
             upstreamUrl = url,
             subjectType = "tmdb_collection",
-            subjectId = collId.toLong(),
-            contentType = "image/jpeg"
-        ))
-
+            subjectId = collId.toLong()
+        )
+        cachedIds[collId] = true
         return destPath
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -76,28 +74,24 @@ object CollectionPosterCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("Collection poster fetch returned HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
 
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("Collection poster fetch returned unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
 
             val body = response.body()
             if (body.isEmpty()) {
                 log.warn("Collection poster fetch returned empty body for {}", url)
-                return false
+                return null
             }
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            log.debug("Cached collection poster: {}", dest)
-            true
+            body
         } catch (e: Exception) {
-            log.error("Failed to fetch/write collection poster from {}: {}", url, e.message)
-            false
+            log.error("Failed to fetch collection poster from {}: {}", url, e.message)
+            null
         }
     }
 }

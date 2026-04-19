@@ -14,10 +14,12 @@ import java.util.UUID
 
 /**
  * On-demand poster cache. First request fetches from TMDB CDN and saves to disk;
- * subsequent requests serve from local storage under data/poster-cache/.
+ * subsequent requests serve from local storage under the unified
+ * [InternetImageStore] layout:
+ *   data/internet-images/tmdb-poster/{ab}/{cd}/{uuid}.jpg
  *
- * Directory is sharded two levels deep by UUID prefix to avoid huge flat directories:
- *   data/poster-cache/{ab}/{cd}/{uuid}.jpg
+ * Shard is the first 4 hex chars of sha256(uuid), which gives uniform
+ * 256×256 fan-out regardless of how the UUID is generated.
  */
 object PosterCacheService {
 
@@ -26,17 +28,14 @@ object PosterCacheService {
     private fun countCache(result: String) {
         MetricsRegistry.registry.counter("mm_poster_cache_total", "result", result).increment()
     }
-    private val cacheRoot: Path = Path.of("data", "poster-cache")
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
-    /** Maps a cache UUID to its sharded file path. Returns the path if the file exists, null otherwise. */
-    fun resolve(cacheId: String): Path? {
-        val path = shardedPath(cacheId)
-        return if (Files.exists(path)) path else null
-    }
+    /** Returns the cached file path for a cacheId if present on disk, else null. */
+    fun resolve(cacheId: String): Path? =
+        InternetImageStore.getImage(InternetImageStore.Provider.TMDB_POSTER, cacheId)
 
     /**
      * Returns a cached poster file path, fetching from TMDB if necessary.
@@ -67,16 +66,25 @@ object PosterCacheService {
         if (!posterPath.startsWith("/")) return null
 
         val cacheId = existingCacheId ?: UUID.randomUUID().toString()
-        val destPath = shardedPath(cacheId)
 
-        // Fetch from TMDB CDN
+        // Fetch from TMDB CDN into memory, then commit through the store.
         val tmdbUrl = "https://image.tmdb.org/t/p/${size.pathSegment}$posterPath"
-        val fetched = fetchAndWrite(tmdbUrl, destPath)
-        if (!fetched) {
+        val bytes = fetchBytes(tmdbUrl)
+        if (bytes == null) {
             countCache("fetch_failed")
             return null
         }
         countCache("miss")
+
+        val destPath = InternetImageStore.commit(
+            provider = InternetImageStore.Provider.TMDB_POSTER,
+            cacheKey = cacheId,
+            bytes = bytes,
+            contentType = "image/jpeg",
+            upstreamUrl = tmdbUrl,
+            subjectType = "title",
+            subjectId = title.id
+        )
 
         // Persist the cache ID on the title if it was newly generated
         if (existingCacheId == null) {
@@ -87,16 +95,6 @@ object PosterCacheService {
                 log.warn("Failed to save poster_cache_id on title {}: {}", title.id, e.message)
             }
         }
-
-        // Sidecar — see docs/IMAGE_CACHE_MIGRATION.md.
-        MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-            provider = "tmdb-poster",
-            cacheKey = cacheId,
-            upstreamUrl = tmdbUrl,
-            subjectType = "title",
-            subjectId = title.id,
-            contentType = "image/jpeg"
-        ))
 
         return destPath
     }
@@ -111,25 +109,23 @@ object PosterCacheService {
     fun storeJpegBytes(title: Title, bytes: ByteArray): Path? {
         if (bytes.isEmpty()) return null
         val cacheId = title.poster_cache_id ?: UUID.randomUUID().toString()
-        val destPath = shardedPath(cacheId)
         return try {
-            Files.createDirectories(destPath.parent)
-            Files.write(destPath, bytes)
+            // Embedded posters come from local audio tag picture blocks, not
+            // an upstream URL — provider label captures the origin so a
+            // future rebuild knows not to retry against TMDB.
+            val destPath = InternetImageStore.commit(
+                provider = InternetImageStore.Provider.EMBEDDED_COVER,
+                cacheKey = cacheId,
+                bytes = bytes,
+                contentType = "image/jpeg",
+                upstreamUrl = null,
+                subjectType = "title",
+                subjectId = title.id
+            )
             if (title.poster_cache_id == null) {
                 title.poster_cache_id = cacheId
                 title.save()
             }
-            // Embedded posters come from local audio tag picture blocks, not
-            // an upstream URL — provider records the origin so a rebuild
-            // knows not to try refetching from TMDB.
-            MetadataWriter.writeSidecar(destPath, ImageMetadata.internet(
-                provider = "embedded-cover",
-                cacheKey = cacheId,
-                upstreamUrl = null,
-                subjectType = "title",
-                subjectId = title.id,
-                contentType = "image/jpeg"
-            ))
             countCache("embedded")
             destPath
         } catch (e: Exception) {
@@ -138,7 +134,7 @@ object PosterCacheService {
         }
     }
 
-    private fun fetchAndWrite(url: String, dest: Path): Boolean {
+    private fun fetchBytes(url: String): ByteArray? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -149,35 +145,24 @@ object PosterCacheService {
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
             if (response.statusCode() != 200) {
                 log.warn("TMDB poster fetch returned HTTP {} for {}", response.statusCode(), url)
-                return false
+                return null
             }
 
             val contentType = response.headers().firstValue("Content-Type").orElse("")
             if (!contentType.startsWith("image/")) {
                 log.warn("TMDB poster fetch returned unexpected Content-Type '{}' for {}", contentType, url)
-                return false
+                return null
             }
 
             val body = response.body()
             if (body.isEmpty()) {
                 log.warn("TMDB poster fetch returned empty body for {}", url)
-                return false
+                return null
             }
-
-            Files.createDirectories(dest.parent)
-            Files.write(dest, body)
-            log.debug("Cached poster: {}", dest)
-            true
+            body
         } catch (e: Exception) {
-            log.error("Failed to fetch/write poster from {}: {}", url, e.message)
-            false
+            log.error("Failed to fetch poster from {}: {}", url, e.message)
+            null
         }
-    }
-
-    private fun shardedPath(uuid: String): Path {
-        val clean = uuid.replace("-", "")
-        val shard1 = clean.substring(0, 2)
-        val shard2 = clean.substring(2, 4)
-        return cacheRoot.resolve(shard1).resolve(shard2).resolve("$uuid.jpg")
     }
 }
