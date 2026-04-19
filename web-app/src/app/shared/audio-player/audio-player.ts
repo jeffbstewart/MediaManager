@@ -43,21 +43,10 @@ export class AudioPlayerComponent {
   }
 
   constructor() {
-    // Sync the audio element to the service's play/pause state. Runs
-    // whenever queue.playing() changes. Swallow the promise from play()
-    // because autoplay policies may reject without user interaction.
-    effect(() => {
-      const el = this.audioEl()?.nativeElement;
-      if (!el) return;
-      if (this.queue.playing() && el.paused) {
-        el.play().catch(() => { /* blocked by autoplay */ });
-      } else if (!this.queue.playing() && !el.paused) {
-        el.pause();
-      }
-    });
-
-    // Sync track source when currentTrackUrl changes. Element will emit
-    // canplay and we'll start playing in the effect above.
+    // Source sync runs FIRST so that when a new track starts playing, the
+    // src change + load() happen before the play/pause effect tries to
+    // call play(). Otherwise play() is aborted by the subsequent load(),
+    // producing an AbortError and a stuck player.
     effect(() => {
       const el = this.audioEl()?.nativeElement;
       if (!el) return;
@@ -66,6 +55,25 @@ export class AudioPlayerComponent {
       if (el.getAttribute('src') !== url) {
         el.src = url;
         el.load();
+      }
+    });
+
+    // Play / pause sync. Only call play() when the element has enough data
+    // queued (readyState >= HAVE_CURRENT_DATA); if it's still loading,
+    // let the `canplay` handler pick up the intent. Prevents the
+    // "play() request was interrupted by a new load" AbortError.
+    effect(() => {
+      const el = this.audioEl()?.nativeElement;
+      if (!el) return;
+      if (this.queue.playing() && el.paused) {
+        if (el.readyState >= 2) {
+          el.play().catch(err => {
+            console.warn('[audio] play() rejected:', err?.name, err?.message, 'readyState=', el.readyState);
+          });
+        }
+        // Otherwise wait — onCanPlay() will call play() below.
+      } else if (!this.queue.playing() && !el.paused) {
+        el.pause();
       }
     });
 
@@ -112,6 +120,45 @@ export class AudioPlayerComponent {
   onScrub(event: Event): void {
     const value = parseFloat((event.target as HTMLInputElement).value);
     if (!isNaN(value)) this.queue.seek(value);
+  }
+
+  onError(): void {
+    const el = this.audioEl()?.nativeElement;
+    const err = el?.error;
+    console.error('[audio] element error:', {
+      code: err?.code,
+      message: err?.message,
+      src: el?.currentSrc,
+      networkState: el?.networkState,
+      readyState: el?.readyState,
+    });
+  }
+
+  onStalled(): void {
+    const el = this.audioEl()?.nativeElement;
+    console.warn('[audio] stalled:', {
+      src: el?.currentSrc,
+      networkState: el?.networkState,
+      readyState: el?.readyState,
+      buffered: el ? Array.from({ length: el.buffered.length }, (_, i) =>
+        `${el.buffered.start(i)}-${el.buffered.end(i)}`).join(',') : '',
+    });
+  }
+
+  onCanPlay(): void {
+    const el = this.audioEl()?.nativeElement;
+    console.info('[audio] canplay:', {
+      src: el?.currentSrc,
+      duration: el?.duration,
+      readyState: el?.readyState,
+    });
+    // Pick up deferred play-intent: if the service wants us playing but
+    // the effect above skipped play() because data wasn't ready, try now.
+    if (el && this.queue.playing() && el.paused) {
+      el.play().catch(err => {
+        console.warn('[audio] play() rejected on canplay:', err?.name, err?.message);
+      });
+    }
   }
 
   @HostListener('window:beforeunload')

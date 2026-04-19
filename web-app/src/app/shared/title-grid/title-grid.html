@@ -37,7 +37,7 @@
 } @else {
   <span class="status-label">{{ total() }} {{ label() }}</span>
 
-  <div class="poster-grid">
+  <div class="poster-grid" [class.square-art]="mediaType() === 'ALBUM'">
     @for (title of titles(); track title.title_id) {
       <a class="poster-card" [routerLink]="routes.title(title.title_id)">
         <div class="poster-wrapper">

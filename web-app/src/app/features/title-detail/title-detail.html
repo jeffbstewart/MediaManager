@@ -15,7 +15,8 @@
       }
       <div class="hero-content">
         @if (t.poster_url) {
-          <img [src]="t.poster_url" [alt]="t.title_name" class="hero-poster" />
+          <img [src]="t.poster_url" [alt]="t.title_name" class="hero-poster"
+               [class.hero-poster-square]="isAlbum" />
         }
         <div class="hero-info">
           <div class="title-row">

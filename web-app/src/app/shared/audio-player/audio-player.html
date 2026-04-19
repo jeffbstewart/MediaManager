@@ -7,7 +7,10 @@
   <audio #audioEl preload="auto"
          (timeupdate)="onTimeUpdate()"
          (ended)="onEnded()"
-         (loadedmetadata)="onLoadedMetadata()">
+         (loadedmetadata)="onLoadedMetadata()"
+         (error)="onError()"
+         (stalled)="onStalled()"
+         (canplay)="onCanPlay()">
   </audio>
 
   @if (queue.currentTrack(); as track) {

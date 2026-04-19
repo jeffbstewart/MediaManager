@@ -47,6 +47,15 @@
   object-fit: cover;
 }
 
+// Album art is square. Swap the aspect ratio and let the image display
+// at its native size (object-fit: contain) so embedded covers that aren't
+// perfectly 1:1 don't get cropped.
+.hero-poster.hero-poster-square {
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.35);
+}
+
 .hero-info {
   display: flex;
   flex-direction: column;

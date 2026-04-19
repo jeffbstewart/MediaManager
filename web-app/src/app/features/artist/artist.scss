@@ -97,7 +97,10 @@ h2 {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  // Album covers aren't always perfectly square — embedded art from a rip
+  // may be off-square. `contain` preserves the native aspect instead of
+  // cropping the image.
+  object-fit: contain;
 }
 
 .poster-placeholder {

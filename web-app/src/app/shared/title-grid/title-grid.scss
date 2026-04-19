@@ -56,6 +56,14 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+// Album art is square. Parent grid applies `.square-art` when rendering
+// ALBUM titles; swap the tile to 1:1 and let embedded covers display in
+// their native shape without cropping.
+.poster-grid.square-art {
+  .poster-wrapper { aspect-ratio: 1 / 1; }
+  .poster-img { object-fit: contain; }
+}
+
 .poster-img {
   display: block;
   width: 100%;
