@@ -36,19 +36,37 @@ object OwnershipPhotoService {
         val uuid = UUID.randomUUID().toString()
         val orientation = readExifOrientation(bytes)
         val title = resolveTitleName(mediaItemId)
+        val capturedAt = LocalDateTime.now()
 
-        // Compute semantic disk path via storage layer
+        // Primary write lands in the unified FirstPartyImageStore. The
+        // legacy on-disk path is no longer populated for new uploads —
+        // reads fall back to the legacy tree only for photos taken before
+        // phase 3. See docs/IMAGE_CACHE_MIGRATION.md.
+        val extension = extensionFor(contentType)
+        val newPath = FirstPartyImageStore.commitOwnershipPhoto(
+            photoId = uuid,
+            bytes = bytes,
+            contentType = contentType,
+            storageKey = upc,
+            mediaItemId = mediaItemId,
+            slugHint = title?.let { OwnershipPhotoStorage.slugify(it) },
+            sequence = null,
+            capturedAt = capturedAt,
+            extension = extension
+        )
+
+        // disk_path remains populated with the LEGACY-shape relative path
+        // so the one-way copy updater in phase 3 has a breadcrumb it can
+        // use to find old files. For new writes the breadcrumb points at a
+        // location that doesn't exist yet — getFile() tries the store
+        // first, then falls back to this path.
         val diskPath = if (upc != null && upc.length >= 10) {
             val uniqueId = UpcUniqueId(upc)
             OwnershipPhotoStorage.computePath(uniqueId, title, contentType)
         } else {
-            // Fallback to legacy UUID-based path for items without a valid UPC
             OwnershipPhotoStorage.legacyPath(uuid, contentType)
         }
 
-        OwnershipPhotoStorage.writeFile(diskPath, bytes)
-
-        val capturedAt = LocalDateTime.now()
         OwnershipPhoto(
             id = uuid,
             media_item_id = mediaItemId,
@@ -59,34 +77,33 @@ object OwnershipPhotoService {
             captured_at = capturedAt
         ).create()
 
-        // Sidecar metadata: best-effort, failure doesn't block the photo store.
-        // See docs/IMAGE_CACHE_MIGRATION.md.
-        val absolutePath = OwnershipPhotoStorage.resolveAbsolute(diskPath)
-        MetadataWriter.writeSidecar(
-            absolutePath,
-            ImageMetadata.ownershipPhoto(
-                photoId = uuid,
-                storageKey = upc,
-                mediaItemId = mediaItemId,
-                slugHint = title?.let { OwnershipPhotoStorage.slugify(it) },
-                sequence = OwnershipPhotoStorage.extractSeq(diskPath).takeIf { it > 0 },
-                capturedAt = capturedAt,
-                contentType = contentType
-            )
-        )
-
-        log.info("Ownership photo stored: id={} diskPath={} mediaItemId={} upc={} size={} bytes", uuid, diskPath, mediaItemId, upc, bytes.size)
+        log.info("Ownership photo stored: id={} newPath={} diskPath={} mediaItemId={} upc={} size={} bytes",
+            uuid, newPath, diskPath, mediaItemId, upc, bytes.size)
         return uuid
     }
 
     fun getFile(uuid: String): File? {
         val record = OwnershipPhoto.findById(uuid) ?: return null
-        if (record.disk_path != null) {
-            return OwnershipPhotoStorage.getFile(record.disk_path!!)
-        }
-        // Legacy fallback for records without disk_path (pre-migration)
-        val legacyPath = OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
-        return OwnershipPhotoStorage.getFile(legacyPath)
+        val extension = extensionFor(record.content_type)
+        val legacyFilePath = record.disk_path?.let { OwnershipPhotoStorage.resolveAbsolute(it) }
+            ?: OwnershipPhotoStorage.resolveAbsolute(
+                OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
+            )
+        val resolved = FirstPartyImageStore.getImage(
+            category = FirstPartyImageStore.Category.OWNERSHIP_PHOTOS,
+            identifier = uuid,
+            legacyPath = legacyFilePath,
+            extension = extension
+        )
+        return resolved?.toFile()
+    }
+
+    private fun extensionFor(contentType: String): String = when {
+        contentType.contains("png") -> "png"
+        contentType.contains("webp") -> "webp"
+        contentType.contains("heic") -> "heic"
+        contentType.contains("heif") -> "heif"
+        else -> "jpg"
     }
 
     fun getContentType(uuid: String): String? {
@@ -146,18 +163,29 @@ object OwnershipPhotoService {
     }
 
     fun delete(uuid: String) {
-        val record = OwnershipPhoto.findById(uuid)
-        if (record != null) {
-            if (record.disk_path != null) {
-                OwnershipPhotoStorage.deleteFile(record.disk_path!!)
-            } else {
-                // Legacy fallback
-                val legacyPath = OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
-                OwnershipPhotoStorage.deleteFile(legacyPath)
-            }
-            record.delete()
-            log.info("Ownership photo deleted: id={}", uuid)
+        val record = OwnershipPhoto.findById(uuid) ?: return
+
+        // Delete from the new store (if the copy updater already landed
+        // a copy there or phase-3 writes put it there directly).
+        FirstPartyImageStore.deleteNewLayout(
+            category = FirstPartyImageStore.Category.OWNERSHIP_PHOTOS,
+            identifier = uuid,
+            extension = extensionFor(record.content_type)
+        )
+
+        // Delete from the legacy path too. User-initiated deletion should
+        // actually remove the bytes — the dual-read policy is only a
+        // safety net for phase 3's copy, not a reason to keep orphans
+        // when the user has said "delete this".
+        if (record.disk_path != null) {
+            OwnershipPhotoStorage.deleteFile(record.disk_path!!)
+        } else {
+            val legacyPath = OwnershipPhotoStorage.legacyPath(uuid, record.content_type)
+            OwnershipPhotoStorage.deleteFile(legacyPath)
         }
+
+        record.delete()
+        log.info("Ownership photo deleted: id={}", uuid)
     }
 
     fun countByMediaItem(): Map<Long, Int> {

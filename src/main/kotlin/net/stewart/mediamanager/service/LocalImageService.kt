@@ -8,50 +8,38 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 /**
- * Stores and retrieves locally-sourced images (user uploads and FFmpeg frame extracts).
- * Uses the same UUID-sharded directory layout as the poster/headshot caches:
- * data/local-images/{ab}/{cd}/{uuid}.{ext}
+ * Stores and retrieves locally-sourced images (user uploads and FFmpeg
+ * frame extracts). Phase-3 primary writes go to the unified
+ * [FirstPartyImageStore]; reads fall back to the legacy UUID-sharded
+ * directory under data/local-images/ when the new path is empty.
  */
 object LocalImageService {
     private val log = LoggerFactory.getLogger(LocalImageService::class.java)
-    private const val CACHE_DIR = "data/local-images"
+    private const val LEGACY_DIR = "data/local-images"
 
     /** Stores image bytes, creates a LocalImage record, and returns the UUID. */
     fun store(bytes: ByteArray, sourceType: LocalImageSourceType, contentType: String): String {
         val uuid = UUID.randomUUID().toString()
-        val ext = when {
-            contentType.contains("png") -> "png"
-            contentType.contains("webp") -> "webp"
-            else -> "jpg"
-        }
-
-        val file = fileForId(uuid, ext)
-        file.parentFile.mkdirs()
-        file.writeBytes(bytes)
-
+        val ext = extensionFor(contentType)
         val createdAt = LocalDateTime.now()
+
+        FirstPartyImageStore.commitLocalImage(
+            uuid = uuid,
+            bytes = bytes,
+            contentType = contentType,
+            subjectType = sourceType.name,
+            subjectId = null,
+            uploadedByUserId = null,
+            uploadedAt = createdAt,
+            extension = ext
+        )
+
         LocalImage(
             id = uuid,
             source_type = sourceType.name,
             content_type = contentType,
             created_at = createdAt
         ).create()
-
-        // Sidecar metadata — best effort, see docs/IMAGE_CACHE_MIGRATION.md.
-        // subject_type / subject_id are populated later by callers that know
-        // what this local image decorates; at store time we only know the
-        // source category (FRAME_EXTRACT / USER_UPLOAD / etc.).
-        MetadataWriter.writeSidecar(
-            file.toPath(),
-            ImageMetadata.localImage(
-                uuid = uuid,
-                subjectType = sourceType.name,
-                subjectId = null,
-                uploadedByUserId = null,
-                uploadedAt = createdAt,
-                contentType = contentType
-            )
-        )
 
         log.info("Local image stored: id={} type={} size={} bytes", uuid, sourceType, bytes.size)
         return uuid
@@ -60,13 +48,14 @@ object LocalImageService {
     /** Returns the image file for a given UUID, or null if not found. */
     fun getFile(uuid: String): File? {
         val record = LocalImage.findById(uuid) ?: return null
-        val ext = when {
-            record.content_type.contains("png") -> "png"
-            record.content_type.contains("webp") -> "webp"
-            else -> "jpg"
-        }
-        val file = fileForId(uuid, ext)
-        return if (file.exists()) file else null
+        val ext = extensionFor(record.content_type)
+        val legacyPath = legacyFileFor(uuid, ext).toPath()
+        return FirstPartyImageStore.getImage(
+            category = FirstPartyImageStore.Category.LOCAL_IMAGES,
+            identifier = uuid,
+            legacyPath = legacyPath,
+            extension = ext
+        )?.toFile()
     }
 
     /** Returns the content type for a stored image. */
@@ -74,26 +63,34 @@ object LocalImageService {
         return LocalImage.findById(uuid)?.content_type
     }
 
-    /** Deletes a local image (file + sidecar + DB record). */
+    /** Deletes a local image (both new + legacy file + sidecar + DB row). */
     fun delete(uuid: String) {
-        val record = LocalImage.findById(uuid)
-        if (record != null) {
-            val ext = when {
-                record.content_type.contains("png") -> "png"
-                record.content_type.contains("webp") -> "webp"
-                else -> "jpg"
-            }
-            val file = fileForId(uuid, ext)
-            if (file.exists()) file.delete()
-            MetadataWriter.deleteSidecar(file.toPath())
-            record.delete()
-            log.info("Local image deleted: id={}", uuid)
-        }
+        val record = LocalImage.findById(uuid) ?: return
+
+        val ext = extensionFor(record.content_type)
+        FirstPartyImageStore.deleteNewLayout(
+            category = FirstPartyImageStore.Category.LOCAL_IMAGES,
+            identifier = uuid,
+            extension = ext
+        )
+
+        val legacy = legacyFileFor(uuid, ext)
+        if (legacy.exists()) legacy.delete()
+        MetadataWriter.deleteSidecar(legacy.toPath())
+
+        record.delete()
+        log.info("Local image deleted: id={}", uuid)
     }
 
-    private fun fileForId(uuid: String, ext: String): File {
+    private fun legacyFileFor(uuid: String, ext: String): File {
         val ab = uuid.substring(0, 2)
         val cd = uuid.substring(2, 4)
-        return File("$CACHE_DIR/$ab/$cd/$uuid.$ext")
+        return File("$LEGACY_DIR/$ab/$cd/$uuid.$ext")
+    }
+
+    private fun extensionFor(contentType: String): String = when {
+        contentType.contains("png") -> "png"
+        contentType.contains("webp") -> "webp"
+        else -> "jpg"
     }
 }
