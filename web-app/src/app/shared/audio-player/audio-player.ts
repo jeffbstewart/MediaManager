@@ -1,11 +1,12 @@
 import {
-  ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, viewChild,
+  ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, signal, viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { PlaybackQueueService } from '../../core/playback-queue.service';
 import { AppRoutes } from '../../core/routes';
+import { QueuePanelComponent } from './queue-panel';
 
 /**
  * Persistent bottom-bar audio player. Lives in the shell so it stays
@@ -24,7 +25,7 @@ import { AppRoutes } from '../../core/routes';
 @Component({
   selector: 'app-audio-player',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatIconModule, MatButtonModule],
+  imports: [RouterLink, MatIconModule, MatButtonModule, QueuePanelComponent],
   templateUrl: './audio-player.html',
   styleUrl: './audio-player.scss',
 })
@@ -33,6 +34,13 @@ export class AudioPlayerComponent {
   readonly routes = AppRoutes;
 
   readonly audioEl = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
+
+  /** Drop-up queue-panel visibility. Closed by default. */
+  readonly queuePanelOpen = signal<boolean>(false);
+
+  toggleQueuePanel(): void {
+    this.queuePanelOpen.update(v => !v);
+  }
 
   /** Formatted "m:ss" for the position / duration display. */
   formatTime(seconds: number): string {

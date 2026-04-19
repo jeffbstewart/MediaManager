@@ -62,6 +62,12 @@
     </div>
 
     <div class="extras">
+      <button mat-icon-button (click)="toggleQueuePanel()"
+              [class.active]="queuePanelOpen()"
+              [attr.aria-label]="queuePanelOpen() ? 'Hide queue' : 'Show queue'"
+              [attr.aria-expanded]="queuePanelOpen()">
+        <mat-icon>queue_music</mat-icon>
+      </button>
       <button mat-icon-button (click)="queue.toggleShuffle()"
               [class.active]="queue.shuffleEnabled()" aria-label="Toggle shuffle">
         <mat-icon>shuffle</mat-icon>
@@ -72,5 +78,9 @@
         <mat-icon>{{ queue.repeatMode() === 'ONE' ? 'repeat_one' : 'repeat' }}</mat-icon>
       </button>
     </div>
+
+    <app-queue-panel
+      [open]="queuePanelOpen()"
+      (closeRequested)="queuePanelOpen.set(false)" />
   }
 </div>

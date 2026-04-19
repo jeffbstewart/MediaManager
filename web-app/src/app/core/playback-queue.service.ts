@@ -90,6 +90,12 @@ export class PlaybackQueueService {
     return idx >= 0 && idx < q.length ? q[idx] : null;
   });
 
+  /** Readonly view of the full queue — used by the queue-panel UI. */
+  readonly queueSnapshot = computed<QueuedTrack[]>(() => this.queue());
+
+  /** Readonly view of the playing-index — lets the queue panel highlight the current row. */
+  readonly currentQueueIndex = computed<number>(() => this.currentIndex());
+
   readonly hasQueue = computed<boolean>(() => this.currentTrack() !== null);
 
   readonly currentTrackUrl = computed<string | null>(() => {
@@ -147,6 +153,24 @@ export class PlaybackQueueService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Jump to an arbitrary index in the queue. Used by the queue panel so
+   * the user can tap a track further down the list to play it now.
+   * Departing-track skip accounting runs first so radio weighting stays
+   * honest.
+   */
+  jumpTo(index: number): void {
+    const q = this.queue();
+    if (index < 0 || index >= q.length) return;
+    if (index === this.currentIndex()) return;
+    this.recordDepartingTrack();
+    this.currentIndex.set(index);
+    this.positionSeconds.set(0);
+    this.playing.set(true);
+    this.currentTrackStartedAt = Date.now();
+    this.maybeRefillRadio();
   }
 
   /** Turn off radio mode. The already-generated queue keeps playing. */

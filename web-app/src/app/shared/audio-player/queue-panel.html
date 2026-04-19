@@ -1,0 +1,59 @@
+@if (open()) {
+  <div class="queue-panel" role="dialog" aria-label="Playback queue">
+    <div class="queue-header">
+      @if (queue.queueMode() === 'RADIO' && queue.radioSeed(); as seed) {
+        <div class="header-text">
+          <span class="header-eyebrow">
+            <mat-icon>graphic_eq</mat-icon>
+            Radio
+          </span>
+          <span class="header-title">from {{ seed.seed_name }}</span>
+          <span class="header-note">Auto-refills based on what you already own.</span>
+        </div>
+      } @else {
+        <div class="header-text">
+          <span class="header-title">Up Next</span>
+          <span class="header-note">{{ queue.queueSnapshot().length }} track{{ queue.queueSnapshot().length === 1 ? '' : 's' }} in queue</span>
+        </div>
+      }
+      <button mat-icon-button class="close-btn" (click)="closeRequested.emit()" aria-label="Close queue panel">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <div class="queue-list">
+      @for (track of queue.queueSnapshot(); track track.trackId + '-' + $index; let i = $index) {
+        <button class="queue-row"
+                [class.current]="i === queue.currentQueueIndex()"
+                [class.past]="i < queue.currentQueueIndex()"
+                (click)="onTrackClick(i)"
+                [attr.aria-current]="i === queue.currentQueueIndex() ? 'true' : null">
+          <div class="row-thumb">
+            @if (track.albumPosterUrl) {
+              <img [src]="track.albumPosterUrl" [alt]="track.albumName" />
+            } @else {
+              <mat-icon>album</mat-icon>
+            }
+            @if (i === queue.currentQueueIndex()) {
+              <div class="now-playing-indicator" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
+            }
+          </div>
+          <div class="row-text">
+            <span class="row-title">{{ track.trackName }}</span>
+            <span class="row-meta">
+              @if (track.trackArtistName) { {{ track.trackArtistName }} }
+              @else if (track.primaryArtistName) { {{ track.primaryArtistName }} }
+              @if ((track.trackArtistName || track.primaryArtistName) && track.albumName) { &nbsp;·&nbsp; }
+              <span class="row-album">{{ track.albumName }}</span>
+            </span>
+          </div>
+          @if (formatDuration(track.durationSeconds); as dur) {
+            <span class="row-duration">{{ dur }}</span>
+          }
+        </button>
+      }
+    </div>
+  </div>
+}
