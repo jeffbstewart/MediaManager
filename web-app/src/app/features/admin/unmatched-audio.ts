@@ -164,11 +164,25 @@ export class UnmatchedAudioComponent implements OnInit {
       this.mbSearchArtist.set(data.search_artist);
       this.mbSearchAlbum.set(data.search_album);
       this.mbCandidates.set(data.candidates);
-    } catch {
-      this.mbError.set('MusicBrainz search failed');
+    } catch (e: unknown) {
+      // Server returns { error: "..." } as the body on 4xx/5xx; lift it
+      // into the dialog so the admin doesn't need Binnacle to diagnose.
+      this.mbError.set(this.extractError(e, 'MusicBrainz search failed'));
     } finally {
       this.mbBusy.set(false);
     }
+  }
+
+  private extractError(e: unknown, fallback: string): string {
+    const httpErr = e as { error?: { error?: string } | string; message?: string; status?: number };
+    if (httpErr?.error && typeof httpErr.error === 'object' && httpErr.error.error) {
+      return `${fallback}: ${httpErr.error.error}`;
+    }
+    if (typeof httpErr?.error === 'string' && httpErr.error) {
+      return `${fallback}: ${httpErr.error}`;
+    }
+    if (httpErr?.message) return `${fallback}: ${httpErr.message}`;
+    return fallback;
   }
 
   async pickCandidate(candidate: MusicBrainzCandidate): Promise<void> {

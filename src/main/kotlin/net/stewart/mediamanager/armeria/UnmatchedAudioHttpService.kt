@@ -24,6 +24,7 @@ import net.stewart.mediamanager.service.MusicBrainzReleaseLookup
 import net.stewart.mediamanager.service.MusicBrainzResult
 import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.MusicIngestionService
+import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 import java.time.LocalDateTime
 
@@ -38,7 +39,13 @@ class UnmatchedAudioHttpService(
     private val musicBrainz: MusicBrainzService = MusicBrainzHttpService()
 ) {
 
+    private val log = LoggerFactory.getLogger(UnmatchedAudioHttpService::class.java)
     private val gson = Gson()
+
+    /** MusicBrainz release MBID — UUID v4 shape. Used to detect when the
+     *  admin pastes an MBID directly into the override box instead of a
+     *  free-text query. */
+    private val mbidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
     @Get("/api/v2/admin/unmatched-audio")
     fun list(ctx: ServiceRequestContext): HttpResponse {
@@ -211,15 +218,17 @@ class UnmatchedAudioHttpService(
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val rows = UnmatchedAudio.findAll()
-            .filter { it.match_status == UnmatchedAudioStatus.UNMATCHED.name }
-        val groups = computeGroups(rows).map { it.toMap() }
-
-        return jsonResponse(gson.toJson(mapOf(
-            "groups" to groups,
-            "total_groups" to groups.size,
-            "total_files" to rows.size
-        )))
+        return runHandler("listGroups") {
+            val rows = UnmatchedAudio.findAll()
+                .filter { it.match_status == UnmatchedAudioStatus.UNMATCHED.name }
+            val groups = computeGroups(rows)
+            log.info("Unmatched-audio groups: {} groups across {} files", groups.size, rows.size)
+            jsonResponse(gson.toJson(mapOf(
+                "groups" to groups.map { it.toMap() },
+                "total_groups" to groups.size,
+                "total_files" to rows.size
+            )))
+        }
     }
 
     @Post("/api/v2/admin/unmatched-audio/musicbrainz-search")
@@ -227,62 +236,118 @@ class UnmatchedAudioHttpService(
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val body = parseBody(ctx) ?: return badRequest("invalid body")
-        val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
-            ?: return badRequest("unmatched_audio_ids required")
-        val rows = UnmatchedAudio.findAll().filter { it.id in ids }
-        if (rows.isEmpty()) return badRequest("no rows found")
-
-        val override = (body["query_override"] as? String)?.takeIf { it.isNotBlank() }
-
-        val candidates = mutableListOf<String>()
-
-        // 1) UPC tier — if all rows agree on a barcode, try it first.
-        val dominantUpc = rows.mapNotNull { it.parsed_upc?.takeIf { s -> s.isNotBlank() } }
-            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-        if (override == null && dominantUpc != null) {
-            (musicBrainz.lookupByBarcode(dominantUpc) as? MusicBrainzResult.Success)?.let {
-                candidates += it.release.musicBrainzReleaseId
+        return runHandler("searchMusicBrainz") {
+            val body = parseBody(ctx) ?: run {
+                log.warn("musicbrainz-search: invalid JSON body")
+                return@runHandler badRequest("invalid body")
             }
+            val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
+            if (ids.isNullOrEmpty()) {
+                log.warn("musicbrainz-search: unmatched_audio_ids missing or empty (body keys={})",
+                    body.keys.joinToString())
+                return@runHandler badRequest("unmatched_audio_ids required")
+            }
+            val rows = UnmatchedAudio.findAll().filter { it.id in ids.toSet() }
+            if (rows.isEmpty()) {
+                log.warn("musicbrainz-search: no rows found for ids={}", ids)
+                return@runHandler badRequest("no rows found")
+            }
+
+            val override = (body["query_override"] as? String)?.takeIf { it.isNotBlank() }?.trim()
+            log.info("musicbrainz-search: ids={} ({} rows) override='{}'",
+                ids, rows.size, override ?: "")
+
+            // Direct MBID paste: admin already found the right release on
+            // musicbrainz.org and gave us its UUID. Skip every search tier
+            // and go straight to the detail lookup so the candidate list
+            // contains exactly that one release.
+            if (override != null && mbidRegex.matches(override)) {
+                log.info("musicbrainz-search: override looks like a release MBID, going direct: {}", override)
+                return@runHandler runDirectMbidLookup(rows, override)
+            }
+
+            val candidates = mutableListOf<String>()
+
+            // Tier 1: UPC. Skipped when admin typed an override since they're
+            // already telling us the auto-derived signals went wrong.
+            val dominantUpc = rows.mapNotNull { it.parsed_upc?.takeIf { s -> s.isNotBlank() } }
+                .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            if (override == null && dominantUpc != null) {
+                when (val r = musicBrainz.lookupByBarcode(dominantUpc)) {
+                    is MusicBrainzResult.Success -> {
+                        val mbid = r.release.musicBrainzReleaseId
+                        log.info("musicbrainz-search: UPC({}) hit → {}", dominantUpc, mbid)
+                        candidates += mbid
+                    }
+                    is MusicBrainzResult.NotFound ->
+                        log.info("musicbrainz-search: UPC({}) not indexed by MB", dominantUpc)
+                    is MusicBrainzResult.Error ->
+                        log.warn("musicbrainz-search: UPC({}) MB error: {} (rateLimited={})",
+                            dominantUpc, r.message, r.rateLimited)
+                }
+            } else if (override == null) {
+                log.info("musicbrainz-search: no dominant UPC across rows; skipping UPC tier")
+            }
+
+            // Tier 2: Artist + Album. Override splits on " - " when present;
+            // otherwise the dominant tag values drive the search.
+            val dominantArtist = rows.mapNotNull { it.parsed_album_artist?.takeIf { s -> s.isNotBlank() } }
+                .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            val dominantAlbum = rows.mapNotNull { it.parsed_album?.takeIf { s -> s.isNotBlank() } }
+                .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+
+            val (searchArtist, searchAlbum) = if (override != null) {
+                val dash = override.indexOf(" - ")
+                if (dash > 0) override.substring(0, dash) to override.substring(dash + 3)
+                else (dominantArtist ?: "Various Artists") to override
+            } else {
+                (dominantArtist ?: "Various Artists") to (dominantAlbum ?: "")
+            }
+
+            if (searchAlbum.isBlank()) {
+                log.warn("musicbrainz-search: empty album for artist='{}'; nothing to search " +
+                    "(dominantArtist='{}' dominantAlbum='{}' override='{}')",
+                    searchArtist, dominantArtist, dominantAlbum, override)
+            } else {
+                log.info("musicbrainz-search: artist+album query artist='{}' album='{}'",
+                    searchArtist, searchAlbum)
+                val tier2 = musicBrainz.searchReleaseByArtistAndAlbum(searchArtist, searchAlbum)
+                log.info("musicbrainz-search: artist+album returned {} candidate(s)", tier2.size)
+                candidates += tier2
+            }
+
+            // De-dup while preserving order; cap detail fetches (each is one
+            // 1.1 s MB tick).
+            val ordered = candidates.distinct().take(10)
+            log.info("musicbrainz-search: fetching detail for {} unique candidate(s)", ordered.size)
+
+            val details = mutableListOf<Map<String, Any?>>()
+            var detailErrors = 0
+            var detailNotFound = 0
+            for (mbid in ordered) {
+                when (val r = musicBrainz.lookupByReleaseMbid(mbid)) {
+                    is MusicBrainzResult.Success ->
+                        details += candidateInfo(rows, r.release)
+                    is MusicBrainzResult.NotFound -> {
+                        detailNotFound++
+                        log.warn("musicbrainz-search: detail lookup NotFound for {}", mbid)
+                    }
+                    is MusicBrainzResult.Error -> {
+                        detailErrors++
+                        log.warn("musicbrainz-search: detail lookup error for {}: {} (rateLimited={})",
+                            mbid, r.message, r.rateLimited)
+                    }
+                }
+            }
+            log.info("musicbrainz-search: returning {} candidate(s) ({} not found, {} errors)",
+                details.size, detailNotFound, detailErrors)
+
+            jsonResponse(gson.toJson(mapOf(
+                "search_artist" to searchArtist,
+                "search_album" to searchAlbum,
+                "candidates" to details
+            )))
         }
-
-        // 2) Artist+Album tier — either the explicit override (admin-typed)
-        //    or the dominant tag values from the group.
-        val dominantArtist = rows.mapNotNull { it.parsed_album_artist?.takeIf { s -> s.isNotBlank() } }
-            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-        val dominantAlbum = rows.mapNotNull { it.parsed_album?.takeIf { s -> s.isNotBlank() } }
-            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-
-        val (searchArtist, searchAlbum) = if (override != null) {
-            // Treat override as a free-form query: split on " - " if present,
-            // otherwise feed as the album with "Various Artists" as the
-            // artist (matches MB compilation-search shape).
-            val dash = override.indexOf(" - ")
-            if (dash > 0) override.substring(0, dash) to override.substring(dash + 3)
-            else (dominantArtist ?: "Various Artists") to override
-        } else {
-            (dominantArtist ?: "Various Artists") to (dominantAlbum ?: "")
-        }
-        if (searchAlbum.isNotBlank()) {
-            candidates += musicBrainz.searchReleaseByArtistAndAlbum(searchArtist, searchAlbum)
-        }
-
-        // De-dup while preserving order; cap to the first 10 to keep MB
-        // detail-fetch traffic bounded (each detail call is one 1.1 s tick).
-        val ordered = candidates.distinct().take(10)
-
-        // Fetch detail per candidate so the UI can show track count,
-        // year, country, label without a second round trip.
-        val details = ordered.mapNotNull { mbid ->
-            val lookup = (musicBrainz.lookupByReleaseMbid(mbid) as? MusicBrainzResult.Success)?.release
-            if (lookup != null) candidateInfo(rows, lookup) else null
-        }
-
-        return jsonResponse(gson.toJson(mapOf(
-            "search_artist" to searchArtist,
-            "search_album" to searchAlbum,
-            "candidates" to details
-        )))
     }
 
     @Post("/api/v2/admin/unmatched-audio/link-album-to-release")
@@ -290,32 +355,59 @@ class UnmatchedAudioHttpService(
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val body = parseBody(ctx) ?: return badRequest("invalid body")
-        val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
-            ?: return badRequest("unmatched_audio_ids required")
-        val mbid = (body["release_mbid"] as? String)?.takeIf { it.isNotBlank() }
-            ?: return badRequest("release_mbid required")
+        return runHandler("linkAlbumToRelease") {
+            val body = parseBody(ctx) ?: run {
+                log.warn("link-album-to-release: invalid JSON body")
+                return@runHandler badRequest("invalid body")
+            }
+            val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
+            if (ids.isNullOrEmpty()) {
+                log.warn("link-album-to-release: unmatched_audio_ids missing or empty")
+                return@runHandler badRequest("unmatched_audio_ids required")
+            }
+            val mbid = (body["release_mbid"] as? String)?.takeIf { it.isNotBlank() }
+            if (mbid == null) {
+                log.warn("link-album-to-release: release_mbid missing")
+                return@runHandler badRequest("release_mbid required")
+            }
 
-        val rows = UnmatchedAudio.findAll().filter { it.id in ids }
-        if (rows.isEmpty()) return badRequest("no rows found")
+            val rows = UnmatchedAudio.findAll().filter { it.id in ids.toSet() }
+            if (rows.isEmpty()) {
+                log.warn("link-album-to-release: no rows found for ids={}", ids)
+                return@runHandler badRequest("no rows found")
+            }
 
-        val lookup = (musicBrainz.lookupByReleaseMbid(mbid) as? MusicBrainzResult.Success)?.release
-            ?: return badRequest("MB release not found")
+            log.info("link-album-to-release: ingesting MB release {} for {} files", mbid, rows.size)
+            val lookup = when (val r = musicBrainz.lookupByReleaseMbid(mbid)) {
+                is MusicBrainzResult.Success -> r.release
+                is MusicBrainzResult.NotFound -> {
+                    log.warn("link-album-to-release: MB release {} not found", mbid)
+                    return@runHandler badRequest("MB release not found")
+                }
+                is MusicBrainzResult.Error -> {
+                    log.warn("link-album-to-release: MB lookup for {} failed: {} (rateLimited={})",
+                        mbid, r.message, r.rateLimited)
+                    return@runHandler badRequest("MB lookup failed: ${r.message}")
+                }
+            }
 
-        val ingest = MusicIngestionService.ingest(
-            upc = null,
-            mediaFormat = MediaFormat.AUDIO_FLAC,
-            lookup = lookup
-        )
-        val tracks = Track.findAll().filter { it.title_id == ingest.title.id }
-        val (linked, failed) = linkRowsToTracks(rows, tracks)
+            val ingest = MusicIngestionService.ingest(
+                upc = null,
+                mediaFormat = MediaFormat.AUDIO_FLAC,
+                lookup = lookup
+            )
+            val tracks = Track.findAll().filter { it.title_id == ingest.title.id }
+            val (linked, failed) = linkRowsToTracks(rows, tracks)
+            log.info("link-album-to-release: title={} linked={} failed={}",
+                ingest.title.id, linked.size, failed.size)
 
-        return jsonResponse(gson.toJson(mapOf(
-            "title_id" to ingest.title.id,
-            "title_name" to ingest.title.name,
-            "linked" to linked.size,
-            "failed" to failed
-        )))
+            jsonResponse(gson.toJson(mapOf(
+                "title_id" to ingest.title.id,
+                "title_name" to ingest.title.name,
+                "linked" to linked.size,
+                "failed" to failed
+            )))
+        }
     }
 
     @Post("/api/v2/admin/unmatched-audio/link-album-manual")
@@ -323,23 +415,83 @@ class UnmatchedAudioHttpService(
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val body = parseBody(ctx) ?: return badRequest("invalid body")
-        val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
-            ?: return badRequest("unmatched_audio_ids required")
+        return runHandler("linkAlbumManual") {
+            val body = parseBody(ctx) ?: run {
+                log.warn("link-album-manual: invalid JSON body")
+                return@runHandler badRequest("invalid body")
+            }
+            val ids = (body["unmatched_audio_ids"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() }
+            if (ids.isNullOrEmpty()) {
+                log.warn("link-album-manual: unmatched_audio_ids missing or empty")
+                return@runHandler badRequest("unmatched_audio_ids required")
+            }
 
-        val rows = UnmatchedAudio.findAll().filter { it.id in ids }
-        if (rows.isEmpty()) return badRequest("no rows found")
+            val rows = UnmatchedAudio.findAll().filter { it.id in ids.toSet() }
+            if (rows.isEmpty()) {
+                log.warn("link-album-manual: no rows found for ids={}", ids)
+                return@runHandler badRequest("no rows found")
+            }
 
-        val title = MusicIngestionService.ingestManualFromRows(rows)
-        val tracks = Track.findAll().filter { it.title_id == title.id }
-        val (linked, failed) = linkRowsToTracks(rows, tracks)
+            log.info("link-album-manual: deriving title from tags for {} files", rows.size)
+            val title = MusicIngestionService.ingestManualFromRows(rows)
+            val tracks = Track.findAll().filter { it.title_id == title.id }
+            val (linked, failed) = linkRowsToTracks(rows, tracks)
+            log.info("link-album-manual: title={} linked={} failed={}",
+                title.id, linked.size, failed.size)
 
+            jsonResponse(gson.toJson(mapOf(
+                "title_id" to title.id,
+                "title_name" to title.name,
+                "linked" to linked.size,
+                "failed" to failed
+            )))
+        }
+    }
+
+    /**
+     * Skip the multi-tier search and fetch a single release by MBID.
+     * Used when the admin pasted an MBID into the override box —
+     * they've already done the disambiguation work on musicbrainz.org.
+     */
+    private fun runDirectMbidLookup(rows: List<UnmatchedAudio>, mbid: String): HttpResponse {
+        val candidates = when (val r = musicBrainz.lookupByReleaseMbid(mbid)) {
+            is MusicBrainzResult.Success -> listOf(candidateInfo(rows, r.release))
+            is MusicBrainzResult.NotFound -> {
+                log.warn("musicbrainz-search: MBID {} returned NotFound", mbid)
+                emptyList()
+            }
+            is MusicBrainzResult.Error -> {
+                log.warn("musicbrainz-search: MBID {} lookup failed: {} (rateLimited={})",
+                    mbid, r.message, r.rateLimited)
+                emptyList()
+            }
+        }
         return jsonResponse(gson.toJson(mapOf(
-            "title_id" to title.id,
-            "title_name" to title.name,
-            "linked" to linked.size,
-            "failed" to failed
+            "search_artist" to "(direct MBID lookup)",
+            "search_album" to mbid,
+            "candidates" to candidates
         )))
+    }
+
+    /**
+     * Wrap an endpoint handler so any unexpected exception lands in
+     * Binnacle with a stack trace plus the endpoint label, instead of
+     * surfacing as a generic 500 the admin can't diagnose. Returns the
+     * handler's response on success; converts thrown exceptions into a
+     * structured 500 with the exception type + message in the body.
+     */
+    private inline fun runHandler(label: String, block: () -> HttpResponse): HttpResponse {
+        return try {
+            block()
+        } catch (e: Exception) {
+            log.warn("{}: unhandled exception ({}): {}", label, e.javaClass.simpleName, e.message, e)
+            HttpResponse.builder()
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .content(MediaType.JSON_UTF_8, gson.toJson(mapOf(
+                    "error" to "${e.javaClass.simpleName}: ${e.message ?: "(no message)"}"
+                )))
+                .build()
+        }
     }
 
     // -------------------------------------------------------------------

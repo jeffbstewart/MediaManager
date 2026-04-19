@@ -2032,6 +2032,9 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     private val unmatchedAudioMb: net.stewart.mediamanager.service.MusicBrainzService =
         net.stewart.mediamanager.service.MusicBrainzHttpService()
 
+    private val unmatchedAudioMbidRegex =
+        Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
     override suspend fun listUnmatchedAudioGroups(request: Empty): UnmatchedAudioGroupListResponse {
         val rows = UnmatchedAudioEntity.findAll()
             .filter { it.match_status == UnmatchedAudioStatusEnum.UNMATCHED.name }
@@ -2050,7 +2053,21 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         if (rows.isEmpty()) {
             throw StatusException(Status.NOT_FOUND.withDescription("no rows found"))
         }
-        val override = if (request.hasQueryOverride()) request.queryOverride.takeIf { it.isNotBlank() } else null
+        val override = if (request.hasQueryOverride()) request.queryOverride.takeIf { it.isNotBlank() }?.trim() else null
+
+        // Direct MBID paste: skip search tiers, go straight to detail lookup.
+        if (override != null && unmatchedAudioMbidRegex.matches(override)) {
+            val candidates = when (val r = unmatchedAudioMb.lookupByReleaseMbid(override)) {
+                is net.stewart.mediamanager.service.MusicBrainzResult.Success ->
+                    listOf(candidateProto(rows, r.release))
+                else -> emptyList()
+            }
+            return searchMusicBrainzForUnmatchedAudioResponse {
+                searchArtist = "(direct MBID lookup)"
+                searchAlbum = override
+                this.candidates.addAll(candidates)
+            }
+        }
 
         val mbids = mutableListOf<String>()
 

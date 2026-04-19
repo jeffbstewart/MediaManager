@@ -119,7 +119,8 @@
       </header>
 
       <div class="mb-search-row">
-        <input type="text" placeholder="Override search (Artist - Album, or just Album)"
+        <input type="text"
+               placeholder="Artist - Album, just Album, or paste a release MBID"
                [ngModel]="mbQueryOverride()" (ngModelChange)="mbQueryOverride.set($event)"
                name="mbOverride" (keydown.enter)="runMbSearch()" />
         <button mat-stroked-button type="button" (click)="runMbSearch()" [disabled]="mbBusy()">
