@@ -94,16 +94,23 @@ class AuthorEnrichmentAgent(
 
     /** Returns the number of authors actually processed in this batch. */
     internal fun enrichBatch(): Int {
-        val allNeeding = Author.findAll().filter { needsEnrichment(it) }
-        val queueBefore = allNeeding.size
-        val candidates = allNeeding.take(BATCH_SIZE)
+        val now = clock.now()
+        val all = Author.findAll()
+        val allNeeding = all.filter { needsEnrichment(it) }
+        val eligible = allNeeding.filter { isEligibleForRetry(it, now) }
+        val cooling = allNeeding.size - eligible.size
+        val candidates = eligible.take(BATCH_SIZE)
 
         if (candidates.isEmpty()) {
-            log.debug("No authors need enrichment")
+            if (cooling > 0) {
+                log.info("No authors eligible for enrichment; {} in cooldown", cooling)
+            } else {
+                log.debug("No authors need enrichment")
+            }
             return 0
         }
-        log.info("Enriching {} author(s); queue size before batch: {}",
-            candidates.size, queueBefore)
+        log.info("Enriching {} author(s); queue={} eligible={} cooling={}",
+            candidates.size, allNeeding.size, eligible.size, cooling)
 
         var progressed = 0
         var stuck = 0
@@ -122,6 +129,7 @@ class AuthorEnrichmentAgent(
             }
             val after = gapsFor(author)
             val filled = before - after
+            recordAttempt(author, madeProgress = filled.isNotEmpty())
             if (filled.isNotEmpty()) {
                 progressed++
                 val stillMissing = if (after.isEmpty()) "done" else "still missing ${after.joinToString(",")}"
@@ -129,15 +137,32 @@ class AuthorEnrichmentAgent(
                     author.id, author.name, filled.joinToString(","), stillMissing)
             } else {
                 stuck++
-                log.info("Author {} '{}': no progress, still missing {}",
-                    author.id, author.name, after.joinToString(","))
+                val nextRetry = EnrichmentBackoff.cooldownFor(author.enrichment_no_progress_streak)
+                log.info("Author {} '{}': no progress (streak={}), still missing {}; next try in {}",
+                    author.id, author.name, author.enrichment_no_progress_streak,
+                    after.joinToString(","), nextRetry)
             }
         }
 
         val queueAfter = Author.findAll().count { needsEnrichment(it) }
         log.info("Batch done: progressed={} stuck={} queue={} (delta={})",
-            progressed, stuck, queueAfter, queueAfter - queueBefore)
+            progressed, stuck, queueAfter, queueAfter - allNeeding.size)
         return candidates.size
+    }
+
+    // Tiny per-entity wrappers around EnrichmentBackoff. See
+    // ArtistEnrichmentAgent for the mirrored pattern.
+    private fun isEligibleForRetry(a: Author, now: LocalDateTime): Boolean =
+        EnrichmentBackoff.isEligibleForRetry(
+            a.enrichment_last_attempt_at, a.enrichment_no_progress_streak, now
+        )
+
+    private fun recordAttempt(a: Author, madeProgress: Boolean) {
+        a.enrichment_last_attempt_at = clock.now()
+        a.enrichment_no_progress_streak = EnrichmentBackoff.nextStreak(
+            a.enrichment_no_progress_streak, madeProgress
+        )
+        a.save()
     }
 
     /** Named gaps in an author's state. See ArtistEnrichmentAgent.gapsFor. */

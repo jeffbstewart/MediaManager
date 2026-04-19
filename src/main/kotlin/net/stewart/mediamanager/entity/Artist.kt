@@ -29,6 +29,10 @@ data class Artist(
     /** Last.fm similar-artist cache (serialized JSON). Populated by the future radio milestone. */
     var lastfm_similar_json: String? = null,
     var similar_fetched_at: LocalDateTime? = null,
+    /** Last ArtistEnrichmentAgent attempt (any outcome). Drives retry cooldown. */
+    var enrichment_last_attempt_at: LocalDateTime? = null,
+    /** Consecutive no-progress attempts. Resets to 0 on any progress. */
+    var enrichment_no_progress_streak: Int = 0,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

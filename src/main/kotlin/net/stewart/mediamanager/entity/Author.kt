@@ -22,6 +22,10 @@ data class Author(
     var wikidata_id: String? = null,
     var birth_date: LocalDate? = null,
     var death_date: LocalDate? = null,
+    /** Last AuthorEnrichmentAgent attempt (any outcome). Drives retry cooldown. */
+    var enrichment_last_attempt_at: LocalDateTime? = null,
+    /** Consecutive no-progress attempts. Resets to 0 on any progress. */
+    var enrichment_no_progress_streak: Int = 0,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

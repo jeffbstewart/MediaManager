@@ -96,15 +96,22 @@ class ArtistEnrichmentAgent(
 
     /** Returns the number of artists actually processed in this batch. */
     internal fun enrichBatch(): Int {
-        val allNeeding = Artist.findAll().filter { needsEnrichment(it) }
-        val queueBefore = allNeeding.size
-        val candidates = allNeeding.take(BATCH_SIZE)
+        val now = clock.now()
+        val all = Artist.findAll()
+        val allNeeding = all.filter { needsEnrichment(it) }
+        val eligible = allNeeding.filter { isEligibleForRetry(it, now) }
+        val cooling = allNeeding.size - eligible.size
+        val candidates = eligible.take(BATCH_SIZE)
         if (candidates.isEmpty()) {
-            log.debug("No artists need enrichment")
+            if (cooling > 0) {
+                log.info("No artists eligible for enrichment; {} in cooldown", cooling)
+            } else {
+                log.debug("No artists need enrichment")
+            }
             return 0
         }
-        log.info("Enriching {} artist(s); queue size before batch: {}",
-            candidates.size, queueBefore)
+        log.info("Enriching {} artist(s); queue={} eligible={} cooling={}",
+            candidates.size, allNeeding.size, eligible.size, cooling)
 
         var progressed = 0
         var stuck = 0
@@ -123,6 +130,7 @@ class ArtistEnrichmentAgent(
             }
             val after = gapsFor(artist)
             val filled = before - after
+            recordAttempt(artist, madeProgress = filled.isNotEmpty())
             if (filled.isNotEmpty()) {
                 progressed++
                 val stillMissing = if (after.isEmpty()) "done" else "still missing ${after.joinToString(",")}"
@@ -130,15 +138,33 @@ class ArtistEnrichmentAgent(
                     artist.id, artist.name, filled.joinToString(","), stillMissing)
             } else {
                 stuck++
-                log.info("Artist {} '{}': no progress, still missing {}",
-                    artist.id, artist.name, after.joinToString(","))
+                val nextRetry = EnrichmentBackoff.cooldownFor(artist.enrichment_no_progress_streak)
+                log.info("Artist {} '{}': no progress (streak={}), still missing {}; next try in {}",
+                    artist.id, artist.name, artist.enrichment_no_progress_streak,
+                    after.joinToString(","), nextRetry)
             }
         }
 
         val queueAfter = Artist.findAll().count { needsEnrichment(it) }
         log.info("Batch done: progressed={} stuck={} queue={} (delta={})",
-            progressed, stuck, queueAfter, queueAfter - queueBefore)
+            progressed, stuck, queueAfter, queueAfter - allNeeding.size)
         return candidates.size
+    }
+
+    // Tiny per-entity wrappers around EnrichmentBackoff. The ladder and
+    // eligibility math live in that shared utility; only the "which
+    // columns on which entity" knowledge stays here.
+    private fun isEligibleForRetry(a: Artist, now: LocalDateTime): Boolean =
+        EnrichmentBackoff.isEligibleForRetry(
+            a.enrichment_last_attempt_at, a.enrichment_no_progress_streak, now
+        )
+
+    private fun recordAttempt(a: Artist, madeProgress: Boolean) {
+        a.enrichment_last_attempt_at = clock.now()
+        a.enrichment_no_progress_streak = EnrichmentBackoff.nextStreak(
+            a.enrichment_no_progress_streak, madeProgress
+        )
+        a.save()
     }
 
     /**
