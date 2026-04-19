@@ -22,6 +22,7 @@ import net.stewart.mediamanager.service.PopulateCollectionUpdater
 import net.stewart.mediamanager.service.PopulateProductNameUpdater
 import net.stewart.mediamanager.service.BackfillFirstPartyImageSidecars
 import net.stewart.mediamanager.service.BackfillInternetImageSidecars
+import net.stewart.mediamanager.service.CopyFirstPartyImagesToNewLayout
 import net.stewart.mediamanager.service.MigrateInternetImageCachesUpdater
 import net.stewart.mediamanager.service.BulkTagUpdater
 import net.stewart.mediamanager.service.ManagedDirectoryService
@@ -145,6 +146,7 @@ object Bootstrap {
         SchemaUpdaterRunner.register(BackfillFirstPartyImageSidecars())
         SchemaUpdaterRunner.register(BackfillInternetImageSidecars())
         SchemaUpdaterRunner.register(MigrateInternetImageCachesUpdater())
+        SchemaUpdaterRunner.register(CopyFirstPartyImagesToNewLayout())
         SchemaUpdaterRunner.runAll()
 
         ManagedDirectoryService.ensureManagedDirectories()
