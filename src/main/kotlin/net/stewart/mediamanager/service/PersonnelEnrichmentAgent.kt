@@ -194,7 +194,20 @@ class PersonnelEnrichmentAgent(
         byMbid: MutableMap<String, Artist>
     ) {
         val now = LocalDateTime.now()
-        val existing = ArtistMembership.findAll()
+        // Seed with already-persisted keys, then grow as we insert inside
+        // this call. MB often returns multiple membership rows for the
+        // same (group, member, begin_date) tuple when an artist played
+        // several instruments on the same gig; our unique constraint
+        // collapses instruments into a comma-joined string so only the
+        // first of such a run should hit the DB. Prior to this change the
+        // `existing` snapshot was only refreshed once per call, so a
+        // second MB row for the same tuple within the same call would
+        // slip through and trip the unique index.
+        val seenKeys: MutableSet<Triple<Long, Long, LocalDate?>> =
+            ArtistMembership.findAll()
+                .mapTo(mutableSetOf()) { Triple(it.group_artist_id, it.member_artist_id, it.begin_date) }
+
+        var inserted = 0
         for (m in memberships) {
             val group = byMbid[m.groupMbid] ?: upsertSkeletonArtist(
                 m.groupMbid,
@@ -212,26 +225,37 @@ class PersonnelEnrichmentAgent(
             ).also { byMbid[m.memberMbid] = it }
 
             val begin = parseMbDate(m.beginDate)
-            val alreadyThere = existing.any {
-                it.group_artist_id == group.id &&
-                    it.member_artist_id == member.id &&
-                    it.begin_date == begin
-            }
-            if (alreadyThere) continue
+            val key = Triple(group.id!!, member.id!!, begin)
+            if (!seenKeys.add(key)) continue  // already in DB or just inserted
 
-            ArtistMembership(
-                group_artist_id = group.id!!,
-                member_artist_id = member.id!!,
-                begin_date = begin,
-                end_date = parseMbDate(m.endDate),
-                primary_instruments = m.instruments.joinToString(", ").ifBlank { null },
-                notes = null,
-                created_at = now,
-                updated_at = now
-            ).save()
+            try {
+                ArtistMembership(
+                    group_artist_id = group.id!!,
+                    member_artist_id = member.id!!,
+                    begin_date = begin,
+                    end_date = parseMbDate(m.endDate),
+                    primary_instruments = m.instruments.joinToString(", ").ifBlank { null },
+                    notes = null,
+                    created_at = now,
+                    updated_at = now
+                ).save()
+                inserted++
+            } catch (e: Exception) {
+                // Belt-and-suspenders for the case where a concurrent
+                // writer beat us to this key. Our set should have caught
+                // it; this path is the defensive log-and-continue so a
+                // unique-index violation can't crash the batch.
+                val msg = e.message.orEmpty()
+                if (msg.contains("Unique", ignoreCase = true) || msg.contains("duplicate", ignoreCase = true)) {
+                    log.warn("Duplicate membership skipped for group={} member={} begin={}",
+                        group.id, member.id, begin)
+                } else {
+                    throw e
+                }
+            }
         }
-        log.info("Enriched {} membership(s) touching artist id={} '{}'",
-            memberships.size, selfArtist.id, selfArtist.name)
+        log.info("Enriched {} membership(s) touching artist id={} '{}' (inserted {})",
+            memberships.size, selfArtist.id, selfArtist.name, inserted)
     }
 
     // -------------------------------------------------------------------
