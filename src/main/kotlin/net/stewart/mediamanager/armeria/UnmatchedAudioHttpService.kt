@@ -55,6 +55,10 @@ class UnmatchedAudioHttpService {
                     "parsed_duration_seconds" to row.parsed_duration_seconds,
                     "parsed_mb_release_id" to row.parsed_mb_release_id,
                     "parsed_mb_recording_id" to row.parsed_mb_recording_id,
+                    "parsed_upc" to row.parsed_upc,
+                    "parsed_isrc" to row.parsed_isrc,
+                    "parsed_catalog_number" to row.parsed_catalog_number,
+                    "parsed_label" to row.parsed_label,
                     "discovered_at" to row.discovered_at?.toString()
                 )
             }

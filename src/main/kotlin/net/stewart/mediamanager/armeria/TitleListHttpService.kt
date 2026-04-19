@@ -11,7 +11,10 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
+import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.UserTitleFlag
 import net.stewart.mediamanager.entity.UserFlagType
@@ -53,6 +56,7 @@ class TitleListHttpService {
             "TV" -> MMMediaType.TV
             "PERSONAL" -> MMMediaType.PERSONAL
             "BOOK" -> MMMediaType.BOOK
+            "ALBUM" -> MMMediaType.ALBUM
             else -> return HttpResponse.builder()
                 .status(HttpStatus.BAD_REQUEST)
                 .content(MediaType.JSON_UTF_8, gson.toJson(mapOf("error" to "Invalid media_type")))
@@ -72,17 +76,43 @@ class TitleListHttpService {
         // Rating ceiling
         titles = titles.filter { user.canSeeRating(it.content_rating) }
 
-        // Compute playable title IDs
-        val allTranscodes = Transcode.findAll().filter { it.file_path != null }
-        val nasRoot = TranscoderAgent.getNasRoot()
-        val playableTitleIds = allTranscodes.filter { tc ->
-            val fp = tc.file_path!!
-            if (TranscoderAgent.needsTranscoding(fp)) {
-                nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, fp)
-            } else {
-                true
+        // "Playable" = consumable right now through the web UI, per media type.
+        //   VIDEO (MOVIE / TV / PERSONAL) — transcode exists and is browser-
+        //     compatible or already transcoded to the ForBrowser mirror.
+        //   BOOK — at least one MediaItem on the title has a digital
+        //     file_path (.epub / .pdf) so the reader can open it.
+        //   ALBUM — at least one Track on the title has a file_path.
+        val playableTitleIds: Set<Long> = when (mmType) {
+            MMMediaType.BOOK -> {
+                val bookMediaItemIds = MediaItem.findAll()
+                    .filter { !it.file_path.isNullOrBlank() }
+                    .mapNotNull { it.id }
+                    .toSet()
+                MediaItemTitle.findAll()
+                    .filter { it.media_item_id in bookMediaItemIds }
+                    .map { it.title_id }
+                    .toSet()
             }
-        }.map { it.title_id }.toSet()
+            MMMediaType.ALBUM -> {
+                Track.findAll()
+                    .filter { !it.file_path.isNullOrBlank() }
+                    .map { it.title_id }
+                    .toSet()
+            }
+            else -> {
+                val nasRoot = TranscoderAgent.getNasRoot()
+                Transcode.findAll()
+                    .filter { tc ->
+                        val fp = tc.file_path
+                        if (fp.isNullOrBlank()) false
+                        else if (TranscoderAgent.needsTranscoding(fp))
+                            nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, fp)
+                        else true
+                    }
+                    .map { it.title_id }
+                    .toSet()
+            }
+        }
 
         // Available rating values (before rating/playable filters, for chip display)
         val availableRatings = titles
@@ -97,9 +127,7 @@ class TitleListHttpService {
             titles = titles.filter { it.content_rating in ratingFilter }
         }
 
-        // Playable filter. Books have no transcodes and nothing is "playable"
-        // in the M1 video sense — so skip the filter entirely for BOOK.
-        if (playableOnly && mmType != MMMediaType.BOOK) {
+        if (playableOnly) {
             titles = titles.filter { it.id in playableTitleIds }
         }
 

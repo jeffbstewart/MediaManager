@@ -173,6 +173,30 @@ interface MusicBrainzService {
      */
     fun listArtistMemberships(artistMbid: String): List<MusicBrainzMembership>
 
+    /**
+     * Search releases by label catalog number (optionally constrained by
+     * label name), used as a fallback match key when MBIDs aren't in the
+     * tags. Returns candidate release MBIDs in MB's own relevance order,
+     * capped. Empty list on miss or error.
+     */
+    fun searchByCatalogNumber(catalogNumber: String, label: String? = null): List<String>
+
+    /**
+     * Search recordings by ISRC, returning the MBIDs of releases those
+     * recordings appear on. ISRC uniquely identifies a recording, so the
+     * release list is small and the top hit is almost always the right
+     * pressing. Empty list on miss or error.
+     */
+    fun searchByIsrc(isrc: String): List<String>
+
+    /**
+     * Fuzzy search of releases by album-artist + album title. Lucene-style
+     * query (`artist:"..." AND release:"..."`); returns candidate release
+     * MBIDs in MB's relevance order, capped. Lowest-confidence tier —
+     * callers should verify the first hit before auto-linking.
+     */
+    fun searchReleaseByArtistAndAlbum(albumArtist: String, album: String): List<String>
+
     companion object {
         /** Path the image proxy exposes for a release's cover art. */
         fun coverUrlByReleaseMbid(releaseMbid: String, size: CoverSize = CoverSize.M): String =
@@ -334,6 +358,103 @@ class MusicBrainzHttpService : MusicBrainzService {
             emptyList()
         }
     }
+
+    override fun searchByCatalogNumber(catalogNumber: String, label: String?): List<String> {
+        val cat = catalogNumber.trim()
+        if (cat.isBlank()) return emptyList()
+        val query = buildString {
+            append("catno:\"").append(luceneEscape(cat)).append('"')
+            if (!label.isNullOrBlank()) {
+                append(" AND label:\"").append(luceneEscape(label.trim())).append('"')
+            }
+        }
+        val url = "$BASE/release/?query=${URLEncoder.encode(query, Charsets.UTF_8)}&limit=10&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on catalog-number search: {}", cat)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz catalog-number search failed for {}: {}", cat, e.message)
+            return emptyList()
+        }
+        return try {
+            parseReleaseMbidList(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz catalog-number parse failed for {}: {}", cat, e.message)
+            emptyList()
+        }
+    }
+
+    override fun searchByIsrc(isrc: String): List<String> {
+        val cleaned = isrc.trim().uppercase()
+        if (!cleaned.matches(ISRC_RE)) return emptyList()
+        val url = "$BASE/isrc/$cleaned?inc=releases&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on ISRC lookup: {}", cleaned)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz ISRC lookup failed for {}: {}", cleaned, e.message)
+            return emptyList()
+        }
+        return try {
+            val root = mapper.readTree(body)
+            val recordings = root.path("recordings")
+            if (!recordings.isArray) return emptyList()
+            val out = linkedSetOf<String>()
+            for (rec in recordings) {
+                val releases = rec.path("releases")
+                if (!releases.isArray) continue
+                for (rel in releases) {
+                    rel.textOrNull("id")?.let { out += it }
+                }
+            }
+            out.toList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz ISRC parse failed for {}: {}", cleaned, e.message)
+            emptyList()
+        }
+    }
+
+    override fun searchReleaseByArtistAndAlbum(albumArtist: String, album: String): List<String> {
+        val artist = albumArtist.trim()
+        val title = album.trim()
+        if (artist.isBlank() || title.isBlank()) return emptyList()
+        val query = "artist:\"${luceneEscape(artist)}\" AND release:\"${luceneEscape(title)}\""
+        val url = "$BASE/release/?query=${URLEncoder.encode(query, Charsets.UTF_8)}&limit=10&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on artist+album search: {} / {}", artist, title)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz artist+album search failed for {} / {}: {}", artist, title, e.message)
+            return emptyList()
+        }
+        return try {
+            parseReleaseMbidList(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz artist+album parse failed for {} / {}: {}", artist, title, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseReleaseMbidList(body: String): List<String> {
+        val root = mapper.readTree(body)
+        val releases = root.path("releases")
+        if (!releases.isArray) return emptyList()
+        return releases.mapNotNull { it.textOrNull("id") }
+    }
+
+    /**
+     * Escape the subset of Lucene special chars that MB's search backend
+     * treats specially inside quoted phrases. We quote the value, so only
+     * backslash and double-quote need escaping.
+     */
+    private fun luceneEscape(s: String): String =
+        s.replace("\\", "\\\\").replace("\"", "\\\"")
 
     internal fun parseRecordingCredits(body: String): List<MusicBrainzRecordingCredit> {
         val root = mapper.readTree(body)
@@ -633,6 +754,8 @@ class MusicBrainzHttpService : MusicBrainzService {
         private const val MIN_GAP_MILLIS = 1100L
         private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         private val BARCODE_RE = Regex("^\\d{8,14}$")
+        /** ISRC: 2-letter country, 3-char registrant, 2-digit year, 5-digit designation. */
+        private val ISRC_RE = Regex("^[A-Z]{2}[A-Z0-9]{3}\\d{2}\\d{5}$")
     }
 
     private class RateLimitedException : RuntimeException("rate limited")

@@ -1,4 +1,4 @@
-.unmatched-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.unmatched-page { padding: 1.5rem; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 
 h2 { margin: 0 0 0.75rem; }
@@ -34,6 +34,18 @@ h2 { margin: 0 0 0.75rem; }
 .parsed-cell {
   display: block; max-width: 220px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ids-cell { display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
+
+.id-chip {
+  display: inline-block;
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
 .action-buttons { display: flex; gap: 0.25rem; }

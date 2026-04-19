@@ -22,6 +22,10 @@ interface UnmatchedAudio {
   parsed_duration_seconds: number | null;
   parsed_mb_release_id: string | null;
   parsed_mb_recording_id: string | null;
+  parsed_upc: string | null;
+  parsed_isrc: string | null;
+  parsed_catalog_number: string | null;
+  parsed_label: string | null;
   discovered_at: string | null;
 }
 
@@ -62,7 +66,7 @@ export class UnmatchedAudioComponent implements OnInit {
   readonly trackSearching = signal(false);
   readonly trackResults = signal<TrackCandidate[]>([]);
 
-  readonly columns = ['file', 'track', 'album', 'artist', 'duration', 'actions'];
+  readonly columns = ['file', 'track', 'album', 'artist', 'ids', 'duration', 'actions'];
 
   async ngOnInit(): Promise<void> {
     await this.refresh();

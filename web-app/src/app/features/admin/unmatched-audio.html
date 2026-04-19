@@ -53,6 +53,25 @@
           </td>
         </ng-container>
 
+        <ng-container matColumnDef="ids">
+          <th mat-header-cell *matHeaderCellDef>Identifiers</th>
+          <td mat-cell *matCellDef="let f">
+            <div class="ids-cell">
+              @if (f.parsed_upc) { <span class="id-chip" title="UPC">UPC {{ f.parsed_upc }}</span> }
+              @if (f.parsed_catalog_number) {
+                <span class="id-chip" title="Catalog #">
+                  {{ f.parsed_catalog_number }}@if (f.parsed_label) { ({{ f.parsed_label }}) }
+                </span>
+              }
+              @if (f.parsed_isrc) { <span class="id-chip" title="ISRC">ISRC {{ f.parsed_isrc }}</span> }
+              @if (f.parsed_mb_release_id) { <span class="id-chip" title="MB release MBID">MBID</span> }
+              @if (!f.parsed_upc && !f.parsed_catalog_number && !f.parsed_isrc && !f.parsed_mb_release_id) {
+                —
+              }
+            </div>
+          </td>
+        </ng-container>
+
         <ng-container matColumnDef="duration">
           <th mat-header-cell *matHeaderCellDef>Duration</th>
           <td mat-cell *matCellDef="let f">{{ formatDuration(f.parsed_duration_seconds) }}</td>

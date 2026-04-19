@@ -25,6 +25,8 @@ import net.stewart.mediamanager.service.ManagedDirectoryService
 import net.stewart.mediamanager.service.MigrateOwnershipPhotosUpdater
 import net.stewart.mediamanager.service.MigrateSeasonDataUpdater
 import net.stewart.mediamanager.service.ClearOlImageCacheUpdater
+import net.stewart.mediamanager.service.ClearAllAlbumsUpdater
+import net.stewart.mediamanager.service.ClearUnmatchedAudioUpdater
 import net.stewart.mediamanager.service.RepairFulfilledWishesUpdater
 import net.stewart.mediamanager.service.RetryUnmatchedBooksUpdater
 import net.stewart.mediamanager.service.PopulateSeasonsUpdater
@@ -135,6 +137,8 @@ object Bootstrap {
         SchemaUpdaterRunner.register(MigrateOwnershipPhotosUpdater())
         SchemaUpdaterRunner.register(RetryUnmatchedBooksUpdater())
         SchemaUpdaterRunner.register(ClearOlImageCacheUpdater())
+        SchemaUpdaterRunner.register(ClearUnmatchedAudioUpdater())
+        SchemaUpdaterRunner.register(ClearAllAlbumsUpdater())
         SchemaUpdaterRunner.runAll()
 
         ManagedDirectoryService.ensureManagedDirectories()

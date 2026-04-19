@@ -81,6 +81,9 @@ class EnrichmentIntegrationTest {
         override fun listArtistReleaseGroups(artistMbid: String, limit: Int) = emptyList<ArtistReleaseGroupRef>()
         override fun listReleaseRecordingCredits(releaseMbid: String) = emptyList<MusicBrainzRecordingCredit>()
         override fun listArtistMemberships(artistMbid: String) = emptyList<MusicBrainzMembership>()
+        override fun searchByCatalogNumber(catalogNumber: String, label: String?) = emptyList<String>()
+        override fun searchByIsrc(isrc: String) = emptyList<String>()
+        override fun searchReleaseByArtistAndAlbum(albumArtist: String, album: String) = emptyList<String>()
     }
 
     /** TMDB service that returns controlled responses without making HTTP calls. */

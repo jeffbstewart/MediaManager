@@ -38,11 +38,33 @@ object AudioTagReader {
         /** MUSICBRAINZ_TRACKID on Vorbis, `MusicBrainz Track Id` on ID3 = recording MBID. */
         val musicBrainzRecordingId: String?,
         /** MUSICBRAINZ_ARTISTID; semicolon-separated if there are multiple. First ID only. */
-        val musicBrainzArtistId: String?
+        val musicBrainzArtistId: String?,
+        /**
+         * EAN-13 / UPC barcode from the release. Vorbis `UPC` or `BARCODE`,
+         * ID3 `TXXX:BARCODE` or `TXXX:UPC`. When present this is
+         * authoritative for matching — MB's barcode search returns the
+         * exact pressing.
+         */
+        val upc: String?,
+        /**
+         * Per-track ISRC (International Standard Recording Code). Vorbis
+         * `ISRC`, ID3 `TSRC`. MB has an `/isrc/{isrc}` endpoint that
+         * resolves to a recording; good fallback when UPC is missing but
+         * individual tracks carry ISRCs.
+         */
+        val isrc: String?,
+        /**
+         * Label's catalog number, e.g. "CDP 593178". Vorbis
+         * `CATALOGNUMBER` / `LABELNO`, ID3 `TXXX:CATALOGNUMBER`.
+         */
+        val catalogNumber: String?,
+        /** Label / publisher name. Vorbis `LABEL` / `ORGANIZATION`, ID3 `TPUB`. */
+        val label: String?
     ) {
         companion object {
             val EMPTY = AudioTags(
-                null, null, null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null
             )
         }
     }
@@ -111,7 +133,16 @@ object AudioTagReader {
             musicBrainzArtistId = tags.firstValue(
                 "musicbrainz_artistid",
                 "musicbrainz artist id"
-            )?.substringBefore(';')?.trim()?.ifBlank { null }
+            )?.substringBefore(';')?.trim()?.ifBlank { null },
+            // UPC is usually digits only, but some writers wrap it in spaces
+            // or include a hyphenated form — cleanup handled downstream in
+            // the MB lookup shim.
+            upc = tags.firstValue("upc", "barcode"),
+            // ISRCs are 12-character codes (e.g. "GBAYE8200051"). Some writers
+            // carry a stack of ISRCs separated by `/`; take the first.
+            isrc = tags.firstValue("isrc", "tsrc")?.substringBefore('/')?.trim()?.ifBlank { null },
+            catalogNumber = tags.firstValue("catalognumber", "labelno", "catalog_number", "catalog"),
+            label = tags.firstValue("label", "organization", "publisher")
         )
     }
 

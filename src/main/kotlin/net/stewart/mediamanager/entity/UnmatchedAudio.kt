@@ -34,6 +34,14 @@ data class UnmatchedAudio(
     var parsed_mb_release_group_id: String? = null,
     /** MUSICBRAINZ_TRACKID (= recording MBID) from tags. */
     var parsed_mb_recording_id: String? = null,
+    /** EAN-13 / UPC from the `UPC` / `BARCODE` tag — authoritative MB match key when present. */
+    var parsed_upc: String? = null,
+    /** Per-track ISRC from the `ISRC` / `TSRC` tag. */
+    var parsed_isrc: String? = null,
+    /** Label catalog number, e.g. "CDP 593178". */
+    var parsed_catalog_number: String? = null,
+    /** Label / publisher name from the `LABEL` / `TPUB` tag. */
+    var parsed_label: String? = null,
     var match_status: String = UnmatchedAudioStatus.UNMATCHED.name,
     var linked_track_id: Long? = null,
     var discovered_at: LocalDateTime? = null,

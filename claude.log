@@ -4191,3 +4191,40 @@ Session 2 (Mar 25):
   the fix — buddy reconnect triggered the orphan cleanup.
 - Files: src/main/kotlin/net/stewart/mediamanager/grpc/BuddyGrpcService.kt
 ===
+
+=== 2026-04-18 — Music scanner: tiered fallback + reprocess pass ===
+- Problem: every audio file landed in UnmatchedAudio because
+  MusicScannerAgent.handleAlbumDir only matched via MUSICBRAINZ_ALBUMID.
+  User's ripper (dBpoweramp) doesn't write MBIDs — tags present are
+  UPC, ISRC, Catalog #, Label, Album, Album Artist.
+- Added MusicBrainzService fallback endpoints:
+    - searchByCatalogNumber(catno, label?)  → /release/?query=catno:...
+    - searchByIsrc(isrc)                    → /isrc/{isrc}?inc=releases
+    - searchReleaseByArtistAndAlbum(a, b)   → /release/?query=artist:"..." AND release:"..."
+- MusicScannerAgent.resolveReleaseIdForDir walks 5 tiers per album
+  directory: MBID → UPC → Catalog#(+Label) → ISRC → Artist+Album.
+  First tier to resolve wins; MB's own relevance ordering picks the
+  candidate within a tier.
+- Added reprocessUnmatched() housekeeping pass that runs at the top of
+  every scan cycle, retries resolution on up to REPROCESS_LIMIT=60
+  existing UNMATCHED rows using their stored parsed identifiers, and
+  deletes rows that now resolve (the next fs walk re-discovers and links).
+- Schema: V081__unmatched_audio_identifiers.sql adds
+  parsed_upc / parsed_isrc / parsed_catalog_number / parsed_label.
+  UnmatchedAudio entity + stageUnmatched persist these.
+  AudioTagReader already parses them (done in prior turn).
+- Admin UI: /api/v2/admin/unmatched-audio exposes the new fields, and
+  the Angular table grew an "Identifiers" column with chip rendering
+  so admins can see what match data was available.
+- Tests: StubMusicBrainzService in EnrichmentIntegrationTest stubs the
+  three new methods. Full suite green.
+- Files touched:
+  - src/main/kotlin/.../service/MusicBrainzService.kt
+  - src/main/kotlin/.../service/MusicScannerAgent.kt
+  - src/main/kotlin/.../service/AudioTagReader.kt
+  - src/main/kotlin/.../entity/UnmatchedAudio.kt
+  - src/main/kotlin/.../armeria/UnmatchedAudioHttpService.kt
+  - src/main/resources/db/migration/V081__unmatched_audio_identifiers.sql (new)
+  - src/test/kotlin/.../EnrichmentIntegrationTest.kt
+  - web-app/src/app/features/admin/unmatched-audio.{ts,html,scss}
+===

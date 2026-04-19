@@ -47,15 +47,9 @@ object PosterCacheService {
      * - If no poster_cache_id at all, generates a new UUID, fetches, and updates the title.
      */
     fun cacheAndServe(title: Title, size: PosterSize): Path? {
-        val posterPath = title.poster_path ?: return null
-
-        // TMDB poster paths always start with "/" (e.g. "/abc123.jpg"). Book
-        // titles store non-TMDB sentinels like "isbn/<isbn>" meant for the
-        // Open Library proxy — those are served by the caller after this
-        // returns null, not by fetching from image.tmdb.org.
-        if (!posterPath.startsWith("/")) return null
-
-        // Determine or generate the cache UUID
+        // If we've already cached a poster for this title (from any origin —
+        // TMDB, embedded album art, Open Library …), serve the cached file
+        // regardless of what `poster_path` points at.
         val existingCacheId = title.poster_cache_id
         if (existingCacheId != null) {
             val cached = resolve(existingCacheId)
@@ -64,6 +58,13 @@ object PosterCacheService {
                 return cached
             }
         }
+
+        val posterPath = title.poster_path ?: return null
+
+        // Auto-fetch from TMDB only for TMDB-shaped paths. Book ("isbn/...")
+        // and album ("caa/...") sentinels are served by the caller via their
+        // respective proxies when this returns null.
+        if (!posterPath.startsWith("/")) return null
 
         val cacheId = existingCacheId ?: UUID.randomUUID().toString()
         val destPath = shardedPath(cacheId)
@@ -88,6 +89,32 @@ object PosterCacheService {
         }
 
         return destPath
+    }
+
+    /**
+     * Write raw JPEG [bytes] into the cache for [title] and set its
+     * `poster_cache_id`. Used for images we source locally (e.g. embedded
+     * cover art extracted from a FLAC's PICTURE block) where there's no
+     * upstream URL to fetch. Reuses any existing cache UUID so this
+     * overwrites the previously stored poster for that title.
+     */
+    fun storeJpegBytes(title: Title, bytes: ByteArray): Path? {
+        if (bytes.isEmpty()) return null
+        val cacheId = title.poster_cache_id ?: UUID.randomUUID().toString()
+        val destPath = shardedPath(cacheId)
+        return try {
+            Files.createDirectories(destPath.parent)
+            Files.write(destPath, bytes)
+            if (title.poster_cache_id == null) {
+                title.poster_cache_id = cacheId
+                title.save()
+            }
+            countCache("embedded")
+            destPath
+        } catch (e: Exception) {
+            log.warn("Failed to write embedded poster for title {}: {}", title.id, e.message)
+            null
+        }
     }
 
     private fun fetchAndWrite(url: String, dest: Path): Boolean {
