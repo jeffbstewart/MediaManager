@@ -570,12 +570,16 @@ fun ArtistEntity.toProto(): Artist = artist {
     this@toProto.end_date?.year?.let { endYear = it }
 }
 
-fun ArtistEntity.toListItem(ownedAlbumCount: Int): ArtistListItem = artistListItem {
+fun ArtistEntity.toListItem(
+    ownedAlbumCount: Int,
+    fallbackAlbumTitleId: Long? = null
+): ArtistListItem = artistListItem {
     id = this@toListItem.id!!
     name = this@toListItem.name
     this@toListItem.sort_name.takeIf { it.isNotBlank() }?.let { sortName = it }
     artistType = this@toListItem.artist_type.toProtoArtistType()
     this.ownedAlbumCount = ownedAlbumCount
+    fallbackAlbumTitleId?.let { this.fallbackAlbumTitleId = it }
 }
 
 fun AuthorEntity.toProto(): Author = author {

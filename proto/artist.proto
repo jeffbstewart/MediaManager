@@ -25,8 +25,15 @@ service ArtistService {
 message ListArtistsRequest {
   int32 page = 1;
   int32 limit = 2;
-  optional string sort = 3;              // "name", "recent", "popularity"
+  // Sort modes: "albums" (owned-album count desc, default), "name"
+  // (sort_name asc), "recent" (created_at desc). "popularity" is
+  // accepted as an alias for "albums" for back-compat.
+  optional string sort = 3;
   optional string q = 4;
+  // True keeps only artists with at least one playable album (a track
+  // with a populated file_path). The web audio landing page sets this;
+  // legacy clients that omit it get every artist regardless.
+  bool playable_only = 5;
 }
 
 message ArtistListResponse {
@@ -40,6 +47,10 @@ message ArtistListItem {
   optional string sort_name = 3;
   ArtistType artist_type = 4;
   int32 owned_album_count = 5;
+  // Populated when the artist has at least one owned album. Cards use
+  // the album's poster as a hero fallback when no headshot is cached.
+  // Fetch via ImageService with IMAGE_TYPE_POSTER_THUMBNAIL + this id.
+  optional int64 fallback_album_title_id = 6;
 }
 
 message ArtistIdRequest { int64 artist_id = 1; }

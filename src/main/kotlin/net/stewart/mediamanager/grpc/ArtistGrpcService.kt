@@ -34,22 +34,76 @@ class ArtistGrpcService(
     // ------------------------------------------------------------------
 
     override suspend fun listArtists(request: ListArtistsRequest): ArtistListResponse {
-        currentUser()
+        val user = currentUser()
         val ownedAlbumsByArtist = TitleArtist.findAll().groupingBy { it.artist_id }.eachCount()
-        val all = Artist.findAll()
-        val filtered = request.q.takeIf { request.hasQ() && it.isNotBlank() }?.lowercase()?.let { needle ->
-            all.filter { it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
-        } ?: all
 
-        val sorted = when (request.sort.takeIf { request.hasSort() }) {
-            "recent" -> filtered.sortedByDescending { it.updated_at ?: it.created_at ?: java.time.LocalDateTime.MIN }
-            "popularity" -> filtered.sortedByDescending { ownedAlbumsByArtist[it.id] ?: 0 }
+        // Album-cover fallback: ordered by artist_order so primary credits
+        // come first; we want a recognizable cover, not the first guest spot.
+        val albumsByArtist: Map<Long, List<Long>> = TitleArtist.findAll()
+            .sortedBy { it.artist_order }
+            .groupBy({ it.artist_id }, { it.title_id })
+        val visibleAlbumIds: Set<Long> = TitleEntity.findAll()
+            .filter {
+                it.media_type == MediaTypeEnum.ALBUM.name &&
+                    !it.hidden &&
+                    user.canSeeRating(it.content_rating)
+            }
+            .mapNotNull { it.id }
+            .toSet()
+
+        // Playable-only: artist has at least one album whose tracks
+        // include a populated file_path. Computing this once vs. per-row.
+        val playableArtistIds: Set<Long> = if (request.playableOnly) {
+            val playableTitleIds = net.stewart.mediamanager.entity.Track.findAll()
+                .filter { !it.file_path.isNullOrBlank() }
+                .map { it.title_id }
+                .toSet()
+            TitleArtist.findAll()
+                .filter { it.title_id in playableTitleIds }
+                .map { it.artist_id }
+                .toSet()
+        } else emptySet()
+
+        val all = Artist.findAll()
+        val filtered = all.asSequence()
+            .let { seq ->
+                if (request.playableOnly) seq.filter { it.id in playableArtistIds } else seq
+            }
+            .let { seq ->
+                val needle = request.q.takeIf { request.hasQ() && it.isNotBlank() }?.lowercase()
+                if (needle != null) {
+                    seq.filter { it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
+                } else seq
+            }
+            .toList()
+
+        val sortKey = request.sort.takeIf { request.hasSort() }
+        val sorted = when (sortKey) {
+            "name" -> filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
+            "recent" -> filtered.sortedByDescending {
+                it.updated_at ?: it.created_at ?: java.time.LocalDateTime.MIN
+            }
+            // "albums" is the canonical name; "popularity" stays as a
+            // back-compat alias for the original ListArtistsRequest shape.
+            // No sort key falls through to "albums" so the iOS landing
+            // page gets the right default without setting the field.
+            "popularity", "albums", null -> filtered.sortedWith(
+                compareByDescending<Artist> { ownedAlbumsByArtist[it.id] ?: 0 }
+                    .thenBy { it.sort_name.ifBlank { it.name }.lowercase() }
+            )
             else -> filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
         }
 
         val (paged, pagination) = paginate(sorted, request.page, request.limit)
         return artistListResponse {
-            artists.addAll(paged.map { it.toListItem(ownedAlbumsByArtist[it.id] ?: 0) })
+            artists.addAll(paged.map { artist ->
+                val fallbackAlbumId = albumsByArtist[artist.id]
+                    ?.firstOrNull { it in visibleAlbumIds }
+                artist.toListItem(
+                    ownedAlbumCount = ownedAlbumsByArtist[artist.id] ?: 0,
+                    fallbackAlbumTitleId = fallbackAlbumId
+                )
+            })
             this.pagination = pagination
         }
     }

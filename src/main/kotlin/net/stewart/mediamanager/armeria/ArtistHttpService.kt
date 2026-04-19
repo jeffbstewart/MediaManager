@@ -11,6 +11,7 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Default
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.ArtistMembership
 import net.stewart.mediamanager.entity.ArtistType
@@ -18,9 +19,11 @@ import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.service.MusicBrainzHttpService
 import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.WishListService
+import java.time.LocalDateTime
 
 /**
  * Artist browse surface. Mirrors [AuthorHttpService] but reads from the
@@ -35,26 +38,100 @@ class ArtistHttpService(
 
     private val gson = Gson()
 
+    /**
+     * Artist exploration grid for the audio landing page. Backs the
+     * `/app/content/music` view: cards per artist sorted by owned-album
+     * count by default, click-through to the artist detail page.
+     *
+     * Filters:
+     *  - playable_only=true (default) — keep only artists with at least
+     *    one playable album (a Track row with a populated file_path).
+     *  - q — substring match (case-insensitive) on name and sort_name.
+     *
+     * Sort modes:
+     *  - albums (default) — owned-album count desc, then sort_name asc.
+     *  - name — sort_name asc (fall back to name when blank).
+     *  - recent — created_at desc, then id desc.
+     *
+     * Each card carries a fallback_poster_url pointing at the first
+     * owned album's poster, used by the client when no headshot is
+     * cached yet (parallel to the artist hero page's fallback).
+     */
     @Get("/api/v2/catalog/artists")
-    fun list(ctx: ServiceRequestContext): HttpResponse {
-        ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+    fun list(
+        ctx: ServiceRequestContext,
+        @Param("sort") @Default("albums") sort: String,
+        @Param("q") @Default("") q: String,
+        @Param("playable_only") @Default("true") playableOnly: Boolean
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
-        // Owned-album count per artist (lead with most-collected).
-        val byArtist = TitleArtist.findAll().groupingBy { it.artist_id }.eachCount()
-        val artists = Artist.findAll()
-            .sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
-            .map { artist ->
-                mapOf(
-                    "id" to artist.id,
-                    "name" to artist.name,
-                    "sort_name" to artist.sort_name,
-                    "artist_type" to artist.artist_type,
-                    "headshot_url" to headshotUrl(artist),
-                    "album_count" to (byArtist[artist.id] ?: 0)
-                )
+        val countsByArtist = TitleArtist.findAll().groupingBy { it.artist_id }.eachCount()
+
+        // Artists with at least one playable album. We compute
+        // playableTitleIds once (Track with file_path) then walk
+        // TitleArtist to find which artists touch them.
+        val playableTitleIds: Set<Long> = Track.findAll()
+            .filter { !it.file_path.isNullOrBlank() }
+            .map { it.title_id }
+            .toSet()
+        val playableArtistIds: Set<Long> = TitleArtist.findAll()
+            .filter { it.title_id in playableTitleIds }
+            .map { it.artist_id }
+            .toSet()
+
+        // First-album-cover fallback per artist (artist_order = 0 gives
+        // primary-credit albums first; we want a recognizable cover, not
+        // the first split-credit guest spot).
+        val albumsByArtist: Map<Long, List<Long>> = TitleArtist.findAll()
+            .sortedBy { it.artist_order }
+            .groupBy({ it.artist_id }, { it.title_id })
+        val titlesById: Map<Long?, Title> = Title.findAll()
+            .filter { it.media_type == MMMediaType.ALBUM.name && !it.hidden && user.canSeeRating(it.content_rating) }
+            .associateBy { it.id }
+
+        val needle = q.trim().lowercase().takeIf { it.isNotEmpty() }
+        var artists = Artist.findAll().asSequence()
+        if (playableOnly) artists = artists.filter { it.id in playableArtistIds }
+        if (needle != null) {
+            artists = artists.filter {
+                it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle)
             }
+        }
 
-        return jsonResponse(gson.toJson(mapOf("artists" to artists)))
+        val sorted = when (sort) {
+            "name" -> artists.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
+            "recent" -> artists.sortedWith(
+                compareByDescending<Artist> { it.created_at ?: LocalDateTime.MIN }
+                    .thenByDescending { it.id ?: 0L }
+            )
+            // "albums" — default. Most-collected first, alphabetical tiebreaker.
+            else -> artists.sortedWith(
+                compareByDescending<Artist> { countsByArtist[it.id] ?: 0 }
+                    .thenBy { it.sort_name.ifBlank { it.name }.lowercase() }
+            )
+        }.toList()
+
+        val rows = sorted.map { artist ->
+            val firstOwnedAlbumId = albumsByArtist[artist.id]
+                ?.firstOrNull { it in titlesById }
+            val firstOwnedAlbum = firstOwnedAlbumId?.let { titlesById[it] }
+            mapOf(
+                "id" to artist.id,
+                "name" to artist.name,
+                "sort_name" to artist.sort_name,
+                "artist_type" to artist.artist_type,
+                "headshot_url" to headshotUrl(artist),
+                "album_count" to (countsByArtist[artist.id] ?: 0),
+                "fallback_poster_url" to firstOwnedAlbum?.posterUrl(PosterSize.THUMBNAIL)
+            )
+        }
+
+        return jsonResponse(gson.toJson(mapOf(
+            "artists" to rows,
+            "total" to rows.size
+        )))
     }
 
     @Get("/api/v2/catalog/artists/{artistId}")
