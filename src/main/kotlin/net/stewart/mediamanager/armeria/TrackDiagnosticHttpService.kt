@@ -233,6 +233,11 @@ class TrackDiagnosticHttpService {
         var filesWrongAlbumTag = 0
         var filesPathRejected = 0
         var rootsWalked = mutableListOf<String>()
+        // Dedup across walks — the fallback music_root walk overlaps
+        // the sibling-root walk (sibling root is usually a subtree of
+        // music_root), and we don't want to double-count the same
+        // files in the summary.
+        val seenPaths = mutableSetOf<String>()
         // Keep a handful of rejected album-tag strings so the response
         // can show the admin exactly why nothing matched (e.g. "files
         // say 'Whitney Houston: The Greatest Hits', title says 'The
@@ -251,6 +256,14 @@ class TrackDiagnosticHttpService {
                 .map { normalize(it.name) }
                 .filter { it.isNotBlank() }
         }
+        // The album's recording MBIDs — used as a strong-signal bypass
+        // on the album-tag check. If the file carries an MBID we know
+        // belongs to this album, its album string doesn't have to
+        // match (MB may have picked a different canonical release name
+        // than what the taggers wrote into the files).
+        val albumRecordingMbids: Set<String> = tracks
+            .mapNotNull { it.musicbrainz_recording_id?.takeIf { m -> m.isNotBlank() } }
+            .toSet()
 
         // Walk strategy: start from `primaryRoot`; if that finds zero
         // audio files, try `fallbackRoot` (typically music_root). This
@@ -265,6 +278,7 @@ class TrackDiagnosticHttpService {
                 stream.forEach { p ->
                     if (!p.isRegularFile()) return@forEach
                     if (p.extension.lowercase() !in audioExts) return@forEach
+                    if (!seenPaths.add(p.toString())) return@forEach
                     filesWalked++
                     if (p.toString() in alreadyLinkedPaths) {
                         filesAlreadyLinked++
@@ -289,7 +303,12 @@ class TrackDiagnosticHttpService {
                     }
                     val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
                         ?: AudioTagReader.AudioTags.EMPTY
-                    if (!albumTagLooksRight(tags, title)) {
+                    // MBID match bypasses the album-tag check — the
+                    // file is authoritatively on this album even if
+                    // its album string doesn't match our title name.
+                    val mbidOk = tags.musicBrainzRecordingId != null &&
+                        tags.musicBrainzRecordingId in albumRecordingMbids
+                    if (!mbidOk && !albumTagLooksRight(tags, title)) {
                         filesWrongAlbumTag++
                         if (rejectedAlbumSamples.size < 5) {
                             tags.album?.takeIf { it.isNotBlank() }
