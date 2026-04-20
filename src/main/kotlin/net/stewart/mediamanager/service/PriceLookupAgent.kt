@@ -20,9 +20,13 @@ import kotlin.time.Duration.Companion.seconds
  *   - keepa_api_key: Keepa API key
  *   - keepa_tokens_per_minute: batch size per cycle (default 20)
  *
- * Eligible items: media_format in (DVD, BLURAY, UHD_BLURAY, HD_DVD),
- * linked to a non-PERSONAL title, and replacement_value_updated_at is
- * null or older than 30 days.
+ * Eligible items: physical formats we can insure — video discs
+ * (DVD, BLURAY, UHD_BLURAY, HD_DVD), physical books (MASS_MARKET_PAPERBACK,
+ * TRADE_PAPERBACK, HARDBACK), and audiobook CDs. Excludes digital
+ * editions (EBOOK_EPUB / EBOOK_PDF / AUDIOBOOK_DIGITAL / DIGITAL_MUSIC_ALBUM)
+ * which aren't replaceable in the insurance sense. Also excludes
+ * items linked to PERSONAL titles, and items whose
+ * replacement_value_updated_at is null or older than 30 days.
  *
  * ASIN resolution priority per item:
  *   1. override_asin (user override)
@@ -62,8 +66,17 @@ class PriceLookupAgent(
         private val STARTUP_DELAY = 30.seconds
         private const val STALENESS_DAYS = 30L
         private val ELIGIBLE_FORMATS = setOf(
+            // Video discs
             MediaFormat.DVD.name, MediaFormat.BLURAY.name,
-            MediaFormat.UHD_BLURAY.name, MediaFormat.HD_DVD.name
+            MediaFormat.UHD_BLURAY.name, MediaFormat.HD_DVD.name,
+            // Physical books. Keepa tracks these natively; ISBNs map
+            // cleanly to ASINs via the same UPC lookup path the video
+            // discs use.
+            MediaFormat.MASS_MARKET_PAPERBACK.name,
+            MediaFormat.TRADE_PAPERBACK.name,
+            MediaFormat.HARDBACK.name,
+            // Audiobook CDs. Physical, replaceable, priced on Amazon.
+            MediaFormat.AUDIOBOOK_CD.name
         )
     }
 
@@ -339,6 +352,13 @@ class PriceLookupAgent(
         MediaFormat.BLURAY.name -> "Blu-ray"
         MediaFormat.UHD_BLURAY.name -> "4K UHD Blu-ray"
         MediaFormat.HD_DVD.name -> "HD DVD"
+        // Books — Keepa's search narrows fine on these keywords.
+        // Mass-market vs trade paperbacks don't have distinct Amazon
+        // categories, so both route to "Paperback".
+        MediaFormat.MASS_MARKET_PAPERBACK.name -> "Paperback"
+        MediaFormat.TRADE_PAPERBACK.name -> "Paperback"
+        MediaFormat.HARDBACK.name -> "Hardcover"
+        MediaFormat.AUDIOBOOK_CD.name -> "Audiobook CD"
         else -> ""
     }
 }
