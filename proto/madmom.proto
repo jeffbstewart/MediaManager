@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "MadmomServiceProto";
+// No swift_prefix — iOS doesn't use this service. It's the MM server
+// talking to its own madmom sidecar process.
+
+import "common.proto";
+
+// gRPC contract between the MM server (client) and the madmom sidecar
+// (server). The sidecar runs madmom's RNN-based downbeat tracker in
+// Python; we talk to it over gRPC to get time-signature detection
+// without dragging Python dependencies into the Kotlin container.
+//
+// Single RPC plus a health check. File paths are resolved inside the
+// sidecar container, which shares a read-only bind mount of the NAS
+// music tree at the same path as MM (so the path string round-trips
+// cleanly from MM's DB through the gRPC call).
+service MadmomAnalysis {
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse);
+  rpc Health(Empty) returns (HealthStatus);
+}
+
+message AnalyzeRequest {
+  // Absolute path inside the sidecar container. Must resolve to a
+  // readable audio file (flac / mp3 / m4a / wav / ogg).
+  string file_path = 1;
+}
+
+message AnalyzeResponse {
+  // Detected BPM (integer). Madmom returns a float — we round to int
+  // to match the existing track.bpm column type. Absent when madmom
+  // couldn't confidently detect a tempo.
+  optional int32 bpm = 1;
+
+  // Time signature in "beats/division" form. Currently madmom's
+  // DBNDownBeatTracker only distinguishes 3/4 and 4/4 (we pass
+  // beats_per_bar=[3, 4]); absent when neither is a confident fit.
+  optional string time_signature = 2;
+
+  // Confidence score in 0..1 for the winning time-signature class.
+  // Derived from the downbeat-tracker's class posterior averaged
+  // across the track. Callers can threshold on this to decide
+  // whether to auto-apply or queue for manual review.
+  optional double downbeat_confidence = 3;
+
+  // Number of detected beats — mostly for sanity-checking (a
+  // 3-minute track should have ~300-400 beats at typical tempos).
+  optional int32 beat_count = 4;
+}
+
+message HealthStatus {
+  // "READY" once models are loaded, "LOADING_MODELS" during startup,
+  // "DEGRADED" if the sidecar is up but inference is failing.
+  string status = 1;
+  // Upstream madmom version string — useful for forensics when a
+  // bump changes detection accuracy.
+  string madmom_version = 2;
+}

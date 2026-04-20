@@ -33,8 +33,10 @@ data class Track(
      * [bpm_source]="ESSENTIA_FAILED".
      */
     var bpm_analysis_failed_mtime: Long? = null,
-    /** Raw time signature, e.g. "3/4" / "4/4". Mostly null — no standard ID3 frame; user can set manually. */
+    /** Raw time signature, e.g. "3/4" / "4/4". From tag / madmom / manual override — see [time_signature_source]. */
     var time_signature: String? = null,
+    /** Provenance of [time_signature]: "TAG" / "MADMOM" / "MANUAL" / "MADMOM_FAILED". */
+    var time_signature_source: String = "TAG",
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

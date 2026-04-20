@@ -63,6 +63,63 @@ services:
       start_period: 30s
       retries: 3
 
+  # ── Madmom sidecar (optional) ────────────────────────────────────
+  # Python subprocess that runs madmom's downbeat tracker for per-track
+  # time-signature detection (3/4 vs. 4/4 for ballroom filters, etc.).
+  # Kept out of the main image because madmom's Python deps don't
+  # cleanly install on musl/Alpine. If you don't want time-signature
+  # detection, delete this service and the TimeSignatureAgent on the
+  # MM side self-disables after one probe.
+  mediamanager-madmom:
+    image: ghcr.io/jeffbstewart/mediamanager-madmom:latest
+    container_name: mediamanager-madmom
+    restart: unless-stopped
+
+    # MM uses host networking for Roku SSDP; it therefore can't be on
+    # a bridge "internal" network with the sidecar. Instead the
+    # sidecar's gRPC port is bound to the NAS host's loopback only,
+    # so MM reaches it at `localhost:9091` but nothing on the LAN can.
+    # The `binnacle_ingest` external network is Binnacle's own bridge
+    # network — shared only so this sidecar's logs reach the Binnacle
+    # collector without being reachable anywhere else.
+    ports:
+      - "127.0.0.1:9091:9091"    # gRPC MadmomAnalysis (MM reads)
+      - "127.0.0.1:8090:8090"    # Prometheus /metrics (host scrape)
+    networks:
+      - binnacle_ingest
+
+    # Bind the same NAS music path used by MM, read-only — madmom only
+    # needs to read files, never writes. The path matches MM's
+    # container path exactly so `track.file_path` values round-trip.
+    volumes:
+      - /volume1/your-media-share:/media:ro
+
+    environment:
+      # Binnacle OTLP HTTP — the sidecar ships stdlib logs through
+      # OpenTelemetry. The endpoint uses the Docker service name
+      # `binnacle`, resolved via the shared binnacle_ingest network.
+      - BINNACLE_OTLP_ENDPOINT=http://binnacle:4318/v1/logs
+      - BINNACLE_API_KEY=${BINNACLE_API_KEY}
+      - SIDECAR_VERSION=dev
+      - TZ=America/New_York
+
+    mem_limit: 2g            # madmom models + one track's frames ≈ 500 MB active
+    memswap_limit: 2g
+
+    healthcheck:
+      # gRPC health via the same server, exercised with grpcurl-shaped
+      # python one-liner. grpc_health_probe would be nicer but adds a
+      # whole binary; this uses the interpreter we already have.
+      test: ["CMD", "python", "-c",
+             "import grpc, sys; import madmom_pb2, madmom_pb2_grpc, common_pb2;
+              ch = grpc.insecure_channel('localhost:9091');
+              s = madmom_pb2_grpc.MadmomAnalysisStub(ch);
+              sys.exit(0 if s.Health(common_pb2.Empty()) else 1)"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
   # ── Watchtower (optional) ────────────────────────────────────────
   # Automatically pulls new :latest images and restarts the container.
   # Remove this service if you prefer manual updates.
@@ -73,3 +130,12 @@ services:
   #   volumes:
   #     - /var/run/docker.sock:/var/run/docker.sock
   #   command: --interval 300 --cleanup mediamanager
+
+# ── Networks ────────────────────────────────────────────────────────
+networks:
+  binnacle_ingest:
+    # Pre-created by Binnacle's compose stack. Referenced here by name
+    # so our sidecar can reach the OTLP collector over an isolated
+    # bridge — no LAN exposure, no internet route for madmom-sidecar.
+    name: binnacle_ingest
+    external: true

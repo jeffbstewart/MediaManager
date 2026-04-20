@@ -19,7 +19,9 @@ import net.stewart.mediamanager.service.PersonnelEnrichmentAgent
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookScannerAgent
 import net.stewart.mediamanager.service.EssentiaAgent
+import net.stewart.mediamanager.service.MadmomClient
 import net.stewart.mediamanager.service.MusicScannerAgent
+import net.stewart.mediamanager.service.TimeSignatureAgent
 import net.stewart.mediamanager.service.RecommendationAgent
 import net.stewart.mediamanager.service.CollectionRefreshAgent
 import net.stewart.mediamanager.service.PopularityRefreshAgent
@@ -112,6 +114,13 @@ fun main(args: Array<String>) {
     val essentiaAgent = EssentiaAgent()
     essentiaAgent.start()
     Runtime.getRuntime().addShutdownHook(Thread { essentiaAgent.stop() })
+
+    val timeSignatureAgent = TimeSignatureAgent()
+    timeSignatureAgent.start()
+    Runtime.getRuntime().addShutdownHook(Thread {
+        timeSignatureAgent.stop()
+        MadmomClient.shutdown()
+    })
 
     val recommendationAgent = RecommendationAgent()
     recommendationAgent.start()

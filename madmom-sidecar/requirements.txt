@@ -1,0 +1,19 @@
+# madmom + its pinned scientific deps. These versions are what works
+# with madmom 0.16 on Python 3.10 — bumping anything here without
+# testing is a good way to get import errors.
+madmom==0.16.1
+numpy==1.24.4
+scipy==1.10.1
+cython==0.29.36
+
+# gRPC server
+grpcio==1.62.1
+grpcio-tools==1.62.1
+
+# Prometheus metrics + liveness probe
+prometheus_client==0.20.0
+
+# OpenTelemetry → Binnacle OTLP HTTP logs
+opentelemetry-api==1.25.0
+opentelemetry-sdk==1.25.0
+opentelemetry-exporter-otlp-proto-http==1.25.0
