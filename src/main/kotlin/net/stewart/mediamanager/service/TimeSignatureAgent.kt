@@ -39,29 +39,69 @@ class TimeSignatureAgent(
         private val POLL_INTERVAL = 2.seconds
         private val BACKLOG_LOG_INTERVAL = 60.seconds
         private val IDLE_INTERVAL = 10.minutes
+        /**
+         * Retry delays for the initial availability probe. Sized so the
+         * total covers the plausible startup race: MM and the sidecar
+         * both launched by `docker-compose up` can see each other come
+         * alive within seconds, but first-time image pulls or pip-installs
+         * on a cold sidecar push the window to a minute or two. Six
+         * attempts, total ~135 s of waiting.
+         */
+        private val STARTUP_RETRY_DELAYS = listOf(
+            5.seconds, 10.seconds, 15.seconds, 30.seconds, 60.seconds, 60.seconds
+        )
+        /** How often the main loop re-probes when the sidecar is absent. */
+        private val ABSENT_RECHECK_INTERVAL = 5.minutes
     }
 
     fun start() {
         if (running.getAndSet(true)) return
         thread = Thread({
-            log.info("TimeSignatureAgent starting")
-            if (!MadmomClient.isAvailable()) {
+            log.info("TimeSignatureAgent starting; probing madmom sidecar")
+            val reachedOnStartup = probeWithRetries()
+            if (!reachedOnStartup) {
                 log.warn(
-                    "TimeSignatureAgent: madmom sidecar unreachable — " +
-                    "time-signature analysis DISABLED for this process. " +
+                    "TimeSignatureAgent: madmom sidecar still unreachable after {} " +
+                    "startup attempts — will re-check every {}min while running. " +
                     "Deploy the mediamanager-madmom container (see docker-compose.yml) " +
-                    "or set madmom_sidecar_url in Settings."
+                    "or set madmom_sidecar_url in Settings to fix.",
+                    STARTUP_RETRY_DELAYS.size, ABSENT_RECHECK_INTERVAL.inWholeMinutes
                 )
-                running.set(false)
-                return@Thread
+            } else {
+                log.info("TimeSignatureAgent started — polling for tracks needing analysis")
             }
-            log.info("TimeSignatureAgent started — polling for tracks needing analysis")
-            runLoop()
+            // Enter the loop either way: a sidecar that wasn't ready
+            // at boot may come up shortly after (image still pulling,
+            // host still bringing dependencies online) and we want to
+            // recover without requiring a MM restart.
+            runLoop(initiallyAvailable = reachedOnStartup)
             log.info("TimeSignatureAgent stopped")
         }, "time-signature-agent").apply {
             isDaemon = true
             start()
         }
+    }
+
+    /**
+     * Probe the sidecar repeatedly with the configured backoff. Any
+     * single success short-circuits. Returns false if every attempt
+     * failed or the agent was stopped mid-wait.
+     */
+    private fun probeWithRetries(): Boolean {
+        for ((idx, delay) in STARTUP_RETRY_DELAYS.withIndex()) {
+            if (!running.get()) return false
+            if (MadmomClient.isAvailable()) return true
+            log.info(
+                "TimeSignatureAgent probe {}/{} failed; sleeping {}s before retry",
+                idx + 1, STARTUP_RETRY_DELAYS.size, delay.inWholeSeconds
+            )
+            try {
+                clock.sleep(delay)
+            } catch (_: InterruptedException) {
+                return false
+            }
+        }
+        return false
     }
 
     fun stop() {
@@ -70,10 +110,30 @@ class TimeSignatureAgent(
         thread = null
     }
 
-    private fun runLoop() {
+    private fun runLoop(initiallyAvailable: Boolean) {
+        var sidecarReady = initiallyAvailable
         var lastBacklogLogAtMs = 0L
+        var lastAbsentRecheckMs = 0L
         while (running.get()) {
             try {
+                // If the sidecar was missing at startup, re-probe
+                // periodically — a human deploying the sidecar late
+                // shouldn't need to restart MM for analysis to begin.
+                if (!sidecarReady) {
+                    val now = clock.currentTimeMillis()
+                    if (now - lastAbsentRecheckMs >= ABSENT_RECHECK_INTERVAL.inWholeMilliseconds) {
+                        lastAbsentRecheckMs = now
+                        if (MadmomClient.isAvailable()) {
+                            log.info("TimeSignatureAgent: madmom sidecar reachable on re-probe; enabling analysis")
+                            sidecarReady = true
+                        }
+                    }
+                    if (!sidecarReady) {
+                        clock.sleep(ABSENT_RECHECK_INTERVAL)
+                        continue
+                    }
+                }
+
                 val backlog = remainingCount()
                 val now = clock.currentTimeMillis()
                 if (backlog > 0 && now - lastBacklogLogAtMs >= BACKLOG_LOG_INTERVAL.inWholeMilliseconds) {

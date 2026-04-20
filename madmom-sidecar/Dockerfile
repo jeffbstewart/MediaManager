@@ -16,7 +16,12 @@
 # binnacle_ingest Docker network (set up in Binnacle's compose) so
 # it can reach the collector without being LAN-exposed.
 
-FROM python:3.10-slim
+# Python 3.9 rather than 3.10+ — madmom 0.16.1 (last release 2018)
+# uses a setup.py pattern that trips modern pip build isolation, and
+# its Cython shims don't import cleanly under the 3.10+ import machinery
+# without patches. 3.9 is the sweet spot where `pip install madmom`
+# still Just Works with the pinned scientific stack.
+FROM python:3.9-slim
 
 # System deps madmom needs:
 #   - ffmpeg: audio decode backend for non-WAV inputs
@@ -35,7 +40,15 @@ WORKDIR /app
 # `build.context: .`). Paths below are repo-root-relative so we can
 # pull in the canonical proto without duplicating it.
 COPY madmom-sidecar/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# madmom's setup.py imports numpy at install time (pre-PEP 518 pattern)
+# so the build backend needs numpy + Cython already in place BEFORE
+# `pip install madmom` runs. --no-build-isolation keeps pip from
+# spinning up an ephemeral env where those aren't visible.
+RUN pip install --no-cache-dir \
+        numpy==1.24.4 \
+        cython==0.29.36 \
+    && pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # Generate Python gRPC stubs from the shared proto. common.proto is
 # pulled in alongside because madmom.proto imports it.
