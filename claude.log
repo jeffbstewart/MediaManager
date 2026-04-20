@@ -4440,3 +4440,40 @@ Session 2 (Mar 25):
   content/playlist* components, shared/add-to-playlist component, title-detail (3),
   queue-panel (3).
 ===
+
+=== 2026-04-19 21:40 — Tags for music and books (A + B) ===
+- Phase A: made existing title-level tags work for albums + books.
+  - TagHttpService.tagDetail + searchTitlesForTag: include media_type,
+    artist_name, author_name. Playability computed per media type
+    (album = ripped tracks exist; book = digital edition exists).
+  - CatalogGrpcService.getTagDetail rewritten around new
+    buildTagTitleList helper that spans all media types and populates
+    Title.artist_name / Title.author_name. listTags count spans via
+    new playableTitleIdsForTagging.
+  - Angular TagDetail: 1:1 album cards with artist+year, 2:3 book
+    cards with author+year, media-type pill. Title-detail admin-only
+    + Tag button + per-badge X via new reusable TagPickerComponent.
+- Phase B: track-level tags.
+  - V088 schema adds track_tag table (unique on (track_id, tag_id),
+    cascading FKs to track + tag).
+  - TrackTag entity; TagService adds addTagToTrack / removeTagFromTrack /
+    getTagsForTrack / getTrackIdsForTags / getTagTrackCounts;
+    deleteTag cleans track_tag rows too. 7 new unit tests: idempotency,
+    unknown-track/unknown-tag no-ops, OR-union, independence from
+    title tags, deletion cascade.
+  - HTTP: POST/DELETE /api/v2/catalog/tags/{id}/tracks/{trackId},
+    GET/POST /api/v2/catalog/tracks/{id}/tags. TagDetail response now
+    includes tracks[] + track_total.
+  - gRPC: catalog.proto TagDetail gains tracks; 7 new RPCs
+    (AddTagToTitle, RemoveTagFromTitle, SetTitleTags, AddTagToTrack,
+    RemoveTagFromTrack, SetTrackTags, ListTagsForTrack). Mutations
+    admin-gated with PERMISSION_DENIED on non-admin.
+  - Angular: tagged-tracks section on TagDetail with Play All + per-row
+    play; per-track tag icon on album page opens shared TagPickerComponent
+    with already-attached tags excluded.
+- Backend tests + Angular build green.
+- Files touched: V088 migration, TrackTag entity, proto/catalog.proto,
+  proto/common.proto, TagService, TagServiceTest, TagHttpService,
+  CatalogGrpcService, catalog.service.ts, tag-detail.ts, title-detail
+  (3 files), new shared/tag-picker component (3 files).
+===

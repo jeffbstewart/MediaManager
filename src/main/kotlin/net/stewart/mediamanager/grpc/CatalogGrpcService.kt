@@ -5,6 +5,7 @@ import io.grpc.Status
 import io.grpc.StatusException
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.FamilyMember
+import net.stewart.mediamanager.entity.MediaItem as MediaItemEntity
 import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.TitleFamilyMember
@@ -30,7 +31,8 @@ import net.stewart.mediamanager.entity.TitleGenre
 import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.Author
-import net.stewart.mediamanager.entity.Track
+import net.stewart.mediamanager.entity.Track as TrackRow
+import net.stewart.mediamanager.service.TagService
 import net.stewart.mediamanager.entity.TitleArtist
 import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.service.MissingSeasonService
@@ -498,7 +500,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val artists = Artist.findAll().filter { it.id in artistIds }
         val artistsById = artists.associateBy { it.id }
 
-        val tracks = Track.findAll()
+        val tracks = TrackRow.findAll()
             .filter { it.title_id == titleId }
             .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
 
@@ -639,7 +641,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
 
             // 1c. Track search (when include_audio)
-            for (track in Track.findAll()) {
+            for (track in TrackRow.findAll()) {
                 if (!queryTokensAudio.all { track.name.lowercase().contains(it) }) continue
                 val album = catalog.titlesById[track.title_id] ?: continue
                 val albumArtistName = titleArtistLeadName(album.id!!)
@@ -1052,9 +1054,8 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
     override suspend fun listTags(request: Empty): TagListResponse {
         val user = currentUser()
-        val nasRoot = TranscoderAgent.getNasRoot()
-        val catalog = loadCatalog(user, nasRoot)
-        val playableTitleIds = catalog.playableTitles.mapNotNull { it.id }.toSet()
+        // Tags span every media type; the count must include albums + books.
+        val playableForTags = playableTitleIdsForTagging(user)
 
         val allTags = TagEntity.findAll()
         val titleTags = TitleTag.findAll()
@@ -1062,7 +1063,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         val items = allTags.mapNotNull { tag ->
             val tagTitleIds = titleIdsByTag[tag.id] ?: return@mapNotNull null
-            val playableCount = tagTitleIds.count { it in playableTitleIds }
+            val playableCount = tagTitleIds.count { it in playableForTags }
             if (playableCount == 0) return@mapNotNull null
             tagListItem {
                 id = tag.id!!
@@ -1084,13 +1085,219 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             ?: throw StatusException(Status.NOT_FOUND)
 
         val titleIds = TitleTag.findAll().filter { it.tag_id == tagId }.map { it.title_id }.toSet()
-        val titles = buildPlayableTitleList(titleIds, user)
+        // Use the cross-media-type tag helper so albums and books appear too.
+        val titles = buildTagTitleList(titleIds, user)
+
+        // Tagged tracks (phase B). Only include tracks whose parent
+        // album is visible to the user; apply the same rating + hidden
+        // filters as the titles list.
+        val taggedTrackIds = TagService.getTrackIdsForTags(setOf(tagId))
+        val tracks: List<Track> = if (taggedTrackIds.isEmpty()) emptyList() else {
+            val rows = TrackRow.findAll().filter { it.id in taggedTrackIds }
+            val albumIds = rows.map { it.title_id }.toSet()
+            val visibleAlbums = TitleEntity.findAll()
+                .filter { it.id in albumIds && !it.hidden }
+                .filter { user.canSeeRating(it.content_rating) }
+                .mapNotNull { it.id }
+                .toSet()
+            rows.filter { it.title_id in visibleAlbums }
+                .sortedWith(compareBy({ it.title_id }, { it.disc_number }, { it.track_number }))
+                .map { it.toProto() }
+        }
 
         return tagDetail {
             name = tag.name
             color = tag.bg_color.toProtoColor()
             this.titles.addAll(titles)
+            this.tracks.addAll(tracks)
         }
+    }
+
+    // =====================================================================
+    // Tag mutations (admin-gated). These mirror the HTTP endpoints in
+    // TagHttpService.kt; the web client stays on HTTP, but iOS gets
+    // the same surface through gRPC.
+    // =====================================================================
+
+    override suspend fun addTagToTitle(request: TagTitleRequest): Empty {
+        requireAdmin()
+        if (TagEntity.findById(request.tagId) == null || TitleEntity.findById(request.titleId) == null) {
+            throw StatusException(Status.NOT_FOUND)
+        }
+        TagService.addTagToTitle(request.titleId, request.tagId)
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun removeTagFromTitle(request: TagTitleRequest): Empty {
+        requireAdmin()
+        TagService.removeTagFromTitle(request.titleId, request.tagId)
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun setTitleTags(request: SetTitleTagsRequest): Empty {
+        requireAdmin()
+        val titleId = request.titleId
+        if (TitleEntity.findById(titleId) == null) throw StatusException(Status.NOT_FOUND)
+        val desired = request.tagIdsList.toSet()
+        val existing = TitleTag.findAll().filter { it.title_id == titleId }
+        for (row in existing) {
+            if (row.tag_id !in desired) TagService.removeTagFromTitle(titleId, row.tag_id)
+        }
+        val existingIds = existing.map { it.tag_id }.toSet()
+        for (tid in desired) {
+            if (tid !in existingIds) TagService.addTagToTitle(titleId, tid)
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun addTagToTrack(request: TagTrackRequest): Empty {
+        requireAdmin()
+        if (TagEntity.findById(request.tagId) == null || TrackRow.findById(request.trackId) == null) {
+            throw StatusException(Status.NOT_FOUND)
+        }
+        TagService.addTagToTrack(request.trackId, request.tagId)
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun removeTagFromTrack(request: TagTrackRequest): Empty {
+        requireAdmin()
+        TagService.removeTagFromTrack(request.trackId, request.tagId)
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun setTrackTags(request: SetTrackTagsRequest): Empty {
+        requireAdmin()
+        val trackId = request.trackId
+        if (TrackRow.findById(trackId) == null) throw StatusException(Status.NOT_FOUND)
+        val desired = request.tagIdsList.toSet()
+        val existing = net.stewart.mediamanager.entity.TrackTag.findAll()
+            .filter { it.track_id == trackId }
+        for (row in existing) {
+            if (row.tag_id !in desired) TagService.removeTagFromTrack(trackId, row.tag_id)
+        }
+        val existingIds = existing.map { it.tag_id }.toSet()
+        for (tid in desired) {
+            if (tid !in existingIds) TagService.addTagToTrack(trackId, tid)
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun listTagsForTrack(request: TrackIdRequest): TagListResponse {
+        currentUser() // auth only; track tags are readable by any logged-in user
+        if (TrackRow.findById(request.trackId) == null) throw StatusException(Status.NOT_FOUND)
+        val tags = TagService.getTagsForTrack(request.trackId).map { tag ->
+            tagListItem {
+                id = tag.id!!
+                name = tag.name
+                color = tag.bg_color.toProtoColor()
+                titleCount = 0  // per-track view doesn't need the aggregate count
+            }
+        }
+        return tagListResponse { this.tags.addAll(tags) }
+    }
+
+    /** Throws PERMISSION_DENIED when the caller isn't admin. */
+    private fun requireAdmin() {
+        val user = currentUser()
+        if (!user.isAdmin()) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("admin only"))
+        }
+    }
+
+    /**
+     * Set of title ids the user can see *and* that are playable in some
+     * media-type-appropriate sense. Used by [listTags] for accurate
+     * per-tag counts that include albums + books.
+     */
+    private fun playableTitleIdsForTagging(user: AppUser): Set<Long> {
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val visibleTitles = TitleEntity.findAll()
+            .filter { !it.hidden && user.canSeeRating(it.content_rating) }
+
+        val playableTranscodeIds = TranscodeEntity.findAll()
+            .filter { it.file_path != null && isPlayable(it, nasRoot) }
+            .groupBy { it.title_id }
+        val tracksByTitle = TrackRow.findAll()
+            .filter { !it.file_path.isNullOrBlank() }
+            .groupBy { it.title_id }
+        val mediaItemsById = MediaItemEntity.findAll().associateBy { it.id }
+        val digitalTitleIds = MediaItemTitle.findAll()
+            .filter { mediaItemsById[it.media_item_id]?.file_path?.isNotBlank() == true }
+            .map { it.title_id }
+            .toSet()
+
+        return visibleTitles.mapNotNull { title ->
+            val ok = when (title.media_type) {
+                MediaTypeEnum.ALBUM.name -> tracksByTitle[title.id]?.isNotEmpty() == true
+                MediaTypeEnum.BOOK.name -> title.id in digitalTitleIds
+                MediaTypeEnum.TV.name ->
+                    playableTranscodeIds[title.id]?.any { it.episode_id != null } == true
+                else -> playableTranscodeIds[title.id]?.isNotEmpty() == true
+            }
+            if (ok) title.id else null
+        }.toSet()
+    }
+
+    /**
+     * Cross-media-type version of [buildPlayableTitleList]. Returns a
+     * playable+visible Title proto for each id, populated with the
+     * media-type-appropriate primary credit (artist_name for ALBUM,
+     * author_name for BOOK). Sorted alphabetically by name so the
+     * resulting list reads predictably regardless of source order.
+     */
+    private fun buildTagTitleList(titleIds: Set<Long>, user: AppUser): List<Title> {
+        val nasRoot = TranscoderAgent.getNasRoot()
+        val visibleTitles = TitleEntity.findAll()
+            .filter { it.id in titleIds && !it.hidden }
+            .filter { user.canSeeRating(it.content_rating) }
+        if (visibleTitles.isEmpty()) return emptyList()
+
+        val playableByTitle = TranscodeEntity.findAll()
+            .filter { it.file_path != null && isPlayable(it, nasRoot) }
+            .groupBy { it.title_id }
+        val tracksByTitle = TrackRow.findAll()
+            .filter { !it.file_path.isNullOrBlank() }
+            .groupBy { it.title_id }
+        val mediaItemsById = MediaItemEntity.findAll().associateBy { it.id }
+        val digitalTitleIds = MediaItemTitle.findAll()
+            .filter { mediaItemsById[it.media_item_id]?.file_path?.isNotBlank() == true }
+            .map { it.title_id }
+            .toSet()
+
+        val primaryArtistByTitle: Map<Long, Artist> = run {
+            val links = TitleArtist.findAll().filter { it.artist_order == 0 }
+            val byId = Artist.findAll()
+                .filter { it.id in links.map { l -> l.artist_id }.toSet() }
+                .associateBy { it.id }
+            links.mapNotNull { l -> byId[l.artist_id]?.let { l.title_id to it } }.toMap()
+        }
+        val primaryAuthorByTitle: Map<Long, Author> = run {
+            val links = TitleAuthor.findAll().filter { it.author_order == 0 }
+            val byId = Author.findAll()
+                .filter { it.id in links.map { l -> l.author_id }.toSet() }
+                .associateBy { it.id }
+            links.mapNotNull { l -> byId[l.author_id]?.let { l.title_id to it } }.toMap()
+        }
+
+        return visibleTitles
+            .filter { title ->
+                when (title.media_type) {
+                    MediaTypeEnum.ALBUM.name -> tracksByTitle[title.id]?.isNotEmpty() == true
+                    MediaTypeEnum.BOOK.name -> title.id in digitalTitleIds
+                    MediaTypeEnum.TV.name -> playableByTitle[title.id]?.any { it.episode_id != null } == true
+                    else -> playableByTitle[title.id]?.isNotEmpty() == true
+                }
+            }
+            .sortedBy { (it.sort_name ?: it.name).lowercase() }
+            .map { title ->
+                val tc = playableByTitle[title.id]?.firstOrNull()
+                title.toProto(
+                    bestTranscode = tc,
+                    nasRoot = nasRoot,
+                    artistName = primaryArtistByTitle[title.id]?.name,
+                    authorName = primaryAuthorByTitle[title.id]?.name
+                )
+            }
     }
 
     // ========================================================================

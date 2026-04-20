@@ -37,6 +37,8 @@ export interface MissingSeason {
 export interface TitleCard {
   title_id: number;
   title_name: string;
+  /** Server-side enum name: MOVIE / TV / PERSONAL / BOOK / ALBUM. Optional for callers that pre-filter by media type. */
+  media_type?: string;
   poster_url: string | null;
   release_year: number | null;
   content_rating: string | null;
@@ -338,6 +340,20 @@ export interface TagDetailResponse {
   tag: TagCard;
   titles: TitleCard[];
   total: number;
+  /** Phase B — tracks tagged with this tag. Independent of the title list. */
+  tracks: TaggedTrackCard[];
+  track_total: number;
+}
+
+/** Track row on the tag detail page (tagged-tracks section). */
+export interface TaggedTrackCard {
+  track_id: number;
+  track_name: string;
+  duration_seconds: number | null;
+  title_id: number;
+  title_name: string | null;
+  poster_url: string | null;
+  playable: boolean;
 }
 
 export interface FamilyVideoCard {
@@ -799,6 +815,35 @@ export class CatalogService {
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
     return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+  }
+
+  /** Admin only — create a new tag and return its id. */
+  async createTag(name: string, bgColor: string): Promise<{ id: number }> {
+    return firstValueFrom(this.http.post<{ ok: boolean; id: number }>(
+      '/api/v2/admin/tags', { name, bg_color: bgColor }));
+  }
+
+  /**
+   * Admin only — replace a title's tag set with [tagIds]. The server
+   * supports add/remove via /tags/{tagId}/titles/{titleId} too, but the
+   * set-API is one round-trip and the title-detail page already has the
+   * full current tag set in hand.
+   */
+  async setTitleTags(titleId: number, tagIds: number[]): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/catalog/titles/${titleId}/tags`,
+      { tag_ids: tagIds }));
+  }
+
+  async getTrackTags(trackId: number): Promise<TagCard[]> {
+    const resp = await firstValueFrom(
+      this.http.get<{ tags: TagCard[] }>(`/api/v2/catalog/tracks/${trackId}/tags`));
+    return resp.tags ?? [];
+  }
+
+  /** Replace a track's tag set in one shot (admin only). */
+  async setTrackTags(trackId: number, tagIds: number[]): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/catalog/tracks/${trackId}/tags`,
+      { tag_ids: tagIds }));
   }
 
   async search(query: string, limit = 30): Promise<SearchResponse> {

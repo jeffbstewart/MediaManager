@@ -1,0 +1,34 @@
+<div class="picker" role="dialog" [attr.aria-label]="heading()">
+  <header class="picker-header">
+    <h2>{{ heading() }}</h2>
+    <button mat-icon-button type="button" (click)="cancelled.emit()" aria-label="Close">
+      <mat-icon>close</mat-icon>
+    </button>
+  </header>
+
+  @if (loading()) {
+    <div class="picker-loading"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <p class="picker-error">{{ error() }}</p>
+  } @else {
+    <button class="picker-row create-row" type="button" (click)="createNew()" [disabled]="busy()">
+      <mat-icon>add</mat-icon>
+      <span class="picker-name">Create new tag…</span>
+    </button>
+
+    @if (visibleTags().length === 0) {
+      <p class="picker-empty">No tags available.</p>
+    } @else {
+      <ul class="picker-list">
+        @for (t of visibleTags(); track t.id) {
+          <li>
+            <button class="picker-row" type="button" (click)="pick(t)" [disabled]="busy()">
+              <span class="tag-chip" [style.background-color]="t.bg_color"
+                    [style.color]="t.text_color">{{ t.name }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  }
+</div>

@@ -128,13 +128,29 @@
           }
 
           <!-- Tags -->
-          @if (t.tags.length > 0) {
+          @if (t.tags.length > 0 || features.isAdmin()) {
             <div class="tag-row">
               @for (tag of t.tags; track tag.id) {
-                <a class="tag-badge" [routerLink]="routes.tag(tag.id)"
-                   [style.background-color]="tag.bg_color" [style.color]="tag.text_color">
-                  {{ tag.name }}
-                </a>
+                <span class="tag-badge-wrap">
+                  <a class="tag-badge" [routerLink]="routes.tag(tag.id)"
+                     [style.background-color]="tag.bg_color" [style.color]="tag.text_color">
+                    {{ tag.name }}
+                  </a>
+                  @if (features.isAdmin()) {
+                    <button class="tag-remove-btn" type="button"
+                            (click)="removeTagFromTitle(tag.id)"
+                            [attr.aria-label]="'Remove ' + tag.name">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  }
+                </span>
+              }
+              @if (features.isAdmin()) {
+                <button class="tag-add-btn" type="button" (click)="openTagPicker()"
+                        aria-label="Add tag">
+                  <mat-icon>add</mat-icon>
+                  Tag
+                </button>
               }
             </div>
           }
@@ -284,6 +300,13 @@
                         aria-label="Add this track to a playlist">
                   <mat-icon>playlist_add</mat-icon>
                 </button>
+                @if (features.isAdmin()) {
+                  <button mat-icon-button class="track-play-btn"
+                          (click)="openTrackTagPicker(track.track_id, track.name)"
+                          aria-label="Tag this track">
+                    <mat-icon>sell</mat-icon>
+                  </button>
+                }
               </div>
             }
           </div>
@@ -438,6 +461,32 @@
         [heading]="pickerHeading()"
         (picked)="onPickerPicked($event)"
         (cancelled)="closePicker()" />
+    </div>
+  </div>
+}
+
+@if (tagPickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closeTagPicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-tag-picker
+        [excludeTagIds]="currentTagIds()"
+        heading="Add tag to this title"
+        (picked)="onTagPicked($event)"
+        (created)="onTagCreatedAndPicked($event)"
+        (cancelled)="closeTagPicker()" />
+    </div>
+  </div>
+}
+
+@if (trackTagPickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closeTrackTagPicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-tag-picker
+        [excludeTagIds]="currentTrackTagIds()"
+        [heading]="trackTagPickerHeading()"
+        (picked)="onTrackTagPicked($event)"
+        (created)="onTrackTagCreatedAndPicked($event)"
+        (cancelled)="closeTrackTagPicker()" />
     </div>
   </div>
 }

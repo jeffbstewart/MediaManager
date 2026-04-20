@@ -187,6 +187,26 @@ message TagTitleRequest {
   int64 title_id = 2;
 }
 
+message SetTitleTagsRequest {
+  int64 title_id = 1;
+  repeated int64 tag_ids = 2;
+}
+
+// Tags phase B — track-level tagging.
+message TagTrackRequest {
+  int64 tag_id = 1;
+  int64 track_id = 2;
+}
+
+message SetTrackTagsRequest {
+  int64 track_id = 1;
+  repeated int64 tag_ids = 2;
+}
+
+message TrackIdRequest {
+  int64 track_id = 1;
+}
+
 message GenreIdRequest {
   int64 genre_id = 1;
 }
@@ -421,6 +441,10 @@ message TagDetail {
   string name = 1;
   Color color = 2;
   repeated Title titles = 3;
+  // Tags phase B — individual tracks tagged with this tag. Empty
+  // for tags applied only to titles. Client typically renders these
+  // in a "Tagged tracks" section below the title grid.
+  repeated Track tracks = 4;
 }
 
 message GenreDetail {

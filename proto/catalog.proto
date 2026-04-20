@@ -36,6 +36,21 @@ service CatalogService {
   rpc SetHidden(SetFlagRequest) returns (Empty);
   rpc RequestRetranscode(TitleIdRequest) returns (QueuedResponse);
   rpc RequestLowStorageTranscode(TitleIdRequest) returns (QueuedResponse);
+
+  // --- Tag mutations (admin only; non-admins receive PERMISSION_DENIED).
+  // Create/delete of tags themselves lives on AdminService; these RPCs
+  // wire existing tags to specific titles / tracks. ---
+  rpc AddTagToTitle(TagTitleRequest) returns (Empty);
+  rpc RemoveTagFromTitle(TagTitleRequest) returns (Empty);
+  rpc SetTitleTags(SetTitleTagsRequest) returns (Empty);
+
+  // --- Track-level tags (Tags phase B). Same Tag rows apply; the
+  // link table is separate so tracks can be curated independently
+  // of their parent album. Mutations are admin only. ---
+  rpc AddTagToTrack(TagTrackRequest) returns (Empty);
+  rpc RemoveTagFromTrack(TagTrackRequest) returns (Empty);
+  rpc SetTrackTags(SetTrackTagsRequest) returns (Empty);
+  rpc ListTagsForTrack(TrackIdRequest) returns (TagListResponse);
 }
 
 // --- Requests ---

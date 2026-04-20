@@ -14,6 +14,8 @@ import { CatalogService, TitleDetail, AlbumPersonnelEntry } from '../../core/cat
 import { FeatureService } from '../../core/feature.service';
 import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
 import { AddToPlaylistComponent } from '../../shared/add-to-playlist/add-to-playlist';
+import { TagPickerComponent } from '../../shared/tag-picker/tag-picker';
+import type { TagCard } from '../../core/catalog.service';
 
 @Component({
   selector: 'app-title-detail',
@@ -28,6 +30,7 @@ import { AddToPlaylistComponent } from '../../shared/add-to-playlist/add-to-play
     MatTabsModule,
     DecimalPipe,
     AddToPlaylistComponent,
+    TagPickerComponent,
   ],
   templateUrl: './title-detail.html',
   styleUrl: './title-detail.scss',
@@ -49,6 +52,99 @@ export class TitleDetailComponent implements OnInit {
   readonly pickerOpen = signal(false);
   readonly pickerTrackIds = signal<number[]>([]);
   readonly pickerHeading = signal('Add to playlist');
+
+  // Tag picker — admin-only "+ tag" affordance on the title detail.
+  readonly tagPickerOpen = signal(false);
+
+  // Track-level tag picker (phase B) — opens per-track, carries the
+  // track id + current tag set so the picker can hide already-attached tags.
+  readonly trackTagPickerOpen = signal(false);
+  readonly trackTagPickerHeading = signal('Tag this track');
+  private trackTagTargetId = 0;
+  private trackTagCurrentIds: number[] = [];
+
+  currentTrackTagIds(): number[] {
+    return this.trackTagCurrentIds;
+  }
+
+  async openTrackTagPicker(trackId: number, trackName: string): Promise<void> {
+    this.trackTagTargetId = trackId;
+    this.trackTagPickerHeading.set(`Tag "${trackName}"`);
+    // Fetch the track's existing tags so the picker can hide them.
+    try {
+      const existing = await this.catalog.getTrackTags(trackId);
+      this.trackTagCurrentIds = existing.map(t => t.id);
+    } catch {
+      this.trackTagCurrentIds = [];
+    }
+    this.trackTagPickerOpen.set(true);
+  }
+
+  closeTrackTagPicker(): void {
+    this.trackTagPickerOpen.set(false);
+    this.trackTagTargetId = 0;
+    this.trackTagCurrentIds = [];
+  }
+
+  async onTrackTagPicked(tag: TagCard): Promise<void> {
+    await this.attachTrackTag(tag.id);
+  }
+
+  async onTrackTagCreatedAndPicked(tag: TagCard): Promise<void> {
+    await this.attachTrackTag(tag.id);
+  }
+
+  private async attachTrackTag(tagId: number): Promise<void> {
+    if (!this.trackTagTargetId) return;
+    const next = [...this.trackTagCurrentIds.filter(id => id !== tagId), tagId];
+    await this.catalog.setTrackTags(this.trackTagTargetId, next);
+    this.closeTrackTagPicker();
+  }
+
+  currentTagIds(): number[] {
+    return this.title()?.tags?.map(t => t.id) ?? [];
+  }
+
+  openTagPicker(): void { this.tagPickerOpen.set(true); }
+  closeTagPicker(): void { this.tagPickerOpen.set(false); }
+
+  async onTagPicked(tag: TagCard): Promise<void> {
+    await this.attachTag(tag.id);
+  }
+
+  async onTagCreatedAndPicked(tag: TagCard): Promise<void> {
+    // Fresh tag created from the picker — attach immediately.
+    await this.attachTag(tag.id);
+  }
+
+  async removeTagFromTitle(tagId: number): Promise<void> {
+    const t = this.title();
+    if (!t) return;
+    const next = (t.tags ?? []).map(x => x.id).filter(id => id !== tagId);
+    await this.catalog.setTitleTags(t.title_id, next);
+    await this.refreshTitle();
+  }
+
+  private async attachTag(tagId: number): Promise<void> {
+    const t = this.title();
+    if (!t) return;
+    const existing = (t.tags ?? []).map(x => x.id);
+    if (existing.includes(tagId)) {
+      this.tagPickerOpen.set(false);
+      return;
+    }
+    await this.catalog.setTitleTags(t.title_id, [...existing, tagId]);
+    this.tagPickerOpen.set(false);
+    await this.refreshTitle();
+  }
+
+  private async refreshTitle(): Promise<void> {
+    const t = this.title();
+    if (!t) return;
+    try {
+      this.title.set(await this.catalog.getTitleDetail(t.title_id));
+    } catch { /* keep existing */ }
+  }
 
   get isPersonal(): boolean { return this.title()?.media_type === 'PERSONAL'; }
   get isTv(): boolean { return this.title()?.media_type === 'TV'; }

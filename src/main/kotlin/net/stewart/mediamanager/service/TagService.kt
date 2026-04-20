@@ -7,6 +7,8 @@ import net.stewart.mediamanager.entity.TagSourceType
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TitleGenre
 import net.stewart.mediamanager.entity.TitleTag
+import net.stewart.mediamanager.entity.Track
+import net.stewart.mediamanager.entity.TrackTag
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 
@@ -56,8 +58,12 @@ object TagService {
     }
 
     fun deleteTag(tagId: Long) {
-        // Remove all title_tag associations first
+        // Remove all title_tag and track_tag associations first. The DB
+        // would cascade these via the FK, but doing it here keeps the
+        // search index notification consistent with the explicit delete
+        // path used elsewhere.
         TitleTag.findAll().filter { it.tag_id == tagId }.forEach { it.delete() }
+        TrackTag.findAll().filter { it.tag_id == tagId }.forEach { it.delete() }
         Tag.deleteById(tagId)
         log.info("Tag deleted: id={}", tagId)
         SearchIndexService.onTagChanged()
@@ -98,6 +104,49 @@ object TagService {
     /** Returns tag_id -> count of associated titles. */
     fun getTagTitleCounts(): Map<Long, Int> {
         return TitleTag.findAll()
+            .groupBy { it.tag_id }
+            .mapValues { it.value.size }
+    }
+
+    // ============================================================
+    // Track-level tags (Tags phase B). Independent surface — a track
+    // can carry tags that its parent album doesn't, and vice versa.
+    // ============================================================
+
+    fun addTagToTrack(trackId: Long, tagId: Long) {
+        if (Track.findById(trackId) == null) return
+        if (Tag.findById(tagId) == null) return
+        val exists = TrackTag.findAll().any { it.track_id == trackId && it.tag_id == tagId }
+        if (exists) return
+        TrackTag(track_id = trackId, tag_id = tagId, created_at = LocalDateTime.now()).save()
+        SearchIndexService.onTagChanged()
+    }
+
+    fun removeTagFromTrack(trackId: Long, tagId: Long) {
+        TrackTag.findAll()
+            .filter { it.track_id == trackId && it.tag_id == tagId }
+            .forEach { it.delete() }
+        SearchIndexService.onTagChanged()
+    }
+
+    fun getTagsForTrack(trackId: Long): List<Tag> {
+        val tagIds = TrackTag.findAll().filter { it.track_id == trackId }.map { it.tag_id }.toSet()
+        if (tagIds.isEmpty()) return emptyList()
+        return Tag.findAll().filter { it.id in tagIds }.sortedBy { it.name.lowercase() }
+    }
+
+    /** OR semantics — tracks with any of the given tags. */
+    fun getTrackIdsForTags(tagIds: Set<Long>): Set<Long> {
+        if (tagIds.isEmpty()) return emptySet()
+        return TrackTag.findAll()
+            .filter { it.tag_id in tagIds }
+            .map { it.track_id }
+            .toSet()
+    }
+
+    /** tag_id -> count of associated tracks. */
+    fun getTagTrackCounts(): Map<Long, Int> {
+        return TrackTag.findAll()
             .groupBy { it.tag_id }
             .mapValues { it.value.size }
     }
