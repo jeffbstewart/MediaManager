@@ -183,18 +183,36 @@ object AutoTagApplicator {
     }
 
     /**
-     * Find-or-create a tag keyed on (source_type, canonical_source_key).
-     * Display name is a title-case rendering of the canonical key;
-     * source_key itself stores the raw canonical lowercase form so
-     * future lookups don't depend on the display name surviving a rename.
+     * Find-or-create a tag for the given (source, canonicalKey). Lookup
+     * order:
+     *
+     * 1. Exact match on (source_type, source_key) — the canonical path
+     *    for auto-tags we've already created.
+     * 2. Case-insensitive match on the display name across ALL source
+     *    types — "Pop" the GENRE (from TMDB) and "Pop" the STYLE (from
+     *    ID3) collapse to one tag the user sees. Avoids colliding with
+     *    the UNIQUE constraint on tag.name, and keeps the user-facing
+     *    model intuitive.
+     * 3. Create a new tag when neither lookup hits.
      */
     internal fun findOrCreateTag(source: TagSourceType, canonicalKey: String): Tag {
-        val existing = Tag.findAll().firstOrNull {
+        val byKey = Tag.findAll().firstOrNull {
             it.source_type == source.name && it.source_key == canonicalKey
         }
-        if (existing != null) return existing
+        if (byKey != null) return byKey
 
         val name = displayNameFor(source, canonicalKey)
+        val byName = Tag.findAll().firstOrNull {
+            it.name.equals(name, ignoreCase = true)
+        }
+        if (byName != null) {
+            // Reuse the existing row rather than inserting a duplicate.
+            // Don't clobber its source_type — it was set by whoever
+            // created the tag first and some code paths
+            // (autoAssociateOnEnrichment) key off of it.
+            return byName
+        }
+
         val color = AUTO_PALETTE[(canonicalKey.hashCode() and 0x7FFFFFFF) % AUTO_PALETTE.size]
         val tag = Tag(
             name = name,

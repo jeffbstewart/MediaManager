@@ -4512,3 +4512,17 @@ Session 2 (Mar 25):
   button opens a two-step prompt with validation.
 - Backend tests + Angular build green.
 ===
+
+=== 2026-04-20 07:10 — audio 404 logging + tag-name collision fix ===
+- AudioStreamHttpService now logs at ERROR severity for every 404/500
+  path with track id, track name, file_path, and reason. Three 404
+  paths were previously silent; one was only WARN. Range-read
+  exceptions also bumped to ERROR with the range header.
+- AutoTagApplicator.findOrCreateTag now also looks up by display name
+  case-insensitively across any source_type before creating, so a
+  GENRE "Pop" tag and a STYLE "pop" key collapse to one tag. Fixes
+  backfill_track_id3_tags updater hitting the UNIQUE index on tag.name
+  when auto-creating a STYLE tag whose canonical form matched an
+  existing GENRE tag's name. Existing source_type preserved so the
+  TMDB enrichment autoAssociateOnEnrichment still works.
+===

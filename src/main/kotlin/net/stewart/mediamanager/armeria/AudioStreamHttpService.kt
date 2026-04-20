@@ -47,11 +47,27 @@ class AudioStreamHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx)
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
-        val track = Track.findById(trackId) ?: return notFound()
-        val sourcePath = track.file_path ?: return notFound()
+        val track = Track.findById(trackId)
+        if (track == null) {
+            log.error("Audio 404: no Track row for id={}", trackId)
+            return notFound()
+        }
+        val sourcePath = track.file_path
+        if (sourcePath.isNullOrBlank()) {
+            log.error(
+                "Audio 404: Track id={} (title_id={} \"{}\") has no file_path — " +
+                "it was ingested from MusicBrainz but never linked to a NAS file.",
+                trackId, track.title_id, track.name
+            )
+            return notFound()
+        }
         val sourceFile = File(sourcePath)
         if (!sourceFile.isFile) {
-            log.warn("Track {} file_path {} no longer exists on disk", trackId, sourcePath)
+            log.error(
+                "Audio 404: Track id={} (\"{}\") file_path=\"{}\" does not exist on disk — " +
+                "file was renamed, moved, or the NAS mount is missing.",
+                trackId, track.name, sourcePath
+            )
             return notFound()
         }
 
@@ -67,6 +83,13 @@ class AudioStreamHttpService {
         val sourceExt = sourceFile.extension.lowercase()
         val fileToServe = resolveFileToServe(trackId, sourceFile, sourceExt, ctx)
             ?: run {
+                // Not 404 but worth surfacing for the same reason — silently
+                // returning 500 makes debugging the transcode cache path hard.
+                log.error(
+                    "Audio 500: transcode cache returned null for track id={} (\"{}\") " +
+                    "source=\"{}\" ext={} — AudioTranscodeCache log will have details.",
+                    trackId, track.name, sourcePath, sourceExt
+                )
                 MetricsRegistry.countHttpResponse("audio", 500)
                 return HttpResponse.of(HttpStatus.INTERNAL_SERVER_ERROR)
             }
@@ -181,7 +204,8 @@ class AudioStreamHttpService {
                 HttpResponse.of(headers, HttpData.wrap(out, 0, offset))
             }
         } catch (e: Exception) {
-            log.warn("Audio range read error on {}: {}", file, e.message)
+            log.error("Audio 500: range read failed on path=\"{}\" range=\"{}\" length={}",
+                file.absolutePath, rangeHeader ?: "(none)", fileLength, e)
             MetricsRegistry.countHttpResponse("audio", 500)
             HttpResponse.of(HttpStatus.INTERNAL_SERVER_ERROR)
         }
