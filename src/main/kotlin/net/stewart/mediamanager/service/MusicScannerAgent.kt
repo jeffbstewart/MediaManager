@@ -519,7 +519,11 @@ class MusicScannerAgent(
             upc = row.parsed_upc,
             isrc = row.parsed_isrc,
             catalogNumber = row.parsed_catalog_number,
-            label = row.parsed_label
+            label = row.parsed_label,
+            genres = emptyList(),
+            styles = emptyList(),
+            bpm = null,
+            timeSignature = null
         )
     )
 
@@ -693,8 +697,30 @@ class MusicScannerAgent(
             return false
         }
         target.file_path = tf.path.toString()
+        // Persist raw BPM + time signature from the file's tags so the
+        // ballroom "can I waltz to this?" queries have data to filter
+        // on. Track auto-tags (genre/style/bpm-bucket/decade/time-sig)
+        // run off the same values.
+        target.bpm = tf.tags.bpm
+        target.time_signature = tf.tags.timeSignature
         target.updated_at = now
         target.save()
+
+        // Auto-tag the track and let the album inherit whatever reaches
+        // a majority. Safe to call repeatedly — applyToTrack is
+        // idempotent and applyToAlbum only adds missing propagations.
+        val titleId = target.title_id
+        val titleYear = Title.findById(titleId)?.release_year
+        AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
+            trackId = target.id!!,
+            genres = tf.tags.genres,
+            styles = tf.tags.styles,
+            bpm = tf.tags.bpm,
+            timeSignature = tf.tags.timeSignature,
+            year = titleYear
+        ))
+        AutoTagApplicator.applyToAlbum(titleId)
+
         log.info("Link {} → track id={} disc={} track={} (via {})",
             tf.path, target.id, target.disc_number, target.track_number,
             if (targetByMbid != null) "recording MBID" else "disc/track")

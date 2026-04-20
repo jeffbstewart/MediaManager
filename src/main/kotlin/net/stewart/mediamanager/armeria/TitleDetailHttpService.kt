@@ -334,7 +334,9 @@ class TitleDetailHttpService {
                     "name" to track.name,
                     "duration_seconds" to track.duration_seconds,
                     "track_artists" to perTrack,
-                    "tags" to perTrackTags
+                    "tags" to perTrackTags,
+                    "bpm" to track.bpm,
+                    "time_signature" to track.time_signature
                 )
             }
         } else emptyList()

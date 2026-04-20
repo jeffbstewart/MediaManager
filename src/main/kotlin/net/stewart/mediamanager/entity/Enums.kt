@@ -48,9 +48,15 @@ enum class PosterSource { AUTO, MANUAL }
 
 enum class TagSourceType {
     MANUAL,      // User-created tag, manually populated
-    GENRE,       // Backed by a TMDB genre name; auto-populated on enrichment
+    GENRE,       // TMDB genre (video) or ID3 genre (audio); auto-populated on enrichment / ingestion
     COLLECTION,  // Backed by a TMDB collection ID; auto-populated on enrichment (legacy, no longer created)
-    EVENT_TYPE   // Pre-seeded event categories for personal/home videos
+    EVENT_TYPE,  // Pre-seeded event categories for personal/home videos
+    // Music auto-tags (V089 +). Tag.source_key carries the canonical
+    // lowercase value for dedup — e.g. "post-punk" for a STYLE tag.
+    STYLE,       // ID3 TXXX:Style / Vorbis STYLE
+    BPM_BUCKET,  // "80-100" etc., derived from the raw BPM tag
+    DECADE,      // "1980s", derived from release year
+    TIME_SIG     // "3/4" / "4/4" / "6/8", from a TXXX:TIME_SIGNATURE or manual override
 }
 
 enum class ItemCondition {

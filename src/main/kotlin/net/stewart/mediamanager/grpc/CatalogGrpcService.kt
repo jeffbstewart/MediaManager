@@ -32,7 +32,9 @@ import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.Track as TrackRow
+import net.stewart.mediamanager.service.AutoTagApplicator
 import net.stewart.mediamanager.service.TagService
+import java.time.LocalDateTime
 import net.stewart.mediamanager.entity.TitleArtist
 import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.service.MissingSeasonService
@@ -1091,7 +1093,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         // Tagged tracks (phase B). Only include tracks whose parent
         // album is visible to the user; apply the same rating + hidden
         // filters as the titles list.
-        val taggedTrackIds = TagService.getTrackIdsForTags(setOf(tagId))
+        val taggedTrackIds = TagService.getTrackIdsForTagsWithInheritance(setOf(tagId))
         val tracks: List<Track> = if (taggedTrackIds.isEmpty()) emptyList() else {
             val rows = TrackRow.findAll().filter { it.id in taggedTrackIds }
             val albumIds = rows.map { it.title_id }.toSet()
@@ -1182,6 +1184,59 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         return Empty.getDefaultInstance()
     }
 
+    override suspend fun setTrackMusicTags(request: SetTrackMusicTagsRequest): Empty {
+        requireAdmin()
+        val track = TrackRow.findById(request.trackId)
+            ?: throw StatusException(Status.NOT_FOUND)
+
+        if (request.hasBpm()) {
+            // bpm = 0 is the "clear" marker; anything else must be in range.
+            val v = request.bpm
+            if (v != 0 && v !in 1..999) {
+                throw StatusException(Status.INVALID_ARGUMENT.withDescription("bpm must be 1..999, or 0 to clear"))
+            }
+            track.bpm = if (v == 0) null else v
+        }
+        if (request.hasTimeSignature()) {
+            val raw = request.timeSignature.trim()
+            val normalized = raw.ifBlank { null }
+            if (normalized != null && !TIME_SIG_RE.matches(normalized)) {
+                throw StatusException(Status.INVALID_ARGUMENT.withDescription("time_signature must look like '3/4'"))
+            }
+            track.time_signature = normalized
+        }
+        track.updated_at = LocalDateTime.now()
+        track.save()
+
+        // Re-apply auto-tags so BPM_BUCKET / TIME_SIG stay consistent
+        // with the override. Strip stale ones first.
+        val staleTagIds = net.stewart.mediamanager.entity.TrackTag.findAll()
+            .filter { it.track_id == track.id }
+            .map { it.tag_id }
+            .toSet()
+        val purgeableSources = setOf(
+            net.stewart.mediamanager.entity.TagSourceType.BPM_BUCKET.name,
+            net.stewart.mediamanager.entity.TagSourceType.TIME_SIG.name
+        )
+        val purgeableTagIds = net.stewart.mediamanager.entity.Tag.findAll()
+            .filter { it.id in staleTagIds && it.source_type in purgeableSources }
+            .mapNotNull { it.id }.toSet()
+        net.stewart.mediamanager.entity.TrackTag.findAll()
+            .filter { it.track_id == track.id && it.tag_id in purgeableTagIds }
+            .forEach { it.delete() }
+        val year = TitleEntity.findById(track.title_id)?.release_year
+        AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
+            trackId = track.id!!,
+            genres = emptyList(),
+            styles = emptyList(),
+            bpm = track.bpm,
+            timeSignature = track.time_signature,
+            year = year
+        ))
+
+        return Empty.getDefaultInstance()
+    }
+
     override suspend fun listTagsForTrack(request: TrackIdRequest): TagListResponse {
         currentUser() // auth only; track tags are readable by any logged-in user
         if (TrackRow.findById(request.trackId) == null) throw StatusException(Status.NOT_FOUND)
@@ -1203,6 +1258,8 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             throw StatusException(Status.PERMISSION_DENIED.withDescription("admin only"))
         }
     }
+
+    private val TIME_SIG_RE = Regex("""^\d{1,2}/\d{1,2}$""")
 
     /**
      * Set of title ids the user can see *and* that are playable in some

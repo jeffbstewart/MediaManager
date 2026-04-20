@@ -4485,3 +4485,30 @@ Session 2 (Mar 25):
 - Backend: TitleDetailHttpService includes tags on each album track row
   (id + name + bg/text colors). Client type AlbumTrack gains tags: TagCard[].
 ===
+
+=== 2026-04-20 00:45 — ID3 auto-tags (genre/style/BPM/decade/time sig) ===
+- V089 adds track.bpm (INT) + track.time_signature (VARCHAR(8)) with bpm index.
+- New TagSourceTypes: STYLE, BPM_BUCKET, DECADE, TIME_SIG.
+- AudioTagReader extracts genres/styles (multi-split), bpm (1-999),
+  time_signature (N/M form only). 6 new parser tests.
+- AutoTagApplicator normalizes (lowercase/trim/synonyms/blocklist),
+  buckets BPM (20-bpm windows; <60 and 180+ open-ended), derives decade
+  from year, dedups tags by (source_type, source_key). Album-level
+  propagation: only genre/style/decade, only on >50% majority.
+  BPM_BUCKET and TIME_SIG never propagate. 10 new tests.
+- MusicScannerAgent.linkTagged persists bpm/time_sig + calls
+  AutoTagApplicator on every file link.
+- BackfillTrackId3TagsUpdater re-reads every track with file_path,
+  persists new fields, re-tags. Registered in Bootstrap.
+- TagService.getTrackIdsForTagsWithInheritance unions direct
+  track_tag rows + tracks on tagged albums; used by both HTTP and
+  gRPC tag-detail tracks section.
+- Track proto carries bpm + time_signature; title-detail HTTP payload
+  includes them on each album track row.
+- POST /api/v2/catalog/tracks/{id}/music-tags + SetTrackMusicTags gRPC
+  RPC for admin override. Strips stale BPM_BUCKET/TIME_SIG tags before
+  re-running the applicator so chips stay consistent.
+- Web UI: track rows show "128 BPM" + "4/4" pills; admin music-note
+  button opens a two-step prompt with validation.
+- Backend tests + Angular build green.
+===

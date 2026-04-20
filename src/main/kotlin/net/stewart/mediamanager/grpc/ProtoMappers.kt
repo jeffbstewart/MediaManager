@@ -608,6 +608,8 @@ fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = t
     this@toProto.musicbrainz_recording_id?.takeIf { it.isNotBlank() }?.let { musicbrainzRecordingId = it }
     playable = !this@toProto.file_path.isNullOrBlank()
     if (trackArtistNames.isNotEmpty()) this.trackArtistNames.addAll(trackArtistNames)
+    this@toProto.bpm?.let { bpm = it }
+    this@toProto.time_signature?.takeIf { it.isNotBlank() }?.let { timeSignature = it }
 }
 
 fun ListeningProgressEntity.toProto(): ListeningProgress = listeningProgress {

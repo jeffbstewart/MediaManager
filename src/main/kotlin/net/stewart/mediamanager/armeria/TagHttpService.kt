@@ -24,6 +24,7 @@ import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.TrackTag
+import net.stewart.mediamanager.service.AutoTagApplicator
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
@@ -164,7 +165,8 @@ class TagHttpService {
         // songs with "workout", "focus", etc. without tagging their
         // parent album. We render them as their own list; the client
         // shows them below the title grid with a Play-All affordance.
-        val taggedTrackIds = TagService.getTrackIdsForTags(setOf(tagId))
+        // Inheritance: tracks directly tagged AND tracks on tagged albums.
+        val taggedTrackIds = TagService.getTrackIdsForTagsWithInheritance(setOf(tagId))
         val tracksById = if (taggedTrackIds.isEmpty()) emptyMap()
             else Track.findAll().filter { it.id in taggedTrackIds }.associateBy { it.id }
         val tagTrackTitleIds = tracksById.values.map { it.title_id }.toSet()
@@ -355,6 +357,124 @@ class TagHttpService {
             if (tid !in existingIds) TagService.addTagToTrack(trackId, tid)
         }
         return jsonResponse("""{"ok":true}""")
+    }
+
+    /**
+     * Admin-only manual override for a track's time signature and/or
+     * BPM. Time signature extraction from ID3 frames is unreliable (no
+     * standard frame; most taggers don't write it), so a user who
+     * knows a song is in 3/4 — important for the "can I waltz to this"
+     * ballroom flow — needs a way to set it by hand. Also re-runs
+     * auto-tagging so the TIME_SIG / BPM_BUCKET tags update to match.
+     *
+     * Body is a JSON object; unspecified fields are left unchanged.
+     * Pass an explicit null (or empty string for time_signature) to
+     * clear a value.
+     */
+    @Post("/api/v2/catalog/tracks/{trackId}/music-tags")
+    fun setTrackMusicTags(
+        ctx: ServiceRequestContext,
+        @Param("trackId") trackId: Long
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+        val track = Track.findById(trackId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+
+        val body = gson.fromJson(
+            ctx.request().aggregate().join().contentUtf8(), Map::class.java
+        )
+
+        val changed = mutableListOf<String>()
+        if (body.containsKey("time_signature")) {
+            val raw = body["time_signature"] as? String
+            val normalized = raw?.trim()?.ifBlank { null }
+            // Accept only N/M form; reject free-text so "waltz" doesn't
+            // end up on the track as a pseudo-time-signature.
+            if (normalized != null && !TIME_SIG_PATTERN.matches(normalized)) {
+                return badRequest("time_signature must look like '3/4' / '4/4' / '6/8' (or null to clear)")
+            }
+            track.time_signature = normalized
+            changed += "time_signature"
+        }
+        if (body.containsKey("bpm")) {
+            val raw = body["bpm"] as? Number
+            val bpm = raw?.toInt()
+            if (bpm != null && bpm !in 1..999) {
+                return badRequest("bpm must be between 1 and 999 (or null to clear)")
+            }
+            track.bpm = bpm
+            changed += "bpm"
+        }
+        if (changed.isEmpty()) {
+            return badRequest("nothing to update — pass 'time_signature' and/or 'bpm'")
+        }
+        track.updated_at = java.time.LocalDateTime.now()
+        track.save()
+
+        // Re-apply auto-tags so TIME_SIG / BPM_BUCKET tags align with
+        // the manual override. Existing genre/style/decade tags stay in
+        // place — applyToTrack is additive.
+        val year = net.stewart.mediamanager.entity.Title.findById(track.title_id)?.release_year
+        TagService_applyRefreshedAutoTags(
+            trackId = track.id!!,
+            bpm = track.bpm,
+            timeSignature = track.time_signature,
+            year = year
+        )
+
+        return jsonResponse(gson.toJson(mapOf("ok" to true, "changed" to changed)))
+    }
+
+    companion object {
+        private val TIME_SIG_PATTERN = Regex("""^\d{1,2}/\d{1,2}$""")
+    }
+
+    /**
+     * Minimal wrapper — re-apply BPM / time signature / decade tags on
+     * a track after a manual override. Separate from AutoTagApplicator
+     * so we can also strip the now-stale prior BPM_BUCKET / TIME_SIG
+     * tag before adding the new one.
+     */
+    private fun TagService_applyRefreshedAutoTags(
+        trackId: Long,
+        bpm: Int?,
+        timeSignature: String?,
+        year: Int?
+    ) {
+        // Detach any existing BPM_BUCKET / TIME_SIG tag rows so the
+        // override doesn't leave stale buckets hanging around.
+        val stale = net.stewart.mediamanager.entity.TrackTag.findAll()
+            .filter { it.track_id == trackId }
+        val staleTagIds = stale.map { it.tag_id }.toSet()
+        val purgeableSources = setOf(
+            net.stewart.mediamanager.entity.TagSourceType.BPM_BUCKET.name,
+            net.stewart.mediamanager.entity.TagSourceType.TIME_SIG.name
+        )
+        val purgeableTagIds = net.stewart.mediamanager.entity.Tag.findAll()
+            .filter { it.id in staleTagIds && it.source_type in purgeableSources }
+            .mapNotNull { it.id }
+            .toSet()
+        stale.filter { it.tag_id in purgeableTagIds }.forEach { it.delete() }
+
+        // Then apply with the fresh values; applyToTrack handles the
+        // attach for whichever of BPM/TimeSig/Decade are non-null.
+        AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
+            trackId = trackId,
+            genres = emptyList(),
+            styles = emptyList(),
+            bpm = bpm,
+            timeSignature = timeSignature,
+            year = year
+        ))
+    }
+
+    private fun badRequest(message: String): HttpResponse {
+        val bytes = gson.toJson(mapOf("error" to message)).toByteArray(Charsets.UTF_8)
+        val headers = ResponseHeaders.builder(HttpStatus.BAD_REQUEST)
+            .contentType(MediaType.JSON_UTF_8)
+            .contentLength(bytes.size.toLong())
+            .build()
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
     }
 
     private fun jsonResponse(json: String): HttpResponse {

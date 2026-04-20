@@ -207,6 +207,19 @@ message TrackIdRequest {
   int64 track_id = 1;
 }
 
+// V089 — admin override for ID3-derived music fields.
+// Only fields set in `updates` are changed; absence is left alone. To
+// clear an existing value pass the field with an empty / zero marker.
+message SetTrackMusicTagsRequest {
+  int64 track_id = 1;
+  // Present = use this BPM. Absent = leave the current value alone.
+  // Set to 0 to clear the existing BPM.
+  optional int32 bpm = 2;
+  // Present = use this time signature; must match ^\d{1,2}/\d{1,2}$.
+  // Absent = leave it alone. Empty string = clear the existing value.
+  optional string time_signature = 3;
+}
+
 message GenreIdRequest {
   int64 genre_id = 1;
 }
@@ -546,6 +559,12 @@ message Track {
   optional string musicbrainz_recording_id = 7;
   bool playable = 8;                         // audio file present on NAS
   repeated string track_artist_names = 9;    // when different from album credit
+  // V089 — extracted from the file's ID3/Vorbis tags when ingested.
+  // BPM is the raw number (useful for ballroom "bpm ∈ [78,96]"
+  // queries); time_signature is the raw "3/4" / "4/4" string (null
+  // for files whose tagger didn't write it — rare).
+  optional int32 bpm = 10;
+  optional string time_signature = 11;
 }
 
 message Album {

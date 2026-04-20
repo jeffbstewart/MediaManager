@@ -20,6 +20,10 @@ data class Track(
     var duration_seconds: Int? = null,
     var musicbrainz_recording_id: String? = null,
     var file_path: String? = null,
+    /** Raw BPM from ID3/Vorbis `BPM` / `TBPM`. Integer. */
+    var bpm: Int? = null,
+    /** Raw time signature, e.g. "3/4" / "4/4". Mostly null — no standard ID3 frame; user can set manually. */
+    var time_signature: String? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

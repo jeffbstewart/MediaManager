@@ -190,6 +190,10 @@ export interface AlbumTrack {
   track_artists: { id: number; name: string }[];
   /** Tags attached to this specific track (phase B). Empty for tracks with no tags. */
   tags: TagCard[];
+  /** ID3 BPM when available — integer, else null. */
+  bpm: number | null;
+  /** Raw time signature ("3/4", "4/4", etc.) when known — null otherwise. */
+  time_signature: string | null;
 }
 
 export interface TranscodeInfo {
@@ -846,6 +850,20 @@ export class CatalogService {
   async setTrackTags(trackId: number, tagIds: number[]): Promise<void> {
     await firstValueFrom(this.http.post(`/api/v2/catalog/tracks/${trackId}/tags`,
       { tag_ids: tagIds }));
+  }
+
+  /**
+   * Admin override for a track's BPM and/or time signature. Pass null
+   * for a field to clear its current value; omit a field to leave it
+   * alone. The server re-runs auto-tagging on the track so the
+   * BPM-bucket / time-sig tag chips stay consistent.
+   */
+  async setTrackMusicTags(trackId: number, updates: {
+    bpm?: number | null;
+    time_signature?: string | null;
+  }): Promise<void> {
+    await firstValueFrom(this.http.post(
+      `/api/v2/catalog/tracks/${trackId}/music-tags`, updates));
   }
 
   async search(query: string, limit = 30): Promise<SearchResponse> {

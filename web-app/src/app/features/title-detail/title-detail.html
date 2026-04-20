@@ -308,7 +308,22 @@
                     </span>
                   }
                 </div>
+                @if (track.bpm || track.time_signature) {
+                  <span class="track-music-meta" [attr.title]="musicMetaTitle(track)">
+                    @if (track.bpm) { <span class="track-bpm">{{ track.bpm }} BPM</span> }
+                    @if (track.time_signature) {
+                      <span class="track-time-sig">{{ track.time_signature }}</span>
+                    }
+                  </span>
+                }
                 <span class="track-duration">{{ formatTrackDuration(track.duration_seconds) }}</span>
+                @if (features.isAdmin()) {
+                  <button mat-icon-button class="track-play-btn"
+                          (click)="editTrackMusicTags(track)"
+                          aria-label="Edit BPM and time signature">
+                    <mat-icon>music_note</mat-icon>
+                  </button>
+                }
                 <button mat-icon-button class="track-play-btn"
                         (click)="playTrackAt((t.tracks ?? []).indexOf(track))"
                         aria-label="Play this track">

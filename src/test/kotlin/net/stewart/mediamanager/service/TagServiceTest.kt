@@ -306,6 +306,27 @@ class TagServiceTest {
     }
 
     @Test
+    fun `getTrackIdsForTagsWithInheritance unions direct + album-derived`() {
+        val rockAlbum = createAlbum("Rock Album")
+        val jazzAlbum = createAlbum("Jazz Album")
+        val rock1 = createTrack(rockAlbum.id!!, 1, "rock1")
+        val rock2 = createTrack(rockAlbum.id!!, 2, "rock2")
+        val jazz1 = createTrack(jazzAlbum.id!!, 1, "jazz1")
+        val rockTag = TagService.createTag("Rock", "#EF4444")
+
+        // Tag the album with Rock → both of its tracks inherit.
+        TagService.addTagToTitle(rockAlbum.id!!, rockTag.id!!)
+        // Also tag an individual jazz-album track directly with Rock.
+        TagService.addTagToTrack(jazz1.id!!, rockTag.id!!)
+
+        val direct = TagService.getTrackIdsForTags(setOf(rockTag.id!!))
+        assertEquals(setOf(jazz1.id!!), direct)
+
+        val inherited = TagService.getTrackIdsForTagsWithInheritance(setOf(rockTag.id!!))
+        assertEquals(setOf(rock1.id!!, rock2.id!!, jazz1.id!!), inherited)
+    }
+
+    @Test
     fun `same tag can mark a title and a track independently`() {
         val album = createAlbum("A")
         val track = createTrack(album.id!!, 1, "T")

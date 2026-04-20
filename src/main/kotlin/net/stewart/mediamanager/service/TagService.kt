@@ -144,6 +144,26 @@ object TagService {
             .toSet()
     }
 
+    /**
+     * Tracks matching any of [tagIds] *plus* all tracks belonging to
+     * albums tagged with any of [tagIds] (query-time inheritance).
+     * Drives the "tagged tracks" section on tag detail pages so
+     * browsing a `Rock` tag surfaces both explicit track tags and
+     * every track on a Rock-tagged album, without write-amplifying
+     * the inheritance into stored track_tag rows.
+     */
+    fun getTrackIdsForTagsWithInheritance(tagIds: Set<Long>): Set<Long> {
+        if (tagIds.isEmpty()) return emptySet()
+        val direct = getTrackIdsForTags(tagIds)
+        val inheritedTitleIds = getTitleIdsForTags(tagIds)
+        if (inheritedTitleIds.isEmpty()) return direct
+        val inheritedTrackIds = Track.findAll()
+            .filter { it.title_id in inheritedTitleIds }
+            .mapNotNull { it.id }
+            .toSet()
+        return direct + inheritedTrackIds
+    }
+
     /** tag_id -> count of associated tracks. */
     fun getTagTrackCounts(): Map<Long, Int> {
         return TrackTag.findAll()

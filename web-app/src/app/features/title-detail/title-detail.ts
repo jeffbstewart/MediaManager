@@ -15,7 +15,7 @@ import { FeatureService } from '../../core/feature.service';
 import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
 import { AddToPlaylistComponent } from '../../shared/add-to-playlist/add-to-playlist';
 import { TagPickerComponent } from '../../shared/tag-picker/tag-picker';
-import type { TagCard } from '../../core/catalog.service';
+import type { AlbumTrack, TagCard } from '../../core/catalog.service';
 
 @Component({
   selector: 'app-title-detail',
@@ -92,6 +92,63 @@ export class TitleDetailComponent implements OnInit {
 
   async onTrackTagCreatedAndPicked(tag: TagCard): Promise<void> {
     await this.attachTrackTag(tag.id);
+  }
+
+  /**
+   * Tooltip for the BPM + time-sig pill on each track row. Handy when
+   * only one of the two is set — the pill itself shows "128 BPM" but
+   * the tooltip explains "Time signature unknown".
+   */
+  musicMetaTitle(t: AlbumTrack): string {
+    const parts: string[] = [];
+    if (t.bpm) parts.push(`${t.bpm} BPM`);
+    else parts.push('BPM unknown');
+    if (t.time_signature) parts.push(`Time signature ${t.time_signature}`);
+    else parts.push('Time signature unknown');
+    return parts.join(' · ');
+  }
+
+  /**
+   * Admin-only — prompt for a new BPM and time signature. Pressing
+   * Cancel on either prompt aborts. Null-able fields sent through the
+   * API so the server can clear the current value by passing empty.
+   */
+  async editTrackMusicTags(t: AlbumTrack): Promise<void> {
+    const currentBpm = t.bpm != null ? String(t.bpm) : '';
+    const bpmIn = window.prompt(
+      `BPM for "${t.name}" (blank to clear, Cancel to skip)`,
+      currentBpm
+    );
+    // Cancel aborts; empty string clears; otherwise validate integer.
+    if (bpmIn === null) return;
+    const trimmedBpm = bpmIn.trim();
+    let bpm: number | null = null;
+    if (trimmedBpm !== '') {
+      const n = parseInt(trimmedBpm, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 999) {
+        window.alert('BPM must be an integer between 1 and 999.');
+        return;
+      }
+      bpm = n;
+    }
+
+    const currentTs = t.time_signature ?? '';
+    const tsIn = window.prompt(
+      `Time signature for "${t.name}" (e.g. 3/4, blank to clear)`,
+      currentTs
+    );
+    if (tsIn === null) return;
+    const trimmedTs = tsIn.trim();
+    if (trimmedTs !== '' && !/^\d{1,2}\/\d{1,2}$/.test(trimmedTs)) {
+      window.alert("Time signature must look like '3/4' / '4/4' / '6/8'.");
+      return;
+    }
+
+    await this.catalog.setTrackMusicTags(t.track_id, {
+      bpm,
+      time_signature: trimmedTs === '' ? null : trimmedTs,
+    });
+    await this.refreshTitle();
   }
 
   /** Admin-only — detach a tag from a track via the inline × on the chip. */

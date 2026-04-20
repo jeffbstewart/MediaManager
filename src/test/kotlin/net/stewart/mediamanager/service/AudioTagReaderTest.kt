@@ -120,4 +120,70 @@ class AudioTagReaderTest {
         assertEquals("X", upper)
         assertEquals("X", lower)
     }
+
+    // =================================================================
+    // ID3 auto-tag extraction (V089): genre, style, bpm, time signature
+    // =================================================================
+
+    @Test
+    fun `genre splits on semicolons and commas`() {
+        val t = AudioTagReader.parse(
+            """{"format":{"tags":{"GENRE":"Rock; Pop-Rock, Alternative"}}}"""
+        )
+        assertEquals(listOf("Rock", "Pop-Rock", "Alternative"), t.genres)
+    }
+
+    @Test
+    fun `style falls through to alternate keys`() {
+        val t = AudioTagReader.parse(
+            """{"format":{"tags":{"STYLES":"Shoegaze, Dream Pop"}}}"""
+        )
+        assertEquals(listOf("Shoegaze", "Dream Pop"), t.styles)
+    }
+
+    @Test
+    fun `bpm is extracted as integer from TBPM-style text`() {
+        assertEquals(
+            128,
+            AudioTagReader.parse("""{"format":{"tags":{"BPM":"128"}}}""").bpm
+        )
+        // Some writers store BPM as a float ("128.000"); round down.
+        assertEquals(
+            85,
+            AudioTagReader.parse("""{"format":{"tags":{"TBPM":"85.50"}}}""").bpm
+        )
+        // Out of plausible range → null.
+        assertNull(
+            AudioTagReader.parse("""{"format":{"tags":{"BPM":"9999"}}}""").bpm
+        )
+        assertNull(
+            AudioTagReader.parse("""{"format":{"tags":{"BPM":"garbage"}}}""").bpm
+        )
+    }
+
+    @Test
+    fun `time signature is only accepted in N-over-M form`() {
+        assertEquals(
+            "3/4",
+            AudioTagReader.parse("""{"format":{"tags":{"TIMESIGNATURE":"3/4"}}}""").timeSignature
+        )
+        assertEquals(
+            "12/8",
+            AudioTagReader.parse("""{"format":{"tags":{"time_signature":"12/8"}}}""").timeSignature
+        )
+        // Free-text junk gets rejected so "compound" / "waltz" / "4" don't poison the tag.
+        assertNull(
+            AudioTagReader.parse("""{"format":{"tags":{"TIMESIGNATURE":"compound"}}}""").timeSignature
+        )
+    }
+
+    @Test
+    fun `splitMulti trims and deduplicates`() {
+        assertEquals(
+            listOf("Rock", "Jazz"),
+            AudioTagReader.splitMulti("Rock,  Jazz ,  Rock  ,,")
+        )
+        assertEquals(emptyList(), AudioTagReader.splitMulti(null))
+        assertEquals(emptyList(), AudioTagReader.splitMulti("   "))
+    }
 }

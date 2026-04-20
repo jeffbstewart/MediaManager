@@ -59,12 +59,39 @@ object AudioTagReader {
          */
         val catalogNumber: String?,
         /** Label / publisher name. Vorbis `LABEL` / `ORGANIZATION`, ID3 `TPUB`. */
-        val label: String?
+        val label: String?,
+        /**
+         * Zero or more genre strings. ID3v2 `TCON`, Vorbis `GENRE`,
+         * MP4 `©gen`. We split on `;`, `,`, and ` / ` because taggers
+         * freely choose among them when writing multi-genre values
+         * ("Rock; Pop-Rock" and "Rock, Pop-Rock" both show up). Each
+         * split value is trimmed but NOT normalized — normalization is
+         * the applicator's job so the raw ffprobe output stays
+         * inspectable in tests.
+         */
+        val genres: List<String>,
+        /**
+         * Zero or more style strings. No standard ID3 frame — written
+         * by Picard-style taggers to `TXXX:Style` (ID3), `STYLE`
+         * (Vorbis), or sometimes `----:com.apple.iTunes:Style` (MP4).
+         * Same multi-value splitting rules as [genres].
+         */
+        val styles: List<String>,
+        /** Raw BPM from `TBPM` / `BPM` / `tmpo`. Integer; null if absent or unparseable. */
+        val bpm: Int?,
+        /**
+         * Raw time signature. No standard ID3 frame — Picard writes
+         * `TXXX:TIME_SIGNATURE` / Vorbis `TIMESIGNATURE`. Typically
+         * null. Stored verbatim (e.g. "3/4", "4/4", "6/8") so callers
+         * can render or compare as they see fit.
+         */
+        val timeSignature: String?
     ) {
         companion object {
             val EMPTY = AudioTags(
                 null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null,
+                emptyList(), emptyList(), null, null
             )
         }
     }
@@ -142,8 +169,40 @@ object AudioTagReader {
             // carry a stack of ISRCs separated by `/`; take the first.
             isrc = tags.firstValue("isrc", "tsrc")?.substringBefore('/')?.trim()?.ifBlank { null },
             catalogNumber = tags.firstValue("catalognumber", "labelno", "catalog_number", "catalog"),
-            label = tags.firstValue("label", "organization", "publisher")
+            label = tags.firstValue("label", "organization", "publisher"),
+            genres = splitMulti(tags.firstValue("genre", "tcon")),
+            // "Style" isn't a standardized tag name but several writers
+            // produce it. ffprobe lowercases everything so the variants
+            // collapse to the same key on our side.
+            styles = splitMulti(tags.firstValue("style", "styles")),
+            bpm = tags.firstValue("bpm", "tbpm", "tmpo")
+                ?.toDoubleOrNull()?.toInt()?.takeIf { it in 1..999 },
+            timeSignature = tags.firstValue(
+                "time_signature", "timesignature", "time signature"
+            )?.takeIf { TIME_SIG_PATTERN.matches(it.trim()) }?.trim()
         )
+    }
+
+    /** Matches "3/4", "4/4", "6/8", "12/8", "5/4", etc. */
+    private val TIME_SIG_PATTERN = Regex("""^\d{1,2}/\d{1,2}$""")
+
+    /** Multi-value separators taggers actually write. `/` is NOT included — it's
+     *  ambiguous with "12/8" and common within single genre names ("Rock/Pop"
+     *  really is one genre in some taxonomies). */
+    private val MULTI_SEPARATORS = charArrayOf(';', ',')
+
+    /**
+     * Split a raw multi-value tag string on `;` / `,` and trim. Empty
+     * or null input returns an empty list. Exposed to tests.
+     */
+    internal fun splitMulti(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split(*MULTI_SEPARATORS)
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
     }
 
     /** Parse "3/12" or "3" into 3. Returns null on non-numeric input. */

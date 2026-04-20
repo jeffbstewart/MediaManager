@@ -51,6 +51,12 @@ service CatalogService {
   rpc RemoveTagFromTrack(TagTrackRequest) returns (Empty);
   rpc SetTrackTags(SetTrackTagsRequest) returns (Empty);
   rpc ListTagsForTrack(TrackIdRequest) returns (TagListResponse);
+
+  // Admin-only manual override for a track's BPM and/or time signature.
+  // Time signature extraction from ID3 is unreliable (no standard
+  // frame); users with ballroom use cases ("can I waltz to this?")
+  // need to set 3/4 by hand on tracks their tagger didn't annotate.
+  rpc SetTrackMusicTags(SetTrackMusicTagsRequest) returns (Empty);
 }
 
 // --- Requests ---
