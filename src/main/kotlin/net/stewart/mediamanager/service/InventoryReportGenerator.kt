@@ -160,26 +160,62 @@ object InventoryReportGenerator {
         val ds = valued.mapNotNull { it.purchase_date }; if (ds.isNotEmpty()) { val f = DateTimeFormatter.ofPattern("MMM yyyy"); sr("Dates:", "${ds.min().format(f)} \u2013 ${ds.max().format(f)}") }
         document.add(st)
 
-        document.add(Paragraph("\nItem Listing", sF).apply { spacingBefore = 12f; spacingAfter = 8f })
-        val tbl = PdfPTable(7).apply { widthPercentage = 100f; setWidths(floatArrayOf(3f, 1f, 1.5f, 1.5f, 1f, 1f, 1f)) }
-        fun hc(t: String) = PdfPCell(Phrase(t, hF)).apply { backgroundColor = Color(60, 60, 60); setPadding(4f) }
-        tbl.addCell(hc("Title(s)")); tbl.addCell(hc("Format")); tbl.addCell(hc("UPC")); tbl.addCell(hc("Purchase Place")); tbl.addCell(hc("Price")); tbl.addCell(hc("Replacement")); tbl.addCell(hc("Date"))
-        tbl.headerRows = 1
+        // One section per media format. Drops the Format column from
+        // each table (redundant — the section header carries the
+        // format), redistributes the column widths to the remaining
+        // six, and keeps the photo-row behaviour per item unchanged.
+        // Preserves a stable section order: discs first (common insurance
+        // case), then books, then any other formats present.
+        val sortedFormatOrder = listOf(
+            "UHD_BLURAY", "BLURAY", "DVD", "HD_DVD",
+            "HARDBACK", "TRADE_PAPERBACK", "MASS_MARKET_PAPERBACK", "AUDIOBOOK_CD",
+            "CD", "DIGITAL_MUSIC_ALBUM"
+        )
+        val byFormat = data.allItems.groupBy { it.media_format }
+        val orderedFormats = (sortedFormatOrder.filter { byFormat.containsKey(it) } +
+            byFormat.keys.filter { it !in sortedFormatOrder }.sorted())
 
         onProgress(0, total, "Building PDF...")
-        val sorted = data.allItems.sortedBy { sortKey(data.titleNames(it)) }
         var idx = 0
-        for (item in sorted) {
-            idx++; if (idx % 50 == 0) onProgress(idx, sorted.size, "Building PDF")
-            fun c(t: String) = PdfPCell(Phrase(t, cF)).apply { setPadding(3f) }
-            tbl.addCell(c(data.titleNames(item))); tbl.addCell(c(item.media_format.replace("_", " ")))
-            tbl.addCell(c(item.upc ?: "")); tbl.addCell(c(item.purchase_place ?: ""))
-            tbl.addCell(c(item.purchase_price?.setScale(2)?.let { "\$$it" } ?: ""))
-            tbl.addCell(c(item.replacement_value?.setScale(2)?.let { "\$$it" } ?: ""))
-            tbl.addCell(c(item.purchase_date?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: ""))
-            if (photoCounts.containsKey(item.id)) addPhotoRow(tbl, 7, item.id!!)
+        for (fmt in orderedFormats) {
+            val items = byFormat[fmt].orEmpty().sortedBy { sortKey(data.titleNames(it)) }
+            if (items.isEmpty()) continue
+
+            val prettyFmt = fmt.replace("_", " ")
+            document.add(Paragraph(
+                "\n$prettyFmt — ${items.size} item${if (items.size == 1) "" else "s"}",
+                sF
+            ).apply { spacingBefore = 12f; spacingAfter = 6f })
+
+            val tbl = PdfPTable(6).apply {
+                widthPercentage = 100f
+                // Title(s) gets the lion's share; UPC / Purchase Place
+                // expand into what used to be the Format column.
+                setWidths(floatArrayOf(3f, 1.7f, 1.7f, 1f, 1f, 1f))
+            }
+            fun hc(t: String) = PdfPCell(Phrase(t, hF)).apply { backgroundColor = Color(60, 60, 60); setPadding(4f) }
+            tbl.addCell(hc("Title(s)"))
+            tbl.addCell(hc("UPC"))
+            tbl.addCell(hc("Purchase Place"))
+            tbl.addCell(hc("Price"))
+            tbl.addCell(hc("Replacement"))
+            tbl.addCell(hc("Date"))
+            tbl.headerRows = 1
+
+            for (item in items) {
+                idx++; if (idx % 50 == 0) onProgress(idx, total, "Building PDF")
+                fun c(t: String) = PdfPCell(Phrase(t, cF)).apply { setPadding(3f) }
+                tbl.addCell(c(data.titleNames(item)))
+                tbl.addCell(c(item.upc ?: ""))
+                tbl.addCell(c(item.purchase_place ?: ""))
+                tbl.addCell(c(item.purchase_price?.setScale(2)?.let { "\$$it" } ?: ""))
+                tbl.addCell(c(item.replacement_value?.setScale(2)?.let { "\$$it" } ?: ""))
+                tbl.addCell(c(item.purchase_date?.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) ?: ""))
+                if (photoCounts.containsKey(item.id)) addPhotoRow(tbl, 6, item.id!!)
+            }
+            document.add(tbl)
         }
-        document.add(tbl); onProgress(sorted.size, sorted.size, "Finalizing..."); document.close(); out.close()
+        onProgress(total, total, "Finalizing..."); document.close(); out.close()
     }
 
     private fun addPhotoRow(table: PdfPTable, cols: Int, mediaItemId: Long) {

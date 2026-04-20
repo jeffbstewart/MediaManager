@@ -124,9 +124,26 @@ export class MediaItemEditComponent implements OnInit {
       case 'BLURAY': return 'Blu-ray';
       case 'UHD_BLURAY': return 'UHD Blu-ray';
       case 'HD_DVD': return 'HD DVD';
+      case 'MASS_MARKET_PAPERBACK': return 'Paperback (mass market)';
+      case 'TRADE_PAPERBACK': return 'Paperback (trade)';
+      case 'HARDBACK': return 'Hardcover';
+      case 'EBOOK_EPUB': return 'eBook (EPUB)';
+      case 'EBOOK_PDF': return 'eBook (PDF)';
+      case 'AUDIOBOOK_CD': return 'Audiobook (CD)';
+      case 'AUDIOBOOK_DIGITAL': return 'Audiobook (digital)';
+      case 'CD': return 'CD';
+      case 'DIGITAL_MUSIC_ALBUM': return 'Digital album';
       default: return f ?? '';
     }
   }
+
+  /** Media type switching only makes sense for video/personal items. Book and album items were disambiguated at scan time (ISBN / MB release MBID) and changing them would orphan authors / track rows. */
+  get showMediaTypeSelector(): boolean {
+    const mt = this.primary?.media_type;
+    return mt === 'MOVIE' || mt === 'TV' || mt === 'PERSONAL';
+  }
+
+  get isAlbum(): boolean { return this.primary?.media_type === 'ALBUM'; }
 
   statusLabel(s: string): string {
     switch (s) {
@@ -232,6 +249,51 @@ export class MediaItemEditComponent implements OnInit {
     await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${this.itemId}/link-amazon/${order.id}`, {}));
     this.flash('Linked to Amazon order');
     await this.refresh();
+  }
+
+  // --- Ownership Photos ---
+
+  /** Triggered by the hidden file input when the admin picks one or more files. */
+  async onPhotoFilesPicked(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await this.uploadPhoto(files.item(i)!);
+      }
+      this.flash(`Uploaded ${files.length} photo${files.length === 1 ? '' : 's'}`);
+      await this.refresh();
+    } catch (e) {
+      this.flash(`Photo upload failed: ${(e as Error).message ?? e}`, 'error');
+    } finally {
+      // Reset so the same filename can be picked again after a failed try.
+      input.value = '';
+    }
+  }
+
+  private async uploadPhoto(file: File): Promise<void> {
+    // The server expects raw image bytes with the media-item id in a
+    // custom header — matches the scanner's upload path so it needed
+    // no new endpoint for this button.
+    const headers = {
+      'Content-Type': file.type || 'image/jpeg',
+      'X-Media-Item-Id': String(this.itemId),
+    };
+    await firstValueFrom(
+      this.http.post('/api/v2/admin/ownership/upload', file, { headers })
+    );
+  }
+
+  async deletePhoto(photoId: string): Promise<void> {
+    if (!window.confirm('Delete this photo?')) return;
+    try {
+      await firstValueFrom(this.http.delete(`/api/v2/admin/ownership/photos/${photoId}`));
+      this.flash('Photo deleted');
+      await this.refresh();
+    } catch (e) {
+      this.flash(`Delete failed: ${(e as Error).message ?? e}`, 'error');
+    }
   }
 
   // --- Helpers ---

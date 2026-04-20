@@ -58,7 +58,40 @@ h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
 .amazon-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
 .amazon-price { font-size: 0.8125rem; flex-shrink: 0; }
 
-.photo-strip { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.25rem 0; }
+.photo-strip {
+  display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.25rem 0;
+  align-items: center;
+}
 .photo-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.photo-cell {
+  position: relative;
+  flex-shrink: 0;
+  .photo-delete-btn {
+    position: absolute; top: -6px; right: -6px;
+    background: rgba(0, 0, 0, 0.7); color: white;
+    width: 20px; height: 20px; line-height: 20px;
+    opacity: 0; transition: opacity 0.1s;
+    mat-icon { font-size: 14px; width: 14px; height: 14px; }
+  }
+  &:hover .photo-delete-btn { opacity: 1; }
+}
+.photo-add-tile {
+  width: 80px; height: 80px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.25rem;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 4px; cursor: pointer;
+  color: rgba(255, 255, 255, 0.6); font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.02);
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  mat-icon { font-size: 1.5rem; width: 1.5rem; height: 1.5rem; }
+}
+.photo-file-input { display: none; }
+.field-readonly .hint { opacity: 0.5; font-size: 0.75rem; margin-left: 0.5rem; }
 
 .nav-row { display: flex; gap: 0.75rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); }

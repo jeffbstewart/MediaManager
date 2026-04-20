@@ -26,8 +26,10 @@
       </div>
     </div>
 
-    <!-- Media Type -->
-    @if (primary) {
+    <!-- Media Type. Only offered for video/personal items — book and
+         album types are locked at scan time (ISBN / MB release) and
+         flipping them would orphan authors / tracks. -->
+    @if (primary && showMediaTypeSelector) {
       <div class="field-group">
         <label class="field-label">Media Type</label>
         <select class="field-select" (change)="setMediaType($event)">
@@ -35,6 +37,14 @@
             <option [value]="t" [selected]="t === primary.media_type">{{ t }}</option>
           }
         </select>
+      </div>
+    } @else if (primary) {
+      <div class="field-group">
+        <label class="field-label">Media Type</label>
+        <div class="field-readonly">
+          {{ primary.media_type }}
+          <span class="hint">&mdash; locked at scan time</span>
+        </div>
       </div>
     }
 
@@ -165,15 +175,27 @@
       <p class="empty-text">No matching orders.</p>
     }
 
-    <!-- Ownership Photos -->
-    @if (data.photos.length > 0) {
-      <h3>Ownership Photos ({{ data.photo_count }})</h3>
-      <div class="photo-strip">
-        @for (p of data.photos; track p.id) {
+    <!-- Ownership Photos. Always shown so the admin can add the first
+         photo for items that weren't scanned with the mobile capture
+         flow (e.g. books entered via ISBN lookup). -->
+    <h3>Ownership Photos ({{ data.photo_count }})</h3>
+    <div class="photo-strip">
+      @for (p of data.photos; track p.id) {
+        <div class="photo-cell">
           <img [src]="'/ownership-photos/' + p.id" class="photo-thumb" alt="Ownership photo" />
-        }
-      </div>
-    }
+          <button mat-icon-button class="photo-delete-btn" type="button"
+                  (click)="deletePhoto(p.id)" aria-label="Delete photo">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+      <label class="photo-add-tile">
+        <input type="file" accept="image/*" multiple class="photo-file-input"
+               (change)="onPhotoFilesPicked($event)" />
+        <mat-icon>add_a_photo</mat-icon>
+        <span>Add photo</span>
+      </label>
+    </div>
 
     <!-- Navigation -->
     <div class="nav-row">
