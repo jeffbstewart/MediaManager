@@ -16,6 +16,7 @@ import net.stewart.mediamanager.armeria.CollectionPosterHttpService
 import net.stewart.mediamanager.armeria.ArtistHeadshotHttpService
 import net.stewart.mediamanager.armeria.ArtistHttpService
 import net.stewart.mediamanager.armeria.AudioStreamHttpService
+import net.stewart.mediamanager.armeria.AdvancedSearchHttpService
 import net.stewart.mediamanager.armeria.PlaylistHttpService
 import net.stewart.mediamanager.armeria.RadioHttpService
 import net.stewart.mediamanager.armeria.RecommendationHttpService
@@ -263,6 +264,7 @@ object ArmeriaServer {
         blocking(AudioStreamHttpService())
         blocking(RadioHttpService())
         blocking(PlaylistHttpService())
+        blocking(AdvancedSearchHttpService())
         blocking(RecommendationHttpService())
         blocking(BookSeriesHttpService())
         blocking(SearchHttpService())

@@ -1252,6 +1252,53 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
     }
 
     /** Throws PERMISSION_DENIED when the caller isn't admin. */
+    override suspend fun listAdvancedSearchPresets(request: Empty): AdvancedSearchPresetsResponse {
+        currentUser()
+        return advancedSearchPresetsResponse {
+            presets.addAll(
+                net.stewart.mediamanager.service.AdvancedSearchPresets.ALL.map { p ->
+                    advancedSearchPreset {
+                        key = p.key
+                        name = p.name
+                        description = p.description
+                        p.bpmMin?.let { bpmMin = it }
+                        p.bpmMax?.let { bpmMax = it }
+                        p.timeSignature?.let { timeSignature = it }
+                    }
+                }
+            )
+        }
+    }
+
+    override suspend fun searchTracks(request: SearchTracksRequest): SearchTracksResponse {
+        val user = currentUser()
+        val filters = net.stewart.mediamanager.service.TrackSearchService.Filters(
+            query = if (request.hasQuery()) request.query.takeIf { it.isNotBlank() } else null,
+            bpmMin = if (request.hasBpmMin()) request.bpmMin else null,
+            bpmMax = if (request.hasBpmMax()) request.bpmMax else null,
+            timeSignature = if (request.hasTimeSignature())
+                request.timeSignature.takeIf { it.isNotBlank() } else null,
+            limit = if (request.hasLimit() && request.limit > 0) request.limit else 200
+        )
+        val hits = net.stewart.mediamanager.service.TrackSearchService.search(user, filters)
+        return searchTracksResponse {
+            tracks.addAll(hits.map { h ->
+                trackSearchHit {
+                    trackId = h.trackId
+                    titleId = h.titleId
+                    name = h.name
+                    albumName = h.albumName
+                    h.artistName?.let { artistName = it }
+                    h.bpm?.let { bpm = it }
+                    h.timeSignature?.let { timeSignature = it }
+                    h.durationSeconds?.let { durationSeconds = it }
+                    h.posterUrl?.let { posterUrl = it }
+                    playable = h.playable
+                }
+            })
+        }
+    }
+
     private fun requireAdmin() {
         val user = currentUser()
         if (!user.isAdmin()) {

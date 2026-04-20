@@ -1,8 +1,72 @@
 <div class="content-page">
-  <h2>Search results for "{{ query() }}"</h2>
+  <div class="page-header">
+    <h2>
+      @if (advancedActive()) {
+        Advanced search
+      } @else {
+        Search results for "{{ query() }}"
+      }
+    </h2>
+    <div class="header-actions">
+      <button mat-stroked-button type="button" (click)="openAdvanced()">
+        <mat-icon>tune</mat-icon>
+        Advanced
+      </button>
+      @if (advancedActive()) {
+        <button mat-button type="button" (click)="clearAdvanced()">
+          <mat-icon>close</mat-icon>
+          Clear filters
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (advancedActive()) {
+    <span class="filter-summary">{{ filterSummary() }}</span>
+  }
 
   @if (loading()) {
     <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (advancedActive()) {
+    <!-- Filtered track list — rendered when the URL has bpm/ts/advanced filters. -->
+    @if (trackResults().length === 0) {
+      <p class="empty-text">No tracks match those filters.</p>
+    } @else {
+      <div class="track-header-row">
+        <span class="result-count">{{ trackResults().length }} track{{ trackResults().length === 1 ? '' : 's' }}</span>
+        <button mat-flat-button color="primary" type="button" (click)="playAllTracks()"
+                [disabled]="trackResults().length === 0">
+          <mat-icon>play_arrow</mat-icon>
+          Play all
+        </button>
+      </div>
+      <ol class="track-list">
+        @for (t of trackResults(); track t.track_id) {
+          <li class="track-row" [class.unplayable]="!t.playable">
+            @if (t.poster_url) {
+              <img class="track-thumb" [src]="t.poster_url" [alt]="t.album_name" />
+            } @else {
+              <div class="track-thumb track-thumb-placeholder"><mat-icon>music_note</mat-icon></div>
+            }
+            <div class="track-text">
+              <span class="track-name">{{ t.name }}</span>
+              <a class="track-album" [routerLink]="routes.title(t.title_id)">
+                {{ t.album_name }}@if (t.artist_name) { &middot; {{ t.artist_name }} }
+              </a>
+            </div>
+            <div class="track-meta">
+              @if (t.bpm) { <span class="track-bpm">{{ t.bpm }} BPM</span> }
+              @if (t.time_signature) { <span class="track-ts">{{ t.time_signature }}</span> }
+              <span class="track-duration">{{ formatTrackDuration(t.duration_seconds) }}</span>
+            </div>
+            <button mat-icon-button type="button" (click)="playTrack(t)"
+                    aria-label="Play this track" [disabled]="!t.playable">
+              <mat-icon>play_circle</mat-icon>
+            </button>
+          </li>
+        }
+      </ol>
+    }
   } @else if (results().length === 0) {
     <p class="empty-text">No results found.</p>
   } @else {

@@ -1,0 +1,59 @@
+<h2 mat-dialog-title>Advanced Search</h2>
+
+<mat-dialog-content>
+  <section class="preset-section">
+    <div class="section-label">Dance presets</div>
+    @if (loadingPresets()) {
+      <mat-spinner diameter="24" />
+    } @else if (presets().length === 0) {
+      <p class="muted">No presets available.</p>
+    } @else {
+      <mat-chip-set>
+        @for (p of presets(); track p.key) {
+          <mat-chip [highlighted]="activePresetKey() === p.key"
+                    (click)="applyPreset(p)"
+                    [attr.title]="p.description + ' · ' + (p.bpm_min ?? '?') + '–' + (p.bpm_max ?? '?') + ' BPM · ' + (p.time_signature ?? 'any')">
+            {{ p.name }}
+          </mat-chip>
+        }
+      </mat-chip-set>
+    }
+  </section>
+
+  <section class="filter-grid">
+    <div class="field-group">
+      <label class="field-label">Text (track / album / artist)</label>
+      <input class="field-input" type="text" [value]="query()" (input)="onQueryInput($event)" placeholder="optional" />
+    </div>
+
+    <div class="bpm-row">
+      <div class="field-group">
+        <label class="field-label">BPM min</label>
+        <input class="field-input" type="number" min="1" max="400" [value]="bpmMin()" (input)="onBpmMinInput($event)" placeholder="-" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">BPM max</label>
+        <input class="field-input" type="number" min="1" max="400" [value]="bpmMax()" (input)="onBpmMaxInput($event)" placeholder="-" />
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Time signature</label>
+      <select class="field-select" [value]="timeSignature()" (change)="onTimeSigChange($event)">
+        @for (opt of timeSigOptions; track opt.value) {
+          <option [value]="opt.value" [selected]="opt.value === timeSignature()">{{ opt.label }}</option>
+        }
+      </select>
+    </div>
+  </section>
+</mat-dialog-content>
+
+<mat-dialog-actions>
+  <button mat-button type="button" (click)="clearForm()">Clear</button>
+  <span class="spacer"></span>
+  <button mat-button type="button" (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" type="button" (click)="submit()">
+    <mat-icon>search</mat-icon>
+    Search
+  </button>
+</mat-dialog-actions>

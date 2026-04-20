@@ -1,15 +1,24 @@
 import { Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { CatalogService, SearchResult } from '../../core/catalog.service';
+import {
+  AdvancedTrackSearchFilters,
+  CatalogService,
+  SearchResult,
+  TrackSearchHit,
+} from '../../core/catalog.service';
+import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
 import { AppRoutes } from '../../core/routes';
+import { AdvancedSearchDialogComponent } from './advanced-search-dialog';
 
 @Component({
   selector: 'app-search',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatIconModule, MatProgressSpinnerModule],
+  imports: [RouterLink, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
   templateUrl: './search.html',
   styleUrl: './search.scss',
 })
@@ -17,23 +26,52 @@ export class SearchComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly catalog = inject(CatalogService);
+  private readonly dialog = inject(MatDialog);
+  private readonly queue = inject(PlaybackQueueService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
   readonly query = signal('');
   readonly results = signal<SearchResult[]>([]);
 
+  // Advanced-search state. When any of these URL params are present,
+  // we render the track-list view instead of the cross-type result grid.
+  readonly trackResults = signal<TrackSearchHit[]>([]);
+  readonly advancedActive = signal(false);
+  readonly activeFilters = signal<AdvancedTrackSearchFilters | null>(null);
+
   private querySub?: Subscription;
 
   ngOnInit(): void {
     this.querySub = this.route.queryParamMap.subscribe(params => {
       const q = params.get('q') ?? '';
+      const bpmMinRaw = params.get('bpm_min');
+      const bpmMaxRaw = params.get('bpm_max');
+      const ts = params.get('ts') ?? '';
       this.query.set(q);
-      if (q.trim().length >= 2) {
+
+      const hasAdvanced = !!(bpmMinRaw || bpmMaxRaw || ts);
+      if (hasAdvanced) {
+        const filters: AdvancedTrackSearchFilters = {
+          query: q.trim() || undefined,
+          bpmMin: bpmMinRaw ? parseInt(bpmMinRaw, 10) : undefined,
+          bpmMax: bpmMaxRaw ? parseInt(bpmMaxRaw, 10) : undefined,
+          timeSignature: ts || undefined,
+        };
+        this.activeFilters.set(filters);
+        this.advancedActive.set(true);
+        this.doAdvancedSearch(filters);
+      } else if (q.trim().length >= 2) {
+        this.advancedActive.set(false);
+        this.activeFilters.set(null);
+        this.trackResults.set([]);
         this.doSearch(q);
       } else {
+        this.advancedActive.set(false);
+        this.activeFilters.set(null);
         this.loading.set(false);
         this.results.set([]);
+        this.trackResults.set([]);
       }
     });
   }
@@ -52,6 +90,92 @@ export class SearchComponent implements OnInit, OnDestroy {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async doAdvancedSearch(filters: AdvancedTrackSearchFilters): Promise<void> {
+    this.loading.set(true);
+    try {
+      this.trackResults.set(await this.catalog.searchTracks(filters));
+    } catch {
+      this.trackResults.set([]);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  openAdvanced(): void {
+    const ref = this.dialog.open(AdvancedSearchDialogComponent, {
+      autoFocus: 'first-heading',
+    });
+    ref.afterClosed().subscribe(filters => {
+      if (!filters) return;
+      // Reflect filters in the URL so the result list is shareable /
+      // bookmarkable, then let ngOnInit's queryParamMap subscriber
+      // drive the actual search.
+      const queryParams: Record<string, string> = {};
+      if (filters.query) queryParams['q'] = filters.query;
+      if (filters.bpmMin != null) queryParams['bpm_min'] = String(filters.bpmMin);
+      if (filters.bpmMax != null) queryParams['bpm_max'] = String(filters.bpmMax);
+      if (filters.timeSignature) queryParams['ts'] = filters.timeSignature;
+      this.router.navigate([this.routes.search()], { queryParams });
+    });
+  }
+
+  clearAdvanced(): void {
+    this.router.navigate([this.routes.search()]);
+  }
+
+  /** Play all playable tracks from the current advanced-search result. */
+  playAllTracks(): void {
+    const hits = this.trackResults().filter(t => t.playable);
+    if (hits.length === 0) return;
+    const queued: QueuedTrack[] = hits.map(h => ({
+      trackId: h.track_id,
+      trackName: h.name,
+      durationSeconds: h.duration_seconds,
+      albumTitleId: h.title_id,
+      albumName: h.album_name,
+      albumPosterUrl: h.poster_url,
+      primaryArtistName: h.artist_name,
+    }));
+    this.queue.playTracks(queued, 0);
+  }
+
+  playTrack(h: TrackSearchHit): void {
+    const hits = this.trackResults().filter(t => t.playable);
+    const start = hits.findIndex(t => t.track_id === h.track_id);
+    if (start < 0) return;
+    const queued: QueuedTrack[] = hits.map(x => ({
+      trackId: x.track_id,
+      trackName: x.name,
+      durationSeconds: x.duration_seconds,
+      albumTitleId: x.title_id,
+      albumName: x.album_name,
+      albumPosterUrl: x.poster_url,
+      primaryArtistName: x.artist_name,
+    }));
+    this.queue.playTracks(queued, start);
+  }
+
+  formatTrackDuration(seconds: number | null): string {
+    if (seconds == null || seconds < 1) return '';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  filterSummary(): string {
+    const f = this.activeFilters();
+    if (!f) return '';
+    const parts: string[] = [];
+    if (f.query) parts.push(`"${f.query}"`);
+    if (f.bpmMin != null || f.bpmMax != null) {
+      const lo = f.bpmMin ?? '-';
+      const hi = f.bpmMax ?? '-';
+      parts.push(`${lo}-${hi} BPM`);
+    }
+    if (f.timeSignature) parts.push(f.timeSignature);
+    return parts.join(' · ');
   }
 
   resultRoute(item: SearchResult): string {

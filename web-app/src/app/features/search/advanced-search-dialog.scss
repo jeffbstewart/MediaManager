@@ -1,0 +1,63 @@
+:host {
+  display: block;
+  min-width: 480px;
+}
+
+mat-dialog-content { max-height: 70vh; }
+
+.section-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+  margin-bottom: 0.4rem;
+}
+
+.preset-section {
+  margin-bottom: 1rem;
+  mat-chip-set { --mdc-chip-container-height: 28px; }
+}
+
+.muted { opacity: 0.6; font-size: 0.875rem; margin: 0; }
+
+.filter-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.field-input,
+.field-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: inherit;
+  padding: 6px 10px;
+  font-size: 0.875rem;
+  font-family: inherit;
+
+  &:focus {
+    outline: none;
+    border-color: var(--mat-sys-primary, #bb86fc);
+  }
+}
+
+.bpm-row {
+  display: flex;
+  gap: 0.75rem;
+
+  .field-group { flex: 1; }
+}
+
+.spacer { flex: 1; }

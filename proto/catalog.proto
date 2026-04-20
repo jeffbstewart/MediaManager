@@ -57,6 +57,12 @@ service CatalogService {
   // frame); users with ballroom use cases ("can I waltz to this?")
   // need to set 3/4 by hand on tracks their tagger didn't annotate.
   rpc SetTrackMusicTags(SetTrackMusicTagsRequest) returns (Empty);
+
+  // Advanced search — structured filters + dance presets. Separate
+  // surface from the existing Search RPC so we can evolve the track
+  // filter shape without breaking the cross-type free-text search.
+  rpc ListAdvancedSearchPresets(Empty) returns (AdvancedSearchPresetsResponse);
+  rpc SearchTracks(SearchTracksRequest) returns (SearchTracksResponse);
 }
 
 // --- Requests ---
@@ -141,4 +147,51 @@ message TagListResponse {
 message QueuedResponse {
   bool queued = 1;
   int32 count = 2;
+}
+
+// --- Advanced search / dance presets ---
+
+message AdvancedSearchPreset {
+  // Stable id, URL-safe; stays constant across name edits so
+  // bookmarks survive rewording.
+  string key = 1;
+  string name = 2;
+  string description = 3;
+  optional int32 bpm_min = 4;
+  optional int32 bpm_max = 5;
+  // "3/4" / "4/4" / "6/8" / other; clients show a dropdown populated
+  // from whatever values they care about, no reason for a proto enum.
+  optional string time_signature = 6;
+}
+
+message AdvancedSearchPresetsResponse {
+  repeated AdvancedSearchPreset presets = 1;
+}
+
+// All filters AND together. Omitted fields don't restrict. Calling
+// with every field empty returns no rows — use the browse grids for
+// unfiltered listing.
+message SearchTracksRequest {
+  optional string query = 1;
+  optional int32 bpm_min = 2;
+  optional int32 bpm_max = 3;
+  optional string time_signature = 4;
+  optional int32 limit = 5;  // server defaults / caps at 200
+}
+
+message SearchTracksResponse {
+  repeated TrackSearchHit tracks = 1;
+}
+
+message TrackSearchHit {
+  int64 track_id = 1;
+  int64 title_id = 2;
+  string name = 3;
+  string album_name = 4;
+  optional string artist_name = 5;
+  optional int32 bpm = 6;
+  optional string time_signature = 7;
+  optional int32 duration_seconds = 8;
+  optional string poster_url = 9;
+  bool playable = 10;
 }

@@ -493,6 +493,37 @@ export interface SearchResponse {
   query: string;
 }
 
+/** Canonical dance preset fetched from /api/v2/search/presets. */
+export interface AdvancedSearchPreset {
+  key: string;
+  name: string;
+  description: string;
+  bpm_min: number | null;
+  bpm_max: number | null;
+  time_signature: string | null;
+}
+
+export interface AdvancedTrackSearchFilters {
+  query?: string;
+  bpmMin?: number | null;
+  bpmMax?: number | null;
+  timeSignature?: string | null;
+  limit?: number;
+}
+
+export interface TrackSearchHit {
+  track_id: number;
+  title_id: number;
+  name: string;
+  album_name: string;
+  artist_name: string | null;
+  bpm: number | null;
+  time_signature: string | null;
+  duration_seconds: number | null;
+  poster_url: string | null;
+  playable: boolean;
+}
+
 export interface RecommendationVoter {
   mbid: string;
   name: string;
@@ -900,6 +931,24 @@ export class CatalogService {
 
   async search(query: string, limit = 30): Promise<SearchResponse> {
     return firstValueFrom(this.http.get<SearchResponse>('/api/v2/search', { params: { q: query, limit: limit.toString() } }));
+  }
+
+  async listAdvancedSearchPresets(): Promise<AdvancedSearchPreset[]> {
+    const resp = await firstValueFrom(
+      this.http.get<{ presets: AdvancedSearchPreset[] }>('/api/v2/search/presets'));
+    return resp.presets ?? [];
+  }
+
+  async searchTracks(filters: AdvancedTrackSearchFilters): Promise<TrackSearchHit[]> {
+    const params: Record<string, string> = {};
+    if (filters.query) params['q'] = filters.query;
+    if (filters.bpmMin != null) params['bpm_min'] = String(filters.bpmMin);
+    if (filters.bpmMax != null) params['bpm_max'] = String(filters.bpmMax);
+    if (filters.timeSignature) params['time_signature'] = filters.timeSignature;
+    if (filters.limit != null) params['limit'] = String(filters.limit);
+    const resp = await firstValueFrom(
+      this.http.get<{ tracks: TrackSearchHit[] }>('/api/v2/search/tracks', { params }));
+    return resp.tracks ?? [];
   }
 
   async getActorDetail(personId: number): Promise<ActorDetail> {
