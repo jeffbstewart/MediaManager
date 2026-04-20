@@ -84,11 +84,17 @@ class TitleDetailHttpService {
             Genre.findAll().filter { it.id in genreIds }.map { it.name }
         } else emptyList()
 
-        // Tags
+        // Tags. Sort by IDF-style rarity — tags attached to the fewest
+        // titles come first so the most discriminating chip (e.g. a
+        // hand-made "mixtape" tag) is read before a noisy genre like
+        // "Rock". Ties break alphabetically for determinism.
         val tagIds = TitleTag.findAll().filter { it.title_id == titleId }.map { it.tag_id }.toSet()
-        val tags = Tag.findAll().filter { it.id in tagIds }.map { tag ->
-            mapOf("id" to tag.id, "name" to tag.name, "bg_color" to tag.bg_color, "text_color" to tag.textColor())
-        }
+        val tagTitleCounts = net.stewart.mediamanager.service.TagService.getTagTitleCounts()
+        val tags = Tag.findAll().filter { it.id in tagIds }
+            .sortedWith(compareBy({ tagTitleCounts[it.id] ?: 0 }, { it.name.lowercase() }))
+            .map { tag ->
+                mapOf("id" to tag.id, "name" to tag.name, "bg_color" to tag.bg_color, "text_color" to tag.textColor())
+            }
 
         // Formats from linked media items
         val mediaItemIds = MediaItemTitle.findAll().filter { it.title_id == titleId }.map { it.media_item_id }.toSet()
@@ -316,9 +322,15 @@ class TitleDetailHttpService {
                             mapOf("id" to a.id, "name" to a.name)
                         }
                     }
+                // Track chips only surface what DIFFERS from the album
+                // (an album-level "Jazz" badge implies every track on
+                // it is Jazz; repeating the chip per row is pure noise).
+                // Same IDF-rarity sort as the album chips so the scan
+                // pattern is consistent.
                 val perTrackTags = tagsByTrack[track.id].orEmpty()
                     .mapNotNull { tagsById[it.tag_id] }
-                    .sortedBy { it.name.lowercase() }
+                    .filter { it.id !in tagIds }
+                    .sortedWith(compareBy({ tagTitleCounts[it.id] ?: 0 }, { it.name.lowercase() }))
                     .map { t ->
                         mapOf(
                             "id" to t.id,
