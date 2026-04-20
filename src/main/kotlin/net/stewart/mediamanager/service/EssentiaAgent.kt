@@ -86,8 +86,20 @@ class EssentiaAgent(
 
                 val next = nextCandidate()
                 if (next == null) {
-                    // Nothing to do — sleep longer so we're not
-                    // scanning the track table every 2s when idle.
+                    // Before idling, check whether any previously-failed
+                    // tracks have had their files replaced (re-rip,
+                    // manual repair). Any that have move back into the
+                    // analysis queue automatically — the admin doesn't
+                    // need to hand-reset the row.
+                    val recovered = sweepRecoveredFailures()
+                    if (recovered > 0) {
+                        log.info(
+                            "EssentiaAgent: {} previously-failed track(s) have newer " +
+                            "files on disk; requeued for analysis.", recovered
+                        )
+                        // Skip the idle sleep — we likely have work now.
+                        continue
+                    }
                     clock.sleep(IDLE_INTERVAL)
                     continue
                 }
@@ -106,6 +118,42 @@ class EssentiaAgent(
     /** Count of tracks still needing Essentia analysis — for the heartbeat log. */
     private fun remainingCount(): Int = Track.findAll().count { needsAnalysis(it) }
 
+    /**
+     * Look for ESSENTIA_FAILED rows whose underlying file has a newer
+     * mtime than when we recorded the failure. Those get their
+     * bpm_source flipped back to 'TAG' so the normal queue picks them
+     * up on the next cycle. Returns the count of rows requeued.
+     *
+     * Runs on the idle path in runLoop — no extra timers. A row whose
+     * file is missing or whose mtime hasn't moved is left alone.
+     */
+    private fun sweepRecoveredFailures(): Int {
+        val failed = Track.findAll().filter {
+            it.bpm_source == "ESSENTIA_FAILED" && !it.file_path.isNullOrBlank()
+        }
+        if (failed.isEmpty()) return 0
+        var recovered = 0
+        for (track in failed) {
+            val file = File(track.file_path!!)
+            if (!file.isFile) continue
+            val currentMtime = file.lastModified() / 1000
+            val storedMtime = track.bpm_analysis_failed_mtime ?: 0L
+            if (currentMtime > storedMtime) {
+                track.bpm_source = "TAG"
+                track.bpm_analysis_failed_mtime = null
+                track.updated_at = clock.now()
+                track.save()
+                recovered++
+                log.info(
+                    "EssentiaAgent: track {} \"{}\" file mtime advanced ({} -> {}); " +
+                    "flipped bpm_source back to TAG for re-analysis.",
+                    track.id, track.name, storedMtime, currentMtime
+                )
+            }
+        }
+        return recovered
+    }
+
     /** Pick the next eligible track. Ordered oldest-id-first for stable progress. */
     private fun nextCandidate(): Track? = Track.findAll()
         .asSequence()
@@ -116,7 +164,11 @@ class EssentiaAgent(
     private fun needsAnalysis(t: Track): Boolean =
         !t.file_path.isNullOrBlank() &&
         t.bpm_source != "ESSENTIA" &&
-        t.bpm_source != "MANUAL"
+        t.bpm_source != "MANUAL" &&
+        // Tried once, rejected (silent file / corrupt container / etc.).
+        // Don't keep knocking on it every cycle — if the admin repairs
+        // the file they can reset the row back to TAG to retry.
+        t.bpm_source != "ESSENTIA_FAILED"
 
     /**
      * Run Essentia on one track and persist the result. Logs the
@@ -144,12 +196,19 @@ class EssentiaAgent(
         val elapsedMs = clock.currentTimeMillis() - started
 
         if (rhythm == null) {
-            // Couldn't analyze. Don't flip the source — next cycle
-            // retries. Rate-limit by tracking consecutive failures? For
-            // now, the POLL_INTERVAL sleep is enough.
+            // Analysis failed. Capture the file's current mtime so the
+            // idle-sweep can auto-requeue this row if the file is
+            // re-ripped or repaired later. Preserves whatever bpm the
+            // tag reader had set; only changes provenance + failure mark.
+            track.bpm_source = "ESSENTIA_FAILED"
+            track.bpm_analysis_failed_mtime = file.lastModified() / 1000
+            track.updated_at = clock.now()
+            track.save()
             log.warn(
-                "EssentiaAgent: analysis failed for track {} \"{}\" ({}); will retry later",
-                track.id, track.name, path
+                "EssentiaAgent: analysis FAILED for track {} \"{}\" ({}); " +
+                "marked ESSENTIA_FAILED at mtime={}. The idle sweep will " +
+                "auto-requeue if the file is replaced.",
+                track.id, track.name, path, track.bpm_analysis_failed_mtime
             )
             return
         }

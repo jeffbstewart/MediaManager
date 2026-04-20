@@ -26,6 +26,13 @@ data class Track(
     var bpm_source: String = "TAG",
     /** Set only when [bpm_source]="ESSENTIA"; bpm_histogram_first_peak_weight (0..1). */
     var bpm_confidence: Double? = null,
+    /**
+     * Epoch seconds of the file's mtime at the moment analysis failed.
+     * Used by EssentiaAgent's sweep to auto-requeue rows whose underlying
+     * file has been modified since the failure was recorded. Null unless
+     * [bpm_source]="ESSENTIA_FAILED".
+     */
+    var bpm_analysis_failed_mtime: Long? = null,
     /** Raw time signature, e.g. "3/4" / "4/4". Mostly null — no standard ID3 frame; user can set manually. */
     var time_signature: String? = null,
     var created_at: LocalDateTime? = null,
