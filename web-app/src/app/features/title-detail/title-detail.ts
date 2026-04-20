@@ -94,11 +94,21 @@ export class TitleDetailComponent implements OnInit {
     await this.attachTrackTag(tag.id);
   }
 
+  /** Admin-only — detach a tag from a track via the inline × on the chip. */
+  async removeTrackTag(trackId: number, tagId: number): Promise<void> {
+    const existing = await this.catalog.getTrackTags(trackId);
+    const next = existing.map(t => t.id).filter(id => id !== tagId);
+    await this.catalog.setTrackTags(trackId, next);
+    await this.refreshTitle();
+  }
+
   private async attachTrackTag(tagId: number): Promise<void> {
     if (!this.trackTagTargetId) return;
     const next = [...this.trackTagCurrentIds.filter(id => id !== tagId), tagId];
     await this.catalog.setTrackTags(this.trackTagTargetId, next);
     this.closeTrackTagPicker();
+    // Refresh so the new chip appears on the track row without a reload.
+    await this.refreshTitle();
   }
 
   currentTagIds(): number[] {

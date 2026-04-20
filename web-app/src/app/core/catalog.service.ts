@@ -188,6 +188,8 @@ export interface AlbumTrack {
   duration_seconds: number | null;
   /** Populated only when the per-track performer differs from the album-level credit (compilations). */
   track_artists: { id: number; name: string }[];
+  /** Tags attached to this specific track (phase B). Empty for tracks with no tags. */
+  tags: TagCard[];
 }
 
 export interface TranscodeInfo {

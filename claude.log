@@ -4477,3 +4477,11 @@ Session 2 (Mar 25):
   CatalogGrpcService, catalog.service.ts, tag-detail.ts, title-detail
   (3 files), new shared/tag-picker component (3 files).
 ===
+
+=== 2026-04-19 22:05 — Show track tags on album page ===
+- Track tag chips now appear inline next to each track name on the album
+  detail page; admin × on each chip for one-click removal. Attaching a
+  tag via the picker refreshes the title so the chip shows up immediately.
+- Backend: TitleDetailHttpService includes tags on each album track row
+  (id + name + bg/text colors). Client type AlbumTrack gains tags: TagCard[].
+===

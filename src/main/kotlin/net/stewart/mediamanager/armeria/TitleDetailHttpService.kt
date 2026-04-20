@@ -295,6 +295,18 @@ class TitleDetailHttpService {
                 .filter { a -> trackArtistLinks.any { it.artist_id == a.id } }
                 .associateBy { it.id }
 
+            // Per-track tags — surfaced so the album view can render a
+            // chip next to each track row and the admin picker opens
+            // already knowing which tags are attached.
+            val trackTagLinks = if (trackIds.isEmpty()) emptyList()
+                else net.stewart.mediamanager.entity.TrackTag.findAll()
+                    .filter { it.track_id in trackIds }
+            val tagsByTrack = trackTagLinks.groupBy { it.track_id }
+            val tagsById = if (trackTagLinks.isEmpty()) emptyMap()
+                else net.stewart.mediamanager.entity.Tag.findAll()
+                    .filter { t -> trackTagLinks.any { it.tag_id == t.id } }
+                    .associateBy { it.id }
+
             tracks.map { track ->
                 val perTrack = trackArtistLinks
                     .filter { it.track_id == track.id }
@@ -304,13 +316,25 @@ class TitleDetailHttpService {
                             mapOf("id" to a.id, "name" to a.name)
                         }
                     }
+                val perTrackTags = tagsByTrack[track.id].orEmpty()
+                    .mapNotNull { tagsById[it.tag_id] }
+                    .sortedBy { it.name.lowercase() }
+                    .map { t ->
+                        mapOf(
+                            "id" to t.id,
+                            "name" to t.name,
+                            "bg_color" to t.bg_color,
+                            "text_color" to t.textColor()
+                        )
+                    }
                 mapOf(
                     "track_id" to track.id,
                     "disc_number" to track.disc_number,
                     "track_number" to track.track_number,
                     "name" to track.name,
                     "duration_seconds" to track.duration_seconds,
-                    "track_artists" to perTrack
+                    "track_artists" to perTrack,
+                    "tags" to perTrackTags
                 )
             }
         } else emptyList()

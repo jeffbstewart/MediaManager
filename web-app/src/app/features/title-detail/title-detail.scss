@@ -146,6 +146,49 @@
   min-width: 0;
 }
 
+.track-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.track-tag-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.track-tag-chip {
+  font-size: 0.625rem;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  text-decoration: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0.9;
+
+  &:hover { opacity: 1; }
+}
+
+.track-tag-remove-btn {
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  padding: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+
+  &:hover { opacity: 1; }
+  mat-icon { font-size: 10px; width: 10px; height: 10px; }
+}
+
 .track-name {
   font-size: 0.9375rem;
   overflow: hidden;

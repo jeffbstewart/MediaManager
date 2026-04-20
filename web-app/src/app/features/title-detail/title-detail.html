@@ -280,7 +280,26 @@
               <div class="track-row">
                 <span class="track-number">{{ track.track_number }}</span>
                 <div class="track-info">
-                  <span class="track-name">{{ track.name }}</span>
+                  <span class="track-name-row">
+                    <span class="track-name">{{ track.name }}</span>
+                    @if (track.tags && track.tags.length > 0) {
+                      @for (tag of track.tags; track tag.id) {
+                        <span class="track-tag-chip-wrap">
+                          <a class="track-tag-chip"
+                             [routerLink]="routes.tag(tag.id)"
+                             [style.background-color]="tag.bg_color"
+                             [style.color]="tag.text_color">{{ tag.name }}</a>
+                          @if (features.isAdmin()) {
+                            <button type="button" class="track-tag-remove-btn"
+                                    (click)="removeTrackTag(track.track_id, tag.id); $event.preventDefault(); $event.stopPropagation()"
+                                    [attr.aria-label]="'Remove ' + tag.name">
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          }
+                        </span>
+                      }
+                    }
+                  </span>
                   @if (track.track_artists.length > 0) {
                     <span class="track-artist">
                       @for (a of track.track_artists; track a.id; let last = $last) {
