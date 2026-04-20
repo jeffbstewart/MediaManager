@@ -11,11 +11,15 @@ import com.linecorp.armeria.server.ServiceRequestContext
 import com.linecorp.armeria.server.annotation.Blocking
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.UnmatchedAudio
 import net.stewart.mediamanager.service.AudioTagReader
+import net.stewart.mediamanager.service.AutoTagApplicator
+import org.slf4j.LoggerFactory
+import java.time.LocalDateTime
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,6 +46,7 @@ import kotlin.io.path.name
 @Blocking
 class TrackDiagnosticHttpService {
 
+    private val log = LoggerFactory.getLogger(TrackDiagnosticHttpService::class.java)
     private val gson = Gson()
 
     @Get("/api/v2/admin/diag/track/{trackId}")
@@ -145,6 +150,229 @@ class TrackDiagnosticHttpService {
 
         val bytes = gson.toJson(response).toByteArray(Charsets.UTF_8)
         val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .contentLength(bytes.size.toLong())
+            .build()
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
+    }
+
+    /**
+     * Rescan the album's directories for audio files and link any
+     * strong matches to *unlinked* tracks. Never touches already-linked
+     * tracks — this is the narrow recovery tool for "scanner ran before
+     * the files were in place" / "one track didn't match" cases, not
+     * the heavy "I picked the wrong MB release entirely" case (that's
+     * a separate drop-and-restage flow).
+     *
+     * MBID match is the acceptance bar; we fall back to (disc, track)
+     * number match ONLY when the track has no recording_mbid of its
+     * own (so a mis-numbered compilation file can't silently overwrite
+     * a better track row).
+     */
+    @Post("/api/v2/admin/albums/{titleId}/rescan")
+    fun rescanAlbum(
+        ctx: ServiceRequestContext,
+        @Param("titleId") titleId: Long
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val title = Title.findById(titleId) ?: return notFound("Title $titleId not found")
+        val tracks = Track.findAll()
+            .filter { it.title_id == titleId }
+            .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
+        if (tracks.isEmpty()) {
+            return badRequest("Title $titleId has no tracks — nothing to rescan.")
+        }
+
+        // Determine the search root. If any sibling track already has a
+        // file_path, use the common ancestor of those dirs — covers the
+        // normal "one track missed" case without scanning the whole
+        // library. If NONE are linked, fall back to music_root and
+        // walk everything (user asked for it; admin-initiated only).
+        val linkedDirs = tracks.mapNotNull { it.file_path?.let { fp -> File(fp).parentFile } }
+            .toSet()
+        val searchRoot = linkedDirs.commonAncestorOrNull()
+            ?: musicRoot()?.let { File(it) }
+        if (searchRoot == null || !searchRoot.isDirectory) {
+            return badRequest("No linked siblings and music_root_path not configured.")
+        }
+
+        val unlinkedTracks = tracks.filter { it.file_path.isNullOrBlank() }
+        if (unlinkedTracks.isEmpty()) {
+            return jsonOk(mapOf(
+                "linked" to 0,
+                "skipped_already_linked" to tracks.size,
+                "no_match" to 0,
+                "candidates_considered" to 0,
+                "message" to "All tracks already linked — nothing to do."
+            ))
+        }
+
+        val alreadyLinkedPaths = tracks.mapNotNull { it.file_path }.toSet()
+        val filesConsidered = mutableListOf<Pair<Path, AudioTagReader.AudioTags>>()
+        val audioExts = setOf("flac", "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav")
+
+        // Walk the search root. Depth-cap at 4 so the fallback full-
+        // library walk stays bounded even on a big NAS layout
+        // (music_root/artist/album/disc/file.flac is depth 4).
+        val walkDepth = if (linkedDirs.isEmpty()) 4 else 3
+        Files.walk(searchRoot.toPath(), walkDepth).use { stream ->
+            stream.forEach { p ->
+                if (!p.isRegularFile()) return@forEach
+                if (p.extension.lowercase() !in audioExts) return@forEach
+                if (p.toString() in alreadyLinkedPaths) return@forEach
+                val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
+                    ?: AudioTagReader.AudioTags.EMPTY
+                // Ignore files whose album tag obviously doesn't match —
+                // protects a full-library walk from pulling in the
+                // world. Loose compare because taggers disagree on
+                // punctuation and casing.
+                if (!albumTagLooksRight(tags, title)) return@forEach
+                filesConsidered += p to tags
+            }
+        }
+
+        val now = LocalDateTime.now()
+        var linkedCount = 0
+        val failures = mutableListOf<Map<String, Any?>>()
+        val perTrackBest = mutableMapOf<Long, Pair<Path, AudioTagReader.AudioTags>>()
+
+        // For each unlinked track, pick the best file by MBID match,
+        // then by (disc, track) number, then by title-name similarity.
+        for (track in unlinkedTracks) {
+            val best = filesConsidered
+                .mapNotNull { (p, tags) ->
+                    val score = scoreMatch(track, tags, p.name)
+                    if (score > 0) Triple(p, tags, score) else null
+                }
+                .maxByOrNull { it.third }
+                ?: continue
+            perTrackBest[track.id!!] = best.first to best.second
+        }
+
+        // Two different tracks could pick the same file if, say, MBIDs
+        // are absent and disc/track numbering collides. Resolve by
+        // score — the better-scoring track wins the file, the other
+        // stays unlinked and reports no match.
+        val fileToTrack = mutableMapOf<Path, Long>()
+        val trackScores = mutableMapOf<Long, Int>()
+        for (track in unlinkedTracks) {
+            val entry = perTrackBest[track.id!!] ?: continue
+            val (path, tags) = entry
+            val score = scoreMatch(track, tags, path.name)
+            val incumbent = fileToTrack[path]
+            if (incumbent == null || score > (trackScores[incumbent] ?: 0)) {
+                if (incumbent != null) trackScores.remove(incumbent)
+                fileToTrack[path] = track.id!!
+                trackScores[track.id!!] = score
+            }
+        }
+
+        for ((path, trackId) in fileToTrack) {
+            val track = tracks.first { it.id == trackId }
+            val tags = perTrackBest[trackId]!!.second
+            val titleYear = title.release_year
+            track.file_path = path.toString()
+            track.bpm = tags.bpm
+            track.time_signature = tags.timeSignature
+            track.updated_at = now
+            track.save()
+            AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
+                trackId = trackId,
+                genres = tags.genres,
+                styles = tags.styles,
+                bpm = tags.bpm,
+                timeSignature = tags.timeSignature,
+                year = titleYear
+            ))
+            linkedCount++
+            log.info("rescanAlbum title={}: linked track {} disc={} track={} \"{}\" -> {}",
+                titleId, trackId, track.disc_number, track.track_number, track.name, path)
+        }
+        if (linkedCount > 0) AutoTagApplicator.applyToAlbum(titleId)
+
+        val stillUnlinked = unlinkedTracks.filter { it.file_path.isNullOrBlank() }
+        for (t in stillUnlinked) {
+            failures += mapOf(
+                "track_id" to t.id,
+                "disc_number" to t.disc_number,
+                "track_number" to t.track_number,
+                "name" to t.name
+            )
+        }
+
+        return jsonOk(mapOf(
+            "linked" to linkedCount,
+            "skipped_already_linked" to (tracks.size - unlinkedTracks.size),
+            "no_match" to stillUnlinked.size,
+            "candidates_considered" to filesConsidered.size,
+            "search_root" to searchRoot.absolutePath,
+            "unlinked_after_rescan" to failures
+        ))
+    }
+
+    /**
+     * Scoring used by rescanAlbum to pick the best file per track.
+     * Higher is better; 0 means "not a candidate."
+     */
+    private fun scoreMatch(
+        track: Track,
+        tags: AudioTagReader.AudioTags,
+        filename: String
+    ): Int {
+        var score = 0
+        // MBID is the strongest signal — use it alone when both sides
+        // carry one and they match.
+        if (!track.musicbrainz_recording_id.isNullOrBlank() &&
+            tags.musicBrainzRecordingId == track.musicbrainz_recording_id) {
+            return 100
+        }
+        // Otherwise require disc + track number agreement. This is the
+        // conservative floor — without MBID we need positional proof.
+        if (tags.discNumber == track.disc_number &&
+            tags.trackNumber == track.track_number) {
+            score += 50
+            // Track name / filename similarity gets us over the line
+            // when two discs have overlapping numbering (compilations).
+            val normName = normalize(track.name)
+            if (normName.isNotBlank()) {
+                if (tags.title != null && normalize(tags.title).contains(normName)) score += 20
+                if (normalize(filename).contains(normName)) score += 10
+            }
+        }
+        return score
+    }
+
+    /**
+     * True when the file's album / album_artist tag reasonably matches
+     * the title row. Protects the full-library fallback walk from
+     * pulling in unrelated files.
+     */
+    private fun albumTagLooksRight(
+        tags: AudioTagReader.AudioTags,
+        title: Title
+    ): Boolean {
+        val album = tags.album ?: return false
+        val titleNorm = normalize(title.name)
+        if (titleNorm.isBlank()) return false
+        val albumNorm = normalize(album)
+        // Either direction: "The Greatest Hits" vs "The Greatest Hits, Disc 1".
+        return albumNorm.contains(titleNorm) || titleNorm.contains(albumNorm)
+    }
+
+    private fun jsonOk(payload: Map<String, Any?>): HttpResponse {
+        val bytes = gson.toJson(payload).toByteArray(Charsets.UTF_8)
+        val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .contentLength(bytes.size.toLong())
+            .build()
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
+    }
+
+    private fun badRequest(msg: String): HttpResponse {
+        val bytes = gson.toJson(mapOf("error" to msg)).toByteArray(Charsets.UTF_8)
+        val headers = ResponseHeaders.builder(HttpStatus.BAD_REQUEST)
             .contentType(MediaType.JSON_UTF_8)
             .contentLength(bytes.size.toLong())
             .build()

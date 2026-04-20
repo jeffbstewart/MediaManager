@@ -866,6 +866,29 @@ export class CatalogService {
       `/api/v2/catalog/tracks/${trackId}/music-tags`, updates));
   }
 
+  /**
+   * Admin-only — rescan the album's directories and link any
+   * previously-unlinked tracks whose tags match a file on disk.
+   * Never touches already-linked tracks.
+   */
+  async rescanAlbum(titleId: number): Promise<{
+    linked: number;
+    skipped_already_linked: number;
+    no_match: number;
+    candidates_considered: number;
+    search_root: string;
+    unlinked_after_rescan: Array<{
+      track_id: number;
+      disc_number: number;
+      track_number: number;
+      name: string;
+    }>;
+    message?: string;
+  }> {
+    return firstValueFrom(this.http.post<any>(
+      `/api/v2/admin/albums/${titleId}/rescan`, {}));
+  }
+
   async search(query: string, limit = 30): Promise<SearchResponse> {
     return firstValueFrom(this.http.get<SearchResponse>('/api/v2/search', { params: { q: query, limit: limit.toString() } }));
   }

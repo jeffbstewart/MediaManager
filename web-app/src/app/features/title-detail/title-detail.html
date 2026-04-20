@@ -207,6 +207,13 @@
                   <mat-icon>playlist_add</mat-icon>
                   <span>Add to playlist</span>
                 </button>
+                @if (features.isAdmin()) {
+                  <button mat-menu-item type="button" (click)="rescanAlbum()"
+                          [disabled]="rescanning()">
+                    <mat-icon>refresh</mat-icon>
+                    <span>{{ rescanning() ? 'Rescanning…' : 'Rescan files (admin)' }}</span>
+                  </button>
+                }
               </mat-menu>
             </div>
           }

@@ -50,6 +50,10 @@ export class TitleDetailComponent implements OnInit {
   readonly title = signal<TitleDetail | null>(null);
   readonly selectedSeason = signal<number | null>(null);
 
+  // Admin: rescan-files in-flight flag so the menu item disables while
+  // the server walks the album's directories.
+  readonly rescanning = signal(false);
+
   // Phase 2 — playlist picker for album / track adds.
   readonly pickerOpen = signal(false);
   readonly pickerTrackIds = signal<number[]>([]);
@@ -268,6 +272,35 @@ export class TitleDetailComponent implements OnInit {
   /** Play a single track; queues the rest of the album behind it. */
   playTrackAt(index: number): void {
     this.playAlbum(index);
+  }
+
+  /**
+   * Admin-only — walk the album's directories and link any previously
+   * unlinked tracks. Shows a one-line summary in the error banner slot
+   * (reusing its positioning) so the admin knows what happened. Also
+   * refreshes the title so freshly-linked tracks get play buttons.
+   */
+  async rescanAlbum(): Promise<void> {
+    const t = this.title();
+    if (!t || this.rescanning()) return;
+    this.rescanning.set(true);
+    try {
+      const result = await this.catalog.rescanAlbum(t.title_id);
+      const msg = result.message
+        ?? `Rescan: linked ${result.linked}, still unlinked ${result.no_match}, ` +
+           `${result.candidates_considered} files considered.`;
+      // Reuse the error banner as a transient status; cleared on the
+      // next refresh of the title. window.alert keeps this snappy
+      // without building a full snackbar plumbing pass.
+      window.alert(msg);
+      // Refresh so track rows pick up their new file_path + tags.
+      const fresh = await this.catalog.getTitleDetail(t.title_id);
+      this.title.set(fresh);
+    } catch (e) {
+      window.alert(`Rescan failed: ${(e as Error).message ?? e}`);
+    } finally {
+      this.rescanning.set(false);
+    }
   }
 
   /** Open the picker pre-loaded with every track on the current album. */
