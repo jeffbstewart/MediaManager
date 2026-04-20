@@ -294,10 +294,17 @@ export class TitleDetailComponent implements OnInit {
         `${r.candidates_considered} candidate(s) kept from ${r.files_walked} ` +
           `audio file(s) walked.`,
         `${r.files_wrong_album_tag} rejected (album tag didn't match), ` +
+          `${r.files_path_rejected} skipped by path prefilter, ` +
           `${r.files_already_linked_elsewhere} already linked elsewhere.`,
-        `Searched: ${r.roots_walked.join(' → ')}`,
-        `music_root_path: ${r.music_root_configured}`,
       ];
+      if (r.rejected_album_tag_samples.length > 0) {
+        lines.push(
+          `Rejected album tags saw (sample): ${r.rejected_album_tag_samples
+            .map(s => `"${s}"`).join(', ')}`,
+        );
+      }
+      lines.push(`Searched: ${r.roots_walked.join(' → ')}`);
+      lines.push(`music_root_path: ${r.music_root_configured}`);
       window.alert(r.message ?? lines.join('\n'));
       const fresh = await this.catalog.getTitleDetail(t.title_id);
       this.title.set(fresh);

@@ -177,6 +177,12 @@ class TrackDiagnosticHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
+        // A fallback full-library walk does an ffprobe per audio file;
+        // on a NAS with thousands of files that doesn't fit in the
+        // default 10s request timeout. Give the handler a comfortable
+        // ceiling — this is an admin-initiated one-shot action.
+        ctx.setRequestTimeout(java.time.Duration.ofMinutes(5))
+
         val title = Title.findById(titleId) ?: return notFound("Title $titleId not found")
         val tracks = Track.findAll()
             .filter { it.title_id == titleId }
@@ -225,7 +231,26 @@ class TrackDiagnosticHttpService {
         var filesWalked = 0
         var filesAlreadyLinked = 0
         var filesWrongAlbumTag = 0
+        var filesPathRejected = 0
         var rootsWalked = mutableListOf<String>()
+        // Keep a handful of rejected album-tag strings so the response
+        // can show the admin exactly why nothing matched (e.g. "files
+        // say 'Whitney Houston: The Greatest Hits', title says 'The
+        // Ultimate Collection'").
+        val rejectedAlbumSamples = linkedSetOf<String>()
+
+        val titleNorm = normalize(title.name)
+        val primaryArtistNames: List<String> = run {
+            val artistLinkIds = net.stewart.mediamanager.entity.TitleArtist.findAll()
+                .filter { it.title_id == titleId }
+                .map { it.artist_id }
+                .toSet()
+            if (artistLinkIds.isEmpty()) emptyList()
+            else net.stewart.mediamanager.entity.Artist.findAll()
+                .filter { it.id in artistLinkIds }
+                .map { normalize(it.name) }
+                .filter { it.isNotBlank() }
+        }
 
         // Walk strategy: start from `primaryRoot`; if that finds zero
         // audio files, try `fallbackRoot` (typically music_root). This
@@ -234,7 +259,7 @@ class TrackDiagnosticHttpService {
         // linked siblings sit entirely under one disc directory so the
         // ancestor never walked up far enough to see the other disc's
         // files. Covered here by retrying from the full library root.
-        fun walkOne(root: File, depth: Int) {
+        fun walkOne(root: File, depth: Int, pathPrefilter: Boolean) {
             rootsWalked += root.absolutePath
             Files.walk(root.toPath(), depth).use { stream ->
                 stream.forEach { p ->
@@ -245,10 +270,31 @@ class TrackDiagnosticHttpService {
                         filesAlreadyLinked++
                         return@forEach
                     }
+                    // Path-based prefilter on the full-library walk so
+                    // we don't ffprobe every file under music_root.
+                    // Require the normalized path to contain either the
+                    // album title OR the primary artist / album artist
+                    // so we still catch files in artist-named folders
+                    // whose directory doesn't carry the album name.
+                    if (pathPrefilter) {
+                        val pathNorm = normalize(p.toString())
+                        val hit = (titleNorm.isNotBlank() && pathNorm.contains(titleNorm)) ||
+                            primaryArtistNames.any { a ->
+                                a.isNotBlank() && pathNorm.contains(a)
+                            }
+                        if (!hit) {
+                            filesPathRejected++
+                            return@forEach
+                        }
+                    }
                     val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
                         ?: AudioTagReader.AudioTags.EMPTY
                     if (!albumTagLooksRight(tags, title)) {
                         filesWrongAlbumTag++
+                        if (rejectedAlbumSamples.size < 5) {
+                            tags.album?.takeIf { it.isNotBlank() }
+                                ?.let { rejectedAlbumSamples.add(it) }
+                        }
                         return@forEach
                     }
                     filesConsidered += p to tags
@@ -260,11 +306,17 @@ class TrackDiagnosticHttpService {
         // the album directory tree. The full-library fallback walks
         // deeper because some setups nest several levels under
         // music_root (e.g. /music/lossless/artist/album/disc/).
-        walkOne(primaryRoot, depth = if (siblingRoot != null) 4 else 8)
+        // Sibling-root walks skip the path prefilter — we're already
+        // inside the album tree so every audio file is a candidate.
+        // The fallback library walk uses the prefilter to avoid
+        // ffprobing every file under music_root.
+        walkOne(primaryRoot, depth = if (siblingRoot != null) 4 else 8, pathPrefilter = siblingRoot == null)
         if (filesConsidered.isEmpty() && fallbackRoot != null) {
-            log.info("rescanAlbum title={}: primary root {} found no candidates, " +
-                "falling back to music_root {}", titleId, primaryRoot, fallbackRoot)
-            walkOne(fallbackRoot, depth = 8)
+            log.info("rescanAlbum title={}: primary root {} found no candidates " +
+                "(walked={}, wrong_album={}, already_linked={}), " +
+                "falling back to music_root {}",
+                titleId, primaryRoot, filesWalked, filesWrongAlbumTag, filesAlreadyLinked, fallbackRoot)
+            walkOne(fallbackRoot, depth = 8, pathPrefilter = true)
         }
 
         val now = LocalDateTime.now()
@@ -344,6 +396,8 @@ class TrackDiagnosticHttpService {
             "files_walked" to filesWalked,
             "files_already_linked_elsewhere" to filesAlreadyLinked,
             "files_wrong_album_tag" to filesWrongAlbumTag,
+            "files_path_rejected" to filesPathRejected,
+            "rejected_album_tag_samples" to rejectedAlbumSamples.toList(),
             "roots_walked" to rootsWalked,
             "music_root_configured" to (musicRootDir?.absolutePath ?: "(not set)"),
             "unlinked_after_rescan" to failures

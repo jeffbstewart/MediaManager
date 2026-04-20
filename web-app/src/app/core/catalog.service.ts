@@ -879,6 +879,8 @@ export class CatalogService {
     files_walked: number;
     files_already_linked_elsewhere: number;
     files_wrong_album_tag: number;
+    files_path_rejected: number;
+    rejected_album_tag_samples: string[];
     roots_walked: string[];
     music_root_configured: string;
     unlinked_after_rescan: Array<{
