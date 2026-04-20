@@ -40,11 +40,14 @@ dependencies {
     implementation(libs.zxing.javase)
     implementation(project(":transcode-common"))
 
-    // gRPC + Protobuf (Armeria provides the HTTP/2 transport)
+    // gRPC + Protobuf (Armeria provides the HTTP/2 transport for our
+    // inbound gRPC server; grpc-netty-shaded below is the OUTBOUND
+    // transport ManagedChannelBuilder needs for MadmomClient.)
     implementation(libs.grpc.stub)
     implementation(libs.grpc.kotlin.stub)
     implementation(libs.grpc.protobuf)
     implementation(libs.armeria.grpc)
+    implementation(libs.grpc.netty.shaded)
     implementation(libs.protobuf.kotlin)
     implementation(libs.kotlinx.coroutines.core)
 
