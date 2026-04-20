@@ -19,6 +19,9 @@ while IFS='=' read -r key value; do
     export "$key"="$value"
 done < "$DEPLOY_ENV"
 
+# REGISTRY is required. NAS_IP / WATCHTOWER_PORT / WATCHTOWER_TOKEN
+# are optional — if set, we ping Watchtower after push so the sidecar
+# rolls automatically; if unset, the operator redeploys by hand.
 for var in REGISTRY; do
     if [ -z "${!var:-}" ]; then
         echo "ERROR: $var not set in $DEPLOY_ENV"
@@ -62,8 +65,34 @@ echo "Done! Pushed:"
 echo "  ${FULL_NAME}:${TIMESTAMP}"
 echo "  ${FULL_NAME}:latest"
 echo "  ${FULL_NAME}:rollback (previous latest)"
+
+# Watchtower ping — same shape as docker-build.sh. Works if the
+# Watchtower service is configured to watch the mediamanager-madmom
+# container (either watches all containers by default, or explicitly
+# includes it in its watch-list arg). If Watchtower is scoped to
+# only `mediamanager`, this endpoint call is still harmless — it
+# just doesn't touch the sidecar; operator falls back to manual
+# `docker-compose pull && up -d`.
+if [ -n "${WATCHTOWER_TOKEN:-}" ] && [ -n "${NAS_IP:-}" ] && [ -n "${WATCHTOWER_PORT:-}" ]; then
+    echo ""
+    echo "Triggering Watchtower redeploy..."
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer ${WATCHTOWER_TOKEN}" \
+        "http://${NAS_IP}:${WATCHTOWER_PORT}/v1/update" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo "Watchtower accepted the update request. Sidecar will restart if it's on Watchtower's watch list."
+        echo "If it doesn't restart, confirm mediamanager-madmom is in the Watchtower command (e.g."
+        echo "  command: --interval 300 --cleanup mediamanager mediamanager-madmom)."
+    else
+        echo "Warning: Watchtower returned HTTP ${HTTP_CODE}. Check NAS logs."
+        echo "  Manual deploy: docker-compose pull mediamanager-madmom && docker-compose up -d"
+    fi
+else
+    echo ""
+    echo "No Watchtower vars set — skipping auto-redeploy."
+    echo "Manual: docker-compose pull mediamanager-madmom && docker-compose up -d"
+fi
 echo ""
-echo "Next steps:"
-echo "  - Ensure BINNACLE_API_KEY is set in your docker-compose env."
-echo "  - Ensure binnacle_ingest network exists (created by Binnacle stack)."
-echo "  - docker-compose pull mediamanager-madmom && docker-compose up -d"
+echo "Required one-time setup (if not done):"
+echo "  - BINNACLE_API_KEY set in the docker-compose env"
+echo "  - binnacle_ingest network created by the Binnacle stack"

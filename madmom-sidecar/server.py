@@ -75,10 +75,14 @@ def setup_logging() -> None:
         "service.version": os.environ.get("SIDECAR_VERSION", "dev"),
     })
     provider = LoggerProvider(resource=resource)
+    # Binnacle's ingest auth is a custom header name rather than the
+    # OTLP-default Authorization/Bearer — it matches what our Kotlin
+    # logging-common exporter sends. Using the wrong header is a
+    # guaranteed HTTP 401 on every batch.
     provider.add_log_record_processor(BatchLogRecordProcessor(
         OTLPLogExporter(
             endpoint=endpoint,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"X-Logging-Api-Key": api_key},
         )
     ))
     handler = LoggingHandler(level=logging.INFO, logger_provider=provider)

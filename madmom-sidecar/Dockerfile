@@ -51,11 +51,13 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # Generate Python gRPC stubs from the shared proto. common.proto is
-# pulled in alongside because madmom.proto imports it.
+# pulled in alongside because madmom.proto imports it, and time.proto
+# is the transitive dep of common.proto — without generating it here,
+# the common_pb2 import fails at runtime with ModuleNotFoundError.
 COPY proto/ proto/
 RUN python -m grpc_tools.protoc \
         -Iproto --python_out=. --grpc_python_out=. \
-        proto/madmom.proto proto/common.proto \
+        proto/madmom.proto proto/common.proto proto/time.proto \
     && ls -l *_pb2*.py
 
 COPY madmom-sidecar/server.py .
