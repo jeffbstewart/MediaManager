@@ -880,6 +880,7 @@ export class CatalogService {
     files_already_linked_elsewhere: number;
     files_wrong_album_tag: number;
     files_path_rejected: number;
+    files_accepted_by_artist_position: number;
     rejected_album_tag_samples: string[];
     roots_walked: string[];
     music_root_configured: string;

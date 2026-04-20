@@ -296,6 +296,7 @@ export class TitleDetailComponent implements OnInit {
         `${r.files_wrong_album_tag} rejected (album tag didn't match), ` +
           `${r.files_path_rejected} skipped by path prefilter, ` +
           `${r.files_already_linked_elsewhere} already linked elsewhere.`,
+        `${r.files_accepted_by_artist_position} accepted by artist+position bypass.`,
       ];
       if (r.rejected_album_tag_samples.length > 0) {
         lines.push(

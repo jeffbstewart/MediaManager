@@ -417,9 +417,14 @@ class TrackDiagnosticHttpService {
                     }
                     val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
                         ?: AudioTagReader.AudioTags.EMPTY
-                    // MBID match bypasses the album-tag check — the
-                    // file is authoritatively on this album even if
-                    // its album string doesn't match our title name.
+
+                    // Acceptance gates. Any one of these passing is
+                    // enough to consider the file — downstream
+                    // scoreMatch then gates the actual per-track pick.
+                    //
+                    // MBID bypass. Strong signal, applies when the file
+                    // or the catalog carries any of the three MBID
+                    // flavours we pair up.
                     val recordingBypass = tags.musicBrainzRecordingId != null &&
                         tags.musicBrainzRecordingId in albumRecordingMbids
                     val releaseBypass = albumReleaseMbid != null &&
@@ -427,7 +432,24 @@ class TrackDiagnosticHttpService {
                     val releaseGroupBypass = albumReleaseGroupMbid != null &&
                         tags.musicBrainzReleaseGroupId == albumReleaseGroupMbid
                     val mbidOk = recordingBypass || releaseBypass || releaseGroupBypass
-                    if (!mbidOk && !albumTagLooksRight(tags, title)) {
+
+                    // Artist-plus-position bypass. Handles the common
+                    // real-world case where the rip carries no MB IDs
+                    // (or IDs that don't match the catalog's chosen
+                    // release), but does tag the artist and the
+                    // (disc, track) position — both present. Only
+                    // fires when BOTH match; scoreMatch enforces the
+                    // final pick by track-name / filename similarity.
+                    val fileArtistNorm = (tags.albumArtist ?: tags.trackArtist)
+                        ?.let { normalize(it) }
+                    val artistHit = fileArtistNorm != null &&
+                        fileArtistNorm in primaryArtistNamesSet
+                    val positionHit = tags.discNumber != null &&
+                        tags.trackNumber != null &&
+                        (tags.discNumber!! to tags.trackNumber!!) in albumSlots
+                    val artistPositionOk = artistHit && positionHit
+
+                    if (!mbidOk && !artistPositionOk && !albumTagLooksRight(tags, title)) {
                         filesWrongAlbumTag++
                         if (rejectedAlbumSamples.size < 5) {
                             tags.album?.takeIf { it.isNotBlank() }
@@ -449,6 +471,22 @@ class TrackDiagnosticHttpService {
                             )
                         }
                         return@forEach
+                    }
+                    if (artistPositionOk && !mbidOk && !albumTagLooksRight(tags, title)) {
+                        filesAcceptedByArtistPosition++
+                        // Cheap-but-handy audit — at most a few per run
+                        // given how artist+position intersects; lets
+                        // the admin verify the bypass fired where they
+                        // expected it to.
+                        if (filesAcceptedByArtistPosition <= 10) {
+                            log.info(
+                                "rescanAlbum title={}: ACCEPT by artist+position path={} " +
+                                "FILE[artist=\"{}\" disc={} track={}]",
+                                titleId, p,
+                                tags.albumArtist ?: tags.trackArtist ?: "(null)",
+                                tags.discNumber, tags.trackNumber
+                            )
+                        }
                     }
                     filesConsidered += p to tags
                 }
@@ -555,11 +593,12 @@ class TrackDiagnosticHttpService {
 
         log.info(
             "rescanAlbum title={} \"{}\" FINAL: linked={}, still_unlinked={}, " +
-            "candidates_considered={}, files_walked={}, wrong_album={}, " +
-            "path_skipped={}, already_linked={}, rejected_album_samples={}",
+            "candidates_considered={}, accepted_by_artist_position={}, " +
+            "files_walked={}, wrong_album={}, path_skipped={}, already_linked={}, " +
+            "rejected_album_samples={}",
             titleId, title.name, linkedCount, stillUnlinked.size,
-            filesConsidered.size, filesWalked, filesWrongAlbumTag,
-            filesPathRejected, filesAlreadyLinked,
+            filesConsidered.size, filesAcceptedByArtistPosition,
+            filesWalked, filesWrongAlbumTag, filesPathRejected, filesAlreadyLinked,
             rejectedAlbumSamples.toList()
         )
 
@@ -572,6 +611,7 @@ class TrackDiagnosticHttpService {
             "files_already_linked_elsewhere" to filesAlreadyLinked,
             "files_wrong_album_tag" to filesWrongAlbumTag,
             "files_path_rejected" to filesPathRejected,
+            "files_accepted_by_artist_position" to filesAcceptedByArtistPosition,
             "rejected_album_tag_samples" to rejectedAlbumSamples.toList(),
             "roots_walked" to rootsWalked,
             "music_root_configured" to (musicRootDir?.absolutePath ?: "(not set)"),

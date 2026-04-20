@@ -145,7 +145,11 @@ object AudioTagReader {
             durationSeconds = durationSec,
             musicBrainzReleaseId = tags.firstValue(
                 "musicbrainz_albumid",
-                "musicbrainz album id"
+                "musicbrainz album id",
+                // dBpoweramp writes a plain "MBID" key that carries the
+                // release MBID (same value across every track on the
+                // release). Non-standard but common in the wild.
+                "mbid"
             ),
             musicBrainzReleaseGroupId = tags.firstValue(
                 "musicbrainz_releasegroupid",
