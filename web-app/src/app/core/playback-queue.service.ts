@@ -453,33 +453,58 @@ export class PlaybackQueueService {
   }
 
   private postProgress(trackId: number, position: number, duration: number): void {
-    // Fire-and-forget; we don't want progress posts to block playback.
-    firstValueFrom(
-      this.http.post('/api/v2/audio/progress', {
-        track_id: trackId,
-        position_seconds: position,
-        duration_seconds: duration > 0 ? duration : null,
-      }),
-    ).catch(() => {
-      /* swallow — the next tick will retry */
+    this.beacon('/api/v2/audio/progress', {
+      track_id: trackId,
+      position_seconds: position,
+      duration_seconds: duration > 0 ? duration : null,
     });
   }
 
   /** Phase 2 — upsert the per-user playlist resume cursor. Fire-and-forget. */
   private postPlaylistProgress(playlistId: number, playlistTrackId: number, positionSeconds: number): void {
-    firstValueFrom(
-      this.http.post(`/api/v2/playlists/${playlistId}/progress`, {
-        playlist_track_id: playlistTrackId,
-        position_seconds: positionSeconds,
-      }),
-    ).catch(() => { /* swallow */ });
+    this.beacon(`/api/v2/playlists/${playlistId}/progress`, {
+      playlist_track_id: playlistTrackId,
+      position_seconds: positionSeconds,
+    });
   }
 
   /** Phase 2 — bump per-user, per-track play counter. Fire-and-forget. */
   private postTrackCompleted(trackId: number): void {
-    firstValueFrom(
-      this.http.post('/api/v2/playlists/track-completed', { track_id: trackId }),
-    ).catch(() => { /* swallow */ });
+    this.beacon('/api/v2/playlists/track-completed', { track_id: trackId });
+  }
+
+  /**
+   * Fire-and-forget JSON POST that doesn't consume one of the
+   * browser's six HTTP/1.1 slots per origin. Progress writes used to
+   * ride the HttpClient pool; while audio was playing, they piled up
+   * behind the audio stream and made user navigation fetches queue
+   * visibly (pending for seconds despite 30 ms server responses).
+   *
+   * navigator.sendBeacon queues requests on a separate scheduler so
+   * they never compete with foreground fetches; also guarantees
+   * delivery across page unload. Falls back to fetch() with
+   * keepalive:true when sendBeacon isn't available (all modern
+   * browsers have it, but defensive). Cookies ride along either way.
+   */
+  private beacon(url: string, payload: unknown): void {
+    const body = JSON.stringify(payload);
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([body], { type: 'application/json' });
+        if (navigator.sendBeacon(url, blob)) return;
+        // sendBeacon returned false — queue full / size over limit —
+        // fall through to fetch().
+      }
+      fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => { /* swallow */ });
+    } catch {
+      /* If Blob/fetch construction fails, skip this tick. */
+    }
   }
 }
 
