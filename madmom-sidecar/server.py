@@ -172,8 +172,46 @@ class MadmomEngine:
 # Service implementation
 # ------------------------------------------------------------------
 class MadmomAnalysisServicer(madmom_pb2_grpc.MadmomAnalysisServicer):
+    # Small LRU of recent POSITIVE results keyed on (path, mtime).
+    # Protects against back-to-back retries from MM (transient failure
+    # on the client side, rapid re-dispatch) re-running a 30 s
+    # inference we just finished. mtime in the key means a re-ripped
+    # file correctly invalidates — the mtime bump acts as a cache bust.
+    # Negative results (no time_signature detected) are NOT cached so
+    # a real retry has a chance to hit a different code path (e.g.
+    # after a madmom upgrade).
+    _CACHE_MAX = 256
+
     def __init__(self, engine: MadmomEngine) -> None:
         self.engine = engine
+        # OrderedDict: the move_to_end idiom gives us LRU eviction.
+        from collections import OrderedDict
+        self._cache: "OrderedDict[tuple[str, int], madmom_pb2.AnalyzeResponse]" = OrderedDict()
+
+    def _cache_key(self, path: str) -> Optional[tuple]:
+        try:
+            return (path, int(os.path.getmtime(path)))
+        except OSError:
+            return None
+
+    def _cache_get(self, path: str):
+        key = self._cache_key(path)
+        if key is None:
+            return None
+        resp = self._cache.get(key)
+        if resp is not None:
+            # Bump MRU.
+            self._cache.move_to_end(key)
+        return resp
+
+    def _cache_put(self, path: str, resp) -> None:
+        key = self._cache_key(path)
+        if key is None:
+            return
+        self._cache[key] = resp
+        self._cache.move_to_end(key)
+        while len(self._cache) > self._CACHE_MAX:
+            self._cache.popitem(last=False)
 
     def Analyze(self, request, context):
         path = request.file_path
@@ -191,6 +229,19 @@ class MadmomAnalysisServicer(madmom_pb2_grpc.MadmomAnalysisServicer):
             # Return an empty response rather than an error status;
             # MM's agent treats "no fields set" as "couldn't detect."
             return madmom_pb2.AnalyzeResponse()
+
+        # Cache check before paying for inference. Only positive
+        # results land in here — see _cache_put at the end.
+        cached = self._cache_get(path)
+        if cached is not None:
+            ANALYSIS_TOTAL.labels(outcome="success").inc()
+            logging.info(
+                "Analyze CACHED path=%s bpm=%d time_sig=%s (hit)",
+                path,
+                cached.bpm if cached.HasField("bpm") else 0,
+                cached.time_signature if cached.HasField("time_signature") else "(none)",
+            )
+            return cached
 
         try:
             _activations, beats = self.engine.analyze(path)
@@ -253,6 +304,10 @@ class MadmomAnalysisServicer(madmom_pb2_grpc.MadmomAnalysisServicer):
             resp.time_signature = time_signature
         resp.downbeat_confidence = confidence
         resp.beat_count = beat_count
+        # Only cache when we have a time_signature — the MM-facing
+        # contract for "positive result" is time_signature populated.
+        if time_signature is not None:
+            self._cache_put(path, resp)
         return resp
 
     def Health(self, request, context):
@@ -275,6 +330,18 @@ def main() -> None:
     logging.info("Prometheus /metrics serving on :%d", metrics_port)
 
     engine = MadmomEngine()
+
+    # Force model load BEFORE opening the listen socket. The first
+    # real inference blended model-load + JIT warm-up into a single
+    # >90 s call, blowing past MM's per-RPC deadline. Paying that
+    # cost during container startup moves it out of the request
+    # path and surfaces import-level failures (np.float removal,
+    # broken wheel, etc.) here instead of on first RPC. Startup
+    # becomes slow; steady state stays fast.
+    logging.info("Pre-loading madmom models before accepting requests...")
+    engine._ensure_loaded()
+    logging.info("Models loaded; opening gRPC listen socket")
+
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=1),  # madmom is not thread-safe
         options=[
