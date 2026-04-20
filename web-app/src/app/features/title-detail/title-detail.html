@@ -178,26 +178,37 @@
           }
 
           <!-- Play Album (albums) — only enabled when there's at least one
-               track with a playable file on the NAS. Clicking queues every
-               track on the album and starts the first. -->
+               track with a playable file on the NAS. Play is the primary
+               action; everything else lives behind the "More" pulldown so
+               the hero stays uncluttered. -->
           @if (isAlbum && t.tracks && t.tracks.length > 0) {
-            <button mat-flat-button color="primary" class="resume-btn"
-                    (click)="playAlbum(0)">
-              <mat-icon>play_arrow</mat-icon>
-              Play Album
-            </button>
-            @if (hasMusicRadio()) {
-              <button mat-stroked-button class="resume-btn"
-                      [disabled]="radioStarting()"
-                      (click)="startRadio()">
-                <mat-icon>graphic_eq</mat-icon>
-                {{ radioStarting() ? 'Starting…' : 'Start Radio' }}
+            <div class="album-actions">
+              <button mat-flat-button color="primary" class="resume-btn"
+                      (click)="playAlbum(0)">
+                <mat-icon>play_arrow</mat-icon>
+                Play Album
               </button>
-            }
-            <button mat-stroked-button class="resume-btn" (click)="openPickerForAlbum()">
-              <mat-icon>playlist_add</mat-icon>
-              Add to playlist
-            </button>
+              <button mat-stroked-button class="resume-btn album-more-btn"
+                      [matMenuTriggerFor]="albumActionsMenu"
+                      aria-label="More album actions">
+                <mat-icon>more_horiz</mat-icon>
+                More
+              </button>
+              <mat-menu #albumActionsMenu>
+                @if (hasMusicRadio()) {
+                  <button mat-menu-item type="button"
+                          [disabled]="radioStarting()"
+                          (click)="startRadio()">
+                    <mat-icon>graphic_eq</mat-icon>
+                    <span>{{ radioStarting() ? 'Starting…' : 'Start Radio' }}</span>
+                  </button>
+                }
+                <button mat-menu-item type="button" (click)="openPickerForAlbum()">
+                  <mat-icon>playlist_add</mat-icon>
+                  <span>Add to playlist</span>
+                </button>
+              </mat-menu>
+            </div>
           }
         </div>
       </div>

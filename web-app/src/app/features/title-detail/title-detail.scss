@@ -750,3 +750,12 @@
   z-index: 1000;
 }
 .playlist-picker-anchor { display: contents; }
+
+// Phase B — keep the album hero action row tight: Play is primary,
+// everything else collapses into the More pulldown.
+.album-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.album-more-btn mat-icon { margin-right: 0.25rem; }
