@@ -184,6 +184,28 @@ export class PlaybackQueueService {
     this.maybeRefillRadio();
   }
 
+  /**
+   * Close the audio player entirely: stop playback, drop the queue,
+   * exit radio mode, flush one last progress report. The bottom-bar
+   * UI hides itself when the queue is empty, so this is the "×" the
+   * user clicks to make the player go away.
+   */
+  clearQueue(): void {
+    this.flushProgress();
+    this.playing.set(false);
+    this.positionSeconds.set(0);
+    this.durationSeconds.set(0);
+    this.queue.set([]);
+    this.currentIndex.set(-1);
+    this.completedThisSession.clear();
+    this.queueMode.set('EXPLICIT');
+    this.radioSeed.set(null);
+    this.radioSeedId = null;
+    this.radioHistory.length = 0;
+    this.radioRefillInFlight = false;
+    this.currentTrackStartedAt = null;
+  }
+
   /** Turn off radio mode. The already-generated queue keeps playing. */
   stopRadio(): void {
     this.queueMode.set('EXPLICIT');
@@ -309,12 +331,24 @@ export class PlaybackQueueService {
   }
 
   /**
-   * Bound to the audio element's `timeupdate` event. Rate-limits server-side
-   * progress reports to the configured interval.
+   * Bound to the audio element's `timeupdate` event. Rate-limits
+   * server-side progress reports to the configured interval, AND
+   * throttles the displayed [positionSeconds] signal to whole-second
+   * changes. `timeupdate` fires 4+ times per second; writing the
+   * signal on every tick was cheap individually but cascaded into
+   * scrubber re-binds and effect reruns that made the whole app feel
+   * sluggish during playback. Rounding to 1 Hz is invisible to the
+   * user (the display is in whole seconds anyway) and cuts change-
+   * detection work by 4x.
    */
   reportPosition(position: number, duration: number): void {
-    this.positionSeconds.set(position);
-    if (duration > 0) this.durationSeconds.set(duration);
+    const rounded = Math.floor(position);
+    if (rounded !== this.positionSeconds()) {
+      this.positionSeconds.set(rounded);
+    }
+    if (duration > 0 && duration !== this.durationSeconds()) {
+      this.durationSeconds.set(duration);
+    }
 
     const now = Date.now();
     const track = this.currentTrack();

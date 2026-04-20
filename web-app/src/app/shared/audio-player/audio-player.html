@@ -89,6 +89,10 @@
               [title]="'Repeat: ' + queue.repeatMode()">
         <mat-icon>{{ queue.repeatMode() === 'ONE' ? 'repeat_one' : 'repeat' }}</mat-icon>
       </button>
+      <button mat-icon-button (click)="closePlayer()"
+              aria-label="Close audio player" title="Close audio player">
+        <mat-icon>close</mat-icon>
+      </button>
     </div>
 
     <app-queue-panel

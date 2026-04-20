@@ -42,6 +42,15 @@ export class AudioPlayerComponent {
     this.queuePanelOpen.update(v => !v);
   }
 
+  /**
+   * Stop playback and dismiss the player. The bar auto-hides once
+   * the queue is empty, so clearQueue() is what makes the "×" work.
+   */
+  closePlayer(): void {
+    this.queue.clearQueue();
+    this.queuePanelOpen.set(false);
+  }
+
   /** Formatted "m:ss" for the position / duration display. */
   formatTime(seconds: number): string {
     if (!isFinite(seconds) || seconds <= 0) return '0:00';
