@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "PlaylistServiceProto";
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// Slice 1: durable, named, owner-controlled track lists. Owner-only
+// mutations except DuplicatePlaylist, which is intentionally open to
+// any authenticated user — it's the "use this as a starting point"
+// affordance.
+//
+// Hero image: server resolves hero_track_id to the parent title and
+// the client uses the existing ImageService with IMAGE_TYPE_POSTER_FULL
+// against title id. When unset, clients fall back to the first track's
+// title poster.
+//
+// See docs/MUSIC.md (Playlists).
+service PlaylistService {
+  rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
+  rpc GetPlaylist(GetPlaylistRequest) returns (PlaylistDetail);
+  rpc CreatePlaylist(CreatePlaylistRequest) returns (PlaylistSummary);
+  rpc RenamePlaylist(RenamePlaylistRequest) returns (Empty);
+  rpc DeletePlaylist(DeletePlaylistRequest) returns (Empty);
+  rpc AddTracksToPlaylist(AddTracksToPlaylistRequest) returns (AddTracksToPlaylistResponse);
+  rpc RemoveTrackFromPlaylist(RemoveTrackFromPlaylistRequest) returns (Empty);
+  rpc ReorderPlaylist(ReorderPlaylistRequest) returns (Empty);
+  rpc SetPlaylistHero(SetPlaylistHeroRequest) returns (Empty);
+
+  // Fork the source playlist into a new one owned by the calling user.
+  // The caller does NOT need to own the source — that's the point.
+  rpc DuplicatePlaylist(DuplicatePlaylistRequest) returns (PlaylistSummary);
+
+  // Ephemeral library shuffle — server returns a fresh ordering each
+  // call, persists nothing. Caller queues these into the audio player;
+  // a follow-up CreatePlaylist + AddTracksToPlaylist call makes it
+  // durable as a "Save as playlist" affordance.
+  rpc LibraryShuffle(LibraryShuffleRequest) returns (LibraryShuffleResponse);
+
+  // ------------------------ Phase 2 additions ----------------------
+
+  // Owner-only privacy toggle. Private playlists are hidden from
+  // ListPlaylists for non-owners.
+  rpc SetPlaylistPrivacy(SetPlaylistPrivacyRequest) returns (Empty);
+
+  // Resume cursor — upsert per (user, playlist).
+  rpc ReportPlaylistProgress(ReportPlaylistProgressRequest) returns (Empty);
+
+  // Drop the resume cursor.
+  rpc ClearPlaylistProgress(ClearPlaylistProgressRequest) returns (Empty);
+
+  // Bump the per-user play count for a track. Drives Most Played.
+  rpc RecordTrackCompletion(RecordTrackCompletionRequest) returns (Empty);
+
+  // Read-only smart playlists (Recently Added, Most Played, ...).
+  rpc ListSmartPlaylists(ListSmartPlaylistsRequest) returns (ListSmartPlaylistsResponse);
+  rpc GetSmartPlaylist(GetSmartPlaylistRequest) returns (SmartPlaylistDetail);
+}
+
+// ----------------------------------------------------------------------
+// Messages
+// ----------------------------------------------------------------------
+
+enum PlaylistScope {
+  PLAYLIST_SCOPE_UNKNOWN = 0;
+  PLAYLIST_SCOPE_ALL = 1;     // every playlist visible to the caller
+  PLAYLIST_SCOPE_MINE = 2;    // only playlists this user owns
+}
+
+message ListPlaylistsRequest {
+  PlaylistScope scope = 1;
+}
+
+message ListPlaylistsResponse {
+  repeated PlaylistSummary playlists = 1;
+}
+
+// Lightweight row for the browse / library grid. Hero is resolved on
+// the server to the parent title id so clients can hit ImageService
+// with IMAGE_TYPE_POSTER_FULL without a follow-up lookup.
+message PlaylistSummary {
+  int64 id = 1;
+  string name = 2;
+  optional string description = 3;
+  int64 owner_user_id = 4;
+  string owner_username = 5;
+  bool is_owner = 6;
+  optional int64 hero_title_id = 7;
+  optional Timestamp updated_at = 8;
+  // Phase 2.
+  bool is_private = 9;
+}
+
+// Per-user resume cursor for a playlist.
+message PlaylistResume {
+  int64 playlist_track_id = 1;
+  int64 track_id = 2;
+  int32 position_seconds = 3;
+  optional Timestamp updated_at = 4;
+}
+
+message GetPlaylistRequest { int64 id = 1; }
+
+message PlaylistDetail {
+  PlaylistSummary summary = 1;
+  repeated PlaylistTrackEntry tracks = 2;
+  int32 total_duration_seconds = 3;
+  // Phase 2 — present when the user has a resume cursor.
+  optional PlaylistResume resume = 4;
+}
+
+// One track at one position. playlist_track_id is the stable handle for
+// removal / reorder — track_id can repeat in the same playlist.
+message PlaylistTrackEntry {
+  int64 playlist_track_id = 1;
+  int32 position = 2;
+  Track track = 3;
+  // Parent album info for client-side display (poster / album label).
+  int64 title_id = 4;
+  string title_name = 5;
+}
+
+message CreatePlaylistRequest {
+  string name = 1;
+  optional string description = 2;
+}
+
+message RenamePlaylistRequest {
+  int64 id = 1;
+  string name = 2;
+  optional string description = 3;
+}
+
+message DeletePlaylistRequest { int64 id = 1; }
+
+message AddTracksToPlaylistRequest {
+  int64 id = 1;
+  repeated int64 track_ids = 2;
+}
+
+message AddTracksToPlaylistResponse {
+  int32 added = 1;
+  // Stable handles for the freshly-added entries, in the order they
+  // ended up at. Useful when the client wants to immediately call
+  // ReorderPlaylist or RemoveTrackFromPlaylist on something it just
+  // appended.
+  repeated int64 playlist_track_ids = 2;
+}
+
+message RemoveTrackFromPlaylistRequest {
+  int64 id = 1;
+  int64 playlist_track_id = 2;
+}
+
+// Full new order. Any playlist_track_ids not in the list are removed
+// from the playlist. Unknown ids are silently ignored.
+message ReorderPlaylistRequest {
+  int64 id = 1;
+  repeated int64 playlist_track_ids_in_order = 2;
+}
+
+// Set or clear the hero override. Omit (or set to 0) to clear; the
+// server falls back to the first track's poster.
+message SetPlaylistHeroRequest {
+  int64 id = 1;
+  optional int64 track_id = 2;
+}
+
+message DuplicatePlaylistRequest {
+  int64 source_id = 1;
+  // Optional override for the new playlist's name. When absent, the
+  // server uses "<source name> (copy)".
+  optional string new_name = 2;
+}
+
+message LibraryShuffleRequest {
+  // Cap on returned tracks. Server defaults to 200 when absent or 0.
+  optional int32 limit = 1;
+}
+
+message LibraryShuffleResponse {
+  repeated Track tracks = 1;
+}
+
+// ----------------------------------------------------------------------
+// Phase 2 messages
+// ----------------------------------------------------------------------
+
+message SetPlaylistPrivacyRequest {
+  int64 id = 1;
+  bool is_private = 2;
+}
+
+message ReportPlaylistProgressRequest {
+  int64 id = 1;
+  int64 playlist_track_id = 2;
+  int32 position_seconds = 3;
+}
+
+message ClearPlaylistProgressRequest { int64 id = 1; }
+
+message RecordTrackCompletionRequest { int64 track_id = 1; }
+
+// Smart playlists are read-only — no owner, no mutations. Stable
+// string keys (e.g. "recently-added", "most-played") for deep-linking.
+message SmartPlaylistSummary {
+  string key = 1;
+  string name = 2;
+  string description = 3;
+  int32 track_count = 4;
+  optional int64 hero_title_id = 5;
+}
+
+message SmartPlaylistDetail {
+  SmartPlaylistSummary summary = 1;
+  repeated PlaylistTrackEntry tracks = 2;
+  int32 total_duration_seconds = 3;
+}
+
+message ListSmartPlaylistsRequest {}
+
+message ListSmartPlaylistsResponse {
+  repeated SmartPlaylistSummary playlists = 1;
+}
+
+message GetSmartPlaylistRequest { string key = 1; }

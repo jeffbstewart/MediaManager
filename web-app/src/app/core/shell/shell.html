@@ -54,6 +54,10 @@
           <mat-icon matListItemIcon>album</mat-icon>
           <span matListItemTitle>Music</span>
         </a>
+        <a mat-list-item [routerLink]="routes.playlists()" routerLinkActive="active-link">
+          <mat-icon matListItemIcon>queue_music</mat-icon>
+          <span matListItemTitle>Playlists</span>
+        </a>
       }
       <a mat-list-item [routerLink]="routes.wishlist()" routerLinkActive="active-link">
         <mat-icon matListItemIcon>favorite</mat-icon>

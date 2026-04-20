@@ -1,0 +1,238 @@
+.page {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.error { color: var(--mat-sys-error, #f44336); }
+.empty { padding: 2rem; text-align: center; opacity: 0.7; }
+
+.hero-row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.hero-image {
+  flex-shrink: 0;
+  width: 200px;
+  height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hero-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    opacity: 0.4;
+
+    mat-icon {
+      font-size: 4rem;
+      width: 4rem;
+      height: 4rem;
+    }
+  }
+}
+
+.hero-meta {
+  flex: 1;
+  min-width: 0;
+
+  h1 { margin: 0; font-size: 2rem; }
+
+  .description {
+    margin: 0.5rem 0;
+    opacity: 0.85;
+  }
+
+  .byline {
+    margin: 0.25rem 0 0.75rem;
+    opacity: 0.7;
+    font-size: 0.875rem;
+  }
+
+  .owner-pill {
+    background: rgba(76, 175, 80, 0.25);
+    color: #81c784;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+  }
+
+  .hero-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+.private-icon {
+  font-size: 1.1rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+  opacity: 0.7;
+}
+
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--mat-sys-surface-container, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+  border-left: 4px solid var(--mat-sys-primary, #4a90e2);
+
+  .resume-label { flex: 1; min-width: 0; }
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 152, 0, 0.12);
+  border-radius: 8px;
+}
+
+.select-all-row {
+  margin: 0.5rem 0.75rem 0.25rem;
+}
+
+.tracks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.track {
+  display: grid;
+  // Optional drag-handle + checkbox columns get auto width — render as
+  // 0-width when absent for non-owners.
+  grid-template-columns: auto auto 2.5rem 3rem 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  transition: background 60ms ease;
+
+  &.selected {
+    background: rgba(74, 144, 226, 0.12);
+  }
+
+  .drag-handle {
+    cursor: grab;
+    opacity: 0.4;
+    &:hover { opacity: 0.8; }
+  }
+
+  .row-select { margin: 0; }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  &.unplayable {
+    opacity: 0.5;
+  }
+
+  .position {
+    text-align: right;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.875rem;
+  }
+
+  .thumb {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 4px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+
+    &.thumb-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.4;
+    }
+  }
+
+  .track-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .track-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-album {
+    font-size: 0.8125rem;
+    opacity: 0.7;
+    text-decoration: none;
+    color: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover { text-decoration: underline; }
+  }
+
+  .duration {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    font-size: 0.875rem;
+  }
+
+  .row-actions {
+    display: flex;
+    gap: 0;
+  }
+}
+
+// CDK drag-drop visuals — placeholder is the gap that opens up while
+// dragging, preview is the floating element following the cursor.
+.cdk-drag-preview {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  background: var(--mat-sys-surface-container-high, #2a2a2a);
+  border-radius: 8px;
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.cdk-drag-animating {
+  transition: transform 200ms ease;
+}
+
+.tracks.cdk-drop-list-dragging .track:not(.cdk-drag-placeholder) {
+  transition: transform 200ms ease;
+}

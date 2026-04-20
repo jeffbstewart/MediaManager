@@ -21,6 +21,33 @@
       </button>
     </div>
 
+    @if (hasQueue()) {
+      <div class="queue-actions">
+        <button mat-stroked-button type="button" (click)="saveQueueAsPlaylist()" [disabled]="busy()">
+          <mat-icon>playlist_add</mat-icon>
+          @if (queue.queueMode() === 'RADIO') { Save radio as playlist }
+          @else { Save queue as playlist }
+        </button>
+        <button mat-stroked-button type="button" (click)="openPicker()"
+                [disabled]="busy() || currentTrackId() === null">
+          <mat-icon>library_add</mat-icon>
+          Add track to playlist
+        </button>
+      </div>
+    }
+
+    @if (pickerOpen()) {
+      <div class="picker-overlay" (click)="closePicker()">
+        <div class="picker-anchor" (click)="$event.stopPropagation()">
+          <app-add-to-playlist
+            [trackIds]="currentTrackIds()"
+            heading="Add current track to…"
+            (picked)="onPickerPicked($event)"
+            (cancelled)="closePicker()" />
+        </div>
+      </div>
+    }
+
     <div class="queue-list">
       @for (track of queue.queueSnapshot(); track track.trackId + '-' + $index; let i = $index) {
         <button class="queue-row"

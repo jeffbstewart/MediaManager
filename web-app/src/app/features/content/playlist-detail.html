@@ -1,0 +1,158 @@
+<div class="page">
+  @if (loading()) {
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error">{{ error() }}</p>
+  } @else if (playlist(); as p) {
+    <header class="hero-row">
+      <div class="hero-image">
+        @if (heroPosterUrl(); as src) {
+          <img [src]="src" [alt]="p.name" />
+        } @else {
+          <div class="hero-placeholder"><mat-icon>queue_music</mat-icon></div>
+        }
+      </div>
+      <div class="hero-meta">
+        <h1>
+          {{ p.name }}
+          @if (p.is_private) {
+            <mat-icon class="private-icon" aria-label="Private playlist">lock</mat-icon>
+          }
+        </h1>
+        @if (p.description) { <p class="description">{{ p.description }}</p> }
+        <p class="byline">
+          by <b>{{ p.owner_username }}</b>
+          @if (p.is_owner) { &middot; <span class="owner-pill">you</span> }
+          &middot; {{ p.track_count }} {{ p.track_count === 1 ? 'track' : 'tracks' }}
+          &middot; {{ durationLabel() }}
+        </p>
+
+        <div class="hero-actions">
+          <button mat-flat-button color="primary" type="button" (click)="playAll()" [disabled]="p.tracks.length === 0">
+            <mat-icon>play_arrow</mat-icon>
+            Play
+          </button>
+          <button mat-stroked-button type="button" (click)="duplicate()" [disabled]="busy()">
+            <mat-icon>content_copy</mat-icon>
+            Duplicate
+          </button>
+          @if (p.is_owner) {
+            <button mat-stroked-button type="button" (click)="rename()" [disabled]="busy()">
+              <mat-icon>edit</mat-icon>
+              Rename
+            </button>
+            <button mat-stroked-button type="button" (click)="editDescription()" [disabled]="busy()">
+              <mat-icon>notes</mat-icon>
+              Edit description
+            </button>
+            <mat-slide-toggle [checked]="p.is_private" (change)="togglePrivacy()" [disabled]="busy()">
+              Private
+            </mat-slide-toggle>
+            <button mat-button color="warn" type="button" (click)="deletePlaylist()" [disabled]="busy()">
+              <mat-icon>delete</mat-icon>
+              Delete
+            </button>
+          }
+        </div>
+      </div>
+    </header>
+
+    @if (resumeTrack()) {
+      <div class="resume-banner" role="status">
+        <mat-icon>history</mat-icon>
+        <span class="resume-label">{{ resumeLabel() }}</span>
+        <button mat-flat-button color="primary" type="button" (click)="resumePlay()">
+          <mat-icon>play_arrow</mat-icon>
+          Resume
+        </button>
+        <button mat-button type="button" (click)="clearResume()" aria-label="Forget resume position">
+          Forget
+        </button>
+      </div>
+    }
+
+    @if (p.is_owner && anySelected()) {
+      <div class="bulk-bar" role="toolbar">
+        <span>{{ selected().size }} selected</span>
+        <button mat-stroked-button color="warn" type="button" (click)="removeSelected()" [disabled]="busy()">
+          <mat-icon>delete</mat-icon>
+          Remove selected
+        </button>
+        <button mat-button type="button" (click)="clearSelection()">Cancel</button>
+      </div>
+    }
+
+    @if (p.tracks.length === 0) {
+      <p class="empty">
+        @if (p.is_owner) {
+          Empty playlist. Add tracks from any album page or from the bottom-bar queue panel.
+        } @else {
+          Empty playlist.
+        }
+      </p>
+    } @else {
+      @if (p.is_owner) {
+        <div class="select-all-row">
+          <mat-checkbox
+            [checked]="selected().size === p.tracks.length && p.tracks.length > 0"
+            [indeterminate]="selected().size > 0 && selected().size < p.tracks.length"
+            (change)="toggleSelectAll()">
+            Select all
+          </mat-checkbox>
+        </div>
+      }
+      <ol class="tracks" cdkDropList (cdkDropListDropped)="onDrop($event)">
+        @for (t of p.tracks; track t.playlist_track_id) {
+          <li class="track" [class.unplayable]="!t.playable" [class.selected]="isSelected(t.playlist_track_id)"
+              cdkDrag [cdkDragDisabled]="!p.is_owner || busy()">
+            @if (p.is_owner) {
+              <mat-icon class="drag-handle" cdkDragHandle aria-hidden="true">drag_indicator</mat-icon>
+              <mat-checkbox class="row-select"
+                            [checked]="isSelected(t.playlist_track_id)"
+                            (change)="toggleSelect(t.playlist_track_id)"
+                            (click)="$event.stopPropagation()"
+                            [attr.aria-label]="'Select ' + t.track_name"></mat-checkbox>
+            }
+            <span class="position">{{ t.position + 1 }}</span>
+            @if (t.poster_url) {
+              <img class="thumb" [src]="t.poster_url" [alt]="t.title_name" />
+            } @else {
+              <div class="thumb thumb-placeholder"><mat-icon>music_note</mat-icon></div>
+            }
+            <div class="track-text">
+              <span class="track-name">{{ t.track_name }}</span>
+              @if (t.title_id) {
+                <a class="track-album" [routerLink]="routes.title(t.title_id)">{{ t.title_name }}</a>
+              }
+            </div>
+            <span class="duration">{{ formatTrackDuration(t.duration_seconds) }}</span>
+            <div class="row-actions">
+              <button mat-icon-button type="button" (click)="playFrom(t)" aria-label="Play"
+                      [disabled]="!t.playable">
+                <mat-icon>play_arrow</mat-icon>
+              </button>
+              @if (p.is_owner) {
+                <button mat-icon-button type="button" (click)="setHero(t)"
+                        [attr.aria-label]="trackIcon(t) === 'star' ? 'Clear hero' : 'Set as hero'">
+                  <mat-icon>{{ trackIcon(t) }}</mat-icon>
+                </button>
+                <button mat-icon-button type="button" (click)="moveUp(t)" aria-label="Move up"
+                        [disabled]="busy()">
+                  <mat-icon>arrow_upward</mat-icon>
+                </button>
+                <button mat-icon-button type="button" (click)="moveDown(t)" aria-label="Move down"
+                        [disabled]="busy()">
+                  <mat-icon>arrow_downward</mat-icon>
+                </button>
+                <button mat-icon-button type="button" (click)="removeTrack(t)" aria-label="Remove"
+                        [disabled]="busy()">
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ol>
+    }
+  }
+</div>

@@ -16,6 +16,7 @@ import net.stewart.mediamanager.armeria.CollectionPosterHttpService
 import net.stewart.mediamanager.armeria.ArtistHeadshotHttpService
 import net.stewart.mediamanager.armeria.ArtistHttpService
 import net.stewart.mediamanager.armeria.AudioStreamHttpService
+import net.stewart.mediamanager.armeria.PlaylistHttpService
 import net.stewart.mediamanager.armeria.RadioHttpService
 import net.stewart.mediamanager.armeria.RecommendationHttpService
 import net.stewart.mediamanager.armeria.AuthorHeadshotHttpService
@@ -106,7 +107,8 @@ object ArmeriaServer {
             ObservabilityGrpcService(),
             ArtistGrpcService(),
             RadioGrpcService(),
-            RecommendationGrpcService()
+            RecommendationGrpcService(),
+            PlaylistGrpcService()
         )
 
         val grpcServiceBuilder = GrpcService.builder()
@@ -259,6 +261,7 @@ object ArmeriaServer {
         blocking(ArtistHttpService())
         blocking(AudioStreamHttpService())
         blocking(RadioHttpService())
+        blocking(PlaylistHttpService())
         blocking(RecommendationHttpService())
         blocking(BookSeriesHttpService())
         blocking(SearchHttpService())

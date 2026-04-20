@@ -13,6 +13,7 @@ import { AppRoutes } from '../../core/routes';
 import { CatalogService, TitleDetail, AlbumPersonnelEntry } from '../../core/catalog.service';
 import { FeatureService } from '../../core/feature.service';
 import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.service';
+import { AddToPlaylistComponent } from '../../shared/add-to-playlist/add-to-playlist';
 
 @Component({
   selector: 'app-title-detail',
@@ -26,6 +27,7 @@ import { PlaybackQueueService, QueuedTrack } from '../../core/playback-queue.ser
     MatDividerModule,
     MatTabsModule,
     DecimalPipe,
+    AddToPlaylistComponent,
   ],
   templateUrl: './title-detail.html',
   styleUrl: './title-detail.scss',
@@ -42,6 +44,11 @@ export class TitleDetailComponent implements OnInit {
   readonly error = signal('');
   readonly title = signal<TitleDetail | null>(null);
   readonly selectedSeason = signal<number | null>(null);
+
+  // Phase 2 — playlist picker for album / track adds.
+  readonly pickerOpen = signal(false);
+  readonly pickerTrackIds = signal<number[]>([]);
+  readonly pickerHeading = signal('Add to playlist');
 
   get isPersonal(): boolean { return this.title()?.media_type === 'PERSONAL'; }
   get isTv(): boolean { return this.title()?.media_type === 'TV'; }
@@ -96,6 +103,30 @@ export class TitleDetailComponent implements OnInit {
   /** Play a single track; queues the rest of the album behind it. */
   playTrackAt(index: number): void {
     this.playAlbum(index);
+  }
+
+  /** Open the picker pre-loaded with every track on the current album. */
+  openPickerForAlbum(): void {
+    const tracks = this.title()?.tracks ?? [];
+    if (tracks.length === 0) return;
+    this.pickerTrackIds.set(tracks.map(t => t.track_id));
+    this.pickerHeading.set(`Add album to playlist`);
+    this.pickerOpen.set(true);
+  }
+
+  /** Open the picker for a single track row. */
+  openPickerForTrack(trackId: number, trackName: string): void {
+    this.pickerTrackIds.set([trackId]);
+    this.pickerHeading.set(`Add "${trackName}" to playlist`);
+    this.pickerOpen.set(true);
+  }
+
+  closePicker(): void {
+    this.pickerOpen.set(false);
+  }
+
+  onPickerPicked(_evt: { playlistId: number; created: boolean }): void {
+    this.pickerOpen.set(false);
   }
 
   readonly radioStarting = signal<boolean>(false);

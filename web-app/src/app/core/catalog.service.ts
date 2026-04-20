@@ -657,6 +657,82 @@ export interface BookWishInput {
   series_number?: string | null;
 }
 
+// ----------------------------- Playlists -----------------------------
+
+export interface PlaylistSummary {
+  id: number;
+  name: string;
+  description: string | null;
+  owner_user_id: number;
+  owner_username: string;
+  is_owner: boolean;
+  is_private: boolean;
+  hero_poster_url: string | null;
+  updated_at: string | null;
+}
+
+export interface SmartPlaylistSummary {
+  key: string;
+  name: string;
+  description: string;
+  is_smart: true;
+  track_count: number;
+  hero_poster_url: string | null;
+}
+
+export interface SmartPlaylistDetail extends SmartPlaylistSummary {
+  total_duration_seconds: number;
+  tracks: PlaylistTrackEntry[];
+}
+
+export interface PlaylistResume {
+  playlist_track_id: number;
+  track_id: number;
+  position_seconds: number;
+  updated_at: string | null;
+}
+
+export interface PlaylistTrackEntry {
+  playlist_track_id: number;
+  position: number;
+  track_id: number;
+  track_name: string;
+  duration_seconds: number | null;
+  title_id: number;
+  title_name: string | null;
+  poster_url: string | null;
+  playable: boolean;
+}
+
+export interface PlaylistDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  owner_user_id: number;
+  owner_username: string;
+  is_owner: boolean;
+  is_private: boolean;
+  hero_track_id: number | null;
+  hero_poster_url: string | null;
+  track_count: number;
+  total_duration_seconds: number;
+  created_at: string | null;
+  updated_at: string | null;
+  resume: PlaylistResume | null;
+  tracks: PlaylistTrackEntry[];
+}
+
+/** A track returned by the library-shuffle endpoint — minimal shape for queueing. */
+export interface ShuffleTrack {
+  track_id: number;
+  track_name: string;
+  title_id: number;
+  title_name: string | null;
+  poster_url: string | null;
+  duration_seconds: number | null;
+  playable: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly http = inject(HttpClient);
@@ -819,6 +895,99 @@ export class CatalogService {
 
   async getCameras(): Promise<CameraListResponse> {
     return firstValueFrom(this.http.get<CameraListResponse>('/api/v2/catalog/cameras'));
+  }
+
+  // ----------------------------- Playlists -------------------------
+
+  async listPlaylists(scope: 'all' | 'mine' = 'all'): Promise<{
+    playlists: PlaylistSummary[];
+    smartPlaylists: SmartPlaylistSummary[];
+  }> {
+    const url = scope === 'mine' ? '/api/v2/playlists/mine' : '/api/v2/playlists';
+    const resp = await firstValueFrom(this.http.get<{
+      playlists: PlaylistSummary[];
+      smart_playlists?: SmartPlaylistSummary[];
+    }>(url));
+    return {
+      playlists: resp.playlists ?? [],
+      smartPlaylists: resp.smart_playlists ?? [],
+    };
+  }
+
+  async getSmartPlaylist(key: string): Promise<SmartPlaylistDetail> {
+    return firstValueFrom(
+      this.http.get<SmartPlaylistDetail>(`/api/v2/playlists/smart/${encodeURIComponent(key)}`));
+  }
+
+  async setPlaylistPrivacy(id: number, isPrivate: boolean): Promise<void> {
+    await firstValueFrom(this.http.post(
+      `/api/v2/playlists/${id}/privacy`, { is_private: isPrivate }));
+  }
+
+  async reportPlaylistProgress(id: number, playlistTrackId: number, positionSeconds: number): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/progress`, {
+      playlist_track_id: playlistTrackId,
+      position_seconds: positionSeconds,
+    }));
+  }
+
+  async clearPlaylistProgress(id: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}/progress`));
+  }
+
+  async recordTrackCompletion(trackId: number): Promise<void> {
+    await firstValueFrom(this.http.post('/api/v2/playlists/track-completed', { track_id: trackId }));
+  }
+
+  async getPlaylist(id: number): Promise<PlaylistDetail> {
+    return firstValueFrom(this.http.get<PlaylistDetail>(`/api/v2/playlists/${id}`));
+  }
+
+  async createPlaylist(name: string, description: string | null): Promise<{ id: number; name: string }> {
+    return firstValueFrom(this.http.post<{ id: number; name: string }>(
+      '/api/v2/playlists', { name, description }));
+  }
+
+  async renamePlaylist(id: number, name: string, description: string | null): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/rename`, { name, description }));
+  }
+
+  async deletePlaylist(id: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}`));
+  }
+
+  async addTracksToPlaylist(id: number, trackIds: number[]): Promise<{ added: number; playlist_track_ids: number[] }> {
+    return firstValueFrom(this.http.post<{ added: number; playlist_track_ids: number[] }>(
+      `/api/v2/playlists/${id}/tracks`, { track_ids: trackIds }));
+  }
+
+  async removeTrackFromPlaylist(id: number, playlistTrackId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}/tracks/${playlistTrackId}`));
+  }
+
+  async reorderPlaylist(id: number, playlistTrackIds: number[]): Promise<void> {
+    await firstValueFrom(this.http.post(
+      `/api/v2/playlists/${id}/reorder`, { playlist_track_ids: playlistTrackIds }));
+  }
+
+  async setPlaylistHero(id: number, trackId: number | null): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/hero`, { track_id: trackId }));
+  }
+
+  /**
+   * Fork [sourceId] into a new playlist owned by the caller. Works
+   * regardless of whether the caller owns the source.
+   */
+  async duplicatePlaylist(sourceId: number, newName?: string): Promise<{ id: number; name: string }> {
+    return firstValueFrom(this.http.post<{ id: number; name: string }>(
+      `/api/v2/playlists/${sourceId}/duplicate`,
+      newName ? { name: newName } : {}));
+  }
+
+  async libraryShuffle(): Promise<ShuffleTrack[]> {
+    const resp = await firstValueFrom(
+      this.http.get<{ tracks: ShuffleTrack[] }>('/api/v2/playlists/library-shuffle'));
+    return resp.tracks ?? [];
   }
 
   async getFamilyVideos(params: { sort?: FamilySortMode; members?: number[]; playableOnly?: boolean } = {}): Promise<FamilyVideosResponse> {

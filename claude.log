@@ -4407,3 +4407,36 @@ Session 2 (Mar 25):
 - Files touched:
   - src/main/kotlin/.../grpc/AdminGrpcService.kt
 ===
+
+=== 2026-04-19 20:55 — Playlists slice 1 + phase 2 ===
+- Implemented durable user playlists end-to-end.
+- Slice 1: V086 schema (playlist + playlist_track), Playlist + PlaylistTrack entities,
+  PlaylistService (create/rename/delete, addTracks, removeTrack with compaction,
+  reorder via two-pass negative-position dance to dodge the unique index, setHero,
+  duplicate that any user can call on any playlist, libraryShuffle), 10 unit tests,
+  PlaylistHttpService under /api/v2/playlists, playlist.proto + PlaylistGrpcService
+  registered in ArmeriaServer, web UI /content/playlists landing + /playlist/:id detail
+  with up/down reorder + duplicate button on every card, "Shuffle library" button,
+  Playlists nav item under Music.
+- Phase 2: V087 added is_private flag + playlist_progress table (per-user resume) +
+  track_play_count table (per-user, drives Most Played). PlaylistService extended with
+  setPrivacy, getResume / reportProgress / clearResume, recordTrackCompletion,
+  listSmartPlaylists / getSmartPlaylist (Recently Added, Most Played). listAll became
+  listVisibleTo to enforce privacy at the read layer; getDetail now takes viewerUserId
+  and 404s for non-owners on private playlists (same response as not-found, by design).
+  HTTP + gRPC mirror everything for iOS parity. 11 more tests.
+- Web phase 2: drag-drop reorder via Angular CDK, bulk-select + Remove selected,
+  privacy slide-toggle, "Resume X at m:ss" banner, smart-playlist landing section + new
+  /playlist/smart/:key read-only viewer, AddToPlaylistComponent picker reused by the
+  bottom-bar queue panel ("Save queue/radio as playlist" + "Add track to playlist") and
+  by title-detail (album-level + per-track adds). PlaybackQueueService now attaches
+  playlistContext to queue entries and posts throttled resume cursor + completion-event
+  writes (90% / last-5s threshold) so Most Played stays accurate.
+- Backend tests + Angular build: green.
+- Deployed: docker images 202604192032 (slice 1) and 202604192054 (phase 2).
+- Files touched: 2 migrations, 4 entities, PlaylistService + test, PlaylistHttpService,
+  PlaylistGrpcService, playlist.proto, ArmeriaServer.kt, catalog.service.ts,
+  playback-queue.service.ts, routes.ts, app.routes.ts, shell.html, three new
+  content/playlist* components, shared/add-to-playlist component, title-detail (3),
+  queue-panel (3).
+===

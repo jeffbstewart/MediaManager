@@ -17,6 +17,13 @@ export interface QueuedTrack {
   primaryArtistName: string | null;
   /** Optional per-track artist override, e.g. on compilations. */
   trackArtistName?: string | null;
+  /**
+   * Phase 2 — when populated, ties the queue entry to the originating
+   * playlist_track row so the audio player can post resume-cursor
+   * updates as it advances. Smart playlists and ad-hoc queues leave
+   * this null; only owned/forked playlists wire it up.
+   */
+  playlistContext?: { playlistId: number; playlistTrackId: number } | null;
 }
 
 export type RepeatMode = 'OFF' | 'ONE' | 'ALL';
@@ -105,6 +112,10 @@ export class PlaybackQueueService {
 
   private lastReportedAt = 0;
   private readonly REPORT_INTERVAL_MS = 10_000;
+  private lastPlaylistReportedAt = 0;
+  private readonly PLAYLIST_REPORT_INTERVAL_MS = 15_000;
+  /** Set of trackIds we've already counted as "completed" this play session. */
+  private readonly completedThisSession = new Set<number>();
 
   /** Start playing an album from [startIndex] of its track list. */
   playAlbum(tracks: QueuedTrack[], startIndex: number = 0): void {
@@ -185,6 +196,25 @@ export class PlaybackQueueService {
   /** Queue a single track and start it; useful from the home carousel. */
   playSingleTrack(track: QueuedTrack): void {
     this.playAlbum([track], 0);
+  }
+
+  /**
+   * Replace the queue with a sequence of tracks and start at [startIndex].
+   * Identical to [playAlbum] semantically — the separate name is just for
+   * caller readability when the source isn't a single album (playlists,
+   * library shuffle).
+   */
+  playTracks(tracks: QueuedTrack[], startIndex: number = 0): void {
+    this.playAlbum(tracks, startIndex);
+  }
+
+  /**
+   * Returns a snapshot of the current queue's track ids in queue order.
+   * Used by "Save as playlist" / "Add queue to playlist" actions on the
+   * bottom-bar — the call site posts these to PlaylistService.
+   */
+  currentQueueTrackIds(): number[] {
+    return this.queue().map(t => t.trackId);
   }
 
   /** Advance to the next queued track, respecting shuffle / repeat. */
@@ -287,11 +317,38 @@ export class PlaybackQueueService {
     if (duration > 0) this.durationSeconds.set(duration);
 
     const now = Date.now();
-    if (now - this.lastReportedAt < this.REPORT_INTERVAL_MS) return;
-    this.lastReportedAt = now;
     const track = this.currentTrack();
-    if (!track) return;
-    this.postProgress(track.trackId, Math.floor(position), Math.floor(duration));
+
+    // Per-track progress goes to /api/v2/audio/progress (existing).
+    if (now - this.lastReportedAt >= this.REPORT_INTERVAL_MS && track) {
+      this.lastReportedAt = now;
+      this.postProgress(track.trackId, Math.floor(position), Math.floor(duration));
+    }
+
+    // Per-playlist resume cursor — only when the queue is sourced from
+    // a playlist. Throttled separately because the write rate doesn't
+    // need to match the per-track cadence.
+    if (track?.playlistContext &&
+        now - this.lastPlaylistReportedAt >= this.PLAYLIST_REPORT_INTERVAL_MS) {
+      this.lastPlaylistReportedAt = now;
+      this.postPlaylistProgress(
+        track.playlistContext.playlistId,
+        track.playlistContext.playlistTrackId,
+        Math.floor(position),
+      );
+    }
+
+    // Track-completion event for Most Played. Fire once per (track, session)
+    // when the user gets past the lesser of 90% or last-30s threshold.
+    // Prevents the same track from incrementing the counter on every tick.
+    if (track && duration > 30 && !this.completedThisSession.has(track.trackId)) {
+      const remaining = duration - position;
+      const past90 = position / duration >= 0.9;
+      if (past90 || remaining <= 5) {
+        this.completedThisSession.add(track.trackId);
+        this.postTrackCompleted(track.trackId);
+      }
+    }
   }
 
   /** Called on pause / track-end / close to flush a final progress snapshot. */
@@ -372,6 +429,23 @@ export class PlaybackQueueService {
     ).catch(() => {
       /* swallow — the next tick will retry */
     });
+  }
+
+  /** Phase 2 — upsert the per-user playlist resume cursor. Fire-and-forget. */
+  private postPlaylistProgress(playlistId: number, playlistTrackId: number, positionSeconds: number): void {
+    firstValueFrom(
+      this.http.post(`/api/v2/playlists/${playlistId}/progress`, {
+        playlist_track_id: playlistTrackId,
+        position_seconds: positionSeconds,
+      }),
+    ).catch(() => { /* swallow */ });
+  }
+
+  /** Phase 2 — bump per-user, per-track play counter. Fire-and-forget. */
+  private postTrackCompleted(trackId: number): void {
+    firstValueFrom(
+      this.http.post('/api/v2/playlists/track-completed', { track_id: trackId }),
+    ).catch(() => { /* swallow */ });
   }
 }
 

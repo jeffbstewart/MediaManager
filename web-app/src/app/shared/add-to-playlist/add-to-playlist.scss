@@ -1,0 +1,92 @@
+.picker {
+  background: var(--mat-sys-surface-container-high, #2a2a2a);
+  color: var(--mat-sys-on-surface, inherit);
+  border-radius: 12px;
+  padding: 1rem;
+  width: 360px;
+  max-width: 90vw;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+}
+
+.picker-loading,
+.picker-error,
+.picker-empty {
+  padding: 1rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.picker-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.picker-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover { background: rgba(255, 255, 255, 0.06); }
+  &:disabled { opacity: 0.5; cursor: default; }
+
+  &.create-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 0.25rem;
+    padding-bottom: 0.6rem;
+  }
+}
+
+.picker-thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.picker-thumb-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 2.5rem;
+  opacity: 0.4;
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-private {
+  font-size: 1rem;
+  opacity: 0.6;
+}

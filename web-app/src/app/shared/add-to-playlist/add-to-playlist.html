@@ -1,0 +1,41 @@
+<div class="picker" role="dialog" [attr.aria-label]="heading()">
+  <header class="picker-header">
+    <h2>{{ heading() }}</h2>
+    <button mat-icon-button type="button" (click)="cancelled.emit()" aria-label="Close">
+      <mat-icon>close</mat-icon>
+    </button>
+  </header>
+
+  @if (loading()) {
+    <div class="picker-loading"><mat-spinner diameter="32" /></div>
+  } @else if (error()) {
+    <p class="picker-error">{{ error() }}</p>
+  } @else {
+    <button class="picker-row create-row" type="button" (click)="createAndPick()" [disabled]="busy()">
+      <mat-icon>add</mat-icon>
+      <span class="picker-name">Create new playlist…</span>
+    </button>
+
+    @if (playlists().length === 0) {
+      <p class="picker-empty">You don't own any playlists yet.</p>
+    } @else {
+      <ul class="picker-list">
+        @for (p of playlists(); track p.id) {
+          <li>
+            <button class="picker-row" type="button" (click)="pick(p)" [disabled]="busy()">
+              @if (p.hero_poster_url) {
+                <img class="picker-thumb" [src]="p.hero_poster_url" [alt]="p.name" />
+              } @else {
+                <mat-icon class="picker-thumb-icon">queue_music</mat-icon>
+              }
+              <span class="picker-name">{{ p.name }}</span>
+              @if (p.is_private) {
+                <mat-icon class="picker-private" aria-label="Private">lock</mat-icon>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  }
+</div>

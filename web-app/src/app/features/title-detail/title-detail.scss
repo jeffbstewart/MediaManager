@@ -637,3 +637,15 @@
   .meta-row { justify-content: center; }
   .hero, .section { padding-left: 1rem; padding-right: 1rem; }
 }
+
+// Phase 2 — overlay for the "Add to playlist" picker.
+.playlist-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.playlist-picker-anchor { display: contents; }

@@ -178,6 +178,10 @@
                 {{ radioStarting() ? 'Starting…' : 'Start Radio' }}
               </button>
             }
+            <button mat-stroked-button class="resume-btn" (click)="openPickerForAlbum()">
+              <mat-icon>playlist_add</mat-icon>
+              Add to playlist
+            </button>
           }
         </div>
       </div>
@@ -274,6 +278,11 @@
                         (click)="playTrackAt((t.tracks ?? []).indexOf(track))"
                         aria-label="Play this track">
                   <mat-icon>play_circle</mat-icon>
+                </button>
+                <button mat-icon-button class="track-play-btn"
+                        (click)="openPickerForTrack(track.track_id, track.name)"
+                        aria-label="Add this track to a playlist">
+                  <mat-icon>playlist_add</mat-icon>
                 </button>
               </div>
             }
@@ -418,5 +427,17 @@
         </div>
       </section>
     }
+  </div>
+}
+
+@if (pickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closePicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-add-to-playlist
+        [trackIds]="pickerTrackIds()"
+        [heading]="pickerHeading()"
+        (picked)="onPickerPicked($event)"
+        (cancelled)="closePicker()" />
+    </div>
   </div>
 }

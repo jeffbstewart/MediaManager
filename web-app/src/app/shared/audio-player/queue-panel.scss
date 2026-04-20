@@ -179,3 +179,27 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
+
+// Phase 2 — save/add actions row at the top of the panel.
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+// Picker is anchored over the panel itself; click-out closes it.
+.picker-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.picker-anchor {
+  // Stop the overlay click from bubbling — set on (click) in template.
+}

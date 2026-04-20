@@ -1,0 +1,81 @@
+<div class="content-page">
+  <header class="page-header">
+    <h1>Playlists</h1>
+    <div class="header-actions">
+      <button mat-stroked-button type="button" (click)="shuffleLibrary()" [disabled]="shuffling()">
+        <mat-icon>shuffle</mat-icon>
+        Shuffle library
+      </button>
+      <button mat-flat-button color="primary" type="button" (click)="createNew()" [disabled]="creating()">
+        <mat-icon>add</mat-icon>
+        New playlist
+      </button>
+    </div>
+  </header>
+
+  <mat-chip-set>
+    <mat-chip [highlighted]="scope() === 'all'" (click)="setScope('all')">All</mat-chip>
+    <mat-chip [highlighted]="scope() === 'mine'" (click)="setScope('mine')">Mine</mat-chip>
+  </mat-chip-set>
+
+  @if (smartPlaylists().length > 0 && scope() === 'all') {
+    <section class="smart-section">
+      <h2 class="section-title"><mat-icon>auto_awesome</mat-icon> Smart playlists</h2>
+      <div class="playlist-grid">
+        @for (s of smartPlaylists(); track s.key) {
+          <a class="playlist-card smart" [routerLink]="routes.smartPlaylist(s.key)">
+            <div class="hero">
+              @if (s.hero_poster_url) {
+                <img [src]="s.hero_poster_url" [alt]="s.name" loading="lazy" decoding="async" />
+              } @else {
+                <div class="hero-placeholder"><mat-icon>auto_awesome</mat-icon></div>
+              }
+            </div>
+            <span class="name">{{ s.name }}</span>
+            <span class="meta">{{ s.track_count }} {{ s.track_count === 1 ? 'track' : 'tracks' }}</span>
+          </a>
+        }
+      </div>
+    </section>
+  }
+
+  @if (loading()) {
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error">{{ error() }}</p>
+  } @else if (playlists().length === 0) {
+    <p class="empty">
+      @if (scope() === 'mine') {
+        No playlists yet. Hit <b>New playlist</b> to start one, or duplicate someone else's.
+      } @else {
+        No playlists in the system yet.
+      }
+    </p>
+  } @else {
+    <div class="playlist-grid">
+      @for (p of playlists(); track p.id) {
+        <a class="playlist-card" [routerLink]="routes.playlist(p.id)">
+          <div class="hero">
+            @if (p.hero_poster_url) {
+              <img [src]="p.hero_poster_url" [alt]="p.name" loading="lazy" decoding="async" />
+            } @else {
+              <div class="hero-placeholder"><mat-icon>queue_music</mat-icon></div>
+            }
+          </div>
+          <span class="name">{{ p.name }}</span>
+          <span class="meta">
+            by {{ p.owner_username }}
+            @if (p.is_owner) { &middot; <span class="owner-pill">you</span> }
+          </span>
+          <div class="card-actions">
+            <button mat-stroked-button type="button" (click)="duplicate(p, $event)"
+                    aria-label="Duplicate playlist as starting point">
+              <mat-icon>content_copy</mat-icon>
+              Duplicate
+            </button>
+          </div>
+        </a>
+      }
+    </div>
+  }
+</div>
