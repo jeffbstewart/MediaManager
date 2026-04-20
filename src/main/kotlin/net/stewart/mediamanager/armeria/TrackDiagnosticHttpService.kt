@@ -192,9 +192,19 @@ class TrackDiagnosticHttpService {
         // walk everything (user asked for it; admin-initiated only).
         val linkedDirs = tracks.mapNotNull { it.file_path?.let { fp -> File(fp).parentFile } }
             .toSet()
-        val searchRoot = linkedDirs.commonAncestorOrNull()
-            ?: musicRoot()?.let { File(it) }
-        if (searchRoot == null || !searchRoot.isDirectory) {
+        val siblingRoot = linkedDirs.commonAncestorOrNull()
+        val musicRootDir = musicRoot()?.let { File(it) }?.takeIf { it.isDirectory }
+
+        // Prefer the sibling-derived root for speed, but keep music_root
+        // as a fallback we can rerun from if the focused walk finds
+        // nothing. This handles cases where the sibling-derived root
+        // ends up too narrow (e.g. all linked siblings are in one disc
+        // subdir that doesn't contain the unlinked track) or plain wrong.
+        val primaryRoot = siblingRoot ?: musicRootDir
+        val fallbackRoot = if (siblingRoot != null && musicRootDir != null && siblingRoot != musicRootDir)
+            musicRootDir else null
+
+        if (primaryRoot == null || !primaryRoot.isDirectory) {
             return badRequest("No linked siblings and music_root_path not configured.")
         }
 
@@ -212,25 +222,49 @@ class TrackDiagnosticHttpService {
         val alreadyLinkedPaths = tracks.mapNotNull { it.file_path }.toSet()
         val filesConsidered = mutableListOf<Pair<Path, AudioTagReader.AudioTags>>()
         val audioExts = setOf("flac", "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav")
+        var filesWalked = 0
+        var filesAlreadyLinked = 0
+        var filesWrongAlbumTag = 0
+        var rootsWalked = mutableListOf<String>()
 
-        // Walk the search root. Depth-cap at 4 so the fallback full-
-        // library walk stays bounded even on a big NAS layout
-        // (music_root/artist/album/disc/file.flac is depth 4).
-        val walkDepth = if (linkedDirs.isEmpty()) 4 else 3
-        Files.walk(searchRoot.toPath(), walkDepth).use { stream ->
-            stream.forEach { p ->
-                if (!p.isRegularFile()) return@forEach
-                if (p.extension.lowercase() !in audioExts) return@forEach
-                if (p.toString() in alreadyLinkedPaths) return@forEach
-                val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
-                    ?: AudioTagReader.AudioTags.EMPTY
-                // Ignore files whose album tag obviously doesn't match —
-                // protects a full-library walk from pulling in the
-                // world. Loose compare because taggers disagree on
-                // punctuation and casing.
-                if (!albumTagLooksRight(tags, title)) return@forEach
-                filesConsidered += p to tags
+        // Walk strategy: start from `primaryRoot`; if that finds zero
+        // audio files, try `fallbackRoot` (typically music_root). This
+        // recovers from cases where the sibling-derived common ancestor
+        // ended up too narrow — the classic multi-disc mis-pick:
+        // linked siblings sit entirely under one disc directory so the
+        // ancestor never walked up far enough to see the other disc's
+        // files. Covered here by retrying from the full library root.
+        fun walkOne(root: File, depth: Int) {
+            rootsWalked += root.absolutePath
+            Files.walk(root.toPath(), depth).use { stream ->
+                stream.forEach { p ->
+                    if (!p.isRegularFile()) return@forEach
+                    if (p.extension.lowercase() !in audioExts) return@forEach
+                    filesWalked++
+                    if (p.toString() in alreadyLinkedPaths) {
+                        filesAlreadyLinked++
+                        return@forEach
+                    }
+                    val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
+                        ?: AudioTagReader.AudioTags.EMPTY
+                    if (!albumTagLooksRight(tags, title)) {
+                        filesWrongAlbumTag++
+                        return@forEach
+                    }
+                    filesConsidered += p to tags
+                }
             }
+        }
+
+        // Sibling-derived walks stay shallow since we know we're inside
+        // the album directory tree. The full-library fallback walks
+        // deeper because some setups nest several levels under
+        // music_root (e.g. /music/lossless/artist/album/disc/).
+        walkOne(primaryRoot, depth = if (siblingRoot != null) 4 else 8)
+        if (filesConsidered.isEmpty() && fallbackRoot != null) {
+            log.info("rescanAlbum title={}: primary root {} found no candidates, " +
+                "falling back to music_root {}", titleId, primaryRoot, fallbackRoot)
+            walkOne(fallbackRoot, depth = 8)
         }
 
         val now = LocalDateTime.now()
@@ -307,7 +341,11 @@ class TrackDiagnosticHttpService {
             "skipped_already_linked" to (tracks.size - unlinkedTracks.size),
             "no_match" to stillUnlinked.size,
             "candidates_considered" to filesConsidered.size,
-            "search_root" to searchRoot.absolutePath,
+            "files_walked" to filesWalked,
+            "files_already_linked_elsewhere" to filesAlreadyLinked,
+            "files_wrong_album_tag" to filesWrongAlbumTag,
+            "roots_walked" to rootsWalked,
+            "music_root_configured" to (musicRootDir?.absolutePath ?: "(not set)"),
             "unlinked_after_rescan" to failures
         ))
     }

@@ -285,15 +285,20 @@ export class TitleDetailComponent implements OnInit {
     if (!t || this.rescanning()) return;
     this.rescanning.set(true);
     try {
-      const result = await this.catalog.rescanAlbum(t.title_id);
-      const msg = result.message
-        ?? `Rescan: linked ${result.linked}, still unlinked ${result.no_match}, ` +
-           `${result.candidates_considered} files considered.`;
-      // Reuse the error banner as a transient status; cleared on the
-      // next refresh of the title. window.alert keeps this snappy
-      // without building a full snackbar plumbing pass.
-      window.alert(msg);
-      // Refresh so track rows pick up their new file_path + tags.
+      const r = await this.catalog.rescanAlbum(t.title_id);
+      // Verbose message when nothing matched so the admin can tell
+      // whether the walk found files at all and where it looked —
+      // without this, "linked 0" is opaque.
+      const lines = [
+        `Rescan: linked ${r.linked}, still unlinked ${r.no_match}.`,
+        `${r.candidates_considered} candidate(s) kept from ${r.files_walked} ` +
+          `audio file(s) walked.`,
+        `${r.files_wrong_album_tag} rejected (album tag didn't match), ` +
+          `${r.files_already_linked_elsewhere} already linked elsewhere.`,
+        `Searched: ${r.roots_walked.join(' → ')}`,
+        `music_root_path: ${r.music_root_configured}`,
+      ];
+      window.alert(r.message ?? lines.join('\n'));
       const fresh = await this.catalog.getTitleDetail(t.title_id);
       this.title.set(fresh);
     } catch (e) {

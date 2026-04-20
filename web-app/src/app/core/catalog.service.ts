@@ -876,7 +876,11 @@ export class CatalogService {
     skipped_already_linked: number;
     no_match: number;
     candidates_considered: number;
-    search_root: string;
+    files_walked: number;
+    files_already_linked_elsewhere: number;
+    files_wrong_album_tag: number;
+    roots_walked: string[];
+    music_root_configured: string;
     unlinked_after_rescan: Array<{
       track_id: number;
       disc_number: number;
