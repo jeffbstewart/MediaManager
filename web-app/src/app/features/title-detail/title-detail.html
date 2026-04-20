@@ -127,6 +127,24 @@
             </div>
           }
 
+          <!-- Admin: per-physical-copy edit links. Renders one pill
+               per linked MediaItem so the admin can reach the detail
+               page for the specific paperback vs. hardcover (or DVD
+               vs. Blu-ray) when multiple copies exist. Non-admin
+               users never see this — the server returns an empty list. -->
+          @if (features.isAdmin() && t.admin_media_items.length > 0) {
+            <div class="admin-items-row">
+              @for (mi of t.admin_media_items; track mi.media_item_id) {
+                <a class="admin-item-link"
+                   [routerLink]="routes.adminMediaItem(mi.media_item_id)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Edit {{ formatLabel(mi.media_format) }}</span>
+                  @if (mi.upc) { <span class="admin-item-upc">{{ mi.upc }}</span> }
+                </a>
+              }
+            </div>
+          }
+
           <!-- Tags -->
           @if (t.tags.length > 0 || features.isAdmin()) {
             <div class="tag-row">

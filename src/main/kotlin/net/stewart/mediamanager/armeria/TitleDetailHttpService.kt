@@ -98,11 +98,25 @@ class TitleDetailHttpService {
 
         // Formats from linked media items
         val mediaItemIds = MediaItemTitle.findAll().filter { it.title_id == titleId }.map { it.media_item_id }.toSet()
-        val formats = MediaItem.findAll()
-            .filter { it.id in mediaItemIds }
+        val allLinkedItems = MediaItem.findAll().filter { it.id in mediaItemIds }
+        val formats = allLinkedItems
             .map { it.media_format }
             .distinct()
             .filter { it != MediaFormat.UNKNOWN.name && it != MediaFormat.OTHER.name }
+        // Admin-only list of the actual MediaItem rows so the title
+        // page can link directly into the admin edit page for each
+        // physical copy (paperback + hardcover of the same book, DVD
+        // + Blu-ray of the same movie, etc.). Non-admin clients are
+        // free to ignore this; the main badge strip comes from `formats`.
+        val adminMediaItems = if (user.isAdmin()) {
+            allLinkedItems.map {
+                mapOf(
+                    "media_item_id" to it.id,
+                    "media_format" to it.media_format,
+                    "upc" to it.upc
+                )
+            }
+        } else emptyList()
 
         // Transcodes with playability
         val nasRoot = TranscoderAgent.getNasRoot()
@@ -391,6 +405,7 @@ class TitleDetailHttpService {
             "genres" to genres,
             "tags" to tags,
             "formats" to formats,
+            "admin_media_items" to adminMediaItems,
             "transcodes" to transcodeList,
             "readable_editions" to readableEditions,
             "cast" to cast,

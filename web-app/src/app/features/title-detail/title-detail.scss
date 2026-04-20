@@ -759,3 +759,26 @@
   flex-wrap: wrap;
 }
 .album-more-btn mat-icon { margin-right: 0.25rem; }
+
+// Admin-only per-MediaItem edit links under the format badge strip.
+.admin-items-row {
+  display: flex; flex-wrap: wrap; gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+.admin-item-link {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 0.6875rem;
+  text-decoration: none; color: inherit;
+  opacity: 0.7;
+  &:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+  .admin-item-upc {
+    opacity: 0.5;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-left: 0.25rem;
+  }
+}

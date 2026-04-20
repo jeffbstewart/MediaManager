@@ -21,6 +21,8 @@ interface BookSeriesInfo { id: number; name: string; volume: string | null; }
 interface MediaItemDetail {
   media_item_id: number; display_name: string; upc: string | null;
   product_name: string | null; media_format: string | null;
+  /** Formats the admin is allowed to switch this item to — varies by media_type. */
+  editable_formats: string[];
   media_type: string | null;
   storage_location: string | null;
   purchase_place: string | null; purchase_date: string | null;
@@ -162,6 +164,28 @@ export class MediaItemEditComponent implements OnInit {
     await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${this.itemId}/media-type`, { media_type: value }));
     this.flash('Media type updated');
     await this.refresh();
+  }
+
+  // --- Media Format ---
+  /**
+   * Change the physical/digital format of this item (e.g. book scanned
+   * as paperback but it's actually hardcover). Server validates that
+   * the new format is compatible with the title's media_type.
+   */
+  async setMediaFormat(event: Event): Promise<void> {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!value || value === this.item()?.media_format) return;
+    try {
+      await firstValueFrom(this.http.post(
+        `/api/v2/admin/media-item/${this.itemId}/format`,
+        { media_format: value }
+      ));
+      this.flash('Media format updated — replacement price cleared, will re-price on next cycle');
+      await this.refresh();
+    } catch (e: unknown) {
+      const msg = (e as { error?: { error?: string } })?.error?.error ?? 'Failed to update format';
+      this.flash(msg, 'error');
+    }
   }
 
   // --- Seasons ---

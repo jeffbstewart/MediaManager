@@ -110,6 +110,10 @@ service AdminService {
   rpc ListValuations(ValuationRequest) returns (ValuationResponse);
   rpc UpdateMediaItem(UpdateMediaItemRequest) returns (Empty);
   rpc TriggerKeepaLookup(MediaItemIdRequest) returns (Empty);
+  // Change the physical/digital format of an existing MediaItem.
+  // The new format must be compatible with the linked title's
+  // media_type (book titles take book formats, etc.).
+  rpc SetMediaItemFormat(SetMediaItemFormatRequest) returns (Empty);
 
   // --- Document Ownership ---
   rpc ListUndocumentedItems(PaginationRequest) returns (UndocumentedItemsResponse);
@@ -937,6 +941,11 @@ message ValuationResponse {
   int32 total_items = 3;
   double total_purchase_value = 4;
   double total_replacement_value = 5;
+}
+
+message SetMediaItemFormatRequest {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
 }
 
 message UpdateMediaItemRequest {

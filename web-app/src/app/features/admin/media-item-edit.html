@@ -48,6 +48,20 @@
       </div>
     }
 
+    <!-- Media Format. Options are media-type-aware (server decides);
+         omitted entirely for items with no editable formats (e.g.
+         digital-only books whose format is fixed by the file extension). -->
+    @if (data.editable_formats.length > 0) {
+      <div class="field-group">
+        <label class="field-label">Format</label>
+        <select class="field-select" (change)="setMediaFormat($event)">
+          @for (f of data.editable_formats; track f) {
+            <option [value]="f" [selected]="f === data.media_format">{{ formatLabel(f) }}</option>
+          }
+        </select>
+      </div>
+    }
+
     <!-- Seasons (for TV titles) -->
     @for (t of data.titles; track t.join_id) {
       @if (t.media_type === 'TV') {

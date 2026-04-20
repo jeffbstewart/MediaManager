@@ -16,6 +16,7 @@ import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.AmazonImportService
+import net.stewart.mediamanager.service.MediaFormatSwitcher
 import net.stewart.mediamanager.service.MissingSeasonService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.ScanDetailService
@@ -93,6 +94,7 @@ class MediaItemEditHttpService {
             "upc" to item.upc,
             "product_name" to item.product_name,
             "media_format" to item.media_format,
+            "editable_formats" to MediaFormatSwitcher.editableFormatsFor(primaryTitle?.media_type),
             "media_type" to primaryTitle?.media_type,
             "storage_location" to item.storage_location,
             "purchase_place" to item.purchase_place,
@@ -127,6 +129,41 @@ class MediaItemEditHttpService {
         title.media_type = newType
         title.save()
         SearchIndexService.onTitleChanged(titleId)
+
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    /**
+     * Change a MediaItem's physical format (e.g. "paperback" to
+     * "hardcover" when the wrong ISBN edition was scanned, or DVD to
+     * Blu-ray when a user re-rips). Validates that the new format
+     * makes sense for the linked title's media_type — book titles
+     * can't take disc formats, etc.
+     */
+    @Post("/api/v2/admin/media-item/{itemId}/format")
+    fun setMediaFormat(ctx: ServiceRequestContext, @Param("itemId") itemId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val item = MediaItem.findById(itemId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+        val newFormat = body["media_format"] as? String
+            ?: return badRequest("media_format required")
+
+        val validation = MediaFormatSwitcher.validate(item, newFormat)
+        if (!validation.ok) return badRequest(validation.reason!!)
+
+        item.media_format = newFormat
+        item.updated_at = LocalDateTime.now()
+        item.save()
+        // When the format changes meaningfully, replacement value might
+        // too (hardcover → paperback is a real price delta). Null out
+        // the previous price so the Keepa agent re-prices on next cycle.
+        if (validation.clearPrice) {
+            item.replacement_value = null
+            item.replacement_value_updated_at = null
+            item.save()
+        }
 
         return jsonResponse("""{"ok":true}""")
     }

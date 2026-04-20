@@ -1548,6 +1548,33 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         return empty {}
     }
 
+    override suspend fun setMediaItemFormat(request: SetMediaItemFormatRequest): Empty {
+        val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))
+
+        // Proto enum values are MEDIA_FORMAT_DVD etc. — strip the
+        // prefix so the name matches the Kotlin entity enum (and the
+        // validator) which just uses "DVD" / "HARDBACK" / etc.
+        val protoName = request.mediaFormat.name
+        if (protoName == "MEDIA_FORMAT_UNKNOWN") {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("media_format is required"))
+        }
+        val entityName = protoName.removePrefix("MEDIA_FORMAT_")
+        val validation = net.stewart.mediamanager.service.MediaFormatSwitcher.validate(item, entityName)
+        if (!validation.ok) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription(validation.reason))
+        }
+
+        item.media_format = entityName
+        item.updated_at = LocalDateTime.now()
+        if (validation.clearPrice) {
+            item.replacement_value = null
+            item.replacement_value_updated_at = null
+        }
+        item.save()
+        return empty {}
+    }
+
     override suspend fun triggerKeepaLookup(request: MediaItemIdRequest): Empty {
         val item = net.stewart.mediamanager.entity.MediaItem.findById(request.mediaItemId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Media item not found"))

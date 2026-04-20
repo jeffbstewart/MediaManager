@@ -141,6 +141,8 @@ export interface TitleDetail {
   genres: string[];
   tags: { id: number; name: string; bg_color: string; text_color: string }[];
   formats: string[];
+  /** Admin-only list of the MediaItem rows linked to this title, with their format + UPC, so the UI can route to /admin/item/:id for each. Empty for non-admin users. */
+  admin_media_items: { media_item_id: number; media_format: string; upc: string | null }[];
   transcodes: TranscodeInfo[];
   readable_editions?: ReadableEdition[];
   cast: CastInfo[];
