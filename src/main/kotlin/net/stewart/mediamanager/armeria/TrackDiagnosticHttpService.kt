@@ -157,6 +157,94 @@ class TrackDiagnosticHttpService {
     }
 
     /**
+     * Dump the raw ffprobe output for a specific file so we can see
+     * every tag ffprobe exposes, not just the ones AudioTagReader
+     * knows to look for. Handy when File Explorer / Picard show an
+     * MBID we aren't picking up — we need to know whether ffprobe
+     * is blind to it or whether we're keyed on the wrong name.
+     *
+     * Pass ?path=... (URL-encoded absolute path). Admin-only.
+     */
+    @Get("/api/v2/admin/diag/audio-file")
+    fun diagnoseFile(
+        ctx: ServiceRequestContext,
+        @Param("path") path: String
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val file = File(path)
+        if (!file.isFile) return notFound("Not a file: $path")
+
+        // Run ffprobe directly to get the raw JSON output, without the
+        // AudioTagReader.parse() filtering. Also run it with
+        // show_format=private so some rarer metadata surfaces.
+        val proc = ProcessBuilder(
+            "ffprobe",
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            "-show_entries", "format_tags:stream_tags",
+            file.absolutePath
+        ).redirectErrorStream(false).start()
+        val finished = proc.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+        if (!finished) {
+            proc.destroyForcibly()
+            return badRequest("ffprobe timed out")
+        }
+        val exitValue = proc.exitValue()
+        val stdout = proc.inputStream.bufferedReader().readText()
+        val stderr = proc.errorStream.bufferedReader().readText()
+
+        // Also run AudioTagReader on the same file so we can see what
+        // the parsed reader extracts — lets you compare "what ffprobe
+        // saw" vs "what we kept." If the MBID is in ffprobe's output
+        // but missing from the parsed struct, the key name is off.
+        val parsed = runCatching { AudioTagReader.read(file) }.getOrNull()
+
+        val response = mapOf(
+            "path" to file.absolutePath,
+            "size_bytes" to file.length(),
+            "ffprobe_exit_code" to exitValue,
+            "ffprobe_stdout_raw" to stdout,
+            "ffprobe_stderr" to stderr,
+            "audio_tag_reader_parsed" to parsed?.let { t ->
+                mapOf(
+                    "title" to t.title,
+                    "album" to t.album,
+                    "album_artist" to t.albumArtist,
+                    "track_artist" to t.trackArtist,
+                    "track_number" to t.trackNumber,
+                    "disc_number" to t.discNumber,
+                    "year" to t.year,
+                    "musicbrainz_recording_id" to t.musicBrainzRecordingId,
+                    "musicbrainz_release_id" to t.musicBrainzReleaseId,
+                    "musicbrainz_release_group_id" to t.musicBrainzReleaseGroupId,
+                    "musicbrainz_artist_id" to t.musicBrainzArtistId,
+                    "upc" to t.upc,
+                    "isrc" to t.isrc,
+                    "genres" to t.genres,
+                    "styles" to t.styles,
+                    "bpm" to t.bpm,
+                    "time_signature" to t.timeSignature
+                )
+            }
+        )
+
+        log.info("diagnoseFile path={} exit={} stdout_len={} parsed={}",
+            file.absolutePath, exitValue, stdout.length,
+            parsed?.let { "title=\"${it.title}\" recording_mbid=${it.musicBrainzRecordingId}" })
+
+        val bytes = gson.toJson(response).toByteArray(Charsets.UTF_8)
+        val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .contentLength(bytes.size.toLong())
+            .build()
+        return HttpResponse.of(headers, HttpData.wrap(bytes))
+    }
+
+    /**
      * Rescan the album's directories for audio files and link any
      * strong matches to *unlinked* tracks. Never touches already-linked
      * tracks — this is the narrow recovery tool for "scanner ran before
@@ -234,6 +322,7 @@ class TrackDiagnosticHttpService {
         var filesAlreadyLinked = 0
         var filesWrongAlbumTag = 0
         var filesPathRejected = 0
+        var filesAcceptedByArtistPosition = 0
         var rootsWalked = mutableListOf<String>()
         // Dedup across walks — the fallback music_root walk overlaps
         // the sibling-root walk (sibling root is usually a subtree of
@@ -273,6 +362,13 @@ class TrackDiagnosticHttpService {
             ?.takeIf { it.isNotBlank() }
         val albumReleaseGroupMbid: String? = title.musicbrainz_release_group_id
             ?.takeIf { it.isNotBlank() }
+
+        // (disc, track) slots this album contains. Used by the
+        // artist-plus-position bypass below as a cheap structural match.
+        val albumSlots: Set<Pair<Int, Int>> = tracks
+            .map { it.disc_number to it.track_number }
+            .toSet()
+        val primaryArtistNamesSet: Set<String> = primaryArtistNames.toSet()
 
         log.info(
             "rescanAlbum title={} \"{}\": {} tracks total, {} unlinked. " +
@@ -341,13 +437,15 @@ class TrackDiagnosticHttpService {
                             // vs what the catalog holds. Only the first 5
                             // per run — we don't want to flood binnacle.
                             log.info(
-                                "rescanAlbum title={}: REJECTED path={} album=\"{}\" " +
-                                "recording_mbid={} release_mbid={} " +
-                                "(title.name=\"{}\" release_mbid={})",
-                                titleId, p, tags.album ?: "(null)",
+                                "rescanAlbum title={}: REJECTED path={} " +
+                                "FILE[album=\"{}\" recording_mbid={} release_mbid={}] " +
+                                "vs CATALOG[title=\"{}\" release_mbid={}]",
+                                titleId, p,
+                                tags.album ?: "(null)",
                                 tags.musicBrainzRecordingId ?: "(null)",
                                 tags.musicBrainzReleaseId ?: "(null)",
-                                title.name, albumReleaseMbid ?: "(null)"
+                                title.name,
+                                albumReleaseMbid ?: "(null)"
                             )
                         }
                         return@forEach
