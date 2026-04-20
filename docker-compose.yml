@@ -103,20 +103,23 @@ services:
       - SIDECAR_VERSION=dev
       - TZ=America/New_York
 
-    mem_limit: 2g            # madmom models + one track's frames ≈ 500 MB active
-    memswap_limit: 2g
+    # Model load + one track's activations peaks ~1 GB in practice;
+    # bumped to 4 GB so a big file (long classical, high-rate WAV)
+    # doesn't hit the limit mid-inference. Docker's default SIGKILL
+    # on OOM is exactly what a silent restart loop looks like.
+    mem_limit: 4g
+    memswap_limit: 4g
 
+    # TCP-level health check. The gRPC server binds :9091 as soon as
+    # the Python process is up, so a TCP connect proves "process alive"
+    # without queuing behind in-flight Analyze calls — a real gRPC
+    # Health RPC would block on the single-threaded executor that
+    # madmom needs, routinely failing the 10 s timeout during a 30 s
+    # inference.
     healthcheck:
-      # gRPC health via the same server, exercised with grpcurl-shaped
-      # python one-liner. grpc_health_probe would be nicer but adds a
-      # whole binary; this uses the interpreter we already have.
-      test: ["CMD", "python", "-c",
-             "import grpc, sys; import madmom_pb2, madmom_pb2_grpc, common_pb2;
-              ch = grpc.insecure_channel('localhost:9091');
-              s = madmom_pb2_grpc.MadmomAnalysisStub(ch);
-              sys.exit(0 if s.Health(common_pb2.Empty()) else 1)"]
+      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 9091)); s.close()\""]
       interval: 60s
-      timeout: 10s
+      timeout: 5s
       start_period: 30s
       retries: 3
 

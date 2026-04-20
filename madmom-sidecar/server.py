@@ -177,6 +177,12 @@ class MadmomAnalysisServicer(madmom_pb2_grpc.MadmomAnalysisServicer):
 
     def Analyze(self, request, context):
         path = request.file_path
+        # Log entry BEFORE any heavy work. madmom drives C extensions
+        # that can segfault on malformed files — a Python `except`
+        # cannot catch that and the whole process exits silently.
+        # The pre-log survives long enough to land in the OTLP batch
+        # so binnacle shows which file was in-flight when we crashed.
+        logging.info("Analyze BEGIN path=%s", path)
         started = time.monotonic()
 
         if not path or not os.path.isfile(path):
