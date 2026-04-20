@@ -77,20 +77,30 @@ object AutoTagApplicator {
 
         if (toAttach.isEmpty()) return
 
+        // Resolve to tag ids FIRST, then dedup. findOrCreateTag falls
+        // back to case-insensitive lookup by display name, so (GENRE,
+        // "pop") and (STYLE, "pop") can both resolve to the same Tag
+        // row. If we didn't dedup here we'd try to insert the same
+        // (track_id, tag_id) twice and trip idx_track_tag_dedup.
+        val resolvedTagIds = toAttach.distinct()
+            .map { (source, canonical) -> findOrCreateTag(source, canonical).id!! }
+            .toSet()
+
         val existing = TrackTag.findAll().filter { it.track_id == input.trackId }
             .map { it.tag_id }.toSet()
         val now = LocalDateTime.now()
-        for ((source, canonical) in toAttach.distinct()) {
-            val tag = findOrCreateTag(source, canonical)
-            if (tag.id!! !in existing) {
+        var changed = false
+        for (tagId in resolvedTagIds) {
+            if (tagId !in existing) {
                 TrackTag(
                     track_id = input.trackId,
-                    tag_id = tag.id!!,
+                    tag_id = tagId,
                     created_at = now
                 ).save()
+                changed = true
             }
         }
-        if (toAttach.isNotEmpty()) SearchIndexService.onTagChanged()
+        if (changed) SearchIndexService.onTagChanged()
     }
 
     /**

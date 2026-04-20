@@ -128,6 +128,26 @@ class AutoTagApplicatorTest {
     }
 
     @Test
+    fun `applyToTrack collapses genre+style with same canonical name into one TrackTag row`() {
+        // Regression: GENRE "Pop" and STYLE "Pop" resolve to the same
+        // Tag row (via the display-name fallback in findOrCreateTag).
+        // Inserting both caused a UNIQUE constraint hit on
+        // idx_track_tag_dedup. applyToTrack must dedup by tag id.
+        val album = seedAlbum("A", 1984)
+        val track = seedTrack(album.id!!, 1, "T")
+
+        AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
+            trackId = track.id!!,
+            genres = listOf("Pop"),
+            styles = listOf("Pop"),
+            bpm = null, timeSignature = null, year = null
+        ))
+
+        val rows = TrackTag.findAll().filter { it.track_id == track.id }
+        assertEquals(1, rows.size, "genre+style with same name must produce one TrackTag row")
+    }
+
+    @Test
     fun `applyToTrack is idempotent`() {
         val album = seedAlbum("A", 1984)
         val track = seedTrack(album.id!!, 1, "T")
