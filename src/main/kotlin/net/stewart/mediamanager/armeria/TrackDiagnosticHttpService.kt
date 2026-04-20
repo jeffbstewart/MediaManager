@@ -216,6 +216,8 @@ class TrackDiagnosticHttpService {
 
         val unlinkedTracks = tracks.filter { it.file_path.isNullOrBlank() }
         if (unlinkedTracks.isEmpty()) {
+            log.info("rescanAlbum title={} \"{}\": all {} tracks already linked, nothing to do",
+                titleId, title.name, tracks.size)
             return jsonOk(mapOf(
                 "linked" to 0,
                 "skipped_already_linked" to tracks.size,
@@ -256,14 +258,30 @@ class TrackDiagnosticHttpService {
                 .map { normalize(it.name) }
                 .filter { it.isNotBlank() }
         }
-        // The album's recording MBIDs — used as a strong-signal bypass
-        // on the album-tag check. If the file carries an MBID we know
-        // belongs to this album, its album string doesn't have to
-        // match (MB may have picked a different canonical release name
-        // than what the taggers wrote into the files).
+        // MBID bypasses for the album-tag check. Two signals, either
+        // sufficient:
+        //   - Per-track recording MBID matches any track on this album.
+        //     Written by Picard to MUSICBRAINZ_TRACKID (Vorbis) /
+        //     TXXX:MusicBrainz Track Id (ID3).
+        //   - File's release MBID matches the title's release MBID.
+        //     Written by Picard to MUSICBRAINZ_ALBUMID. Useful when the
+        //     file has no per-track MBID but does have the album one.
         val albumRecordingMbids: Set<String> = tracks
             .mapNotNull { it.musicbrainz_recording_id?.takeIf { m -> m.isNotBlank() } }
             .toSet()
+        val albumReleaseMbid: String? = title.musicbrainz_release_id
+            ?.takeIf { it.isNotBlank() }
+        val albumReleaseGroupMbid: String? = title.musicbrainz_release_group_id
+            ?.takeIf { it.isNotBlank() }
+
+        log.info(
+            "rescanAlbum title={} \"{}\": {} tracks total, {} unlinked. " +
+            "Release MBID={} ReleaseGroup={} Recording MBIDs on album={}",
+            titleId, title.name, tracks.size, unlinkedTracks.size,
+            albumReleaseMbid ?: "(none)",
+            albumReleaseGroupMbid ?: "(none)",
+            albumRecordingMbids.size
+        )
 
         // Walk strategy: start from `primaryRoot`; if that finds zero
         // audio files, try `fallbackRoot` (typically music_root). This
@@ -306,13 +324,31 @@ class TrackDiagnosticHttpService {
                     // MBID match bypasses the album-tag check — the
                     // file is authoritatively on this album even if
                     // its album string doesn't match our title name.
-                    val mbidOk = tags.musicBrainzRecordingId != null &&
+                    val recordingBypass = tags.musicBrainzRecordingId != null &&
                         tags.musicBrainzRecordingId in albumRecordingMbids
+                    val releaseBypass = albumReleaseMbid != null &&
+                        tags.musicBrainzReleaseId == albumReleaseMbid
+                    val releaseGroupBypass = albumReleaseGroupMbid != null &&
+                        tags.musicBrainzReleaseGroupId == albumReleaseGroupMbid
+                    val mbidOk = recordingBypass || releaseBypass || releaseGroupBypass
                     if (!mbidOk && !albumTagLooksRight(tags, title)) {
                         filesWrongAlbumTag++
                         if (rejectedAlbumSamples.size < 5) {
                             tags.album?.takeIf { it.isNotBlank() }
                                 ?.let { rejectedAlbumSamples.add(it) }
+                            // Log first few rejections verbatim so the
+                            // admin can see exactly what the tagger wrote
+                            // vs what the catalog holds. Only the first 5
+                            // per run — we don't want to flood binnacle.
+                            log.info(
+                                "rescanAlbum title={}: REJECTED path={} album=\"{}\" " +
+                                "recording_mbid={} release_mbid={} " +
+                                "(title.name=\"{}\" release_mbid={})",
+                                titleId, p, tags.album ?: "(null)",
+                                tags.musicBrainzRecordingId ?: "(null)",
+                                tags.musicBrainzReleaseId ?: "(null)",
+                                title.name, albumReleaseMbid ?: "(null)"
+                            )
                         }
                         return@forEach
                     }
@@ -329,13 +365,25 @@ class TrackDiagnosticHttpService {
         // inside the album tree so every audio file is a candidate.
         // The fallback library walk uses the prefilter to avoid
         // ffprobing every file under music_root.
+        log.info("rescanAlbum title={}: walking primary root {} (prefilter={})",
+            titleId, primaryRoot, siblingRoot == null)
         walkOne(primaryRoot, depth = if (siblingRoot != null) 4 else 8, pathPrefilter = siblingRoot == null)
+        log.info(
+            "rescanAlbum title={}: primary walk done. " +
+            "walked={}, kept={}, already_linked={}, wrong_album={}, path_skipped={}",
+            titleId, filesWalked, filesConsidered.size,
+            filesAlreadyLinked, filesWrongAlbumTag, filesPathRejected
+        )
         if (filesConsidered.isEmpty() && fallbackRoot != null) {
-            log.info("rescanAlbum title={}: primary root {} found no candidates " +
-                "(walked={}, wrong_album={}, already_linked={}), " +
-                "falling back to music_root {}",
-                titleId, primaryRoot, filesWalked, filesWrongAlbumTag, filesAlreadyLinked, fallbackRoot)
+            log.info("rescanAlbum title={}: no candidates from primary root, " +
+                "falling back to music_root {}", titleId, fallbackRoot)
             walkOne(fallbackRoot, depth = 8, pathPrefilter = true)
+            log.info(
+                "rescanAlbum title={}: fallback walk done. " +
+                "walked={}, kept={}, already_linked={}, wrong_album={}, path_skipped={}",
+                titleId, filesWalked, filesConsidered.size,
+                filesAlreadyLinked, filesWrongAlbumTag, filesPathRejected
+            )
         }
 
         val now = LocalDateTime.now()
@@ -406,6 +454,16 @@ class TrackDiagnosticHttpService {
                 "name" to t.name
             )
         }
+
+        log.info(
+            "rescanAlbum title={} \"{}\" FINAL: linked={}, still_unlinked={}, " +
+            "candidates_considered={}, files_walked={}, wrong_album={}, " +
+            "path_skipped={}, already_linked={}, rejected_album_samples={}",
+            titleId, title.name, linkedCount, stillUnlinked.size,
+            filesConsidered.size, filesWalked, filesWrongAlbumTag,
+            filesPathRejected, filesAlreadyLinked,
+            rejectedAlbumSamples.toList()
+        )
 
         return jsonOk(mapOf(
             "linked" to linkedCount,
