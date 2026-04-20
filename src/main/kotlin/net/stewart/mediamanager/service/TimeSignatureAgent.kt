@@ -40,6 +40,14 @@ class TimeSignatureAgent(
         private val BACKLOG_LOG_INTERVAL = 60.seconds
         private val IDLE_INTERVAL = 10.minutes
         /**
+         * Consecutive-failure threshold before a track gets the hard
+         * MADMOM_FAILED stamp. A transient sidecar problem (crashing
+         * deploy, RPC timeout, OOM) shouldn't permanently park tracks
+         * on one bad try; three in a row means the failure is tied
+         * to this specific file, not the analyzer.
+         */
+        private const val FAIL_THRESHOLD = 3
+        /**
          * Retry delays for the initial availability probe. Sized so the
          * total covers the plausible startup race: MM and the sidecar
          * both launched by `docker-compose up` can see each other come
@@ -201,26 +209,42 @@ class TimeSignatureAgent(
         val elapsedMs = clock.currentTimeMillis() - started
 
         if (rhythm == null || rhythm.timeSignature == null) {
-            // Record the failure + file mtime so the sweep can auto-
-            // requeue if the file is later replaced.
-            track.time_signature_source = "MADMOM_FAILED"
-            // Reuse the existing bpm_analysis_failed_mtime column —
-            // adding a second mtime column for this would be premature;
-            // the file either changed or it didn't, regardless of which
-            // analyzer last failed on it.
-            track.bpm_analysis_failed_mtime = file.lastModified() / 1000
-            track.updated_at = clock.now()
-            track.save()
-            log.warn(
-                "TimeSignatureAgent: analysis FAILED for track {} \"{}\" ({}); " +
-                "marked MADMOM_FAILED at mtime={}. {} ms",
-                track.id, track.name, path, track.bpm_analysis_failed_mtime, elapsedMs
-            )
+            // Tolerate transient sidecar failures — a bad deploy, an
+            // RPC timeout, a momentary OOM — by requiring several
+            // consecutive failures before parking the track. Counter
+            // persists in the DB so it survives MM restarts. Once
+            // this hits the threshold, we mark MADMOM_FAILED and let
+            // the auto-requeue mtime sweep be the recovery path.
+            val newCount = track.time_signature_fail_count + 1
+            track.time_signature_fail_count = newCount
+            if (newCount >= FAIL_THRESHOLD) {
+                track.time_signature_source = "MADMOM_FAILED"
+                track.bpm_analysis_failed_mtime = file.lastModified() / 1000
+                track.updated_at = clock.now()
+                track.save()
+                log.warn(
+                    "TimeSignatureAgent: analysis FAILED for track {} \"{}\" ({}) " +
+                    "after {} consecutive attempts; marked MADMOM_FAILED at mtime={}. {} ms",
+                    track.id, track.name, path, newCount,
+                    track.bpm_analysis_failed_mtime, elapsedMs
+                )
+            } else {
+                track.updated_at = clock.now()
+                track.save()
+                log.warn(
+                    "TimeSignatureAgent: analysis failed for track {} \"{}\" ({}); " +
+                    "attempt {}/{} — will retry next cycle. {} ms",
+                    track.id, track.name, path, newCount, FAIL_THRESHOLD, elapsedMs
+                )
+            }
             return
         }
 
         track.time_signature = rhythm.timeSignature
         track.time_signature_source = "MADMOM"
+        // Reset on success so any previous transient failures don't
+        // push the next legitimate failure immediately to the threshold.
+        track.time_signature_fail_count = 0
         track.updated_at = clock.now()
         track.save()
 
@@ -254,6 +278,8 @@ class TimeSignatureAgent(
             val storedMtime = track.bpm_analysis_failed_mtime ?: 0L
             if (currentMtime > storedMtime) {
                 track.time_signature_source = "TAG"
+                // Fresh file — fresh chance at three attempts.
+                track.time_signature_fail_count = 0
                 track.updated_at = clock.now()
                 track.save()
                 recovered++

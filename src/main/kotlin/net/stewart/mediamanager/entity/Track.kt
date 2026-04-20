@@ -37,6 +37,8 @@ data class Track(
     var time_signature: String? = null,
     /** Provenance of [time_signature]: "TAG" / "MADMOM" / "MANUAL" / "MADMOM_FAILED". */
     var time_signature_source: String = "TAG",
+    /** Consecutive madmom failures on this track; reset to 0 on success, MADMOM_FAILED after N. */
+    var time_signature_fail_count: Int = 0,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {
