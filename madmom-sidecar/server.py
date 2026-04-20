@@ -24,12 +24,23 @@ import logging
 import os
 import sys
 import time
+import warnings
 from concurrent import futures
 from typing import Optional
 
 import grpc
 import numpy as np
 from prometheus_client import Counter, Histogram, start_http_server
+
+# madmom 0.16.1 constructs ragged ndarrays internally; numpy 1.19 emits
+# a VisibleDeprecationWarning for each call. With thousands of tracks
+# in the queue that's thousands of four-line warnings in Binnacle for
+# a problem we already know about and is in madmom's code, not ours.
+warnings.filterwarnings(
+    "ignore",
+    category=np.VisibleDeprecationWarning,
+    message=r".*Creating an ndarray from ragged nested sequences.*",
+)
 
 # Generated stubs live in the same directory as this file after the
 # Dockerfile's grpc_tools.protoc run.

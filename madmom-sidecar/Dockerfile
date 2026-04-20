@@ -46,7 +46,7 @@ COPY madmom-sidecar/requirements.txt .
 # `pip install madmom` runs. --no-build-isolation keeps pip from
 # spinning up an ephemeral env where those aren't visible.
 RUN pip install --no-cache-dir \
-        numpy==1.24.4 \
+        numpy==1.19.5 \
         cython==0.29.36 \
     && pip install --no-cache-dir --no-build-isolation -r requirements.txt
 

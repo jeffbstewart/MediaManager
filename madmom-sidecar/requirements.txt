@@ -1,9 +1,11 @@
-# madmom + its pinned scientific deps. These versions are what works
-# with madmom 0.16 on Python 3.10 — bumping anything here without
-# testing is a good way to get import errors.
+# madmom + its pinned scientific deps. madmom 0.16.1 was cut in 2018
+# and still references `np.float`, which numpy removed in 1.20. We
+# pin numpy at the last 1.19 release and a matching scipy. Bumping
+# any of these without testing will almost certainly surface a new
+# deprecation-turned-removal at madmom import time.
 madmom==0.16.1
-numpy==1.24.4
-scipy==1.10.1
+numpy==1.19.5
+scipy==1.5.4
 cython==0.29.36
 
 # gRPC server
