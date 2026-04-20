@@ -98,11 +98,14 @@ object MadmomClient {
      * matching Essentia's wrapper convention so the agent's
      * success/failure handling is symmetric.
      *
-     * `timeoutMs` covers the full RPC including the sidecar's
-     * inference time (10-25 s typical per track). 90 s leaves headroom
-     * for long tracks + first-request model-load overhead.
+     * `timeoutMs` covers the full RPC. Real-world madmom wall time
+     * on the NAS runs 60-120 s per track; long / complex tracks can
+     * stretch past 180 s. Five minutes gives comfortable headroom —
+     * if we're still waiting after that, something's actually wrong
+     * (model crashed, sidecar OOM'd, network stuck) and the retry +
+     * threshold logic in the agent is the right recovery path.
      */
-    fun analyze(filePath: String, timeoutMs: Long = 90_000L): Rhythm? {
+    fun analyze(filePath: String, timeoutMs: Long = 300_000L): Rhythm? {
         return try {
             val stub = MadmomAnalysisGrpcKt.MadmomAnalysisCoroutineStub(getChannel())
             val req = AnalyzeRequest.newBuilder().setFilePath(filePath).build()
