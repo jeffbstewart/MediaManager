@@ -20,8 +20,12 @@ data class Track(
     var duration_seconds: Int? = null,
     var musicbrainz_recording_id: String? = null,
     var file_path: String? = null,
-    /** Raw BPM from ID3/Vorbis `BPM` / `TBPM`. Integer. */
+    /** Raw BPM from ID3/Vorbis `BPM` / `TBPM`, ML analysis, or manual override — see [bpm_source]. */
     var bpm: Int? = null,
+    /** Provenance of [bpm]: "TAG" / "ESSENTIA" / "MANUAL". Drives re-analysis queue. */
+    var bpm_source: String = "TAG",
+    /** Set only when [bpm_source]="ESSENTIA"; bpm_histogram_first_peak_weight (0..1). */
+    var bpm_confidence: Double? = null,
     /** Raw time signature, e.g. "3/4" / "4/4". Mostly null — no standard ID3 frame; user can set manually. */
     var time_signature: String? = null,
     var created_at: LocalDateTime? = null,
