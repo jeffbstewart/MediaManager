@@ -23,6 +23,7 @@ class UpcLookupAgent(
     private var thread: Thread? = null
     private var lastLookupTime = 0L
     private var wasQuotaExhausted = false
+    private var lastIdleSummaryMs = 0L
     private fun countLookup(result: String) {
         MetricsRegistry.registry.counter("mm_upc_lookups_total", "result", result).increment()
     }
@@ -31,12 +32,16 @@ class UpcLookupAgent(
         private val POLL_INTERVAL = 5.seconds
         private val QUOTA_EXHAUSTED_INTERVAL = 60.seconds
         private val RATE_LIMITED_BACKOFF = 24.hours + 5.minutes
+        /** How often to log the queue snapshot while idle. */
+        private const val IDLE_SUMMARY_INTERVAL_MS = 60_000L
     }
 
     fun start() {
         if (running.getAndSet(true)) return
         thread = Thread({
             log.info("UPC Lookup Agent started")
+            runCatching { logQueueSummary(prefix = "startup") }
+                .onFailure { log.warn("startup queue summary failed: {}", it.message) }
             while (running.get()) {
                 var sleepDuration = POLL_INTERVAL
                 try {
@@ -79,7 +84,18 @@ class UpcLookupAgent(
             wasQuotaExhausted = false
         }
 
-        val scan = findOldestPending() ?: return POLL_INTERVAL
+        val scan = findOldestPending()
+        if (scan == null) {
+            // Nothing queued — periodically dump a per-status tally so
+            // we can tell whether the queue is truly empty or whether
+            // scans are stuck in unexpected states.
+            val nowMs = clock.currentTimeMillis()
+            if (nowMs - lastIdleSummaryMs >= IDLE_SUMMARY_INTERVAL_MS) {
+                logQueueSummary(prefix = "idle")
+                lastIdleSummaryMs = nowMs
+            }
+            return POLL_INTERVAL
+        }
 
         val elapsed = clock.currentTimeMillis() - lastLookupTime
         val wait = MIN_LOOKUP_GAP_MS - elapsed
@@ -88,12 +104,16 @@ class UpcLookupAgent(
             clock.sleep(wait.milliseconds)
         }
 
-        log.info("Looking up UPC: {} (scan #{})", scan.upc, scan.id)
+        val isIsbn = isIsbnBarcode(scan.upc)
+        log.info(
+            "Looking up UPC: '{}' (scan #{}, len={}, route={})",
+            scan.upc, scan.id, scan.upc.length, if (isIsbn) "ISBN/OpenLibrary" else "Music/UPCitemdb"
+        )
         lastLookupTime = clock.currentTimeMillis()
 
         // ISBN barcodes (EAN-13 with 978/979 prefix) route to Open Library
         // instead of UPCitemdb. See docs/BOOKS.md.
-        if (isIsbnBarcode(scan.upc)) {
+        if (isIsbn) {
             return handleIsbn(scan)
         }
 
@@ -242,6 +262,30 @@ class UpcLookupAgent(
     }
 
     /**
+     * Print a per-status count of scans + the next-to-process barcode
+     * so an admin staring at binnacle can tell at a glance whether the
+     * agent is idle by design or stuck. Called both during idle cycles
+     * and at startup.
+     */
+    private fun logQueueSummary(prefix: String) {
+        val all = BarcodeScan.findAll()
+        val byStatus = all.groupingBy { it.lookup_status }.eachCount()
+        val pendingBooks = all.count {
+            it.lookup_status == LookupStatus.NOT_LOOKED_UP.name && isIsbnBarcode(it.upc)
+        }
+        val pendingOther = all.count {
+            it.lookup_status == LookupStatus.NOT_LOOKED_UP.name && !isIsbnBarcode(it.upc)
+        }
+        val next = findOldestPending()
+        log.info(
+            "UpcLookupAgent [{}] status tally={}, pending_isbn={}, pending_non_isbn={}, " +
+            "next='{}' (scan_id={}, isbn={})",
+            prefix, byStatus, pendingBooks, pendingOther,
+            next?.upc ?: "(none)", next?.id, next?.upc?.let { isIsbnBarcode(it) }
+        )
+    }
+
+    /**
      * EAN-13 barcodes starting with 978 or 979 are Bookland — ISBNs. Any
      * other 13-digit barcode (or any 12-digit UPC) is routed through the
      * movie/product pipeline.
@@ -250,7 +294,10 @@ class UpcLookupAgent(
         code.length == 13 && (code.startsWith("978") || code.startsWith("979"))
 
     private fun handleIsbn(scan: BarcodeScan): Duration {
+        log.info("ISBN lookup: calling Open Library for '{}' (scan #{})", scan.upc, scan.id)
         val result = openLibraryService.lookupByIsbn(scan.upc)
+        log.info("ISBN lookup: Open Library responded with {} for '{}'",
+            result::class.simpleName, scan.upc)
         when (result) {
             is OpenLibraryResult.Success -> {
                 countLookup("found")
