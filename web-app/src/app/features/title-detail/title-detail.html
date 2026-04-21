@@ -353,30 +353,40 @@
                   </span>
                 }
                 <span class="track-duration">{{ formatTrackDuration(track.duration_seconds) }}</span>
-                @if (features.isAdmin()) {
-                  <button mat-icon-button class="track-play-btn"
-                          (click)="editTrackMusicTags(track)"
-                          aria-label="Edit BPM and time signature">
-                    <mat-icon>music_note</mat-icon>
-                  </button>
-                }
+
+                <!-- Play stays as the only always-visible action. -->
                 <button mat-icon-button class="track-play-btn"
                         (click)="playTrackAt((t.tracks ?? []).indexOf(track))"
                         aria-label="Play this track">
                   <mat-icon>play_circle</mat-icon>
                 </button>
+                <!-- Everything else lives behind a three-dots menu so
+                     each action has room for a text label. Labels
+                     make the admin-only items self-documenting. -->
                 <button mat-icon-button class="track-play-btn"
-                        (click)="openPickerForTrack(track.track_id, track.name)"
-                        aria-label="Add this track to a playlist">
-                  <mat-icon>playlist_add</mat-icon>
+                        [matMenuTriggerFor]="trackRowMenu"
+                        aria-label="More track actions">
+                  <mat-icon>more_vert</mat-icon>
                 </button>
-                @if (features.isAdmin()) {
-                  <button mat-icon-button class="track-play-btn"
-                          (click)="openTrackTagPicker(track.track_id, track.name)"
-                          aria-label="Tag this track">
-                    <mat-icon>sell</mat-icon>
+                <mat-menu #trackRowMenu>
+                  <button mat-menu-item type="button"
+                          (click)="openPickerForTrack(track.track_id, track.name)">
+                    <mat-icon>playlist_add</mat-icon>
+                    <span>Add to playlist</span>
                   </button>
-                }
+                  @if (features.isAdmin()) {
+                    <button mat-menu-item type="button"
+                            (click)="openTrackTagPicker(track.track_id, track.name)">
+                      <mat-icon>sell</mat-icon>
+                      <span>Tag this track</span>
+                    </button>
+                    <button mat-menu-item type="button"
+                            (click)="editTrackMusicTags(track)">
+                      <mat-icon>music_note</mat-icon>
+                      <span>Edit BPM &amp; time signature</span>
+                    </button>
+                  }
+                </mat-menu>
               </div>
             }
           </div>
