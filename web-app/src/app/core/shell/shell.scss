@@ -136,6 +136,23 @@
 
 .search-clear {
   position: absolute;
+  // Sits to the LEFT of the advanced button when both are visible.
+  right: 32px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: 50%;
+
+  &:hover { color: white; }
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.search-advanced {
+  position: absolute;
   right: 6px;
   background: none;
   border: none;

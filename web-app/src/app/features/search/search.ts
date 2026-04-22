@@ -48,7 +48,23 @@ export class SearchComponent implements OnInit, OnDestroy {
       const bpmMinRaw = params.get('bpm_min');
       const bpmMaxRaw = params.get('bpm_max');
       const ts = params.get('ts') ?? '';
+      const wantsDialog = params.get('advanced') === '1';
       this.query.set(q);
+
+      // Shell's "tune" button lands here with ?advanced=1 (+ optional
+      // q=). Open the dialog immediately so the user doesn't have to
+      // click a second time to reach it.
+      if (wantsDialog) {
+        this.openAdvanced();
+        // Strip the ?advanced=1 flag so reloads don't re-open the
+        // dialog and the URL stays clean. Preserve q if it was set.
+        const cleaned: Record<string, string> = {};
+        if (q) cleaned['q'] = q;
+        this.router.navigate([this.routes.search()], { queryParams: cleaned, replaceUrl: true });
+        // Falls through to the normal branches below — we may still
+        // want to render a results view or empty state while the
+        // dialog is open on top.
+      }
 
       const hasAdvanced = !!(bpmMinRaw || bpmMaxRaw || ts);
       if (hasAdvanced) {
@@ -106,6 +122,16 @@ export class SearchComponent implements OnInit, OnDestroy {
   openAdvanced(): void {
     const ref = this.dialog.open(AdvancedSearchDialogComponent, {
       autoFocus: 'first-heading',
+      // Pre-populate the dialog's text field with whatever the user
+      // had typed before hitting "advanced" — the shell's tune button
+      // carries the query through, and the dialog preserves it so a
+      // throwaway search term isn't lost.
+      data: {
+        initialQuery: this.query(),
+        initialBpmMin: this.activeFilters()?.bpmMin ?? null,
+        initialBpmMax: this.activeFilters()?.bpmMax ?? null,
+        initialTimeSignature: this.activeFilters()?.timeSignature ?? null,
+      },
     });
     ref.afterClosed().subscribe(filters => {
       if (!filters) return;

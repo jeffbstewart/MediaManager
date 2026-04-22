@@ -107,6 +107,19 @@ export class ShellComponent implements OnInit {
     this.showSuggestions.set(false);
   }
 
+  /**
+   * Navigate to the search page with `advanced=1`, which triggers the
+   * Advanced dialog to open automatically. The current input text (if
+   * any) rides along so the user doesn't lose what they typed.
+   */
+  openAdvancedSearch(): void {
+    const queryParams: Record<string, string> = { advanced: '1' };
+    const q = this.searchQuery().trim();
+    if (q) queryParams['q'] = q;
+    this.showSuggestions.set(false);
+    this.router.navigate(['/search'], { queryParams });
+  }
+
   onSuggestionClick(): void {
     this.showSuggestions.set(false);
     this.searchQuery.set('');

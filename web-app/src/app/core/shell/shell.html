@@ -219,6 +219,16 @@
             <mat-icon>close</mat-icon>
           </button>
         }
+        <!-- Always-visible advanced-search button so you can reach the
+             BPM / time-sig / dance-preset dialog without having to
+             issue a throwaway text search first. Carries the current
+             input text along as a starting point. -->
+        <button class="search-advanced" type="button"
+                (mousedown)="openAdvancedSearch(); $event.preventDefault()"
+                title="Advanced search (BPM, time signature, dance presets)"
+                aria-label="Advanced search">
+          <mat-icon>tune</mat-icon>
+        </button>
         @if (showSuggestions() && suggestions().length > 0) {
           <div class="suggestions-dropdown">
             @for (item of suggestions(); track item.name + item.type) {

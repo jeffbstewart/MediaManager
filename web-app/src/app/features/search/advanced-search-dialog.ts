@@ -1,10 +1,17 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AdvancedSearchPreset, AdvancedTrackSearchFilters, CatalogService } from '../../core/catalog.service';
+
+export interface AdvancedSearchDialogData {
+  initialQuery?: string | null;
+  initialBpmMin?: number | null;
+  initialBpmMax?: number | null;
+  initialTimeSignature?: string | null;
+}
 
 /**
  * Advanced search popup. Three things:
@@ -33,15 +40,17 @@ import { AdvancedSearchPreset, AdvancedTrackSearchFilters, CatalogService } from
 export class AdvancedSearchDialogComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
   private readonly dialogRef = inject(MatDialogRef<AdvancedSearchDialogComponent, AdvancedTrackSearchFilters | null>);
+  private readonly data = inject<AdvancedSearchDialogData | null>(MAT_DIALOG_DATA, { optional: true });
 
   readonly presets = signal<AdvancedSearchPreset[]>([]);
   readonly loadingPresets = signal(true);
 
-  // Form state
-  readonly query = signal('');
-  readonly bpmMin = signal<string>('');
-  readonly bpmMax = signal<string>('');
-  readonly timeSignature = signal<string>('');
+  // Form state — seeded from the caller's data payload so an
+  // in-progress query/filters aren't lost when the dialog opens.
+  readonly query = signal(this.data?.initialQuery ?? '');
+  readonly bpmMin = signal<string>(this.data?.initialBpmMin != null ? String(this.data.initialBpmMin) : '');
+  readonly bpmMax = signal<string>(this.data?.initialBpmMax != null ? String(this.data.initialBpmMax) : '');
+  readonly timeSignature = signal<string>(this.data?.initialTimeSignature ?? '');
   /** Highlighted preset key so the chip stays visibly selected after a click. */
   readonly activePresetKey = signal<string | null>(null);
 
