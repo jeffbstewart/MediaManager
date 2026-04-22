@@ -86,9 +86,9 @@ class UpcLookupAgent(
 
         val scan = findOldestPending()
         if (scan == null) {
-            // Nothing queued — periodically dump a per-status tally so
-            // we can tell whether the queue is truly empty or whether
-            // scans are stuck in unexpected states.
+            // Nothing eligible — either the queue is empty or every pending
+            // scan is in backoff. Periodically dump a per-status tally so
+            // an admin can tell the difference.
             val nowMs = clock.currentTimeMillis()
             if (nowMs - lastIdleSummaryMs >= IDLE_SUMMARY_INTERVAL_MS) {
                 logQueueSummary(prefix = "idle")
@@ -140,11 +140,18 @@ class UpcLookupAgent(
         if (result.apiError) {
             log.warn("API error for UPC {}: {}", scan.upc, result.errorMessage)
             countLookup("error")
-            // Leave as NOT_LOOKED_UP for retry — do NOT count against quota
+            // Leave as NOT_LOOKED_UP for retry — do NOT count against quota.
             if (result.rateLimited) {
+                // The 24 h global backoff already keeps us from hammering
+                // the API. Don't also penalize this scan with a per-scan
+                // cooldown — the failure wasn't UPC-specific.
                 log.info("Rate limited by API, backing off for {}", RATE_LIMITED_BACKOFF)
                 return RATE_LIMITED_BACKOFF
             }
+            // Per-UPC failure: bump the scan's backoff ladder so a
+            // persistently-failing barcode doesn't hog the agent every
+            // 11 s forever.
+            markAttemptFailed(scan)
             return POLL_INTERVAL
         }
 
@@ -257,8 +264,35 @@ class UpcLookupAgent(
     }
 
     private fun findOldestPending(): BarcodeScan? {
-        return BarcodeScan.findAll(BarcodeScan::scanned_at.asc)
-            .firstOrNull { it.lookup_status == LookupStatus.NOT_LOOKED_UP.name }
+        val now = clock.now()
+        return BarcodeScan.findAll(BarcodeScan::scanned_at.asc).firstOrNull {
+            it.lookup_status == LookupStatus.NOT_LOOKED_UP.name &&
+                EnrichmentBackoff.isEligibleForRetry(
+                    it.lookup_last_attempt_at,
+                    it.lookup_no_progress_streak,
+                    now
+                )
+        }
+    }
+
+    /**
+     * Stamp the scan so [EnrichmentBackoff] holds it off the queue
+     * until the next ladder step. Only reached on paths that leave
+     * the scan in NOT_LOOKED_UP — found / not-found transitions move
+     * the scan to a terminal status and don't go through here.
+     */
+    private fun markAttemptFailed(scan: BarcodeScan) {
+        scan.lookup_last_attempt_at = clock.now()
+        scan.lookup_no_progress_streak = EnrichmentBackoff.nextStreak(
+            currentStreak = scan.lookup_no_progress_streak,
+            madeProgress = false
+        )
+        scan.save()
+        val cooldown = EnrichmentBackoff.cooldownFor(scan.lookup_no_progress_streak)
+        log.info(
+            "Scan #{} '{}' backed off: streak={}, next attempt in {}",
+            scan.id, scan.upc, scan.lookup_no_progress_streak, cooldown
+        )
     }
 
     /**
@@ -328,9 +362,14 @@ class UpcLookupAgent(
                 countLookup("error")
                 log.warn("Open Library error for ISBN {}: {}", scan.upc, result.message)
                 if (result.rateLimited) {
+                    // Global rate limit — already throttled by RATE_LIMITED_BACKOFF,
+                    // don't pile a per-scan cooldown on top.
                     return RATE_LIMITED_BACKOFF
                 }
-                // Leave as NOT_LOOKED_UP for retry — don't count against quota.
+                // Leave as NOT_LOOKED_UP for retry, but push this scan into
+                // the backoff ladder so a bad ISBN doesn't get re-queried
+                // every 11 s forever.
+                markAttemptFailed(scan)
                 return POLL_INTERVAL
             }
         }
