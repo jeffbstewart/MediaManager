@@ -27,8 +27,8 @@ h2 { margin: 0 0 0.25rem; }
 
 .vote-badge {
   display: inline-block;
-  background: var(--mat-sys-primary, #bb86fc);
-  color: white;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
   font-size: 0.6875rem;
   font-weight: 700;
   padding: 2px 8px;

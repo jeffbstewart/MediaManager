@@ -52,8 +52,8 @@ h2 { margin: 0 0 0.75rem; }
 // by mat-sidenav-content's transform that would otherwise bound a
 // position:fixed overlay and hide it behind the open side drawer.
 .link-dialog {
-  background: #1e1e1e;
-  color: white;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
   border: none;
   border-radius: 12px;
   padding: 1.5rem;
@@ -74,9 +74,9 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .close-btn {
-  background: none; border: none; color: white; cursor: pointer;
+  background: none; border: none; color: inherit; cursor: pointer;
   padding: 4px; border-radius: 50%;
-  &:hover { background: rgba(255, 255, 255, 0.1); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
 }
 
 .section-title {
@@ -85,21 +85,21 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .link-error {
-  background: rgba(244, 67, 54, 0.12);
-  border: 1px solid rgba(244, 67, 54, 0.3);
-  color: #f44336; font-size: 0.8125rem;
+  background: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-error) 30%, transparent);
+  color: var(--mat-sys-error); font-size: 0.8125rem;
   padding: 0.5rem 0.75rem; border-radius: 4px;
   margin-bottom: 0.75rem;
 }
 
 .search-input {
-  width: 100%; background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px; color: white;
+  width: 100%; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit;
   padding: 8px 12px; font-size: 0.875rem;
   outline: none; margin-bottom: 0.5rem; box-sizing: border-box;
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
-  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+  &:focus { border-color: var(--mat-sys-primary); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
   &:disabled { opacity: 0.5; }
 }
 
@@ -113,7 +113,7 @@ h2 { margin: 0 0 0.75rem; }
 .link-result-row {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.5rem; border-radius: 4px;
-  &:hover { background: rgba(255, 255, 255, 0.05); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); }
 }
 
 .link-title { flex: 1; font-size: 0.875rem; }
@@ -127,7 +127,7 @@ h2 { margin: 0 0 0.75rem; }
 
 .ol-cover-placeholder {
   width: 36px; height: 54px; border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   mat-icon { opacity: 0.4; font-size: 18px; width: 18px; height: 18px; }

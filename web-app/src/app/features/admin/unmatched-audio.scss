@@ -30,7 +30,7 @@ header {
   text-align: center;
 }
 
-.error { color: var(--mat-sys-error, #f44336); }
+.error { color: var(--mat-sys-error); }
 
 .status {
   margin: 0.5rem 0 1rem;
@@ -59,7 +59,7 @@ header {
 
   .mbid-chip {
     background: rgba(76, 175, 80, 0.2);
-    color: var(--mat-sys-on-surface, inherit);
+    color: var(--mat-sys-on-surface);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -77,7 +77,7 @@ header {
     display: inline-block;
     margin-right: 0.5rem;
     padding: 1px 6px;
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
     border-radius: 4px;
     font-family: monospace;
     font-size: 0.75rem;
@@ -95,7 +95,7 @@ header {
       th, td {
         text-align: left;
         padding: 4px 8px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
       }
 
       th { opacity: 0.6; font-weight: 600; }
@@ -110,8 +110,8 @@ header {
   width: 720px;
   max-width: 90vw;
   max-height: 80vh;
-  background: var(--mat-sys-surface, #1e1e1e);
-  color: var(--mat-sys-on-surface, inherit);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
 
   &::backdrop {
     background: rgba(0, 0, 0, 0.6);
@@ -134,8 +134,8 @@ header {
     input {
       flex: 1;
       padding: 0.5rem 0.75rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
+      border: 1px solid var(--mat-sys-outline-variant);
       border-radius: 6px;
       color: inherit;
       font: inherit;
@@ -156,7 +156,7 @@ header {
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
     border-radius: 8px;
 
     .candidate-main {
@@ -197,8 +197,8 @@ header {
   bottom: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--mat-sys-surface-container-high, #2a2a2a);
-  color: var(--mat-sys-on-surface, inherit);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   display: flex;
@@ -245,7 +245,7 @@ header {
     li {
       font-size: 0.75rem;
       padding: 4px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
 
       &:last-child { border-bottom: none; }
     }

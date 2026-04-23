@@ -45,7 +45,7 @@
 }
 
 .dot { opacity: 0.3; }
-.failed { color: #f44336; }
+.failed { color: var(--mat-sys-error); }
 
 // Info note
 .info-note {
@@ -89,22 +89,24 @@
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+  color: inherit;
   flex-shrink: 0;
 
-  &.tag-TRANSCODE { background: #1565c0; }
-  &.tag-MOBILE_TRANSCODE { background: #6a1b9a; }
-  &.tag-THUMBNAILS { background: #e65100; }
-  &.tag-SUBTITLES { background: #2e7d32; }
-  &.tag-CHAPTERS { background: #00838f; }
+  // Branded category tags keep their original colors in both modes —
+  // the white text was paired with these dark fills intentionally.
+  &.tag-TRANSCODE { background: #1565c0; color: white; }
+  &.tag-MOBILE_TRANSCODE { background: #6a1b9a; color: white; }
+  &.tag-THUMBNAILS { background: #e65100; color: white; }
+  &.tag-SUBTITLES { background: #2e7d32; color: white; }
+  &.tag-CHAPTERS { background: #00838f; color: white; }
 }
 
 .encoder-tag {
   font-size: 0.625rem;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   opacity: 0.6;
   flex-shrink: 0;
 }
@@ -162,7 +164,7 @@
   height: 16px;
 
   &.success { color: #4caf50; }
-  &.failed { color: #f44336; }
+  &.failed { color: var(--mat-sys-error); }
 }
 
 .file-name-table {
@@ -175,7 +177,7 @@
 
 .error-detail {
   font-size: 0.6875rem;
-  color: #f44336;
+  color: var(--mat-sys-error);
   opacity: 0.8;
   white-space: normal;
   line-height: 1.3;
