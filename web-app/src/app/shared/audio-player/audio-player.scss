@@ -14,9 +14,9 @@
   z-index: 10;
   height: 72px;
   padding: 0 1rem;
-  background: rgba(20, 20, 22, 0.96);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-highest) 96%, transparent);
   backdrop-filter: blur(8px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--mat-sys-outline-variant);
   grid-template-columns: minmax(220px, 1fr) auto minmax(260px, 2fr) auto;
   gap: 1rem;
   align-items: center;
@@ -44,7 +44,7 @@
 }
 
 .cover-placeholder {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,7 +149,7 @@
   align-items: center;
   gap: 0.25rem;
   padding-right: 0.25rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid var(--mat-sys-outline-variant);
   margin-right: 0.125rem;
 }
 

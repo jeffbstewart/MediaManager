@@ -5,6 +5,14 @@
 .shell-drawer {
   width: 260px;
 
+  // The fixed audio player at the bottom of the viewport overlaps the
+  // last ~72 px of the drawer's scroll region. Without compensation the
+  // bottom-most nav rows (e.g. "Users") are unreachable while the
+  // player is showing. Push the nav-list contents up so they clear it.
+  &.with-player .mat-mdc-list-base {
+    padding-bottom: 88px;
+  }
+
   .section-header {
     font-size: 0.6875rem;
     font-weight: 600;
@@ -27,7 +35,7 @@
   }
 
   .active-link {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   }
 
   .unmatched-badge {
@@ -117,21 +125,21 @@
 
 .search-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 24px;
-  color: white;
+  color: var(--mat-sys-on-surface);
   padding: 8px 36px 8px 36px;
   font-size: 0.875rem;
   outline: none;
   font-family: inherit;
 
   &:focus {
-    border-color: rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--mat-sys-outline);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent);
   }
 
-  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
 }
 
 .search-clear {
@@ -140,13 +148,13 @@
   right: 32px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
   padding: 4px;
   display: flex;
   border-radius: 50%;
 
-  &:hover { color: white; }
+  &:hover { color: var(--mat-sys-on-surface); }
 
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
@@ -156,13 +164,13 @@
   right: 6px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
   padding: 4px;
   display: flex;
   border-radius: 50%;
 
-  &:hover { color: white; }
+  &:hover { color: var(--mat-sys-on-surface); }
 
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
@@ -172,7 +180,8 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: #2a2a2a;
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
   overflow: hidden;
@@ -187,17 +196,17 @@
   gap: 0.625rem;
   padding: 10px 14px;
   text-decoration: none;
-  color: white;
+  color: inherit;
   cursor: pointer;
   transition: background 0.1s;
 
-  &:hover { background: rgba(255, 255, 255, 0.08); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); }
 
   &.suggestion-all {
     justify-content: center;
     font-size: 0.8125rem;
     opacity: 0.5;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--mat-sys-outline-variant);
     padding: 10px;
 
     &:hover { opacity: 0.8; }
@@ -245,7 +254,7 @@
   width: 32px;
   height: 48px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;

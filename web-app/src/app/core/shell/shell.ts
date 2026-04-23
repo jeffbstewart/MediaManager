@@ -1,5 +1,6 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatIconModule } from '@angular/material/icon';
@@ -35,7 +36,7 @@ import { PlaybackQueueService } from '../playback-queue.service';
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
-export class ShellComponent implements OnInit {
+export class ShellComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly catalog = inject(CatalogService);
   private readonly router = inject(Router);
@@ -50,7 +51,26 @@ export class ShellComponent implements OnInit {
   readonly showSuggestions = signal(false);
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
+  // Responsive sidenav. On phones (incl. iOS Chrome) the sidenav lives
+  // in `over` mode and starts closed so the page content isn't pushed
+  // off-screen by a 260 px drawer. On tablet+ it stays in `side` mode,
+  // pinned open. Tracked via matchMedia so it reacts to rotation /
+  // window resizes without an Angular CDK dependency.
+  private readonly mobileQuery: MediaQueryList | null =
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null;
+  readonly isMobile = signal(this.mobileQuery?.matches ?? false);
+  private readonly mobileListener = (e: MediaQueryListEvent) => this.isMobile.set(e.matches);
+  private routerSub?: { unsubscribe(): void };
+
   async ngOnInit(): Promise<void> {
+    this.mobileQuery?.addEventListener('change', this.mobileListener);
+    // Auto-close the over-mode drawer after a navigation so tapping a
+    // nav item on a phone doesn't leave the drawer covering the page.
+    this.routerSub = this.router.events
+      .pipe(filter(e => e instanceof NavigationEnd))
+      .subscribe(() => {
+        if (this.isMobile()) this.drawerOpen.set(false);
+      });
     try {
       const flags = await this.catalog.getFeatures();
       this.features.update(flags);
@@ -58,6 +78,15 @@ export class ShellComponent implements OnInit {
       // Non-fatal — nav will show minimal set until home page loads
     }
   }
+
+  ngOnDestroy(): void {
+    this.mobileQuery?.removeEventListener('change', this.mobileListener);
+    this.routerSub?.unsubscribe();
+  }
+
+  /** Drawer open state. Starts open on desktop, closed on mobile. */
+  readonly drawerOpen = signal(!(this.mobileQuery?.matches ?? false));
+  toggleDrawer(): void { this.drawerOpen.update(v => !v); }
   readonly purchasesOpen = signal(false);
   readonly transcodesOpen = signal(false);
 

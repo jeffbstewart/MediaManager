@@ -14,13 +14,13 @@ h2 { margin: 0; }
 .initial-circle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-  background: rgba(187, 134, 252, 0.15); color: var(--mat-sys-primary, #bb86fc);
+  background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent); color: var(--mat-sys-primary);
   font-weight: 700; font-size: 0.75rem;
 }
 .member-name { font-weight: 500; }
 .secondary { font-size: 0.8125rem; opacity: 0.5; }
 .notes-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-.delete-btn { color: #f44336 !important; }
+.delete-btn { color: var(--mat-sys-error) !important; }
 
 // Modal
 .modal-overlay {
@@ -28,24 +28,25 @@ h2 { margin: 0; }
   display: flex; align-items: center; justify-content: center;
 }
 .modal-content {
-  background: #2a2a2a; border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 450px;
+  background: var(--mat-sys-surface-container-highest); color: var(--mat-sys-on-surface);
+  border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 450px;
   &.small { max-width: 400px; }
   h3 { margin: 0 0 1rem; }
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 
 .field-group { margin-bottom: 0.75rem; }
-.field-label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; margin-bottom: 4px; }
+.field-label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); margin-bottom: 4px; }
 .field-input, .field-textarea {
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 4px; color: white; padding: 8px 12px; font-size: 0.875rem; outline: none;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit; padding: 8px 12px; font-size: 0.875rem; outline: none;
   width: 100%; box-sizing: border-box; font-family: inherit;
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
-  &::placeholder { color: rgba(255,255,255,0.35); }
+  &:focus { border-color: var(--mat-sys-primary); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
 }
 .field-textarea { height: 80px; resize: vertical; }
 
 .error-message {
-  background: rgba(244,67,54,0.15); color: #f44336;
+  background: color-mix(in srgb, var(--mat-sys-error) 15%, transparent); color: var(--mat-sys-error);
   padding: 8px 12px; border-radius: 6px; font-size: 0.8125rem; margin-bottom: 0.75rem;
 }

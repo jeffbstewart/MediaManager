@@ -31,7 +31,7 @@
 
 .source-label { font-size: 0.75rem; opacity: 0.5; }
 
-.delete-btn { color: rgba(255, 255, 255, 0.4); &:hover { color: #f44336; } }
+.delete-btn { color: var(--mat-sys-on-surface-variant); &:hover { color: var(--mat-sys-error); } }
 
 // Modal
 .modal-overlay {
@@ -41,7 +41,8 @@
 }
 
 .modal-content {
-  background: #1e1e1e; border-radius: 12px;
+  background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface);
+  border-radius: 12px;
   padding: 1.5rem; width: 90vw; max-width: 420px;
 }
 
@@ -52,23 +53,23 @@
 }
 
 .close-btn {
-  background: none; border: none; color: white; cursor: pointer;
+  background: none; border: none; color: inherit; cursor: pointer;
   padding: 4px; border-radius: 50%;
-  &:hover { background: rgba(255, 255, 255, 0.1); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
 }
 
 .field-label {
-  display: block; font-size: 0.8125rem; opacity: 0.6;
+  display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant);
   margin: 0.75rem 0 0.25rem;
 }
 
 .field-input {
-  width: 100%; background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px; color: white;
+  width: 100%; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit;
   padding: 8px 12px; font-size: 0.875rem;
   outline: none; box-sizing: border-box;
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+  &:focus { border-color: var(--mat-sys-primary); }
 }
 
 .color-grid {
@@ -102,7 +103,7 @@
   justify-content: center;
 }
 
-.field-error { color: #f44336; font-size: 0.75rem; display: block; margin-top: 0.25rem; }
+.field-error { color: var(--mat-sys-error); font-size: 0.75rem; display: block; margin-top: 0.25rem; }
 
 .delete-message { font-size: 0.875rem; opacity: 0.85; margin: 0 0 1rem; line-height: 1.5; }
 

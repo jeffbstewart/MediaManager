@@ -9,7 +9,8 @@
 }
 
 .modal-content {
-  background: #1e1e1e;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
   border-radius: 12px;
   padding: 1.5rem;
   width: 90vw;
@@ -27,11 +28,11 @@
 .close-btn {
   background: none;
   border: none;
-  color: white;
+  color: inherit;
   cursor: pointer;
   padding: 4px;
   border-radius: 50%;
-  &:hover { background: rgba(255, 255, 255, 0.1); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
 }
 
 .form-fields {
@@ -59,17 +60,17 @@
 
 .field-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 4px;
-  color: white;
+  color: inherit;
   padding: 8px 12px;
   font-size: 0.875rem;
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
   resize: vertical;
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+  &:focus { border-color: var(--mat-sys-primary); }
 }
 
 .dialog-footer {

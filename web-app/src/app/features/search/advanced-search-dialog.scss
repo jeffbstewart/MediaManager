@@ -39,8 +39,8 @@ mat-dialog-content { max-height: 70vh; }
 
 .field-input,
 .field-select {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 4px;
   color: inherit;
   padding: 6px 10px;
@@ -49,7 +49,7 @@ mat-dialog-content { max-height: 70vh; }
 
   &:focus {
     outline: none;
-    border-color: var(--mat-sys-primary, #bb86fc);
+    border-color: var(--mat-sys-primary);
   }
 }
 

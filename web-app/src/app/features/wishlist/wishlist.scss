@@ -288,7 +288,8 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 }
 
 .modal-content {
-  background: #2a2a2a; border-radius: 12px; padding: 1.5rem;
+  background: var(--mat-sys-surface-container-highest); color: var(--mat-sys-on-surface);
+  border-radius: 12px; padding: 1.5rem;
   width: 90vw; max-width: 420px;
 
   h3 { margin: 0 0 0.75rem; }
@@ -301,13 +302,14 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
   .cancel-btn {
     position: static; width: auto; height: auto; border-radius: 6px;
-    background: rgba(255,255,255,0.1); color: white; padding: 8px 16px;
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); color: inherit;
+    padding: 8px 16px;
     font-size: 0.8125rem; cursor: pointer; border: none;
-    &:hover { background: rgba(255,255,255,0.15); }
+    &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 15%, transparent); }
   }
 
   .confirm-btn {
-    background: var(--mat-sys-primary, #bb86fc); color: #1e1e1e;
+    background: var(--mat-sys-primary); color: var(--mat-sys-on-primary);
     border: none; border-radius: 6px; padding: 8px 16px;
     font-size: 0.8125rem; font-weight: 600; cursor: pointer;
     &:hover { opacity: 0.9; }

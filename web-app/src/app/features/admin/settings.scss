@@ -4,7 +4,7 @@
 h2 { margin: 0 0 1rem; }
 h3 {
   margin: 1.5rem 0 0.5rem; font-size: 1.125rem;
-  padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 1rem; border-top: 1px solid var(--mat-sys-outline-variant);
   &:first-of-type { border-top: none; padding-top: 0; }
 }
 
@@ -13,18 +13,18 @@ h3 {
 .field-group { margin-bottom: 0.75rem; }
 
 .field-label {
-  display: block; font-size: 0.8125rem; opacity: 0.6;
+  display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.25rem;
 }
 
 .field-input {
-  width: 100%; background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 4px; color: white;
+  width: 100%; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit;
   padding: 8px 12px; font-size: 0.875rem;
   outline: none; box-sizing: border-box;
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
-  &::placeholder { color: rgba(255,255,255,0.35); }
+  &:focus { border-color: var(--mat-sys-primary); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
   &[readonly] { opacity: 0.5; cursor: not-allowed; }
   &.mono { font-family: monospace; font-size: 0.8125rem; }
 }
@@ -34,7 +34,7 @@ h3 {
 .checkbox-row {
   display: flex; align-items: center; gap: 0.5rem;
   cursor: pointer; font-size: 0.875rem; margin-bottom: 0.5rem;
-  input { accent-color: var(--mat-sys-primary, #bb86fc); width: 16px; height: 16px; }
+  input { accent-color: var(--mat-sys-primary); width: 16px; height: 16px; }
 }
 
 .section-desc {
@@ -59,7 +59,7 @@ h3 {
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 
-.delete-btn { color: rgba(255,255,255,0.4); &:hover { color: #f44336; } }
+.delete-btn { color: var(--mat-sys-on-surface-variant); &:hover { color: var(--mat-sys-error); } }
 .empty-text { display: block; font-size: 0.8125rem; opacity: 0.4; margin-bottom: 0.75rem; }
 
 .small-btn {
@@ -73,7 +73,7 @@ h3 {
 .save-row {
   display: flex; align-items: center; gap: 0.75rem;
   margin-top: 1.5rem; padding-top: 1rem;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 // Pinned variant — stays visible at the top of the scroll container
@@ -86,10 +86,10 @@ h3 {
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
   border-top: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
   // Opaque backdrop so form rows scrolling behind it don't bleed
   // through. Uses the Material card background so it blends in.
-  background: var(--mat-sys-surface-container, #1e1f23);
+  background: var(--mat-sys-surface-container);
 }
 
 .saved-label {
@@ -111,7 +111,8 @@ h3 {
   display: flex; align-items: center; justify-content: center;
 }
 .modal-content {
-  background: #1e1e1e; border-radius: 12px;
+  background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface);
+  border-radius: 12px;
   padding: 1.5rem; width: 90vw; max-width: 500px;
 }
 .modal-header {
@@ -120,13 +121,13 @@ h3 {
   h3 { margin: 0; }
 }
 .close-btn {
-  background: none; border: none; color: white; cursor: pointer;
+  background: none; border: none; color: inherit; cursor: pointer;
   padding: 4px; border-radius: 50%;
-  &:hover { background: rgba(255,255,255,0.1); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
 }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 
-.key-warning { color: #f44336; font-weight: 600; font-size: 0.875rem; margin: 0 0 0.75rem; }
+.key-warning { color: var(--mat-sys-error); font-weight: 600; font-size: 0.875rem; margin: 0 0 0.75rem; }
 .key-display {
   display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;
   .field-input { flex: 1; }

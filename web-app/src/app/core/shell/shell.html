@@ -1,5 +1,10 @@
 <mat-sidenav-container class="shell-container">
-  <mat-sidenav #drawer mode="side" [opened]="true" class="shell-drawer">
+  <mat-sidenav #drawer
+               [mode]="isMobile() ? 'over' : 'side'"
+               [opened]="drawerOpen()"
+               (openedChange)="drawerOpen.set($event)"
+               class="shell-drawer"
+               [class.with-player]="playbackQueue.hasQueue()">
     <mat-nav-list>
       <!-- Main section -->
       <a mat-list-item [routerLink]="routes.home()" routerLinkActive="active-link"
@@ -200,7 +205,7 @@
 
   <mat-sidenav-content class="shell-content">
     <mat-toolbar class="top-toolbar">
-      <button mat-icon-button (click)="drawer.toggle()" aria-label="Toggle navigation">
+      <button mat-icon-button (click)="toggleDrawer()" aria-label="Toggle navigation">
         <mat-icon>menu</mat-icon>
       </button>
       <span class="app-title">Media Manager</span>
