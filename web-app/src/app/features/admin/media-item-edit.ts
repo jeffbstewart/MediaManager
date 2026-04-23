@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AppRoutes } from '../../core/routes';
@@ -8,6 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 import { tmdbImageUrl } from '../../core/catalog.service';
+import { CanDeactivateComponent } from '../../core/can-deactivate.guard';
 
 interface TitleLink {
   join_id: number; title_id: number; title_name: string;
@@ -48,8 +49,11 @@ interface AmazonOrder {
   imports: [RouterLink, MatIconModule, MatProgressSpinnerModule, MatButtonModule, MatChipsModule],
   templateUrl: './media-item-edit.html',
   styleUrl: './media-item-edit.scss',
+  // beforeunload covers tab close / refresh / external URL changes;
+  // Angular router navigations are caught by canDeactivate below.
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
-export class MediaItemEditComponent implements OnInit {
+export class MediaItemEditComponent implements OnInit, CanDeactivateComponent {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
   readonly routes = AppRoutes;
@@ -69,13 +73,27 @@ export class MediaItemEditComponent implements OnInit {
   readonly amazonQuery = signal('');
   readonly amazonOrders = signal<AmazonOrder[]>([]);
 
-  // Purchase form
+  // Purchase form. These are the only manually-saved fields on the
+  // page — everything else (TMDB pick, format change, seasons, photos,
+  // Amazon link) commits instantly on change. Only this block needs
+  // dirty-state tracking.
   readonly purchasePlace = signal('');
   readonly purchaseDate = signal('');
   readonly purchasePrice = signal('');
   // Physical location on shelf / bookcase. Shown for any media, first
   // user of it is books.
   readonly storageLocation = signal('');
+
+  // Pristine snapshot, refreshed on load and after each successful save;
+  // dirty = any current field differs from the snapshot.
+  private readonly pristine = signal({ place: '', date: '', price: '', location: '' });
+  readonly isDirty = computed(() => {
+    const p = this.pristine();
+    return this.purchasePlace() !== p.place
+      || this.purchaseDate() !== p.date
+      || this.purchasePrice() !== p.price
+      || this.storageLocation() !== p.location;
+  });
 
   private itemId = 0;
 
@@ -90,11 +108,16 @@ export class MediaItemEditComponent implements OnInit {
       const data = await firstValueFrom(this.http.get<MediaItemDetail>(`/api/v2/admin/media-item/${this.itemId}`));
       this.item.set(data);
 
-      // Init purchase form
-      this.purchasePlace.set(data.purchase_place ?? '');
-      this.purchaseDate.set(data.purchase_date ?? '');
-      this.purchasePrice.set(data.purchase_price?.toString() ?? '');
-      this.storageLocation.set(data.storage_location ?? '');
+      // Init purchase form + pristine snapshot
+      const place = data.purchase_place ?? '';
+      const date = data.purchase_date ?? '';
+      const price = data.purchase_price?.toString() ?? '';
+      const location = data.storage_location ?? '';
+      this.purchasePlace.set(place);
+      this.purchaseDate.set(date);
+      this.purchasePrice.set(price);
+      this.storageLocation.set(location);
+      this.pristine.set({ place, date, price, location });
 
       // Init TMDB search with title name
       const primary = data.titles[0];
@@ -244,7 +267,35 @@ export class MediaItemEditComponent implements OnInit {
       storage_location: this.storageLocation() || null,
     };
     await firstValueFrom(this.http.post(`/api/v2/admin/media-item/${this.itemId}/purchase`, body));
+    // Re-baseline so the form reads as clean again.
+    this.pristine.set({
+      place: this.purchasePlace(),
+      date: this.purchaseDate(),
+      price: this.purchasePrice(),
+      location: this.storageLocation(),
+    });
     this.flash('Purchase info saved');
+  }
+
+  /**
+   * Router CanDeactivate hook. When the purchase form has unsaved
+   * edits, prompt before allowing navigation. Clean returns true.
+   */
+  canDeactivate(): boolean {
+    if (!this.isDirty()) return true;
+    return confirm('You have unsaved purchase-info changes. Leave without saving?');
+  }
+
+  /**
+   * Tab close / refresh / external URL handler — Angular's router
+   * guard only catches in-app navigation. Setting `returnValue` arms
+   * the browser's native "Leave site?" dialog.
+   */
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.isDirty()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
   }
 
   updatePurchasePlace(event: Event): void { this.purchasePlace.set((event.target as HTMLInputElement).value); }
