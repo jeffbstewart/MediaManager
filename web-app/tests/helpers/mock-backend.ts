@@ -12,6 +12,10 @@ export interface MockBackendOptions {
   discover?: 'normal' | 'setup-required';
   /** Legal-compliance status returned by `/api/v2/legal/status`. */
   legalStatus?: 'compliant' | 'pending';
+  /** Feature-flags fixture served from `/api/v2/catalog/features`. */
+  features?: 'viewer' | 'admin';
+  /** Home-feed fixture served from `/api/v2/catalog/home`. */
+  homeFeed?: 'populated' | 'empty';
 }
 
 /**
@@ -68,5 +72,20 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // --- Profile (change-password) ---
   await page.route('**/api/v2/profile/change-password', (r: Route) =>
     r.fulfill({ json: { ok: true } })
+  );
+
+  // --- Catalog ---
+  const featuresFixture = opts.features === 'admin'
+    ? 'catalog/features.admin.json'
+    : 'catalog/features.viewer.json';
+  const homeFixture = opts.homeFeed === 'empty'
+    ? 'catalog/home.empty.json'
+    : 'catalog/home.populated.json';
+
+  await page.route('**/api/v2/catalog/features', (r: Route) =>
+    r.fulfill({ json: loadFixture(featuresFixture) })
+  );
+  await page.route('**/api/v2/catalog/home', (r: Route) =>
+    r.fulfill({ json: loadFixture(homeFixture) })
   );
 }

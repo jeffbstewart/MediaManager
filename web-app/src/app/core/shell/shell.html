@@ -4,6 +4,8 @@
                [opened]="drawerOpen()"
                (openedChange)="drawerOpen.set($event)"
                class="shell-drawer"
+               role="navigation"
+               aria-label="Primary"
                [class.with-player]="playbackQueue.hasQueue()">
     <mat-nav-list>
       <!-- Main section -->
@@ -204,14 +206,14 @@
   </mat-sidenav>
 
   <mat-sidenav-content class="shell-content">
-    <mat-toolbar class="top-toolbar">
+    <mat-toolbar class="top-toolbar" role="banner">
       <button mat-icon-button (click)="toggleDrawer()" aria-label="Toggle navigation">
         <mat-icon>menu</mat-icon>
       </button>
-      <span class="app-title">Media Manager</span>
+      <h1 class="app-title">Media Manager</h1>
 
       <div class="search-container">
-        <mat-icon class="search-icon">search</mat-icon>
+        <mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
         <input class="search-input" type="text" placeholder="Search..."
                [value]="searchQuery()"
                (input)="onSearchInput($event)"
@@ -317,7 +319,7 @@
       </mat-menu>
     </mat-toolbar>
 
-    <div class="page-content" [class.with-player]="playbackQueue.hasQueue()">
+    <main class="page-content" [class.with-player]="playbackQueue.hasQueue()">
       <router-outlet />
       @if (playbackQueue.hasQueue()) {
         <!-- Spacer equal to the fixed audio-player height so scroll
@@ -327,7 +329,7 @@
              browsers. -->
         <div class="player-spacer" aria-hidden="true"></div>
       }
-    </div>
+    </main>
   </mat-sidenav-content>
 </mat-sidenav-container>
 

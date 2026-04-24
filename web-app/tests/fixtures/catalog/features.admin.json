@@ -1,0 +1,15 @@
+{
+  "has_personal_videos": true,
+  "has_books": true,
+  "has_music": true,
+  "has_music_radio": true,
+  "has_cameras": true,
+  "has_live_tv": true,
+  "is_admin": true,
+  "wish_ready_count": 2,
+  "unmatched_count": 5,
+  "unmatched_books_count": 1,
+  "unmatched_audio_count": 3,
+  "data_quality_count": 4,
+  "open_reports_count": 1
+}
