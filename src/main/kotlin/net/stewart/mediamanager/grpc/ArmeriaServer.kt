@@ -241,6 +241,11 @@ object ArmeriaServer {
         blocking(LocalImageHttpService())
         blocking(OwnershipPhotoHttpService())
         blocking(PlaybackProgressHttpService())
+        blocking(net.stewart.mediamanager.armeria.PublicArtTokenHttpService())
+        // Token-gated unauthenticated artwork — needed so iOS / macOS
+        // lock-screen now-playing UI can fetch album art (the OS fetch
+        // doesn't share the browser's auth cookies).
+        blockingNoAuth(net.stewart.mediamanager.armeria.PublicAlbumArtHttpService())
 
         // Streaming endpoints (video, camera, live TV)
         blocking(VideoStreamHttpService())

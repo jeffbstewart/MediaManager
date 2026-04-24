@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { PlaybackQueueService } from '../../core/playback-queue.service';
+import { CatalogService } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 import { QueuePanelComponent } from './queue-panel';
 
@@ -31,12 +32,23 @@ import { QueuePanelComponent } from './queue-panel';
 })
 export class AudioPlayerComponent {
   readonly queue = inject(PlaybackQueueService);
+  private readonly catalog = inject(CatalogService);
   readonly routes = AppRoutes;
 
   readonly audioEl = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
 
   /** Drop-up queue-panel visibility. Closed by default. */
   readonly queuePanelOpen = signal<boolean>(false);
+
+  /**
+   * Cached public-art tokens keyed by album title id. Tokens are good
+   * for 12 h, so a typical listening session never needs a refresh —
+   * we mint once per album encountered and reuse for every track on it.
+   */
+  private readonly artTokenCache = new Map<number, string>();
+
+  /** Throttle for `setPositionState` calls — once per second is plenty. */
+  private lastPositionStateAt = 0;
 
   toggleQueuePanel(): void {
     this.queuePanelOpen.update(v => !v);
@@ -114,12 +126,110 @@ export class AudioPlayerComponent {
         try { el.currentTime = target; } catch { /* seek failed — try again on next tick */ }
       }
     });
+
+    this.setupMediaSession();
+  }
+
+  /**
+   * Wire up the MediaSession API so the OS lock-screen / Control Center
+   * can show now-playing metadata and forward transport-control taps.
+   * Only runs in browsers that implement the API (all modern desktop
+   * browsers + WebKit on iOS 15+).
+   *
+   * Action handlers are registered once. Metadata + playback state are
+   * driven by signal effects so they track the queue automatically.
+   */
+  private setupMediaSession(): void {
+    if (!('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+
+    ms.setActionHandler('play', () => this.queue.resume());
+    ms.setActionHandler('pause', () => this.queue.pause());
+    ms.setActionHandler('previoustrack', () => this.queue.prev());
+    ms.setActionHandler('nexttrack', () => this.queue.next());
+    ms.setActionHandler('seekto', (event) => {
+      if (typeof event.seekTime === 'number') this.queue.seek(event.seekTime);
+    });
+
+    // Metadata effect — runs whenever the current track changes. Mints
+    // a public-art token (cached per album) so the lock-screen artwork
+    // fetch — which doesn't share the browser's auth — can succeed.
+    effect(() => {
+      const t = this.queue.currentTrack();
+      if (!t) {
+        ms.metadata = null;
+        ms.playbackState = 'none';
+        return;
+      }
+      void this.applyMetadata(t.trackName, t.albumName, t.primaryArtistName, t.albumTitleId);
+    });
+
+    // Playback-state effect.
+    effect(() => {
+      ms.playbackState = this.queue.playing() ? 'playing' : (this.queue.currentTrack() ? 'paused' : 'none');
+    });
+  }
+
+  private async applyMetadata(
+    title: string,
+    album: string | null,
+    artist: string | null,
+    albumTitleId: number | null,
+  ): Promise<void> {
+    const ms = navigator.mediaSession;
+    let artwork: MediaImage[] = [];
+    if (albumTitleId != null) {
+      try {
+        let token = this.artTokenCache.get(albumTitleId);
+        if (!token) {
+          const res = await this.catalog.getPublicArtToken(albumTitleId);
+          token = res.token;
+          this.artTokenCache.set(albumTitleId, token);
+        }
+        const url = `/public/album-art/${token}`;
+        // 500x500 is the FULL size that PublicAlbumArtHttpService serves.
+        artwork = [{ src: url, sizes: '500x500', type: 'image/jpeg' }];
+      } catch {
+        // Token mint failed — fall through with empty artwork. The lock
+        // screen will show a generic icon but title/artist/album still render.
+      }
+    }
+    ms.metadata = new MediaMetadata({
+      title,
+      artist: artist ?? '',
+      album: album ?? '',
+      artwork,
+    });
   }
 
   onTimeUpdate(): void {
     const el = this.audioEl()?.nativeElement;
     if (!el) return;
     this.queue.reportPosition(el.currentTime, isFinite(el.duration) ? el.duration : 0);
+    this.updateMediaSessionPosition(el);
+  }
+
+  /**
+   * Push position to MediaSession's setPositionState so the lock-screen
+   * scrubber tracks the audio. Throttled to 1 Hz — `timeupdate` fires
+   * at ~4 Hz and the lock screen doesn't need that resolution.
+   */
+  private updateMediaSessionPosition(el: HTMLAudioElement): void {
+    if (!('mediaSession' in navigator)) return;
+    const now = Date.now();
+    if (now - this.lastPositionStateAt < 1000) return;
+    this.lastPositionStateAt = now;
+    if (!isFinite(el.duration) || el.duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: el.duration,
+        position: Math.min(el.currentTime, el.duration),
+        playbackRate: el.playbackRate || 1,
+      });
+    } catch {
+      // setPositionState throws if duration < position or other invariants
+      // fail; nothing actionable, just skip this tick.
+    }
   }
 
   onEnded(): void {

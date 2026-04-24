@@ -820,6 +820,19 @@ export class CatalogService {
     return firstValueFrom(this.http.get<FeatureFlags>('/api/v2/catalog/features'));
   }
 
+  /**
+   * Mint a 12-hour signed token authorising an unauthenticated fetch
+   * of this title's poster via `/public/album-art/{token}`. Used by the
+   * audio player's MediaSession integration so iOS / macOS lock-screen
+   * now-playing UI can render album art (the OS-level fetch doesn't
+   * share the browser's auth cookies).
+   */
+  async getPublicArtToken(titleId: number): Promise<{ token: string; ttl_seconds: number }> {
+    return firstValueFrom(this.http.get<{ token: string; ttl_seconds: number }>(
+      '/api/v2/public-art-token', { params: { title_id: String(titleId) } }
+    ));
+  }
+
   async getTitleDetail(titleId: number): Promise<TitleDetail> {
     return firstValueFrom(this.http.get<TitleDetail>(`/api/v2/catalog/titles/${titleId}`));
   }

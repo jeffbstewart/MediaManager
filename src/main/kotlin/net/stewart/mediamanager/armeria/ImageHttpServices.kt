@@ -26,6 +26,7 @@ import net.stewart.mediamanager.service.LocalImageService
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.PosterCacheService
+import net.stewart.mediamanager.service.PublicArtTokenService
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -82,6 +83,60 @@ private fun forbidden(metric: String): HttpResponse {
     return HttpResponse.of(HttpStatus.FORBIDDEN)
 }
 
+/**
+ * Resolve the poster bytes for a title at a requested size, going through
+ * the local cache first and the upstream proxy second. Returns NOT_FOUND
+ * when the title has no poster on file. Caller is responsible for the
+ * rating ceiling check before invoking this.
+ */
+private fun servePosterFor(title: Title, posterSize: PosterSize, metric: String): HttpResponse {
+    if (title.poster_path == null) return notFound(metric)
+
+    val cached = PosterCacheService.cacheAndServe(title, posterSize)
+    if (cached != null && Files.exists(cached)) {
+        return serveFile(cached, "image/jpeg", metric)
+    }
+
+    val path = title.poster_path!!
+    // Books store "isbn/<isbn>" — serve via the OL proxy.
+    if (path.startsWith("isbn/")) {
+        val isbn = path.removePrefix("isbn/")
+        val olSize = when (posterSize) {
+            PosterSize.THUMBNAIL -> "M"
+            PosterSize.FULL -> "L"
+        }
+        return serveProxied(
+            ImageProxyService.Provider.OPEN_LIBRARY,
+            // ?default=false → 404 instead of 1x1 placeholder GIF.
+            "/b/isbn/$isbn-$olSize.jpg?default=false",
+            "jpg",
+            metric
+        )
+    }
+    // Albums store "caa/<release-mbid>" — serve via the Cover Art Archive proxy.
+    if (path.startsWith("caa/")) {
+        val mbid = path.removePrefix("caa/")
+        val caaSize = when (posterSize) {
+            PosterSize.THUMBNAIL -> "front-250"
+            PosterSize.FULL -> "front-500"
+        }
+        return serveProxied(
+            ImageProxyService.Provider.COVER_ART_ARCHIVE,
+            "/release/$mbid/$caaSize.jpg",
+            "jpg",
+            metric
+        )
+    }
+    if (!isValidTmdbPath(path)) return notFound(metric)
+    val extension = path.substringAfterLast('.', "jpg")
+    return serveProxied(
+        ImageProxyService.Provider.TMDB,
+        "/t/p/${posterSize.pathSegment}$path",
+        extension,
+        metric
+    )
+}
+
 class PosterHttpService {
 
     @Blocking
@@ -90,55 +145,59 @@ class PosterHttpService {
         val posterSize = PosterSize.entries.firstOrNull { it.pathSegment == size }
             ?: return badRequest("poster")
 
-        val title = Title.findById(titleId)
-        if (title == null || title.poster_path == null) return notFound("poster")
+        val title = Title.findById(titleId) ?: return notFound("poster")
 
         val user = ArmeriaAuthDecorator.getUser(ctx)
         if (user != null && !user.canSeeRating(title.content_rating)) return forbidden("poster")
 
-        val cached = PosterCacheService.cacheAndServe(title, posterSize)
-        if (cached != null && Files.exists(cached)) {
-            return serveFile(cached, "image/jpeg", "poster")
-        }
+        return servePosterFor(title, posterSize, "poster")
+    }
+}
 
-        val path = title.poster_path!!
-        // Books store "isbn/<isbn>" — serve via the OL proxy.
-        if (path.startsWith("isbn/")) {
-            val isbn = path.removePrefix("isbn/")
-            val olSize = when (posterSize) {
-                PosterSize.THUMBNAIL -> "M"
-                PosterSize.FULL -> "L"
-            }
-            return serveProxied(
-                ImageProxyService.Provider.OPEN_LIBRARY,
-                // ?default=false → 404 instead of 1x1 placeholder GIF.
-                "/b/isbn/$isbn-$olSize.jpg?default=false",
-                "jpg",
-                "poster"
-            )
-        }
-        // Albums store "caa/<release-mbid>" — serve via the Cover Art Archive proxy.
-        if (path.startsWith("caa/")) {
-            val mbid = path.removePrefix("caa/")
-            val caaSize = when (posterSize) {
-                PosterSize.THUMBNAIL -> "front-250"
-                PosterSize.FULL -> "front-500"
-            }
-            return serveProxied(
-                ImageProxyService.Provider.COVER_ART_ARCHIVE,
-                "/release/$mbid/$caaSize.jpg",
-                "jpg",
-                "poster"
-            )
-        }
-        if (!isValidTmdbPath(path)) return notFound("poster")
-        val extension = path.substringAfterLast('.', "jpg")
-        return serveProxied(
-            ImageProxyService.Provider.TMDB,
-            "/t/p/${posterSize.pathSegment}$path",
-            extension,
-            "poster"
-        )
+/**
+ * Unauthenticated artwork endpoint, gated by a short-lived signed token.
+ * Used by the web-app's MediaSession integration so iOS / macOS lock-screen
+ * now-playing UI can render album art (the OS-level fetch doesn't share
+ * the browser's auth cookies, so the normal `/posters/...` route 401s).
+ *
+ * Token is minted by `/api/v2/public-art-token?title_id=...` and validated
+ * here by [PublicArtTokenService]. Always serves the FULL (w500) size —
+ * lock screens want a large, square image.
+ *
+ * Registered with `blockingNoAuth` in ArmeriaServer.
+ */
+class PublicAlbumArtHttpService {
+
+    @Blocking
+    @Get("/public/album-art/{token}")
+    fun publicAlbumArt(@Param("token") token: String): HttpResponse {
+        val titleId = PublicArtTokenService.validate(token) ?: return notFound("public_album_art")
+        val title = Title.findById(titleId) ?: return notFound("public_album_art")
+        return servePosterFor(title, PosterSize.FULL, "public_album_art")
+    }
+}
+
+/**
+ * Authenticated mint endpoint. Returns a 12-hour signed token usable only
+ * against [PublicAlbumArtHttpService] for the given title id. The user
+ * must be able to see this title's content rating; we don't want a
+ * low-rating viewer minting tokens for adult-rated artwork.
+ */
+class PublicArtTokenHttpService {
+
+    @Blocking
+    @Get("/api/v2/public-art-token")
+    fun mintToken(ctx: ServiceRequestContext, @Param("title_id") titleId: Long): HttpResponse {
+        val title = Title.findById(titleId) ?: return notFound("public_art_token")
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+        if (user != null && !user.canSeeRating(title.content_rating)) return forbidden("public_art_token")
+        val token = PublicArtTokenService.mint(titleId)
+        val body = "{\"token\":\"$token\",\"ttl_seconds\":${PublicArtTokenService.TOKEN_TTL_SECONDS}}"
+        val headers = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .build()
+        MetricsRegistry.countHttpResponse("public_art_token", 200)
+        return HttpResponse.of(headers, HttpData.ofUtf8(body))
     }
 }
 
