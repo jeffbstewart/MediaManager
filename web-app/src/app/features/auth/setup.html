@@ -1,12 +1,12 @@
-<div class="setup-container">
+<main class="setup-container">
   <mat-card class="setup-card">
     <mat-card-header>
-      <mat-card-title>Configure New Server</mat-card-title>
+      <mat-card-title role="heading" aria-level="1">Configure New Server</mat-card-title>
       <mat-card-subtitle>Create the first admin account and configure server policies.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="form" (ngSubmit)="onSubmit()">
-        <h3>Admin Account</h3>
+        <h2>Admin Account</h2>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Username</mat-label>
@@ -38,7 +38,7 @@
           }
         </mat-form-field>
 
-        <h3>Legal Documents</h3>
+        <h2>Legal Documents</h2>
         <p class="legal-hint">
           Enter the URLs for your privacy policy and terms of use.
           Leave as <code>about:blank</code> to configure later.
@@ -76,4 +76,4 @@
       </form>
     </mat-card-content>
   </mat-card>
-</div>
+</main>

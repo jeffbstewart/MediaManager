@@ -1,7 +1,7 @@
-<div class="login-container">
+<main class="login-container">
   <mat-card class="login-card">
     <mat-card-header>
-      <mat-card-title>Sign In</mat-card-title>
+      <mat-card-title role="heading" aria-level="1">Sign In</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="form" (ngSubmit)="onSubmit()">
@@ -51,4 +51,4 @@
       }
     </mat-card-content>
   </mat-card>
-</div>
+</main>
