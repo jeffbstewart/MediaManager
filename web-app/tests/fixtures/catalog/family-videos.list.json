@@ -1,0 +1,11 @@
+{
+  "videos": [
+    { "title_id": 700, "title_name": "Family Beach Trip 2024", "poster_url": "/local-images/700", "event_date": "2024-07-12", "description": "A week at the Outer Banks.", "playable": true },
+    { "title_id": 701, "title_name": "Holiday Recital", "poster_url": null, "event_date": "2023-12-15", "description": null, "playable": false }
+  ],
+  "total": 2,
+  "family_members": [
+    { "id": 1, "name": "Alex" },
+    { "id": 2, "name": "Jamie" }
+  ]
+}

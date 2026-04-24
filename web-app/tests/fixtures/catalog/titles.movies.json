@@ -1,0 +1,10 @@
+{
+  "titles": [
+    { "title_id": 100, "title_name": "The Matrix", "media_type": "MOVIE", "poster_url": "/posters/w185/100", "release_year": 1999, "content_rating": "R", "playable": true, "progress_fraction": null },
+    { "title_id": 101, "title_name": "Inception", "media_type": "MOVIE", "poster_url": "/posters/w185/101", "release_year": 2010, "content_rating": "PG-13", "playable": true, "progress_fraction": 0.34 },
+    { "title_id": 102, "title_name": "Interstellar", "media_type": "MOVIE", "poster_url": "/posters/w185/102", "release_year": 2014, "content_rating": "PG-13", "playable": true, "progress_fraction": null },
+    { "title_id": 103, "title_name": "Blade Runner 2049", "media_type": "MOVIE", "poster_url": null, "release_year": 2017, "content_rating": "R", "playable": false, "progress_fraction": null }
+  ],
+  "total": 4,
+  "available_ratings": ["G", "PG", "PG-13", "R"]
+}

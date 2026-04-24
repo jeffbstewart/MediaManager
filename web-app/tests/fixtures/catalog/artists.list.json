@@ -1,0 +1,8 @@
+{
+  "artists": [
+    { "id": 1, "name": "Miles Davis", "sort_name": "Davis, Miles", "artist_type": "Person", "headshot_url": "/artist-headshots/1", "album_count": 8, "fallback_poster_url": "/posters/w185/500" },
+    { "id": 2, "name": "Radiohead", "sort_name": "Radiohead", "artist_type": "Group", "headshot_url": "/artist-headshots/2", "album_count": 9, "fallback_poster_url": null },
+    { "id": 3, "name": "Björk", "sort_name": "Björk", "artist_type": "Person", "headshot_url": null, "album_count": 3, "fallback_poster_url": "/posters/w185/501" }
+  ],
+  "total": 3
+}

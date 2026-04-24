@@ -1,0 +1,8 @@
+{
+  "collections": [
+    { "id": 1, "name": "The Dark Knight Trilogy", "poster_url": "/collection-posters/263", "owned_count": 3, "total_parts": 3 },
+    { "id": 2, "name": "The Matrix Collection", "poster_url": "/collection-posters/2344", "owned_count": 2, "total_parts": 4 },
+    { "id": 3, "name": "Star Wars", "poster_url": null, "owned_count": 5, "total_parts": 11 }
+  ],
+  "total": 3
+}

@@ -34,8 +34,8 @@ import { AppRoutes } from '../../core/routes';
   styles: `
     .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .loading-container { display: flex; justify-content: center; padding: 4rem; }
-    .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
-    .status-label { display: block; font-size: 0.8125rem; opacity: 0.5; margin-bottom: 0.75rem; }
+    .error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
+    .status-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
     .tag-grid {
       display: flex;
@@ -55,7 +55,7 @@ import { AppRoutes } from '../../core/routes';
       transition: opacity 0.15s;
     }
     .tag-chip:hover { opacity: 0.85; }
-    .tag-count { opacity: 0.7; font-size: 0.75rem; }
+    .tag-count { font-size: 0.75rem; }
   `,
 })
 export class TagsComponent implements OnInit {

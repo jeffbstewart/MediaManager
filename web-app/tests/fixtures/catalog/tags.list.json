@@ -1,0 +1,8 @@
+{
+  "tags": [
+    { "id": 1, "name": "Comfort Watch", "bg_color": "#1B5E20", "text_color": "#ffffff", "title_count": 12 },
+    { "id": 2, "name": "For Rainy Days", "bg_color": "#0D47A1", "text_color": "#ffffff", "title_count": 7 },
+    { "id": 3, "name": "Hidden Gem", "bg_color": "#BF360C", "text_color": "#ffffff", "title_count": 4 }
+  ],
+  "total": 3
+}

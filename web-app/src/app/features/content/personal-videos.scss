@@ -21,7 +21,7 @@
 .status-label {
   display: block;
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.75rem;
 }
 
@@ -32,7 +32,7 @@
 }
 
 .error-message {
-  color: var(--mat-sys-error, #f44336);
+  color: var(--mat-sys-error);
   text-align: center;
   padding: 2rem;
 }
@@ -46,7 +46,7 @@
 .video-card {
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   border-radius: 12px;
   overflow: hidden;
   text-decoration: none;
@@ -55,7 +55,7 @@
   transition: background 0.2s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   }
 }
 
@@ -95,12 +95,12 @@
 
 .event-date {
   font-size: 0.8125rem;
-  opacity: 0.6;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .description {
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   line-height: 1.4;
 }
 
@@ -112,8 +112,8 @@
 }
 
 .member-chip {
-  background: rgba(var(--mat-sys-primary-rgb, 187, 134, 252), 0.15);
-  color: var(--mat-sys-primary, #bb86fc);
+  background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);
+  color: var(--mat-sys-primary);
   border-radius: 9999px;
   padding: 1px 8px;
   font-size: 0.75rem;
@@ -130,7 +130,7 @@
 
 .progress-track {
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
   border-radius: 2px;
   overflow: hidden;
   margin-top: 0.25rem;
@@ -138,5 +138,5 @@
 
 .progress-fill {
   height: 100%;
-  background: var(--mat-sys-primary, #bb86fc);
+  background: var(--mat-sys-primary);
 }

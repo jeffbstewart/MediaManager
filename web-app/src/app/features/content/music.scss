@@ -21,7 +21,7 @@
 .search-wrapper {
   display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   border-radius: 999px;
   padding: 4px 8px;
   min-width: 220px;
@@ -32,7 +32,7 @@
   font-size: 18px;
   width: 18px;
   height: 18px;
-  opacity: 0.6;
+  color: var(--mat-sys-on-surface-variant);
   margin-right: 4px;
 }
 
@@ -69,7 +69,7 @@
 .status-label {
   display: block;
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.75rem;
 }
 
@@ -80,7 +80,7 @@
 }
 
 .error-message {
-  color: var(--mat-sys-error, #f44336);
+  color: var(--mat-sys-error);
   text-align: center;
   padding: 2rem;
 }
@@ -115,7 +115,7 @@
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
 
   img {
     display: block;
@@ -150,5 +150,5 @@
 
 .artist-meta {
   font-size: 0.75rem;
-  opacity: 0.6;
+  color: var(--mat-sys-on-surface-variant);
 }

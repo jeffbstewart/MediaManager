@@ -319,7 +319,11 @@
       </mat-menu>
     </mat-toolbar>
 
-    <main class="page-content" [class.with-player]="playbackQueue.hasQueue()">
+    <!-- tabindex="0" satisfies axe's scrollable-region-focusable rule:
+         the main is an overflow:auto scroll container, and Safari's
+         keyboard handling requires the region itself to be focusable
+         (not just its descendants) so users can arrow-scroll it. -->
+    <main class="page-content" tabindex="0" [class.with-player]="playbackQueue.hasQueue()">
       <router-outlet />
       @if (playbackQueue.hasQueue()) {
         <!-- Spacer equal to the fixed audio-player height so scroll

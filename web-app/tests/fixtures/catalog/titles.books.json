@@ -1,0 +1,8 @@
+{
+  "titles": [
+    { "title_id": 300, "title_name": "Dune", "media_type": "BOOK", "poster_url": "/posters/w185/300", "release_year": 1965, "content_rating": null, "playable": true, "progress_fraction": null, "author_name": "Frank Herbert" },
+    { "title_id": 301, "title_name": "The Left Hand of Darkness", "media_type": "BOOK", "poster_url": "/posters/w185/301", "release_year": 1969, "content_rating": null, "playable": true, "progress_fraction": 0.12, "author_name": "Ursula K. Le Guin" }
+  ],
+  "total": 2,
+  "available_ratings": []
+}

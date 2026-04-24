@@ -39,8 +39,8 @@ import { AppRoutes } from '../../core/routes';
   styles: `
     .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .loading-container { display: flex; justify-content: center; padding: 4rem; }
-    .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
-    .status-label { display: block; font-size: 0.8125rem; opacity: 0.5; margin-bottom: 0.75rem; }
+    .error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
+    .status-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
     .poster-grid {
       display: grid;
@@ -53,7 +53,8 @@ import { AppRoutes } from '../../core/routes';
     }
     .poster-wrapper {
       position: relative; width: 100%; aspect-ratio: 2/3;
-      border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05);
+      border-radius: 8px; overflow: hidden;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
     }
     .poster-img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .poster-placeholder { width: 100%; height: 100%; }

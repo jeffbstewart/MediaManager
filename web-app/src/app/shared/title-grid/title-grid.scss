@@ -15,7 +15,7 @@
 .status-label {
   display: block;
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.75rem;
 }
 
@@ -26,7 +26,7 @@
 }
 
 .error-message {
-  color: var(--mat-sys-error, #f44336);
+  color: var(--mat-sys-error);
   text-align: center;
   padding: 2rem;
 }
@@ -53,7 +53,7 @@
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
 }
 
 // Album art is square. Parent grid applies `.square-art` when rendering
@@ -109,7 +109,7 @@
 
 .progress-fill {
   height: 100%;
-  background: var(--mat-sys-primary, #bb86fc);
+  background: var(--mat-sys-primary);
 }
 
 .poster-title {
@@ -122,12 +122,12 @@
 
 .poster-meta {
   font-size: 0.6875rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .poster-credit {
   font-size: 0.6875rem;
-  opacity: 0.75;
+  color: var(--mat-sys-on-surface-variant);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

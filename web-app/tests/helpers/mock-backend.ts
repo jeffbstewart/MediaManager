@@ -88,4 +88,36 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/catalog/home', (r: Route) =>
     r.fulfill({ json: loadFixture(homeFixture) })
   );
+
+  // --- Browse grids (Tier 3) ---
+  // /api/v2/catalog/titles is parameterised by `media_type`; dispatch
+  // to the right fixture so movies / tv / books / personal each get
+  // a sensible populated response.
+  await page.route('**/api/v2/catalog/titles*', (r: Route) => {
+    const url = new URL(r.request().url());
+    const mt = url.searchParams.get('media_type');
+    const fixture = mt === 'TV' ? 'catalog/titles.tv.json'
+                  : mt === 'BOOK' ? 'catalog/titles.books.json'
+                  : 'catalog/titles.movies.json';
+    return r.fulfill({ json: loadFixture(fixture) });
+  });
+
+  await page.route('**/api/v2/catalog/collections', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/collections.list.json') })
+  );
+  await page.route('**/api/v2/catalog/tags', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/tags.list.json') })
+  );
+  await page.route('**/api/v2/catalog/artists*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/artists.list.json') })
+  );
+  await page.route('**/api/v2/catalog/family-videos*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/family-videos.list.json') })
+  );
+  await page.route('**/api/v2/playlists', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/playlists.list.json') })
+  );
+  await page.route('**/api/v2/playlists/mine', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/playlists.list.json') })
+  );
 }
