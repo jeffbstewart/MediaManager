@@ -17,6 +17,38 @@ html {
       density: 0,
     )
   );
+
+  // ---------------------------------------------------------------
+  // A11y: Material 3's default mat-form-field label colour is
+  // `on-surface-variant`, which on the Azure palette comes in below
+  // WCAG AA 4.5:1 against the card/modal surface (axe finds a
+  // 2.82:1 ratio in dark mode). Promote rest-state label text to
+  // `on-surface` so contrast passes globally.
+  //
+  // Focus state stays `primary` (Material's default) — reads against
+  // the outline cutout, not the card surface.
+  // ---------------------------------------------------------------
+  @include mat.form-field-overrides(
+    (
+      outlined-label-text-color: var(--mat-sys-on-surface),
+      outlined-hover-label-text-color: var(--mat-sys-on-surface),
+      filled-label-text-color: var(--mat-sys-on-surface),
+      filled-hover-label-text-color: var(--mat-sys-on-surface),
+    )
+  );
+}
+
+// Belt-and-braces override with !important — Material's internal
+// rules win the specificity fight without it. Axe's color-contrast
+// reads through to a color I can't identify via normal inspection
+// (appears to be an intermediate blend state); pinning with
+// !important forces the measured color to on-surface in both modes
+// and satisfies WCAG AA.
+.mdc-floating-label,
+.mat-mdc-floating-label,
+.mdc-floating-label mat-label,
+.mat-mdc-floating-label mat-label {
+  color: var(--mat-sys-on-surface) !important;
 }
 
 body {
