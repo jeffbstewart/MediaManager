@@ -150,6 +150,19 @@ export class AudioPlayerComponent {
     ms.setActionHandler('seekto', (event) => {
       if (typeof event.seekTime === 'number') this.queue.seek(event.seekTime);
     });
+    // iOS lock-screen quirk: WebKit shows the 10-second seek buttons
+    // (not previous/next-track) for web-page audio, whether or not we
+    // register `previoustrack`/`nexttrack`. If we don't register the
+    // seek handlers iOS runs its own built-in ±10 s logic, which isn't
+    // what the user wants. Registering them and mapping them to
+    // prev/next track gives the lock-screen user the track-skip they
+    // expected, using the buttons iOS insists on displaying.
+    //
+    // Desktop Chrome / Firefox honor `previoustrack`/`nexttrack` above
+    // and ignore seek-backward/forward when no in-track skip is useful,
+    // so this dual registration has no downside there.
+    ms.setActionHandler('seekbackward', () => this.queue.prev());
+    ms.setActionHandler('seekforward', () => this.queue.next());
 
     // Metadata effect — runs whenever the current track changes. Mints
     // a public-art token (cached per album) so the lock-screen artwork
