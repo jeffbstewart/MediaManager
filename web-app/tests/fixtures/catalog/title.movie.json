@@ -1,0 +1,31 @@
+{
+  "title_id": 100,
+  "title_name": "The Matrix",
+  "media_type": "MOVIE",
+  "release_year": 1999,
+  "description": "A computer hacker learns from mysterious rebels about the true nature of his reality and his role in the war against its controllers.",
+  "content_rating": "R",
+  "poster_url": "/posters/w500/100",
+  "backdrop_url": "/backdrops/100",
+  "event_date": null,
+  "is_starred": false,
+  "is_hidden": false,
+  "genres": ["Action", "Science Fiction"],
+  "tags": [{ "id": 1, "name": "Comfort Watch", "bg_color": "#1B5E20", "text_color": "#ffffff" }],
+  "formats": ["BLURAY", "UHD_BLURAY"],
+  "admin_media_items": [],
+  "transcodes": [
+    { "transcode_id": 1001, "file_name": "The.Matrix.1999.mkv", "playable": true, "media_format": "BLURAY" }
+  ],
+  "cast": [
+    { "id": 1, "name": "Keanu Reeves", "character_name": "Neo", "headshot_url": "/headshots/1", "tmdb_person_id": 6384 },
+    { "id": 2, "name": "Laurence Fishburne", "character_name": "Morpheus", "headshot_url": "/headshots/2", "tmdb_person_id": 2975 }
+  ],
+  "episodes": [],
+  "seasons": [],
+  "family_members": [],
+  "similar_titles": [
+    { "title_id": 102, "title_name": "Interstellar", "poster_url": "/posters/w185/102", "release_year": 2014 }
+  ],
+  "collection": null
+}

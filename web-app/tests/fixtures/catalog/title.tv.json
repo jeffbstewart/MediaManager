@@ -1,0 +1,31 @@
+{
+  "title_id": 200,
+  "title_name": "Breaking Bad",
+  "media_type": "TV",
+  "release_year": 2008,
+  "description": "A high school chemistry teacher turned methamphetamine manufacturer.",
+  "content_rating": "TV-MA",
+  "poster_url": "/posters/w500/200",
+  "backdrop_url": "/backdrops/200",
+  "event_date": null,
+  "is_starred": true,
+  "is_hidden": false,
+  "genres": ["Drama", "Crime"],
+  "tags": [],
+  "formats": ["BLURAY"],
+  "admin_media_items": [],
+  "transcodes": [],
+  "cast": [
+    { "id": 10, "name": "Bryan Cranston", "character_name": "Walter White", "headshot_url": "/headshots/10", "tmdb_person_id": 17419 }
+  ],
+  "episodes": [
+    { "id": 1, "season_number": 1, "episode_number": 1, "name": "Pilot", "transcode_id": 2001, "playable": true, "position_seconds": null, "duration_seconds": 3480 },
+    { "id": 2, "season_number": 1, "episode_number": 2, "name": "Cat's in the Bag…", "transcode_id": 2002, "playable": true, "position_seconds": 600, "duration_seconds": 2880 }
+  ],
+  "seasons": [
+    { "season_number": 1, "acquisition_status": "OWNED" }
+  ],
+  "family_members": [],
+  "similar_titles": [],
+  "collection": null
+}

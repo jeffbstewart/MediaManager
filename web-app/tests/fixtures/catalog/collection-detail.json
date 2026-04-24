@@ -1,0 +1,11 @@
+{
+  "id": 1,
+  "name": "The Dark Knight Trilogy",
+  "owned_count": 3,
+  "total_parts": 3,
+  "parts": [
+    { "title_id": 500, "title_name": "Batman Begins", "poster_path": "/posters/w185/500", "release_year": 2005, "owned": true },
+    { "title_id": 501, "title_name": "The Dark Knight", "poster_path": "/posters/w185/501", "release_year": 2008, "owned": true },
+    { "title_id": 502, "title_name": "The Dark Knight Rises", "poster_path": "/posters/w185/502", "release_year": 2012, "owned": true }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": 1,
+  "name": "Miles Davis",
+  "sort_name": "Davis, Miles",
+  "artist_type": "Person",
+  "biography": "American jazz trumpeter, bandleader, and composer.",
+  "headshot_url": "/artist-headshots/1",
+  "begin_date": "1926-05-26",
+  "end_date": "1991-09-28",
+  "musicbrainz_artist_id": "561d854a-6a28-4aa7-8c99-323e6ce46c2a",
+  "owned_albums": [
+    { "title_id": 301, "title_name": "Kind of Blue", "poster_url": "/posters/w185/301", "release_year": 1959, "track_count": 5 }
+  ],
+  "other_works": [
+    { "release_group_id": "abc-123", "title": "Bitches Brew", "year": 1970, "primary_type": "Album", "secondary_types": [], "poster_url": null, "already_wished": false }
+  ],
+  "band_members": [],
+  "member_of": []
+}

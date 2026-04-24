@@ -1,0 +1,14 @@
+{
+  "id": 1,
+  "name": "Dune",
+  "description": "Frank Herbert's desert-planet saga.",
+  "poster_url": "/posters/w500/300",
+  "author": { "id": 1, "name": "Frank Herbert" },
+  "volumes": [
+    { "title_id": 300, "title_name": "Dune", "series_number": "1", "poster_url": "/posters/w185/300", "release_year": 1965 }
+  ],
+  "missing_volumes": [
+    { "ol_work_id": "OL12345W", "title": "Dune Messiah", "series_number": "2", "year": 1969, "cover_url": null, "already_wished": false }
+  ],
+  "can_fill_gaps": true
+}

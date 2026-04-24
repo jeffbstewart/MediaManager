@@ -120,4 +120,43 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/playlists/mine', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/playlists.list.json') })
   );
+
+  // --- Detail pages (Tier 4) ---
+  // /api/v2/catalog/titles/:id — dispatch by id to the right media-type
+  // fixture. 100 movie, 200 tv, 300 book, 301 album. Anything else
+  // falls back to the movie fixture.
+  await page.route('**/api/v2/catalog/titles/*', (r: Route) => {
+    const url = new URL(r.request().url());
+    const id = url.pathname.split('/').pop();
+    const fixture = id === '200' ? 'catalog/title.tv.json'
+                  : id === '300' ? 'catalog/title.book.json'
+                  : id === '301' ? 'catalog/title.album.json'
+                  : 'catalog/title.movie.json';
+    return r.fulfill({ json: loadFixture(fixture) });
+  });
+
+  await page.route('**/api/v2/catalog/actor/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/actor.json') })
+  );
+  await page.route('**/api/v2/catalog/authors/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/author.json') })
+  );
+  await page.route('**/api/v2/catalog/artists/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/artist.json') })
+  );
+  await page.route('**/api/v2/catalog/series/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/series.json') })
+  );
+  await page.route('**/api/v2/catalog/tags/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/tag-detail.json') })
+  );
+  await page.route('**/api/v2/catalog/collections/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/collection-detail.json') })
+  );
+
+  // Wish list — both title-detail and collection-detail query it to
+  // drive the "Add to wish list" buttons. Empty list keeps things simple.
+  await page.route('**/api/v2/wishlist', (r: Route) =>
+    r.fulfill({ json: { items: [] } })
+  );
 }
