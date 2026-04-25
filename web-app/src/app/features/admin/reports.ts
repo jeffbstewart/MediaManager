@@ -67,6 +67,14 @@ export class ReportsComponent implements OnInit {
   readonly resolveStatus = signal('RESOLVED');
   readonly resolveNotes = signal('');
 
+  // Delete-catalog-entry dialog. Distinct from Resolve so the
+  // confirmation copy can warn about NAS files staying behind and the
+  // user can't bypass the explicit click on a destructive button.
+  readonly deleteMediaOpen = signal(false);
+  readonly deleteMediaRow = signal<ReportRow | null>(null);
+  readonly deleteMediaNotes = signal('');
+  readonly deletingMedia = signal(false);
+
   async ngOnInit(): Promise<void> {
     await this.refresh();
   }
@@ -136,6 +144,34 @@ export class ReportsComponent implements OnInit {
       await this.refresh();
       await this.refreshFeatures();
     } catch { /* ignore */ }
+  }
+
+  // --- Delete catalog entry ---
+
+  openDeleteMedia(row: ReportRow): void {
+    this.deleteMediaRow.set(row);
+    this.deleteMediaNotes.set('');
+    this.deleteMediaOpen.set(true);
+  }
+
+  closeDeleteMedia(): void {
+    this.deleteMediaOpen.set(false);
+    this.deleteMediaRow.set(null);
+  }
+
+  async submitDeleteMedia(): Promise<void> {
+    const row = this.deleteMediaRow();
+    if (!row) return;
+    this.deletingMedia.set(true);
+    try {
+      await firstValueFrom(this.http.post(`/api/v2/admin/reports/${row.id}/delete-media`, {
+        notes: this.deleteMediaNotes().trim() || null,
+      }));
+      this.closeDeleteMedia();
+      await this.refresh();
+      await this.refreshFeatures();
+    } catch { /* server error toast TBD; keep dialog open so user can retry */ }
+    finally { this.deletingMedia.set(false); }
   }
 
   async reopen(row: ReportRow): Promise<void> {

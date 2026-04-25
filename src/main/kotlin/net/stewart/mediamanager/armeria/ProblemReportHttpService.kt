@@ -16,6 +16,9 @@ import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.ProblemReport
 import net.stewart.mediamanager.entity.ReportStatus
+import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.MediaItemTitle
+import net.stewart.mediamanager.service.MediaItemDeleteService
 import java.time.LocalDateTime
 
 @Blocking
@@ -124,6 +127,65 @@ class ProblemReportHttpService {
 
         report.status = newStatus
         report.admin_notes = (map["notes"] as? String)?.trim()
+        report.resolved_by = user.id
+        report.updated_at = LocalDateTime.now()
+        report.save()
+
+        return jsonResponse("""{"ok":true}""")
+    }
+
+    /**
+     * Admin: delete the catalog entry referenced by a report and mark
+     * the report RESOLVED in one step. Used for "unfixable" reports —
+     * e.g., a CD that won't rip cleanly and the admin has decided to
+     * remove from the collection.
+     *
+     * Cascades through MediaItemDeleteService: removes all media items
+     * linked to the title, and the title itself if no other media item
+     * references it. Track rows cascade via DB FK on title_id.
+     *
+     * Does NOT touch any files on the NAS — the admin removes those
+     * manually. This intentional split keeps MediaManager out of the
+     * filesystem-deletion business.
+     *
+     * Body: { "notes": "optional admin notes appended to the report" }
+     */
+    @Post("/api/v2/admin/reports/{reportId}/delete-media")
+    fun deleteMedia(ctx: ServiceRequestContext, @Param("reportId") reportId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        val report = ProblemReport.findById(reportId)
+            ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+
+        val titleId = report.title_id
+            ?: return badRequest("Report has no associated title to delete")
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = if (body.isBlank()) emptyMap<String, Any?>()
+                  else gson.fromJson(body, Map::class.java) ?: emptyMap()
+        val userNotes = (map["notes"] as? String)?.trim()
+
+        // Mirror DataQualityHttpService.deleteTitle: delete linked
+        // media items first (cascading title cleanup as the last item
+        // departs), then drop the title directly if it survives.
+        val mediaItemIds = MediaItemTitle.findAll()
+            .filter { it.title_id == titleId }
+            .mapNotNull { it.media_item_id }
+            .distinct()
+        for (id in mediaItemIds) {
+            MediaItemDeleteService.delete(id)
+        }
+        if (Title.findById(titleId) != null) {
+            MediaItemDeleteService.deleteTitleCascade(titleId)
+        }
+
+        // Compose admin_notes so the audit trail is clear without
+        // overwriting whatever the admin typed.
+        val auto = "Catalog entry removed; NAS files require manual cleanup."
+        report.admin_notes = if (userNotes.isNullOrBlank()) auto else "$auto\n\n$userNotes"
+        report.status = ReportStatus.RESOLVED.name
         report.resolved_by = user.id
         report.updated_at = LocalDateTime.now()
         report.save()

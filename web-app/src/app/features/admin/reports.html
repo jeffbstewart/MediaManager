@@ -67,6 +67,12 @@
               @if (r.status === 'OPEN') {
                 <button mat-menu-item (click)="openResolve(r, 'RESOLVED')"><mat-icon>check_circle</mat-icon> Resolve</button>
                 <button mat-menu-item (click)="openResolve(r, 'DISMISSED')"><mat-icon>cancel</mat-icon> Dismiss</button>
+                @if (r.title_id) {
+                  <mat-divider />
+                  <button mat-menu-item class="delete-item" (click)="openDeleteMedia(r)">
+                    <mat-icon>delete_forever</mat-icon> Delete catalog entry…
+                  </button>
+                }
               } @else {
                 <button mat-menu-item (click)="reopen(r)"><mat-icon>replay</mat-icon> Reopen</button>
               }
@@ -81,6 +87,44 @@
 
     <mat-paginator [length]="total()" [pageSize]="pageSize()" [pageIndex]="page()"
                    [pageSizeOptions]="[25, 50, 100]" (page)="onPage($event)" showFirstLastButtons />
+  }
+
+  <!-- Delete-media confirmation dialog -->
+  @if (deleteMediaOpen() && deleteMediaRow(); as row) {
+    <div class="modal-overlay" (click)="closeDeleteMedia()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Delete catalog entry</h3>
+          <button class="close-btn" aria-label="Close" (click)="closeDeleteMedia()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="resolve-context">
+          <p class="resolve-description">
+            This removes <b>{{ row.title_name ?? 'Title #' + row.title_id }}</b> from the catalog
+            (media items, transcodes, episodes, and tracks all cascade away).
+          </p>
+          <p class="resolve-description">
+            <b>Files on the NAS are NOT deleted</b> — remove those manually if you don't want
+            the next scan to re-discover them.
+          </p>
+          <p class="resolve-description">
+            The report will be marked Resolved with an audit note.
+          </p>
+        </div>
+        <div class="form-fields">
+          <label class="field-label">Notes (optional, appended to the audit trail)</label>
+          <textarea class="field-input" rows="3" placeholder="e.g. CD won't rip cleanly after 4 attempts"
+                    [value]="deleteMediaNotes()"
+                    (input)="deleteMediaNotes.set($any($event.target).value)"></textarea>
+        </div>
+        <div class="dialog-footer">
+          <button mat-button (click)="closeDeleteMedia()">Cancel</button>
+          <button mat-flat-button color="warn" (click)="submitDeleteMedia()" [disabled]="deletingMedia()">
+            @if (deletingMedia()) { <mat-spinner diameter="16" /> }
+            Delete catalog entry
+          </button>
+        </div>
+      </div>
+    </div>
   }
 
   <!-- Resolve Dialog -->
