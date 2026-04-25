@@ -162,10 +162,14 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     r.fulfill({ json: loadFixture('catalog/wishlist.json') })
   );
 
-  await page.route('**/api/v2/catalog/search*', (r: Route) =>
+  // Search lives under /api/v2/search (NOT /api/v2/catalog/search,
+  // despite the name). Use a regex so the route only matches the
+  // bare endpoint with optional query-string, leaving sub-paths
+  // (/search/presets, /search/tracks) to their own handlers below.
+  await page.route(/\/api\/v2\/search(\?|$)/, (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/search.results.json') })
   );
-  await page.route('**/api/v2/catalog/search/tracks*', (r: Route) =>
+  await page.route('**/api/v2/search/tracks*', (r: Route) =>
     r.fulfill({ json: { tracks: [] } })
   );
   // Advanced-search presets for the search dialog variant.
