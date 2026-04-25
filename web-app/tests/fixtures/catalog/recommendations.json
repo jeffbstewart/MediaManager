@@ -1,0 +1,24 @@
+{
+  "artists": [
+    {
+      "suggested_artist_mbid": "abc-1",
+      "suggested_artist_name": "Bill Evans",
+      "artist_id": null,
+      "score": 0.92,
+      "voters": [{ "artist_id": 1, "artist_name": "Miles Davis" }],
+      "representative_release_group_id": "rg-1",
+      "representative_release_title": "Sunday at the Village Vanguard",
+      "cover_url": "/posters/w185/400"
+    },
+    {
+      "suggested_artist_mbid": "abc-2",
+      "suggested_artist_name": "John Coltrane",
+      "artist_id": null,
+      "score": 0.87,
+      "voters": [{ "artist_id": 1, "artist_name": "Miles Davis" }],
+      "representative_release_group_id": "rg-2",
+      "representative_release_title": "A Love Supreme",
+      "cover_url": "/posters/w185/401"
+    }
+  ]
+}

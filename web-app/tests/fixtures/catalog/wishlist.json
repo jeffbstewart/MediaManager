@@ -1,0 +1,35 @@
+{
+  "media_wishes": [
+    {
+      "id": 1,
+      "tmdb_id": 245891,
+      "tmdb_title": "John Wick",
+      "tmdb_media_type": "movie",
+      "tmdb_poster_path": "/fZPSd91yGE9fCcCe6OoQZ6ljZeB.jpg",
+      "tmdb_release_year": 2014,
+      "season_number": null,
+      "lifecycle_stage": "PENDING",
+      "lifecycle_label": "Pending",
+      "title_id": null,
+      "vote_count": 1,
+      "dismissible": true
+    }
+  ],
+  "transcode_wishes": [],
+  "book_wishes": [
+    {
+      "id": 10,
+      "ol_work_id": "OL12345W",
+      "title": "Dune Messiah",
+      "author": "Frank Herbert",
+      "cover_url": "/posters/w185/302",
+      "series_name": "Dune",
+      "series_number": "2",
+      "lifecycle_stage": "PENDING",
+      "lifecycle_label": "Pending",
+      "dismissible": true
+    }
+  ],
+  "album_wishes": [],
+  "has_any_media_wish": true
+}

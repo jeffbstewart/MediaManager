@@ -38,8 +38,8 @@
     </div>
 
     <div class="field-group">
-      <label class="field-label">Time signature</label>
-      <select class="field-select" [value]="timeSignature()" (change)="onTimeSigChange($event)">
+      <label class="field-label" for="adv-search-time-sig">Time signature</label>
+      <select id="adv-search-time-sig" class="field-select" [value]="timeSignature()" (change)="onTimeSigChange($event)">
         @for (opt of timeSigOptions; track opt.value) {
           <option [value]="opt.value" [selected]="opt.value === timeSignature()">{{ opt.label }}</option>
         }

@@ -1,0 +1,20 @@
+{
+  "sessions": [
+    {
+      "id": 1,
+      "type": "browser",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      "created_at": "2026-04-20T10:00:00Z",
+      "last_used_at": "2026-04-24T09:00:00Z",
+      "is_current": true
+    },
+    {
+      "id": 2,
+      "type": "device",
+      "device_name": "iPhone 14",
+      "created_at": "2026-04-15T08:00:00Z",
+      "last_used_at": "2026-04-23T18:00:00Z",
+      "is_current": false
+    }
+  ]
+}

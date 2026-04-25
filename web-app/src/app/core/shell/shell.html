@@ -1,13 +1,14 @@
 <mat-sidenav-container class="shell-container">
+  <!-- mat-nav-list inside already carries role="navigation"; giving
+       the sidenav the same role tripped axe's landmark-unique rule.
+       Move the accessible name onto the inner nav list instead. -->
   <mat-sidenav #drawer
                [mode]="isMobile() ? 'over' : 'side'"
                [opened]="drawerOpen()"
                (openedChange)="drawerOpen.set($event)"
                class="shell-drawer"
-               role="navigation"
-               aria-label="Primary"
                [class.with-player]="playbackQueue.hasQueue()">
-    <mat-nav-list>
+    <mat-nav-list aria-label="Primary">
       <!-- Main section -->
       <a mat-list-item [routerLink]="routes.home()" routerLinkActive="active-link"
          [routerLinkActiveOptions]="{ exact: true }">

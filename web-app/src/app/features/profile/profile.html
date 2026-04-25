@@ -34,7 +34,8 @@
         <div class="star-row">
           @for (star of qualityStars; track star) {
             <button class="star-btn" [class.active]="star <= p.live_tv_min_quality"
-                    (click)="updateTvQuality(star)">
+                    (click)="updateTvQuality(star)"
+                    [attr.aria-label]="'Set minimum quality to ' + star + ' star' + (star === 1 ? '' : 's')">
               <mat-icon>{{ star <= p.live_tv_min_quality ? 'star' : 'star_border' }}</mat-icon>
             </button>
           }

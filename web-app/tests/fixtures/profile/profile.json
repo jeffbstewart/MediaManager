@@ -1,0 +1,10 @@
+{
+  "id": 1,
+  "username": "testuser",
+  "display_name": "Test User",
+  "is_admin": false,
+  "rating_ceiling": null,
+  "live_tv_min_quality": 0,
+  "has_live_tv": true,
+  "passkeys_enabled": false
+}

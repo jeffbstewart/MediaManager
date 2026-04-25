@@ -5,10 +5,10 @@
 }
 
 h2 { margin: 0 0 1rem; }
-h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
+h3 { margin: 1.5rem 0 0.5rem; color: var(--mat-sys-on-surface); }
 
 .loading-container { display: flex; justify-content: center; padding: 2rem; }
-.empty-text { display: block; opacity: 0.5; font-size: 0.875rem; margin-bottom: 0.5rem; }
+.empty-text { display: block; color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; margin-bottom: 0.5rem; }
 
 // Search
 .search-bar {
@@ -19,24 +19,24 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .search-input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 4px;
-  color: white;
+  color: inherit;
   padding: 8px 12px;
   font-size: 0.875rem;
   outline: none;
 
-  &:focus { border-color: var(--mat-sys-primary, #bb86fc); }
-  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+  &:focus { border-color: var(--mat-sys-primary); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
 }
 
 .search-btn {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: var(--mat-sys-primary, #bb86fc);
-  color: white;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
   border: none;
   border-radius: 4px;
   padding: 8px 16px;
@@ -198,12 +198,12 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .media-meta {
   font-size: 0.6875rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .season-label {
   font-size: 0.6875rem;
-  color: var(--mat-sys-primary, #bb86fc);
+  color: var(--mat-sys-primary);
   font-weight: 500;
 }
 
@@ -211,6 +211,9 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   font-size: 0.75rem;
   font-weight: 500;
   margin-top: 0.25rem;
+  // Lifecycle pill should use the same secondary-emphasis pattern;
+  // axe wants ≥4.5:1 against the row's background.
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .dismiss-btn {
@@ -219,12 +222,12 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   gap: 2px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
   font-size: 0.75rem;
   padding: 2px 8px;
 
-  &:hover { color: white; }
+  &:hover { color: var(--mat-sys-on-surface); }
 
   mat-icon { font-size: 14px; width: 14px; height: 14px; }
 }
@@ -241,7 +244,7 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   border-radius: 8px;
 }
 
@@ -255,16 +258,16 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .transcode-title {
   flex: 1;
-  color: white;
+  color: var(--mat-sys-on-surface);
   text-decoration: none;
   font-weight: 500;
 
-  &:hover { color: var(--mat-sys-primary, #bb86fc); }
+  &:hover { color: var(--mat-sys-primary); }
 }
 
 .transcode-status {
   font-size: 0.8125rem;
-  color: var(--mat-sys-primary, #bb86fc);
+  color: var(--mat-sys-primary);
   flex-shrink: 0;
 
   &.ready { color: #4caf50; }
@@ -273,12 +276,19 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 .remove-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
   padding: 4px;
   flex-shrink: 0;
 
-  &:hover { color: #f44336; }
+  &:hover { color: var(--mat-sys-error); }
+}
+
+// Inline secondary text inside .transcode-title — render author /
+// album info at lower emphasis but still passing AA contrast.
+.book-wish-author {
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: normal;
 }
 
 // First-wish interstitial modal

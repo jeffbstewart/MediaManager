@@ -154,9 +154,36 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     r.fulfill({ json: loadFixture('catalog/collection-detail.json') })
   );
 
-  // Wish list — both title-detail and collection-detail query it to
-  // drive the "Add to wish list" buttons. Empty list keeps things simple.
+  // --- Wishlist / Search / Discover / Profile (Tier 5) ---
+  // Title-detail & collection-detail consult the wishlist to drive
+  // their "add to wishlist" state; the wishlist page itself renders
+  // the same response.
   await page.route('**/api/v2/wishlist', (r: Route) =>
-    r.fulfill({ json: { items: [] } })
+    r.fulfill({ json: loadFixture('catalog/wishlist.json') })
+  );
+
+  await page.route('**/api/v2/catalog/search*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/search.results.json') })
+  );
+  await page.route('**/api/v2/catalog/search/tracks*', (r: Route) =>
+    r.fulfill({ json: { tracks: [] } })
+  );
+  // Advanced-search presets for the search dialog variant.
+  await page.route('**/api/v2/search/presets*', (r: Route) =>
+    r.fulfill({ json: { presets: [] } })
+  );
+
+  await page.route('**/api/v2/recommendations/artists*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/recommendations.json') })
+  );
+
+  await page.route('**/api/v2/profile', (r: Route) =>
+    r.fulfill({ json: loadFixture('profile/profile.json') })
+  );
+  await page.route('**/api/v2/profile/sessions', (r: Route) =>
+    r.fulfill({ json: loadFixture('profile/sessions.json') })
+  );
+  await page.route('**/api/v2/profile/hidden-titles', (r: Route) =>
+    r.fulfill({ json: loadFixture('profile/hidden-titles.json') })
   );
 }

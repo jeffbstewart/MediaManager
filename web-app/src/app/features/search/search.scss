@@ -1,13 +1,13 @@
 .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
-.empty-text { opacity: 0.5; }
+.empty-text { color: var(--mat-sys-on-surface-variant); }
 
 h2 { margin: 0 0 0.75rem; }
 
 .result-count {
   display: block;
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   margin-bottom: 1rem;
 }
 

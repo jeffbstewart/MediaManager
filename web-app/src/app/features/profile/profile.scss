@@ -2,7 +2,7 @@
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 
 h2 { margin: 0 0 1rem; }
-h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
+h3 { margin: 1.5rem 0 0.5rem; color: var(--mat-sys-on-surface); }
 
 .info-section { display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -11,10 +11,10 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
-.info-label { font-size: 0.875rem; opacity: 0.5; min-width: 160px; }
+.info-label { font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); min-width: 160px; }
 .info-value { font-size: 0.875rem; }
 
 .quality-row {
@@ -26,7 +26,8 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .star-btn {
   background: none; border: none; cursor: pointer;
-  color: rgba(255, 255, 255, 0.3); padding: 2px;
+  // Default is on-surface-variant so unfilled stars pass AA.
+  color: var(--mat-sys-on-surface-variant); padding: 2px;
 
   &.active { color: #fbbf24; }
 
@@ -35,22 +36,26 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .action-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white; padding: 8px 16px; border-radius: 4px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface); padding: 8px 16px; border-radius: 4px;
   cursor: pointer; font-size: 0.875rem;
   margin-bottom: 0.75rem;
 
-  &:hover { background: rgba(255, 255, 255, 0.12); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent); }
   &:disabled { opacity: 0.4; cursor: default; }
 
   &.primary {
-    background: var(--mat-sys-primary, #bb86fc);
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
     border-color: transparent;
     &:hover { opacity: 0.9; }
   }
 
-  &.danger { color: #f44336; border-color: rgba(244, 67, 54, 0.3); }
+  &.danger {
+    color: var(--mat-sys-error);
+    border-color: color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
+  }
 
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
@@ -60,7 +65,8 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .passkey-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0.75rem; background: rgba(255, 255, 255, 0.05);
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   border-radius: 8px; gap: 1rem;
 }
 
@@ -72,7 +78,8 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .session-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0.75rem; background: rgba(255, 255, 255, 0.05);
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   border-radius: 8px; gap: 1rem;
 }
 
@@ -80,31 +87,34 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
 
 .session-type-row { display: flex; align-items: center; gap: 0.5rem; }
 
+// Status badges — explicit dark fills so the intentional white text
+// passes AA in both schemes.
 .session-badge {
   font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
-  border-radius: 9999px; background: #3b82f6; color: white;
+  border-radius: 9999px; background: #0D47A1; color: white;
 
-  &.device { background: #8b5cf6; }
+  &.device { background: #4527A0; }
 }
 
 .current-badge {
   font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
-  border-radius: 9999px; background: #4caf50; color: white;
+  border-radius: 9999px; background: #1B5E20; color: white;
 }
 
 .session-detail {
-  font-size: 0.75rem; opacity: 0.6;
+  font-size: 0.75rem; color: var(--mat-sys-on-surface-variant);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.session-meta { font-size: 0.6875rem; opacity: 0.4; }
+.session-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 
 .revoke-btn {
-  background: none; border: 1px solid rgba(244, 67, 54, 0.3);
-  color: #f44336; padding: 4px 12px; border-radius: 4px;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
+  color: var(--mat-sys-error); padding: 4px 12px; border-radius: 4px;
   cursor: pointer; font-size: 0.75rem; flex-shrink: 0;
 
-  &:hover { background: rgba(244, 67, 54, 0.1); }
+  &:hover { background: color-mix(in srgb, var(--mat-sys-error) 10%, transparent); }
 }
 
 // Modal
@@ -159,7 +169,7 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   mat-icon { font-size: 24px; width: 24px; height: 24px; }
 }
 
-.section-hint { font-size: 0.8125rem; opacity: 0.5; margin: 0 0 0.5rem; }
+.section-hint { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin: 0 0 0.5rem; }
 
 .hidden-titles-list { display: flex; flex-direction: column; gap: 0.25rem; }
 .hidden-title-row {
@@ -170,5 +180,5 @@ h3 { margin: 1.5rem 0 0.5rem; opacity: 0.8; }
   flex: 1; text-decoration: none; color: inherit; font-size: 0.875rem;
   &:hover { text-decoration: underline; }
 }
-.hidden-year { opacity: 0.4; }
+.hidden-year { color: var(--mat-sys-on-surface-variant); }
 .unhide-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }

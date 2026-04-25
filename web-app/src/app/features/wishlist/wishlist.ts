@@ -168,12 +168,14 @@ export class WishListComponent implements OnInit {
     switch (stage) {
       case 'READY_TO_WATCH': return '#4caf50';
       case 'ON_NAS_PENDING_DESKTOP':
-      case 'ORDERED': return 'var(--mat-sys-primary, #bb86fc)';
-      case 'IN_HOUSE_PENDING_NAS': return 'var(--mat-sys-primary, #bb86fc)';
+      case 'ORDERED': return 'var(--mat-sys-primary)';
+      case 'IN_HOUSE_PENDING_NAS': return 'var(--mat-sys-primary)';
       case 'NOT_FEASIBLE':
-      case 'WONT_ORDER': return '#f44336';
+      case 'WONT_ORDER': return 'var(--mat-sys-error)';
       case 'NEEDS_ASSISTANCE': return '#ffa500';
-      default: return 'rgba(255,255,255,0.6)';
+      // PENDING / WISHED_FOR fall here. Use on-surface-variant so
+      // the badge passes AA against the page surface in both modes.
+      default: return 'var(--mat-sys-on-surface-variant)';
     }
   }
 }
