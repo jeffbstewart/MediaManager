@@ -13,19 +13,24 @@
   "genres": ["Action", "Science Fiction"],
   "tags": [{ "id": 1, "name": "Comfort Watch", "bg_color": "#1B5E20", "text_color": "#ffffff" }],
   "formats": ["BLURAY", "UHD_BLURAY"],
-  "admin_media_items": [],
+  "admin_media_items": [
+    { "media_item_id": 5001, "media_format": "BLURAY", "upc": "888574293321" },
+    { "media_item_id": 5002, "media_format": "UHD_BLURAY", "upc": "883929199854" }
+  ],
   "transcodes": [
     { "transcode_id": 1001, "file_name": "The.Matrix.1999.mkv", "playable": true, "media_format": "BLURAY" }
   ],
   "cast": [
     { "id": 1, "name": "Keanu Reeves", "character_name": "Neo", "headshot_url": "/headshots/1", "tmdb_person_id": 6384 },
-    { "id": 2, "name": "Laurence Fishburne", "character_name": "Morpheus", "headshot_url": "/headshots/2", "tmdb_person_id": 2975 }
+    { "id": 2, "name": "Laurence Fishburne", "character_name": "Morpheus", "headshot_url": "/headshots/2", "tmdb_person_id": 2975 },
+    { "id": 3, "name": "Carrie-Anne Moss", "character_name": "Trinity", "headshot_url": "/headshots/3", "tmdb_person_id": 530 }
   ],
   "episodes": [],
   "seasons": [],
   "family_members": [],
   "similar_titles": [
-    { "title_id": 102, "title_name": "Interstellar", "poster_url": "/posters/w185/102", "release_year": 2014 }
+    { "title_id": 102, "title_name": "Interstellar", "poster_url": "/posters/w185/102", "release_year": 2014 },
+    { "title_id": 103, "title_name": "Blade Runner 2049", "poster_url": "/posters/w185/103", "release_year": 2017 }
   ],
   "collection": null
 }

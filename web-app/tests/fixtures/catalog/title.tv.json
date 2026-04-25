@@ -13,19 +13,26 @@
   "genres": ["Drama", "Crime"],
   "tags": [],
   "formats": ["BLURAY"],
-  "admin_media_items": [],
+  "admin_media_items": [
+    { "media_item_id": 6001, "media_format": "BLURAY", "upc": "794043145063" }
+  ],
   "transcodes": [],
   "cast": [
-    { "id": 10, "name": "Bryan Cranston", "character_name": "Walter White", "headshot_url": "/headshots/10", "tmdb_person_id": 17419 }
+    { "id": 10, "name": "Bryan Cranston", "character_name": "Walter White", "headshot_url": "/headshots/10", "tmdb_person_id": 17419 },
+    { "id": 11, "name": "Aaron Paul", "character_name": "Jesse Pinkman", "headshot_url": "/headshots/11", "tmdb_person_id": 84497 }
   ],
   "episodes": [
     { "id": 1, "season_number": 1, "episode_number": 1, "name": "Pilot", "transcode_id": 2001, "playable": true, "position_seconds": null, "duration_seconds": 3480 },
-    { "id": 2, "season_number": 1, "episode_number": 2, "name": "Cat's in the Bag…", "transcode_id": 2002, "playable": true, "position_seconds": 600, "duration_seconds": 2880 }
+    { "id": 2, "season_number": 1, "episode_number": 2, "name": "Cat's in the Bag…", "transcode_id": 2002, "playable": true, "position_seconds": 600, "duration_seconds": 2880 },
+    { "id": 3, "season_number": 2, "episode_number": 1, "name": "Seven Thirty-Seven", "transcode_id": 2003, "playable": true, "position_seconds": null, "duration_seconds": 2820 }
   ],
   "seasons": [
-    { "season_number": 1, "acquisition_status": "OWNED" }
+    { "season_number": 1, "acquisition_status": "OWNED" },
+    { "season_number": 2, "acquisition_status": "OWNED" }
   ],
   "family_members": [],
-  "similar_titles": [],
+  "similar_titles": [
+    { "title_id": 100, "title_name": "The Matrix", "poster_url": "/posters/w185/100", "release_year": 1999 }
+  ],
   "collection": null
 }
