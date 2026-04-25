@@ -41,8 +41,14 @@ declare global {
 // Vendored under web-app/public/vendor/ — see THIRD_PARTY_LICENSES.md.
 // epub.js's UMD wrapper expects window.JSZip to exist when it loads, so
 // JSZip must be injected first.
+//
+// SRI hashes pin the byte content of the vendored bundles so a
+// compromised build pipeline can't silently swap in malicious JS.
+// Regenerate with: openssl dgst -sha384 -binary <file> | base64 -w 0
 const JSZIP_SRC = 'vendor/jszip.min.js';
+const JSZIP_INTEGRITY = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
 const EPUB_JS_SRC = 'vendor/epub.min.js';
+const EPUB_JS_INTEGRITY = 'sha384-ZqmkDa/1AGF4SKdSmXgEG+3G+Gsb6yNqUSq2Mqp0jDf1GWk+UY5eNbEd7hgwiywI';
 const PROGRESS_REPORT_MS = 10_000;
 
 @Component({
@@ -131,8 +137,8 @@ export class ReaderComponent implements OnInit, OnDestroy {
   }
 
   private async bootEpub(resumeCfi: string | null): Promise<void> {
-    await loadScriptOnce(JSZIP_SRC);
-    await loadScriptOnce(EPUB_JS_SRC);
+    await loadScriptOnce(JSZIP_SRC, JSZIP_INTEGRITY);
+    await loadScriptOnce(EPUB_JS_SRC, EPUB_JS_INTEGRITY);
     const el = this.container()?.nativeElement;
     if (!el) throw new Error('epub container missing');
     if (!window.ePub) throw new Error('epub.js failed to load');
@@ -172,12 +178,19 @@ export class ReaderComponent implements OnInit, OnDestroy {
 }
 
 const loadedScripts = new Set<string>();
-function loadScriptOnce(src: string): Promise<void> {
+function loadScriptOnce(src: string, integrity?: string): Promise<void> {
   if (loadedScripts.has(src)) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = src;
     s.async = true;
+    if (integrity) {
+      // SRI requires `crossorigin` for the integrity check to apply.
+      // `anonymous` avoids sending credentials; same-origin static
+      // assets don't need them.
+      s.integrity = integrity;
+      s.crossOrigin = 'anonymous';
+    }
     s.onload = () => { loadedScripts.add(src); resolve(); };
     s.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(s);

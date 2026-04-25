@@ -59,6 +59,15 @@ class CspDecorator : DecoratingHttpServiceFunction {
                 builder.add("Content-Security-Policy-Report-Only", CSP_VALUE)
             }
             builder.add("Reporting-Endpoints", REPORTING_ENDPOINTS)
+
+            // Companion security headers — same scope as CSP. Each is
+            // idempotent and no upstream service in this app emits
+            // them, so plain add() is fine.
+            builder.add("Strict-Transport-Security", HSTS)
+            builder.add("X-Content-Type-Options", "nosniff")
+            builder.add("Referrer-Policy", "strict-origin-when-cross-origin")
+            builder.add("Permissions-Policy", PERMISSIONS_POLICY)
+            builder.add("Cross-Origin-Opener-Policy", "same-origin")
             builder.build()
         }
     }
@@ -69,6 +78,35 @@ class CspDecorator : DecoratingHttpServiceFunction {
 
         /** Reporting API endpoint binding — consumed by `report-to csp-endpoint` below. */
         private const val REPORTING_ENDPOINTS = "csp-endpoint=\"/csp-report\""
+
+        /**
+         * 2-year HSTS, includes subdomains, preload-eligible. We're
+         * exclusively HTTPS at the HAProxy edge — committing
+         * indefinitely costs nothing.
+         */
+        private const val HSTS = "max-age=63072000; includeSubDomains; preload"
+
+        /**
+         * Disable browser APIs we don't use; explicitly allow `camera`
+         * because /admin/document-ownership and /admin/cameras need
+         * getUserMedia for in-browser barcode scanning + capture.
+         * `interest-cohort=()` and `browsing-topics=()` opt out of
+         * FLoC / Topics behavioural-cohort APIs that would otherwise
+         * default-on.
+         */
+        private val PERMISSIONS_POLICY: String = listOf(
+            "camera=(self)",
+            "microphone=()",
+            "geolocation=()",
+            "gyroscope=()",
+            "magnetometer=()",
+            "accelerometer=()",
+            "interest-cohort=()",
+            "browsing-topics=()",
+            "payment=()",
+            "usb=()",
+            "midi=()"
+        ).joinToString(", ")
 
         /**
          * Policy body. Built once as a `String` so we don't reallocate on
