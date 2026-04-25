@@ -64,7 +64,7 @@ class ImageProxyHttpService {
             path = "/t/p/$size/$file",
             extension = extension
         )
-        return serve(upstream)
+        return serve(upstream, placeholderSeed = file)
     }
 
     // ------------------------------------------------------------------
@@ -110,7 +110,7 @@ class ImageProxyHttpService {
             path = path,
             extension = "jpg"
         )
-        return serve(upstream)
+        return serve(upstream, placeholderSeed = key)
     }
 
     // ------------------------------------------------------------------
@@ -133,7 +133,7 @@ class ImageProxyHttpService {
             path = "/release/$mbid/$size.jpg",
             extension = "jpg"
         )
-        return serve(upstream)
+        return serve(upstream, placeholderSeed = mbid)
     }
 
     /**
@@ -155,14 +155,25 @@ class ImageProxyHttpService {
             path = "/release-group/$rgid/$size.jpg",
             extension = "jpg"
         )
-        return serve(upstream)
+        return serve(upstream, placeholderSeed = rgid)
     }
 
     // ------------------------------------------------------------------
     // Shared path
     // ------------------------------------------------------------------
 
-    private fun serve(upstream: ImageProxyService.ProxiedUpstream): HttpResponse {
+    /**
+     * @param placeholderSeed When set, upstream 404 / 503 returns a
+     *   synthesised SVG placeholder via [servePlaceholder] instead of the
+     *   raw status. Used so the artist page's "Other works" grid and
+     *   similar surfaces don't pollute the network panel with 404s when
+     *   CAA / OL has no cover for a given mbid / isbn. Other failure
+     *   codes still bubble up — those are real problems worth seeing.
+     */
+    private fun serve(
+        upstream: ImageProxyService.ProxiedUpstream,
+        placeholderSeed: String? = null,
+    ): HttpResponse {
         return when (val r = ImageProxyService.serve(upstream)) {
             is ImageProxyService.Result.Hit -> {
                 val bytes = Files.readAllBytes(r.file)
@@ -178,8 +189,12 @@ class ImageProxyHttpService {
                 HttpResponse.of(headers, HttpData.wrap(bytes))
             }
             is ImageProxyService.Result.Failure -> {
-                MetricsRegistry.countHttpResponse("image_proxy", r.httpStatus)
-                HttpResponse.of(HttpStatus.valueOf(r.httpStatus))
+                if (placeholderSeed != null && (r.httpStatus == 404 || r.httpStatus == 503)) {
+                    servePlaceholder(placeholderSeed, "image_proxy")
+                } else {
+                    MetricsRegistry.countHttpResponse("image_proxy", r.httpStatus)
+                    HttpResponse.of(HttpStatus.valueOf(r.httpStatus))
+                }
             }
         }
     }

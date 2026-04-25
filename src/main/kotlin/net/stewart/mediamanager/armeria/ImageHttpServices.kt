@@ -51,21 +51,75 @@ private fun serveFile(path: Path, contentType: String, metric: String, cacheCont
  * client IPs no longer leak to TMDB / Open Library when the local UUID-
  * keyed cache hasn't populated yet (cache misses here are quickly filled
  * by the proxy's own disk cache under data/image-proxy-cache/).
+ *
+ * Pass `onMissing` to substitute a placeholder for upstream 404 / 503 (i.e.
+ * "this provider has nothing for this id") instead of propagating the
+ * status. Callers that have a sensible visual fallback use this; opaque
+ * passthroughs leave it null and let the real status escape.
  */
 private fun serveProxied(
     provider: ImageProxyService.Provider,
     path: String,
     extension: String,
-    metric: String
+    metric: String,
+    onMissing: (() -> HttpResponse)? = null,
 ): HttpResponse {
     val upstream = ImageProxyService.ProxiedUpstream(provider, path, extension)
     return when (val r = ImageProxyService.serve(upstream)) {
         is ImageProxyService.Result.Hit -> serveFile(r.file, r.contentType, metric)
         is ImageProxyService.Result.Failure -> {
-            MetricsRegistry.countHttpResponse(metric, r.httpStatus)
-            HttpResponse.of(HttpStatus.valueOf(r.httpStatus))
+            // Treat upstream 404 (no art for this id) and 503 (proxy
+            // breaker open) as "no cover available" and let the caller
+            // synthesise something. Other statuses (5xx from upstream,
+            // network errors, 429s) still bubble up — those are real
+            // problems worth seeing in the network panel.
+            if (onMissing != null && (r.httpStatus == 404 || r.httpStatus == 503)) {
+                onMissing()
+            } else {
+                MetricsRegistry.countHttpResponse(metric, r.httpStatus)
+                HttpResponse.of(HttpStatus.valueOf(r.httpStatus))
+            }
         }
     }
+}
+
+/**
+ * Returns a synthesised square SVG cover with a colour-hashed background
+ * and a single bold initial. Used when we don't have real cover art —
+ * stops 404s from cluttering the network panel and gives every album a
+ * stable, distinguishable visual identity.
+ *
+ * Colour is HSL with hue derived from a stable hash of the seed string,
+ * so the same album always lands on the same hue. Saturation/lightness
+ * are fixed in the dim-mid range so white text passes contrast.
+ */
+internal fun servePlaceholder(seed: String, metric: String): HttpResponse {
+    val cleanSeed = seed.trim().ifBlank { "?" }
+    val hash = cleanSeed.fold(0) { acc, c -> acc * 31 + c.code }
+    val hue = ((hash % 360) + 360) % 360
+
+    // Initial: first alphanumeric character, uppercased. Falls back to
+    // "?" so weird titles (pure punctuation, leading whitespace removed)
+    // don't break the SVG with un-escaped characters.
+    val initialChar = cleanSeed.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '?'
+    val initial = if (initialChar.isLetterOrDigit()) initialChar.toString() else "?"
+
+    val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" preserveAspectRatio="xMidYMid slice"><rect width="500" height="500" fill="hsl($hue, 35%, 28%)"/><text x="250" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="280" font-weight="700" fill="rgba(255,255,255,0.78)" text-anchor="middle" dominant-baseline="central">$initial</text></svg>"""
+
+    val bytes = svg.toByteArray(Charsets.UTF_8)
+    val headers = ResponseHeaders.builder(HttpStatus.OK)
+        // image/svg+xml so <img src> renders it like any other image.
+        .contentType(MediaType.parse("image/svg+xml"))
+        // Short cache: if real art arrives later (background enrichment
+        // run, manual cover upload), the placeholder retires within
+        // an hour without a hard refresh.
+        .add("Cache-Control", "public, max-age=3600")
+        .contentLength(bytes.size.toLong())
+        .build()
+    // Distinct metric so the dashboard can tell real hits from
+    // placeholder fallbacks at a glance.
+    MetricsRegistry.countHttpResponse(metric + "_placeholder", 200)
+    return HttpResponse.of(headers, HttpData.wrap(bytes))
 }
 
 private fun notFound(metric: String): HttpResponse {
@@ -90,7 +144,9 @@ private fun forbidden(metric: String): HttpResponse {
  * rating ceiling check before invoking this.
  */
 private fun servePosterFor(title: Title, posterSize: PosterSize, metric: String): HttpResponse {
-    if (title.poster_path == null) return notFound(metric)
+    val placeholder = { servePlaceholder(title.name, metric) }
+
+    if (title.poster_path == null) return placeholder()
 
     val cached = PosterCacheService.cacheAndServe(title, posterSize)
     if (cached != null && Files.exists(cached)) {
@@ -110,7 +166,8 @@ private fun servePosterFor(title: Title, posterSize: PosterSize, metric: String)
             // ?default=false → 404 instead of 1x1 placeholder GIF.
             "/b/isbn/$isbn-$olSize.jpg?default=false",
             "jpg",
-            metric
+            metric,
+            onMissing = placeholder,
         )
     }
     // Albums store "caa/<release-mbid>" — serve via the Cover Art Archive proxy.
@@ -124,16 +181,18 @@ private fun servePosterFor(title: Title, posterSize: PosterSize, metric: String)
             ImageProxyService.Provider.COVER_ART_ARCHIVE,
             "/release/$mbid/$caaSize.jpg",
             "jpg",
-            metric
+            metric,
+            onMissing = placeholder,
         )
     }
-    if (!isValidTmdbPath(path)) return notFound(metric)
+    if (!isValidTmdbPath(path)) return placeholder()
     val extension = path.substringAfterLast('.', "jpg")
     return serveProxied(
         ImageProxyService.Provider.TMDB,
         "/t/p/${posterSize.pathSegment}$path",
         extension,
-        metric
+        metric,
+        onMissing = placeholder,
     )
 }
 
