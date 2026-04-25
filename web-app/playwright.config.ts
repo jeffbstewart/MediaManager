@@ -35,7 +35,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // The player integration test (15-player-playback) calls
+        // video.play() programmatically via the page lifecycle.
+        // Headless Chromium's default autoplay policy blocks that
+        // until a user gesture, which the page never makes — the
+        // test then stalls with paused video. Disable the policy
+        // for the whole project; the cost in other specs is
+        // nothing (they don't have <video> elements).
+        launchOptions: {
+          args: ['--autoplay-policy=no-user-gesture-required'],
+        },
+      },
     },
   ],
 
