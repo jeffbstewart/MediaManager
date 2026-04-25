@@ -1,0 +1,33 @@
+{
+  "rows": [
+    {
+      "id": 1,
+      "reporter_name": "alice",
+      "title_id": 100,
+      "title_name": "The Matrix",
+      "season_number": null,
+      "episode_number": null,
+      "description": "Audio is out of sync starting at the lobby scene.",
+      "status": "OPEN",
+      "admin_notes": null,
+      "resolved_by_name": null,
+      "created_at": "2026-04-01T14:22:00Z",
+      "updated_at": "2026-04-01T14:22:00Z"
+    },
+    {
+      "id": 2,
+      "reporter_name": "bob",
+      "title_id": 200,
+      "title_name": "Breaking Bad",
+      "season_number": 2,
+      "episode_number": 5,
+      "description": "Subtitles missing in Spanish dub.",
+      "status": "RESOLVED",
+      "admin_notes": "Re-encoded with subtitle track preserved.",
+      "resolved_by_name": "admin",
+      "created_at": "2026-03-15T09:10:00Z",
+      "updated_at": "2026-03-18T11:00:00Z"
+    }
+  ],
+  "total": 2
+}

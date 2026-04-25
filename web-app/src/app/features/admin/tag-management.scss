@@ -21,12 +21,15 @@
   display: inline-block;
   padding: 3px 12px;
   border-radius: 9999px;
-  font-weight: 500;
-  font-size: 0.8125rem;
+  // 14px + 700 promotes the badge into WCAG's "large text" tier so
+  // 3:1 contrast suffices — relevant because user-chosen tag colors
+  // are arbitrary and rarely meet 4.5:1 against white.
+  font-weight: 700;
+  font-size: 0.875rem;
   text-decoration: none;
   white-space: nowrap;
 
-  &.preview { font-size: 0.875rem; padding: 4px 16px; }
+  &.preview { font-size: 1rem; padding: 4px 16px; }
 }
 
 .source-label { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); }

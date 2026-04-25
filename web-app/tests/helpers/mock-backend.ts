@@ -260,4 +260,43 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/pair/info*', (r: Route) =>
     r.fulfill({ json: { status: 'pending', display_name: 'iOS App' } })
   );
+
+  // --- Admin (Tier A: list + simple CRUD pages) ---
+  // Each handler matches the canonical admin endpoint and returns a
+  // populated fixture so the table-shaped pages render rows. Detail
+  // sub-paths (e.g. .../sessions, .../audit) ride a generic 200/[]
+  // catch-all where applicable.
+  await page.route('**/api/v2/admin/users', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/users.json') })
+  );
+  await page.route('**/api/v2/admin/users/*/sessions', (r: Route) =>
+    r.fulfill({ json: { sessions: [] } })
+  );
+
+  await page.route('**/api/v2/admin/tags', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/tags.json') })
+  );
+
+  await page.route('**/api/v2/admin/family-members', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/family-members.json') })
+  );
+
+  await page.route('**/api/v2/admin/purchase-wishes', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/purchase-wishes.json') })
+  );
+
+  await page.route('**/api/v2/admin/valuations*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/valuations.json') })
+  );
+
+  await page.route('**/api/v2/admin/reports*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/reports.json') })
+  );
+
+  await page.route('**/api/v2/admin/report/info', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/report-info.json') })
+  );
+  await page.route('**/api/v2/admin/report/status', (r: Route) =>
+    r.fulfill({ json: { status: 'idle', phase: '', current: 0, total: 0, error: null } })
+  );
 }

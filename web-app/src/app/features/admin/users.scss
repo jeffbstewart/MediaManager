@@ -22,8 +22,8 @@
   font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
   padding: 1px 6px; border-radius: 4px; margin-left: 0.25rem;
 
-  &.locked { background: #f44336; color: white; }
-  &.pw-change { background: #f59e0b; color: #1e1e1e; }
+  &.locked { background: #c62828; color: white; }
+  &.pw-change { background: #b45309; color: white; }
 }
 
 .role-badge {
@@ -31,7 +31,7 @@
   padding: 2px 8px; border-radius: 4px;
   background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
 
-  &.admin { background: #6366f1; color: white; }
+  &.admin { background: #4338ca; color: white; }
 }
 
 .delete-item { color: var(--mat-sys-error) !important; }
@@ -44,7 +44,7 @@
 .sessions-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .session-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent); border-radius: 6px; gap: 0.75rem; }
 .session-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
-.session-badge { font-size: 0.625rem; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: #3b82f6; color: white; align-self: flex-start; &.device { background: #8b5cf6; } }
+.session-badge { font-size: 0.625rem; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: #1d4ed8; color: white; align-self: flex-start; &.device { background: #6d28d9; } }
 .session-detail { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 .small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }

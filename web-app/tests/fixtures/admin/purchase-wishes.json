@@ -1,0 +1,43 @@
+{
+  "wishes": [
+    {
+      "tmdb_id": 100,
+      "title": "The Shawshank Redemption",
+      "display_title": "The Shawshank Redemption (1994)",
+      "media_type": "MOVIE",
+      "poster_path": "/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg",
+      "release_year": 1994,
+      "season_number": null,
+      "vote_count": 5,
+      "voters": ["alice", "bob", "carol", "dave", "eve"],
+      "lifecycle_stage": "READY_TO_WATCH",
+      "lifecycle_label": "Ready to watch"
+    },
+    {
+      "tmdb_id": 200,
+      "title": "Breaking Bad",
+      "display_title": "Breaking Bad — Season 1",
+      "media_type": "TV",
+      "poster_path": "/3xnWaLQjelJDDF7LT1WBo6f4BRe.jpg",
+      "release_year": 2008,
+      "season_number": 1,
+      "vote_count": 2,
+      "voters": ["alice", "frank"],
+      "lifecycle_stage": "ORDERED",
+      "lifecycle_label": "Ordered"
+    },
+    {
+      "tmdb_id": 300,
+      "title": "Some Niche Title",
+      "display_title": "Some Niche Title",
+      "media_type": "MOVIE",
+      "poster_path": null,
+      "release_year": null,
+      "season_number": null,
+      "vote_count": 1,
+      "voters": ["alice"],
+      "lifecycle_stage": "WONT_ORDER",
+      "lifecycle_label": "Won't order"
+    }
+  ]
+}

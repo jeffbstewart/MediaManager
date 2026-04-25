@@ -46,16 +46,19 @@ h2 { margin: 0 0 0.25rem; }
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  background: none;
-  border: 1px solid currentColor;
+  // Solid pill: bg-color is set inline per lifecycle stage; text is
+  // always white. Each background hex in stageColor() is chosen to
+  // clear AA contrast with white at large-bold (14px + 700).
+  border: none;
+  color: white;
   border-radius: 9999px;
   padding: 3px 10px 3px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 
-  &:hover { opacity: 0.8; }
+  &:hover { opacity: 0.9; }
 }
 
 .status-arrow {

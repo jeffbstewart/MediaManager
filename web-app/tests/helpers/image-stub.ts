@@ -33,6 +33,7 @@ export async function stubImages(page: Page): Promise<void> {
     '**/ownership-photos/**',
     '**/public/album-art/**',
     '**/cam/**',
+    'https://image.tmdb.org/**',
   ];
   for (const g of globs) {
     await page.route(g, handler);

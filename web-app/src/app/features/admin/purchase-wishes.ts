@@ -71,15 +71,17 @@ export class PurchaseWishesComponent implements OnInit {
   posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 
   stageColor(stage: string): string {
+    // Solid-pill backgrounds: paired with white text in the template.
+    // Each color is dark enough to clear 4.5:1 against white text.
     switch (stage) {
-      case 'READY_TO_WATCH': return '#4caf50';
+      case 'READY_TO_WATCH': return '#2e7d32';
       case 'ON_NAS_PENDING_DESKTOP':
       case 'IN_HOUSE_PENDING_NAS':
-      case 'ORDERED': return 'var(--mat-sys-primary, #bb86fc)';
+      case 'ORDERED': return '#1565c0';
       case 'NOT_FEASIBLE':
-      case 'WONT_ORDER': return '#f44336';
-      case 'NEEDS_ASSISTANCE': return '#ffa500';
-      default: return '#ffd54f';
+      case 'WONT_ORDER': return '#c62828';
+      case 'NEEDS_ASSISTANCE': return '#b45309';
+      default: return '#6d4c00';
     }
   }
 }

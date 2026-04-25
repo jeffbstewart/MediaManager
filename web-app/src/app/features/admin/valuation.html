@@ -72,7 +72,7 @@
         </ng-container>
 
         <ng-container matColumnDef="photos">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Photos</span></th>
           <td mat-cell *matCellDef="let r">
             @if (r.photo_count > 0) {
               <mat-icon class="photo-icon" [title]="r.photo_count + ' photo(s)'">photo_camera</mat-icon>
@@ -81,7 +81,7 @@
         </ng-container>
 
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
           <td mat-cell *matCellDef="let r">
             <button mat-icon-button (click)="openEdit(r)" title="Edit" aria-label="Edit valuation">
               <mat-icon>edit</mat-icon>
