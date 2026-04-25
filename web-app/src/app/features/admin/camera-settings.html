@@ -7,7 +7,7 @@
   </div>
 
   <!-- go2rtc status -->
-  <div class="status-badge" [style.color]="statusColor(go2rtcStatus())">
+  <div class="status-badge" [style.background-color]="statusColor(go2rtcStatus())">
     <mat-icon>{{ go2rtcStatus() === 'running' ? 'check_circle' : 'error' }}</mat-icon>
     {{ statusLabel(go2rtcStatus()) }}
   </div>

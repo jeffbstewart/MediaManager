@@ -3,7 +3,18 @@
 
 .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; h2 { margin: 0; } }
 
-.status-badge { display: flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; margin-bottom: 1rem; mat-icon { font-size: 18px; width: 18px; height: 18px; } }
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: white;
+  margin-bottom: 1rem;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: white; }
+}
 
 .empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 .hint-text { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.5rem; }
@@ -17,7 +28,12 @@
   background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent);
 
   &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent); }
-  &.disabled-row { opacity: 0.4; }
+  // Disabled rows used to dim via opacity:0.4 which dragged the cam
+  // name + stream label below AA. Use a subtle italic + muted token
+  // colour instead so axe still reads contrast on the row text.
+  &.disabled-row {
+    .cam-name, .cam-stream { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+  }
 }
 
 .cdk-drag-preview {

@@ -150,6 +150,8 @@ export class CameraSettingsComponent implements OnInit {
   }
 
   statusColor(status: string): string {
-    return status === 'running' ? '#4caf50' : '#f44336';
+    // Solid-pill backgrounds: paired with white text in the template.
+    // Picked dark enough to clear AA against white at default size.
+    return status === 'running' ? '#2e7d32' : '#c62828';
   }
 }

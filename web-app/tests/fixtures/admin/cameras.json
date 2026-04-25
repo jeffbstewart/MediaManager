@@ -1,0 +1,8 @@
+{
+  "cameras": [
+    { "id": 1, "name": "Front Door", "go2rtc_name": "front_door", "enabled": true, "display_order": 0 },
+    { "id": 2, "name": "Driveway", "go2rtc_name": "driveway", "enabled": true, "display_order": 1 },
+    { "id": 3, "name": "Garage (offline)", "go2rtc_name": "garage", "enabled": false, "display_order": 2 }
+  ],
+  "go2rtc_status": "running"
+}

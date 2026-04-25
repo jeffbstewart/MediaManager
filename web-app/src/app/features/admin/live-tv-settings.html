@@ -15,16 +15,19 @@
         <div class="field-group">
           <label class="field-label">Max Concurrent Streams</label>
           <input class="field-input short" type="number" min="1" max="10"
-                 [value]="maxStreams()" (input)="updateSetting('maxStreams', $event)" />
+                 [value]="maxStreams()" (input)="updateSetting('maxStreams', $event)"
+                 aria-label="Max Concurrent Streams" />
         </div>
         <div class="field-group">
           <label class="field-label">Idle Timeout (seconds)</label>
           <input class="field-input short" type="number" min="10" max="600"
-                 [value]="idleTimeout()" (input)="updateSetting('idleTimeout', $event)" />
+                 [value]="idleTimeout()" (input)="updateSetting('idleTimeout', $event)"
+                 aria-label="Idle Timeout (seconds)" />
         </div>
         <div class="field-group">
           <label class="field-label">Minimum Content Rating for Live TV</label>
-          <select class="field-select" (change)="setMinRating(+$any($event.target).value)">
+          <select class="field-select" (change)="setMinRating(+$any($event.target).value)"
+                  aria-label="Minimum Content Rating for Live TV">
             @for (opt of ratingOptions; track opt.value) {
               <option [value]="opt.value" [selected]="opt.value === minRating()">{{ opt.label }}</option>
             }
@@ -71,7 +74,7 @@
           <td mat-cell *matCellDef="let t">{{ t.firmware_version }}</td>
         </ng-container>
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
           <td mat-cell *matCellDef="let t">
             <button mat-icon-button (click)="openEditTuner(t)" title="Edit" aria-label="Edit tuner">
               <mat-icon>edit</mat-icon>
@@ -100,10 +103,11 @@
       <h3>Channels</h3>
       <table mat-table [dataSource]="channels()" class="channel-table">
         <ng-container matColumnDef="enabled">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Enabled</span></th>
           <td mat-cell *matCellDef="let ch">
             <input type="checkbox" [checked]="ch.enabled" (change)="toggleChannel(ch)"
-                   class="channel-check" />
+                   class="channel-check"
+                   [attr.aria-label]="(ch.enabled ? 'Disable' : 'Enable') + ' channel ' + ch.guide_number" />
           </td>
         </ng-container>
         <ng-container matColumnDef="number">
@@ -118,7 +122,8 @@
           <th mat-header-cell *matHeaderCellDef>Affiliation</th>
           <td mat-cell *matCellDef="let ch">
             <input class="inline-input" type="text" [value]="ch.network_affiliation ?? ''"
-                   (blur)="updateAffiliation(ch, $event)" placeholder="—" />
+                   (blur)="updateAffiliation(ch, $event)" placeholder="—"
+                   [attr.aria-label]="'Network affiliation for ' + ch.guide_name" />
           </td>
         </ng-container>
         <ng-container matColumnDef="quality">
@@ -127,7 +132,8 @@
             <div class="star-row compact">
               @for (star of qualityStars; track star) {
                 <button class="star-btn small" [class.active]="star <= ch.reception_quality"
-                        (click)="setQuality(ch, star)">
+                        (click)="setQuality(ch, star)"
+                        [attr.aria-label]="'Set quality to ' + star + ' star' + (star === 1 ? '' : 's')">
                   <mat-icon>{{ star <= ch.reception_quality ? 'star' : 'star_border' }}</mat-icon>
                 </button>
               }
@@ -152,7 +158,7 @@
           <label class="field-label">IP Address</label>
           <input class="field-input" type="text" placeholder="192.168.1.100"
                  [value]="addIp()" (input)="addIp.set($any($event.target).value)"
-                 (keydown.enter)="discoverTuner()" />
+                 (keydown.enter)="discoverTuner()" aria-label="IP Address" />
         </div>
         @if (addError()) { <span class="field-error">{{ addError() }}</span> }
         <div class="dialog-footer">
@@ -177,10 +183,10 @@
         <div class="form-fields">
           <label class="field-label">Name</label>
           <input class="field-input" type="text" [value]="editTunerName()"
-                 (input)="editTunerName.set($any($event.target).value)" />
+                 (input)="editTunerName.set($any($event.target).value)" aria-label="Name" />
           <label class="field-label">IP Address</label>
           <input class="field-input" type="text" [value]="editTunerIp()"
-                 (input)="editTunerIp.set($any($event.target).value)" />
+                 (input)="editTunerIp.set($any($event.target).value)" aria-label="IP Address" />
         </div>
         <div class="dialog-footer">
           <button mat-button (click)="editTunerOpen.set(false)">Cancel</button>

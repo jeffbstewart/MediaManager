@@ -137,8 +137,14 @@ export class DataQualityComponent implements OnInit {
   }
 
   statusColor(s: string): string {
-    switch (s) { case 'ENRICHED': return '#4caf50'; case 'FAILED': case 'ABANDONED': return '#f44336';
-      case 'PENDING': case 'REASSIGNMENT_REQUESTED': return 'var(--mat-sys-primary, #bb86fc)'; default: return 'rgba(255,255,255,0.5)'; }
+    // Solid-pill backgrounds: paired with white text in the template.
+    // Each clears AA contrast against white at the 12px badge size.
+    switch (s) {
+      case 'ENRICHED': return '#2e7d32';
+      case 'FAILED': case 'ABANDONED': return '#c62828';
+      case 'PENDING': case 'REASSIGNMENT_REQUESTED': return '#1565c0';
+      default: return '#5d5d61';
+    }
   }
 
   issueLabel(i: string): string {

@@ -356,4 +356,27 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/admin/settings', (r: Route) =>
     r.fulfill({ json: loadFixture('admin/settings.json') })
   );
+
+  // --- Admin (Tier D: config surfaces with embedded media) ---
+  // /api/v2/admin/cameras returns the camera list AND the go2rtc
+  // status badge; the test fixture reports "running".
+  await page.route('**/api/v2/admin/cameras', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/cameras.json') })
+  );
+  // /api/v2/admin/live-tv (NOT /live-tv/settings) returns the
+  // composite tuners + channels + settings payload.
+  await page.route('**/api/v2/admin/live-tv', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/live-tv.json') })
+  );
+  await page.route('**/api/v2/admin/data-quality*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/data-quality.json') })
+  );
+  // Document-ownership lookup; empty by default so the page renders
+  // its idle/scan state instead of a populated capture.
+  await page.route('**/api/v2/admin/ownership/lookup*', (r: Route) =>
+    r.fulfill({ json: { item: null, photos: [] } })
+  );
+  await page.route('**/api/v2/admin/ownership/search*', (r: Route) =>
+    r.fulfill({ json: { items: [] } })
+  );
 }

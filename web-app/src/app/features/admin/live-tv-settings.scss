@@ -44,8 +44,11 @@ h3 { margin: 1.5rem 0 0.75rem; }
   .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
-.disabled-text { opacity: 0.4; }
-.disabled-row { opacity: 0.5; }
+// Disabled rows used to dim via opacity, which dragged the cell text
+// below AA. Use a token colour + italic so contrast survives axe.
+.disabled-text { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+.disabled-row td { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+.disabled-row .inline-input { color: var(--mat-sys-on-surface-variant); }
 .delete-btn { color: var(--mat-sys-on-surface-variant); &:hover { color: var(--mat-sys-error); } }
 
 .channel-check { accent-color: var(--mat-sys-primary); width: 16px; height: 16px; cursor: pointer; }
