@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
@@ -25,7 +24,7 @@ import { AppRoutes } from '../../core/routes';
 @Component({
   selector: 'app-discover',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
+  imports: [MatIconModule, MatButtonModule, MatProgressSpinnerModule],
   templateUrl: './discover.html',
   styleUrl: './discover.scss',
 })
