@@ -138,6 +138,12 @@ class CspDecorator : DecoratingHttpServiceFunction {
             "frame-ancestors 'none'",
             "frame-src 'self'",
             "img-src 'self' data: blob:",
+            // Live-TV uses HLS.js → MediaSource Extensions, which
+            // wrap each MPEG-TS segment in a Blob URL before feeding
+            // it to the <video>. Without `blob:` here the player is
+            // silently CSP-blocked. `'self'` covers the direct
+            // /audio/* and /stream/* MP4s the rest of the app plays.
+            "media-src 'self' blob:",
             "object-src 'none'",
             "script-src 'self'",
             "style-src 'self' 'unsafe-inline' blob:",
