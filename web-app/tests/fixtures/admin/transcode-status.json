@@ -1,0 +1,42 @@
+{
+  "local_disabled": false,
+  "local_status": { "active": false },
+  "overall": {
+    "total_completed": 4321,
+    "total_bytes": "12.4 TB",
+    "pending": { "transcodes": 12, "mobile": 3, "thumbnails": 7, "subtitles": 2, "chapters": 1, "total": 25 },
+    "throughput": {
+      "transcode_rate": 4.2, "mobile_rate": 1.1, "thumbnail_rate": 18.0,
+      "subtitle_rate": 0.8, "chapter_rate": 1.4, "bytes_per_hour": "32 GB/h"
+    },
+    "eta_seconds": 7200,
+    "active_workers": 2,
+    "failed_count": 1,
+    "thumbnail_stats": { "total": 3120, "today": 14 },
+    "subtitle_stats": { "total": 980, "today": 4 },
+    "chapter_stats": { "total": 612, "today": 2 }
+  },
+  "active_buddies": [
+    {
+      "id": 1, "buddy_name": "Buddy-Alpha",
+      "file_name": "movie.mkv", "relative_path": "Movies/movie.mkv",
+      "lease_type": "TRANSCODE", "status": "running",
+      "progress_percent": 42, "encoder": "x264", "elapsed_seconds": 1230
+    }
+  ],
+  "recent": [
+    {
+      "id": 100, "buddy_name": "Buddy-Alpha", "file_name": "show.s01e01.mkv",
+      "lease_type": "TRANSCODE", "status": "completed",
+      "file_size_bytes": 4500000000, "elapsed_seconds": 1800,
+      "error_message": null, "completed_at": "2026-04-23T18:30:00Z"
+    },
+    {
+      "id": 99, "buddy_name": "Buddy-Beta", "file_name": "broken.mkv",
+      "lease_type": "TRANSCODE", "status": "failed",
+      "file_size_bytes": 2000000000, "elapsed_seconds": 60,
+      "error_message": "Audio codec not supported",
+      "completed_at": "2026-04-23T17:00:00Z"
+    }
+  ]
+}

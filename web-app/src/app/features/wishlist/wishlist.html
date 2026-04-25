@@ -108,7 +108,7 @@
           <span class="transcode-status" [class.ready]="wish.status === 'ready'">
             {{ wish.status === 'ready' ? 'Ready to watch' : 'On NAS, pending desktop' }}
           </span>
-          <button class="remove-btn" (click)="removeTranscodeWish(wish)">
+          <button class="remove-btn" (click)="removeTranscodeWish(wish)" aria-label="Remove from wish list">
             <mat-icon>close</mat-icon>
           </button>
         </div>

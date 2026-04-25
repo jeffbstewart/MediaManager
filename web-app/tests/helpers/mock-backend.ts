@@ -299,4 +299,26 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/admin/report/status', (r: Route) =>
     r.fulfill({ json: { status: 'idle', phase: '', current: 0, total: 0, error: null } })
   );
+
+  // --- Admin (Tier B: transcode pipeline + unmatched media) ---
+  await page.route('**/api/v2/admin/transcode-status', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/transcode-status.json') })
+  );
+  await page.route('**/api/v2/admin/unmatched', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/transcode-unmatched.json') })
+  );
+  // /api/v2/admin/linked-transcodes accepts query params; match the
+  // base path with optional querystring.
+  await page.route('**/api/v2/admin/linked-transcodes*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/transcode-linked.json') })
+  );
+  await page.route('**/api/v2/admin/transcode-backlog*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/transcode-backlog.json') })
+  );
+  await page.route('**/api/v2/admin/unmatched-books', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/unmatched-books.json') })
+  );
+  await page.route('**/api/v2/admin/unmatched-audio/groups', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/unmatched-audio.json') })
+  );
 }

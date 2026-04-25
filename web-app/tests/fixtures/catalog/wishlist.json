@@ -15,7 +15,14 @@
       "dismissible": true
     }
   ],
-  "transcode_wishes": [],
+  "transcode_wishes": [
+    {
+      "id": 1, "title_id": 100,
+      "title_name": "The Matrix",
+      "poster_url": "/posters/100.jpg",
+      "status": "ready"
+    }
+  ],
   "book_wishes": [
     {
       "id": 10,

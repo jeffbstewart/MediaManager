@@ -1,0 +1,30 @@
+{
+  "files": [
+    {
+      "id": 1,
+      "file_name": "Some.Movie.2022.1080p.mkv",
+      "file_path": "/nas/Movies/Some.Movie.2022.1080p.mkv",
+      "directory": "Movies",
+      "media_type": "MOVIE",
+      "is_personal": false,
+      "parsed_title": "Some Movie",
+      "parsed_year": 2022,
+      "parsed_season": null,
+      "parsed_episode": null,
+      "suggestion": { "title_id": 100, "title_name": "Some Movie (2022)", "score": 0.92 }
+    },
+    {
+      "id": 2,
+      "file_name": "Show.S02E05.mkv",
+      "file_path": "/nas/TV/Show/Show.S02E05.mkv",
+      "directory": "TV/Show",
+      "media_type": "TV",
+      "is_personal": false,
+      "parsed_title": "Show",
+      "parsed_year": null,
+      "parsed_season": 2,
+      "parsed_episode": 5,
+      "suggestion": null
+    }
+  ]
+}

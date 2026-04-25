@@ -14,7 +14,7 @@
       <table mat-table [dataSource]="rows()" class="backlog-table">
 
         <ng-container matColumnDef="poster">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Poster</span></th>
           <td mat-cell *matCellDef="let row">
             @if (row.poster_url) {
               <img [src]="row.poster_url" [alt]="row.title_name" class="row-poster" />
@@ -51,7 +51,7 @@
         </ng-container>
 
         <ng-container matColumnDef="request">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Request</span></th>
           <td mat-cell *matCellDef="let row">
             <button mat-icon-button [class.wished]="row.is_wished"
                     (click)="toggleWish(row)"

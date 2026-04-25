@@ -266,11 +266,18 @@ h3 { margin: 1.5rem 0 0.5rem; color: var(--mat-sys-on-surface); }
 }
 
 .transcode-status {
+  // Solid pill so the on-NAS / ready label clears AA in both modes.
+  display: inline-flex;
+  align-items: center;
   font-size: 0.8125rem;
-  color: var(--mat-sys-primary);
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: #1565c0;
+  color: white;
   flex-shrink: 0;
 
-  &.ready { color: #4caf50; }
+  &.ready { background: #2e7d32; }
 }
 
 .remove-btn {
