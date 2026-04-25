@@ -33,9 +33,9 @@
 
 .hint {
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .success-icon { font-size: 48px; width: 48px; height: 48px; color: #4caf50; }
-.error-icon { font-size: 48px; width: 48px; height: 48px; color: #f44336; }
+.error-icon { font-size: 48px; width: 48px; height: 48px; color: var(--mat-sys-error); }
 .info-icon { font-size: 48px; width: 48px; height: 48px; color: #2196f3; }

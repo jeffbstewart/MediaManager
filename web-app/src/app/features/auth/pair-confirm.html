@@ -1,4 +1,4 @@
-<div class="pair-page">
+<main class="pair-page">
   <mat-card class="pair-card">
     @switch (state()) {
       @case ('loading') {
@@ -9,7 +9,7 @@
 
       @case ('confirm') {
         <mat-card-header>
-          <mat-card-title>Link Device</mat-card-title>
+          <mat-card-title role="heading" aria-level="1">Link Device</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <p>Link this device to your account?</p>
@@ -49,4 +49,4 @@
       }
     }
   </mat-card>
-</div>
+</main>

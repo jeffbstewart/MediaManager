@@ -82,7 +82,10 @@ video {
 
 .loading-text {
   margin-top: 1rem;
-  opacity: 0.7;
+  // Always-light text — the .overlay parent forces a near-opaque
+  // dark background so we don't need a token-based color here, and
+  // axe sees an undimmed value (opacity 0.7 fails AA on the dark bg).
+  color: white;
 }
 
 // Title on pause

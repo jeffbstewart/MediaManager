@@ -216,4 +216,48 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       body: '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0\n#EXT-X-ENDLIST\n',
     })
   );
+
+  // --- Standalone surfaces (Tier 7) ---
+  // /play/:id reads chapter JSON, thumbnail VTT, subs VTT, progress,
+  // and next-episode. Return minimal/empty shapes so the player
+  // settles into its idle state and renders the controls.
+  await page.route('**/stream/*/chapters.json', (r: Route) =>
+    r.fulfill({ json: { chapters: [] } })
+  );
+  await page.route('**/stream/*/thumbs.vtt', (r: Route) =>
+    r.fulfill({ status: 200, headers: { 'Content-Type': 'text/vtt' }, body: 'WEBVTT\n\n' })
+  );
+  await page.route('**/stream/*/subs.vtt', (r: Route) =>
+    r.fulfill({ status: 404 })
+  );
+  await page.route('**/stream/*/next-episode', (r: Route) =>
+    r.fulfill({ status: 404 })
+  );
+  await page.route('**/playback-progress/*', (r: Route) =>
+    r.fulfill({ json: { position: 0, duration: 0 } })
+  );
+  // Video binary itself — return empty 200 so <video> doesn't 404.
+  await page.route('**/stream/*', (r: Route) =>
+    r.fulfill({ status: 200, headers: { 'Content-Type': 'video/mp4' }, body: '' })
+  );
+
+  // /reader/:id needs reading progress + a HEAD probe on /ebook/:id
+  // to discover EPUB-vs-PDF. Return EPUB content-type so the page
+  // mounts the EPUB branch (we don't care if epub.js can't render
+  // the empty body — the page chrome is what axe is auditing).
+  await page.route('**/api/v2/reading-progress/*', (r: Route) =>
+    r.fulfill({ json: { media_item_id: 0, cfi: null, percent: 0, updated_at: null } })
+  );
+  await page.route('**/ebook/*', (r: Route) =>
+    r.fulfill({
+      status: 200,
+      headers: { 'Content-Type': 'application/epub+zip' },
+      body: '',
+    })
+  );
+
+  // /pair?code=X queries pair info.
+  await page.route('**/api/v2/pair/info*', (r: Route) =>
+    r.fulfill({ json: { status: 'pending', display_name: 'iOS App' } })
+  );
 }
