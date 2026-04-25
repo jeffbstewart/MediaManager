@@ -321,4 +321,39 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/admin/unmatched-audio/groups', (r: Route) =>
     r.fulfill({ json: loadFixture('admin/unmatched-audio.json') })
   );
+
+  // --- Admin (Tier C: heavy-form pages) ---
+  await page.route('**/api/v2/admin/add-item/quota', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/add-item-quota.json') })
+  );
+  await page.route('**/api/v2/admin/add-item/recent*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/add-item-recent.json') })
+  );
+  await page.route('**/api/v2/admin/add-item/search-tmdb*', (r: Route) =>
+    r.fulfill({ json: { results: [] } })
+  );
+
+  await page.route('**/api/v2/admin/expand', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/expand.json') })
+  );
+
+  // /api/v2/admin/media-item/:id (the edit page) — return a populated
+  // detail so the form fields are bound to real values.
+  await page.route('**/api/v2/admin/media-item/*', (r: Route) => {
+    const url = new URL(r.request().url());
+    // Subpaths like .../seasons / .../purchase / .../media-type need
+    // a 200 with empty/no-op shape — they're not what we audit.
+    if (/\/media-item\/\d+\/(seasons|purchase|media-type|link-amazon)/.test(url.pathname)) {
+      return r.fulfill({ json: { ok: true } });
+    }
+    return r.fulfill({ json: loadFixture('admin/media-item-detail.json') });
+  });
+
+  await page.route('**/api/v2/admin/amazon-orders*', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/amazon-orders.json') })
+  );
+
+  await page.route('**/api/v2/admin/settings', (r: Route) =>
+    r.fulfill({ json: loadFixture('admin/settings.json') })
+  );
 }

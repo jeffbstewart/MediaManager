@@ -51,6 +51,7 @@ html {
   color: var(--mat-sys-on-surface) !important;
 }
 
+
 // Material's menu.mjs applies a loose global rule
 //   mat-icon-no-color { color: var(--mat-menu-item-icon-color,
 //                                  var(--mat-sys-on-surface-variant)) }
@@ -62,6 +63,16 @@ html {
 // assumes ("no color" should mean "use the ambient one").
 mat-icon.mat-icon-no-color {
   color: inherit !important;
+}
+
+// mat-tab labels: Material's defaults route through
+// `--mat-tab-{active,inactive}-label-text-color` whose fallback is
+// `--mat-sys-on-surface`. The spans render with this token but axe
+// has flagged them as low-contrast in some build/cache states; pin to
+// on-surface explicitly to remove ambiguity.
+.mat-mdc-tab .mdc-tab__text-label,
+.mat-mdc-tab.mdc-tab--active .mdc-tab__text-label {
+  color: var(--mat-sys-on-surface) !important;
 }
 
 // Accessible-name utility: render off-screen but readable by screen

@@ -78,7 +78,7 @@
         </ng-container>
 
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
           <td mat-cell *matCellDef="let o">
             @if (o.linked_media_item_id) {
               <button mat-stroked-button class="small-btn" (click)="unlink(o)">Unlink</button>

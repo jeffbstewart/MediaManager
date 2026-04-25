@@ -1,0 +1,17 @@
+{
+  "settings": {
+    "tmdb_api_key": "********",
+    "keepa_api_key": "",
+    "nas_root": "/nas/media",
+    "transcoder_enabled": "true",
+    "max_parallel_transcodes": "2",
+    "go2rtc_path": "/usr/local/bin/go2rtc",
+    "roku_api_key": "***-***-***-***",
+    "keepa_tokens_per_minute": "20"
+  },
+  "buddy_keys": [
+    { "id": 1, "name": "Buddy-Alpha", "created_at": "2025-12-01T10:00:00Z" },
+    { "id": 2, "name": "Buddy-Beta", "created_at": "2026-01-15T14:00:00Z" }
+  ],
+  "is_docker": true
+}

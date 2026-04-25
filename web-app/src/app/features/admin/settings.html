@@ -27,21 +27,23 @@
           <label class="field-label">NAS Root Path</label>
           <input class="field-input" type="text" [value]="settings()['nas_root_path']"
                  (input)="updateSetting('nas_root_path', $event)"
-                 [readOnly]="isDocker()" placeholder="/path/to/media/root" />
+                 [readOnly]="isDocker()" placeholder="/path/to/media/root"
+                 aria-label="NAS Root Path" />
           @if (isDocker()) { <span class="helper-text">Locked to Docker volume mount</span> }
         </div>
         <div class="field-group">
           <label class="field-label">FFmpeg Path</label>
           <input class="field-input" type="text" [value]="settings()['ffmpeg_path']"
                  (input)="updateSetting('ffmpeg_path', $event)"
-                 [readOnly]="isDocker()" />
+                 [readOnly]="isDocker()" aria-label="FFmpeg Path" />
           @if (isDocker()) { <span class="helper-text">Locked to container path</span> }
         </div>
         <div class="field-group">
           <label class="field-label">Roku Base URL</label>
           <input class="field-input" type="text" [value]="settings()['roku_base_url']"
                  (input)="updateSetting('roku_base_url', $event)"
-                 placeholder="https://myserver.example.com:8080" />
+                 placeholder="https://myserver.example.com:8080"
+                 aria-label="Roku Base URL" />
           <span class="helper-text">Base URL for Roku feed. Leave blank to auto-detect.</span>
         </div>
 
@@ -56,7 +58,8 @@
           <label class="field-label">Personal Video Directory</label>
           <input class="field-input" type="text" [value]="settings()['personal_video_nas_dir']"
                  (input)="updateSetting('personal_video_nas_dir', $event)"
-                 placeholder="e.g., Family Videos" />
+                 placeholder="e.g., Family Videos"
+                 aria-label="Personal Video Directory" />
           <span class="helper-text">Directory name inside the NAS root (not a full path).</span>
         </div>
 
@@ -66,7 +69,8 @@
           <label class="field-label">EBook Directory</label>
           <input class="field-input" type="text" [value]="settings()['books_root_path']"
                  (input)="updateSetting('books_root_path', $event)"
-                 placeholder="e.g., /cache/nas/EBOOKS" />
+                 placeholder="e.g., /cache/nas/EBOOKS"
+                 aria-label="EBook Directory" />
           <span class="helper-text">
             Absolute path (as visible inside the server container) to a directory holding
             .epub / .pdf files. Scanned hourly; empty stops future scans. EPUBs with embedded
@@ -80,7 +84,8 @@
           <label class="field-label">Music Directory</label>
           <input class="field-input" type="text" [value]="settings()['music_root_path']"
                  (input)="updateSetting('music_root_path', $event)"
-                 placeholder="e.g., /cache/nas/MUSIC" />
+                 placeholder="e.g., /cache/nas/MUSIC"
+                 aria-label="Music Directory" />
           <span class="helper-text">
             Absolute path to a directory holding .flac / .mp3 / .m4a / .ogg / .wav rips.
             Scanned hourly and immediately after a NAS scan. Tracks with MusicBrainz IDs
@@ -93,7 +98,8 @@
           <label class="field-label">Last.fm API Key (optional)</label>
           <input class="field-input" type="password" [value]="settings()['lastfm_api_key']"
                  (input)="updateSetting('lastfm_api_key', $event)"
-                 placeholder="Paste your Last.fm API key" />
+                 placeholder="Paste your Last.fm API key"
+                 aria-label="Last.fm API Key" />
           <span class="helper-text">
             Enables Start Radio on album pages and recommendation surfaces.
             Without a key these features stay hidden; once cached, similarity
@@ -121,7 +127,7 @@
               <td mat-cell *matCellDef="let key">{{ tz.formatDateTime(key.created_at) }}</td>
             </ng-container>
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef></th>
+              <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
               <td mat-cell *matCellDef="let key">
                 <button mat-icon-button class="delete-btn" (click)="deleteKey(key)" title="Delete key" aria-label="Delete buddy key">
                   <mat-icon>delete</mat-icon>
@@ -137,7 +143,8 @@
         <div class="field-group">
           <label class="field-label">Lease Duration (minutes)</label>
           <input class="field-input" type="number" [value]="settings()['buddy_lease_duration_minutes']"
-                 (input)="updateSetting('buddy_lease_duration_minutes', $event)" />
+                 (input)="updateSetting('buddy_lease_duration_minutes', $event)"
+                 aria-label="Lease Duration (minutes)" />
           <span class="helper-text">How long a buddy can hold a transcode job before it expires.</span>
         </div>
 
@@ -152,12 +159,14 @@
         <div class="field-group">
           <label class="field-label">Keepa API Key</label>
           <input class="field-input" type="password" [value]="settings()['keepa_api_key']"
-                 (input)="updateSetting('keepa_api_key', $event)" placeholder="Paste your Keepa API key" />
+                 (input)="updateSetting('keepa_api_key', $event)" placeholder="Paste your Keepa API key"
+                 aria-label="Keepa API Key" />
         </div>
         <div class="field-group">
           <label class="field-label">Tokens per minute</label>
           <input class="field-input" type="number" [value]="settings()['keepa_tokens_per_minute']"
-                 (input)="updateSetting('keepa_tokens_per_minute', $event)" min="1" max="1000" />
+                 (input)="updateSetting('keepa_tokens_per_minute', $event)" min="1" max="1000"
+                 aria-label="Tokens per minute" />
           <span class="helper-text">Base: 20/min. Higher tiers: 250, 1000, 4000.</span>
         </div>
 
@@ -167,48 +176,56 @@
         <div class="field-group">
           <label class="field-label">Privacy Policy URL</label>
           <input class="field-input" type="url" [value]="settings()['privacy_policy_url']"
-                 (input)="updateSetting('privacy_policy_url', $event)" placeholder="https://example.com/privacy" />
+                 (input)="updateSetting('privacy_policy_url', $event)" placeholder="https://example.com/privacy"
+                 aria-label="Privacy Policy URL" />
         </div>
         <div class="field-group">
           <label class="field-label">Privacy Policy Version</label>
           <input class="field-input" type="number" [value]="settings()['privacy_policy_version']"
-                 (input)="updateSetting('privacy_policy_version', $event)" min="0" />
+                 (input)="updateSetting('privacy_policy_version', $event)" min="0"
+                 aria-label="Privacy Policy Version" />
         </div>
 
         <span class="subsection-label">iOS Terms of Use</span>
         <div class="field-group">
           <label class="field-label">URL</label>
           <input class="field-input" type="url" [value]="settings()['ios_terms_of_use_url']"
-                 (input)="updateSetting('ios_terms_of_use_url', $event)" />
+                 (input)="updateSetting('ios_terms_of_use_url', $event)"
+                 aria-label="iOS Terms of Use URL" />
         </div>
         <div class="field-group">
           <label class="field-label">Version</label>
           <input class="field-input" type="number" [value]="settings()['ios_terms_of_use_version']"
-                 (input)="updateSetting('ios_terms_of_use_version', $event)" min="0" />
+                 (input)="updateSetting('ios_terms_of_use_version', $event)" min="0"
+                 aria-label="iOS Terms of Use Version" />
         </div>
 
         <span class="subsection-label">Web Terms of Use</span>
         <div class="field-group">
           <label class="field-label">URL</label>
           <input class="field-input" type="url" [value]="settings()['web_terms_of_use_url']"
-                 (input)="updateSetting('web_terms_of_use_url', $event)" />
+                 (input)="updateSetting('web_terms_of_use_url', $event)"
+                 aria-label="Web Terms of Use URL" />
         </div>
         <div class="field-group">
           <label class="field-label">Version</label>
           <input class="field-input" type="number" [value]="settings()['web_terms_of_use_version']"
-                 (input)="updateSetting('web_terms_of_use_version', $event)" min="0" />
+                 (input)="updateSetting('web_terms_of_use_version', $event)" min="0"
+                 aria-label="Web Terms of Use Version" />
         </div>
 
         <span class="subsection-label">Android TV Terms of Use</span>
         <div class="field-group">
           <label class="field-label">URL</label>
           <input class="field-input" type="url" [value]="settings()['android_tv_terms_of_use_url']"
-                 (input)="updateSetting('android_tv_terms_of_use_url', $event)" />
+                 (input)="updateSetting('android_tv_terms_of_use_url', $event)"
+                 aria-label="Android TV Terms of Use URL" />
         </div>
         <div class="field-group">
           <label class="field-label">Version</label>
           <input class="field-input" type="number" [value]="settings()['android_tv_terms_of_use_version']"
-                 (input)="updateSetting('android_tv_terms_of_use_version', $event)" min="0" />
+                 (input)="updateSetting('android_tv_terms_of_use_version', $event)" min="0"
+                 aria-label="Android TV Terms of Use Version" />
         </div>
 
         <!-- Passkey Authentication -->
@@ -222,21 +239,24 @@
           <label class="field-label">Relying Party ID (domain)</label>
           <input class="field-input" type="text" [value]="settings()['webauthn_rp_id']"
                  (input)="updateSetting('webauthn_rp_id', $event)"
-                 placeholder="e.g., mm.example.com (or localhost for dev)" />
+                 placeholder="e.g., mm.example.com (or localhost for dev)"
+                 aria-label="Relying Party ID (domain)" />
           <span class="helper-text">The domain users type in their browser. No protocol, no port. Example: <code>mm.example.com</code></span>
         </div>
         <div class="field-group">
           <label class="field-label">Relying Party Origin</label>
           <input class="field-input" type="text" [value]="settings()['webauthn_rp_origin']"
                  (input)="updateSetting('webauthn_rp_origin', $event)"
-                 placeholder="e.g., https://mm.example.com:8443" />
+                 placeholder="e.g., https://mm.example.com:8443"
+                 aria-label="Relying Party Origin" />
           <span class="helper-text">Full origin including protocol and port if non-standard. Example: <code>https://mm.example.com:8443</code>. Leave blank to default to <code>https://&lt;RP ID&gt;</code> (port 443).</span>
         </div>
         <div class="field-group">
           <label class="field-label">Display Name</label>
           <input class="field-input" type="text" [value]="settings()['webauthn_rp_name']"
                  (input)="updateSetting('webauthn_rp_name', $event)"
-                 placeholder="Media Manager" />
+                 placeholder="Media Manager"
+                 aria-label="Display Name" />
           <span class="helper-text">Shown in the browser's passkey dialog. Defaults to "Media Manager" if blank.</span>
         </div>
 
@@ -256,7 +276,8 @@
         @if (keyGenerated()) {
           <p class="key-warning">Copy this key now. It will not be shown again.</p>
           <div class="key-display">
-            <input class="field-input mono" type="text" [value]="generatedKey()" readonly />
+            <input class="field-input mono" type="text" [value]="generatedKey()" readonly
+                   aria-label="Generated API key" />
             <button mat-stroked-button (click)="copyKey()"><mat-icon>content_copy</mat-icon> Copy</button>
           </div>
           <span class="helper-text">Set this as the api_key value in your buddy's configuration file.</span>
@@ -268,7 +289,8 @@
             <label class="field-label">Key Name</label>
             <input class="field-input" type="text" maxlength="100"
                    [value]="keyName()" (input)="updateKeyName($event)"
-                   placeholder="e.g., Office GPU, Living Room" />
+                   placeholder="e.g., Office GPU, Living Room"
+                   aria-label="Key Name" />
           </div>
           <span class="helper-text">A new API key will be generated. You will see it once.</span>
           <div class="dialog-footer">

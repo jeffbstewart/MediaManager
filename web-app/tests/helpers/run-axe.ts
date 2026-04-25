@@ -27,8 +27,23 @@ const VIEWPORTS = [
  * from "light / desktop".
  */
 export async function auditA11y(page: Page, opts: AxeRunOptions = {}): Promise<void> {
+  // Capture initial URL so we can reload to it on each scheme switch
+  // (see comment below). page.url() returns the post-navigation URL,
+  // so this is correct even when the test goto'd a query-string-laden
+  // route.
+  const initialUrl = page.url();
+  // Capture the spec's "is this page ready?" predicate by stashing
+  // the body innerHTML hash; reload + waitForLoadState should restore
+  // it. The reload step itself is in the per-scheme loop below.
   for (const scheme of SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
+    // Reload after emulateMedia so CSS that depends on
+    // `prefers-color-scheme` (incl. `light-dark()` resolved through
+    // CSS custom properties) re-evaluates against the new scheme.
+    // Without this, Material's mat-tab labels (and a few other
+    // components that rescope color-scheme internally) cache the
+    // initial-load LIGHT branch and axe sees light text on a dark bg.
+    await page.goto(initialUrl);
     for (const vp of VIEWPORTS) {
       await page.setViewportSize(vp.size);
       // Give Material a frame to react to the viewport / scheme change.
