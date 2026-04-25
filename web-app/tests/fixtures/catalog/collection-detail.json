@@ -1,11 +1,46 @@
 {
   "id": 1,
-  "name": "The Dark Knight Trilogy",
-  "owned_count": 3,
-  "total_parts": 3,
+  "name": "The Matrix Collection",
+  "owned_count": 2,
+  "total_parts": 4,
   "parts": [
-    { "title_id": 500, "title_name": "Batman Begins", "poster_path": "/posters/w185/500", "release_year": 2005, "owned": true },
-    { "title_id": 501, "title_name": "The Dark Knight", "poster_path": "/posters/w185/501", "release_year": 2008, "owned": true },
-    { "title_id": 502, "title_name": "The Dark Knight Rises", "poster_path": "/posters/w185/502", "release_year": 2012, "owned": true }
+    {
+      "title_id": 500,
+      "title_name": "The Matrix",
+      "poster_url": "/posters/w185/500",
+      "release_year": 1999,
+      "owned": true,
+      "playable": true,
+      "progress_fraction": null
+    },
+    {
+      "title_id": 501,
+      "title_name": "The Matrix Reloaded",
+      "poster_url": "/posters/w185/501",
+      "release_year": 2003,
+      "owned": true,
+      "playable": false,
+      "progress_fraction": 0.42
+    },
+    {
+      "tmdb_movie_id": 605,
+      "title_name": "The Matrix Revolutions",
+      "poster_url": null,
+      "release_year": 2003,
+      "owned": false,
+      "playable": false,
+      "progress_fraction": null,
+      "wished": false
+    },
+    {
+      "tmdb_movie_id": 624860,
+      "title_name": "The Matrix Resurrections",
+      "poster_url": null,
+      "release_year": 2021,
+      "owned": false,
+      "playable": false,
+      "progress_fraction": null,
+      "wished": true
+    }
   ]
 }
