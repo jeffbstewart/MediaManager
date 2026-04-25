@@ -63,13 +63,15 @@
 
   .byline {
     margin: 0.25rem 0 0.75rem;
-    opacity: 0.7;
+    color: var(--mat-sys-on-surface-variant);
     font-size: 0.875rem;
   }
 
+  // Solid green pill (matches the playlists list-page version) so
+  // white text on dark green passes AA in both modes.
   .owner-pill {
-    background: rgba(76, 175, 80, 0.25);
-    color: #81c784;
+    background: #1B5E20;
+    color: #ffffff;
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.7rem;

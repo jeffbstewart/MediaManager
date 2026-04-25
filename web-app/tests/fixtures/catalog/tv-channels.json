@@ -1,0 +1,8 @@
+{
+  "channels": [
+    { "id": 1, "guide_number": "5.1", "guide_name": "WTTW HD", "network_affiliation": "PBS", "reception_quality": 5 },
+    { "id": 2, "guide_number": "7.1", "guide_name": "WLS HD", "network_affiliation": "ABC", "reception_quality": 5 },
+    { "id": 3, "guide_number": "9.1", "guide_name": "WGN HD", "network_affiliation": "Independent", "reception_quality": 4 }
+  ],
+  "total": 3
+}

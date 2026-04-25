@@ -1,0 +1,37 @@
+{
+  "key": "recently-played",
+  "name": "Recently Played",
+  "description": "Songs you've played in the last 7 days.",
+  "is_smart": true,
+  "track_count": 2,
+  "hero_poster_url": "/posters/w185/301",
+  "total_duration_seconds": 1154,
+  "tracks": [
+    {
+      "playlist_track_id": 0,
+      "position": 1,
+      "track_id": 4001,
+      "track_name": "So What",
+      "duration_seconds": 565,
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "artist_name": "Miles Davis",
+      "playable": true,
+      "progress_seconds": null
+    },
+    {
+      "playlist_track_id": 0,
+      "position": 2,
+      "track_id": 4002,
+      "track_name": "Freddie Freeloader",
+      "duration_seconds": 589,
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "artist_name": "Miles Davis",
+      "playable": true,
+      "progress_seconds": null
+    }
+  ]
+}

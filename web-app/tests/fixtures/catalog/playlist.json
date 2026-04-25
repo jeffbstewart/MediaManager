@@ -1,0 +1,44 @@
+{
+  "id": 1,
+  "name": "Road Trip",
+  "description": "For long drives",
+  "owner_user_id": 1,
+  "owner_username": "testuser",
+  "is_owner": true,
+  "is_private": false,
+  "hero_track_id": 4001,
+  "hero_poster_url": "/posters/w185/301",
+  "track_count": 2,
+  "total_duration_seconds": 1154,
+  "created_at": "2026-04-10T12:00:00Z",
+  "updated_at": "2026-04-20T10:00:00Z",
+  "resume": null,
+  "tracks": [
+    {
+      "playlist_track_id": 100,
+      "position": 1,
+      "track_id": 4001,
+      "track_name": "So What",
+      "duration_seconds": 565,
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "artist_name": "Miles Davis",
+      "playable": true,
+      "progress_seconds": null
+    },
+    {
+      "playlist_track_id": 101,
+      "position": 2,
+      "track_id": 4002,
+      "track_name": "Freddie Freeloader",
+      "duration_seconds": 589,
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "artist_name": "Miles Davis",
+      "playable": true,
+      "progress_seconds": null
+    }
+  ]
+}

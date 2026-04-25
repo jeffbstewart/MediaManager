@@ -13,7 +13,7 @@
 .error-message, .empty-message {
   text-align: center;
   padding: 2rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .error-message {
@@ -23,7 +23,7 @@
 .status-label {
   display: block;
   font-size: 0.8125rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.75rem;
 }
 
@@ -38,21 +38,25 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: var(--mat-sys-surface-container);
+  // Outline-only so the text reads against the page surface (which
+  // axe reliably resolves) — avoids the surface-container token
+  // resolution flakes axe hits in dark mode.
+  background: transparent;
   color: var(--mat-sys-on-surface);
+  border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
 
   &:hover {
-    background: var(--mat-sys-surface-container-high);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   }
 }
 
 .channel-number {
   font-size: 1.25rem;
   font-weight: 700;
-  opacity: 0.6;
+  color: var(--mat-sys-on-surface-variant);
   min-width: 2.5rem;
   text-align: right;
   flex-shrink: 0;
@@ -74,5 +78,5 @@
 
 .channel-affiliation {
   font-size: 0.75rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }

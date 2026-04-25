@@ -33,6 +33,13 @@ export async function auditA11y(page: Page, opts: AxeRunOptions = {}): Promise<v
       await page.setViewportSize(vp.size);
       // Give Material a frame to react to the viewport / scheme change.
       await page.waitForLoadState('networkidle');
+      // Wait two animation frames so all CSS-custom-property
+      // dependent styles are recomputed before axe samples colors.
+      // Without this, axe occasionally reads dark-mode fg on a
+      // light-mode bg (or vice versa) mid-transition.
+      await page.evaluate(() => new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      ));
 
       let builder = new AxeBuilder({ page });
       if (opts.include) builder = builder.include(opts.include as string);

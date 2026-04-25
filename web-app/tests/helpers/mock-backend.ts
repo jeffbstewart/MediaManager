@@ -186,4 +186,34 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/profile/hidden-titles', (r: Route) =>
     r.fulfill({ json: loadFixture('profile/hidden-titles.json') })
   );
+
+  // --- Media + Live (Tier 6) ---
+  // Playlist endpoints registered after `/api/v2/playlists` and
+  // `/api/v2/playlists/mine` (Tier 3) so trailing-segment paths win
+  // via Playwright's LIFO route matching.
+  await page.route('**/api/v2/playlists/smart/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/smart-playlist.json') })
+  );
+  await page.route('**/api/v2/playlists/*', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/playlist.json') })
+  );
+
+  await page.route('**/api/v2/catalog/cameras', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/cameras.json') })
+  );
+  await page.route('**/api/v2/catalog/live-tv/channels', (r: Route) =>
+    r.fulfill({ json: loadFixture('catalog/tv-channels.json') })
+  );
+  // Live-TV-player launches an HLS stream against
+  //   /api/v2/live-tv/stream/:channelId/playlist.m3u8
+  // The page renders before the stream is needed; if HLS.js fires
+  // a request, return a minimal valid manifest so it doesn't error
+  // loudly. The page's a11y is what we care about, not the stream.
+  await page.route('**/api/v2/live-tv/stream/**', (r: Route) =>
+    r.fulfill({
+      status: 200,
+      headers: { 'Content-Type': 'application/vnd.apple.mpegurl' },
+      body: '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0\n#EXT-X-ENDLIST\n',
+    })
+  );
 }

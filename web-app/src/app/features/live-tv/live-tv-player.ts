@@ -15,11 +15,12 @@ import Hls from 'hls.js';
     <div class="player-container" #containerEl tabindex="0"
          (keydown.escape)="goBack()" (keydown.f)="toggleFullscreen()">
       <div class="top-bar" [class.visible]="showControls()">
-        <button class="ctrl-btn" (click)="goBack()">
+        <button class="ctrl-btn" (click)="goBack()" aria-label="Back to channel guide">
           <mat-icon>arrow_back</mat-icon>
         </button>
         <span class="channel-label">{{ channelName }}</span>
-        <button class="ctrl-btn" (click)="toggleFullscreen()">
+        <button class="ctrl-btn" (click)="toggleFullscreen()"
+                [attr.aria-label]="isFullscreen() ? 'Exit fullscreen' : 'Enter fullscreen'">
           <mat-icon>{{ isFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
         </button>
       </div>

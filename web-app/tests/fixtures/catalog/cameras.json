@@ -1,0 +1,8 @@
+{
+  "cameras": [
+    { "id": 1, "name": "Front Door" },
+    { "id": 2, "name": "Driveway" },
+    { "id": 3, "name": "Back Yard" }
+  ],
+  "total": 3
+}

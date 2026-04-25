@@ -94,6 +94,7 @@
       @if (p.is_owner) {
         <div class="select-all-row">
           <mat-checkbox
+            aria-label="Select all tracks"
             [checked]="selected().size === p.tracks.length && p.tracks.length > 0"
             [indeterminate]="selected().size > 0 && selected().size < p.tracks.length"
             (change)="toggleSelectAll()">
@@ -111,7 +112,7 @@
                             [checked]="isSelected(t.playlist_track_id)"
                             (change)="toggleSelect(t.playlist_track_id)"
                             (click)="$event.stopPropagation()"
-                            [attr.aria-label]="'Select ' + t.track_name"></mat-checkbox>
+                            [aria-label]="'Select ' + t.track_name"></mat-checkbox>
             }
             <span class="position">{{ t.position + 1 }}</span>
             @if (t.poster_url) {

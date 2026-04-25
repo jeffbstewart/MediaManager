@@ -13,11 +13,11 @@
 .error-message, .empty-message {
   text-align: center;
   padding: 2rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .error-message {
-  color: var(--mat-sys-error, #f44336);
+  color: var(--mat-sys-error);
 }
 
 .header-row {
@@ -34,16 +34,15 @@
 
 .mode-toggle {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--mat-sys-outline);
+  color: var(--mat-sys-on-surface);
   padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
   }
 }
 
@@ -57,12 +56,12 @@
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
   cursor: pointer;
   transition: background 0.2s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
   }
 }
 
@@ -80,7 +79,9 @@
   left: 0;
   right: 0;
   padding: 4px 8px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  // Always-dark gradient overlay so white label reads regardless
+  // of the snapshot beneath.
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
   color: white;
   font-size: 0.8125rem;
   font-weight: 600;

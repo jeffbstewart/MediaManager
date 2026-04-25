@@ -32,6 +32,7 @@ export async function stubImages(page: Page): Promise<void> {
     '**/local-images/**',
     '**/ownership-photos/**',
     '**/public/album-art/**',
+    '**/cam/**',
   ];
   for (const g of globs) {
     await page.route(g, handler);
