@@ -14,10 +14,16 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts$/,
+  // Each test file gets its own worker process. Windows had a
+  // cross-file loader corruption: when `workers: 1` made one worker
+  // load multiple spec files sequentially, the second file onwards
+  // tripped "test.describe called outside suite". Giving each file
+  // its own worker via `fullyParallel: true` + generous `workers`
+  // sidesteps the shared-state bug.
   fullyParallel: true,
+  workers: 8,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
 
   use: {
@@ -33,12 +39,7 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm start',
-    url: 'http://localhost:4200',
-    reuseExistingServer: !process.env.CI,
-    // ng serve on a cold machine can take 30-60 s to produce the first
-    // bundle. Bump the default timeout so CI doesn't fail on slow builds.
-    timeout: 180_000,
-  },
+  // Start ng serve manually before running tests; Playwright's
+  // webServer auto-spawn triggered an intermittent test-loader race
+  // on Windows. `npm run test:a11y` handles this (starts + waits).
 });

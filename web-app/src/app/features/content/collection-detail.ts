@@ -78,9 +78,9 @@ import { AppRoutes } from '../../core/routes';
   styles: `
     .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .loading-container { display: flex; justify-content: center; padding: 4rem; }
-    .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
+    .error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
     .collection-title { margin: 0 0 0.25rem; }
-    .status-label { display: block; font-size: 0.8125rem; opacity: 0.5; margin-bottom: 0.75rem; }
+    .status-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
     .poster-grid {
       display: grid;
@@ -94,13 +94,14 @@ import { AppRoutes } from '../../core/routes';
     .poster-card.unowned { opacity: 0.4; cursor: default; }
     .poster-wrapper {
       position: relative; width: 100%; aspect-ratio: 2/3;
-      border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05);
+      border-radius: 8px; overflow: hidden;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
     }
     .poster-img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .poster-placeholder { width: 100%; height: 100%; }
     .not-owned-label {
       display: flex; align-items: center; justify-content: center;
-      font-size: 0.75rem; opacity: 0.5;
+      font-size: 0.75rem; color: var(--mat-sys-on-surface-variant);
     }
     .playable-badge {
       position: absolute; bottom: 6px; right: 6px;
@@ -117,18 +118,18 @@ import { AppRoutes } from '../../core/routes';
       position: absolute; bottom: 0; left: 0; width: 100%; height: 3px;
       background: rgba(0,0,0,0.5);
     }
-    .progress-fill { height: 100%; background: var(--mat-sys-primary, #bb86fc); }
+    .progress-fill { height: 100%; background: var(--mat-sys-primary); }
     .poster-title {
       font-size: 0.75rem; margin-top: 0.25rem;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .poster-meta { font-size: 0.6875rem; opacity: 0.5; }
+    .poster-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
     .wish-heart {
       position: absolute; top: 4px; right: 4px;
       background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
       width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; color: rgba(255,255,255,0.7); padding: 0;
-      &.wished { color: #f44336; }
+      cursor: pointer; color: white; padding: 0;
+      &.wished { color: var(--mat-sys-error); }
       mat-icon { font-size: 18px; width: 18px; height: 18px; }
     }
   `,

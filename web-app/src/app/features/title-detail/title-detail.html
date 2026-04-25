@@ -242,7 +242,7 @@
     <!-- Family members (personal only) -->
     @if (isPersonal && t.family_members.length > 0) {
       <section class="section">
-        <h3>People in this Video</h3>
+        <h2>People in this Video</h2>
         <div class="family-row">
           @for (member of t.family_members; track member.id) {
             <div class="family-card">
@@ -257,7 +257,7 @@
     <!-- Seasons (TV only) -->
     @if (isTv && t.seasons.length > 0) {
       <section class="section">
-        <h3>Seasons</h3>
+        <h2>Seasons</h2>
         <div class="season-chips">
           @for (s of t.seasons; track s.season_number) {
             <span class="season-chip" [attr.data-status]="s.acquisition_status">
@@ -271,7 +271,7 @@
     <!-- Episodes (TV only) -->
     @if (isTv && t.episodes.length > 0) {
       <section class="section">
-        <h3>Episodes</h3>
+        <h2>Episodes</h2>
         <div class="season-selector">
           @for (s of availableSeasons; track s) {
             <button mat-stroked-button [class.active]="selectedSeason() === s"
@@ -291,7 +291,8 @@
               }
               @if (ep.playable && ep.transcode_id) {
                 <a [routerLink]="routes.play(ep.transcode_id)" [queryParams]="{ title: t.title_name }"
-                   class="ep-play-link">
+                   class="ep-play-link"
+                   [attr.aria-label]="'Play ' + (ep.name ?? ('Episode ' + ep.episode_number))">
                   <mat-icon class="ep-play">play_circle</mat-icon>
                 </a>
               }
@@ -306,10 +307,10 @@
          Play buttons are disabled placeholders until M5 wires audio playback. -->
     @if (isAlbum && albumDiscs.length > 0) {
       <section class="section">
-        <h3>Tracks</h3>
+        <h2>Tracks</h2>
         @for (disc of albumDiscs; track disc.discNumber) {
           @if (albumDiscs.length > 1) {
-            <h4 class="disc-header">Disc {{ disc.discNumber }}</h4>
+            <h3 class="disc-header">Disc {{ disc.discNumber }}</h3>
           }
           <div class="track-list">
             @for (track of disc.tracks; track track.track_id) {
@@ -404,7 +405,7 @@
           <mat-icon class="expand-chevron" [class.expanded]="personnelExpanded()">
             chevron_right
           </mat-icon>
-          <h3>Personnel</h3>
+          <h2>Personnel</h2>
           @if (!personnelExpanded()) {
             <span class="personnel-hint">
               {{ (t.personnel ?? []).length }} credits documented by MusicBrainz
@@ -415,7 +416,7 @@
           <div class="personnel-groups">
             @for (bucket of personnelByRole; track bucket.role) {
               <div class="personnel-group">
-                <h4 class="personnel-role">{{ bucket.label }}</h4>
+                <h3 class="personnel-role">{{ bucket.label }}</h3>
                 <ul class="personnel-list">
                   @for (entry of bucket.entries; track entry.artist_id + '-' + entry.track_id + '-' + (entry.instrument ?? '')) {
                     <li class="personnel-entry">
@@ -441,7 +442,7 @@
     <!-- Readable editions (books) -->
     @if (t.readable_editions && t.readable_editions.length > 0) {
       <section class="section">
-        <h3>Read</h3>
+        <h2>Read</h2>
         @for (ed of t.readable_editions; track ed.media_item_id) {
           <div class="transcode-row">
             <span class="format-badge small">{{ ed.media_format === 'EBOOK_EPUB' ? 'EPUB' : 'PDF' }}</span>
@@ -461,7 +462,7 @@
     <!-- Transcodes / Watch -->
     @if (t.transcodes.length > 0) {
       <section class="section">
-        <h3>{{ isTv ? '' : 'Watch' }}</h3>
+        <h2>{{ isTv ? '' : 'Watch' }}</h2>
         @for (tc of t.transcodes; track tc.transcode_id) {
           @if (!isTv || !tc.season_number) {
             <div class="transcode-row">
@@ -475,7 +476,8 @@
               }
               @if (tc.playable) {
                 <a [routerLink]="routes.play(tc.transcode_id)" [queryParams]="{ title: t.title_name }"
-                   class="tc-play-link">
+                   class="tc-play-link"
+                   [attr.aria-label]="'Play ' + tc.file_name">
                   <mat-icon class="tc-play">play_circle</mat-icon>
                 </a>
               }
@@ -488,7 +490,7 @@
     <!-- Cast (non-personal) -->
     @if (!isPersonal && t.cast.length > 0) {
       <section class="section">
-        <h3>Cast</h3>
+        <h2>Cast</h2>
         <div class="cast-row">
           @for (member of t.cast; track member.id) {
             <a class="cast-card" [routerLink]="routes.actor(member.tmdb_person_id)">
@@ -510,7 +512,7 @@
     <!-- Similar titles (non-personal) -->
     @if (!isPersonal && t.similar_titles.length > 0) {
       <section class="section">
-        <h3>Similar Titles</h3>
+        <h2>Similar Titles</h2>
         <div class="similar-row">
           @for (item of t.similar_titles; track item.title_id) {
             <a class="poster-card" [routerLink]="routes.title(item.title_id)">

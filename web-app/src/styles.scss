@@ -51,6 +51,19 @@ html {
   color: var(--mat-sys-on-surface) !important;
 }
 
+// Material's menu.mjs applies a loose global rule
+//   mat-icon-no-color { color: var(--mat-menu-item-icon-color,
+//                                  var(--mat-sys-on-surface-variant)) }
+// that hits EVERY mat-icon-no-color on the page, not just menu
+// items. Axe resolves the fallback token as the effective color
+// and fails contrast, even when scoped component rules correctly
+// override with white. `color: inherit !important` makes the icon
+// take its button/parent color — which is what the design already
+// assumes ("no color" should mean "use the ambient one").
+mat-icon.mat-icon-no-color {
+  color: inherit !important;
+}
+
 body {
   color-scheme: light dark;
 

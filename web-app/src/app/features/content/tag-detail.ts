@@ -125,14 +125,14 @@ import { AppRoutes } from '../../core/routes';
   styles: `
     .content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .loading-container { display: flex; justify-content: center; padding: 4rem; }
-    .error-message { color: var(--mat-sys-error, #f44336); text-align: center; padding: 2rem; }
+    .error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
 
     .header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
     .tag-badge {
       display: inline-block; padding: 6px 16px;
       border-radius: 9999px; font-weight: 500; font-size: 1.125rem;
     }
-    .title-count { font-size: 0.8125rem; opacity: 0.5; }
+    .title-count { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); }
 
     .poster-grid {
       display: grid;
@@ -145,19 +145,20 @@ import { AppRoutes } from '../../core/routes';
     }
     .poster-wrapper {
       position: relative; width: 100%; aspect-ratio: 2/3;
-      border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.05);
+      border-radius: 8px; overflow: hidden;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
     }
     .poster-wrapper.poster-square { aspect-ratio: 1/1; }
-    .poster-placeholder { display: flex; align-items: center; justify-content: center; opacity: 0.35; }
+    .poster-placeholder { display: flex; align-items: center; justify-content: center; color: var(--mat-sys-on-surface-variant); }
     .poster-placeholder mat-icon { font-size: 3rem; width: 3rem; height: 3rem; }
     .media-type-pill {
       position: absolute; top: 6px; left: 6px;
-      background: rgba(0,0,0,0.65); color: rgba(255,255,255,0.9);
+      background: rgba(0,0,0,0.65); color: white;
       font-size: 0.625rem; padding: 2px 6px; border-radius: 4px;
       text-transform: uppercase; letter-spacing: 0.03em;
     }
     .result-media-type {
-      font-size: 0.6875rem; opacity: 0.6; text-transform: uppercase; margin: 0 0.25rem;
+      font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); text-transform: uppercase; margin: 0 0.25rem;
     }
 
     .tagged-tracks-section { margin-bottom: 1.5rem; }
@@ -165,7 +166,7 @@ import { AppRoutes } from '../../core/routes';
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 0.5rem;
     }
-    .tagged-tracks-header h2 { margin: 0; font-size: 1rem; opacity: 0.85; }
+    .tagged-tracks-header h2 { margin: 0; font-size: 1rem; }
     .tagged-tracks-list {
       list-style: none; padding: 0; margin: 0;
       display: flex; flex-direction: column; gap: 0.25rem;
@@ -176,21 +177,22 @@ import { AppRoutes } from '../../core/routes';
       align-items: center; gap: 0.75rem;
       padding: 0.4rem 0.6rem;
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.03);
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 3%, transparent);
     }
     .track-thumb {
       width: 3rem; height: 3rem; border-radius: 4px;
-      object-fit: cover; background: rgba(255, 255, 255, 0.05);
+      object-fit: cover;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
     }
-    .track-thumb-placeholder { display: flex; align-items: center; justify-content: center; opacity: 0.4; }
+    .track-thumb-placeholder { display: flex; align-items: center; justify-content: center; color: var(--mat-sys-on-surface-variant); }
     .track-text { min-width: 0; display: flex; flex-direction: column; }
     .track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .track-album {
-      font-size: 0.8125rem; opacity: 0.7; text-decoration: none; color: inherit;
+      font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); text-decoration: none;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .track-album:hover { text-decoration: underline; }
-    .track-duration { opacity: 0.7; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
+    .track-duration { color: var(--mat-sys-on-surface-variant); font-variant-numeric: tabular-nums; font-size: 0.875rem; }
     .poster-img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .poster-placeholder { width: 100%; height: 100%; }
     .playable-badge {
@@ -208,20 +210,21 @@ import { AppRoutes } from '../../core/routes';
       position: absolute; bottom: 0; left: 0; width: 100%; height: 3px;
       background: rgba(0,0,0,0.5);
     }
-    .progress-fill { height: 100%; background: var(--mat-sys-primary, #bb86fc); }
+    .progress-fill { height: 100%; background: var(--mat-sys-primary); }
     .poster-title {
       font-size: 0.75rem; margin-top: 0.25rem;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .poster-meta { font-size: 0.6875rem; opacity: 0.5; }
+    .poster-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 
     .admin-add-row { margin-bottom: 1rem; position: relative; }
     .add-input {
-      width: 100%; max-width: 400px; background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
-      color: white; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
+      width: 100%; max-width: 400px;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+      border: 1px solid var(--mat-sys-outline-variant); border-radius: 4px;
+      color: inherit; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
     }
-    .add-input:focus { border-color: var(--mat-sys-primary, #bb86fc); }
+    .add-input:focus { border-color: var(--mat-sys-primary); }
     .add-input::placeholder { color: rgba(255,255,255,0.35); }
     .search-results {
       position: absolute; z-index: 10; background: #2a2a2a; border-radius: 8px;
