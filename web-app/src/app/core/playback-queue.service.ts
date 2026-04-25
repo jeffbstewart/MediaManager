@@ -2,6 +2,36 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
+// Volume/mute persist via localStorage so playback resumes at the
+// user's last level instead of jumping to 100% on each new track.
+// Wrapped in try/catch because Safari private mode and locked-down
+// profiles throw on access; in those cases we silently fall back to
+// the in-memory defaults.
+const VOLUME_KEY = 'mm.audioVolume';
+const MUTED_KEY = 'mm.audioMuted';
+
+function loadStoredVolume(): number {
+  try {
+    const raw = localStorage.getItem(VOLUME_KEY);
+    if (raw === null) return 1.0;
+    const v = Number(raw);
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1.0;
+  } catch { return 1.0; }
+}
+
+function loadStoredMuted(): boolean {
+  try { return localStorage.getItem(MUTED_KEY) === 'true'; }
+  catch { return false; }
+}
+
+function saveStoredVolume(v: number): void {
+  try { localStorage.setItem(VOLUME_KEY, String(v)); } catch { /* ignore */ }
+}
+
+function saveStoredMuted(m: boolean): void {
+  try { localStorage.setItem(MUTED_KEY, m ? 'true' : 'false'); } catch { /* ignore */ }
+}
+
 /**
  * One row in the audio player's queue. `albumPosterUrl` is used for the
  * bottom-bar thumbnail; `albumTitleId` lets the now-playing chip link back
@@ -72,8 +102,8 @@ export class PlaybackQueueService {
   readonly playing = signal<boolean>(false);
   readonly positionSeconds = signal<number>(0);
   readonly durationSeconds = signal<number>(0);
-  readonly volume = signal<number>(1.0);
-  readonly muted = signal<boolean>(false);
+  readonly volume = signal<number>(loadStoredVolume());
+  readonly muted = signal<boolean>(loadStoredMuted());
   readonly shuffleEnabled = signal<boolean>(false);
   readonly repeatMode = signal<RepeatMode>('OFF');
 
@@ -266,8 +296,14 @@ export class PlaybackQueueService {
       if (repeat === 'ALL') {
         nextIdx = 0;
       } else {
+        // End of queue. Pause but keep `currentIndex` pointing at the
+        // last track so the bar stays visible showing the finished
+        // track. Tearing it down here would also tear it down for
+        // legitimate "Continue Listening" resumes whose saved
+        // position is close enough to the track end that playback
+        // ends within a second or two of starting. The "×" button on
+        // the bar is the explicit "clear queue" path.
         this.playing.set(false);
-        this.currentIndex.set(-1);
         return;
       }
     }
@@ -313,11 +349,15 @@ export class PlaybackQueueService {
   }
 
   setVolume(v: number): void {
-    this.volume.set(Math.max(0, Math.min(1, v)));
+    const clamped = Math.max(0, Math.min(1, v));
+    this.volume.set(clamped);
+    saveStoredVolume(clamped);
   }
 
   toggleMute(): void {
-    this.muted.set(!this.muted());
+    const next = !this.muted();
+    this.muted.set(next);
+    saveStoredMuted(next);
   }
 
   toggleShuffle(): void {
