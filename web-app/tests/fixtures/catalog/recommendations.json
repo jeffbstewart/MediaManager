@@ -5,7 +5,9 @@
       "suggested_artist_name": "Bill Evans",
       "artist_id": null,
       "score": 0.92,
-      "voters": [{ "artist_id": 1, "artist_name": "Miles Davis" }],
+      "voters": [
+        { "mbid": "v-1", "name": "Miles Davis", "album_count": 4 }
+      ],
       "representative_release_group_id": "rg-1",
       "representative_release_title": "Sunday at the Village Vanguard",
       "cover_url": "/posters/w185/400"
@@ -15,7 +17,11 @@
       "suggested_artist_name": "John Coltrane",
       "artist_id": null,
       "score": 0.87,
-      "voters": [{ "artist_id": 1, "artist_name": "Miles Davis" }],
+      "voters": [
+        { "mbid": "v-1", "name": "Miles Davis", "album_count": 4 },
+        { "mbid": "v-2", "name": "Bill Evans", "album_count": 2 },
+        { "mbid": "v-3", "name": "Thelonious Monk", "album_count": 1 }
+      ],
       "representative_release_group_id": "rg-2",
       "representative_release_title": "A Love Supreme",
       "cover_url": "/posters/w185/401"
