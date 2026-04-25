@@ -68,6 +68,22 @@ class CspDecorator : DecoratingHttpServiceFunction {
             builder.add("Referrer-Policy", "strict-origin-when-cross-origin")
             builder.add("Permissions-Policy", PERMISSIONS_POLICY)
             builder.add("Cross-Origin-Opener-Policy", "same-origin")
+
+            // Fingerprint suppression. Armeria's default `Server`
+            // header is `Armeria/<version>` which lets attackers
+            // shortcut CVE matching against our specific framework
+            // version. Replace with a generic value so the header is
+            // still present (some upstream proxies log its absence
+            // as suspicious) but reveals no version. X-Powered-By
+            // and the legacy ASP.NET banners aren't emitted by this
+            // stack today, but stripping them defensively costs
+            // nothing and keeps the response clean if a future
+            // dependency starts adding them.
+            builder.set("server", "MediaManager")
+            builder.remove("x-powered-by")
+            builder.remove("x-aspnet-version")
+            builder.remove("x-aspnetmvc-version")
+            builder.remove("x-generator")
             builder.build()
         }
     }
