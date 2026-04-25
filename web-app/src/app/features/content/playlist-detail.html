@@ -137,14 +137,6 @@
                         [attr.aria-label]="trackIcon(t) === 'star' ? 'Clear hero' : 'Set as hero'">
                   <mat-icon>{{ trackIcon(t) }}</mat-icon>
                 </button>
-                <button mat-icon-button type="button" (click)="moveUp(t)" aria-label="Move up"
-                        [disabled]="busy()">
-                  <mat-icon>arrow_upward</mat-icon>
-                </button>
-                <button mat-icon-button type="button" (click)="moveDown(t)" aria-label="Move down"
-                        [disabled]="busy()">
-                  <mat-icon>arrow_downward</mat-icon>
-                </button>
                 <button mat-icon-button type="button" (click)="removeTrack(t)" aria-label="Remove"
                         [disabled]="busy()">
                   <mat-icon>close</mat-icon>

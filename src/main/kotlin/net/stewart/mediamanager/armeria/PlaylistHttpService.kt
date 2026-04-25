@@ -14,6 +14,7 @@ import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.Playlist
+import net.stewart.mediamanager.entity.PlaylistTrack
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Track
@@ -46,7 +47,9 @@ class PlaylistHttpService {
     @Get("/api/v2/playlists")
     fun listAll(ctx: ServiceRequestContext): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
-        val rows = PlaylistService.listVisibleTo(user.id!!).map { it.toSummary(user.id!!) }
+        val playlists = PlaylistService.listVisibleTo(user.id!!)
+        val fallback = computeFallbackPosters(playlists)
+        val rows = playlists.map { it.toSummary(user.id!!, fallback[it.id]) }
         val smart = PlaylistService.listSmartPlaylists(user).map { it.toSummary() }
         return jsonResponse(gson.toJson(mapOf(
             "playlists" to rows,
@@ -87,7 +90,9 @@ class PlaylistHttpService {
     @Get("/api/v2/playlists/mine")
     fun listMine(ctx: ServiceRequestContext): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
-        val rows = PlaylistService.listOwnedBy(user.id!!).map { it.toSummary(user.id!!) }
+        val playlists = PlaylistService.listOwnedBy(user.id!!)
+        val fallback = computeFallbackPosters(playlists)
+        val rows = playlists.map { it.toSummary(user.id!!, fallback[it.id]) }
         return jsonResponse(gson.toJson(mapOf("playlists" to rows)))
     }
 
@@ -332,13 +337,17 @@ class PlaylistHttpService {
         }
     }
 
-    private fun Playlist.toSummary(currentUserId: Long): Map<String, Any?> {
+    private fun Playlist.toSummary(currentUserId: Long, fallbackPosterUrl: String? = null): Map<String, Any?> {
         val ownerUsername = AppUser.findById(this.owner_user_id)?.username ?: "?"
         // Resolve hero poster eagerly so the browse grid doesn't have to
-        // do a follow-up call per row.
-        val heroTitle = this.hero_track_id
+        // do a follow-up call per row. Match the detail endpoint's fallback
+        // (first track's title poster) so card hero == detail hero — see
+        // Playlist.kt's class-doc contract.
+        val heroPosterUrl = this.hero_track_id
             ?.let { Track.findById(it) }
             ?.let { Title.findById(it.title_id) }
+            ?.posterUrl(PosterSize.THUMBNAIL)
+            ?: fallbackPosterUrl
         return mapOf(
             "id" to this.id,
             "name" to this.name,
@@ -347,9 +356,33 @@ class PlaylistHttpService {
             "owner_username" to ownerUsername,
             "is_owner" to (this.owner_user_id == currentUserId),
             "is_private" to this.is_private,
-            "hero_poster_url" to heroTitle?.posterUrl(PosterSize.THUMBNAIL),
+            "hero_poster_url" to heroPosterUrl,
             "updated_at" to this.updated_at?.toString()
         )
+    }
+
+    /**
+     * Build a `playlist.id -> first-track-title-poster-url` map for every
+     * playlist that has no explicit hero_track_id. One PlaylistTrack scan
+     * + one Track scan + one Title scan, vs. N+1 if [toSummary] did it
+     * inline.
+     */
+    private fun computeFallbackPosters(playlists: List<Playlist>): Map<Long, String?> {
+        val needsFallback = playlists.filter { it.hero_track_id == null && it.id != null }
+        if (needsFallback.isEmpty()) return emptyMap()
+        val pids = needsFallback.mapNotNull { it.id }.toSet()
+        val firstTrackByPlaylist = PlaylistTrack.findAll()
+            .filter { it.playlist_id in pids }
+            .groupBy { it.playlist_id }
+            .mapValues { (_, rows) -> rows.minByOrNull { it.position }?.track_id }
+        val trackIds = firstTrackByPlaylist.values.filterNotNull().toSet()
+        val titleIdByTrack = if (trackIds.isEmpty()) emptyMap()
+            else Track.findAll().filter { it.id in trackIds }.associate { it.id!! to it.title_id }
+        return needsFallback.associate { pl ->
+            val trackId = firstTrackByPlaylist[pl.id]
+            val titleId = trackId?.let { titleIdByTrack[it] }
+            pl.id!! to titleId?.let { Title.findById(it)?.posterUrl(PosterSize.THUMBNAIL) }
+        }
     }
 
     private fun PlaylistService.SmartPlaylistView.toSummary(): Map<String, Any?> {

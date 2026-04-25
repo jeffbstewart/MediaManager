@@ -13,7 +13,7 @@ import { AppRoutes } from '../../core/routes';
 /**
  * Playlist detail page (phase 2).
  *
- * - Drag-drop reorder via Angular CDK; up/down arrows kept for keyboard a11y.
+ * - Drag-drop reorder via Angular CDK (the only reorder UI).
  * - Bulk-select with a checkbox column + "Remove selected" button.
  * - Owner-only privacy toggle in the header.
  * - "Resume from {track}" banner when the user has a saved cursor.
@@ -48,11 +48,7 @@ export class PlaylistDetailComponent implements OnInit {
   readonly busy = signal(false);
   readonly selected = signal<Set<number>>(new Set<number>());
 
-  readonly heroPosterUrl = computed(() => {
-    const p = this.playlist();
-    if (!p) return null;
-    return p.hero_poster_url ?? p.tracks[0]?.poster_url ?? null;
-  });
+  readonly heroPosterUrl = computed(() => this.playlist()?.hero_poster_url ?? null);
 
   readonly durationLabel = computed(() => {
     const p = this.playlist();
@@ -162,26 +158,6 @@ export class PlaylistDetailComponent implements OnInit {
     const p = this.playlist();
     if (!p || !p.is_owner) return;
     await this.runOwnerAction(() => this.catalog.setPlaylistPrivacy(p.id, !p.is_private));
-  }
-
-  async moveUp(entry: PlaylistTrackEntry): Promise<void> {
-    const p = this.playlist();
-    if (!p || !p.is_owner) return;
-    const idx = p.tracks.findIndex(t => t.playlist_track_id === entry.playlist_track_id);
-    if (idx <= 0) return;
-    const ids = p.tracks.map(t => t.playlist_track_id);
-    [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-    await this.runOwnerAction(() => this.catalog.reorderPlaylist(p.id, ids));
-  }
-
-  async moveDown(entry: PlaylistTrackEntry): Promise<void> {
-    const p = this.playlist();
-    if (!p || !p.is_owner) return;
-    const idx = p.tracks.findIndex(t => t.playlist_track_id === entry.playlist_track_id);
-    if (idx < 0 || idx >= p.tracks.length - 1) return;
-    const ids = p.tracks.map(t => t.playlist_track_id);
-    [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
-    await this.runOwnerAction(() => this.catalog.reorderPlaylist(p.id, ids));
   }
 
   /** CDK drag-drop handler. Optimistically reorders the list, then PUTs. */

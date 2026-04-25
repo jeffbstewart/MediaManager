@@ -16,7 +16,7 @@
   "tracks": [
     {
       "playlist_track_id": 100,
-      "position": 1,
+      "position": 0,
       "track_id": 4001,
       "track_name": "So What",
       "duration_seconds": 565,
@@ -29,7 +29,7 @@
     },
     {
       "playlist_track_id": 101,
-      "position": 2,
+      "position": 1,
       "track_id": 4002,
       "track_name": "Freddie Freeloader",
       "duration_seconds": 589,

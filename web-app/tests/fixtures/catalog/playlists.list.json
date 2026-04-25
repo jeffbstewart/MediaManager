@@ -1,9 +1,10 @@
 {
   "playlists": [
-    { "id": 1, "name": "Road Trip", "description": "For long drives", "owner_user_id": 1, "owner_username": "testuser", "is_owner": true, "is_private": false, "hero_poster_url": "/posters/w185/500", "updated_at": "2026-04-20T10:00:00Z" },
-    { "id": 2, "name": "Coffee Shop", "description": null, "owner_user_id": 1, "owner_username": "testuser", "is_owner": true, "is_private": true, "hero_poster_url": null, "updated_at": "2026-04-18T14:30:00Z" }
+    { "id": 1, "name": "Road Trip", "description": "For long drives", "owner_user_id": 1, "owner_username": "testuser", "is_owner": true, "is_private": false, "hero_poster_url": "/posters/w185/301", "updated_at": "2026-04-20T10:00:00Z" },
+    { "id": 2, "name": "Coffee Shop", "description": null, "owner_user_id": 1, "owner_username": "testuser", "is_owner": true, "is_private": true, "hero_poster_url": null, "updated_at": "2026-04-18T14:30:00Z" },
+    { "id": 3, "name": "Borrowed Mix", "description": "Someone else's playlist", "owner_user_id": 7, "owner_username": "alice", "is_owner": false, "is_private": false, "hero_poster_url": "/posters/w185/302", "updated_at": "2026-04-15T09:00:00Z" }
   ],
-  "smartPlaylists": [
+  "smart_playlists": [
     { "key": "recently-played", "name": "Recently Played", "description": "Songs you've played in the last 7 days.", "is_smart": true, "track_count": 42, "hero_poster_url": "/posters/w185/501" },
     { "key": "most-played", "name": "Most Played", "description": "Your top 50 most-played tracks.", "is_smart": true, "track_count": 50, "hero_poster_url": "/posters/w185/502" }
   ]
