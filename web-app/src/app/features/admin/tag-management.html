@@ -36,10 +36,10 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let tag">
-          <button mat-icon-button (click)="openEdit(tag)" title="Edit">
+          <button mat-icon-button (click)="openEdit(tag)" title="Edit" aria-label="Edit tag">
             <mat-icon>edit</mat-icon>
           </button>
-          <button mat-icon-button class="delete-btn" (click)="openDelete(tag)" title="Delete">
+          <button mat-icon-button class="delete-btn" (click)="openDelete(tag)" title="Delete" aria-label="Delete tag">
             <mat-icon>delete</mat-icon>
           </button>
         </td>
@@ -56,7 +56,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>{{ dialogMode() === 'edit' ? 'Edit Tag' : 'New Tag' }}</h3>
-          <button class="close-btn" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
         </div>
 
         <label class="field-label">Name</label>
@@ -102,7 +102,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Delete Tag</h3>
-          <button class="close-btn" (click)="closeDelete()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeDelete()"><mat-icon>close</mat-icon></button>
         </div>
         <p class="delete-message">
           Delete "{{ tag.name }}"?

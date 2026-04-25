@@ -73,7 +73,7 @@
     @if (linkFile(); as file) {
       <div class="modal-header">
         <h3>Link: {{ file.parsed_title ?? file.file_name }}</h3>
-        <button class="close-btn" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
+        <button class="close-btn" aria-label="Close" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
       </div>
 
       @if (linkError()) {

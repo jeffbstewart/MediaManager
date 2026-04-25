@@ -2,10 +2,10 @@
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 h2 { margin: 0 0 1rem; }
 h3 { margin: 1.5rem 0 0.75rem; }
-.empty-text { opacity: 0.5; font-size: 0.875rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 
 .settings-card { margin-bottom: 1rem; max-width: 500px; }
-.status-row { font-size: 0.875rem; opacity: 0.6; margin-bottom: 0.75rem; }
+.status-row { font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
 .field-group { margin-bottom: 0.5rem; }
 .field-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.125rem; }
@@ -23,7 +23,7 @@ h3 { margin: 1.5rem 0 0.75rem; }
   &:focus { border-color: var(--mat-sys-primary); }
   option { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); }
 }
-.helper-text { display: block; font-size: 0.6875rem; opacity: 0.4; margin-top: 0.125rem; }
+.helper-text { display: block; font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.125rem; }
 
 .star-row { display: flex; gap: 2px; &.compact { gap: 0; } }
 .star-btn {
@@ -34,14 +34,14 @@ h3 { margin: 1.5rem 0 0.75rem; }
 }
 
 .save-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
-.saved-label { display: flex; align-items: center; gap: 0.25rem; color: #4caf50; font-size: 0.875rem; mat-icon { font-size: 18px; width: 18px; height: 18px; } }
+.saved-label { display: flex; align-items: center; gap: 0.25rem; color: var(--mat-sys-on-surface); font-size: 0.875rem; mat-icon { font-size: 18px; width: 18px; height: 18px; color: #4caf50; } }
 
 .section-header { display: flex; align-items: center; justify-content: space-between; h3 { margin: 0; } }
 
 // Tables
 .tuner-table, .channel-table {
   width: 100%; margin-bottom: 1rem;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 .disabled-text { opacity: 0.4; }

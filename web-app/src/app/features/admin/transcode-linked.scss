@@ -36,7 +36,7 @@ h2 { margin: 0 0 0.75rem; }
 
   .mat-mdc-header-cell {
     font-size: 0.6875rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant);
   }
 
   .mat-mdc-cell { font-size: 0.8125rem; }
@@ -78,7 +78,7 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .play-link {
-  color: #4caf50;
+  color: var(--mat-sys-primary);
   display: flex; align-items: center;
   text-decoration: none;
   mat-icon { font-size: 20px; width: 20px; height: 20px; }

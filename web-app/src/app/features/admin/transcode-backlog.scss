@@ -2,8 +2,8 @@
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 
 h2 { margin: 0 0 0.25rem; }
-.subtitle { font-size: 0.8125rem; opacity: 0.5; margin: 0 0 1rem; }
-.empty-text { opacity: 0.5; }
+.subtitle { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin: 0 0 1rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); }
 
 .search-input {
   width: 250px;
@@ -28,7 +28,7 @@ h2 { margin: 0 0 0.25rem; }
 
   .mat-mdc-header-cell {
     font-size: 0.6875rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant);
   }
 
   .mat-mdc-cell { font-size: 0.8125rem; }

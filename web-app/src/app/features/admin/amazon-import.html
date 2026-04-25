@@ -103,7 +103,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Link: {{ order.product_name.substring(0, 60) }}</h3>
-          <button class="close-btn" (click)="closeLink()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeLink()"><mat-icon>close</mat-icon></button>
         </div>
         <input class="field-input" type="text" placeholder="Search media items..."
                [value]="linkQuery()" (input)="searchItems($event)" />

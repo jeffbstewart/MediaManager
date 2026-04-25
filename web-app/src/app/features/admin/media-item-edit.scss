@@ -1,18 +1,18 @@
 .edit-page { padding: 1.5rem; max-width: 700px; margin: 0 auto; }
 h2 { margin: 0; }
 h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
-.empty-text { opacity: 0.5; font-size: 0.875rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 
 .message-banner {
   padding: 8px 16px; border-radius: 6px; margin-bottom: 0.75rem; font-size: 0.875rem;
-  &.success { background: rgba(76,175,80,0.15); color: #4caf50; }
+  &.success { background: color-mix(in srgb, #4caf50 18%, transparent); color: var(--mat-sys-on-surface); }
   &.error { background: color-mix(in srgb, var(--mat-sys-error) 15%, transparent); color: var(--mat-sys-error); }
 }
 
 .header-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
 .header-poster { width: 80px; height: 120px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
 .header-info { display: flex; flex-direction: column; }
-.meta { font-size: 0.8125rem; opacity: 0.5; &.small { font-size: 0.75rem; } }
+.meta { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); &.small { font-size: 0.75rem; } }
 
 .field-group { margin-bottom: 0.75rem; }
 .field-label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); margin-bottom: 4px; }
@@ -40,8 +40,8 @@ h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
 .tmdb-results { display: flex; flex-direction: column; gap: 0.25rem; max-height: 400px; overflow-y: auto; }
 .tmdb-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem; border-radius: 4px; &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); } }
 .tmdb-poster { width: 40px; height: 60px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-.tmdb-info { flex: 1; display: flex; flex-direction: column; } .tmdb-title { font-size: 0.875rem; } .tmdb-meta { font-size: 0.6875rem; opacity: 0.4; }
-.tmdb-overview { font-size: 0.6875rem; opacity: 0.35; }
+.tmdb-info { flex: 1; display: flex; flex-direction: column; } .tmdb-title { font-size: 0.875rem; } .tmdb-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
+.tmdb-overview { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 
 // `auto-fit` so the grid collapses to fewer columns when each cell
 // would otherwise be too narrow for its content. Phones (~390 px
@@ -50,17 +50,17 @@ h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
 // than the cell — they would otherwise overflow into the next column.
 .purchase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
 .price-input { position: relative; display: flex; align-items: center;
-  .prefix { position: absolute; left: 12px; opacity: 0.4; font-size: 0.875rem; pointer-events: none; }
+  .prefix { position: absolute; left: 12px; color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; pointer-events: none; }
   .field-input { padding-left: 24px; }
 }
 .save-btn { margin-top: 0.5rem; }
-.linked-order { font-size: 0.8125rem; color: #4caf50; display: block; margin-bottom: 0.5rem; }
+.linked-order { font-size: 0.8125rem; color: var(--mat-sys-on-surface); font-weight: 600; display: block; margin-bottom: 0.5rem; }
 
 .amazon-list { display: flex; flex-direction: column; gap: 0.25rem; max-height: 250px; overflow-y: auto; }
 .amazon-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem; border-radius: 4px;
   &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); } }
 .amazon-name { flex: 1; font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.amazon-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
+.amazon-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }
 .amazon-price { font-size: 0.8125rem; flex-shrink: 0; }
 
 .photo-strip {
@@ -97,6 +97,6 @@ h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
   mat-icon { font-size: 1.5rem; width: 1.5rem; height: 1.5rem; }
 }
 .photo-file-input { display: none; }
-.field-readonly .hint { opacity: 0.5; font-size: 0.75rem; margin-left: 0.5rem; }
+.field-readonly .hint { color: var(--mat-sys-on-surface-variant); font-size: 0.75rem; margin-left: 0.5rem; }
 
 .nav-row { display: flex; gap: 0.75rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--mat-sys-outline-variant); }

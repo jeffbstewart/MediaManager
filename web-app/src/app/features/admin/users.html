@@ -101,7 +101,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Add User</h3>
-          <button class="close-btn" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
           <label class="field-label">Username</label>
@@ -140,7 +140,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Reset Password: {{ u.username }}</h3>
-          <button class="close-btn" (click)="closeResetDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeResetDialog()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
           <label class="field-label">New Password</label>
@@ -169,7 +169,7 @@
       <div class="modal-content sessions-modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Sessions: {{ u.username }}</h3>
-          <button class="close-btn" (click)="closeSessionsDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeSessionsDialog()"><mat-icon>close</mat-icon></button>
         </div>
 
         @if (sessions().length > 0) {

@@ -43,7 +43,7 @@
       <div class="modal-content large" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>{{ item.product_name ?? 'Multi-Pack' }}</h3>
-          <button class="close-btn" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
         </div>
 
         <!-- TMDB Search -->
@@ -86,7 +86,7 @@
                   <span class="linked-name">{{ t.name }}</span>
                   @if (t.release_year) { <span class="linked-year">{{ t.release_year }}</span> }
                 </div>
-                <button mat-icon-button class="remove-btn" (click)="removeTitle(t)" title="Remove">
+                <button mat-icon-button class="remove-btn" (click)="removeTitle(t)" title="Remove" aria-label="Remove title">
                   <mat-icon>close</mat-icon>
                 </button>
               </div>

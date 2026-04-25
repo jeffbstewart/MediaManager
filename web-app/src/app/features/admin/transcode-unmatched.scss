@@ -3,11 +3,11 @@
 
 h2 { margin: 0 0 0.75rem; }
 
-.status-label { display: block; font-size: 0.8125rem; opacity: 0.5; margin-bottom: 0.75rem; }
+.status-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
 .empty-state {
   display: flex; align-items: center; gap: 0.5rem;
-  font-size: 0.875rem; opacity: 0.6;
+  font-size: 0.875rem; color: var(--mat-sys-on-surface-variant);
   mat-icon { color: #4caf50; }
 }
 
@@ -18,7 +18,7 @@ h2 { margin: 0 0 0.75rem; }
 
   .mat-mdc-header-cell {
     font-size: 0.6875rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant);
   }
   .mat-mdc-cell { font-size: 0.8125rem; vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
 }
@@ -34,7 +34,7 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .episode-label {
-  font-size: 0.6875rem; opacity: 0.5; margin-left: 0.25rem;
+  font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); margin-left: 0.25rem;
 }
 
 .suggestion-cell {
@@ -47,7 +47,7 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .suggestion-score {
-  font-size: 0.6875rem; opacity: 0.4; flex-shrink: 0;
+  font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0;
 }
 
 .no-suggestion { opacity: 0.3; }
@@ -110,10 +110,10 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .link-title { flex: 1; font-size: 0.875rem; }
-.link-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
-.no-results { font-size: 0.8125rem; opacity: 0.5; }
+.link-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }
+.no-results { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); }
 
-.tmdb-section-title { font-size: 0.8125rem; font-weight: 600; margin: 1rem 0 0.5rem; opacity: 0.6; }
+.tmdb-section-title { font-size: 0.8125rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--mat-sys-on-surface-variant); }
 .tmdb-search-row { display: flex; gap: 0.375rem; align-items: center; margin-bottom: 0.5rem; .flex { flex: 1; margin-bottom: 0; } }
 .tmdb-poster { width: 36px; height: 54px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
 .tmdb-info { display: flex; flex-direction: column; flex: 1; }

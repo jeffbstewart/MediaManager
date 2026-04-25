@@ -1,12 +1,12 @@
 .family-page { padding: 1.5rem; max-width: 900px; margin: 0 auto; }
 h2 { margin: 0; }
-.empty-text { opacity: 0.5; font-size: 0.875rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
 
 .member-table {
   width: 100%;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 
@@ -18,7 +18,7 @@ h2 { margin: 0; }
   font-weight: 700; font-size: 0.75rem;
 }
 .member-name { font-weight: 500; }
-.secondary { font-size: 0.8125rem; opacity: 0.5; }
+.secondary { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); }
 .notes-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .delete-btn { color: var(--mat-sys-error) !important; }
 

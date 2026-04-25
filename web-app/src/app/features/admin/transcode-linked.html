@@ -91,11 +91,11 @@
                 <mat-icon class="retranscode-icon active" title="Re-transcode requested">refresh</mat-icon>
               } @else {
                 <button mat-icon-button class="retranscode-btn"
-                        (click)="confirmRetranscode(row)" title="Request re-transcode">
+                        (click)="confirmRetranscode(row)" title="Request re-transcode" aria-label="Request re-transcode">
                   <mat-icon>refresh</mat-icon>
                 </button>
               }
-              <button mat-icon-button class="unlink-btn" (click)="unlink(row)" title="Unlink from title">
+              <button mat-icon-button class="unlink-btn" (click)="unlink(row)" title="Unlink from title" aria-label="Unlink from title">
                 <mat-icon>link_off</mat-icon>
               </button>
             </div>

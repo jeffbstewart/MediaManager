@@ -29,10 +29,10 @@
           <span class="cam-name">{{ cam.name }}</span>
           <span class="cam-stream secondary">{{ cam.go2rtc_name }}</span>
           <span class="spacer"></span>
-          <button mat-icon-button (click)="testSnapshot(cam)" title="Test Snapshot"><mat-icon>photo_camera</mat-icon></button>
-          <button mat-icon-button (click)="openEdit(cam)" title="Edit"><mat-icon>edit</mat-icon></button>
-          <button mat-icon-button (click)="duplicateCam(cam)" title="Duplicate"><mat-icon>content_copy</mat-icon></button>
-          <button mat-icon-button class="delete-btn" (click)="deleteCam(cam)" title="Delete"><mat-icon>delete</mat-icon></button>
+          <button mat-icon-button (click)="testSnapshot(cam)" title="Test Snapshot" aria-label="Test snapshot"><mat-icon>photo_camera</mat-icon></button>
+          <button mat-icon-button (click)="openEdit(cam)" title="Edit" aria-label="Edit camera"><mat-icon>edit</mat-icon></button>
+          <button mat-icon-button (click)="duplicateCam(cam)" title="Duplicate" aria-label="Duplicate camera"><mat-icon>content_copy</mat-icon></button>
+          <button mat-icon-button class="delete-btn" (click)="deleteCam(cam)" title="Delete" aria-label="Delete camera"><mat-icon>delete</mat-icon></button>
         </div>
       }
     </div>
@@ -44,7 +44,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>{{ dialogMode() === 'edit' ? 'Edit Camera' : 'Add Camera' }}</h3>
-          <button class="close-btn" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" (click)="closeDialog()" aria-label="Close"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
           <label class="field-label">Name</label>
@@ -80,7 +80,7 @@
       <div class="modal-content snapshot-modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Snapshot: {{ snapshotName() }}</h3>
-          <button class="close-btn" (click)="snapshotOpen.set(false)"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" (click)="snapshotOpen.set(false)" aria-label="Close"><mat-icon>close</mat-icon></button>
         </div>
         <img [src]="snapshotUrl()" class="snapshot-img" alt="Camera snapshot"
              (error)="snapshotError.set(true)" />

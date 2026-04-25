@@ -73,16 +73,17 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let t">
-            <button mat-icon-button (click)="openEditTuner(t)" title="Edit">
+            <button mat-icon-button (click)="openEditTuner(t)" title="Edit" aria-label="Edit tuner">
               <mat-icon>edit</mat-icon>
             </button>
-            <button mat-icon-button (click)="toggleTuner(t)" [title]="t.enabled ? 'Disable' : 'Enable'">
+            <button mat-icon-button (click)="toggleTuner(t)" [title]="t.enabled ? 'Disable' : 'Enable'"
+                    [attr.aria-label]="t.enabled ? 'Disable tuner' : 'Enable tuner'">
               <mat-icon>{{ t.enabled ? 'visibility' : 'visibility_off' }}</mat-icon>
             </button>
-            <button mat-icon-button (click)="syncChannels(t)" title="Refresh channels">
+            <button mat-icon-button (click)="syncChannels(t)" title="Refresh channels" aria-label="Refresh channels">
               <mat-icon>refresh</mat-icon>
             </button>
-            <button mat-icon-button class="delete-btn" (click)="deleteTuner(t)" title="Delete">
+            <button mat-icon-button class="delete-btn" (click)="deleteTuner(t)" title="Delete" aria-label="Delete tuner">
               <mat-icon>delete</mat-icon>
             </button>
           </td>
@@ -145,7 +146,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Add HDHomeRun Tuner</h3>
-          <button class="close-btn" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="field-group">
           <label class="field-label">IP Address</label>
@@ -171,7 +172,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Edit Tuner</h3>
-          <button class="close-btn" (click)="editTunerOpen.set(false)"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="editTunerOpen.set(false)"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
           <label class="field-label">Name</label>

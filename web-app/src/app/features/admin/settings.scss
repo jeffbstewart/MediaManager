@@ -29,7 +29,7 @@ h3 {
   &.mono { font-family: monospace; font-size: 0.8125rem; }
 }
 
-.helper-text { display: block; font-size: 0.6875rem; opacity: 0.4; margin-top: 0.125rem; }
+.helper-text { display: block; font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.125rem; }
 
 .checkbox-row {
   display: flex; align-items: center; gap: 0.5rem;
@@ -38,7 +38,7 @@ h3 {
 }
 
 .section-desc {
-  display: block; font-size: 0.8125rem; opacity: 0.5;
+  display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant);
   margin-bottom: 0.75rem;
 }
 
@@ -55,12 +55,12 @@ h3 {
 
 .buddy-table {
   width: 100%; margin-bottom: 0.75rem;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 
 .delete-btn { color: var(--mat-sys-on-surface-variant); &:hover { color: var(--mat-sys-error); } }
-.empty-text { display: block; font-size: 0.8125rem; opacity: 0.4; margin-bottom: 0.75rem; }
+.empty-text { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
 
 .small-btn {
   font-size: 0.75rem !important;
@@ -94,14 +94,14 @@ h3 {
 
 .saved-label {
   display: flex; align-items: center; gap: 0.25rem;
-  color: #4caf50; font-size: 0.875rem;
-  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  color: var(--mat-sys-on-surface); font-size: 0.875rem;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #4caf50; }
 }
 
 .dirty-label {
   display: flex; align-items: center; gap: 0.25rem;
-  color: #ffb74d; font-size: 0.875rem;
-  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  color: var(--mat-sys-on-surface); font-size: 0.875rem;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #f57c00; }
 }
 
 // Modal

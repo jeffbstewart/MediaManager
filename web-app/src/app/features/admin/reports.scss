@@ -1,6 +1,6 @@
 .reports-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
-.empty-message { opacity: 0.5; text-align: center; padding: 3rem; }
+.empty-message { color: var(--mat-sys-on-surface-variant); text-align: center; padding: 3rem; }
 h2 { margin: 0 0 0.75rem; }
 
 .filter-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 0.75rem; }
@@ -8,13 +8,13 @@ h2 { margin: 0 0 0.75rem; }
 .table-container { overflow-x: auto; }
 .reports-table {
   width: 100%;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; vertical-align: top; padding-top: 8px; padding-bottom: 8px; }
 }
 
 .title-link { color: var(--mat-sys-primary); text-decoration: none; &:hover { text-decoration: underline; } }
-.no-title { opacity: 0.4; font-style: italic; }
-.episode-info { font-size: 0.6875rem; opacity: 0.5; margin-left: 0.375rem; }
+.no-title { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+.episode-info { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); margin-left: 0.375rem; }
 
 .description-text {
   display: -webkit-box;
@@ -27,7 +27,7 @@ h2 { margin: 0 0 0.75rem; }
 
 .status-badge { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
 .status-open { color: var(--mat-sys-error); }
-.status-resolved { color: #4caf50; }
+.status-resolved { color: var(--mat-sys-primary); }
 .status-dismissed { color: var(--mat-sys-on-surface-variant); }
 
 // Modal
@@ -38,7 +38,7 @@ h2 { margin: 0 0 0.75rem; }
 
 .resolve-context { margin-bottom: 0.75rem; }
 .resolve-description { font-size: 0.875rem; margin: 0 0 0.25rem; white-space: pre-line; }
-.resolve-meta { font-size: 0.75rem; opacity: 0.4; }
+.resolve-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); }
 
 .form-fields { display: flex; flex-direction: column; gap: 0.375rem; }
 .field-label { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.25rem; }

@@ -1,7 +1,7 @@
 .amazon-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .loading-container { display: flex; justify-content: center; padding: 4rem; }
 h2 { margin: 0 0 1rem; }
-.empty-text { opacity: 0.5; font-size: 0.875rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 
 // Upload
 .upload-card { margin-bottom: 1rem; }
@@ -12,10 +12,10 @@ h2 { margin: 0 0 1rem; }
   padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.875rem;
   &:hover { opacity: 0.9; }
 }
-.upload-result { font-size: 0.875rem; color: #4caf50; }
+.upload-result { font-size: 0.875rem; color: var(--mat-sys-on-surface); font-weight: 600; }
 
 // Stats
-.stats-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; font-size: 0.875rem; opacity: 0.6; }
+.stats-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); }
 .stat-sep { opacity: 0.3; }
 
 // Filters
@@ -30,11 +30,11 @@ h2 { margin: 0 0 1rem; }
 .table-container { overflow-x: auto; }
 .orders-table {
   width: 100%;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 .product-name { display: block; max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.linked-name { color: #4caf50; }
+.linked-name { color: var(--mat-sys-on-surface); font-weight: 600; }
 .unlinked { opacity: 0.3; }
 .small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
 
@@ -50,4 +50,4 @@ h2 { margin: 0 0 1rem; }
 }
 .link-results { display: flex; flex-direction: column; gap: 0.25rem; }
 .link-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 4px; &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); } }
-.link-name { flex: 1; font-size: 0.875rem; } .link-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
+.link-name { flex: 1; font-size: 0.875rem; } .link-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }

@@ -6,7 +6,7 @@ h2 { margin: 0 0 1rem; }
 .summary-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .summary-card { flex: 1; min-width: 180px; text-align: center; }
 .summary-value { display: block; font-size: 1.5rem; font-weight: 700; }
-.summary-label { display: block; font-size: 0.75rem; opacity: 0.5; margin-top: 0.125rem; }
+.summary-label { display: block; font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.125rem; }
 
 // Filters
 .filter-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
@@ -23,11 +23,11 @@ h2 { margin: 0 0 1rem; }
 .table-container { overflow-x: auto; }
 .valuation-table {
   width: 100%;
-  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5; }
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant); }
   .mat-mdc-cell { font-size: 0.8125rem; }
 }
 .item-name { font-weight: 500; display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.upc-label { display: block; font-size: 0.6875rem; opacity: 0.4; }
+.upc-label { display: block; font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 .photo-icon { font-size: 18px; width: 18px; height: 18px; opacity: 0.5; }
 
 // Modal
@@ -51,7 +51,7 @@ h2 { margin: 0 0 1rem; }
   &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); }
 }
 .amazon-name { flex: 1; font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.amazon-meta { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
+.amazon-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }
 .amazon-price { font-size: 0.8125rem; flex-shrink: 0; }
 .small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
 
@@ -65,6 +65,6 @@ h2 { margin: 0 0 1rem; }
 }
 .keepa-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .keepa-title { font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.keepa-asin { font-size: 0.6875rem; opacity: 0.4; font-family: monospace; }
-.keepa-price { font-size: 0.875rem; font-weight: 600; color: #4caf50; flex-shrink: 0; }
-.keepa-no-price { font-size: 0.75rem; opacity: 0.4; flex-shrink: 0; }
+.keepa-asin { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); font-family: monospace; }
+.keepa-price { font-size: 0.875rem; font-weight: 600; color: var(--mat-sys-primary); flex-shrink: 0; }
+.keepa-no-price { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }

@@ -11,7 +11,7 @@
   width: 100%;
   .mat-mdc-header-cell {
     font-size: 0.6875rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.5;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant);
   }
   .mat-mdc-cell { font-size: 0.875rem; }
 }
@@ -36,7 +36,7 @@
 
 .delete-item { color: var(--mat-sys-error) !important; }
 .active-rating { font-weight: 700; color: var(--mat-sys-primary) !important; }
-.empty-text { opacity: 0.5; font-size: 0.875rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
 
 // Sessions dialog
 .sessions-modal { max-width: 550px; }
@@ -45,8 +45,8 @@
 .session-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent); border-radius: 6px; gap: 0.75rem; }
 .session-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
 .session-badge { font-size: 0.625rem; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: #3b82f6; color: white; align-self: flex-start; &.device { background: #8b5cf6; } }
-.session-detail { font-size: 0.75rem; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-meta { font-size: 0.6875rem; opacity: 0.4; }
+.session-detail { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
 .small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
 
 // Modal shared styles
@@ -85,7 +85,7 @@
   outline: none; box-sizing: border-box;
   &:focus { border-color: var(--mat-sys-primary); }
 }
-.field-hint { font-size: 0.75rem; color: #ffa500; }
+.field-hint { font-size: 0.75rem; color: var(--mat-sys-error); }
 .field-error { font-size: 0.75rem; color: var(--mat-sys-error); }
 
 .checkbox-row {
@@ -94,6 +94,6 @@
   input { accent-color: var(--mat-sys-primary); width: 16px; height: 16px; }
 }
 
-.reset-note { font-size: 0.8125rem; opacity: 0.5; margin: 0.5rem 0 0; }
+.reset-note { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin: 0.5rem 0 0; }
 
 .dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }

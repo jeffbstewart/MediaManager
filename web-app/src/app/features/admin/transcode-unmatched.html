@@ -86,7 +86,7 @@
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Link: {{ linkFile()?.parsed_title ?? linkFile()?.file_name }}</h3>
-          <button class="close-btn" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
+          <button class="close-btn" aria-label="Close" (click)="closeLinkDialog()"><mat-icon>close</mat-icon></button>
         </div>
 
         <input class="search-input" type="text" placeholder="Search catalog titles..."
