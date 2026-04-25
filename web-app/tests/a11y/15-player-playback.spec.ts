@@ -14,12 +14,16 @@ import { loginAs } from '../helpers/login-as';
 // tests/fixtures/player/. The fixture transcode id is 42; nothing
 // else in the test infrastructure cares which id.
 //
-// Fixture files (~115 KB total committed):
-//   5s.mp4      — 5 s of testsrc + 440 Hz tone, H.264/AAC, 320x240
+// Fixture files (~410 KB total committed):
+//   20s.mp4     — 20 s of testsrc + 440 Hz tone, H.264/AAC, 320x240.
+//                 Length matters because the resume spec
+//                 (17-player-resume) needs > 10 s — the player
+//                 gates the resume prompt on saved position > 10 s.
 //   thumbs.jpg  — 5×1 sprite of one-second-cadence frames at 160x90
 //   thumbs.vtt  — five cues mapping each second to one sprite cell
-//   subs.vtt    — three cues at known timestamps inside the 5 s window
-//   chapters.json — two chapters, no skip segments
+//                 (covers t=0..5; later positions show no preview)
+//   subs.vtt    — three cues at known timestamps inside 0..5 s
+//   chapters.json — two chapters covering 0..5 s, no skip segments
 const FIXTURE_DIR = 'tests/fixtures/player';
 const TRANSCODE_ID = 42;
 
@@ -55,7 +59,7 @@ test.describe('player integration', () => {
     );
     await page.route(`**/stream/${TRANSCODE_ID}`, route =>
       route.fulfill({
-        path: `${FIXTURE_DIR}/5s.mp4`,
+        path: `${FIXTURE_DIR}/20s.mp4`,
         headers: {
           'Content-Type': 'video/mp4',
           // <video> tolerates getting the full body with 200 even
