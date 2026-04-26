@@ -36,11 +36,12 @@ class PurchaseWishesHttpService {
             WishLifecycleStage.NOT_FEASIBLE to 6,
             WishLifecycleStage.WONT_ORDER to 7
         )
-        val aggregates = WishListService.getMediaWishVoteCounts()
-            .sortedWith(compareBy<net.stewart.mediamanager.service.MediaWishAggregate> { statusOrder[it.lifecycleStage] ?: 99 }
-                .thenBy { it.tmdbTitle.lowercase() })
-        val items = aggregates.map { agg ->
+        val mediaAggregates = WishListService.getMediaWishVoteCounts()
+        val albumAggregates = WishListService.getAlbumWishVoteCounts()
+
+        val mediaItems = mediaAggregates.map { agg ->
             mapOf(
+                "wish_type" to "MEDIA",
                 "tmdb_id" to agg.tmdbId,
                 "title" to agg.tmdbTitle,
                 "display_title" to agg.displayTitle,
@@ -54,7 +55,33 @@ class PurchaseWishesHttpService {
                 "lifecycle_label" to agg.lifecycleStage.displayLabel()
             )
         }
-        return jsonResponse(gson.toJson(mapOf("wishes" to items, "total" to items.size)))
+        val albumItems = albumAggregates.map { agg ->
+            mapOf(
+                "wish_type" to "ALBUM",
+                "release_group_id" to agg.releaseGroupId,
+                "title" to agg.title,
+                "display_title" to agg.displayTitle,
+                "primary_artist" to agg.primaryArtist,
+                "is_compilation" to agg.isCompilation,
+                "release_year" to agg.year,
+                "cover_release_id" to agg.coverReleaseId,
+                "vote_count" to agg.voteCount,
+                "voters" to agg.voters,
+                "lifecycle_stage" to agg.lifecycleStage.name,
+                "lifecycle_label" to agg.lifecycleStage.displayLabel()
+            )
+        }
+
+        // Sort: by lifecycle stage priority, then by display title alpha.
+        // Common envelope across both wish types so the client renders
+        // them in one table.
+        val all = (mediaItems + albumItems).sortedWith(
+            compareBy<Map<String, Any?>>(
+                { statusOrder[WishLifecycleStage.valueOf(it["lifecycle_stage"] as String)] ?: 99 },
+                { (it["display_title"] as String).lowercase() }
+            )
+        )
+        return jsonResponse(gson.toJson(mapOf("wishes" to all, "total" to all.size)))
     }
 
     @Post("/api/v2/admin/purchase-wishes/set-status")

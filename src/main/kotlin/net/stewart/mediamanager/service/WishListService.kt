@@ -41,6 +41,33 @@ data class MediaWishAggregate(
         get() = if (seasonNumber != null) "$tmdbTitle — Season $seasonNumber" else tmdbTitle
 }
 
+/**
+ * Aggregated album (CD) wish across all users for the admin
+ * purchase-wishes view. Same shape as [MediaWishAggregate] but
+ * keyed on MusicBrainz release-group id instead of TMDB id, and
+ * carries album-specific display fields (artist, compilation flag).
+ */
+data class AlbumWishAggregate(
+    val releaseGroupId: String,
+    val title: String,
+    val primaryArtist: String?,
+    val year: Int?,
+    val coverReleaseId: String?,
+    val isCompilation: Boolean,
+    val voteCount: Int,
+    val voters: List<String>,
+    val lifecycleStage: WishLifecycleStage,
+    val titleId: Long? = null
+) {
+    /** Display string: "Title — Artist" for single-artist; "Title — Compilation" otherwise. */
+    val displayTitle: String
+        get() = when {
+            isCompilation -> "$title — Compilation"
+            primaryArtist != null -> "$title — $primaryArtist"
+            else -> title
+        }
+}
+
 enum class WishLifecycleStage {
     WISHED_FOR,
     NOT_FEASIBLE,
@@ -329,6 +356,49 @@ object WishListService {
                     acquisitionStatus = state.acquisitionStatus,
                     lifecycleStage = state.lifecycleStage,
                     titleId = state.titleId
+                )
+            }
+            .sortedByDescending { it.voteCount }
+    }
+
+    /**
+     * Aggregates active album wishes across all users, sorted by vote
+     * count descending. Lifecycle resolution is intentionally simple:
+     * READY_TO_WATCH if a Title exists with the matching MBID (owned),
+     * WISHED_FOR otherwise. We don't currently track ORDERED / etc.
+     * for albums — admins manage those via the catalog directly.
+     */
+    fun getAlbumWishVoteCounts(): List<AlbumWishAggregate> {
+        val active = WishListItem.findAll().filter {
+            it.wish_type == WishType.ALBUM.name &&
+                it.status == WishStatus.ACTIVE.name &&
+                it.musicbrainz_release_group_id != null
+        }
+        if (active.isEmpty()) return emptyList()
+
+        val userMap = AppUser.findAll().associateBy { it.id }
+        val ownedMbids = Title.findAll()
+            .mapNotNull { it.musicbrainz_release_group_id?.let { mbid -> mbid to it.id } }
+            .toMap()
+
+        return active
+            .groupBy { it.musicbrainz_release_group_id!! }
+            .map { (rgid, wishes) ->
+                val first = wishes.first()
+                val titleId = ownedMbids[rgid]
+                val stage = if (titleId != null) WishLifecycleStage.READY_TO_WATCH
+                            else WishLifecycleStage.WISHED_FOR
+                AlbumWishAggregate(
+                    releaseGroupId = rgid,
+                    title = first.album_title ?: "Unknown",
+                    primaryArtist = first.album_primary_artist,
+                    year = first.album_year,
+                    coverReleaseId = first.album_cover_release_id,
+                    isCompilation = first.album_is_compilation,
+                    voteCount = wishes.size,
+                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name },
+                    lifecycleStage = stage,
+                    titleId = titleId
                 )
             }
             .sortedByDescending { it.voteCount }

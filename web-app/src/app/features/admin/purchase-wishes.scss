@@ -5,6 +5,10 @@ h2 { margin: 0 0 0.25rem; }
 .subtitle { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin: 0 0 1rem; }
 .empty-text { color: var(--mat-sys-on-surface-variant); }
 
+.lifecycle-filters {
+  margin: 0 0 1rem;
+}
+
 .table-container { overflow-x: auto; }
 
 .wishes-table {
@@ -59,6 +63,12 @@ h2 { margin: 0 0 0.25rem; }
   white-space: nowrap;
 
   &:hover { opacity: 0.9; }
+
+  &.readonly {
+    cursor: default;
+    padding-right: 12px; // no dropdown arrow → equal padding both sides
+    &:hover { opacity: 1; }
+  }
 }
 
 .status-arrow {
