@@ -53,40 +53,6 @@ import { AppRoutes } from '../../core/routes';
           </div>
         }
 
-        @if (tracks().length > 0) {
-          <section class="tagged-tracks-section">
-            <div class="tagged-tracks-header">
-              <h2>Tagged tracks ({{ tracks().length }})</h2>
-              <button mat-flat-button color="primary" type="button" (click)="playAllTaggedTracks()">
-                <mat-icon>play_arrow</mat-icon>
-                Play all
-              </button>
-            </div>
-            <ol class="tagged-tracks-list">
-              @for (tr of tracks(); track tr.track_id) {
-                <li class="tagged-track">
-                  @if (tr.poster_url) {
-                    <img class="track-thumb" [src]="tr.poster_url" [alt]="tr.title_name" />
-                  } @else {
-                    <div class="track-thumb track-thumb-placeholder"><mat-icon>music_note</mat-icon></div>
-                  }
-                  <div class="track-text">
-                    <span class="track-name">{{ tr.track_name }}</span>
-                    <a class="track-album" [routerLink]="routes.title(tr.title_id)">
-                      {{ tr.title_name }}@if (tr.artist_name) { <span class="track-artist"> · {{ tr.artist_name }}</span> }
-                    </a>
-                  </div>
-                  <span class="track-duration">{{ formatTrackDuration(tr.duration_seconds) }}</span>
-                  <button mat-icon-button type="button" (click)="playOneTaggedTrack(tr)"
-                          aria-label="Play this track" [disabled]="!tr.playable">
-                    <mat-icon>play_circle</mat-icon>
-                  </button>
-                </li>
-              }
-            </ol>
-          </section>
-        }
-
         <div class="poster-grid">
           @for (title of titles(); track title.title_id) {
             <a class="poster-card"
@@ -123,6 +89,40 @@ import { AppRoutes } from '../../core/routes';
             </a>
           }
         </div>
+
+        @if (tracks().length > 0) {
+          <section class="tagged-tracks-section">
+            <div class="tagged-tracks-header">
+              <h2>Tagged tracks ({{ tracks().length }})</h2>
+              <button mat-flat-button color="primary" type="button" (click)="playAllTaggedTracks()">
+                <mat-icon>play_arrow</mat-icon>
+                Play all
+              </button>
+            </div>
+            <ol class="tagged-tracks-list">
+              @for (tr of tracks(); track tr.track_id) {
+                <li class="tagged-track">
+                  @if (tr.poster_url) {
+                    <img class="track-thumb" [src]="tr.poster_url" [alt]="tr.title_name" />
+                  } @else {
+                    <div class="track-thumb track-thumb-placeholder"><mat-icon>music_note</mat-icon></div>
+                  }
+                  <div class="track-text">
+                    <span class="track-name">{{ tr.track_name }}</span>
+                    <a class="track-album" [routerLink]="routes.title(tr.title_id)">
+                      {{ tr.title_name }}@if (tr.artist_name) { <span class="track-artist"> · {{ tr.artist_name }}</span> }
+                    </a>
+                  </div>
+                  <span class="track-duration">{{ formatTrackDuration(tr.duration_seconds) }}</span>
+                  <button mat-icon-button type="button" (click)="playOneTaggedTrack(tr)"
+                          aria-label="Play this track" [disabled]="!tr.playable">
+                    <mat-icon>play_circle</mat-icon>
+                  </button>
+                </li>
+              }
+            </ol>
+          </section>
+        }
       }
     </div>
   `,

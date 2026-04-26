@@ -444,9 +444,10 @@ class TrackDiagnosticHttpService {
                         ?.let { normalize(it) }
                     val artistHit = fileArtistNorm != null &&
                         fileArtistNorm in primaryArtistNamesSet
-                    val positionHit = tags.discNumber != null &&
-                        tags.trackNumber != null &&
-                        (tags.discNumber!! to tags.trackNumber!!) in albumSlots
+                    val disc = tags.discNumber
+                    val trackNum = tags.trackNumber
+                    val positionHit = disc != null && trackNum != null &&
+                        (disc to trackNum) in albumSlots
                     val artistPositionOk = artistHit && positionHit
 
                     if (!mbidOk && !artistPositionOk && !albumTagLooksRight(tags, title)) {
