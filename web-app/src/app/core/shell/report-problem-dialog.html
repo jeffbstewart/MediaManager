@@ -3,12 +3,14 @@
     <div class="modal-content" (click)="$event.stopPropagation()">
       @if (!done()) {
         <div class="modal-header">
-          <h3>Report a Problem</h3>
-          <button class="close-btn" (click)="close()"><mat-icon>close</mat-icon></button>
+          <h3 id="report-dialog-title">Report a Problem</h3>
+          <button class="close-btn" type="button" aria-label="Close" (click)="close()">
+            <mat-icon>close</mat-icon>
+          </button>
         </div>
         <div class="form-fields">
           @if (titleName()) {
-            <label class="field-label">Title</label>
+            <span class="field-label">Title</span>
             <div class="context-display">
               {{ titleName() }}
               @if (seasonNumber() != null) {
@@ -16,8 +18,9 @@
               }
             </div>
           }
-          <label class="field-label">What's the problem?</label>
-          <textarea class="field-input description-input"
+          <label class="field-label" for="report-dialog-description">What's the problem?</label>
+          <textarea id="report-dialog-description"
+                    class="field-input description-input"
                     rows="4"
                     placeholder="Describe the issue..."
                     [value]="description()"

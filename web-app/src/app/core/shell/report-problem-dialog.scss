@@ -42,8 +42,12 @@
 }
 
 .field-label {
+  // opacity: 0.6 dragged the label color to ~4.19:1 against the
+  // light-mode dialog background, below WCAG AA. Use the
+  // on-surface-variant token at full opacity instead — Material
+  // tunes those to clear AA in both modes.
   font-size: 0.8125rem;
-  opacity: 0.6;
+  color: var(--mat-sys-on-surface-variant);
   margin-top: 0.25rem;
 }
 
@@ -53,7 +57,8 @@
 }
 
 .context-meta {
-  opacity: 0.5;
+  // Same opacity-vs-AA problem as .field-label.
+  color: var(--mat-sys-on-surface-variant);
   margin-left: 0.5rem;
   font-size: 0.8125rem;
 }
