@@ -134,8 +134,8 @@ for (let i = 0; i < specs.length; i++) {
   writeProgress();
 }
 
-// Newline after the final progress line so the post-run "Wrote: ..."
-// summary lands cleanly.
+// Newline after the final progress line so the post-run summary
+// lands cleanly.
 if (isTty) process.stderr.write('\n');
 
 // ---------------- write artefacts ----------------
@@ -149,7 +149,31 @@ writeFileSync(join(outDir, 'run.json'), JSON.stringify({
   specs: perSpec,
 }, null, 2));
 
-process.stderr.write(`\nWrote: ${relative(repoRoot, outDir)}/{summary.txt,failures.md,run.json}\n`);
+// Final summary line — designed so anyone (CI tail, terminal user,
+// LLM glancing at the last line) gets the verdict at a glance:
+//   ✓ axe 17/17, functional 26/26 — 357 passed, 0 failed (2m51s)
+//   ✘ axe 17/17, functional 25/26 — 1 FAILED in tests/functional/04-...:103
+const elapsed = fmtTime(Date.now() - startedAtMs);
+const bySuiteCounts = new Map();
+for (const r of perSpec) {
+  const s = bySuiteCounts.get(r.suite) || { passSpecs: 0, totalSpecs: 0 };
+  s.totalSpecs++;
+  if (r.failed === 0) s.passSpecs++;
+  bySuiteCounts.set(r.suite, s);
+}
+const suiteStr = Array.from(bySuiteCounts).map(([s, c]) => `${s} ${c.passSpecs}/${c.totalSpecs}`).join(', ');
+let mark, tail;
+if (totalFail === 0) {
+  mark = '✓';
+  tail = `${totalPass} passed, 0 failed (${elapsed})`;
+} else {
+  mark = '✘';
+  const firstFail = perSpec.flatMap(r => r.failures.map(f => ({ path: r.path, line: f.line }))).at(0);
+  const where = firstFail ? `first: ${firstFail.path}:${firstFail.line}` : '';
+  tail = `${totalFail} FAILED, ${totalPass} passed (${elapsed}) — ${where}`;
+}
+process.stderr.write(`\n${mark} ${suiteStr} — ${tail}\n`);
+process.stderr.write(`  details: ${relative(repoRoot, outDir)}/{summary.txt,failures.md}\n`);
 process.exit(totalFail > 0 ? 1 : 0);
 
 // ---------------- helpers ----------------
@@ -298,6 +322,19 @@ function walkSpec(spec, out) {
 function formatSummary() {
   const when = startedAt.toISOString().replace('T', ' ').slice(0, 19);
   const lines = [];
+  // First line is the at-a-glance verdict — same shape as the final
+  // stderr line, so the very first thing read (whether it's the user
+  // glancing or an LLM doing `head -1 summary.txt`) is enough to know
+  // whether to dig deeper.
+  const elapsedSec = perSpec.reduce((a, r) => a + r.durationMs, 0) / 1000;
+  if (totalFail === 0) {
+    lines.push(`OK — ${totalPass} passed, 0 failed across ${perSpec.length} specs (${elapsedSec.toFixed(0)}s)`);
+  } else {
+    const first = perSpec.flatMap(r => r.failures.map(f => ({ path: r.path, line: f.line }))).at(0);
+    const where = first ? ` — first: ${first.path}:${first.line}` : '';
+    lines.push(`FAIL — ${totalFail} failed, ${totalPass} passed across ${perSpec.length} specs (${elapsedSec.toFixed(0)}s)${where}`);
+  }
+  lines.push('');
   lines.push(`Test harness — ${when} UTC`);
   lines.push(`Mode: ${mode}`);
   lines.push('');
