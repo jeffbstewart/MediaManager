@@ -169,13 +169,50 @@ open class GrpcTestBase {
         return user
     }
 
-    protected fun authenticatedChannel(user: AppUser): ManagedChannel {
+    protected fun authenticatedChannel(user: AppUser, origin: String? = null): ManagedChannel {
         val tokenPair = JwtService.createTokenPair(user, "test")
         val metadata = Metadata().apply {
             put(
                 Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER),
                 "Bearer ${tokenPair.accessToken}"
             )
+            if (origin != null) {
+                put(
+                    Metadata.Key.of("origin", Metadata.ASCII_STRING_MARSHALLER),
+                    origin,
+                )
+            }
+        }
+        return InProcessChannelBuilder.forName(SERVER_NAME)
+            .directExecutor()
+            .intercept(MetadataUtils.newAttachHeadersInterceptor(metadata))
+            .build()
+    }
+
+    /**
+     * Build a channel that authenticates via the HttpOnly session cookie
+     * (AuthService.COOKIE_NAME), mirroring how the browser SPA hits the
+     * gRPC endpoint. Optional `origin` simulates a browser's Origin
+     * header — pass null for the native-client case (no Origin), pass a
+     * value for a browser case.
+     */
+    protected fun cookieChannel(
+        user: AppUser,
+        origin: String? = null,
+        cookieToken: String? = null,
+    ): ManagedChannel {
+        val token = cookieToken ?: net.stewart.mediamanager.service.AuthService.createSession(user, "test-agent")
+        val metadata = Metadata().apply {
+            put(
+                Metadata.Key.of("cookie", Metadata.ASCII_STRING_MARSHALLER),
+                "${net.stewart.mediamanager.service.AuthService.COOKIE_NAME}=$token"
+            )
+            if (origin != null) {
+                put(
+                    Metadata.Key.of("origin", Metadata.ASCII_STRING_MARSHALLER),
+                    origin,
+                )
+            }
         }
         return InProcessChannelBuilder.forName(SERVER_NAME)
             .directExecutor()

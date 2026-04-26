@@ -1,5 +1,10 @@
 import type { Page, Route } from '@playwright/test';
 import { loadFixture } from './load-fixture';
+import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
+import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
+import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -122,9 +127,37 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   );
 
   // --- Detail pages (Tier 4) ---
-  // /api/v2/catalog/titles/:id — dispatch by id to the right media-type
-  // fixture. 100 movie, 200 tv, 300 book, 301 album. Anything else
-  // falls back to the movie fixture.
+  // gRPC-JSON unary: POST /<service>/<rpc> with a JSON body. Single
+  // entry covers all unary catalog RPCs we route here; we dispatch on
+  // the rpc name. Web → server contract is the proto, so we serve a
+  // proto-typed fixture and round-trip it through TitleDetail.fromJSON
+  // /toJSON in fulfillProto so any fixture drift fails the test setup
+  // loudly instead of silently shipping the wrong shape.
+  await page.route('**/mediamanager.CatalogService/*', async (r: Route) => {
+    const url = new URL(r.request().url());
+    const rpc = url.pathname.split('/').pop();
+    if (rpc === 'GetTitleDetail') {
+      // Body is gRPC-Web framed: 5-byte header + binary protobuf
+      // TitleIdRequest. Strip the frame, decode, dispatch on id;
+      // ids without a typed fixture fall through to the legacy REST
+      // handler below.
+      const payload = unframeGrpcWebRequest(r.request().postDataBuffer());
+      const req = fromBinary(TitleIdRequestSchema, payload);
+      if (req.titleId === 100n) {
+        return fulfillProto(r, TitleDetailSchema, titleMovie100);
+      }
+      if (req.titleId === 200n) {
+        return fulfillProto(r, TitleDetailSchema, titleTv200);
+      }
+    }
+    return r.fallback();
+  });
+
+  // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
+  // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
+  // Anything else falls back to the movie fixture. Kept in place
+  // during the proto migration; a title id only exits this path
+  // once a typed fixture lands above.
   await page.route('**/api/v2/catalog/titles/*', (r: Route) => {
     const url = new URL(r.request().url());
     const id = url.pathname.split('/').pop();

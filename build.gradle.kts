@@ -127,6 +127,39 @@ dependencyCheck {
     }
 }
 
+// Web-app TypeScript codegen from .proto files. Same source of truth as
+// the Kotlin/iOS/Android-TV codegen — a single field add in proto/ flows
+// to all four clients. Output (web-app/src/app/proto-gen/) is gitignored.
+//
+// This task is convenience for local dev: run `./gradlew generateWebProto`
+// after editing a .proto and the SPA's TypeScript types refresh in one
+// shot. The "never-forget" guarantee comes from elsewhere:
+//   - npm `prebuild` / `prestart` hooks regenerate before `ng build` /
+//     `ng serve`, so the SPA's bundle is always built against fresh
+//     types (the Docker angular-builder stage uses this path).
+//   - lifecycle/pre-submit.sh runs gen-proto.mjs before the Playwright
+//     suite, so a stale dir can't pass tests.
+//
+// Skipped when run from a context that doesn't have web-app/ on disk
+// (e.g. the Kotlin-only Docker stage that copies `src/` and `proto/`
+// but not `web-app/`).
+tasks.register<Exec>("generateWebProto") {
+    description = "Generate TypeScript types from .proto files for the Angular web-app"
+    group = "build"
+    workingDir = file("web-app")
+    val npm = if (org.gradle.internal.os.OperatingSystem.current().isWindows) "npm.cmd" else "npm"
+    commandLine(npm, "run", "proto:gen")
+
+    val genScript = file("web-app/tests/scripts/gen-proto.mjs")
+    val packageJson = file("web-app/package.json")
+    onlyIf("web-app/ is present") { genScript.exists() && packageJson.exists() }
+
+    inputs.dir("proto").withPropertyName("protoSources")
+    inputs.files(genScript).withPropertyName("genScript").optional()
+    inputs.files(packageJson).withPropertyName("packageJson").optional()
+    outputs.dir("web-app/src/app/proto-gen").withPropertyName("generatedTs")
+}
+
 // npm audit for the Angular web-app. OWASP dependency-check's built-in node
 // analyzers query the same GitHub Advisory data less reliably; running npm's
 // own audit is authoritative for npm packages. --audit-level=high matches the

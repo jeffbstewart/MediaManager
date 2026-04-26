@@ -50,6 +50,14 @@ export class AuthService {
 
   readonly isAuthenticated = computed(() => this.accessToken() !== null);
 
+  constructor() {
+    // Drop any pre-migration auth cookies the browser may still hold
+    // before the first request goes out. The server also sends Set-
+    // Cookie clears on auth-touching endpoints, but doing it on boot
+    // means even the initial /api/v2/auth/discover request is clean.
+    this.clearLegacyAuthCookies();
+  }
+
   /** Cached legal status — populated after login/refresh, cleared on logout. */
   readonly legalStatus = signal<LegalStatus | null>(null);
 
@@ -145,13 +153,16 @@ export class AuthService {
 
   private setAccessToken(token: string, expiresInSeconds: number): void {
     this.accessToken.set(token);
-    this.setJwtCookie(token, expiresInSeconds);
+    // No JS-set auth cookie any more — REST login sets an HttpOnly
+    // session cookie server-side via Set-Cookie. The access token is
+    // held in memory only for the (small) population of code that
+    // attaches it as a Bearer header explicitly; everything that goes
+    // through fetch() / HttpClient picks up the cookie automatically.
     this.scheduleRefresh(expiresInSeconds);
   }
 
   private clearAccessToken(): void {
     this.accessToken.set(null);
-    this.clearJwtCookie();
     if (this.refreshTimerId) {
       clearTimeout(this.refreshTimerId);
       this.refreshTimerId = null;
@@ -159,19 +170,18 @@ export class AuthService {
   }
 
   /**
-   * Sets the access token as an mm_jwt cookie so browser-initiated requests
-   * (<img>, <video>) carry auth automatically. The ArmeriaAuthDecorator
-   * accepts this cookie as auth method #3.
-   *
-   * TODO: Pair with HttpOnly mm_jwt_bind cookie for off-origin theft
-   * protection (see issue #59).
+   * Expire any legacy auth cookies that older builds set from JS.
+   * Called once at app boot. Two reasons:
+   *   1. Old `mm_jwt` cookies sit in browser jars from pre-migration
+   *      sessions and would otherwise keep being sent on every request,
+   *      wasting bytes (the server no longer accepts them on gRPC).
+   *   2. Forces stale sessions onto the login page, where the new
+   *      HttpOnly session cookie is issued.
+   * The server also sends Set-Cookie clears on any auth-touching
+   * endpoint, but the SPA boot clear handles browsers that haven't
+   * yet hit one of those endpoints.
    */
-  private setJwtCookie(token: string, expiresInSeconds: number): void {
-    const expires = new Date(Date.now() + expiresInSeconds * 1000).toUTCString();
-    document.cookie = `mm_jwt=${token}; path=/; expires=${expires}; SameSite=Lax`;
-  }
-
-  private clearJwtCookie(): void {
+  clearLegacyAuthCookies(): void {
     document.cookie = 'mm_jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   }
 

@@ -3,6 +3,7 @@ package net.stewart.mediamanager.grpc
 import com.google.protobuf.ByteString
 import io.grpc.StatusException
 import kotlinx.coroutines.runBlocking
+import net.stewart.mediamanager.service.JwtService
 import kotlin.test.*
 
 /**
@@ -275,5 +276,202 @@ class AuthInterceptorTest : GrpcTestBase() {
         } finally {
             authedChannel.shutdownNow()
         }
+    }
+
+    // ========================================================================
+    // Cookie auth path (browser SPA — no JWT in JS by design)
+    // ========================================================================
+
+    @Test
+    fun `mm_auth cookie authenticates a same-origin request`() = runBlocking {
+        val user = createViewerUser(username = "cookieuser")
+        // Same-origin: Origin matches the InProcess channel's authority,
+        // which is "localhost" (gRPC default for in-process transport).
+        val ch = cookieChannel(user, origin = "https://localhost")
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch)
+            val response = stub.getProfile(Empty.getDefaultInstance())
+            assertEquals(user.username, response.username)
+        } finally {
+            ch.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `mm_auth cookie authenticates when no Origin is sent (native client)`() = runBlocking {
+        val user = createViewerUser(username = "nativecookie")
+        // Native clients (iOS / Roku / curl) don't send Origin. Cookie
+        // auth still works — the CSRF gate is bypassed because there's
+        // nothing to compare against and SameSite stops cross-origin
+        // browsers from getting here in the first place.
+        val ch = cookieChannel(user, origin = null)
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch)
+            val response = stub.getProfile(Empty.getDefaultInstance())
+            assertEquals(user.username, response.username)
+        } finally {
+            ch.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `mm_auth cookie is rejected when Origin points at a different host (CSRF gate)`() = runBlocking {
+        val user = createViewerUser(username = "csrfvictim")
+        // Cross-origin: evil.com fires fetch() with credentials. Even if
+        // a future config change lets the cookie reach the server, the
+        // Origin mismatch shuts the auth path down. UNAUTHENTICATED, not
+        // a partial success.
+        val ch = cookieChannel(user, origin = "https://evil.example.com")
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch)
+            val ex = assertFailsWith<StatusException> {
+                stub.getProfile(Empty.getDefaultInstance())
+            }
+            assertEquals(io.grpc.Status.UNAUTHENTICATED.code, ex.status.code)
+        } finally {
+            ch.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `Bearer auth ignores Origin (Bearer is CSRF-safe by construction)`() = runBlocking {
+        val user = createViewerUser(username = "beareruser")
+        // Bearer auth + a hostile Origin: the Origin only gates the cookie
+        // path. JS-controlled clients that hold a JWT are by definition
+        // not browser SPAs (the SPA can't see the JWT), so Origin is
+        // irrelevant.
+        val ch = authenticatedChannel(user, origin = "https://evil.example.com")
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch)
+            val response = stub.getProfile(Empty.getDefaultInstance())
+            assertEquals(user.username, response.username)
+        } finally {
+            ch.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `mm_jwt cookie is no longer accepted on gRPC (legacy path removed)`() = runBlocking {
+        // The SPA used to JS-set mm_jwt and the interceptor validated it
+        // as a JWT. After the migration to the HttpOnly session cookie,
+        // mm_jwt is no longer an authenticator on gRPC — the only way
+        // for a JS-readable JWT to authenticate the user (XSS-vulnerable)
+        // has been closed. iOS HLS still uses mm_jwt for HTTP servlets
+        // (different path, different decorator).
+        val user = createViewerUser(username = "jwtdenied")
+        val tokenPair = JwtService.createTokenPair(user, "test")
+        val ch = cookieChannel(user, origin = "https://localhost",
+            cookieToken = "ignored")  // session token; we override the cookie below
+        // Re-attach with a literal mm_jwt= cookie instead.
+        val metadata = io.grpc.Metadata().apply {
+            put(
+                io.grpc.Metadata.Key.of("cookie", io.grpc.Metadata.ASCII_STRING_MARSHALLER),
+                "mm_jwt=${tokenPair.accessToken}"
+            )
+            put(
+                io.grpc.Metadata.Key.of("origin", io.grpc.Metadata.ASCII_STRING_MARSHALLER),
+                "https://localhost"
+            )
+        }
+        ch.shutdownNow()
+        val ch2 = io.grpc.inprocess.InProcessChannelBuilder.forName("grpc-test-server")
+            .directExecutor()
+            .intercept(io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata))
+            .build()
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch2)
+            val ex = assertFailsWith<StatusException> {
+                stub.getProfile(Empty.getDefaultInstance())
+            }
+            assertEquals(io.grpc.Status.UNAUTHENTICATED.code, ex.status.code)
+        } finally {
+            ch2.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `Invalid mm_session cookie returns UNAUTHENTICATED`() = runBlocking {
+        val user = createViewerUser(username = "fakecookie")
+        // Pass a syntactically-valid but never-issued cookie value.
+        val ch = cookieChannel(user, origin = "https://grpc-test-server",
+            cookieToken = "00000000-0000-0000-0000-000000000000")
+        try {
+            val stub = ProfileServiceGrpcKt.ProfileServiceCoroutineStub(ch)
+            val ex = assertFailsWith<StatusException> {
+                stub.getProfile(Empty.getDefaultInstance())
+            }
+            assertEquals(io.grpc.Status.UNAUTHENTICATED.code, ex.status.code)
+        } finally {
+            ch.shutdownNow()
+        }
+    }
+
+    // ========================================================================
+    // Origin-parsing pure-function tests (no DB / no channel needed)
+    // ========================================================================
+
+    @Test
+    fun `originPermitted accepts absent Origin`() {
+        val interceptor = AuthInterceptor()
+        assertTrue(interceptor.originPermitted(origin = null, authority = "host:8443"))
+    }
+
+    @Test
+    fun `originPermitted accepts matching host+port`() {
+        val interceptor = AuthInterceptor()
+        assertTrue(interceptor.originPermitted(
+            origin = "https://mediamanagergrpc.example.com:8443",
+            authority = "mediamanagergrpc.example.com:8443"))
+    }
+
+    @Test
+    fun `originPermitted rejects different host`() {
+        val interceptor = AuthInterceptor()
+        assertFalse(interceptor.originPermitted(
+            origin = "https://evil.example.com",
+            authority = "mediamanagergrpc.example.com:8443"))
+    }
+
+    @Test
+    fun `originPermitted accepts same host on different ports (proxy rewrite tolerance)`() {
+        // HAProxy / pfSense reverse proxies often rewrite the HTTP/2
+        // :authority pseudo-header, dropping the public-facing port.
+        // The CSRF gate compares hostnames only — same host means same
+        // origin for our purposes; a different host is what mattered.
+        val interceptor = AuthInterceptor()
+        assertTrue(interceptor.originPermitted(
+            origin = "https://host.example.com:9000",
+            authority = "host.example.com:8443"))
+        assertTrue(interceptor.originPermitted(
+            origin = "https://host.example.com:8443",
+            authority = "host.example.com"))
+    }
+
+    @Test
+    fun `originPermitted is case-insensitive on host`() {
+        val interceptor = AuthInterceptor()
+        assertTrue(interceptor.originPermitted(
+            origin = "https://Host.Example.COM:8443",
+            authority = "host.example.com:8443"))
+    }
+
+    @Test
+    fun `originPermitted rejects when authority is unknown`() {
+        val interceptor = AuthInterceptor()
+        // Fail closed — without an authority we can't prove same-origin.
+        assertFalse(interceptor.originPermitted(
+            origin = "https://anything.example.com",
+            authority = null))
+    }
+
+    @Test
+    fun `originPermitted rejects garbage Origin values`() {
+        val interceptor = AuthInterceptor()
+        assertFalse(interceptor.originPermitted(
+            origin = "not a url",
+            authority = "host:8443"))
+        assertFalse(interceptor.originPermitted(
+            origin = "",
+            authority = "host:8443"))
     }
 }

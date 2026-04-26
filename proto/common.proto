@@ -318,6 +318,77 @@ message TitleDetail {
   optional Album album = 10;
   // Populated only when title.media_type = MEDIA_TYPE_BOOK.
   optional BookDetail book = 11;
+
+  // --- Web parity additions (V100 proto extension). ---
+  // Recommendation row shown under the hero. Empty for personal videos.
+  repeated SimilarTitle similar_titles = 12;
+  // Embedded TV seasons + episodes so the title detail page can render
+  // without a follow-up RPC. Empty for non-TV titles.
+  repeated Season seasons = 13;
+  repeated Episode episodes = 14;
+  // Personal-video tagged people (full objects, not the bare strings
+  // on Title.family_members). Empty for non-PERSONAL titles.
+  repeated FamilyMember family_members_full = 15;
+  // TMDB collection link (Marvel, Bond, …). Distinct from
+  // Title.tmdb_collection_id — this one points at our local
+  // tmdb_collection row id, which the /content/collection/:id route
+  // consumes.
+  optional Collection collection = 16;
+  // Display-ready labels for the format chip row ("Blu-ray", "4K UHD",
+  // "DVD", …). Server-rendered strings so the client doesn't have to
+  // localise a MediaFormat enum into a UI label.
+  repeated string display_formats = 17;
+  // Admin-only edit links for each physical/digital media item.
+  repeated AdminMediaItem admin_media_items = 18;
+  // Digital book editions with per-user reading progress. Empty for
+  // non-BOOK titles.
+  repeated ReadableEdition readable_editions = 19;
+}
+
+// Compact title reference used in the "Similar Titles" carousel. Lighter
+// than embedding full Title — the carousel only needs a name + a year.
+// Cover image: ImageService with IMAGE_TYPE_TITLE_POSTER + title_id.
+message SimilarTitle {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional int32 release_year = 3;
+}
+
+// Tagged person on a personal video.
+message FamilyMember {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Local tmdb_collection row — the row backing /content/collection/:id.
+// Distinct from TMDB's collection_id which lives on Title.
+message Collection {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Admin-only handle to a row in media_item. Lets the title page link
+// to /admin/item/:id for inline edits.
+message AdminMediaItem {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
+  optional string upc = 3;
+}
+
+// Digital book edition + the user's saved reading progress on it.
+message ReadableEdition {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
+  // Fraction read, 0.0–1.0. 0 when there's no saved progress.
+  double percent = 3;
+  // Per-format locator. Absent when there's no saved progress.
+  // EPUB carries a CFI string; PDF carries a 1-based page number.
+  // Future formats add their own arm rather than overloading either.
+  oneof locator {
+    string epub_cfi = 4;
+    int32 pdf_page = 5;
+  }
+  optional Timestamp updated_at = 6;
 }
 
 message Transcode {
@@ -368,6 +439,7 @@ message Season {
   int32 season_number = 1;
   optional string name = 2;
   int32 episode_count = 3;
+  AcquisitionStatus acquisition_status = 4;
 }
 
 message Episode {
@@ -582,6 +654,18 @@ message Track {
   // for files whose tagger didn't write it — rare).
   optional int32 bpm = 10;
   optional string time_signature = 11;
+  // Per-track artist credits with id, so the web track row can
+  // routerLink to /artist/:id. Mirrors track_artist_names but carries
+  // the join target instead of just a label.
+  repeated TrackArtistRef track_artists = 12;
+  // Per-track tags (BPM bucket, dance style, etc.). Filtered to those
+  // that don't already appear on the parent album to avoid noise.
+  repeated Tag tags = 13;
+}
+
+message TrackArtistRef {
+  int64 id = 1;
+  string name = 2;
 }
 
 message Album {
@@ -593,6 +677,34 @@ message Album {
   optional string label = 6;
   optional string musicbrainz_release_group_id = 7;
   optional string musicbrainz_release_id = 8;
+  // MusicBrainz personnel credits (performers, producers, engineers, …).
+  // Empty when MusicBrainz has nothing for this release group.
+  repeated AlbumPersonnelEntry personnel = 9;
+}
+
+// One credit row in the album personnel section. Multiple entries per
+// artist are normal — same person can appear under several roles or
+// per-track credits.
+message AlbumPersonnelEntry {
+  int64 artist_id = 1;
+  string artist_name = 2;
+  PersonnelRole role = 3;
+  // E.g. "trumpet", "piano". Optional — many roles don't take one.
+  optional string instrument = 4;
+  // When set, the credit is for one specific track rather than the
+  // album as a whole.
+  optional int64 track_id = 5;
+  optional string track_name = 6;
+}
+
+enum PersonnelRole {
+  PERSONNEL_ROLE_UNKNOWN = 0;
+  PERSONNEL_ROLE_PERFORMER = 1;
+  PERSONNEL_ROLE_COMPOSER = 2;
+  PERSONNEL_ROLE_PRODUCER = 3;
+  PERSONNEL_ROLE_ENGINEER = 4;
+  PERSONNEL_ROLE_MIXER = 5;
+  PERSONNEL_ROLE_OTHER = 6;
 }
 
 message Author {
@@ -623,6 +735,22 @@ message BookDetail {
   repeated Author authors = 1;
   repeated BookEdition editions = 2;
   optional ReadingProgress reading_progress = 3;
+  // Series link for multi-book series (Dune, Foundation, …).
+  optional BookSeriesRef book_series = 4;
+  optional int32 page_count = 5;
+  optional int32 first_publication_year = 6;
+  // OpenLibrary work id (the abstract work, not a specific edition).
+  // Use with IMAGE_TYPE_OPENLIBRARY_COVER via ImageService for cover art.
+  optional string open_library_work_id = 7;
+}
+
+// Reference to a book_series row. `number` is the volume number within
+// the series for THIS title — kept as a string because some series use
+// "1.5" / "2a" / etc.
+message BookSeriesRef {
+  int64 id = 1;
+  string name = 2;
+  optional string number = 3;
 }
 
 message BookEdition {

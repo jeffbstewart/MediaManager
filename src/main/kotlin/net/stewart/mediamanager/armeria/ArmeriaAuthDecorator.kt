@@ -62,7 +62,7 @@ class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
 
         // 1. Cookie-based auth (normal browser sessions)
         val cookies = headers.cookies()
-        val sessionCookie = cookies.firstOrNull { it.name() == "mm_auth" }
+        val sessionCookie = cookies.firstOrNull { it.name() == AuthService.COOKIE_NAME }
         if (sessionCookie != null) {
             val sessionUser = AuthService.validateCookieToken(sessionCookie.value())
             if (sessionUser != null) {

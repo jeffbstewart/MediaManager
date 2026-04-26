@@ -57,7 +57,7 @@ class RokuFeedHttpService {
 
         // Cookie session fallback
         val cookies = ctx.request().headers().cookies()
-        val sessionCookie = cookies.firstOrNull { it.name() == "mm_auth" }
+        val sessionCookie = cookies.firstOrNull { it.name() == AuthService.COOKIE_NAME }
         if (sessionCookie != null) {
             val cookieUser = AuthService.validateCookieToken(sessionCookie.value())
             if (cookieUser != null) {

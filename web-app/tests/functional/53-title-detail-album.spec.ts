@@ -2,6 +2,30 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { clone, create } from '@bufbuild/protobuf';
+import {
+  MediaFormat,
+  PlaybackProgressSchema,
+  Quality,
+  TitleDetailSchema,
+  TranscodeSchema,
+  type TitleDetail,
+  type Transcode,
+} from '../../src/app/proto-gen/common_pb';
+import { PlaybackOffsetSchema } from '../../src/app/proto-gen/time_pb';
+import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
+
+/** Movie 100 detail post-migration runs through gRPC-Web; per-test
+ * variants override that endpoint with a typed-fixture clone instead
+ * of the legacy REST route. `clone` deep-copies the message so mutations
+ * don't bleed into the canonical fixture. */
+async function overrideMovie100(page: Page, mutate: (d: TitleDetail) => void): Promise<void> {
+  const variant = clone(TitleDetailSchema, titleMovie100);
+  mutate(variant);
+  await page.route('**/mediamanager.CatalogService/GetTitleDetail',
+    r => fulfillProto(r, TitleDetailSchema, variant));
+}
 
 // title-detail — album branch + admin track-row actions. Targets
 // title-detail.ts coverage gaps: musicMetaTitle, editTrackMusicTags,
@@ -352,16 +376,9 @@ test.describe('title detail — hide flow + resume + error states', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    // Override movie fixture with is_hidden=true.
-    await page.route('**/api/v2/catalog/titles/100', r => r.fulfill({ json: {
-      title_id: 100, title_name: 'The Matrix', media_type: 'MOVIE',
-      release_year: 1999, description: '', content_rating: null,
-      poster_url: '/posters/w500/100', backdrop_url: '/backdrops/100',
-      event_date: null, is_starred: false, is_hidden: true,
-      genres: [], tags: [], formats: ['BLURAY'], admin_media_items: [],
-      transcodes: [], cast: [], episodes: [], seasons: [], family_members: [],
-      similar_titles: [], collection: null,
-    } }));
+    // Override movie fixture with isHidden=true. Same typed-fixture
+    // shape as the base — just one field flipped.
+    await overrideMovie100(page, d => { d.isHidden = true; });
     await page.route('**/api/v2/catalog/titles/100/hide', r =>
       r.fulfill({ json: { is_hidden: false } }));
     let dialogFired = false;
@@ -382,21 +399,23 @@ test.describe('title detail — hide flow + resume + error states', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/titles/100', r => r.fulfill({ json: {
-      title_id: 100, title_name: 'The Matrix', media_type: 'MOVIE',
-      release_year: 1999, description: '', content_rating: null,
-      poster_url: '/posters/w500/100', backdrop_url: '/backdrops/100',
-      event_date: null, is_starred: false, is_hidden: false,
-      genres: [], tags: [], formats: ['BLURAY'], admin_media_items: [],
-      transcodes: [
-        { transcode_id: 1001, format: 'BLURAY', display_label: 'Blu-ray',
-          path: '/x', position_seconds: 754, season_number: null,
-          episode_number: null, episode_name: null, transcoded: true,
-          duration_seconds: 7800 },
-      ],
-      cast: [], episodes: [], seasons: [], family_members: [],
-      similar_titles: [], collection: null,
-    } }));
+    // Add a saved-progress transcode so the resumeTranscode getter
+    // surfaces the big "Resume from m:ss" CTA. Position lives on
+    // PlaybackProgress (not Transcode) in the proto schema.
+    await overrideMovie100(page, d => {
+      const tc: Transcode = create(TranscodeSchema, {
+        id: 1001n,
+        mediaFormat: MediaFormat.BLURAY,
+        quality: Quality.HD,
+        playable: true,
+      });
+      d.transcodes = [tc];
+      d.playbackProgress = create(PlaybackProgressSchema, {
+        transcodeId: 1001n,
+        position: create(PlaybackOffsetSchema, { seconds: 754 }),
+        duration: create(PlaybackOffsetSchema, { seconds: 7800 }),
+      });
+    });
     await page.goto(`/title/${MOVIE_ID}`);
     await page.waitForSelector('app-title-detail .detail-container');
     const resumeBtn = page.locator('a.resume-btn').first();
@@ -439,7 +458,8 @@ test.describe('title detail — hide flow + resume + error states', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/titles/100', r => r.fulfill({ status: 500 }));
+    await page.route('**/mediamanager.CatalogService/GetTitleDetail',
+      r => r.fulfill({ status: 500 }));
     await page.goto(`/title/${MOVIE_ID}`);
     await page.waitForSelector('app-title-detail');
     await expect(page.locator('app-title-detail')).toContainText('Failed to load title');

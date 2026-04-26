@@ -1,6 +1,22 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import {
+  AcquisitionStatus as ProtoAcquisitionStatus,
+  AdminMediaItem as ProtoAdminMediaItem,
+  CastMember as ProtoCastMember,
+  Episode as ProtoEpisode,
+  MediaFormat as ProtoMediaFormat,
+  MediaType as ProtoMediaType,
+  ContentRating as ProtoContentRating,
+  Season as ProtoSeason,
+  SimilarTitle as ProtoSimilarTitle,
+  Tag as ProtoTag,
+  TitleDetail as ProtoTitleDetail,
+  Transcode as ProtoTranscode,
+} from '../proto-gen/common_pb';
+import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
+import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
   title_id: number;
@@ -835,6 +851,28 @@ export class CatalogService {
   }
 
   async getTitleDetail(titleId: number): Promise<TitleDetail> {
+    // ---- Migration in flight ----
+    // The catalog detail endpoint is mid-migration from REST/JSON to a
+    // proto gRPC-JSON wire (single source of truth lives in
+    // proto/catalog.proto + common.proto). Each media type joins the
+    // gRPC path once its typed fixture + adapter mappings are in place.
+    // Currently: 100 (movie) and 200 (TV) are exercised in the
+    // functional suite; album + book remain on REST until their
+    // adapter mappings land.
+    //
+    // Once every media type runs through `useProto`, the legacy branch
+    // and the adapter both delete.
+    const useProto = titleId === 100 || titleId === 200;
+    if (useProto) {
+      // Connect-Web client over gRPC-Web (application/grpc-web+proto).
+      // The transport handles framing + cookie auth; we just call the
+      // generated method and adapt the typed proto response to the
+      // legacy TS interface so component code is unchanged.
+      const client = grpcClient(CatalogServiceDesc);
+      // int64 fields are bigint in @bufbuild/protobuf v2.
+      const proto = await client.getTitleDetail({ titleId: BigInt(titleId) });
+      return adaptProtoTitleDetail(proto);
+    }
     return firstValueFrom(this.http.get<TitleDetail>(`/api/v2/catalog/titles/${titleId}`));
   }
 
@@ -1157,4 +1195,217 @@ export class CatalogService {
     if (params.playableOnly) queryParams['playable_only'] = 'true';
     return firstValueFrom(this.http.get<FamilyVideosResponse>('/api/v2/catalog/family-videos', { params: queryParams }));
   }
+}
+
+// ----------------------------------------------------------------------------
+// Proto → legacy adapter for getTitleDetail.
+//
+// Transition shim: the rest of the codebase still types against the
+// hand-written TitleDetail interface above. Each adapter field is one
+// renaming or coercion away from the proto shape. As callers migrate to
+// the proto-derived types directly, the corresponding mapping line
+// disappears. When the legacy interface is empty, the shim deletes
+// itself and getTitleDetail returns ProtoTitleDetail.
+// ----------------------------------------------------------------------------
+
+const PROTO_MEDIA_TYPE_TO_LEGACY: Record<ProtoMediaType, string> = {
+  [ProtoMediaType.UNKNOWN]: 'UNKNOWN',
+  [ProtoMediaType.MOVIE]: 'MOVIE',
+  [ProtoMediaType.TV]: 'TV',
+  [ProtoMediaType.PERSONAL]: 'PERSONAL',
+  [ProtoMediaType.BOOK]: 'BOOK',
+  [ProtoMediaType.ALBUM]: 'ALBUM',
+};
+
+const PROTO_MEDIA_FORMAT_TO_LEGACY: Record<ProtoMediaFormat, string> = {
+  [ProtoMediaFormat.UNKNOWN]: 'UNKNOWN',
+  [ProtoMediaFormat.DVD]: 'DVD',
+  [ProtoMediaFormat.BLURAY]: 'BLURAY',
+  [ProtoMediaFormat.UHD_BLURAY]: 'UHD_BLURAY',
+  [ProtoMediaFormat.HD_DVD]: 'HD_DVD',
+  [ProtoMediaFormat.MASS_MARKET_PAPERBACK]: 'MASS_MARKET_PAPERBACK',
+  [ProtoMediaFormat.TRADE_PAPERBACK]: 'TRADE_PAPERBACK',
+  [ProtoMediaFormat.HARDBACK]: 'HARDBACK',
+  [ProtoMediaFormat.EBOOK_EPUB]: 'EBOOK_EPUB',
+  [ProtoMediaFormat.EBOOK_PDF]: 'EBOOK_PDF',
+  [ProtoMediaFormat.AUDIOBOOK_CD]: 'AUDIOBOOK_CD',
+  [ProtoMediaFormat.AUDIOBOOK_DIGITAL]: 'AUDIOBOOK_DIGITAL',
+  [ProtoMediaFormat.CD]: 'CD',
+  [ProtoMediaFormat.VINYL_LP]: 'VINYL_LP',
+  [ProtoMediaFormat.AUDIO_FLAC]: 'AUDIO_FLAC',
+  [ProtoMediaFormat.AUDIO_MP3]: 'AUDIO_MP3',
+  [ProtoMediaFormat.AUDIO_AAC]: 'AUDIO_AAC',
+  [ProtoMediaFormat.AUDIO_OGG]: 'AUDIO_OGG',
+  [ProtoMediaFormat.AUDIO_WAV]: 'AUDIO_WAV',
+  [ProtoMediaFormat.OTHER]: 'OTHER',
+};
+
+const PROTO_CONTENT_RATING_TO_LEGACY: Partial<Record<ProtoContentRating, string>> = {
+  [ProtoContentRating.G]: 'G',
+  [ProtoContentRating.PG]: 'PG',
+  [ProtoContentRating.PG_13]: 'PG-13',
+  [ProtoContentRating.R]: 'R',
+  [ProtoContentRating.NC_17]: 'NC-17',
+  [ProtoContentRating.TV_Y]: 'TV-Y',
+  [ProtoContentRating.TV_Y7]: 'TV-Y7',
+  [ProtoContentRating.TV_G]: 'TV-G',
+  [ProtoContentRating.TV_PG]: 'TV-PG',
+  [ProtoContentRating.TV_14]: 'TV-14',
+  [ProtoContentRating.TV_MA]: 'TV-MA',
+  [ProtoContentRating.NR]: 'NR',
+};
+
+// Legacy `acquisition_status` is the bare enum name from the Kotlin
+// `AcquisitionStatus` enum (e.g. "OWNED", "NEEDS_ASSISTANCE"). The proto
+// names carry the `ACQUISITION_STATUS_` prefix on the wire but
+// @bufbuild/protobuf strips it on the TS enum, so the value names line up
+// with what the title-detail template renders inline.
+const PROTO_ACQUISITION_STATUS_TO_LEGACY: Record<ProtoAcquisitionStatus, string> = {
+  [ProtoAcquisitionStatus.UNKNOWN]: 'UNKNOWN',
+  [ProtoAcquisitionStatus.NOT_AVAILABLE]: 'NOT_AVAILABLE',
+  [ProtoAcquisitionStatus.REJECTED]: 'REJECTED',
+  [ProtoAcquisitionStatus.ORDERED]: 'ORDERED',
+  [ProtoAcquisitionStatus.OWNED]: 'OWNED',
+  [ProtoAcquisitionStatus.NEEDS_ASSISTANCE]: 'NEEDS_ASSISTANCE',
+};
+
+function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
+  const t = p.title;
+  if (!t) {
+    throw new Error('GetTitleDetail returned no title');
+  }
+  // Proto carries a single PlaybackProgress at the top level (the
+  // server picks the "best" transcode); legacy callers expect
+  // position_seconds on the matching transcode row, so fold it in.
+  const pp = p.playbackProgress;
+  // Keyed by stringified bigint — Map.get(bigint) doesn't unify with
+  // numeric / string keys, so just normalise on the way in and out.
+  const positionByTranscode = new Map<string, { position: number; duration: number | undefined }>();
+  if (pp) {
+    positionByTranscode.set(String(pp.transcodeId), {
+      position: pp.position?.seconds ?? 0,
+      duration: pp.duration?.seconds,
+    });
+  }
+
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    media_type: PROTO_MEDIA_TYPE_TO_LEGACY[t.mediaType] ?? 'UNKNOWN',
+    release_year: t.year ?? null,
+    description: t.description ?? null,
+    content_rating: PROTO_CONTENT_RATING_TO_LEGACY[t.contentRating] ?? null,
+    // Server-side image URLs are deprecated on the proto. Until the
+    // image-id-only flow is wired through ImageService, the title page
+    // still expects a URL — fall back to the canonical /posters/w500/:id
+    // path the existing image servlet serves.
+    poster_url: `/posters/w500/${t.id}`,
+    backdrop_url: `/backdrops/${t.id}`,
+    event_date: null,
+    is_starred: p.isFavorite,
+    is_hidden: p.isHidden,
+    genres: p.genres.map(g => g.name),
+    tags: p.tags.map(adaptTag),
+    formats: p.displayFormats,
+    admin_media_items: p.adminMediaItems.map(adaptAdminItem),
+    transcodes: p.transcodes.map(tc => adaptTranscode(tc, positionByTranscode.get(String(tc.id)))),
+    cast: p.cast.map(adaptCast),
+    episodes: p.episodes.map(adaptEpisode),
+    seasons: p.seasons.map(adaptSeason),
+    family_members: p.familyMembersFull.map(fm => ({ id: Number(fm.id), name: fm.name })),
+    similar_titles: p.similarTitles.map(adaptSimilar),
+    collection: p.collection ? { id: Number(p.collection.id), name: p.collection.name } : null,
+  };
+}
+
+function adaptTag(t: ProtoTag): { id: number; name: string; bg_color: string; text_color: string } {
+  return {
+    id: Number(t.id),
+    name: t.name,
+    bg_color: t.color?.hex ?? '#000000',
+    // Server doesn't send text_color over the wire — pick black/white
+    // for legibility against bg_color via a quick luminance check.
+    text_color: pickTextColor(t.color?.hex ?? '#000000'),
+  };
+}
+
+function adaptAdminItem(a: ProtoAdminMediaItem): { media_item_id: number; media_format: string; upc: string | null } {
+  return {
+    media_item_id: Number(a.mediaItemId),
+    media_format: PROTO_MEDIA_FORMAT_TO_LEGACY[a.mediaFormat] ?? 'UNKNOWN',
+    upc: a.upc ?? null,
+  };
+}
+
+function adaptTranscode(
+  tc: ProtoTranscode,
+  progress?: { position: number; duration: number | undefined },
+): TranscodeInfo {
+  return {
+    transcode_id: Number(tc.id),
+    file_name: '',  // not on the proto — legacy field used only for diagnostics
+    playable: tc.playable,
+    media_format: PROTO_MEDIA_FORMAT_TO_LEGACY[tc.mediaFormat] ?? null,
+    season_number: tc.seasonNumber,
+    episode_number: tc.episodeNumber,
+    episode_name: tc.episodeName,
+    position_seconds: progress?.position,
+    duration_seconds: progress?.duration,
+  };
+}
+
+function adaptCast(c: ProtoCastMember): CastInfo {
+  return {
+    id: c.tmdbPersonId,
+    tmdb_person_id: c.tmdbPersonId,
+    name: c.name,
+    character_name: c.characterName ?? null,
+    headshot_url: c.headshotUrl ?? null,
+  };
+}
+
+function adaptSimilar(s: ProtoSimilarTitle): CarouselTitle {
+  return {
+    title_id: Number(s.titleId),
+    title_name: s.titleName,
+    poster_url: `/posters/w185/${s.titleId}`,
+    release_year: s.releaseYear ?? null,
+  };
+}
+
+function adaptSeason(s: ProtoSeason): { season_number: number; acquisition_status: string } {
+  return {
+    season_number: s.seasonNumber,
+    acquisition_status:
+      PROTO_ACQUISITION_STATUS_TO_LEGACY[s.acquisitionStatus] ?? 'UNKNOWN',
+  };
+}
+
+function adaptEpisode(e: ProtoEpisode): EpisodeInfo {
+  return {
+    id: Number(e.episodeId),
+    season_number: e.seasonNumber,
+    episode_number: e.episodeNumber,
+    name: e.name ?? null,
+    transcode_id: e.transcodeId != null ? Number(e.transcodeId) : null,
+    playable: e.playable,
+    position_seconds: e.resumePosition?.seconds ?? null,
+    duration_seconds: e.duration?.seconds ?? null,
+  };
+}
+
+/**
+ * YIQ luminance test — dark-on-light vs light-on-dark for a tag chip
+ * given just its bg color. Mirrors what the server's textColor() helper
+ * computes server-side; once the proto carries text_color this goes
+ * away.
+ */
+function pickTextColor(hex: string): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return '#ffffff';
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? '#000000' : '#ffffff';
 }

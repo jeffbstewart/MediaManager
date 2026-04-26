@@ -42,6 +42,11 @@ eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee
 ffffffff-ffff-ffff-ffff-ffffffffffff
 abcdefab-abcd-abcd-abcd-abcdefabcdef
 
+# AuthInterceptorTest: invalid-session-token probe to exercise the
+# "syntactically-valid UUID, never issued" rejection path. All zeros
+# is not generatable by java.util.UUID.randomUUID() in practice.
+00000000-0000-0000-0000-000000000000
+
 # Emby version numbers that look like IP addresses (competitive analysis)
 4.9.3.0
 4.10.0.5

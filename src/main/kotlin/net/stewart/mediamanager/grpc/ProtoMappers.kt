@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.grpc
 
 import com.google.protobuf.ByteString
+import org.slf4j.LoggerFactory
 import net.stewart.mediamanager.service.BarcodeScanService
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.DeviceToken
@@ -103,6 +104,21 @@ fun String?.toProtoMediaFormat(): MediaFormat = when (this) {
     MediaFormatEnum.BLURAY.name -> MediaFormat.MEDIA_FORMAT_BLURAY
     MediaFormatEnum.UHD_BLURAY.name -> MediaFormat.MEDIA_FORMAT_UHD_BLURAY
     MediaFormatEnum.HD_DVD.name -> MediaFormat.MEDIA_FORMAT_HD_DVD
+    MediaFormatEnum.MASS_MARKET_PAPERBACK.name -> MediaFormat.MEDIA_FORMAT_MASS_MARKET_PAPERBACK
+    MediaFormatEnum.TRADE_PAPERBACK.name -> MediaFormat.MEDIA_FORMAT_TRADE_PAPERBACK
+    MediaFormatEnum.HARDBACK.name -> MediaFormat.MEDIA_FORMAT_HARDBACK
+    MediaFormatEnum.EBOOK_EPUB.name -> MediaFormat.MEDIA_FORMAT_EBOOK_EPUB
+    MediaFormatEnum.EBOOK_PDF.name -> MediaFormat.MEDIA_FORMAT_EBOOK_PDF
+    MediaFormatEnum.AUDIOBOOK_CD.name -> MediaFormat.MEDIA_FORMAT_AUDIOBOOK_CD
+    MediaFormatEnum.AUDIOBOOK_DIGITAL.name -> MediaFormat.MEDIA_FORMAT_AUDIOBOOK_DIGITAL
+    MediaFormatEnum.CD.name -> MediaFormat.MEDIA_FORMAT_CD
+    MediaFormatEnum.VINYL_LP.name -> MediaFormat.MEDIA_FORMAT_VINYL_LP
+    MediaFormatEnum.AUDIO_FLAC.name -> MediaFormat.MEDIA_FORMAT_AUDIO_FLAC
+    MediaFormatEnum.AUDIO_MP3.name -> MediaFormat.MEDIA_FORMAT_AUDIO_MP3
+    MediaFormatEnum.AUDIO_AAC.name -> MediaFormat.MEDIA_FORMAT_AUDIO_AAC
+    MediaFormatEnum.AUDIO_OGG.name -> MediaFormat.MEDIA_FORMAT_AUDIO_OGG
+    MediaFormatEnum.AUDIO_WAV.name -> MediaFormat.MEDIA_FORMAT_AUDIO_WAV
+    MediaFormatEnum.OTHER.name -> MediaFormat.MEDIA_FORMAT_OTHER
     else -> MediaFormat.MEDIA_FORMAT_UNKNOWN
 }
 
@@ -148,6 +164,57 @@ fun String?.toProtoAcquisitionStatus(): AcquisitionStatus = when (this) {
     AcquisitionStatusEnum.OWNED.name -> AcquisitionStatus.ACQUISITION_STATUS_OWNED
     AcquisitionStatusEnum.NEEDS_ASSISTANCE.name -> AcquisitionStatus.ACQUISITION_STATUS_NEEDS_ASSISTANCE
     else -> AcquisitionStatus.ACQUISITION_STATUS_UNKNOWN
+}
+
+private val protoMappersLog = LoggerFactory.getLogger("net.stewart.mediamanager.grpc.ProtoMappers")
+
+/**
+ * MusicBrainz personnel-credit role string → proto PersonnelRole.
+ * Free-form on the storage side; clients want a closed set so they can
+ * label + group sections without string-matching. Anything unrecognised
+ * buckets into OTHER + a warning, so the log surfaces values worth
+ * promoting to first-class enum entries.
+ */
+fun String?.toProtoPersonnelRole(): PersonnelRole = when (this?.uppercase()) {
+    "PERFORMER" -> PersonnelRole.PERSONNEL_ROLE_PERFORMER
+    "COMPOSER" -> PersonnelRole.PERSONNEL_ROLE_COMPOSER
+    "PRODUCER" -> PersonnelRole.PERSONNEL_ROLE_PRODUCER
+    "ENGINEER" -> PersonnelRole.PERSONNEL_ROLE_ENGINEER
+    "MIXER" -> PersonnelRole.PERSONNEL_ROLE_MIXER
+    "OTHER" -> PersonnelRole.PERSONNEL_ROLE_OTHER
+    null -> PersonnelRole.PERSONNEL_ROLE_UNKNOWN
+    else -> {
+        protoMappersLog.warn("Unrecognised personnel role '{}' bucketed into OTHER", this)
+        PersonnelRole.PERSONNEL_ROLE_OTHER
+    }
+}
+
+/**
+ * Display label for a media-format chip ("Blu-ray", "4K UHD", …).
+ * Used for the `display_formats` row on TitleDetail. Falls back to the
+ * raw entity name for formats that don't have a friendlier display.
+ */
+fun String?.toDisplayFormat(): String = when (this) {
+    MediaFormatEnum.DVD.name -> "DVD"
+    MediaFormatEnum.BLURAY.name -> "Blu-ray"
+    MediaFormatEnum.UHD_BLURAY.name -> "4K UHD"
+    MediaFormatEnum.HD_DVD.name -> "HD DVD"
+    MediaFormatEnum.MASS_MARKET_PAPERBACK.name -> "Paperback"
+    MediaFormatEnum.TRADE_PAPERBACK.name -> "Trade paperback"
+    MediaFormatEnum.HARDBACK.name -> "Hardcover"
+    MediaFormatEnum.EBOOK_EPUB.name -> "EPUB"
+    MediaFormatEnum.EBOOK_PDF.name -> "PDF"
+    MediaFormatEnum.AUDIOBOOK_CD.name -> "Audiobook (CD)"
+    MediaFormatEnum.AUDIOBOOK_DIGITAL.name -> "Audiobook"
+    MediaFormatEnum.CD.name -> "CD"
+    MediaFormatEnum.VINYL_LP.name -> "Vinyl"
+    MediaFormatEnum.AUDIO_FLAC.name -> "FLAC"
+    MediaFormatEnum.AUDIO_MP3.name -> "MP3"
+    MediaFormatEnum.AUDIO_AAC.name -> "AAC"
+    MediaFormatEnum.AUDIO_OGG.name -> "Ogg Vorbis"
+    MediaFormatEnum.AUDIO_WAV.name -> "WAV"
+    null -> ""
+    else -> this
 }
 
 fun WishLifecycleStage.toProtoWishLifecycleStage(): net.stewart.mediamanager.grpc.WishLifecycleStage = when (this) {

@@ -52,16 +52,18 @@ class LoggingInterceptor : ServerInterceptor {
                     status.isOk -> {
                         log.info("OK {} {}ms user={}", method, elapsedMs, username)
                     }
-                    isClientError(status) -> {
-                        // Client errors: log at WARN with the description
-                        // Redact description for auth methods (may contain username-as-password)
+                    else -> {
+                        // Any non-OK close — client OR server error — is logged
+                        // at ERROR so it's visible in Binnacle's default ERROR
+                        // filter. Without this, a UNAUTHENTICATED / NOT_FOUND
+                        // failure left only the misleading HTTP-200 access-log
+                        // line behind.
+                        //
+                        // Auth methods redact the description because it may
+                        // contain a username-shaped value the user typed into
+                        // the password field by mistake.
                         val desc = if (method in AUTH_METHODS) "[redacted]"
                             else (status.description ?: status.code.name)
-                        log.warn("{} {} {}ms user={} {}", status.code, method, elapsedMs, username, desc)
-                    }
-                    else -> {
-                        // Server errors: log at ERROR
-                        val desc = status.description ?: status.code.name
                         val cause = status.cause
                         if (cause != null) {
                             log.error("{} {} {}ms user={} {}", status.code, method, elapsedMs, username, desc, cause)

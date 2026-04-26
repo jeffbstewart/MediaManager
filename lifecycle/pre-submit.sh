@@ -15,4 +15,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cd web-app
+# Regenerate proto-derived TS types up-front so a stale generated dir
+# never silently flips the suite green or red. Cheap when nothing's
+# changed (gen-proto.mjs short-circuits via mtime checks would be ideal;
+# for now it's a few hundred ms even when re-running).
+node tests/scripts/gen-proto.mjs
 node tests/harness.mjs "$@"

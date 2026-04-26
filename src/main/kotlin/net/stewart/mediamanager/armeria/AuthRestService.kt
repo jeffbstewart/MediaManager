@@ -165,18 +165,20 @@ class AuthRestService {
         // Issue tokens so the user is logged in immediately after setup
         val tokenPair = JwtService.createTokenPair(user, "web")
         val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+        val sessionCookie = newSessionCookie(user, "web")
 
         val responseBody = mapOf(
             "access_token" to tokenPair.accessToken,
             "expires_in" to tokenPair.expiresIn
         )
 
-        val headers = ResponseHeaders.builder(HttpStatus.OK)
+        val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
             .contentType(MediaType.JSON_UTF_8)
             .add("Content-Security-Policy", API_CSP)
             .cookie(refreshCookie)
-            .build()
-        return HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+            .cookie(sessionCookie)
+        buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+        return HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
     }
 
     private fun isValidLegalUrl(url: String): Boolean =
@@ -219,6 +221,11 @@ class AuthRestService {
                 val deviceName = body.get("device_name")?.asString ?: "web"
                 val tokenPair = JwtService.createTokenPair(user, deviceName)
                 val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+                // HttpOnly session cookie for browser auth — replaces the
+                // SPA's previous JS-set mm_jwt approach. Cookie auth on
+                // gRPC + HTTP servlets keys off this cookie via
+                // AuthService.validateCookieToken.
+                val sessionCookie = newSessionCookie(user, deviceName)
 
                 val responseBody = mapOf(
                     "access_token" to tokenPair.accessToken,
@@ -226,12 +233,13 @@ class AuthRestService {
                     "password_change_required" to user.must_change_password
                 )
 
-                val headers = ResponseHeaders.builder(HttpStatus.OK)
+                val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
                     .contentType(MediaType.JSON_UTF_8)
                     .add("Content-Security-Policy", API_CSP)
                     .cookie(refreshCookie)
-                    .build()
-                HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+                    .cookie(sessionCookie)
+                buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+                HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
             }
             LoginResult.Failed -> {
                 jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Invalid credentials"))
@@ -318,6 +326,7 @@ class AuthRestService {
 
             val tokenPair = JwtService.createTokenPair(user, "web-passkey")
             val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+            val sessionCookie = newSessionCookie(user, "web-passkey")
 
             val responseBody = mapOf(
                 "access_token" to tokenPair.accessToken,
@@ -325,12 +334,13 @@ class AuthRestService {
                 "password_change_required" to user.must_change_password
             )
 
-            val headers = ResponseHeaders.builder(HttpStatus.OK)
+            val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
                 .contentType(MediaType.JSON_UTF_8)
                 .add("Content-Security-Policy", API_CSP)
                 .cookie(refreshCookie)
-                .build()
-            HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+                .cookie(sessionCookie)
+            buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+            HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
         } catch (e: IllegalArgumentException) {
             log.warn("Passkey authentication failed from IP {}: {}", proxy.clientIp, e.message)
             jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Passkey authentication failed"))
@@ -358,18 +368,31 @@ class AuthRestService {
         return when (val result = JwtService.refresh(refreshToken)) {
             is RefreshResult.Success -> {
                 val refreshCookie = buildRefreshCookie(result.tokenPair.refreshToken)
+                // If the request didn't carry a session cookie (post-deploy
+                // user with stale refresh-only state, or anyone whose
+                // mm_session expired before the refresh token), issue a
+                // fresh one. Otherwise leave the existing session in
+                // place — refresh fires every ~24 minutes during normal
+                // use; reissuing here would churn the session_token
+                // table and prematurely evict legitimate concurrent
+                // sessions on other devices.
+                val hasExistingSession = ctx.request().headers().cookies()
+                    .any { it.name() == AuthService.COOKIE_NAME && !it.value().isNullOrBlank() }
 
                 val responseBody = mapOf(
                     "access_token" to result.tokenPair.accessToken,
                     "expires_in" to result.tokenPair.expiresIn
                 )
 
-                val headers = ResponseHeaders.builder(HttpStatus.OK)
+                val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
                     .contentType(MediaType.JSON_UTF_8)
                     .add("Content-Security-Policy", API_CSP)
                     .cookie(refreshCookie)
-                    .build()
-                HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(responseBody)))
+                if (!hasExistingSession) {
+                    headersBuilder.cookie(newSessionCookie(result.user, "web-refresh"))
+                }
+                buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+                HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
             }
             RefreshResult.InvalidToken -> {
                 clearRefreshCookie(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token")
@@ -388,17 +411,35 @@ class AuthRestService {
             return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf("error" to "Too many requests"))
         }
 
-        val refreshToken = ctx.request().headers().cookies()
-            .firstOrNull { it.name() == REFRESH_COOKIE_NAME }
-            ?.value()
+        val cookies = ctx.request().headers().cookies()
+        val refreshToken = cookies.firstOrNull { it.name() == REFRESH_COOKIE_NAME }?.value()
+        val sessionToken = cookies.firstOrNull { it.name() == AuthService.COOKIE_NAME }?.value()
 
         if (!refreshToken.isNullOrBlank()) {
             try {
                 JwtService.revoke(refreshToken)
             } catch (_: Exception) {}
         }
+        if (!sessionToken.isNullOrBlank()) {
+            try {
+                AuthService.revokeSessionByToken(sessionToken)
+            } catch (_: Exception) {}
+        }
 
-        return clearRefreshCookie(HttpStatus.OK, null)
+        // Clear refresh + session + every legacy auth cookie name in one shot.
+        val expiredRefresh = Cookie.secureBuilder(REFRESH_COOKIE_NAME, "")
+            .httpOnly(true).sameSite("Lax").path("/api/v2/auth/").maxAge(0).build()
+        val expiredSession = Cookie.secureBuilder(AuthService.COOKIE_NAME, "")
+            .httpOnly(true).sameSite("Lax").path("/").maxAge(0).build()
+
+        val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .add("Content-Security-Policy", API_CSP)
+            .cookie(expiredRefresh)
+            .cookie(expiredSession)
+        buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+        return HttpResponse.of(headersBuilder.build(),
+            HttpData.ofUtf8(gson.toJson(mapOf("ok" to true))))
     }
 
     // -- Proxy validation --
@@ -449,6 +490,59 @@ class AuthRestService {
             .path("/api/v2/auth/")
             .maxAge(REFRESH_COOKIE_MAX_AGE_SECONDS)
             .build()
+
+    /**
+     * Build the HttpOnly session cookie (browser SPA path). Carries an
+     * opaque DB-backed session token, validated server-side via
+     * AuthService.validateCookieToken on every request. JS can never
+     * read the value — defense against XSS exfiltration.
+     *
+     * Issued at every browser-facing login path (password, passkey,
+     * first-user-setup) alongside the existing refresh-token cookie.
+     */
+    private fun buildSessionCookie(token: String): Cookie =
+        Cookie.secureBuilder(AuthService.COOKIE_NAME, token)
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(AuthService.SESSION_DAYS * 24L * 60 * 60)
+            .build()
+
+    /**
+     * Build expired-cookie headers for every legacy auth-cookie name we
+     * used to issue. Attached to the response on any path that touches
+     * the auth lifecycle so old cookies still cached in browsers stop
+     * being sent. Prevents both wasted request bytes and accidental
+     * acceptance of a stale auth token by an HTTP servlet that still
+     * recognises the legacy name.
+     */
+    private fun buildLegacyCookieClears(): List<Cookie> {
+        val clears = mutableListOf<Cookie>()
+        // mm_jwt — the SPA's old JS-set cookie. Path / matches the
+        // path it was set with from JS.
+        clears += Cookie.secureBuilder("mm_jwt", "")
+            .httpOnly(false)  // JS originally created it; clear with the same flags
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(0)
+            .build()
+        // mm_auth — the previous server-side session cookie name,
+        // pre-rename. Existing browsers shouldn't have it (it was
+        // dead code) but clearing is cheap and forecloses surprises.
+        clears += Cookie.secureBuilder("mm_auth", "")
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(0)
+            .build()
+        return clears
+    }
+
+    /** Build a fresh session for [user] tied to [deviceName] and return its cookie. */
+    private fun newSessionCookie(user: AppUser, deviceName: String): Cookie {
+        val token = AuthService.createSession(user, deviceName)
+        return buildSessionCookie(token)
+    }
 
     private fun clearRefreshCookie(status: HttpStatus, error: String?): HttpResponse {
         val expiredCookie = Cookie.secureBuilder(REFRESH_COOKIE_NAME, "")

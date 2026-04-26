@@ -4,6 +4,10 @@ WORKDIR /build
 COPY web-app/package.json web-app/package-lock.json ./
 RUN npm ci
 COPY web-app/ ./
+# Proto sources for the web-side codegen. `npm run prebuild` (fired
+# automatically by `ng build` below) reads from /proto/ via the
+# repo-root resolution in tests/scripts/gen-proto.mjs.
+COPY proto/ /proto/
 RUN npx ng build --base-href="/app/"
 
 # Stage 1b: Build server (glibc-based image for protoc plugin compatibility)

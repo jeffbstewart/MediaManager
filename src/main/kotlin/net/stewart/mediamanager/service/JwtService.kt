@@ -23,7 +23,7 @@ data class TokenPair(
 )
 
 sealed class RefreshResult {
-    data class Success(val tokenPair: TokenPair) : RefreshResult()
+    data class Success(val tokenPair: TokenPair, val user: AppUser) : RefreshResult()
     data object InvalidToken : RefreshResult()
     data object FamilyRevoked : RefreshResult()
 }
@@ -127,7 +127,7 @@ object JwtService {
                 val newRefreshToken = createRefreshToken(user, rt.deviceName, rt.familyId)
                 val newAccessToken = createAccessToken(user)
                 log.info("AUDIT: Refresh token grace period reuse for user='{}' family={}", user.username, rt.familyId)
-                return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS))
+                return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS), user)
             } else {
                 // Token theft detected — revoke entire family
                 revokeFamily(rt.familyId)
@@ -158,7 +158,7 @@ object JwtService {
 
         val newAccessToken = createAccessToken(user)
         log.info("AUDIT: Refresh token rotated for user='{}' family={}", user.username, rt.familyId)
-        return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS))
+        return RefreshResult.Success(TokenPair(newAccessToken, newRefreshToken, ACCESS_TOKEN_SECONDS), user)
     }
 
     /**

@@ -115,6 +115,21 @@ object ArmeriaServer {
 
         val grpcServiceBuilder = GrpcService.builder()
             .maxRequestMessageLength(16 * 1024 * 1024)  // 16MB (ownership photos)
+            // Accept every standard gRPC serialization format Armeria
+            // ships with — proto-binary for native gRPC clients (iOS,
+            // Android TV, Roku), and the gRPC-Web variants for the
+            // browser SPA via @connectrpc/connect-web. Same handler
+            // code path for both; Armeria picks the codec from the
+            // request's Content-Type.
+            //
+            // We deliberately do NOT enable enableUnframedRequests:
+            // browsers go through proper gRPC-Web framing via Connect,
+            // and leaving the unframed shim off means a POST without
+            // the gRPC framing is rejected outright instead of being
+            // routed into the auth path.
+            .supportedSerializationFormats(
+                com.linecorp.armeria.common.grpc.GrpcSerializationFormats.values()
+            )
 
         for (service in services) {
             grpcServiceBuilder.addService(

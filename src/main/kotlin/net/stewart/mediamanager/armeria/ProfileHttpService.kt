@@ -119,7 +119,7 @@ class ProfileHttpService {
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
         val currentTokenHash = ctx.request().headers().cookies()
-            .firstOrNull { it.name() == "mm_auth" }
+            .firstOrNull { it.name() == AuthService.COOKIE_NAME }
             ?.value()
             ?.let { AuthService.hashToken(it) }
 
@@ -158,7 +158,7 @@ class ProfileHttpService {
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
         val currentTokenHash = ctx.request().headers().cookies()
-            .firstOrNull { it.name() == "mm_auth" }
+            .firstOrNull { it.name() == AuthService.COOKIE_NAME }
             ?.value()
             ?.let { AuthService.hashToken(it) }
 
@@ -176,7 +176,7 @@ class ProfileHttpService {
             ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
 
         val currentTokenHash = ctx.request().headers().cookies()
-            .firstOrNull { it.name() == "mm_auth" }
+            .firstOrNull { it.name() == AuthService.COOKIE_NAME }
             ?.value()
             ?.let { AuthService.hashToken(it) }
 

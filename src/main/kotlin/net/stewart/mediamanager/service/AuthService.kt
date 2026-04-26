@@ -34,7 +34,12 @@ object AuthService {
         MetricsRegistry.registry.counter("mm_login_attempts_total", "result", result).increment()
     }
 
-    const val COOKIE_NAME = "mm_auth"
+    // Renamed from "mm_auth" → "mm_session" in this commit. The rename
+    // invalidates every existing browser session in one shot — older
+    // SPA bundles that JS-set "mm_jwt" or relied on the original name
+    // can no longer authenticate; users get bounced to the login page
+    // and re-issued an HttpOnly mm_session cookie server-side.
+    const val COOKIE_NAME = "mm_session"
     const val SESSION_DAYS = 30L
     private const val RATE_LIMIT_WINDOW_MINUTES = 15L
     private const val RATE_LIMIT_THRESHOLD = 5

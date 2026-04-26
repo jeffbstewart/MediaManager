@@ -153,16 +153,22 @@ export class ReaderComponent implements OnInit, OnDestroy {
     });
     this.rendition = rendition;
     rendition.themes.fontSize(`${this.fontSize()}%`);
+    // epub.js fires `relocated` once during the initial display() with
+    // percentage = 0 (locations index isn't built yet); honoring that
+    // would clobber the just-loaded saved percent. Gate on a flag set
+    // after the display() promise resolves so only real navigations
+    // update progress.
+    let initialDisplayDone = false;
     rendition.on('relocated', (loc) => {
       this.lastCfi = loc.start.cfi;
-      // Don't clobber a known-good saved percent with 0 — epub.js's
-      // initial relocation often fires before percentages are computed.
+      if (!initialDisplayDone) return;
       if (loc.start.percentage != null) {
         this.percent.set(Math.round(loc.start.percentage * 100));
       }
     });
 
     await rendition.display(resumeCfi ?? undefined);
+    initialDisplayDone = true;
 
     // Report progress every 10 s; suppresses duplicate reports when the user
     // hasn't moved since the last tick.

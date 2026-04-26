@@ -32,7 +32,13 @@ import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.Track as TrackRow
+import net.stewart.mediamanager.entity.BookSeries as BookSeriesEntity
+import net.stewart.mediamanager.entity.RecordingCredit
+import net.stewart.mediamanager.entity.TrackArtist
+import net.stewart.mediamanager.entity.TrackTag
 import net.stewart.mediamanager.service.AutoTagApplicator
+import net.stewart.mediamanager.service.ReadingProgressService
+import net.stewart.mediamanager.service.SimilarTitlesService
 import net.stewart.mediamanager.service.TagService
 import java.time.LocalDateTime
 import net.stewart.mediamanager.entity.TitleArtist
@@ -468,13 +474,139 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         val familyNames = loadFamilyMemberNames()
 
-        val albumDetail = if (titleEntity.media_type == MediaTypeEnum.ALBUM.name) {
-            buildAlbumDetail(titleEntity)
-        } else null
+        val isAlbum = titleEntity.media_type == MediaTypeEnum.ALBUM.name
+        val isBook = titleEntity.media_type == MediaTypeEnum.BOOK.name
+        val isTv = titleEntity.media_type == MediaTypeEnum.TV.name
+        val isPersonal = titleEntity.media_type == MediaTypeEnum.PERSONAL.name
 
-        val bookDetail = if (titleEntity.media_type == MediaTypeEnum.BOOK.name) {
-            buildBookDetail(user.id!!, titleEntity)
-        } else null
+        val albumDetail = if (isAlbum) buildAlbumDetail(titleEntity) else null
+        val bookDetail = if (isBook) buildBookDetail(user.id!!, titleEntity) else null
+
+        // --- Web parity: similar titles, seasons/episodes, family members,
+        // collection, formats, admin items, readable editions. Each block is
+        // populated only for the relevant media type so the wire payload
+        // doesn't carry empty noise. ---
+
+        val similarTitles = if (!isPersonal) {
+            SimilarTitlesService.getSimilarTitlesForUser(titleEntity, user.id!!, 12)
+                .map { t ->
+                    similarTitle {
+                        this.titleId = t.id!!
+                        titleName = t.name
+                        t.release_year?.let { releaseYear = it }
+                    }
+                }
+        } else emptyList()
+
+        val seasonsList = if (isTv) {
+            TitleSeason.findAll()
+                .filter { it.title_id == titleId && it.season_number > 0 }
+                .sortedBy { it.season_number }
+                .map { s ->
+                    season {
+                        seasonNumber = s.season_number
+                        // episode_count isn't tracked on TitleSeason; the
+                        // count comes from EpisodeEntity rows. Caller can
+                        // recompute from `episodes` if it cares.
+                        episodeCount = 0
+                        acquisitionStatus = s.acquisition_status.toProtoAcquisitionStatus()
+                    }
+                }
+        } else emptyList()
+
+        val episodesList = if (isTv) {
+            episodes.values
+                .sortedWith(compareBy({ it.season_number }, { it.episode_number }))
+                .map { ep ->
+                    val epTc = allTranscodes.firstOrNull { it.episode_id == ep.id }
+                    val epProgress = epTc?.let { tc ->
+                        ProgressEntity.findAll()
+                            .firstOrNull { it.user_id == user.id && it.transcode_id == tc.id }
+                    }
+                    ep.toProtoEpisode(
+                        transcode = epTc,
+                        nasRoot = nasRoot,
+                        resumePos = epProgress?.position_seconds ?: 0.0,
+                        duration = epProgress?.duration_seconds,
+                    )
+                }
+        } else emptyList()
+
+        val familyMembersFull = if (isPersonal) {
+            val fmIds = TitleFamilyMember.findAll()
+                .filter { it.title_id == titleId }
+                .map { it.family_member_id }
+                .toSet()
+            FamilyMember.findAll()
+                .filter { it.id in fmIds }
+                .map { fm ->
+                    familyMember {
+                        id = fm.id!!
+                        name = fm.name
+                    }
+                }
+        } else emptyList()
+
+        val collectionMsg = titleEntity.tmdb_collection_id?.let { tmdbCollectionId ->
+            TmdbCollection.findAll()
+                .firstOrNull { it.tmdb_collection_id == tmdbCollectionId }
+                ?.let { col ->
+                    collection {
+                        id = col.id!!
+                        name = col.name
+                    }
+                }
+        }
+
+        val mediaItemIds = MediaItemTitle.findAll()
+            .filter { it.title_id == titleId }
+            .map { it.media_item_id }
+            .toSet()
+        val linkedMediaItems = MediaItemEntity.findAll().filter { it.id in mediaItemIds }
+        val displayFormatsList = linkedMediaItems
+            .map { it.media_format }
+            .distinct()
+            .filter { it != MediaFormatEnum.UNKNOWN.name && it != MediaFormatEnum.OTHER.name }
+            .map { it.toDisplayFormat() }
+
+        val adminItemsList = if (user.isAdmin()) {
+            linkedMediaItems.map { item ->
+                adminMediaItem {
+                    mediaItemId = item.id!!
+                    mediaFormat = item.media_format.toProtoMediaFormat()
+                    item.upc?.let { upc = it }
+                }
+            }
+        } else emptyList()
+
+        val readableEditionsList = if (isBook) {
+            linkedMediaItems
+                .filter { it.file_path != null }
+                .filter {
+                    it.media_format == MediaFormatEnum.EBOOK_EPUB.name ||
+                        it.media_format == MediaFormatEnum.EBOOK_PDF.name
+                }
+                .map { item ->
+                    val rp = ReadingProgressService.get(user.id!!, item.id!!)
+                    val isEpub = item.media_format == MediaFormatEnum.EBOOK_EPUB.name
+                    readableEdition {
+                        mediaItemId = item.id!!
+                        mediaFormat = item.media_format.toProtoMediaFormat()
+                        percent = rp?.percent ?: 0.0
+                        // Locator is per-format: EPUB stores a CFI string,
+                        // PDF stores a page number we parse out of the
+                        // "/page/N" CFI shape ReadingProgressService writes.
+                        rp?.cfi?.let { loc ->
+                            if (isEpub) {
+                                epubCfi = loc
+                            } else {
+                                pdfPageFromLocator(loc)?.let { pdfPage = it }
+                            }
+                        }
+                        rp?.updated_at?.let { updatedAt = it.toProtoTimestamp() }
+                    }
+                }
+        } else emptyList()
 
         return titleDetail {
             title = titleEntity.toProto(bestTc, nasRoot, familyNames[titleEntity.id])
@@ -490,6 +622,14 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             this.wished = wished
             albumDetail?.let { album = it }
             bookDetail?.let { book = it }
+            this.similarTitles.addAll(similarTitles)
+            this.seasons.addAll(seasonsList)
+            this.episodes.addAll(episodesList)
+            this.familyMembersFull.addAll(familyMembersFull)
+            collectionMsg?.let { collection = it }
+            this.displayFormats.addAll(displayFormatsList)
+            this.adminMediaItems.addAll(adminItemsList)
+            this.readableEditions.addAll(readableEditionsList)
         }
     }
 
@@ -506,17 +646,112 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             .filter { it.title_id == titleId }
             .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
 
+        // Per-track artist credits (compilation case) — fetched in bulk so
+        // the proto Track gets `track_artists` with id+name, not just names.
+        val trackIds = tracks.mapNotNull { it.id }.toSet()
+        val trackArtistLinks = if (trackIds.isEmpty()) emptyList()
+            else TrackArtist.findAll().filter { it.track_id in trackIds }
+        val trackArtistIds = trackArtistLinks.map { it.artist_id }.toSet()
+        val trackArtists = if (trackArtistIds.isEmpty()) emptyMap()
+            else Artist.findAll().filter { it.id in trackArtistIds }.associateBy { it.id }
+        val artistsByTrack: Map<Long, List<TrackArtistRef>> = trackArtistLinks
+            .sortedBy { it.artist_order }
+            .groupBy { it.track_id }
+            .mapValues { (_, links) ->
+                links.mapNotNull { link ->
+                    trackArtists[link.artist_id]?.let { a ->
+                        trackArtistRef {
+                            id = a.id!!
+                            name = a.name
+                        }
+                    }
+                }
+            }
+
+        // Per-track tag chips — sparse, surfaced for the album track row.
+        val titleTagIds = TitleTag.findAll().filter { it.title_id == titleId }.map { it.tag_id }.toSet()
+        val trackTagLinks = if (trackIds.isEmpty()) emptyList()
+            else TrackTag.findAll().filter { it.track_id in trackIds }
+        val trackTagIds = trackTagLinks.map { it.tag_id }.toSet()
+        val trackTagsById = if (trackTagIds.isEmpty()) emptyMap()
+            else TagEntity.findAll().filter { it.id in trackTagIds }.associateBy { it.id }
+        val tagTitleCounts = TagService.getTagTitleCounts()
+        val tagsByTrack: Map<Long, List<TagEntity>> = trackTagLinks
+            .groupBy { it.track_id }
+            .mapValues { (_, links) ->
+                links.mapNotNull { trackTagsById[it.tag_id] }
+                    // Drop tags that the parent album already has — repeating them
+                    // per row is noise.
+                    .filter { it.id !in titleTagIds }
+                    .sortedWith(compareBy({ tagTitleCounts[it.id] ?: 0 }, { it.name.lowercase() }))
+            }
+
         val protoTitle = title.toProto()
         return album {
             this.title = protoTitle
             albumArtists.addAll(artistLinks.mapNotNull { artistsById[it.artist_id]?.toProto() })
-            this.tracks.addAll(tracks.map { it.toProto() })
+            this.tracks.addAll(tracks.map { tr ->
+                val base = tr.toProto()
+                base.toBuilder().apply {
+                    artistsByTrack[tr.id]?.let { addAllTrackArtists(it) }
+                    tagsByTrack[tr.id]?.let { addAllTags(it.map { tag -> tag.toProto() }) }
+                }.build()
+            })
             title.track_count?.let { trackCount = it }
             title.total_duration_seconds?.let { totalDuration = it.toDouble().toPlaybackOffset() }
             title.label?.takeIf { it.isNotBlank() }?.let { label = it }
             title.musicbrainz_release_group_id?.takeIf { it.isNotBlank() }?.let { musicbrainzReleaseGroupId = it }
             title.musicbrainz_release_id?.takeIf { it.isNotBlank() }?.let { musicbrainzReleaseId = it }
+            personnel.addAll(buildPersonnel(titleId, trackIds))
         }
+    }
+
+    /**
+     * Album personnel rows from MusicBrainz `recording_credit`. Empty when
+     * MB hasn't documented credits for any of the album's tracks.
+     */
+    private fun buildPersonnel(titleId: Long, trackIds: Set<Long>): List<AlbumPersonnelEntry> {
+        if (trackIds.isEmpty()) return emptyList()
+        val credits = RecordingCredit.findAll().filter { it.track_id in trackIds }
+        if (credits.isEmpty()) return emptyList()
+        val artistsById = Artist.findAll()
+            .filter { a -> credits.any { it.artist_id == a.id } }
+            .associateBy { it.id }
+        val tracksById = TrackRow.findAll()
+            .filter { it.id in trackIds }
+            .associateBy { it.id }
+        return credits
+            .sortedWith(compareBy(
+                { it.role },
+                { tracksById[it.track_id]?.disc_number ?: 0 },
+                { tracksById[it.track_id]?.track_number ?: 0 },
+                { it.credit_order }
+            ))
+            .mapNotNull { c ->
+                val artist = artistsById[c.artist_id] ?: return@mapNotNull null
+                val tr = tracksById[c.track_id]
+                albumPersonnelEntry {
+                    artistId = artist.id!!
+                    artistName = artist.name
+                    role = c.role.toProtoPersonnelRole()
+                    c.instrument?.let { instrument = it }
+                    trackId = c.track_id
+                    tr?.name?.let { trackName = it }
+                }
+            }
+    }
+
+    /**
+     * Pull the page number out of a ReadingProgressService PDF locator.
+     * That service writes "/page/N" for PDFs; legacy writes may carry
+     * just the integer. Returns null on anything we can't parse.
+     */
+    private fun pdfPageFromLocator(loc: String): Int? {
+        val trimmed = loc.trim()
+        val direct = trimmed.toIntOrNull()
+        if (direct != null) return direct
+        val match = Regex("""/page/(\d+)""").find(trimmed) ?: return null
+        return match.groupValues[1].toIntOrNull()
     }
 
     private fun buildBookDetail(userId: Long, title: TitleEntity): BookDetail {
@@ -539,10 +774,24 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             net.stewart.mediamanager.service.ReadingProgressService.get(userId, mi.id!!)
         }.firstOrNull()
 
+        val seriesRef = title.book_series_id?.let { bsId ->
+            BookSeriesEntity.findById(bsId)?.let { s ->
+                bookSeriesRef {
+                    id = s.id!!
+                    name = s.name
+                    title.series_number?.let { n -> number = n.toPlainString() }
+                }
+            }
+        }
+
         return bookDetail {
             this.authors.addAll(authorLinks.mapNotNull { authorsById[it.author_id]?.toProto() })
             this.editions.addAll(editions.map { it.toBookEdition() })
             readingProgress?.let { this.readingProgress = it.toProto() }
+            seriesRef?.let { bookSeries = it }
+            title.page_count?.let { pageCount = it }
+            title.first_publication_year?.let { firstPublicationYear = it }
+            title.open_library_work_id?.takeIf { it.isNotBlank() }?.let { openLibraryWorkId = it }
         }
     }
 

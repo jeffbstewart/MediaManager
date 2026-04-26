@@ -4526,3 +4526,46 @@ Session 2 (Mar 25):
   existing GENRE tag's name. Existing source_type preserved so the
   TMDB enrichment autoAssociateOnEnrichment still works.
 ===
+
+=== 2026-04-26 19:32 — gRPC cookie auth + title-detail proto migration (movie + TV) ===
+- Cookie-based gRPC auth for the Angular SPA. AuthInterceptor accepts
+  either a Bearer JWT (iOS / Android TV / Roku) or the HttpOnly
+  `mm_session` cookie (renamed from `mm_auth` to invalidate every
+  in-flight session). CSRF gate compares Origin to the request
+  authority; same hostname passes regardless of port (HAProxy proxy
+  rewrites the :authority pseudo-header).
+- Production bug found via Binnacle: "Origin … does not match authority
+  null" — Armeria's gRPC bridge does not populate grpc-java's
+  ServerCall#getAuthority(). Fix: GrpcRequestContext.resolveAuthority
+  pulls from `ServiceRequestContext.current().request().authority()`
+  with `call.authority` as InProcess-test fallback.
+- LoggingInterceptor: every non-OK gRPC close now logs at ERROR (was
+  WARN for client errors). Auth-method descriptions still redacted.
+  Goal: default Binnacle ERROR filter surfaces every failure trace.
+- RefreshResult.Success now carries the user so AuthRestService's
+  refresh handler can issue a fresh mm_session cookie when the request
+  arrives without one.
+- Title-detail SPA migration phase 0: TV mappings + canary widening.
+  - PROTO_CONTENT_RATING_TO_LEGACY extended with TV_Y/TV_Y7/TV_G/TV_PG/
+    TV_14/TV_MA/NR (was movie-only).
+  - PROTO_ACQUISITION_STATUS_TO_LEGACY for the seasons chip strings.
+  - adaptSeason / adaptEpisode populate the previously-empty
+    seasons/episodes arrays in adaptProtoTitleDetail. PlaybackOffset's
+    required `seconds: 0` is treated identically to legacy `null`
+    because every UI consumer falsy-checks the value.
+  - tests/fixtures-typed/title-200-tv.fixture.ts mirrors
+    catalog/title.tv.json (Breaking Bad, 2 seasons, 3 episodes, 600s
+    resume on E2). mock-backend dispatches titleId 200n to it.
+  - useProto gate widened from `titleId === 100` to `100 || 200`.
+    Album (301) and book (300) remain on REST until adapter mappings
+    land in the next pass.
+- Repo cleanup: monocart-reporter moved from a stray root package.json
+  (created by an earlier `npm install` at the wrong directory) into
+  web-app/package.json devDependencies. Root node_modules/, package*.json,
+  test-results/, web-app/monocart-report/ deleted. Harness validates.
+- Validation: 11-title-detail.spec.ts (4 TV tests + 13 movie tests)
+  all green via the gRPC path.
+- Memory: feedback_no_infrastructure_leaks added — never put real
+  hostnames / ports / IPs in source or doc-comments; use generic
+  placeholders.
+===

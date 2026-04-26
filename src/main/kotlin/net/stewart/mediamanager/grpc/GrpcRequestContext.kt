@@ -1,5 +1,7 @@
 package net.stewart.mediamanager.grpc
 
+import com.linecorp.armeria.common.RequestContext
+import com.linecorp.armeria.server.ServiceRequestContext
 import io.grpc.Context
 import io.grpc.Grpc
 import io.grpc.Metadata
@@ -23,13 +25,20 @@ internal object GrpcRequestContext {
 
     data class TransportContext(
         val clientIp: String,
-        val isLocal: Boolean
+        val isLocal: Boolean,
+        /** HTTP/2 `:authority` (== HTTP/1.1 `Host`) for this RPC. Null when the transport doesn't expose it. */
+        val authority: String?
     )
 
     fun resolve(headers: Metadata, call: ServerCall<*, *>): TransportContext? {
+        val authority = resolveAuthority(call)
         val remoteAddr = call.attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)
         if (isLocalTransport(remoteAddr)) {
-            return TransportContext(clientIp = localClientIp(remoteAddr), isLocal = true)
+            return TransportContext(
+                clientIp = localClientIp(remoteAddr),
+                isLocal = true,
+                authority = authority,
+            )
         }
 
         val proto = headers.get(FORWARDED_PROTO_KEY)?.trim()
@@ -37,7 +46,26 @@ internal object GrpcRequestContext {
 
         val forwardedFor = headers.get(FORWARDED_FOR_KEY)?.trim().orEmpty()
         val clientIp = parseForwardedFor(forwardedFor) ?: return null
-        return TransportContext(clientIp = clientIp, isLocal = false)
+        return TransportContext(clientIp = clientIp, isLocal = false, authority = authority)
+    }
+
+    /**
+     * Authority of the inbound request. Used by AuthInterceptor's CSRF
+     * gate to compare against the browser-supplied Origin header.
+     *
+     * Armeria's gRPC bridge does not populate grpc-java's
+     * `ServerCall#getAuthority()` on the Netty transport — it returns
+     * null for every real-world request. Armeria's own
+     * `ServiceRequestContext` is the source of truth: it sees the
+     * original `:authority` / `Host` header from the inbound HTTP/2
+     * stream. Falling back to `call.authority` keeps the InProcess
+     * test transport working (Armeria's context isn't installed there).
+     */
+    private fun resolveAuthority(call: ServerCall<*, *>): String? {
+        val ctx = RequestContext.currentOrNull() as? ServiceRequestContext
+        val armeriaAuthority = ctx?.request()?.authority()
+        if (!armeriaAuthority.isNullOrBlank()) return armeriaAuthority
+        return call.authority
     }
 
     internal fun parseForwardedFor(value: String): String? {
