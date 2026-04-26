@@ -32,7 +32,9 @@ import { AppRoutes } from '../../core/routes';
 
         @if (features.isAdmin()) {
           <div class="admin-add-row">
-            <input class="add-input" type="text" placeholder="Search titles to add..."
+            <input class="add-input" type="text"
+                   placeholder="Search the catalog for titles to add to this tag…"
+                   aria-label="Search the catalog for titles to add to this tag"
                    [value]="searchQuery()" (input)="updateSearch($event)" (keydown.enter)="searchTitles()" />
             @if (searchResults().length > 0) {
               <div class="search-results">
@@ -225,17 +227,25 @@ import { AppRoutes } from '../../core/routes';
       color: inherit; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
     }
     .add-input:focus { border-color: var(--mat-sys-primary); }
-    .add-input::placeholder { color: rgba(255,255,255,0.35); }
+    .add-input::placeholder { color: var(--mat-sys-on-surface-variant); opacity: 0.7; }
     .search-results {
-      position: absolute; z-index: 10; background: #2a2a2a; border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-width: 400px; width: 100%; overflow: hidden;
+      position: absolute; z-index: 10;
+      background: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface);
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      max-width: 400px; width: 100%; overflow: hidden;
     }
     .search-result-row {
       display: flex; align-items: center; gap: 0.5rem; padding: 8px 12px;
       font-size: 0.8125rem;
+      color: var(--mat-sys-on-surface);
     }
-    .search-result-row:hover { background: rgba(255,255,255,0.05); }
-    .result-year { opacity: 0.4; }
+    .search-result-row:hover {
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+    }
+    .result-year { color: var(--mat-sys-on-surface-variant); }
     .add-btn { margin-left: auto; font-size: 0.75rem !important; padding: 0 8px !important; min-height: 24px !important; line-height: 24px !important; }
     .remove-btn {
       position: absolute; top: 4px; right: 4px;
