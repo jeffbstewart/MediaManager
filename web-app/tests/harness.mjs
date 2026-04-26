@@ -19,12 +19,12 @@
 //   node tests/harness.mjs                       # both suites
 //   node tests/harness.mjs axe                   # only tests/axe
 //   node tests/harness.mjs functional            # only tests/functional
-//   node tests/harness.mjs --concurrency 1       # serial (default 4)
+//   node tests/harness.mjs --concurrency 1       # serial (default 6)
 //   node tests/harness.mjs --files <a> <b>       # specific files only
 //
 // Exit code: 0 if all tests pass, 1 if any fail, 2 on usage error.
 //
-// Parallelism: by default the harness keeps up to 4 spec subprocesses
+// Parallelism: by default the harness keeps up to 6 spec subprocesses
 // in flight at once. Each subprocess is its own isolated Playwright
 // invocation (preserves the Windows worker-loader workaround) but
 // they run concurrently against the single shared ng-serve dev
@@ -51,7 +51,7 @@ const rawDir = join(outDir, 'raw');
 const args = process.argv.slice(2);
 let mode = 'all';
 let onlyFiles = null;
-let concurrency = 4;
+let concurrency = 6;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === 'axe' || a === 'functional' || a === 'all') {
@@ -151,7 +151,12 @@ function runSpec(idx, onDone) {
   // each subprocess writes its raw V8 entries somewhere unique.
   // The harness's final merge step ingests every per-spec dir.
   const covDir = join(outDir, 'coverage-raw', safeName);
-  const proc = spawn('npx', ['playwright', 'test', spec.path], {
+  // Per-subprocess test-results dir so parallel Playwright runs don't
+  // race on creating .playwright-artifacts-N folders under the shared
+  // test-results/. Without this, c>=5 occasionally fails one spec
+  // with `ENOENT: ... mkdir test-results/.playwright-artifacts-N`.
+  const outputDir = join(outDir, 'test-results', safeName);
+  const proc = spawn('npx', ['playwright', 'test', spec.path, '--output', outputDir], {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
