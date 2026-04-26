@@ -155,7 +155,11 @@ export class ReaderComponent implements OnInit, OnDestroy {
     rendition.themes.fontSize(`${this.fontSize()}%`);
     rendition.on('relocated', (loc) => {
       this.lastCfi = loc.start.cfi;
-      this.percent.set(Math.round((loc.start.percentage ?? 0) * 100));
+      // Don't clobber a known-good saved percent with 0 — epub.js's
+      // initial relocation often fires before percentages are computed.
+      if (loc.start.percentage != null) {
+        this.percent.set(Math.round(loc.start.percentage * 100));
+      }
     });
 
     await rendition.display(resumeCfi ?? undefined);
