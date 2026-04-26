@@ -16,12 +16,19 @@
 //   raw/          — per-spec Playwright JSON output, for tooling.
 //
 // Usage:
-//   node tests/harness.mjs                  # both suites
-//   node tests/harness.mjs axe              # only tests/axe
-//   node tests/harness.mjs functional       # only tests/functional
-//   node tests/harness.mjs --files <a> <b>  # specific files only
+//   node tests/harness.mjs                       # both suites
+//   node tests/harness.mjs axe                   # only tests/axe
+//   node tests/harness.mjs functional            # only tests/functional
+//   node tests/harness.mjs --concurrency 1       # serial (default 4)
+//   node tests/harness.mjs --files <a> <b>       # specific files only
 //
 // Exit code: 0 if all tests pass, 1 if any fail, 2 on usage error.
+//
+// Parallelism: by default the harness keeps up to 4 spec subprocesses
+// in flight at once. Each subprocess is its own isolated Playwright
+// invocation (preserves the Windows worker-loader workaround) but
+// they run concurrently against the single shared ng-serve dev
+// server. Lower the concurrency to 1 for serial debugging.
 //
 // Progress: a one-line progress bar with elapsed / ETA is rendered to
 // stderr while the run is underway. The same progress data is mirrored
@@ -29,7 +36,7 @@
 // file is what an LLM should read to check status, NOT the live stderr
 // stream. Reading the file is O(1) tokens and is updated atomically.
 
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,10 +51,18 @@ const rawDir = join(outDir, 'raw');
 const args = process.argv.slice(2);
 let mode = 'all';
 let onlyFiles = null;
+let concurrency = 4;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === 'axe' || a === 'functional' || a === 'all') {
     mode = a;
+  } else if (a === '--concurrency') {
+    const n = parseInt(args[++i], 10);
+    if (!Number.isFinite(n) || n < 1) {
+      process.stderr.write(`invalid --concurrency value\n`);
+      process.exit(2);
+    }
+    concurrency = n;
   } else if (a === '--files') {
     onlyFiles = args.slice(i + 1);
     break;
@@ -89,19 +104,43 @@ mkdirSync(rawDir, { recursive: true });
 
 const startedAt = new Date();
 const startedAtMs = Date.now();
-const perSpec = []; // { suite, path, passed, failed, skipped, durationMs, failures: [] }
+// perSpec is index-aligned with the specs array so the failures
+// section comes out in deterministic order even though specs finish
+// in whatever order parallel workers complete them.
+const perSpec = new Array(specs.length).fill(null);
 let totalPass = 0, totalFail = 0, totalSkip = 0;
+let completedCount = 0;
+const active = new Map(); // spec.path -> startTime  (specs currently in flight)
 const isTty = process.stderr.isTTY;
 const barWidth = 40;
 
 writeProgress(); // initial 0% line
 
-for (let i = 0; i < specs.length; i++) {
-  const spec = specs[i];
-  // Pre-spec progress line — shows what's currently running.
-  renderProgress(i, spec.path);
+// Worker-pool execution: keep up to `concurrency` subprocesses in
+// flight; as each finishes we start the next from the queue. Each
+// subprocess is fully isolated (own JSON output file, own coverage
+// dir) so they don't interfere despite sharing the dev server.
+let nextIndex = 0;
+await new Promise((resolveAll) => {
+  const startNext = () => {
+    while (active.size < concurrency && nextIndex < specs.length) {
+      const idx = nextIndex++;
+      runSpec(idx, () => {
+        if (nextIndex < specs.length) {
+          startNext();
+        } else if (active.size === 0) {
+          resolveAll();
+        }
+      });
+    }
+  };
+  startNext();
+});
 
+function runSpec(idx, onDone) {
+  const spec = specs[idx];
   const t0 = Date.now();
+  active.set(spec.path, t0);
   // Don't pass --reporter=json on the CLI — that would override the
   // config's reporter array and silence monocart-reporter (no
   // coverage collection). Instead, rely on the config's `json`
@@ -112,39 +151,50 @@ for (let i = 0; i < specs.length; i++) {
   // each subprocess writes its raw V8 entries somewhere unique.
   // The harness's final merge step ingests every per-spec dir.
   const covDir = join(outDir, 'coverage-raw', safeName);
-  const proc = spawnSync('npx', ['playwright', 'test', spec.path], {
+  const proc = spawn('npx', ['playwright', 'test', spec.path], {
     cwd: repoRoot,
-    encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
       PLAYWRIGHT_JSON_FILE: jsonOut,
       MCR_OUTPUT_DIR: covDir,
     },
-    maxBuffer: 200 * 1024 * 1024,
     shell: process.platform === 'win32',
   });
-  const dt = Date.now() - t0;
-  const stdout = proc.stdout || '';
-  const stderr = proc.stderr || '';
-  if (stdout.trim()) writeFileSync(join(rawDir, `${safeName}.stdout`), stdout);
-  if (stderr.trim()) writeFileSync(join(rawDir, `${safeName}.stderr`), stderr);
+  // Buffer stdout/stderr in memory so we can write them after exit.
+  // Volume is small per-spec (Playwright list-reporter output ≤ a few
+  // KB); no streaming to disk required.
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  proc.stdout.on('data', d => stdoutChunks.push(d));
+  proc.stderr.on('data', d => stderrChunks.push(d));
+  proc.on('close', (exitStatus) => {
+    const dt = Date.now() - t0;
+    const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
+    const stderr = Buffer.concat(stderrChunks).toString('utf-8');
+    if (stdout.trim()) writeFileSync(join(rawDir, `${safeName}.stdout`), stdout);
+    if (stderr.trim()) writeFileSync(join(rawDir, `${safeName}.stderr`), stderr);
 
-  let parsed = null;
-  try { parsed = JSON.parse(readFileSync(jsonOut, 'utf-8')); } catch { /* leave null */ }
+    let parsed = null;
+    try { parsed = JSON.parse(readFileSync(jsonOut, 'utf-8')); } catch { /* leave null */ }
 
-  const r = collectResults(parsed, spec, stderr, proc.status);
-  r.durationMs = dt;
-  perSpec.push(r);
-  totalPass += r.passed;
-  totalFail += r.failed;
-  totalSkip += r.skipped;
+    const r = collectResults(parsed, spec, stderr, exitStatus);
+    r.durationMs = dt;
+    perSpec[idx] = r;
+    totalPass += r.passed;
+    totalFail += r.failed;
+    totalSkip += r.skipped;
+    completedCount++;
+    active.delete(spec.path);
 
-  // After each spec: refresh the progress bar AND mirror status to
-  // tests/.last-run/progress.json so an LLM (or any other watcher)
-  // can poll a file instead of tailing stderr.
-  renderProgress(i + 1, null);
-  writeProgress();
+    renderProgress();
+    writeProgress();
+    onDone();
+  });
+  // Render a fresh progress line as soon as a new worker picks up
+  // a spec — gives the user visual confirmation that parallelism is
+  // happening.
+  renderProgress();
 }
 
 // Newline after the final progress line so the post-run summary
@@ -227,19 +277,38 @@ process.exit(totalFail > 0 ? 1 : 0);
  * Render a single-line progress bar to stderr. Uses CR + clear-EOL
  * when on a TTY so the line updates in place; falls back to one
  * line per update when piped (CI logs).
+ *
+ * Reads the live `active` map and `completedCount` counter rather
+ * than taking arguments — every caller wants the current snapshot.
+ * With concurrency > 1 the line includes "[N active]" plus the
+ * shortest active spec name so the user sees parallelism happening.
  */
-function renderProgress(done, currentSpec) {
+function renderProgress() {
   const total = specs.length;
+  const done = completedCount;
   const elapsedMs = Date.now() - startedAtMs;
+  // ETA estimate uses the per-spec average TIMES the remaining spec
+  // count divided by concurrency — accounting for parallel throughput.
   const avgPerSpecMs = done > 0 ? elapsedMs / done : 0;
-  const remainingMs = avgPerSpecMs > 0 ? avgPerSpecMs * (total - done) : 0;
+  const remainingSpecs = total - done;
+  const remainingMs = avgPerSpecMs > 0
+    ? (avgPerSpecMs * remainingSpecs) / Math.max(1, Math.min(concurrency, remainingSpecs))
+    : 0;
   const filled = Math.round(barWidth * (done / total));
   const bar = '█'.repeat(filled) + '·'.repeat(barWidth - filled);
   const pct = ((done / total) * 100).toFixed(0).padStart(3);
   const failBadge = totalFail > 0 ? `  \x1b[31m${totalFail} FAILED\x1b[0m` : '';
-  const status = currentSpec
-    ? `  → ${shortPath(currentSpec)}`
-    : (done === total ? '  done' : '');
+  let status = '';
+  if (active.size > 0) {
+    // Pick the most recently started active spec for display — gives
+    // a sense of forward progress even when others are still running.
+    const recent = Array.from(active.entries())
+      .sort((a, b) => b[1] - a[1])[0]?.[0];
+    const prefix = active.size > 1 ? `  [${active.size} active] → ` : `  → `;
+    status = prefix + shortPath(recent);
+  } else if (done === total) {
+    status = '  done';
+  }
   const line = `[${bar}] ${pct}%  ${done}/${total}  ${fmtTime(elapsedMs)} elapsed  ETA ${fmtTime(remainingMs)}${failBadge}${status}`;
   if (isTty) {
     process.stderr.write('\r\x1b[2K' + line);
@@ -269,10 +338,13 @@ function shortPath(p) {
  */
 function writeProgress() {
   const elapsedMs = Date.now() - startedAtMs;
-  const done = perSpec.length;
+  const done = completedCount;
   const total = specs.length;
   const avgPerSpecMs = done > 0 ? elapsedMs / done : 0;
-  const remainingMs = avgPerSpecMs > 0 ? avgPerSpecMs * (total - done) : 0;
+  const remainingSpecs = total - done;
+  const remainingMs = avgPerSpecMs > 0
+    ? (avgPerSpecMs * remainingSpecs) / Math.max(1, Math.min(concurrency, remainingSpecs))
+    : 0;
   const data = {
     startedAt: startedAt.toISOString(),
     updatedAt: new Date().toISOString(),
@@ -281,9 +353,10 @@ function writeProgress() {
     completedSpecs: done,
     totalSpecs: total,
     percent: total > 0 ? Math.round((done / total) * 100) : 0,
+    concurrency,
     totals: { passed: totalPass, failed: totalFail, skipped: totalSkip },
-    currentSpec: done < total ? specs[done].path : null,
-    completed: perSpec.map(r => ({
+    activeSpecs: Array.from(active.keys()),
+    completed: perSpec.filter(Boolean).map(r => ({
       path: r.path,
       passed: r.passed,
       failed: r.failed,
