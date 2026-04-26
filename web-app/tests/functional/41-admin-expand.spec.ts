@@ -29,11 +29,14 @@ async function setup(page: Page) {
 }
 
 test.describe('admin expand — display', () => {
-  test('renders 1 fixture row with product name + linked title chips', async ({ page }) => {
+  test('renders 1 fixture row with product name + Expand button', async ({ page }) => {
     await setup(page);
     await expect(page.locator('app-expand tbody tr')).toHaveCount(1);
-    await expect(page.locator('app-expand')).toContainText('Lord of the Rings Trilogy');
-    await expect(page.locator('app-expand')).toContainText('The Fellowship of the Ring');
+    // The row shows product_name + media_format + title-count badge +
+    // Expand button. linked_titles render only inside the dialog,
+    // so we don't assert their presence here.
+    await expect(page.locator('app-expand .product-name')).toContainText('Lord of the Rings Trilogy');
+    await expect(page.locator('app-expand tbody tr button', { hasText: 'Expand' })).toBeVisible();
   });
 });
 

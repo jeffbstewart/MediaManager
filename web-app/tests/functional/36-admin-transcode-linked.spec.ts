@@ -50,9 +50,10 @@ test.describe('admin transcode-linked — actions', () => {
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/linked-transcodes/1/retranscode'),
       { timeout: 3_000 },
     );
-    // Re-transcode button label varies; bias toward icon button + text.
+    // Re-transcode is an icon-only button with aria-label (only visible
+    // on rows where retranscode_requested=false; The Matrix qualifies).
     await page.locator('app-transcode-linked tbody tr').first()
-      .locator('button', { hasText: /Re-transcode|Re-encode/i }).click();
+      .locator('button[aria-label="Request re-transcode"]').click();
     await req;
   });
 
@@ -62,8 +63,9 @@ test.describe('admin transcode-linked — actions', () => {
       r.method() === 'DELETE' && r.url().endsWith('/api/v2/admin/linked-transcodes/1'),
       { timeout: 3_000 },
     );
+    // Unlink is an icon-only button with aria-label.
     await page.locator('app-transcode-linked tbody tr').first()
-      .locator('button', { hasText: /^Unlink$/ }).click();
+      .locator('button[aria-label="Unlink from title"]').click();
     await req;
   });
 });

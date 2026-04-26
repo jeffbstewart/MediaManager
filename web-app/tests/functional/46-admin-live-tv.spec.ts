@@ -47,7 +47,8 @@ test.describe('admin live-tv — tuner actions', () => {
       r.method() === 'POST' && /\/tuners\/1\/sync$/.test(r.url()),
       { timeout: 3_000 },
     );
-    await page.locator('app-live-tv-settings button', { hasText: /Sync/ }).first().click();
+    // Sync is an icon-only button with aria-label="Refresh channels".
+    await page.locator('app-live-tv-settings button[aria-label="Refresh channels"]').first().click();
     await req;
   });
 });

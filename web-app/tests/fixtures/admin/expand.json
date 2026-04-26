@@ -2,12 +2,14 @@
   "items": [
     {
       "id": 1,
+      "product_name": "Lord of the Rings Trilogy",
       "display_name": "Lord of the Rings Trilogy",
       "media_format": "BLU_RAY",
       "upc": "794043145063",
+      "title_count": 2,
       "linked_titles": [
-        { "title_id": 100, "name": "The Fellowship of the Ring", "release_year": 2001, "disc_num": 1 },
-        { "title_id": 101, "name": "The Two Towers", "release_year": 2002, "disc_num": 2 }
+        { "title_id": 100, "name": "The Fellowship of the Ring", "release_year": 2001, "poster_url": null, "disc_number": 1 },
+        { "title_id": 101, "name": "The Two Towers", "release_year": 2002, "poster_url": null, "disc_number": 2 }
       ]
     }
   ]

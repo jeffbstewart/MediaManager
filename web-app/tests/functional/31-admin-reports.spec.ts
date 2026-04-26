@@ -68,7 +68,9 @@ test.describe('admin reports — actions', () => {
     await setup(page);
     await page.locator('app-reports tr', { hasText: 'The Matrix' })
       .locator('button[aria-label="Actions"]').click();
-    await expect(page.locator('.mat-mdc-menu-panel button', { hasText: /^Resolve$/ })).toBeVisible();
+    // mat-menu-item buttons render as "<icon-text> <label>" so anchored
+    // ^...$ regex doesn't match. Use plain substring matching here.
+    await expect(page.locator('.mat-mdc-menu-panel button', { hasText: 'Resolve' })).toBeVisible();
     await expect(page.locator('.mat-mdc-menu-panel button', { hasText: 'Dismiss' })).toBeVisible();
     await expect(page.locator('.mat-mdc-menu-panel button', { hasText: 'Delete catalog entry' })).toBeVisible();
   });
@@ -98,7 +100,7 @@ test.describe('admin reports — Resolve dialog', () => {
     await setup(page);
     await page.locator('app-reports tr', { hasText: 'The Matrix' })
       .locator('button[aria-label="Actions"]').click();
-    await page.locator('.mat-mdc-menu-panel button', { hasText: /^Resolve$/ }).click();
+    await page.locator('.mat-mdc-menu-panel button', { hasText: 'Resolve' }).click();
     const dialog = page.locator('app-reports .modal-overlay');
     await expect(dialog.locator('h3')).toContainText('Resolve Report');
     await dialog.locator('textarea').fill('Re-encoded source.');
@@ -106,7 +108,10 @@ test.describe('admin reports — Resolve dialog', () => {
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/reports/1/resolve'),
       { timeout: 3_000 },
     );
-    await dialog.locator('button', { hasText: /^Resolve$/ }).click();
+    // The dialog footer renders the Resolve label inside whitespace
+    // from the template's pretty-printed interpolation; use .last()
+    // to disambiguate from the Cancel button (footer has 2 buttons).
+    await dialog.locator('button.mat-mdc-unelevated-button').click();
     const got = await req;
     expect(got.postDataJSON()).toEqual({ status: 'RESOLVED', notes: 'Re-encoded source.' });
   });
@@ -120,7 +125,9 @@ test.describe('admin reports — Resolve dialog', () => {
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/reports/1/resolve'),
       { timeout: 3_000 },
     );
-    await page.locator('app-reports .modal-overlay button', { hasText: /^Dismiss$/ }).click();
+    // Dialog footer's primary button is the Dismiss submitter (Cancel
+    // is mat-button, the primary is mat-flat-button=mdc-unelevated).
+    await page.locator('app-reports .modal-overlay button.mat-mdc-unelevated-button').click();
     const got = await req;
     expect(got.postDataJSON().status).toBe('DISMISSED');
   });

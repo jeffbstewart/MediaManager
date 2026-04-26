@@ -90,7 +90,9 @@ test.describe('admin data-quality — Edit dialog', () => {
   test('opens with TMDB id + media type pre-filled', async ({ page }) => {
     await setup(page);
     await page.locator('app-data-quality button[aria-label="Actions"]').first().click();
-    await page.locator('.mat-mdc-menu-panel button', { hasText: /^Edit$/ }).click();
+    // mat-menu-item buttons render as "<icon-text> <label>" (e.g.
+    // "edit Edit") so anchored ^...$ regex doesn't match.
+    await page.locator('.mat-mdc-menu-panel button', { hasText: 'Edit' }).click();
     const dialog = page.locator('app-data-quality .modal-overlay');
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('#dq-edit-media-type')).toBeVisible();
@@ -99,7 +101,9 @@ test.describe('admin data-quality — Edit dialog', () => {
   test('Save POSTs /update with tmdb_id + media_type', async ({ page }) => {
     await setup(page);
     await page.locator('app-data-quality button[aria-label="Actions"]').first().click();
-    await page.locator('.mat-mdc-menu-panel button', { hasText: /^Edit$/ }).click();
+    // mat-menu-item buttons render as "<icon-text> <label>" (e.g.
+    // "edit Edit") so anchored ^...$ regex doesn't match.
+    await page.locator('.mat-mdc-menu-panel button', { hasText: 'Edit' }).click();
     await page.locator('app-data-quality #dq-edit-tmdb-id').fill('603');
     const req = page.waitForRequest(r =>
       r.method() === 'POST' && /\/update$/.test(r.url()),

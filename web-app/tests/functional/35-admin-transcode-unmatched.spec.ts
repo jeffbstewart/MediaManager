@@ -88,8 +88,9 @@ test.describe('admin transcode-unmatched — Link dialog', () => {
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/unmatched/1/link/100'),
       { timeout: 5_000 },
     );
-    // The first link result button should fire linkToTitle.
-    await page.locator('app-transcode-unmatched .modal-overlay button', { hasText: /Link|Use/ }).first().click();
+    // The first link-result row's primary action is labeled "Select"
+    // (see transcode-unmatched.html .link-result-row button).
+    await page.locator('app-transcode-unmatched .link-result-row button', { hasText: 'Select' }).first().click();
     await req;
   });
 });

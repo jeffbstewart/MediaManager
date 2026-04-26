@@ -42,13 +42,16 @@ test.describe('admin settings — display', () => {
 test.describe('admin settings — save', () => {
   test('Save button POSTs /settings with the form body', async ({ page }) => {
     await setup(page);
-    // Mutate one input to make the form dirty.
-    await page.locator('app-settings input[type="text"]').first().fill('/nas/changed');
+    // The fixture sets is_docker=true → NAS Root + FFmpeg inputs are
+    // readonly. Mutate the Roku Base URL input (always editable) so
+    // the Save button enables.
+    await page.locator('app-settings input[aria-label="Roku Base URL"]').fill('https://example.com');
     const req = page.waitForRequest(r =>
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/settings'),
       { timeout: 3_000 },
     );
-    await page.locator('app-settings button', { hasText: /^Save( All)?$/ }).first().click();
+    // Save button lives in the sticky save-row.
+    await page.locator('app-settings .save-row button').first().click();
     await req;
   });
 });
@@ -68,8 +71,9 @@ test.describe('admin settings — buddy keys', () => {
       r.method() === 'DELETE' && /\/settings\/buddy-keys\/1$/.test(r.url()),
       { timeout: 3_000 },
     );
+    // Delete is an icon-only button with aria-label.
     await page.locator('app-settings table tbody tr').first()
-      .locator('button', { hasText: /Delete|Revoke|Remove/ }).click();
+      .locator('button[aria-label="Delete buddy key"]').click();
     await req;
   });
 });
