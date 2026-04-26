@@ -4569,3 +4569,31 @@ Session 2 (Mar 25):
   hostnames / ports / IPs in source or doc-comments; use generic
   placeholders.
 ===
+
+=== 2026-04-26 19:55 — Title-detail proto migration (album branch) ===
+- adaptArtist / adaptTrackArtist / adaptTrack / adaptTrackTag /
+  adaptPersonnel populate the album-specific TitleDetail fields from
+  proto Album: artists, tracks, track_count, total_duration_seconds,
+  label, musicbrainz_release_group_id, musicbrainz_release_id,
+  personnel.
+- PROTO_ARTIST_TYPE_TO_LEGACY (PERSON / GROUP / ORCHESTRA / CHOIR /
+  OTHER) and PROTO_PERSONNEL_ROLE_TO_LEGACY (PERFORMER / COMPOSER /
+  PRODUCER / ENGINEER / MIXER / OTHER) — same prefix-stripping pattern.
+- adaptTrackTag emits TagCard shape with title_count: 0; the field is
+  unused by the title-detail track-row template and only required by
+  the type contract.
+- Personnel.track_id is `optional int64` on the wire but `number` on
+  the legacy interface; adapter writes 0 sentinel when absent. Used
+  only in @for keys, never displayed.
+- tests/fixtures-typed/title-301-album.fixture.ts — Kind of Blue
+  (Miles Davis, 2 tracks, no personnel). mock-backend dispatches
+  titleId 301n to it.
+- useProto gate widened to 100 || 200 || 301. Book (300) remains on
+  REST.
+- Test migration: 53-title-detail-album.spec.ts had 4 tests that
+  overrode `/api/v2/catalog/titles/301` REST. Rewrote those + the
+  TV SxxExx test (titleId 200) to use proto-typed clones via new
+  helpers overrideAlbum301 / overrideTv200, mirroring the existing
+  overrideMovie100 pattern. 21/21 in the spec; full harness 610/611
+  with one re-run flake unrelated to migration.
+===

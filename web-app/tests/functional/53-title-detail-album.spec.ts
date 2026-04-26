@@ -5,16 +5,24 @@ import { stubImages } from '../helpers/image-stub';
 import { fulfillProto } from '../helpers/proto-fixture';
 import { clone, create } from '@bufbuild/protobuf';
 import {
+  AlbumPersonnelEntrySchema,
+  ArtistType,
+  ColorSchema,
   MediaFormat,
+  PersonnelRole,
   PlaybackProgressSchema,
   Quality,
+  TagSchema,
   TitleDetailSchema,
+  TrackSchema,
   TranscodeSchema,
   type TitleDetail,
   type Transcode,
 } from '../../src/app/proto-gen/common_pb';
 import { PlaybackOffsetSchema } from '../../src/app/proto-gen/time_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
+import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
+import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
 
 /** Movie 100 detail post-migration runs through gRPC-Web; per-test
  * variants override that endpoint with a typed-fixture clone instead
@@ -22,6 +30,22 @@ import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
  * don't bleed into the canonical fixture. */
 async function overrideMovie100(page: Page, mutate: (d: TitleDetail) => void): Promise<void> {
   const variant = clone(TitleDetailSchema, titleMovie100);
+  mutate(variant);
+  await page.route('**/mediamanager.CatalogService/GetTitleDetail',
+    r => fulfillProto(r, TitleDetailSchema, variant));
+}
+
+/** Same shape as overrideMovie100 but for the TV-200 fixture. */
+async function overrideTv200(page: Page, mutate: (d: TitleDetail) => void): Promise<void> {
+  const variant = clone(TitleDetailSchema, titleTv200);
+  mutate(variant);
+  await page.route('**/mediamanager.CatalogService/GetTitleDetail',
+    r => fulfillProto(r, TitleDetailSchema, variant));
+}
+
+/** Same shape as overrideMovie100 but for the album-301 fixture. */
+async function overrideAlbum301(page: Page, mutate: (d: TitleDetail) => void): Promise<void> {
+  const variant = clone(TitleDetailSchema, titleAlbum301);
   mutate(variant);
   await page.route('**/mediamanager.CatalogService/GetTitleDetail',
     r => fulfillProto(r, TitleDetailSchema, variant));
@@ -100,22 +124,20 @@ test.describe('title detail — album multi-disc + personnel', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/titles/301', r => r.fulfill({ json: {
-      title_id: 301, title_name: 'Multi-Disc', media_type: 'ALBUM',
-      release_year: 2000, description: null, content_rating: null,
-      poster_url: null, backdrop_url: null, event_date: null,
-      is_starred: false, is_hidden: false, genres: [], tags: [],
-      formats: ['CD'], admin_media_items: [], transcodes: [], cast: [],
-      episodes: [], seasons: [], family_members: [], similar_titles: [],
-      collection: null, artists: [{ id: 1, name: 'A', artist_type: 'Person' }],
-      tracks: [
-        { track_id: 1, disc_number: 1, track_number: 1, name: 'D1T1', duration_seconds: 60, track_artists: [], tags: [], bpm: null, time_signature: null, playable: true },
-        { track_id: 2, disc_number: 2, track_number: 1, name: 'D2T1', duration_seconds: 90, track_artists: [], tags: [], bpm: null, time_signature: null, playable: true },
-      ],
-      track_count: 2, total_duration_seconds: 150, label: null,
-      musicbrainz_release_group_id: null, musicbrainz_release_id: null,
-      personnel: [],
-    } }));
+    await overrideAlbum301(page, d => {
+      d.album!.tracks = [
+        create(TrackSchema, {
+          id: 1n, titleId: 301n, discNumber: 1, trackNumber: 1, name: 'D1T1',
+          duration: { seconds: 60 }, playable: true,
+        }),
+        create(TrackSchema, {
+          id: 2n, titleId: 301n, discNumber: 2, trackNumber: 1, name: 'D2T1',
+          duration: { seconds: 90 }, playable: true,
+        }),
+      ];
+      d.album!.trackCount = 2;
+      d.album!.totalDuration = create(PlaybackOffsetSchema, { seconds: 150 });
+    });
     await page.goto(`/title/${ALBUM_ID}`);
     await page.waitForSelector('app-title-detail .detail-container');
     await expect(page.locator('.disc-header')).toHaveCount(2);
@@ -126,25 +148,28 @@ test.describe('title detail — album multi-disc + personnel', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/titles/301', r => r.fulfill({ json: {
-      title_id: 301, title_name: 'Album', media_type: 'ALBUM',
-      release_year: 1959, description: null, content_rating: null,
-      poster_url: null, backdrop_url: null, event_date: null,
-      is_starred: false, is_hidden: false, genres: [], tags: [],
-      formats: ['CD'], admin_media_items: [], transcodes: [], cast: [],
-      episodes: [], seasons: [], family_members: [], similar_titles: [],
-      collection: null, artists: [{ id: 1, name: 'Miles', artist_type: 'Person' }],
-      tracks: [
-        { track_id: 1, disc_number: 1, track_number: 1, name: 'T1', duration_seconds: 60, track_artists: [], tags: [], bpm: null, time_signature: null, playable: true },
-      ],
-      track_count: 1, total_duration_seconds: 60, label: null,
-      musicbrainz_release_group_id: null, musicbrainz_release_id: null,
-      personnel: [
-        { artist_id: 10, artist_name: 'Player A', role: 'PERFORMER', instrument: 'piano', track_id: 1, track_name: 'T1' },
-        { artist_id: 11, artist_name: 'Producer Q', role: 'PRODUCER', instrument: null, track_id: null, track_name: null },
-        { artist_id: 12, artist_name: 'Eng E', role: 'ENGINEER', instrument: null, track_id: null, track_name: null },
-      ],
-    } }));
+    await overrideAlbum301(page, d => {
+      d.album!.tracks = [
+        create(TrackSchema, {
+          id: 1n, titleId: 301n, discNumber: 1, trackNumber: 1, name: 'T1',
+          duration: { seconds: 60 }, playable: true,
+        }),
+      ];
+      d.album!.trackCount = 1;
+      d.album!.totalDuration = create(PlaybackOffsetSchema, { seconds: 60 });
+      d.album!.personnel = [
+        create(AlbumPersonnelEntrySchema, {
+          artistId: 10n, artistName: 'Player A', role: PersonnelRole.PERFORMER,
+          instrument: 'piano', trackId: 1n, trackName: 'T1',
+        }),
+        create(AlbumPersonnelEntrySchema, {
+          artistId: 11n, artistName: 'Producer Q', role: PersonnelRole.PRODUCER,
+        }),
+        create(AlbumPersonnelEntrySchema, {
+          artistId: 12n, artistName: 'Eng E', role: PersonnelRole.ENGINEER,
+        }),
+      ];
+    });
     await page.goto(`/title/${ALBUM_ID}`);
     await page.waitForSelector('app-title-detail .detail-container');
     // Collapsed by default — hint visible, groups absent.
@@ -176,23 +201,21 @@ test.describe('title detail — album admin: track tag picker + remove', () => {
     await loginAs(page);
     await stubImages(page);
     // Override album fixture to give track 4001 an existing tag.
-    await page.route('**/api/v2/catalog/titles/301', r => r.fulfill({ json: {
-      title_id: 301, title_name: 'Kind of Blue', media_type: 'ALBUM',
-      release_year: 1959, description: null, content_rating: null,
-      poster_url: null, backdrop_url: null, event_date: null,
-      is_starred: false, is_hidden: false, genres: [], tags: [],
-      formats: ['CD'], admin_media_items: [], transcodes: [], cast: [],
-      episodes: [], seasons: [], family_members: [], similar_titles: [],
-      collection: null, artists: [{ id: 1, name: 'Miles', artist_type: 'Person' }],
-      tracks: [
-        { track_id: 4001, disc_number: 1, track_number: 1, name: 'So What',
-          duration_seconds: 565, track_artists: [], bpm: null, time_signature: null, playable: true,
-          tags: [{ id: 7, name: 'Mellow', bg_color: '#333', text_color: '#fff' }] },
-      ],
-      track_count: 1, total_duration_seconds: 565, label: null,
-      musicbrainz_release_group_id: null, musicbrainz_release_id: null,
-      personnel: [],
-    } }));
+    await overrideAlbum301(page, d => {
+      d.album!.tracks = [
+        create(TrackSchema, {
+          id: 4001n, titleId: 301n, discNumber: 1, trackNumber: 1, name: 'So What',
+          duration: { seconds: 565 }, playable: true,
+          tags: [
+            create(TagSchema, {
+              id: 7n, name: 'Mellow', color: create(ColorSchema, { hex: '#333' }),
+            }),
+          ],
+        }),
+      ];
+      d.album!.trackCount = 1;
+      d.album!.totalDuration = create(PlaybackOffsetSchema, { seconds: 565 });
+    });
     // GET returns current; POST captures the filtered list.
     await page.route('**/api/v2/catalog/tracks/4001/tags', r => {
       if (r.request().method() === 'GET')
@@ -429,23 +452,25 @@ test.describe('title detail — hide flow + resume + error states', () => {
     await mockBackend(page, { features: 'viewer' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/titles/200', r => r.fulfill({ json: {
-      title_id: 200, title_name: 'Show', media_type: 'TV',
-      release_year: 2008, description: '', content_rating: null,
-      poster_url: '/posters/w500/200', backdrop_url: '/backdrops/200',
-      event_date: null, is_starred: false, is_hidden: false,
-      genres: [], tags: [], formats: [], admin_media_items: [],
-      transcodes: [
-        { transcode_id: 5001, format: 'BLURAY', display_label: 'Blu-ray',
-          path: '/y', position_seconds: 130, season_number: 2, episode_number: 3,
-          episode_name: 'Test EP', transcoded: true, duration_seconds: 3000 },
-      ],
-      cast: [], episodes: [
-        { id: 1, season_number: 1, episode_number: 1, name: 'Pilot', transcode_id: null,
-          playable: false, position_seconds: null, duration_seconds: null },
-      ],
-      seasons: [], family_members: [], similar_titles: [], collection: null,
-    } }));
+    await overrideTv200(page, d => {
+      // Replace transcodes + playbackProgress with the under-test setup.
+      // The SxxExx prefix comes from Transcode's season/episode fields,
+      // and "Resume from 2:10" comes from PlaybackProgress.position=130s.
+      d.transcodes = [create(TranscodeSchema, {
+        id: 5001n,
+        mediaFormat: MediaFormat.BLURAY,
+        quality: Quality.HD,
+        playable: true,
+        seasonNumber: 2,
+        episodeNumber: 3,
+        episodeName: 'Test EP',
+      })];
+      d.playbackProgress = create(PlaybackProgressSchema, {
+        transcodeId: 5001n,
+        position: create(PlaybackOffsetSchema, { seconds: 130 }),
+        duration: create(PlaybackOffsetSchema, { seconds: 3000 }),
+      });
+    });
     await page.goto('/title/200');
     await page.waitForSelector('app-title-detail .detail-container');
     const resume = page.locator('a.resume-btn').first();

@@ -4,15 +4,22 @@ import { firstValueFrom } from 'rxjs';
 import {
   AcquisitionStatus as ProtoAcquisitionStatus,
   AdminMediaItem as ProtoAdminMediaItem,
+  Album as ProtoAlbum,
+  AlbumPersonnelEntry as ProtoAlbumPersonnelEntry,
+  Artist as ProtoArtist,
+  ArtistType as ProtoArtistType,
   CastMember as ProtoCastMember,
   Episode as ProtoEpisode,
   MediaFormat as ProtoMediaFormat,
   MediaType as ProtoMediaType,
   ContentRating as ProtoContentRating,
+  PersonnelRole as ProtoPersonnelRole,
   Season as ProtoSeason,
   SimilarTitle as ProtoSimilarTitle,
   Tag as ProtoTag,
   TitleDetail as ProtoTitleDetail,
+  Track as ProtoTrack,
+  TrackArtistRef as ProtoTrackArtistRef,
   Transcode as ProtoTranscode,
 } from '../proto-gen/common_pb';
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
@@ -856,13 +863,12 @@ export class CatalogService {
     // proto gRPC-JSON wire (single source of truth lives in
     // proto/catalog.proto + common.proto). Each media type joins the
     // gRPC path once its typed fixture + adapter mappings are in place.
-    // Currently: 100 (movie) and 200 (TV) are exercised in the
-    // functional suite; album + book remain on REST until their
-    // adapter mappings land.
+    // Currently: 100 (movie), 200 (TV), 301 (album). Book remains on
+    // REST until its adapter mappings land.
     //
     // Once every media type runs through `useProto`, the legacy branch
     // and the adapter both delete.
-    const useProto = titleId === 100 || titleId === 200;
+    const useProto = titleId === 100 || titleId === 200 || titleId === 301;
     if (useProto) {
       // Connect-Web client over gRPC-Web (application/grpc-web+proto).
       // The transport handles framing + cookie auth; we just call the
@@ -1269,6 +1275,30 @@ const PROTO_ACQUISITION_STATUS_TO_LEGACY: Record<ProtoAcquisitionStatus, string>
   [ProtoAcquisitionStatus.NEEDS_ASSISTANCE]: 'NEEDS_ASSISTANCE',
 };
 
+// Same prefix-stripping convention. SPA consumers compare
+// `artist_type === 'PERSON'` and similar — bare uppercase names.
+const PROTO_ARTIST_TYPE_TO_LEGACY: Record<ProtoArtistType, string> = {
+  [ProtoArtistType.UNKNOWN]: 'OTHER',
+  [ProtoArtistType.PERSON]: 'PERSON',
+  [ProtoArtistType.GROUP]: 'GROUP',
+  [ProtoArtistType.ORCHESTRA]: 'ORCHESTRA',
+  [ProtoArtistType.CHOIR]: 'CHOIR',
+  [ProtoArtistType.OTHER]: 'OTHER',
+};
+
+// AlbumPersonnelEntry.role rides on the `CreditRole` Kotlin enum on the
+// REST side. Proto enum is `PersonnelRole` with the `PERSONNEL_ROLE_`
+// prefix stripped by the TS generator.
+const PROTO_PERSONNEL_ROLE_TO_LEGACY: Record<ProtoPersonnelRole, string> = {
+  [ProtoPersonnelRole.UNKNOWN]: 'OTHER',
+  [ProtoPersonnelRole.PERFORMER]: 'PERFORMER',
+  [ProtoPersonnelRole.COMPOSER]: 'COMPOSER',
+  [ProtoPersonnelRole.PRODUCER]: 'PRODUCER',
+  [ProtoPersonnelRole.ENGINEER]: 'ENGINEER',
+  [ProtoPersonnelRole.MIXER]: 'MIXER',
+  [ProtoPersonnelRole.OTHER]: 'OTHER',
+};
+
 function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
   const t = p.title;
   if (!t) {
@@ -1288,6 +1318,7 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     });
   }
 
+  const album = p.album;
   return {
     title_id: Number(t.id),
     title_name: t.name,
@@ -1315,6 +1346,15 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     family_members: p.familyMembersFull.map(fm => ({ id: Number(fm.id), name: fm.name })),
     similar_titles: p.similarTitles.map(adaptSimilar),
     collection: p.collection ? { id: Number(p.collection.id), name: p.collection.name } : null,
+    // Album-specific. Folded into the legacy flat shape from `p.album`.
+    artists: album?.albumArtists.map(adaptArtist) ?? undefined,
+    tracks: album?.tracks.map(adaptTrack) ?? undefined,
+    track_count: album?.trackCount ?? null,
+    total_duration_seconds: album?.totalDuration?.seconds ?? null,
+    label: album?.label ?? null,
+    musicbrainz_release_group_id: album?.musicbrainzReleaseGroupId ?? null,
+    musicbrainz_release_id: album?.musicbrainzReleaseId ?? null,
+    personnel: album?.personnel.map(adaptPersonnel) ?? undefined,
   };
 }
 
@@ -1391,6 +1431,64 @@ function adaptEpisode(e: ProtoEpisode): EpisodeInfo {
     playable: e.playable,
     position_seconds: e.resumePosition?.seconds ?? null,
     duration_seconds: e.duration?.seconds ?? null,
+  };
+}
+
+function adaptArtist(a: ProtoArtist): { id: number; name: string; artist_type: string } {
+  return {
+    id: Number(a.id),
+    name: a.name,
+    artist_type: PROTO_ARTIST_TYPE_TO_LEGACY[a.artistType] ?? 'OTHER',
+  };
+}
+
+function adaptTrackArtist(a: ProtoTrackArtistRef): { id: number; name: string } {
+  return { id: Number(a.id), name: a.name };
+}
+
+// Track-row tags use the same TagCard shape as title-level tags but the
+// proto Track only carries id / name / color (no `title_count` — that
+// field is only meaningful on the tag-list endpoint). Default to 0 to
+// satisfy the structural shape; the title-detail template never reads it.
+function adaptTrackTag(t: ProtoTag): TagCard {
+  return {
+    id: Number(t.id),
+    name: t.name,
+    bg_color: t.color?.hex ?? '#666666',
+    text_color: pickTextColor(t.color?.hex ?? '#666666'),
+    title_count: 0,
+  };
+}
+
+function adaptTrack(tr: ProtoTrack): AlbumTrack {
+  return {
+    track_id: Number(tr.id),
+    disc_number: tr.discNumber,
+    track_number: tr.trackNumber,
+    name: tr.name,
+    duration_seconds: tr.duration?.seconds ?? null,
+    track_artists: tr.trackArtists.map(adaptTrackArtist),
+    tags: tr.tags.map(adaptTrackTag),
+    bpm: tr.bpm ?? null,
+    time_signature: tr.timeSignature ?? null,
+  };
+}
+
+// Personnel.track_id is `optional int64` on the wire but `number` on the
+// legacy interface — most consumers only use it as part of a @for track
+// key, so a 0 sentinel is safe when the credit is album-wide rather
+// than track-specific. Same for track_name, which renders as "on …" only
+// when set.
+function adaptPersonnel(p: ProtoAlbumPersonnelEntry): AlbumPersonnelEntry {
+  return {
+    artist_id: Number(p.artistId),
+    artist_name: p.artistName,
+    role: PROTO_PERSONNEL_ROLE_TO_LEGACY[p.role] ?? 'OTHER',
+    instrument: p.instrument ?? null,
+    track_id: p.trackId != null ? Number(p.trackId) : 0,
+    track_name: p.trackName ?? null,
+    disc_number: null,
+    track_number: null,
   };
 }
 
