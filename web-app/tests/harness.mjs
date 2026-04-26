@@ -5,7 +5,7 @@
 // long way — bash loop, raw output streamed to stdout — it has to
 // re-run failing specs just to find out *what* failed. This harness
 // runs each spec once, captures Playwright's JSON reporter output,
-// and writes three artefacts under tests/.last-run/:
+// and writes three artifacts under tests/.last-run/:
 //
 //   summary.txt   — terse human summary, one line per failed test.
 //                   This is the "first read" file when an LLM wants
@@ -138,7 +138,7 @@ for (let i = 0; i < specs.length; i++) {
 // lands cleanly.
 if (isTty) process.stderr.write('\n');
 
-// ---------------- write artefacts ----------------
+// ---------------- write artifacts ----------------
 
 writeFileSync(join(outDir, 'summary.txt'), formatSummary());
 writeFileSync(join(outDir, 'failures.md'), formatFailures());

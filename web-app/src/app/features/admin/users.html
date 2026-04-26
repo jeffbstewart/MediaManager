@@ -104,17 +104,17 @@
           <button class="close-btn" aria-label="Close" (click)="closeAddDialog()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
-          <label class="field-label">Username</label>
-          <input class="field-input" type="text" [value]="addUsername()" (input)="updateAddField('username', $event)" />
+          <label class="field-label" for="add-user-username">Username</label>
+          <input id="add-user-username" class="field-input" type="text" [value]="addUsername()" (input)="updateAddField('username', $event)" />
 
-          <label class="field-label">Password</label>
-          <input class="field-input" type="password" [value]="addPassword()" (input)="updateAddField('password', $event)" />
+          <label class="field-label" for="add-user-password">Password</label>
+          <input id="add-user-password" class="field-input" type="password" [value]="addPassword()" (input)="updateAddField('password', $event)" />
           @if (addPassword().length > 0 && addPassword().length < 8) {
             <span class="field-hint">Must be at least 8 characters</span>
           }
 
-          <label class="field-label">Confirm Password</label>
-          <input class="field-input" type="password" [value]="addConfirm()" (input)="updateAddField('confirm', $event)" />
+          <label class="field-label" for="add-user-confirm">Confirm Password</label>
+          <input id="add-user-confirm" class="field-input" type="password" [value]="addConfirm()" (input)="updateAddField('confirm', $event)" />
           @if (addConfirm().length > 0 && addPassword() !== addConfirm()) {
             <span class="field-hint">Passwords do not match</span>
           }
@@ -143,11 +143,11 @@
           <button class="close-btn" aria-label="Close" (click)="closeResetDialog()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
-          <label class="field-label">New Password</label>
-          <input class="field-input" type="password" [value]="resetPassword()" (input)="updateResetField('password', $event)" />
+          <label class="field-label" for="reset-user-password">New Password</label>
+          <input id="reset-user-password" class="field-input" type="password" [value]="resetPassword()" (input)="updateResetField('password', $event)" />
 
-          <label class="field-label">Confirm Password</label>
-          <input class="field-input" type="password" [value]="resetConfirm()" (input)="updateResetField('confirm', $event)" />
+          <label class="field-label" for="reset-user-confirm">Confirm Password</label>
+          <input id="reset-user-confirm" class="field-input" type="password" [value]="resetConfirm()" (input)="updateResetField('confirm', $event)" />
           @if (resetConfirm().length > 0 && resetPassword() !== resetConfirm()) {
             <span class="field-hint">Passwords do not match</span>
           }

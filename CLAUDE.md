@@ -228,6 +228,73 @@ To add custom release notes, edit the release on GitHub after CI creates it.
 
 A git pre-commit hook scans staged changes for sensitive data (hardcoded IPs, UUIDs, API keys, etc.). If the commit is rejected, fix the violations or add known-safe values to `lifecycle/presubmit-allowlist.txt`.
 
+For the **Playwright suite presubmit gate**, run `lifecycle/pre-submit.sh` before pushing. It exits non-zero on any failure and writes the structured artifacts described under "Web-app Test Harness" below. Wire it as a git pre-push hook with:
+
+```bash
+ln -s ../../lifecycle/pre-submit.sh .git/hooks/pre-push
+```
+
+## Web-app Test Harness
+
+The Angular Playwright suite under `web-app/tests/` is split into two directories that the harness runs separately:
+
+- `tests/axe/` — accessibility audits via axe-core. One assertion per test: zero violations.
+- `tests/functional/` — request-mocked DOM / navigation / signal-driven UI tests.
+
+Numbers 01–08 are paired across both directories where the same view exists in each (login / setup / terms / change-password / home / help / profile / report-problem). After 08, each directory continues independently.
+
+### Canonical runner: `tests/harness.mjs`
+
+Always run the suite via the harness — never invoke `npx playwright test` ad-hoc when you want to know status. The harness preserves the Windows worker-loader workaround (per-spec process), captures Playwright's JSON reporter output, and writes structured artifacts.
+
+```bash
+cd web-app
+node tests/harness.mjs              # both suites
+node tests/harness.mjs axe          # only tests/axe
+node tests/harness.mjs functional   # only tests/functional
+node tests/harness.mjs --files tests/functional/04-change-password.spec.ts ...
+```
+
+Or via the wrapper: `tests/run-all.sh` (forwards args verbatim) or `lifecycle/pre-submit.sh` (same, with the gate semantics).
+
+**Console output (stderr)** — for the human watching the run, NOT for parsing:
+- Single-line CR-updating progress bar with elapsed / ETA / current spec when stderr is a TTY; one-line-per-update fallback when piped (CI logs).
+- Final line is the at-a-glance verdict: `✓ axe 17/17, functional 26/26 — 357 passed, 0 failed (2m51s)` or `✘ ... 1 FAILED ... — first: tests/functional/04-...:103`.
+
+**Never redirect stderr** (`2>/dev/null`, `2>&1 | head`, etc.) — the live progress bar is what the user watches. Use the on-disk artifacts for findings.
+
+### On-disk artifacts under `tests/.last-run/` (gitignored)
+
+These are the canonical post-run handoff. Read them instead of tailing the harness output.
+
+| File | Purpose | Read when |
+|------|---------|-----------|
+| `summary.txt` | First line is the at-a-glance verdict (`OK — N passed...` or `FAIL — N failed, first: path:line`). Rest is per-suite roll-up + one-line-per-failure. | First file to read after any run. |
+| `failures.md` | Markdown with trimmed per-failure context (error headline + body + screenshot path). 10-line cap on body. | When `summary.txt` reports failures and you need the error message. |
+| `progress.json` | Atomically updated after each spec — carries `elapsedSec`, `etaSec`, `currentSpec`, `completedSpecs`, `totalSpecs`, per-spec pass/fail counts. | Mid-run, to check status without tailing stderr. |
+| `run.json` | Full structured per-spec results for tooling. | When you need to script over results. |
+| `raw/<spec>.json` | Per-spec Playwright JSON reporter output (untrimmed). | Forensics — when `failures.md` truncated the body and you need the full axe violation node JSON, color values, etc. |
+
+### Helper: `tests/inspect-failure.mjs`
+
+For axe failures the 10-line body cap in `failures.md` often hides the offending DOM nodes / colors. This helper pulls the full error from `raw/*.json` for tests matching a pattern.
+
+```bash
+node tests/inspect-failure.mjs "Edit dialog"           # default 4000 chars per error
+node tests/inspect-failure.mjs "color contrast" --max 8000
+```
+
+Pattern is a case-insensitive substring of the test title.
+
+### Workflow when a spec fails
+
+1. Run `node tests/harness.mjs` (or whichever subset is relevant). Watch the progress bar.
+2. After it exits, `cat tests/.last-run/summary.txt` — the first line tells you pass/fail and (on fail) the first failing spec:line.
+3. If failed: `cat tests/.last-run/failures.md` for the trimmed body.
+4. If the body was truncated and you need the axe node detail (e.g., which DOM element + which colors): `node tests/inspect-failure.mjs "<test title substring>" --max 8000`.
+
+This keeps token usage bounded — the harness itself uses zero tokens during execution.
+
 ### Documentation Check Before Commit
 
 Before each commit, consider whether the changes require documentation updates. Check:

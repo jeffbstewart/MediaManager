@@ -59,8 +59,8 @@
           <button class="close-btn" aria-label="Close" (click)="closeDialog()"><mat-icon>close</mat-icon></button>
         </div>
 
-        <label class="field-label">Name</label>
-        <input class="field-input" type="text" maxlength="100"
+        <label class="field-label" for="tag-dialog-name">Name</label>
+        <input id="tag-dialog-name" class="field-input" type="text" maxlength="100"
                [value]="dialogName()" (input)="updateName($event)" />
 
         <label class="field-label">Color</label>

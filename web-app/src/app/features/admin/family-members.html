@@ -60,13 +60,13 @@
         }
 
         <div class="field-group">
-          <label class="field-label">Name</label>
-          <input class="field-input" type="text" [value]="editName()" (input)="updateName($event)" maxlength="200" />
+          <label class="field-label" for="family-member-name">Name</label>
+          <input id="family-member-name" class="field-input" type="text" [value]="editName()" (input)="updateName($event)" maxlength="200" />
         </div>
 
         <div class="field-group">
-          <label class="field-label">Notes</label>
-          <textarea class="field-textarea" [value]="editNotes()" (input)="updateNotes($event)"
+          <label class="field-label" for="family-member-notes">Notes</label>
+          <textarea id="family-member-notes" class="field-textarea" [value]="editNotes()" (input)="updateNotes($event)"
                     maxlength="500" placeholder="Optional notes"></textarea>
         </div>
 

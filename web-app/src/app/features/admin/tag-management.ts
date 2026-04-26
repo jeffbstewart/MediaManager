@@ -17,23 +17,29 @@ interface AdminTag {
   title_count: number;
 }
 
+// Tailwind-700 palette. The previous 500-level ladder failed WCAG AA
+// when paired with the always-white pill text (most ran 2.5–3.8:1; the
+// AA floor is 4.5:1 for normal text). 700-level darkens enough that
+// white text clears the threshold across the whole row, so the pill
+// no longer needs the per-color dark-text override the template used
+// to apply for amber/yellow/lime.
 const COLOR_PALETTE = [
-  { name: 'Red', hex: '#EF4444' },
-  { name: 'Orange', hex: '#F97316' },
-  { name: 'Amber', hex: '#F59E0B' },
-  { name: 'Yellow', hex: '#EAB308' },
-  { name: 'Lime', hex: '#84CC16' },
-  { name: 'Green', hex: '#22C55E' },
-  { name: 'Emerald', hex: '#10B981' },
-  { name: 'Teal', hex: '#14B8A6' },
-  { name: 'Cyan', hex: '#06B6D4' },
-  { name: 'Sky', hex: '#0EA5E9' },
-  { name: 'Blue', hex: '#3B82F6' },
-  { name: 'Indigo', hex: '#6366F1' },
-  { name: 'Violet', hex: '#8B5CF6' },
-  { name: 'Purple', hex: '#A855F7' },
-  { name: 'Pink', hex: '#EC4899' },
-  { name: 'Stone', hex: '#78716C' },
+  { name: 'Red', hex: '#B91C1C' },
+  { name: 'Orange', hex: '#C2410C' },
+  { name: 'Amber', hex: '#B45309' },
+  { name: 'Yellow', hex: '#A16207' },
+  { name: 'Lime', hex: '#4D7C0F' },
+  { name: 'Green', hex: '#15803D' },
+  { name: 'Emerald', hex: '#047857' },
+  { name: 'Teal', hex: '#0F766E' },
+  { name: 'Cyan', hex: '#0E7490' },
+  { name: 'Sky', hex: '#0369A1' },
+  { name: 'Blue', hex: '#1D4ED8' },
+  { name: 'Indigo', hex: '#4338CA' },
+  { name: 'Violet', hex: '#6D28D9' },
+  { name: 'Purple', hex: '#7E22CE' },
+  { name: 'Pink', hex: '#BE185D' },
+  { name: 'Stone', hex: '#44403C' },
 ];
 
 @Component({
@@ -56,7 +62,7 @@ export class TagManagementComponent implements OnInit {
   readonly dialogMode = signal<'create' | 'edit'>('create');
   readonly editingTag = signal<AdminTag | null>(null);
   readonly dialogName = signal('');
-  readonly dialogColor = signal('#EF4444');
+  readonly dialogColor = signal('#B91C1C');
   readonly dialogError = signal('');
 
   // Delete dialog
@@ -82,7 +88,7 @@ export class TagManagementComponent implements OnInit {
     this.dialogMode.set('create');
     this.editingTag.set(null);
     this.dialogName.set('');
-    this.dialogColor.set('#EF4444');
+    this.dialogColor.set('#B91C1C');
     this.dialogError.set('');
     this.dialogOpen.set(true);
   }

@@ -5,7 +5,7 @@
 #
 #   ln -s ../../lifecycle/pre-submit.sh .git/hooks/pre-push
 #
-# The harness writes structured artefacts under
+# The harness writes structured artifacts under
 # web-app/tests/.last-run/. To inspect failures:
 #
 #   cat web-app/tests/.last-run/summary.txt    # one-line per failure

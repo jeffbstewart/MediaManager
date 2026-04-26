@@ -107,22 +107,22 @@
           <button class="close-btn" aria-label="Close" (click)="closeEdit()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="form-fields">
-          <label class="field-label">TMDB ID</label>
-          <input class="field-input" type="number" [value]="editTmdbId()"
+          <label class="field-label" for="dq-edit-tmdb-id">TMDB ID</label>
+          <input id="dq-edit-tmdb-id" class="field-input" type="number" [value]="editTmdbId()"
                  (input)="editTmdbId.set($any($event.target).value)" />
           <span class="field-hint">Changing TMDB ID triggers re-enrichment</span>
 
-          <label class="field-label">Media Type</label>
-          <select class="field-select" (change)="editMediaType.set($any($event.target).value)">
+          <label class="field-label" for="dq-edit-media-type">Media Type</label>
+          <select id="dq-edit-media-type" class="field-select" (change)="editMediaType.set($any($event.target).value)">
             <option value="MOVIE" [selected]="editMediaType() === 'MOVIE'">Movie</option>
             <option value="TV" [selected]="editMediaType() === 'TV'">TV</option>
             <option value="PERSONAL" [selected]="editMediaType() === 'PERSONAL'">Personal</option>
           </select>
 
           <!-- TMDB Search -->
-          <label class="field-label" style="margin-top:0.75rem">Search TMDB</label>
+          <label class="field-label" for="dq-edit-tmdb-search" style="margin-top:0.75rem">Search TMDB</label>
           <div class="tmdb-search-row">
-            <input class="field-input" type="text" [value]="tmdbQuery()" placeholder="Search TMDB..."
+            <input id="dq-edit-tmdb-search" class="field-input" type="text" [value]="tmdbQuery()" placeholder="Search TMDB..."
                    (input)="tmdbQuery.set($any($event.target).value)"
                    (keydown.enter)="searchTmdb()" />
             <mat-chip-set>
