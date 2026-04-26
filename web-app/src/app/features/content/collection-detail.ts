@@ -91,7 +91,13 @@ import { AppRoutes } from '../../core/routes';
       display: flex; flex-direction: column;
       text-decoration: none; color: inherit; cursor: pointer; text-align: center;
     }
-    .poster-card.unowned { opacity: 0.4; cursor: default; }
+    // Dim the cover image only — at 0.4 opacity on the whole card the
+    // title / meta text and the "Not Owned" placeholder ran 2.01:1
+    // against light-mode surface, well below AA's 4.5:1 floor. The
+    // dimmed cover carries the "not owned" signal; everything else
+    // stays at full opacity so it remains readable.
+    .poster-card.unowned { cursor: default; }
+    .poster-card.unowned .poster-img { opacity: 0.4; }
     .poster-wrapper {
       position: relative; width: 100%; aspect-ratio: 2/3;
       border-radius: 8px; overflow: hidden;

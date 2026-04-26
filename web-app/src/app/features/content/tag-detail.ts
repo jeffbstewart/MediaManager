@@ -72,7 +72,9 @@ import { AppRoutes } from '../../core/routes';
                   }
                   <div class="track-text">
                     <span class="track-name">{{ tr.track_name }}</span>
-                    <a class="track-album" [routerLink]="routes.title(tr.title_id)">{{ tr.title_name }}</a>
+                    <a class="track-album" [routerLink]="routes.title(tr.title_id)">
+                      {{ tr.title_name }}@if (tr.artist_name) { <span class="track-artist"> · {{ tr.artist_name }}</span> }
+                    </a>
                   </div>
                   <span class="track-duration">{{ formatTrackDuration(tr.duration_seconds) }}</span>
                   <button mat-icon-button type="button" (click)="playOneTaggedTrack(tr)"
@@ -299,7 +301,7 @@ export class TagDetailComponent implements OnInit {
       albumTitleId: t.title_id,
       albumName: t.title_name ?? '',
       albumPosterUrl: t.poster_url,
-      primaryArtistName: null,
+      primaryArtistName: t.artist_name ?? null,
     };
   }
 

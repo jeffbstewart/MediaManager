@@ -176,6 +176,20 @@ class TagHttpService {
             .filter { user.canSeeRating(it.content_rating) }
             .associateBy { it.id }
 
+        // Resolve the primary artist (artist_order = 0) for each tagged-track
+        // title in one pass — same shape as the buildPrimaryArtistMap helper
+        // in TitleListHttpService. Without this the row payload omits the
+        // artist and the tagged-tracks list reads like a track + album with
+        // no performer, which is useless for music-tag browsing.
+        val trackTitleIds = tagTrackTitles.keys
+        val artistByTitleId: Map<Long, String> = if (trackTitleIds.isEmpty()) emptyMap() else run {
+            val links = TitleArtist.findAll().filter { it.title_id in trackTitleIds && it.artist_order == 0 }
+            val artistsById = Artist.findAll()
+                .filter { it.id in links.map { l -> l.artist_id }.toSet() }
+                .associateBy { it.id }
+            links.mapNotNull { l -> artistsById[l.artist_id]?.let { l.title_id to it.name } }.toMap()
+        }
+
         val trackRows = tracksById.values
             .filter { it.title_id in tagTrackTitles.keys }
             .sortedWith(compareBy(
@@ -191,6 +205,7 @@ class TagHttpService {
                     "duration_seconds" to track.duration_seconds,
                     "title_id" to track.title_id,
                     "title_name" to parent?.name,
+                    "artist_name" to artistByTitleId[track.title_id],
                     "poster_url" to parent?.posterUrl(PosterSize.THUMBNAIL),
                     "playable" to !track.file_path.isNullOrBlank()
                 )

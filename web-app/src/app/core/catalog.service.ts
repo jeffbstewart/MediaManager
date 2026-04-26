@@ -360,6 +360,7 @@ export interface TaggedTrackCard {
   duration_seconds: number | null;
   title_id: number;
   title_name: string | null;
+  artist_name: string | null;
   poster_url: string | null;
   playable: boolean;
 }
