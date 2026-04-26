@@ -17,7 +17,7 @@ import { loginAs } from '../helpers/login-as';
 // Fixture files (~410 KB total committed):
 //   20s.mp4     — 20 s of testsrc + 440 Hz tone, H.264/AAC, 320x240.
 //                 Length matters because the resume spec
-//                 (17-player-resume) needs > 10 s — the player
+//                 (14-player-resume) needs > 10 s — the player
 //                 gates the resume prompt on saved position > 10 s.
 //   thumbs.jpg  — 5×1 sprite of one-second-cadence frames at 160x90
 //   thumbs.vtt  — five cues mapping each second to one sprite cell

@@ -3,7 +3,7 @@ import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 
 // Resume-prompt integration test. Layered on the same fixture set as
-// 15-player-playback (20s.mp4 etc.); the additional behaviour under
+// 13-player-playback (20s.mp4 etc.); the additional behaviour under
 // test is the prompt that appears when the saved playback position
 // for this transcode is > 10 s.
 //

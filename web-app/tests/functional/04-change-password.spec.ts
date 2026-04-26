@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 
-// Functional companion to 04-change-password (axe-only). The
+// Functional companion to axe/04-change-password. The
 // component uses signal-backed local state (no reactive form) +
 // inline getters for isValid / passwordMismatch / passwordTooShort.
 //
@@ -107,10 +107,12 @@ test.describe('change-password — submit', () => {
     );
     const submit = page.locator('app-change-password button.submit-btn');
     for (let i = 0; i < 5; i++) {
+      // waitForResponse must be armed BEFORE the click, otherwise the
+      // mocked POST can resolve in the same microtask as the click and
+      // the wait misses it → 30 s timeout.
+      const settled = page.waitForResponse(r => r.url().endsWith('/api/v2/profile/change-password'));
       await submit.click();
-      // Wait for the in-flight POST to settle so the next click sees
-      // the updated attempts() count.
-      await page.waitForResponse(r => r.url().endsWith('/api/v2/profile/change-password'));
+      await settled;
     }
     await expect(page.locator('app-change-password .error-message'))
       .toContainText(/Too many failed attempts/);

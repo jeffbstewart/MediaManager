@@ -8,7 +8,7 @@ import { stubImages } from '../helpers/image-stub';
 // /content/tv mounts <app-tv-shows>, which is a thin wrapper around
 // <app-title-grid mediaType="TV" label="TV shows" />. Filter / sort
 // plumbing is shared with /content/movies and /content/books — the
-// movies spec (28-movies-list) covers the generic chip / sort / URL-
+// movies spec (21-movies-list) covers the generic chip / sort / URL-
 // param machinery against MOVIE titles. This spec exercises the
 // TV-specific bits:
 //   - the "TV shows" label on the status chip
@@ -16,7 +16,7 @@ import { stubImages } from '../helpers/image-stub';
 //   - that the title-grid hits the catalog endpoint with media_type=TV
 //
 // Accessibility coverage for /content/tv lives in
-// 06-browse-grids.spec.ts (viewer scope, light/dark × desktop/mobile).
+// axe/09-browse-grids.spec.ts (viewer scope, light/dark × desktop/mobile).
 //
 // Fixture: catalog/titles.tv.json — 3 TV titles (Breaking Bad with
 // progress 0.62, The Expanse, Severance). available_ratings: TV-G,

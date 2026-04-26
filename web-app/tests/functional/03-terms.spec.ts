@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 
-// Functional companion to 03-terms (axe-only). TermsComponent
+// Functional companion to axe/03-terms. TermsComponent
 // loads /api/v2/legal/status — when compliant=true it short-
 // circuits to the returnUrl. When compliant=false it shows a
 // checkbox-per-document form whose required validators are added

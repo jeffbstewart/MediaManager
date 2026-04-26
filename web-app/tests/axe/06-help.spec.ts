@@ -5,7 +5,7 @@ import { auditA11y } from '../helpers/run-axe';
 
 // /help is a static viewer-facing reference page. Pure axe sweep
 // — table semantics, heading hierarchy, link text, etc. The sibling
-// 41-help-functional spec covers structural rendering.
+// sibling tests/functional/06-help spec covers structural rendering.
 
 test.describe('/help (axe)', () => {
   test('renders with zero axe violations', async ({ page }) => {

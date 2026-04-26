@@ -8,16 +8,16 @@ import { stubImages } from '../helpers/image-stub';
 // /content/movies mounts <app-title-grid mediaType="MOVIE">. The
 // title-grid filter wiring is shared with /content/books, /content/tv,
 // /content/music and /content/family — the books spec
-// (22-books-and-reader) already covers the generic chip / sort / URL-
+// (15-books-and-reader) already covers the generic chip / sort / URL-
 // param plumbing. This spec adds the movies-specific bits:
 //   - Popular sort option (replaces Author from books)
 //   - Rating chips (G, PG, PG-13, R) which only appear for video
 //     mediaTypes
 //
 // Actual movie playback isn't re-covered here. The /play/:transcodeId
-// route is media-type agnostic; 15-player-playback exercises the full
+// route is media-type agnostic; 13-player-playback exercises the full
 // HTMLMediaElement pipeline (currentTime, subs, scrub preview) against
-// a generic video transcode and 17-player-resume covers the resume
+// a generic video transcode and 14-player-resume covers the resume
 // prompt. Both apply to movies as much as TV episodes.
 //
 // Fixture: catalog/titles.movies.json — 4 movies (Matrix, Inception,

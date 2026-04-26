@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { mockBackend } from '../helpers/mock-backend';
 
-// Functional companion to 02-setup (axe-only). SetupComponent is
+// Functional companion to axe/02-setup. SetupComponent is
 // only reachable when /api/v2/auth/discover reports setup_required.
 // On submit it POSTs /api/v2/auth/setup with username, password,
 // privacy_policy_url, terms_of_use_url. The form has a custom

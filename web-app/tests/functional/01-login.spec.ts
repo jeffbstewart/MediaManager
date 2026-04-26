@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { mockBackend } from '../helpers/mock-backend';
 
-// Functional companion to 01-login (axe-only). LoginComponent
+// Functional companion to axe/01-login. LoginComponent
 // gates on three things in ngOnInit:
 //   - already-authenticated short-circuit (handled by other specs)
 //   - silent /auth/refresh — 401 in mockBackend's default makes it

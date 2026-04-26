@@ -4,7 +4,7 @@ import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
 import { loadFixture } from '../helpers/load-fixture';
 
-// Serial mode for the same reason as 22-books-and-reader: the
+// Serial mode for the same reason as 15-books-and-reader: the
 // fullscreen view holds an open MJPEG-style image stream and the
 // snapshot mode keeps a 3-second refresh interval running, both of
 // which keep ng serve busier than the default fullyParallel
@@ -24,7 +24,7 @@ test.describe.configure({ mode: 'serial' });
 //
 // The "single camera view" is the fullscreen overlay on this page —
 // no separate route. Admin views (/admin/cameras) are out of scope
-// for this spec; they're covered by 14-admin-tier-d.
+// for this spec; they're covered by axe/17-admin-tier-d.
 
 test.describe('cameras view', () => {
 
