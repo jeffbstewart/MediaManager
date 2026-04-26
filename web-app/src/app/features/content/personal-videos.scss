@@ -112,8 +112,11 @@
 }
 
 .member-chip {
-  background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);
-  color: var(--mat-sys-primary);
+  // primary on primary-15%-on-surface ran 4.47:1 in light mode — just
+  // below WCAG AA. Material tunes the primary-container / on-primary-
+  // container token pair for AA in both schemes.
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
   border-radius: 9999px;
   padding: 1px 8px;
   font-size: 0.75rem;

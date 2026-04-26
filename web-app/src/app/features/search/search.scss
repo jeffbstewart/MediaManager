@@ -102,7 +102,10 @@ h2 { margin: 0 0 0.75rem; }
   &.type-movie { background: #1565c0; color: white; }
   &.type-tv { background: #6a1b9a; color: white; }
   &.type-actor { background: #2e7d32; color: white; }
-  &.type-collection { background: #e65100; color: white; }
+  // #e65100 with white text ran 3.78:1 — below AA's 4.5:1. Darkened
+  // to Material deep-orange-900 (#bf360c) to push past the threshold
+  // while staying recognisably orange against the other pills.
+  &.type-collection { background: #bf360c; color: white; }
   &.type-tag { background: #455a64; color: white; }
   &.type-channel { background: #00838f; color: white; }
   &.type-camera { background: #4e342e; color: white; }
@@ -118,8 +121,11 @@ h2 { margin: 0 0 0.75rem; }
 }
 
 .result-meta {
+  // opacity: 0.5 dragged the meta line to ~3.28:1 against the
+  // light-mode surface, well below AA. Use the on-surface-variant
+  // token directly (Material tunes those to clear AA in both schemes).
   font-size: 0.6875rem;
-  opacity: 0.5;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 /* Advanced search layout additions. */
