@@ -30,7 +30,7 @@
 // stream. Reading the file is O(1) tokens and is updated atomically.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync, writeFileSync, renameSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -102,23 +102,36 @@ for (let i = 0; i < specs.length; i++) {
   renderProgress(i, spec.path);
 
   const t0 = Date.now();
-  const proc = spawnSync('npx', ['playwright', 'test', spec.path, '--reporter=json'], {
+  // Don't pass --reporter=json on the CLI — that would override the
+  // config's reporter array and silence monocart-reporter (no
+  // coverage collection). Instead, rely on the config's `json`
+  // reporter and tell it where to write via PLAYWRIGHT_JSON_FILE.
+  const safeName = spec.path.replace(/[\\/]/g, '_');
+  const jsonOut = join(rawDir, `${safeName}.json`);
+  // Per-spec coverage output dir — read by playwright.config.ts so
+  // each subprocess writes its raw V8 entries somewhere unique.
+  // The harness's final merge step ingests every per-spec dir.
+  const covDir = join(outDir, 'coverage-raw', safeName);
+  const proc = spawnSync('npx', ['playwright', 'test', spec.path], {
     cwd: repoRoot,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      PLAYWRIGHT_JSON_FILE: jsonOut,
+      MCR_OUTPUT_DIR: covDir,
+    },
     maxBuffer: 200 * 1024 * 1024,
     shell: process.platform === 'win32',
   });
   const dt = Date.now() - t0;
   const stdout = proc.stdout || '';
   const stderr = proc.stderr || '';
-  // Stash raw — useful for forensics; safe to delete between runs.
-  const safeName = spec.path.replace(/[\\/]/g, '_');
-  writeFileSync(join(rawDir, `${safeName}.json`), stdout);
+  if (stdout.trim()) writeFileSync(join(rawDir, `${safeName}.stdout`), stdout);
   if (stderr.trim()) writeFileSync(join(rawDir, `${safeName}.stderr`), stderr);
 
   let parsed = null;
-  try { parsed = JSON.parse(stdout); } catch { /* leave null */ }
+  try { parsed = JSON.parse(readFileSync(jsonOut, 'utf-8')); } catch { /* leave null */ }
 
   const r = collectResults(parsed, spec, stderr, proc.status);
   r.durationMs = dt;
@@ -148,6 +161,38 @@ writeFileSync(join(outDir, 'run.json'), JSON.stringify({
   totalPass, totalFail, totalSkip,
   specs: perSpec,
 }, null, 2));
+
+// Coverage merge — each per-spec subprocess wrote raw V8 entries to
+// tests/.last-run/coverage-raw/<spec>/raw/. The shared cache pattern
+// races under parallel workers, so we point each at its own dir and
+// run a final merge here using the standalone monocart-coverage-
+// reports package (transitive dep of monocart-reporter).
+const coverageRawRoot = join(outDir, 'coverage-raw');
+const finalCoverageDir = join(outDir, 'coverage');
+try {
+  const inputDirs = readdirSync(coverageRawRoot)
+    .map(name => join(coverageRawRoot, name, 'raw'))
+    .filter(p => {
+      try { return readdirSync(p).length > 0; } catch { return false; }
+    });
+  if (inputDirs.length > 0) {
+    const { CoverageReport } = await import('monocart-coverage-reports');
+    const report = new CoverageReport({
+      name: 'mediamanager web-app',
+      inputDir: inputDirs,
+      outputDir: finalCoverageDir,
+      entryFilter: { '**/node_modules/**': false, '**/*': true },
+      sourceFilter: { '**/node_modules/**': false, '**/src/app/**': true },
+      reports: [['v8'], ['json-summary']],
+      logging: 'off',
+    });
+    await report.generate();
+    const cov = JSON.parse(readFileSync(join(finalCoverageDir, 'coverage-summary.json'), 'utf-8'));
+    writeFileSync(join(outDir, 'coverage.txt'), formatCoverage(cov));
+  }
+} catch (e) {
+  process.stderr.write(`coverage merge failed: ${e.message}\n`);
+}
 
 // Final summary line — designed so anyone (CI tail, terminal user,
 // LLM glancing at the last line) gets the verdict at a glance:
@@ -391,4 +436,56 @@ function formatFailures() {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * Render the monocart coverage-summary.json into a digestible text
+ * report. Designed for at-a-glance triage:
+ *   - First line: overall % across lines / statements / branches
+ *   - Top-level "Files with 0% coverage" callout (untouched components)
+ *   - Top 20 lowest-covered files (excluding 0% — those have their own
+ *     section) so partial gaps surface
+ *
+ * Skips the `localhost-4200/chunk-*.js` synthetic entries Angular's
+ * dev server emits — those aren't actionable source files.
+ */
+function formatCoverage(cov) {
+  const total = cov.total;
+  const files = Object.entries(cov)
+    .filter(([k]) => k !== 'total' && k.startsWith('src/'))
+    .map(([path, stats]) => ({ path, ...stats }));
+
+  const zero = files.filter(f => f.lines.pct === 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+  const partial = files.filter(f => f.lines.pct > 0 && f.lines.pct < 100)
+    .sort((a, b) => a.lines.pct - b.lines.pct);
+
+  const lines = [];
+  lines.push(
+    `Coverage: lines ${total.lines.pct.toFixed(1)}%  ` +
+    `statements ${total.statements.pct.toFixed(1)}%  ` +
+    `branches ${total.branches.pct.toFixed(1)}%  ` +
+    `functions ${total.functions.pct.toFixed(1)}%  ` +
+    `(${files.length} app source files)`
+  );
+  lines.push('');
+  if (zero.length > 0) {
+    lines.push(`Files with 0% line coverage (${zero.length}):`);
+    for (const f of zero.slice(0, 50)) {
+      lines.push(`  ${f.path}  (${f.lines.total} lines)`);
+    }
+    if (zero.length > 50) lines.push(`  … +${zero.length - 50} more`);
+    lines.push('');
+  } else {
+    lines.push('No files with 0% line coverage.');
+    lines.push('');
+  }
+  lines.push(`Lowest-covered partial files (top 20 of ${partial.length}):`);
+  for (const f of partial.slice(0, 20)) {
+    const pct = f.lines.pct.toFixed(1).padStart(5);
+    lines.push(`  ${pct}%  ${f.path}  (${f.lines.covered}/${f.lines.total} lines)`);
+  }
+  lines.push('');
+  lines.push('HTML report: tests/.last-run/coverage/index.html');
+  return lines.join('\n') + '\n';
 }

@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { auditA11y } from '../helpers/run-axe';
 

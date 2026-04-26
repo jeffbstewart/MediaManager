@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';

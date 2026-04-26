@@ -24,7 +24,50 @@ export default defineConfig({
   workers: 8,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // Reporter list:
+  //   - list: human-readable per-test progress (the harness captures
+  //     this into raw/<spec>.stderr but it's also useful when running
+  //     `npx playwright test` directly).
+  //   - json: structured per-test results. The harness sets
+  //     PLAYWRIGHT_JSON_FILE per spec so each subprocess writes its
+  //     reporter output to a unique file the harness reads back.
+  //     When the env var is unset (direct CLI runs), the json
+  //     reporter writes to stdout per Playwright's default.
+  //   - monocart-reporter: aggregates V8 JS coverage collected per-
+  //     test by the autoCoverageFixture in tests/helpers/test-fixture.ts.
+  //     Each per-spec run writes raw coverage into the shared cache
+  //     (clean=false / cleanCache=false) so the next spec's report
+  //     extends rather than replaces — the LAST spec's regenerate
+  //     produces a report covering everything that ran.
+  //
+  // sourceFilter narrows the coverage report to our app source.
+  reporter: [
+    ['list'],
+    ['json', process.env.PLAYWRIGHT_JSON_FILE
+      ? { outputFile: process.env.PLAYWRIGHT_JSON_FILE }
+      : {}],
+    ['monocart-reporter', {
+      name: 'mediamanager web-app',
+      outputFile: process.env.MCR_OUTPUT_DIR
+        ? `${process.env.MCR_OUTPUT_DIR}/index.html`
+        : 'tests/.last-run/coverage/index.html',
+      coverage: {
+        // Per-spec subprocess invocations write to a unique dir
+        // (set by the harness via MCR_OUTPUT_DIR) so they don't
+        // race each other clobbering a shared cache. The harness's
+        // final step merges all per-spec raw dirs into one report
+        // under tests/.last-run/coverage/.
+        outputDir: process.env.MCR_OUTPUT_DIR || 'tests/.last-run/coverage',
+        entryFilter: { '**/node_modules/**': false, '**/*': true },
+        sourceFilter: { '**/node_modules/**': false, '**/src/app/**': true },
+        // Per-spec runs only need the raw dump (cheap, mergeable);
+        // the merged final pass produces v8 + json-summary.
+        reports: process.env.MCR_OUTPUT_DIR
+          ? [['raw']]
+          : [['v8'], ['raw'], ['json-summary']],
+      },
+    }],
+  ],
 
   use: {
     baseURL: 'http://localhost:4200',

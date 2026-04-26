@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 
 // Functional companion to axe/02-setup. SetupComponent is
