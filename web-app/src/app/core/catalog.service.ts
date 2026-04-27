@@ -19,6 +19,9 @@ import {
   ReadableEdition as ProtoReadableEdition,
   Season as ProtoSeason,
   SimilarTitle as ProtoSimilarTitle,
+  ActorDetail as ProtoActorDetail,
+  CreditEntry as ProtoCreditEntry,
+  OwnedCredit as ProtoOwnedCredit,
   Tag as ProtoTag,
   TagListItem as ProtoTagListItem,
   TitleDetail as ProtoTitleDetail,
@@ -1005,7 +1008,9 @@ export class CatalogService {
   }
 
   async getActorDetail(personId: number): Promise<ActorDetail> {
-    return firstValueFrom(this.http.get<ActorDetail>(`/api/v2/catalog/actor/${personId}`));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getActorDetail({ tmdbPersonId: personId });
+    return adaptProtoActorDetail(personId, proto);
   }
 
   async getAuthorDetail(authorId: number): Promise<AuthorDetail> {
@@ -1489,6 +1494,66 @@ function adaptTagListItem(t: ProtoTagListItem): TagCard {
     bg_color: bg,
     text_color: pickTextColor(bg),
     title_count: t.titleCount,
+  };
+}
+
+// Proto wraps TMDB poster paths as a full URL
+// (https://image.tmdb.org/t/p/w500/abc.jpg). Legacy callers pass the
+// raw path through tmdbImageUrl(), which would double-prefix and break
+// the URL. Strip the wrapper back to "/abc.jpg" so the existing helper
+// keeps producing /proxy/tmdb/{size}/abc.jpg.
+function stripTmdbWrapper(url: string | undefined): string | null {
+  if (!url) return null;
+  const stripped = url.replace(/^https?:\/\/image\.tmdb\.org\/t\/p\/[^/]+/, '');
+  return stripped || null;
+}
+
+// proto/time.proto Month enum values are 1..12 (with 0 = UNKNOWN), so
+// we can use the numeric value directly. Returns "YYYY-MM-DD" matching
+// what the legacy REST endpoint serialised from the DB column.
+function calendarDateToIsoDate(d: { year: number; month: number; day: number } | undefined): string | null {
+  if (!d || d.month < 1 || d.day < 1) return null;
+  const mm = String(d.month).padStart(2, '0');
+  const dd = String(d.day).padStart(2, '0');
+  return `${d.year}-${mm}-${dd}`;
+}
+
+function adaptActorOwnedTitle(c: ProtoOwnedCredit): ActorOwnedTitle {
+  const t = c.title!;
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? `/posters/w185/${t.id}`,
+    release_year: t.year ?? null,
+    character_name: c.characterName ?? null,
+  };
+}
+
+function adaptActorCredit(c: ProtoCreditEntry): ActorCredit {
+  return {
+    tmdb_id: c.tmdbId,
+    title: c.title,
+    media_type: PROTO_MEDIA_TYPE_TO_LEGACY[c.mediaType] ?? 'UNKNOWN',
+    character_name: c.characterName ?? null,
+    release_year: c.releaseYear ?? null,
+    poster_path: stripTmdbWrapper(c.posterUrl),
+    popularity: c.popularity,
+    already_wished: c.wished,
+  };
+}
+
+function adaptProtoActorDetail(personId: number, p: ProtoActorDetail): ActorDetail {
+  return {
+    person_id: personId,
+    name: p.name,
+    biography: p.biography ?? null,
+    birthday: calendarDateToIsoDate(p.birthday),
+    deathday: calendarDateToIsoDate(p.deathday),
+    place_of_birth: p.placeOfBirth ?? null,
+    known_for: p.knownForDepartment ?? null,
+    profile_path: stripTmdbWrapper(p.headshotUrl),
+    owned_titles: p.ownedTitles.map(adaptActorOwnedTitle),
+    other_works: p.otherWorks.map(adaptActorCredit),
   };
 }
 

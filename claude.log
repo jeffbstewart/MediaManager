@@ -4652,3 +4652,30 @@ Session 2 (Mar 25):
 - Next migration target should be a single-id detail with full
   proto coverage: GetActorDetail or GetCollectionDetail.
 ===
+
+=== 2026-04-26 20:15 — GetActorDetail migrated to gRPC ===
+- catalog.service.getActorDetail() now calls
+  CatalogService/GetActorDetail. The proto ActorDetail covers every
+  legacy field; adapter handles a few shape differences:
+  - person_id: not on the proto, filled from the request param.
+  - birthday / deathday: CalendarDate (year/month/day) → "YYYY-MM-DD"
+    string. Month enum's numeric value is 1..12 directly.
+  - profile_path / poster_path: proto wraps TMDB paths in a full URL
+    (https://image.tmdb.org/t/p/w500/abc.jpg). New helper
+    stripTmdbWrapper() peels the prefix back to "/abc.jpg" so
+    tmdbImageUrl() keeps producing /proxy/tmdb/{size}/abc.jpg.
+  - other_works.media_type: proto enum ("MOVIE"/"TV") replaces the
+    legacy fixture's stale lowercase values; the actor.html template
+    already expects uppercase, so this is a fixture drift the
+    migration silently fixes.
+- tests/fixtures-typed/actor-6384.fixture.ts (Keanu Reeves) mirrors
+  catalog/actor.json. mock-backend dispatches GetActorDetail to it
+  and the legacy /api/v2/catalog/actor/:id route is removed.
+- Validation: full harness 610/611 (same pre-existing
+  15-books-and-reader:226 flake; no regressions).
+- CollectionDetail looked next-cleanest but has gaps too —
+  progress_fraction (no proto field) and wished (no proto field).
+  Both are user-visible (progress bar, heart icon), so a clean
+  migration needs proto extensions. Same decision as TagDetail /
+  ListTitles / HomeFeed: server work first, then SPA wiring.
+===

@@ -2,13 +2,14 @@ import type { Page, Route } from '@playwright/test';
 import { loadFixture } from './load-fixture';
 import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
 import { fromBinary } from '@bufbuild/protobuf';
-import { TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
+import { ActorDetailSchema, TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
 import { TagListResponseSchema } from '../../src/app/proto-gen/catalog_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 import { titleBook300 } from '../fixtures-typed/title-300-book.fixture';
 import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
 import { tagsList } from '../fixtures-typed/tags-list.fixture';
+import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -162,6 +163,13 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     if (rpc === 'ListTags') {
       return fulfillProto(r, TagListResponseSchema, tagsList);
     }
+    if (rpc === 'GetActorDetail') {
+      // Fixture covers Keanu (6384) — every other person id falls back
+      // to the same fixture for the smoke-test purposes the existing
+      // suite uses; per-test overrides can register a more specific
+      // gRPC route handler before mockBackend's catch-all if needed.
+      return fulfillProto(r, ActorDetailSchema, actor6384);
+    }
     return r.fallback();
   });
 
@@ -180,9 +188,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     return r.fulfill({ json: loadFixture(fixture) });
   });
 
-  await page.route('**/api/v2/catalog/actor/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/actor.json') })
-  );
+  // /api/v2/catalog/actor/:id is no longer hit — getActorDetail() goes
+  // through GetActorDetail gRPC (dispatch above).
   await page.route('**/api/v2/catalog/authors/*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/author.json') })
   );
