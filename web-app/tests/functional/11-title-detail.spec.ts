@@ -20,38 +20,15 @@ const MOVIE_ID = 100;
 const TV_ID = 200;
 
 /**
- * Wire the per-title write endpoints (star / hide / tags) to silent
- * 200s with the right shape so the title-detail handlers' awaited
- * promises resolve and the local-state updates run.
+ * SetFavorite, SetHidden, and SetTitleTags are no-op'd by mock-backend's
+ * default gRPC dispatch (they just need to resolve so the title-detail
+ * handler's awaited promise unblocks and local-state update runs).
+ * Tests that need to capture the request register their own override
+ * before the helper runs.
  */
-async function stubWriteEndpoints(page: Page, titleId: number) {
-  // /star toggles between true/false on each POST. Capture state
-  // in a closure so successive clicks within a test see the flip.
-  let starred = false;
-  await page.route(`**/api/v2/catalog/titles/${titleId}/star`, route => {
-    if (route.request().method() === 'POST') {
-      starred = !starred;
-      return route.fulfill({ json: { is_starred: starred } });
-    }
-    return route.fallback();
-  });
-
-  let hidden = false;
-  await page.route(`**/api/v2/catalog/titles/${titleId}/hide`, route => {
-    if (route.request().method() === 'POST') {
-      hidden = !hidden;
-      return route.fulfill({ json: { is_hidden: hidden } });
-    }
-    return route.fallback();
-  });
-
-  // setTitleTags POST returns void (server reads tag_ids, persists).
-  await page.route(`**/api/v2/catalog/titles/${titleId}/tags`, route => {
-    if (route.request().method() === 'POST') {
-      return route.fulfill({ status: 204 });
-    }
-    return route.fallback();
-  });
+async function stubWriteEndpoints(_page: Page, _titleId: number) {
+  // No-op — left as a hook in case a future endpoint needs targeted
+  // stubbing; the parameters are retained so callers don't churn.
 }
 
 test.describe('title detail — movie (viewer)', () => {
@@ -87,22 +64,24 @@ test.describe('title detail — movie (viewer)', () => {
     await expect(page.locator('.tag-remove-btn')).toHaveCount(0);
   });
 
-  test('star button posts and flips the starred class', async ({ page }) => {
+  test('star button posts SetFavorite and flips the starred class', async ({ page }) => {
     const starBtn = page.locator('button.star-btn');
     await expect(starBtn).not.toHaveClass(/starred/);
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith(`/api/v2/catalog/titles/${MOVIE_ID}/star`),
+      req.method() === 'POST'
+      && req.url().endsWith('/mediamanager.CatalogService/SetFavorite'),
     );
     await starBtn.click();
     await posted;
     await expect(starBtn).toHaveClass(/starred/);
   });
 
-  test('hide button confirms and posts', async ({ page }) => {
+  test('hide button confirms and posts SetHidden', async ({ page }) => {
     // confirm() is a native dialog; intercept and accept it.
     page.on('dialog', d => d.accept());
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith(`/api/v2/catalog/titles/${MOVIE_ID}/hide`),
+      req.method() === 'POST'
+      && req.url().endsWith('/mediamanager.CatalogService/SetHidden'),
     );
     await page.locator('button.hide-btn').click();
     await posted;

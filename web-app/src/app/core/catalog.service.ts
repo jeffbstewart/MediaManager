@@ -888,7 +888,10 @@ export class CatalogService {
   }
 
   async dismissMissingSeasons(titleId: number): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/catalog/dismiss-missing-seasons/${titleId}`, {}));
+    // Omitting season_number tells the server to dismiss every
+    // missing-season entry for this title at once.
+    const client = grpcClient(CatalogServiceDesc);
+    await client.dismissMissingSeason({ titleId: BigInt(titleId) });
   }
 
   async getCollections(): Promise<CollectionListResponse> {
@@ -930,6 +933,25 @@ export class CatalogService {
       titleId: BigInt(titleId),
       tagIds: tagIds.map(t => BigInt(t)),
     });
+  }
+
+  /**
+   * Set this user's "favorited" state on a title. Idempotent — caller
+   * passes the desired final value rather than relying on a server-
+   * side toggle. The previous REST endpoint flipped the bit on every
+   * POST and echoed back the new state; the gRPC RPC explicitly takes
+   * the value, so the caller updates local UI state to whatever it
+   * just sent.
+   */
+  async setFavorite(titleId: number, value: boolean): Promise<void> {
+    const client = grpcClient(CatalogServiceDesc);
+    await client.setFavorite({ titleId: BigInt(titleId), value });
+  }
+
+  /** Set this user's "hidden" state on a title. Idempotent — see setFavorite. */
+  async setHidden(titleId: number, value: boolean): Promise<void> {
+    const client = grpcClient(CatalogServiceDesc);
+    await client.setHidden({ titleId: BigInt(titleId), value });
   }
 
   async getTrackTags(trackId: number): Promise<TagCard[]> {

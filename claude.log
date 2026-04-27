@@ -4724,3 +4724,29 @@ Session 2 (Mar 25):
 - No native client (iOS / Android TV / Roku) wires this RPC, so
   the schema change is SPA-only blast radius.
 ===
+
+=== 2026-04-26 21:18 — SetFavorite / SetHidden / DismissMissingSeason on gRPC ===
+- catalog.service gains setFavorite(titleId, value) and
+  setHidden(titleId, value); both are idempotent — caller passes
+  desired final state instead of relying on the legacy server-side
+  toggle and is_starred / is_hidden echo. dismissMissingSeasons now
+  calls DismissMissingSeason gRPC.
+- title-detail.ts moves toggleStar() and confirmHide() off direct
+  HttpClient.post to catalog.service.setFavorite/setHidden; computes
+  the next value locally instead of reading from the response.
+  HttpClient is no longer injected in title-detail.
+- mock-backend extends the no-op gRPC handler set with SetFavorite,
+  SetHidden, DismissMissingSeason, DismissContinueWatching.
+- Test rewrites:
+  - 11-title-detail star/hide tests now wait for the gRPC POSTs
+    (/SetFavorite / /SetHidden) instead of the REST URLs.
+    stubWriteEndpoints helper is now a no-op (kept as a hook so
+    callers don't churn).
+  - 53-title-detail-album hide-confirm cancelled / unhide-flow
+    tests retargeted onto /SetHidden.
+  - 05-home-navigation Missing Seasons × test waits for the
+    /DismissMissingSeason gRPC POST. The dead REST stub is gone.
+- Validation: full harness 614/614 — first fully clean run of the
+  migration; even the recurring 15-books-and-reader:226 flake
+  passed this time.
+===

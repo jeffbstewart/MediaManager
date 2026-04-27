@@ -408,7 +408,8 @@ test.describe('title detail — hide flow + resume + error states', () => {
     await stubImages(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith(`/titles/${MOVIE_ID}/hide`)) fired = true;
+      if (r.method() === 'POST'
+          && r.url().endsWith('/mediamanager.CatalogService/SetHidden')) fired = true;
     });
     page.on('dialog', d => d.dismiss());
     await page.goto(`/title/${MOVIE_ID}`);
@@ -425,14 +426,13 @@ test.describe('title detail — hide flow + resume + error states', () => {
     // Override movie fixture with isHidden=true. Same typed-fixture
     // shape as the base — just one field flipped.
     await overrideMovie100(page, d => { d.isHidden = true; });
-    await page.route('**/api/v2/catalog/titles/100/hide', r =>
-      r.fulfill({ json: { is_hidden: false } }));
     let dialogFired = false;
     page.on('dialog', d => { dialogFired = true; d.accept(); });
     await page.goto(`/title/${MOVIE_ID}`);
     await page.waitForSelector('app-title-detail .detail-container');
     const posted = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/hide'),
+      r.method() === 'POST'
+      && r.url().endsWith('/mediamanager.CatalogService/SetHidden'),
       { timeout: 3_000 },
     );
     await page.locator('button.hide-btn').click();

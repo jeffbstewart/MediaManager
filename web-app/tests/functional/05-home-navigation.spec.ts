@@ -130,13 +130,13 @@ test.describe('home navigation', () => {
     await expect(page.locator('.carousel-section', { hasText: 'Continue Watching' })).toHaveCount(0);
   });
 
-  test('Missing Seasons × removes row and calls POST', async ({ page }) => {
+  test('Missing Seasons × removes row and calls DismissMissingSeason', async ({ page }) => {
+    // DismissMissingSeason now lands on gRPC; mock-backend's default
+    // dispatch returns Empty. Capture the request to assert the click
+    // wired through.
     const dismissed = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().includes('/api/v2/catalog/dismiss-missing-seasons/401'),
-    );
-
-    await page.route('**/api/v2/catalog/dismiss-missing-seasons/*', route =>
-      route.fulfill({ status: 204 }),
+      req.method() === 'POST'
+      && req.url().endsWith('/mediamanager.CatalogService/DismissMissingSeason'),
     );
 
     const ms = page.locator('.carousel-section', { hasText: 'New Seasons Available' });

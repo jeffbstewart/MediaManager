@@ -181,7 +181,11 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       rpc === 'AddTagToTitle' ||
       rpc === 'RemoveTagFromTitle' ||
       rpc === 'AddTagToTrack' ||
-      rpc === 'RemoveTagFromTrack'
+      rpc === 'RemoveTagFromTrack' ||
+      rpc === 'SetFavorite' ||
+      rpc === 'SetHidden' ||
+      rpc === 'DismissMissingSeason' ||
+      rpc === 'DismissContinueWatching'
     ) {
       return fulfillProto(r, EmptySchema, create(EmptySchema));
     }

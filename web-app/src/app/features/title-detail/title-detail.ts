@@ -8,8 +8,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { AppRoutes } from '../../core/routes';
 import { CatalogService, TitleDetail, AlbumPersonnelEntry } from '../../core/catalog.service';
 import { FeatureService } from '../../core/feature.service';
@@ -40,7 +38,6 @@ import type { AlbumTrack, TagCard } from '../../core/catalog.service';
 export class TitleDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly catalog = inject(CatalogService);
-  private readonly http = inject(HttpClient);
   readonly features = inject(FeatureService);
   private readonly playbackQueue = inject(PlaybackQueueService);
 
@@ -478,9 +475,11 @@ export class TitleDetailComponent implements OnInit {
   async toggleStar(): Promise<void> {
     const t = this.title();
     if (!t) return;
-    const r = await firstValueFrom(this.http.post<{ is_starred: boolean }>(
-      `/api/v2/catalog/titles/${t.title_id}/star`, {}));
-    this.title.set({ ...t, is_starred: r.is_starred });
+    // SetFavorite is idempotent — caller computes the desired value
+    // locally instead of relying on a server-side toggle / echo.
+    const next = !t.is_starred;
+    await this.catalog.setFavorite(t.title_id, next);
+    this.title.set({ ...t, is_starred: next });
   }
 
   async confirmHide(): Promise<void> {
@@ -488,10 +487,9 @@ export class TitleDetailComponent implements OnInit {
     if (!t) return;
 
     if (t.is_hidden) {
-      // Unhiding doesn't need confirmation
-      const r = await firstValueFrom(this.http.post<{ is_hidden: boolean }>(
-        `/api/v2/catalog/titles/${t.title_id}/hide`, {}));
-      this.title.set({ ...t, is_hidden: r.is_hidden });
+      // Unhiding doesn't need confirmation.
+      await this.catalog.setHidden(t.title_id, false);
+      this.title.set({ ...t, is_hidden: false });
       return;
     }
 
@@ -502,9 +500,8 @@ export class TitleDetailComponent implements OnInit {
     );
     if (!confirmed) return;
 
-    const r = await firstValueFrom(this.http.post<{ is_hidden: boolean }>(
-      `/api/v2/catalog/titles/${t.title_id}/hide`, {}));
-    this.title.set({ ...t, is_hidden: r.is_hidden });
+    await this.catalog.setHidden(t.title_id, true);
+    this.title.set({ ...t, is_hidden: true });
   }
 
   formatLabel(f: string): string {
