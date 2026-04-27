@@ -20,6 +20,17 @@ service ArtistService {
 
   rpc ListAuthors(ListAuthorsRequest) returns (AuthorListResponse);
   rpc GetAuthorDetail(AuthorIdRequest) returns (AuthorDetail);
+
+  // Artist recommendations (M8). Per-user "you might like" cards on
+  // /discover backed by the RecommendationAgent.
+  rpc ListArtistRecommendations(ListArtistRecommendationsRequest)
+      returns (ArtistRecommendationsResponse);
+  rpc DismissArtistRecommendation(DismissArtistRecommendationRequest)
+      returns (Empty);
+  // Fire-and-forget manual recompute. Returns immediately; the agent
+  // refreshes on a background thread and the next ListArtistRecommendations
+  // sees the new rows.
+  rpc RefreshArtistRecommendations(Empty) returns (Empty);
 }
 
 message ListArtistsRequest {
@@ -83,3 +94,38 @@ message AuthorListItem {
 }
 
 message AuthorIdRequest { int64 author_id = 1; }
+
+message ListArtistRecommendationsRequest {
+  // Server clamps to [1, 100]; default 30 when omitted.
+  int32 limit = 1;
+}
+
+message ArtistRecommendationsResponse {
+  repeated ArtistRecommendation artists = 1;
+}
+
+message ArtistRecommendation {
+  string suggested_artist_mbid = 1;
+  string suggested_artist_name = 2;
+  // Populated only when the suggested artist already lives in our
+  // local Artist table — usually null since recommendations surface
+  // unowned artists.
+  optional int64 artist_id = 3;
+  double score = 4;
+  repeated RecommendationVoter voters = 5;
+  // The release group whose cover the discover card renders. Clients
+  // hit /proxy/caa/release-group/{rgid}/front-250 same-origin to fetch
+  // bytes — never derived to a third-party URL on the wire.
+  optional string representative_release_group_id = 6;
+  optional string representative_release_title = 7;
+}
+
+message RecommendationVoter {
+  string mbid = 1;
+  string name = 2;
+  int32 album_count = 3;
+}
+
+message DismissArtistRecommendationRequest {
+  string suggested_artist_mbid = 1;
+}

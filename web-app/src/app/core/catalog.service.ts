@@ -833,23 +833,21 @@ export class CatalogService {
   }
 
   async getArtistRecommendations(limit: number = 30): Promise<ArtistRecommendationsResponse> {
-    return firstValueFrom(
-      this.http.get<ArtistRecommendationsResponse>('/api/v2/recommendations/artists', {
-        params: { limit: String(limit) }
-      })
-    );
+    const client = grpcClient(ArtistServiceDesc);
+    const proto = await client.listArtistRecommendations({ limit });
+    return {
+      artists: proto.artists.map(adaptProtoArtistRecommendation),
+    };
   }
 
   async dismissArtistRecommendation(mbid: string): Promise<void> {
-    await firstValueFrom(
-      this.http.post('/api/v2/recommendations/dismiss', { suggested_artist_mbid: mbid })
-    );
+    const client = grpcClient(ArtistServiceDesc);
+    await client.dismissArtistRecommendation({ suggestedArtistMbid: mbid });
   }
 
   async refreshArtistRecommendations(): Promise<void> {
-    await firstValueFrom(
-      this.http.post('/api/v2/recommendations/refresh', {})
-    );
+    const client = grpcClient(ArtistServiceDesc);
+    await client.refreshArtistRecommendations({});
   }
 
   async getFeatures(): Promise<FeatureFlags> {
@@ -2031,6 +2029,29 @@ function adaptArtistsListItem(a: import('../proto-gen/artist_pb').ArtistListItem
     headshot_url: artistHeadshotUrl(id, a.hasHeadshot),
     album_count: a.ownedAlbumCount,
     fallback_poster_url: fallbackTitleId != null ? `/posters/w185/${fallbackTitleId}` : null,
+  };
+}
+
+function adaptProtoArtistRecommendation(
+  a: import('../proto-gen/artist_pb').ArtistRecommendation,
+): ArtistRecommendation {
+  // Cover URL is constructed same-origin from the representative
+  // release-group id — the proto deliberately doesn't carry it so
+  // third-party hosts (cover-art-archive) never see the client IP.
+  const rgid = a.representativeReleaseGroupId ?? null;
+  return {
+    suggested_artist_mbid: a.suggestedArtistMbid,
+    suggested_artist_name: a.suggestedArtistName,
+    artist_id: a.artistId != null ? Number(a.artistId) : null,
+    score: a.score,
+    voters: a.voters.map(v => ({
+      mbid: v.mbid,
+      name: v.name,
+      album_count: v.albumCount,
+    })),
+    representative_release_group_id: rgid,
+    representative_release_title: a.representativeReleaseTitle ?? null,
+    cover_url: rgid != null ? `/proxy/caa/release-group/${rgid}/front-250` : null,
   };
 }
 

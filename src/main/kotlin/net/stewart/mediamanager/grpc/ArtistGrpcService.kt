@@ -3,10 +3,12 @@ package net.stewart.mediamanager.grpc
 import com.github.vokorm.findAll
 import io.grpc.Status
 import io.grpc.StatusException
+import com.fasterxml.jackson.databind.ObjectMapper
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.ArtistMembership
 import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.MediaType as MediaTypeEnum
+import net.stewart.mediamanager.entity.RecommendedArtist
 import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.entity.TitleArtist
 import net.stewart.mediamanager.entity.TitleAuthor
@@ -14,6 +16,8 @@ import net.stewart.mediamanager.service.MusicBrainzHttpService
 import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.OpenLibraryHttpService
 import net.stewart.mediamanager.service.OpenLibraryService
+import net.stewart.mediamanager.service.RecommendationAgent
+import java.time.LocalDateTime
 
 /**
  * Artist + author browse surface for iOS (M2+ / M3+ in the MUSIC / BOOKS plans).
@@ -283,6 +287,89 @@ class ArtistGrpcService(
     }
 
     // ------------------------------------------------------------------
+    // Recommendations (M8)
+    // ------------------------------------------------------------------
+
+    override suspend fun listArtistRecommendations(
+        request: ListArtistRecommendationsRequest
+    ): ArtistRecommendationsResponse {
+        val user = currentUser()
+        val userId = user.id!!
+        val limit = if (request.limit <= 0) 30 else request.limit.coerceIn(1, 100)
+
+        val rows = RecommendedArtist.findAll()
+            .filter { it.user_id == userId && it.dismissed_at == null }
+            .sortedByDescending { it.score }
+            .take(limit)
+
+        val artistIdsByMbid: Map<String, Long?> = Artist.findAll()
+            .associate { (it.musicbrainz_artist_id ?: "") to it.id }
+            .filterKeys { it.isNotEmpty() }
+
+        return artistRecommendationsResponse {
+            artists.addAll(rows.map { r ->
+                artistRecommendation {
+                    suggestedArtistMbid = r.suggested_artist_mbid
+                    suggestedArtistName = r.suggested_artist_name
+                    artistIdsByMbid[r.suggested_artist_mbid]?.let { artistId = it }
+                    score = r.score
+                    voters.addAll(decodeVoters(r.voters_json))
+                    r.representative_release_group_id?.let { representativeReleaseGroupId = it }
+                    r.representative_release_title?.let { representativeReleaseTitle = it }
+                }
+            })
+        }
+    }
+
+    override suspend fun dismissArtistRecommendation(
+        request: DismissArtistRecommendationRequest
+    ): Empty {
+        val user = currentUser()
+        val userId = user.id!!
+        val mbid = request.suggestedArtistMbid.takeIf { it.isNotBlank() }
+            ?: throw StatusException(Status.INVALID_ARGUMENT.withDescription("suggested_artist_mbid required"))
+
+        val row = RecommendedArtist.findAll()
+            .firstOrNull { it.user_id == userId && it.suggested_artist_mbid == mbid }
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("recommendation not found"))
+
+        row.dismissed_at = LocalDateTime.now()
+        row.save()
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun refreshArtistRecommendations(request: Empty): Empty {
+        val user = currentUser()
+        val userId = user.id!!
+        // Fire-and-forget — same shape as the legacy REST handler.
+        Thread({
+            try { RecommendationAgent.refreshForUserIfAvailable(userId) }
+            catch (_: Exception) { /* logged inside the agent */ }
+        }, "recommendation-manual-refresh-$userId").apply {
+            isDaemon = true
+            start()
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    private fun decodeVoters(json: String?): List<RecommendationVoter> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            val raw = voterMapper.readValue(json, List::class.java) as List<Map<String, Any?>>
+            raw.map { entry ->
+                recommendationVoter {
+                    mbid = entry["mbid"] as? String ?: ""
+                    name = entry["name"] as? String ?: ""
+                    albumCount = (entry["album_count"] as? Number)?.toInt() ?: 0
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Pagination helper
     // ------------------------------------------------------------------
 
@@ -306,5 +393,6 @@ class ArtistGrpcService(
     companion object {
         private const val DEFAULT_LIMIT = 50
         private const val MAX_LIMIT = 200
+        private val voterMapper = ObjectMapper()
     }
 }

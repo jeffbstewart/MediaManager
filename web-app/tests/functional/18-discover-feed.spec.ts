@@ -2,17 +2,25 @@ import { test, expect } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import {
+  DismissArtistRecommendationRequestSchema,
+} from '../../src/app/proto-gen/artist_pb';
 
 // Discover feed (M8) tests. The page reads
-// /api/v2/recommendations/artists, renders one card per recommended
-// artist, and exposes three actions per card / page:
-//   - Wishlist (POST /api/v2/wishlist/albums)
-//   - Dismiss  (POST /api/v2/recommendations/dismiss)
-//   - Refresh  (POST /api/v2/recommendations/refresh, then re-load)
+// ArtistService.ListArtistRecommendations, renders one card per
+// recommended artist, and exposes three actions per card / page:
+//   - Wishlist (POST /api/v2/wishlist/albums — REST until that
+//     migration lands)
+//   - Dismiss  (ArtistService.DismissArtistRecommendation)
+//   - Refresh  (ArtistService.RefreshArtistRecommendations, then re-load)
 //
 // The page is gated on has_music_radio. mockBackend's default viewer
 // features fixture has it on, so no override needed unless we want
 // to test the gated-off explainer state (out of scope here).
+
+const AS = '/mediamanager.ArtistService';
 
 test.describe('discover feed', () => {
 
@@ -20,14 +28,7 @@ test.describe('discover feed', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    // Stub the two write endpoints the page posts to. Both return
-    // 204 so the catalog service's awaited promises resolve.
-    await page.route('**/api/v2/recommendations/dismiss', route =>
-      route.fulfill({ status: 204 }),
-    );
-    await page.route('**/api/v2/recommendations/refresh', route =>
-      route.fulfill({ status: 204 }),
-    );
+    // Wishlist write is still REST.
     await page.route('**/api/v2/wishlist/albums', route =>
       route.fulfill({ status: 204 }),
     );
@@ -68,10 +69,12 @@ test.describe('discover feed', () => {
       .toContainText('because you have Miles Davis, Bill Evans, and Thelonious Monk');
   });
 
-  test('cover image shows when cover_url is set', async ({ page }) => {
+  test('cover image shows when representative_release_group_id is set', async ({ page }) => {
+    // SPA constructs the cover URL same-origin from the rgid:
+    // /proxy/caa/release-group/{rgid}/front-250.
     const cover = page.locator('app-discover .rec-card').first().locator('img.cover');
     await expect(cover).toBeVisible();
-    await expect(cover).toHaveAttribute('src', /\/posters\/w185\/400$/);
+    await expect(cover).toHaveAttribute('src', /\/proxy\/caa\/release-group\/rg-1\/front-250$/);
   });
 
   test('Wishlist click POSTs the right body and flips the button', async ({ page }) => {
@@ -96,30 +99,33 @@ test.describe('discover feed', () => {
     await expect(wishBtn).toBeDisabled();
   });
 
-  test('Dismiss click POSTs the mbid and removes the card', async ({ page }) => {
+  test('Dismiss click fires DismissArtistRecommendation and removes the card', async ({ page }) => {
     const cards = page.locator('app-discover .rec-card');
     await expect(cards).toHaveCount(2);
 
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith('/api/v2/recommendations/dismiss'),
+      req.url().endsWith(`${AS}/DismissArtistRecommendation`),
     );
     // Dismiss the FIRST card (Bill Evans, mbid abc-1).
     await cards.first().locator('button.dismiss-btn').click();
     const req = await posted;
-    expect(req.postDataJSON()).toEqual({ suggested_artist_mbid: 'abc-1' });
+    expect(fromBinary(
+      DismissArtistRecommendationRequestSchema,
+      unframeGrpcWebRequest(req.postDataBuffer()),
+    ).suggestedArtistMbid).toBe('abc-1');
 
     // Local state filter drops the dismissed row; only Coltrane left.
     await expect(cards).toHaveCount(1);
     await expect(cards.first().locator('.artist-name')).toContainText('John Coltrane');
   });
 
-  test('Refresh now POSTs /refresh and shows the in-flight state', async ({ page }) => {
+  test('Refresh now fires RefreshArtistRecommendations and shows the in-flight state', async ({ page }) => {
     const refreshBtn = page.locator('app-discover button.refresh-btn');
     await expect(refreshBtn).toContainText('Refresh now');
     await expect(refreshBtn).not.toBeDisabled();
 
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith('/api/v2/recommendations/refresh'),
+      req.url().endsWith(`${AS}/RefreshArtistRecommendations`),
     );
     await refreshBtn.click();
     await posted;

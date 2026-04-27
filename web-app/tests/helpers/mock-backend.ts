@@ -15,6 +15,7 @@ import {
 import {
   ArtistIdRequestSchema,
   ArtistListResponseSchema,
+  ArtistRecommendationsResponseSchema,
   AuthorIdRequestSchema,
   ListArtistsRequestSchema,
 } from '../../src/app/proto-gen/artist_pb';
@@ -47,6 +48,7 @@ import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fix
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
 import { artistMilesDavis, artistsListFixture, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
+import { artistRecommendations } from '../fixtures-typed/recommendations.fixture';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -267,6 +269,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     ListArtists:     r => fulfillProto(r, ArtistListResponseSchema, artistsListFixture),
     GetArtistDetail: r => fulfillProto(r, ArtistDetailSchema, artistMilesDavis),
     GetAuthorDetail: r => fulfillProto(r, AuthorDetailSchema, authorFrankHerbert),
+    ListArtistRecommendations:
+      r => fulfillProto(r, ArtistRecommendationsResponseSchema, artistRecommendations),
+    DismissArtistRecommendation: noopEmpty,
+    RefreshArtistRecommendations: noopEmpty,
   };
 
   // Each gRPC service mounts at its own URL prefix. The dispatcher
@@ -336,9 +342,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     r.fulfill({ json: { presets: [] } })
   );
 
-  await page.route('**/api/v2/recommendations/artists*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/recommendations.json') })
-  );
+  // /api/v2/recommendations/* are no longer hit — discover-feed reads
+  // ArtistService.{ListArtistRecommendations,DismissArtistRecommendation,
+  // RefreshArtistRecommendations} (dispatched in the gRPC route block
+  // above).
 
   await page.route('**/api/v2/profile', (r: Route) =>
     r.fulfill({ json: loadFixture('profile/profile.json') })
