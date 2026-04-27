@@ -9,6 +9,7 @@ import {
   CollectionDetailSchema,
   EmptySchema,
   MediaType,
+  ReadingProgressSchema,
   TitleDetailSchema,
   TitleIdRequestSchema,
 } from '../../src/app/proto-gen/common_pb';
@@ -300,9 +301,21 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       return r.fallback();
     });
   }
+  // ---- mediamanager.PlaybackService ----
+  // Reading-progress is the only RPC migrated so far; the rest of the
+  // playback surface (video / audio progress, chapters, skip segments)
+  // still rides REST. Defaults: GetReadingProgress returns zeroed
+  // progress (no resume point), Report/Clear return Empty.
+  const playbackHandlers: Record<string, RpcHandler> = {
+    GetReadingProgress:    r => fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema)),
+    ReportReadingProgress: noopEmpty,
+    ClearReadingProgress:  noopEmpty,
+  };
+
   await mountService('mediamanager.CatalogService', catalogHandlers);
   await mountService('mediamanager.PlaylistService', playlistHandlers);
   await mountService('mediamanager.ArtistService', artistHandlers);
+  await mountService('mediamanager.PlaybackService', playbackHandlers);
 
   // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
   // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
@@ -407,12 +420,11 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   );
 
   // /reader/:id needs reading progress + a HEAD probe on /ebook/:id
-  // to discover EPUB-vs-PDF. Return EPUB content-type so the page
-  // mounts the EPUB branch (we don't care if epub.js can't render
-  // the empty body — the page chrome is what axe is auditing).
-  await page.route('**/api/v2/reading-progress/*', (r: Route) =>
-    r.fulfill({ json: { media_item_id: 0, cfi: null, percent: 0, updated_at: null } })
-  );
+  // to discover EPUB-vs-PDF. Reading-progress now flows through
+  // PlaybackService.GetReadingProgress (dispatched in the gRPC route
+  // block above). Return EPUB content-type so the page mounts the
+  // EPUB branch (we don't care if epub.js can't render the empty
+  // body — the page chrome is what axe is auditing).
   await page.route('**/ebook/*', (r: Route) =>
     r.fulfill({
       status: 200,

@@ -2,11 +2,13 @@ import { test, expect, Page, Request } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
-import { fromBinary } from '@bufbuild/protobuf';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import { ReadingProgressSchema } from '../../src/app/proto-gen/common_pb';
 import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
 
 const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
+const PB = '/mediamanager.PlaybackService';
 
 function decodeListTitles(req: Request): { sort: string; playableOnly: boolean } {
   const decoded = fromBinary(
@@ -143,12 +145,13 @@ test.describe('reader — PDF', () => {
     await stubImages(page);
 
     // Reading-progress: 73% saved so the header should reflect it.
-    await page.route(`**/api/v2/reading-progress/${PDF_ITEM_ID}`, route => {
-      if (route.request().method() === 'GET') {
-        return route.fulfill({ json: { media_item_id: PDF_ITEM_ID, cfi: null, percent: 0.73, updated_at: null } });
-      }
-      return route.fulfill({ status: 204 });
-    });
+    // mock-backend's GetReadingProgress default is zero-progress; per-
+    // test override returns the populated fixture for this PDF.
+    await page.route(`**${PB}/GetReadingProgress`, r =>
+      fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema, {
+        mediaItemId: BigInt(PDF_ITEM_ID),
+        fraction: 0.73,
+      })));
 
     // /ebook/:id: HEAD reports PDF, GET serves an empty body. We
     // don't care that the iframe rendering of an empty PDF fails —
@@ -180,8 +183,7 @@ test.describe('reader — PDF', () => {
 
   test('reader fetches the saved progress on open', async ({ page }) => {
     const progressFetch = page.waitForRequest(
-      req => req.method() === 'GET'
-        && req.url().endsWith(`/api/v2/reading-progress/${PDF_ITEM_ID}`),
+      req => req.url().endsWith(`${PB}/GetReadingProgress`),
     );
     await page.goto(`/reader/${PDF_ITEM_ID}`);
     await progressFetch;
@@ -194,21 +196,19 @@ test.describe('reader — EPUB', () => {
     await loginAs(page);
     await stubImages(page);
 
-    await page.route(`**/api/v2/reading-progress/${EPUB_ITEM_ID}`, route => {
-      if (route.request().method() === 'GET') {
-        // cfi="chapter2.xhtml" — epub.js's display() accepts hrefs
-        // in addition to canonical CFIs. Saves us the gory string
-        // shape of a real CFI in the test fixture; the contract from
-        // the reader's POV is that whatever string the server hands
-        // back gets passed straight through.
-        return route.fulfill({
-          json: { media_item_id: EPUB_ITEM_ID, cfi: 'chapter2.xhtml', percent: 0.5, updated_at: '2026-04-01T00:00:00Z' },
-        });
-      }
-      // POST from reportProgress: respond 204 so the reader's
-      // promise resolves quietly.
-      return route.fulfill({ status: 204 });
-    });
+    // locator="chapter2.xhtml" — epub.js's display() accepts hrefs in
+    // addition to canonical CFIs. Saves us the gory string shape of a
+    // real CFI in the test fixture; the contract from the reader's
+    // POV is that whatever string the server hands back gets passed
+    // straight through. mock-backend's ReportReadingProgress default
+    // is no-op so the catalog service's awaited promise resolves.
+    await page.route(`**${PB}/GetReadingProgress`, r =>
+      fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema, {
+        mediaItemId: BigInt(EPUB_ITEM_ID),
+        locator: 'chapter2.xhtml',
+        fraction: 0.5,
+        updatedAt: { secondsSinceEpoch: 1743465600n }, // 2025-04-01T00:00:00Z
+      })));
 
     await page.route(`**/ebook/${EPUB_ITEM_ID}`, route => {
       const headers = { 'Content-Type': 'application/epub+zip' };
@@ -270,8 +270,7 @@ test.describe('reader — EPUB', () => {
     // which fires the POST if lastCfi is set (which it will be —
     // rendition.display() emits 'relocated' before resolving).
     const posted = page.waitForRequest(
-      req => req.method() === 'POST'
-        && req.url().endsWith(`/api/v2/reading-progress/${EPUB_ITEM_ID}`),
+      req => req.url().endsWith(`${PB}/ReportReadingProgress`),
       { timeout: 10_000 },
     );
     // Give epub.js a moment for the relocated event to fire and set

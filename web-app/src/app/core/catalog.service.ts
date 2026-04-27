@@ -33,6 +33,7 @@ import {
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
 import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
 import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-gen/playlist_pb';
+import { PlaybackService as PlaybackServiceDesc } from '../proto-gen/playback_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1162,11 +1163,18 @@ export class CatalogService {
   }
 
   async getReadingProgress(mediaItemId: number): Promise<ReadingProgress> {
-    return firstValueFrom(this.http.get<ReadingProgress>(`/api/v2/reading-progress/${mediaItemId}`));
+    const client = grpcClient(PlaybackServiceDesc);
+    const proto = await client.getReadingProgress({ mediaItemId: BigInt(mediaItemId) });
+    return adaptProtoReadingProgress(proto);
   }
 
   async saveReadingProgress(mediaItemId: number, cfi: string, percent: number): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/reading-progress/${mediaItemId}`, { cfi, percent }));
+    const client = grpcClient(PlaybackServiceDesc);
+    await client.reportReadingProgress({
+      mediaItemId: BigInt(mediaItemId),
+      locator: cfi,
+      fraction: percent,
+    });
   }
 
   async wishlistSeriesGaps(seriesId: number): Promise<{ added: number; already_wished: number; error?: string }> {
@@ -2251,6 +2259,22 @@ function adaptProtoTrackSearchHit(
     duration_seconds: t.durationSeconds ?? null,
     poster_url: t.posterUrl ?? null,
     playable: t.playable,
+  };
+}
+
+function adaptProtoReadingProgress(
+  p: import('../proto-gen/common_pb').ReadingProgress,
+): ReadingProgress {
+  // Proto's locator is either empty (no progress yet) or a CFI / page
+  // marker. The SPA reader treats an empty cfi as "no resume point".
+  const cfi = p.locator !== '' ? p.locator : null;
+  return {
+    media_item_id: Number(p.mediaItemId),
+    cfi,
+    percent: p.fraction ?? 0,
+    updated_at: p.updatedAt
+      ? new Date(Number(p.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
   };
 }
 
