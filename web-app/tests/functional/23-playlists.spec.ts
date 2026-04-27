@@ -2,6 +2,19 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  CreatePlaylistRequestSchema,
+  PlaylistSummarySchema,
+  RenamePlaylistRequestSchema,
+  ReorderPlaylistRequestSchema,
+  SetPlaylistPrivacyRequestSchema,
+} from '../../src/app/proto-gen/playlist_pb';
+
+// Each migrated mutation lives on the PlaylistService gRPC path. The
+// SPA's catalog.service playlist methods call these RPCs directly.
+const PS = '/mediamanager.PlaylistService';
 
 // Playlists tests.
 //
@@ -21,39 +34,27 @@ import { stubImages } from '../helpers/image-stub';
 // /api/v2/playlists/* mutation with a 204 so the catalog service's
 // awaited promises resolve, then assert via waitForRequest.
 
-// Stub all the playlist mutation endpoints with 204 + minimal JSON.
+// Stub all the playlist mutation endpoints with success responses.
 // Registered AFTER mockBackend so they win Playwright's LIFO match.
+//
+// Most mutations are gRPC now (PlaylistService) — mock-backend's
+// default no-op handlers cover them, but we override the ones that
+// need a non-Empty response body (CreatePlaylist returns the new id;
+// DuplicatePlaylist returns the new id + name). The remaining REST
+// endpoints (list, detail, library-shuffle, duplicate) still go
+// through HTTP until their migration lands.
 async function stubPlaylistMutations(page: Page) {
-  await page.route('**/api/v2/playlists', route => {
-    if (route.request().method() === 'POST') {
-      // create — return the new id so the page can navigate.
-      return route.fulfill({ json: { id: 99, name: 'Created' } });
-    }
-    return route.fallback();
-  });
+  await page.route(`**${PS}/CreatePlaylist`, r =>
+    fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
+      id: 99n, name: 'Created',
+    })),
+  );
   await page.route('**/api/v2/playlists/library-shuffle', route =>
     route.fulfill({ json: { tracks: [] } }),
-  );
-  await page.route('**/api/v2/playlists/*/rename', route =>
-    route.fulfill({ status: 204 }),
-  );
-  await page.route('**/api/v2/playlists/*/privacy', route =>
-    route.fulfill({ status: 204 }),
-  );
-  await page.route('**/api/v2/playlists/*/reorder', route =>
-    route.fulfill({ status: 204 }),
   );
   await page.route('**/api/v2/playlists/*/duplicate', route =>
     route.fulfill({ json: { id: 42, name: 'Road Trip (copy)' } }),
   );
-  await page.route('**/api/v2/playlists/*/tracks/*', route => {
-    if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
-    return route.fallback();
-  });
-  await page.route('**/api/v2/playlists/*', route => {
-    if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
-    return route.fallback();
-  });
 }
 
 test.describe('playlists — list view', () => {
@@ -122,12 +123,17 @@ test.describe('playlists — list view', () => {
   test('New playlist prompts for a name then POSTs and navigates', async ({ page }) => {
     page.on('dialog', d => d.accept('Late-Night Jazz'));
     const created = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith('/api/v2/playlists'),
+      req.method() === 'POST' && req.url().endsWith(`${PS}/CreatePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlists button', { hasText: 'New playlist' }).click();
     const req = await created;
-    expect(req.postDataJSON()).toEqual({ name: 'Late-Night Jazz', description: null });
+    const decoded = fromBinary(
+      CreatePlaylistRequestSchema,
+      unframeGrpcWebRequest(req.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Late-Night Jazz');
+    expect(decoded.description).toBeUndefined();
     // create stub returns id=99 → component navigates to /playlist/99.
     await expect(page).toHaveURL(/\/playlist\/99$/);
   });
@@ -195,31 +201,41 @@ test.describe('playlists — detail view', () => {
     await expect(page.locator('.audio-player.visible')).toBeVisible({ timeout: 3_000 });
   });
 
-  test('Rename POSTs /rename with the new name', async ({ page }) => {
+  test('Rename calls RenamePlaylist with the new name', async ({ page }) => {
     page.on('dialog', d => d.accept('Road Trip 2026'));
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/rename'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/RenamePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail .hero-actions button', { hasText: 'Rename' }).click();
     const got = await req;
-    expect(got.postDataJSON()).toEqual({ name: 'Road Trip 2026', description: 'For long drives' });
+    const decoded = fromBinary(
+      RenamePlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Road Trip 2026');
+    expect(decoded.description).toBe('For long drives');
   });
 
-  test('Edit description POSTs /rename with the new description', async ({ page }) => {
+  test('Edit description calls RenamePlaylist with the new description', async ({ page }) => {
     page.on('dialog', d => d.accept('Updated description'));
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/rename'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/RenamePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail .hero-actions button', { hasText: 'Edit description' }).click();
     const got = await req;
-    expect(got.postDataJSON()).toEqual({ name: 'Road Trip', description: 'Updated description' });
+    const decoded = fromBinary(
+      RenamePlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Road Trip');
+    expect(decoded.description).toBe('Updated description');
   });
 
   test('Private slide-toggle POSTs /privacy with the inverted flag', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/privacy'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/SetPlaylistPrivacy`),
       { timeout: 3_000 },
     );
     // Click the underlying button; mat-slide-toggle renders a clickable
@@ -227,7 +243,11 @@ test.describe('playlists — detail view', () => {
     await page.locator('app-playlist-detail mat-slide-toggle').click();
     const got = await req;
     // Fixture is_private=false → toggle posts is_private=true.
-    expect(got.postDataJSON()).toEqual({ is_private: true });
+    const decoded = fromBinary(
+      SetPlaylistPrivacyRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.isPrivate).toBe(true);
   });
 
   test('Duplicate POSTs /duplicate and navigates', async ({ page }) => {
@@ -243,7 +263,7 @@ test.describe('playlists — detail view', () => {
   test('Delete confirms then DELETEs and navigates back to list', async ({ page }) => {
     page.on('dialog', d => d.accept());
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && /\/api\/v2\/playlists\/1$/.test(r.url()),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/DeletePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail .hero-actions button', { hasText: 'Delete' }).click();
@@ -251,9 +271,9 @@ test.describe('playlists — detail view', () => {
     await expect(page).toHaveURL(/\/content\/playlists$/);
   });
 
-  test('per-row Remove DELETEs that single track', async ({ page }) => {
+  test('per-row Remove drops that single track', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && /\/api\/v2\/playlists\/1\/tracks\/100$/.test(r.url()),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/RemoveTrackFromPlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail li.track').first()
@@ -272,13 +292,17 @@ test.describe('playlists — detail view', () => {
     // Confirm dialog — accept.
     page.on('dialog', d => d.accept());
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/reorder'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/ReorderPlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail .bulk-bar button', { hasText: 'Remove selected' }).click();
     const got = await req;
     // Survivor-only order: [101]. (Track 100 was selected and removed.)
-    expect(got.postDataJSON()).toEqual({ playlist_track_ids: [101] });
+    const decoded = fromBinary(
+      ReorderPlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.playlistTrackIdsInOrder.map(n => Number(n))).toEqual([101]);
   });
 
   test('drag-drop reorder POSTs /reorder with the new order', async ({ page }) => {
@@ -293,7 +317,7 @@ test.describe('playlists — detail view', () => {
     if (!handle || !dst) throw new Error('drag-handle / row box missing');
 
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/reorder'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/ReorderPlaylist`),
       { timeout: 5_000 },
     );
 
@@ -310,6 +334,10 @@ test.describe('playlists — detail view', () => {
 
     const got = await req;
     // Original order: [100, 101]. After moving row 0 below row 1: [101, 100].
-    expect(got.postDataJSON()).toEqual({ playlist_track_ids: [101, 100] });
+    const decoded = fromBinary(
+      ReorderPlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.playlistTrackIdsInOrder.map(n => Number(n))).toEqual([101, 100]);
   });
 });

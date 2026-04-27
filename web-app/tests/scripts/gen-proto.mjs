@@ -36,7 +36,7 @@ if (!protoRoot) {
   process.exit(0);
 }
 
-const protoFiles = ['common.proto', 'time.proto', 'catalog.proto', 'artist.proto'];
+const protoFiles = ['common.proto', 'time.proto', 'catalog.proto', 'artist.proto', 'playlist.proto', 'wishlist.proto'];
 
 const protocBin = process.platform === 'win32'
   ? join(webRoot, 'node_modules', '.bin', 'protoc.cmd')

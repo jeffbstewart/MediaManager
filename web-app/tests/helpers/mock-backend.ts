@@ -19,6 +19,10 @@ import {
   ListArtistsRequestSchema,
 } from '../../src/app/proto-gen/artist_pb';
 import {
+  AddTracksToPlaylistResponseSchema,
+  PlaylistSummarySchema,
+} from '../../src/app/proto-gen/playlist_pb';
+import {
   CollectionIdRequestSchema,
   CollectionListResponseSchema,
   FeaturesSchema,
@@ -252,6 +256,39 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // ArtistService gRPC RPCs — lives on a separate service path from
   // CatalogService. The detail RPCs decode the request id so per-test
   // overrides registered before mockBackend can dispatch on it.
+  // PlaylistService no-op mutations. The SPA's catalog.service
+  // playlist mutators await Empty / lightweight responses; tests
+  // that need to capture the request register their own override
+  // before mockBackend's catch-all.
+  await page.route('**/mediamanager.PlaylistService/*', async (r: Route) => {
+    const url = new URL(r.request().url());
+    const rpc = url.pathname.split('/').pop();
+    if (
+      rpc === 'SetPlaylistPrivacy' ||
+      rpc === 'ReportPlaylistProgress' ||
+      rpc === 'ClearPlaylistProgress' ||
+      rpc === 'RecordTrackCompletion' ||
+      rpc === 'RenamePlaylist' ||
+      rpc === 'DeletePlaylist' ||
+      rpc === 'RemoveTrackFromPlaylist' ||
+      rpc === 'ReorderPlaylist' ||
+      rpc === 'SetPlaylistHero'
+    ) {
+      return fulfillProto(r, EmptySchema, create(EmptySchema));
+    }
+    if (rpc === 'CreatePlaylist') {
+      return fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
+        id: 99n, name: 'Created',
+      }));
+    }
+    if (rpc === 'AddTracksToPlaylist') {
+      return fulfillProto(r, AddTracksToPlaylistResponseSchema, create(AddTracksToPlaylistResponseSchema, {
+        added: 1, playlistTrackIds: [42n],
+      }));
+    }
+    return r.fallback();
+  });
+
   await page.route('**/mediamanager.ArtistService/*', async (r: Route) => {
     const url = new URL(r.request().url());
     const rpc = url.pathname.split('/').pop();

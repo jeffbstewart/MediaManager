@@ -2,6 +2,16 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  AddTracksToPlaylistRequestSchema,
+  AddTracksToPlaylistResponseSchema,
+  CreatePlaylistRequestSchema,
+  PlaylistSummarySchema,
+} from '../../src/app/proto-gen/playlist_pb';
+
+const PS = '/mediamanager.PlaylistService';
 
 // shared/add-to-playlist — picker that lets the user append a track
 // (or whole album) to an owned playlist, or create a new playlist
@@ -25,18 +35,16 @@ async function setup(page: Page) {
         { id: 3, name: 'Borrowed',    description: null, owner_user_id: 7, owner_username: 'alice',    is_owner: false, is_private: false, hero_poster_url: '/posters/w185/302', updated_at: null },
       ],
     } }));
-  await page.route('**/api/v2/playlists', r => {
-    if (r.request().method() === 'POST') {
-      return r.fulfill({ json: { id: 99, name: 'Created' } });
-    }
-    return r.fallback();
-  });
-  await page.route('**/api/v2/playlists/*/tracks', r => {
-    if (r.request().method() === 'POST') {
-      return r.fulfill({ json: { added: 1, playlist_track_ids: [42] } });
-    }
-    return r.fallback();
-  });
+  // CreatePlaylist + AddTracksToPlaylist now go through gRPC — return
+  // proto-typed responses rather than the legacy REST JSON.
+  await page.route(`**${PS}/CreatePlaylist`, r =>
+    fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
+      id: 99n, name: 'Created',
+    })));
+  await page.route(`**${PS}/AddTracksToPlaylist`, r =>
+    fulfillProto(r, AddTracksToPlaylistResponseSchema, create(AddTracksToPlaylistResponseSchema, {
+      added: 1, playlistTrackIds: [42n],
+    })));
   // title.album.json (id=301) renders the album branch with a track
   // table; mockBackend already routes /api/v2/catalog/titles/301 to it.
   await page.goto('/title/301');
@@ -97,41 +105,58 @@ test.describe('add-to-playlist — picker render', () => {
 });
 
 test.describe('add-to-playlist — pick existing', () => {
-  test('clicking a playlist POSTs /playlists/:id/tracks with the track id', async ({ page }) => {
+  test('clicking a playlist calls AddTracksToPlaylist with the track id', async ({ page }) => {
     await setup(page);
     await openTrackPicker(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/playlists\/1\/tracks$/.test(r.url()),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/AddTracksToPlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-add-to-playlist .picker-row', { hasText: 'Road Trip' }).click();
     const got = await req;
-    // title.album.json has tracks; the first row's track_id flows through.
-    expect(Array.isArray(got.postDataJSON().track_ids)).toBe(true);
-    expect(got.postDataJSON().track_ids.length).toBeGreaterThan(0);
+    const decoded = fromBinary(
+      AddTracksToPlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    // Picker targeted Road Trip (id=1); track_ids carries the row the user picked.
+    expect(Number(decoded.id)).toBe(1);
+    expect(decoded.trackIds.length).toBeGreaterThan(0);
     // Picker auto-closes on pick.
     await expect(page.locator('app-add-to-playlist .picker')).toHaveCount(0);
   });
 });
 
 test.describe('add-to-playlist — create new', () => {
-  test('Create-new prompts for a name then POSTs /playlists + /playlists/:id/tracks', async ({ page }) => {
+  test('Create-new prompts for a name then calls CreatePlaylist + AddTracksToPlaylist', async ({ page }) => {
     await setup(page);
     await openTrackPicker(page);
     page.on('dialog', d => d.accept('Late-Night Jazz'));
 
     const created = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists'),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/CreatePlaylist`),
       { timeout: 3_000 },
     );
     const tracksAdded = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/playlists\/99\/tracks$/.test(r.url()),
+      r.method() === 'POST' && r.url().endsWith(`${PS}/AddTracksToPlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-add-to-playlist .create-row').click();
     const createReq = await created;
-    expect(createReq.postDataJSON()).toEqual({ name: 'Late-Night Jazz', description: null });
-    await tracksAdded;
+    const decoded = fromBinary(
+      CreatePlaylistRequestSchema,
+      unframeGrpcWebRequest(createReq.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Late-Night Jazz');
+    // hasDescription() distinguishes "absent" from "empty"; the SPA
+    // sends description undefined for a blank input, which the proto
+    // serialises as field-absent.
+    expect(decoded.description).toBeUndefined();
+    const trackReq = await tracksAdded;
+    const trackDecoded = fromBinary(
+      AddTracksToPlaylistRequestSchema,
+      unframeGrpcWebRequest(trackReq.postDataBuffer()),
+    );
+    expect(Number(trackDecoded.id)).toBe(99);
   });
 
   test('Create-new with a blank name leaves the picker open and fires nothing', async ({ page }) => {
@@ -139,7 +164,7 @@ test.describe('add-to-playlist — create new', () => {
     await openTrackPicker(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/api/v2/playlists')) fired = true;
+      if (r.method() === 'POST' && r.url().endsWith(`${PS}/CreatePlaylist`)) fired = true;
     });
     page.on('dialog', d => d.accept('   '));
     await page.locator('app-add-to-playlist .create-row').click();
@@ -154,7 +179,7 @@ test.describe('add-to-playlist — create new', () => {
     await openTrackPicker(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/api/v2/playlists')) fired = true;
+      if (r.method() === 'POST' && r.url().endsWith(`${PS}/CreatePlaylist`)) fired = true;
     });
     page.on('dialog', d => d.dismiss());
     await page.locator('app-add-to-playlist .create-row').click();

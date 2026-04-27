@@ -32,6 +32,7 @@ import {
 } from '../proto-gen/common_pb';
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
 import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
+import { PlaylistService as PlaylistServiceDesc } from '../proto-gen/playlist_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1207,23 +1208,27 @@ export class CatalogService {
   }
 
   async setPlaylistPrivacy(id: number, isPrivate: boolean): Promise<void> {
-    await firstValueFrom(this.http.post(
-      `/api/v2/playlists/${id}/privacy`, { is_private: isPrivate }));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.setPlaylistPrivacy({ id: BigInt(id), isPrivate });
   }
 
   async reportPlaylistProgress(id: number, playlistTrackId: number, positionSeconds: number): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/progress`, {
-      playlist_track_id: playlistTrackId,
-      position_seconds: positionSeconds,
-    }));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.reportPlaylistProgress({
+      id: BigInt(id),
+      playlistTrackId: BigInt(playlistTrackId),
+      positionSeconds,
+    });
   }
 
   async clearPlaylistProgress(id: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}/progress`));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.clearPlaylistProgress({ id: BigInt(id) });
   }
 
   async recordTrackCompletion(trackId: number): Promise<void> {
-    await firstValueFrom(this.http.post('/api/v2/playlists/track-completed', { track_id: trackId }));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.recordTrackCompletion({ trackId: BigInt(trackId) });
   }
 
   async getPlaylist(id: number): Promise<PlaylistDetail> {
@@ -1231,34 +1236,63 @@ export class CatalogService {
   }
 
   async createPlaylist(name: string, description: string | null): Promise<{ id: number; name: string }> {
-    return firstValueFrom(this.http.post<{ id: number; name: string }>(
-      '/api/v2/playlists', { name, description }));
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.createPlaylist({ name, description: description ?? undefined });
+    return { id: Number(proto.id), name: proto.name };
   }
 
   async renamePlaylist(id: number, name: string, description: string | null): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/rename`, { name, description }));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.renamePlaylist({
+      id: BigInt(id),
+      name,
+      description: description ?? undefined,
+    });
   }
 
   async deletePlaylist(id: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}`));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.deletePlaylist({ id: BigInt(id) });
   }
 
   async addTracksToPlaylist(id: number, trackIds: number[]): Promise<{ added: number; playlist_track_ids: number[] }> {
-    return firstValueFrom(this.http.post<{ added: number; playlist_track_ids: number[] }>(
-      `/api/v2/playlists/${id}/tracks`, { track_ids: trackIds }));
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.addTracksToPlaylist({
+      id: BigInt(id),
+      trackIds: trackIds.map(t => BigInt(t)),
+    });
+    return {
+      added: proto.added,
+      playlist_track_ids: proto.playlistTrackIds.map(n => Number(n)),
+    };
   }
 
   async removeTrackFromPlaylist(id: number, playlistTrackId: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/playlists/${id}/tracks/${playlistTrackId}`));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.removeTrackFromPlaylist({
+      id: BigInt(id),
+      playlistTrackId: BigInt(playlistTrackId),
+    });
   }
 
   async reorderPlaylist(id: number, playlistTrackIds: number[]): Promise<void> {
-    await firstValueFrom(this.http.post(
-      `/api/v2/playlists/${id}/reorder`, { playlist_track_ids: playlistTrackIds }));
+    const client = grpcClient(PlaylistServiceDesc);
+    await client.reorderPlaylist({
+      id: BigInt(id),
+      playlistTrackIdsInOrder: playlistTrackIds.map(t => BigInt(t)),
+    });
   }
 
   async setPlaylistHero(id: number, trackId: number | null): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/playlists/${id}/hero`, { track_id: trackId }));
+    const client = grpcClient(PlaylistServiceDesc);
+    // The proto uses optional + zero-as-clear. Pass undefined to omit
+    // the field (= clear); the server reads the absence as "fall back
+    // to the first track's poster". Using 0 would do the same thing
+    // but undefined is unambiguous wire-side.
+    await client.setPlaylistHero({
+      id: BigInt(id),
+      trackId: trackId != null ? BigInt(trackId) : undefined,
+    });
   }
 
   /**
