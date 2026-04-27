@@ -21,8 +21,14 @@
 //   node tests/harness.mjs functional            # only tests/functional
 //   node tests/harness.mjs --concurrency 1       # serial (default 6)
 //   node tests/harness.mjs --files <a> <b>       # specific files only
+//   node tests/harness.mjs --repeat 100 --files <spec>  # flake hunting
 //
 // Exit code: 0 if all tests pass, 1 if any fail, 2 on usage error.
+//
+// `--repeat N` runs each spec N times and emits a per-spec pass/fail
+// roll-up under "FLAKE PROBE" in summary.txt. Use it when an
+// intermittent failure shows up under load — N=100 turns a 1-in-50
+// race into hard data ("12% flake") in a few minutes.
 //
 // Parallelism: by default the harness keeps up to 6 spec subprocesses
 // in flight at once. Each subprocess is its own isolated Playwright
@@ -52,6 +58,11 @@ const args = process.argv.slice(2);
 let mode = 'all';
 let onlyFiles = null;
 let concurrency = 6;
+// Default 1 = ordinary single run. `--repeat N` runs each spec N times,
+// useful for flake-hunting: a sometimes-failing spec under load only
+// shows its true rate when you run it many times. Combine with
+// `--files <one-spec>` to focus the probe.
+let repeat = 1;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === 'axe' || a === 'functional' || a === 'all') {
@@ -63,6 +74,13 @@ for (let i = 0; i < args.length; i++) {
       process.exit(2);
     }
     concurrency = n;
+  } else if (a === '--repeat') {
+    const n = parseInt(args[++i], 10);
+    if (!Number.isFinite(n) || n < 1) {
+      process.stderr.write(`invalid --repeat value (need integer ≥ 1)\n`);
+      process.exit(2);
+    }
+    repeat = n;
   } else if (a === '--files') {
     onlyFiles = args.slice(i + 1);
     break;
@@ -78,14 +96,31 @@ const suites = mode === 'axe' ? ['axe']
               : mode === 'functional' ? ['functional']
               : ['axe', 'functional'];
 
-const specs = [];
+// Collect the unique spec set first, then expand by `repeat`. Each
+// expanded entry carries its iteration number plus a `safeName` that
+// uniquely identifies its artifact paths (raw JSON, coverage dir,
+// test-results dir) — without that, parallel iterations of the same
+// spec race on the same files and corrupt each other's output.
+const uniqueSpecs = [];
 if (onlyFiles) {
-  for (const f of onlyFiles) specs.push({ suite: pathSuite(f), path: f });
+  for (const f of onlyFiles) uniqueSpecs.push({ suite: pathSuite(f), path: f });
 } else {
   for (const suite of suites) {
     const dir = join(repoRoot, 'tests', suite);
     const files = readdirSync(dir).filter(f => f.endsWith('.spec.ts')).sort();
-    for (const f of files) specs.push({ suite, path: `tests/${suite}/${f}` });
+    for (const f of files) uniqueSpecs.push({ suite, path: `tests/${suite}/${f}` });
+  }
+}
+
+const specs = [];
+const iterPad = String(repeat).length;
+for (const spec of uniqueSpecs) {
+  const baseSafe = spec.path.replace(/[\\/]/g, '_');
+  for (let it = 1; it <= repeat; it++) {
+    const safeName = repeat > 1
+      ? `${baseSafe}__iter-${String(it).padStart(iterPad, '0')}`
+      : baseSafe;
+    specs.push({ ...spec, iteration: it, safeName });
   }
 }
 
@@ -110,7 +145,7 @@ const startedAtMs = Date.now();
 const perSpec = new Array(specs.length).fill(null);
 let totalPass = 0, totalFail = 0, totalSkip = 0;
 let completedCount = 0;
-const active = new Map(); // spec.path -> startTime  (specs currently in flight)
+const active = new Map(); // spec.safeName -> { path, startTime } — keyed by safeName so that --repeat iterations of the same path don't collide
 const isTty = process.stderr.isTTY;
 const barWidth = 40;
 
@@ -140,12 +175,16 @@ await new Promise((resolveAll) => {
 function runSpec(idx, onDone) {
   const spec = specs[idx];
   const t0 = Date.now();
-  active.set(spec.path, t0);
+  // Key by safeName, not path — when --repeat is in play, several
+  // iterations of the same spec can be in flight simultaneously and
+  // share a path. Keying by path would have one's `delete` evict the
+  // other's entry from the active map.
+  active.set(spec.safeName, { path: spec.path, startTime: t0 });
   // Don't pass --reporter=json on the CLI — that would override the
   // config's reporter array and silence monocart-reporter (no
   // coverage collection). Instead, rely on the config's `json`
   // reporter and tell it where to write via PLAYWRIGHT_JSON_FILE.
-  const safeName = spec.path.replace(/[\\/]/g, '_');
+  const safeName = spec.safeName;
   const jsonOut = join(rawDir, `${safeName}.json`);
   // Per-spec coverage output dir — read by playwright.config.ts so
   // each subprocess writes its raw V8 entries somewhere unique.
@@ -190,7 +229,7 @@ function runSpec(idx, onDone) {
     totalFail += r.failed;
     totalSkip += r.skipped;
     completedCount++;
-    active.delete(spec.path);
+    active.delete(spec.safeName);
 
     renderProgress();
     writeProgress();
@@ -253,26 +292,52 @@ try {
 // LLM glancing at the last line) gets the verdict at a glance:
 //   ✓ axe 17/17, functional 26/26 — 357 passed, 0 failed (2m51s)
 //   ✘ axe 17/17, functional 25/26 — 1 FAILED in tests/functional/04-...:103
+//
+// In --repeat mode the headline counts iterations, not tests-within-
+// iterations: "100/100 iterations passed" is what the user is
+// hunting for. The total test-pass count (11 × 100 = 1100) is noise
+// when a spec has 11 tests and you're probing for one flake.
 const elapsed = fmtTime(Date.now() - startedAtMs);
-const bySuiteCounts = new Map();
-for (const r of perSpec) {
-  const s = bySuiteCounts.get(r.suite) || { passSpecs: 0, totalSpecs: 0 };
-  s.totalSpecs++;
-  if (r.failed === 0) s.passSpecs++;
-  bySuiteCounts.set(r.suite, s);
-}
-const suiteStr = Array.from(bySuiteCounts).map(([s, c]) => `${s} ${c.passSpecs}/${c.totalSpecs}`).join(', ');
 let mark, tail;
-if (totalFail === 0) {
-  mark = '✓';
-  tail = `${totalPass} passed, 0 failed (${elapsed})`;
+if (repeat > 1) {
+  const stats = flakeStats();
+  const totalIters = Array.from(stats.values()).reduce((a, s) => a + s.iterations, 0);
+  const failedIters = Array.from(stats.values()).reduce((a, s) => a + s.failed, 0);
+  const passedIters = totalIters - failedIters;
+  const flaky = Array.from(stats.entries()).filter(([, s]) => s.failed > 0 && s.failed < s.iterations);
+  const alwaysFail = Array.from(stats.entries()).filter(([, s]) => s.failed === s.iterations);
+  if (failedIters === 0) {
+    mark = '✓';
+    tail = `${passedIters}/${totalIters} iterations passed (${elapsed})`;
+  } else {
+    mark = '✘';
+    const firstFail = perSpec.flatMap(r => (r ? r.failures : []).map(f => ({ path: r.path, line: f.line }))).at(0);
+    const where = firstFail ? ` — first: ${firstFail.path}:${firstFail.line}` : '';
+    tail = `${failedIters}/${totalIters} iterations FAILED${where} (${elapsed})`;
+  }
+  const flakeLine = `flake probe: ${flaky.length} flaky, ${alwaysFail.length} always-fail across ${stats.size} specs × ${repeat} iter`;
+  process.stderr.write(`\n${flakeLine}\n`);
+  process.stderr.write(`\n${mark} ${tail}\n`);
 } else {
-  mark = '✘';
-  const firstFail = perSpec.flatMap(r => r.failures.map(f => ({ path: r.path, line: f.line }))).at(0);
-  const where = firstFail ? `first: ${firstFail.path}:${firstFail.line}` : '';
-  tail = `${totalFail} FAILED, ${totalPass} passed (${elapsed}) — ${where}`;
+  const bySuiteCounts = new Map();
+  for (const r of perSpec) {
+    const s = bySuiteCounts.get(r.suite) || { passSpecs: 0, totalSpecs: 0 };
+    s.totalSpecs++;
+    if (r.failed === 0) s.passSpecs++;
+    bySuiteCounts.set(r.suite, s);
+  }
+  const suiteStr = Array.from(bySuiteCounts).map(([s, c]) => `${s} ${c.passSpecs}/${c.totalSpecs}`).join(', ');
+  if (totalFail === 0) {
+    mark = '✓';
+    tail = `${totalPass} passed, 0 failed (${elapsed})`;
+  } else {
+    mark = '✘';
+    const firstFail = perSpec.flatMap(r => r.failures.map(f => ({ path: r.path, line: f.line }))).at(0);
+    const where = firstFail ? `first: ${firstFail.path}:${firstFail.line}` : '';
+    tail = `${totalFail} FAILED, ${totalPass} passed (${elapsed}) — ${where}`;
+  }
+  process.stderr.write(`\n${mark} ${suiteStr} — ${tail}\n`);
 }
-process.stderr.write(`\n${mark} ${suiteStr} — ${tail}\n`);
 process.stderr.write(`  details: ${relative(repoRoot, outDir)}/{summary.txt,failures.md}\n`);
 process.exit(totalFail > 0 ? 1 : 0);
 
@@ -307,8 +372,8 @@ function renderProgress() {
   if (active.size > 0) {
     // Pick the most recently started active spec for display — gives
     // a sense of forward progress even when others are still running.
-    const recent = Array.from(active.entries())
-      .sort((a, b) => b[1] - a[1])[0]?.[0];
+    const recent = Array.from(active.values())
+      .sort((a, b) => b.startTime - a.startTime)[0]?.path;
     const prefix = active.size > 1 ? `  [${active.size} active] → ` : `  → `;
     status = prefix + shortPath(recent);
   } else if (done === total) {
@@ -360,7 +425,7 @@ function writeProgress() {
     percent: total > 0 ? Math.round((done / total) * 100) : 0,
     concurrency,
     totals: { passed: totalPass, failed: totalFail, skipped: totalSkip },
-    activeSpecs: Array.from(active.keys()),
+    activeSpecs: Array.from(active.values()).map(v => v.path),
     completed: perSpec.filter(Boolean).map(r => ({
       path: r.path,
       passed: r.passed,
@@ -442,6 +507,29 @@ function walkSpec(spec, out) {
   }
 }
 
+/**
+ * Aggregate per-spec pass/fail counts across all iterations. Returns
+ * a map keyed by spec path (not safeName) so multiple iterations of
+ * the same spec roll up into one row.
+ */
+function flakeStats() {
+  const stats = new Map();
+  for (const r of perSpec) {
+    if (!r) continue; // safety: a slot the worker never filled
+    const cur = stats.get(r.path) || { iterations: 0, passed: 0, failed: 0, skipped: 0 };
+    cur.iterations++;
+    // For repeat-mode flake hunting we count an iteration as failed
+    // when ANY test in that spec failed — Playwright sometimes reports
+    // mixed pass/fail within one iteration but the user wants
+    // "iteration green or red".
+    if (r.failed > 0) cur.failed++;
+    else cur.passed++;
+    cur.skipped += r.skipped;
+    stats.set(r.path, cur);
+  }
+  return stats;
+}
+
 function formatSummary() {
   const when = startedAt.toISOString().replace('T', ' ').slice(0, 19);
   const lines = [];
@@ -450,7 +538,23 @@ function formatSummary() {
   // glancing or an LLM doing `head -1 summary.txt`) is enough to know
   // whether to dig deeper.
   const elapsedSec = perSpec.reduce((a, r) => a + r.durationMs, 0) / 1000;
-  if (totalFail === 0) {
+  // In --repeat mode the headline counts iterations, not test×iter,
+  // because the user is asking "how many runs went green?" not
+  // "how many test functions executed?". Single-run mode keeps the
+  // legacy shape for back-compat with anything tailing summary.txt.
+  if (repeat > 1) {
+    const stats = flakeStats();
+    const totalIters = Array.from(stats.values()).reduce((a, s) => a + s.iterations, 0);
+    const failedIters = Array.from(stats.values()).reduce((a, s) => a + s.failed, 0);
+    const passedIters = totalIters - failedIters;
+    if (failedIters === 0) {
+      lines.push(`OK — ${passedIters}/${totalIters} iterations passed across ${stats.size} specs (${elapsedSec.toFixed(0)}s)`);
+    } else {
+      const first = perSpec.flatMap(r => (r ? r.failures : []).map(f => ({ path: r.path, line: f.line }))).at(0);
+      const where = first ? ` — first: ${first.path}:${first.line}` : '';
+      lines.push(`FAIL — ${failedIters}/${totalIters} iterations failed across ${stats.size} specs (${elapsedSec.toFixed(0)}s)${where}`);
+    }
+  } else if (totalFail === 0) {
     lines.push(`OK — ${totalPass} passed, 0 failed across ${perSpec.length} specs (${elapsedSec.toFixed(0)}s)`);
   } else {
     const first = perSpec.flatMap(r => r.failures.map(f => ({ path: r.path, line: f.line }))).at(0);
@@ -477,6 +581,28 @@ function formatSummary() {
   lines.push('');
   lines.push(`TOTAL: ${totalPass} passed, ${totalFail} failed, ${totalSkip} skipped`);
   lines.push('');
+  if (repeat > 1) {
+    // --repeat probe: show per-spec pass/fail across iterations so the
+    // user can spot the flaky one immediately. Sorted with worst-first
+    // (most failures), then by path. Specs that always passed are
+    // included for context — flake hunting often turns up "this spec
+    // is fine but the one next to it is bad," and the contrast helps.
+    lines.push(`FLAKE PROBE — ${repeat} iteration${repeat > 1 ? 's' : ''} per spec:`);
+    const stats = flakeStats();
+    const rows = Array.from(stats.entries()).sort((a, b) => {
+      const fa = a[1].failed, fb = b[1].failed;
+      if (fa !== fb) return fb - fa;
+      return a[0].localeCompare(b[0]);
+    });
+    for (const [path, s] of rows) {
+      const total = s.iterations;
+      const failPct = total > 0 ? ((s.failed / total) * 100).toFixed(0).padStart(3) : '  0';
+      lines.push(
+        `  ${path}  ${s.passed}/${total} passed  ${s.failed} failed  (${failPct}% flake)`
+      );
+    }
+    lines.push('');
+  }
   if (totalFail > 0) {
     lines.push('FAILURES:');
     for (const r of perSpec) {
