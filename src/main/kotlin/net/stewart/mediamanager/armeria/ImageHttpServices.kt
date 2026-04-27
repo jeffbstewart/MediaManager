@@ -291,12 +291,33 @@ class AuthorHeadshotHttpService {
     @Get("/author-headshots/{authorId}")
     fun authorHeadshot(@Param("authorId") authorId: Long): HttpResponse {
         val author = Author.findById(authorId) ?: return notFound("author-headshot")
+        // Preferred source: Wikimedia headshot the author has cached.
         val cached = AuthorHeadshotCacheService.cacheAndServe(author)
-        return if (cached != null && Files.exists(cached)) {
-            serveFile(cached, "image/jpeg", "author-headshot")
-        } else {
-            notFound("author-headshot")
+        if (cached != null && Files.exists(cached)) {
+            return serveFile(cached, "image/jpeg", "author-headshot")
         }
+        // Fallback: fetch the OpenLibrary author photo server-side and
+        // serve the bytes through ImageProxyService (which caches and
+        // SSRF-screens). Crucially the client only ever talks to this
+        // server — never to OL — so the client IP never reaches the
+        // third-party host. Keeps the source-selection logic out of
+        // the proto, which only needs has_headshot.
+        val olid = author.open_library_author_id?.takeIf { it.isNotBlank() }
+        if (olid != null && OL_AUTHOR_RE.matches(olid)) {
+            return serveProxied(
+                ImageProxyService.Provider.OPEN_LIBRARY,
+                "/a/olid/$olid-M.jpg?default=false",
+                "jpg",
+                "author-headshot",
+            )
+        }
+        return notFound("author-headshot")
+    }
+
+    private companion object {
+        // Same shape as ImageProxyHttpService.OL_AUTHOR_RE — guards the
+        // path component before it gets pasted into the upstream URL.
+        private val OL_AUTHOR_RE = Regex("^OL\\d+A$")
     }
 }
 

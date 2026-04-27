@@ -125,13 +125,15 @@ class ArtistGrpcService(
             ))
 
         val ownedReleaseGroupIds = ownedAlbums.mapNotNull { it.musicbrainz_release_group_id }.toSet()
-        val otherWorks = buildArtistOtherWorks(artist, ownedReleaseGroupIds)
+        val wishedReleaseGroupIds = net.stewart.mediamanager.service.WishListService
+            .activeAlbumWishReleaseGroupIdsForUser(user.id!!)
+        val otherWorks = buildArtistOtherWorks(artist, ownedReleaseGroupIds, wishedReleaseGroupIds)
         val (members, memberOf) = buildMemberships(artist)
 
         return artistDetail {
             this.artist = artist.toProto()
             artist.biography?.takeIf { it.isNotBlank() }?.let { biography = it }
-            this.ownedAlbums.addAll(ownedAlbums.map { it.toProto() })
+            this.ownedAlbums.addAll(ownedAlbums.map { it.toProto(trackCount = it.track_count) })
             this.otherWorks.addAll(otherWorks)
             this.members.addAll(members)
             this.memberOf.addAll(memberOf)
@@ -140,7 +142,8 @@ class ArtistGrpcService(
 
     private fun buildArtistOtherWorks(
         artist: Artist,
-        ownedReleaseGroupIds: Set<String>
+        ownedReleaseGroupIds: Set<String>,
+        wishedReleaseGroupIds: Set<String>,
     ): List<DiscographyEntry> {
         val mbid = artist.musicbrainz_artist_id ?: return emptyList()
         return musicBrainz.listArtistReleaseGroups(mbid, limit = 100)
@@ -152,6 +155,9 @@ class ArtistGrpcService(
                     name = rg.title
                     rg.firstReleaseYear?.let { year = it }
                     releaseGroupType = rg.primaryType.toProtoReleaseGroupType()
+                    isCompilation = rg.isCompilation
+                    secondaryTypes.addAll(rg.secondaryTypes)
+                    alreadyWished = rg.musicBrainzReleaseGroupId in wishedReleaseGroupIds
                 }
             }
             .toList()
@@ -171,8 +177,16 @@ class ArtistGrpcService(
         fun toEntry(other: Artist, m: ArtistMembership): ArtistMemberEntry = artistMemberEntry {
             artistId = other.id!!
             name = other.name
-            m.begin_date?.year?.let { beginYear = it }
-            m.end_date?.year?.let { endYear = it }
+            artistType = other.artist_type.toProtoArtistType()
+            m.begin_date?.let {
+                beginYear = it.year
+                beginDate = it.toProtoCalendarDate()
+            }
+            m.end_date?.let {
+                endYear = it.year
+                endDate = it.toProtoCalendarDate()
+            }
+            m.primary_instruments?.takeIf { it.isNotBlank() }?.let { instruments = it }
         }
 
         val members = memberships.filter { it.group_artist_id == id }
@@ -216,28 +230,41 @@ class ArtistGrpcService(
 
         val links = TitleAuthor.findAll().filter { it.author_id == author.id }
         val linkedTitleIds = links.map { it.title_id }.toSet()
+        val seriesById = net.stewart.mediamanager.entity.BookSeries.findAll().associateBy { it.id }
         val ownedBooks = TitleEntity.findAll()
             .filter { it.id in linkedTitleIds }
             .filter { it.media_type == MediaTypeEnum.BOOK.name }
             .filter { !it.hidden && user.canSeeRating(it.content_rating) }
             .sortedWith(compareBy(
-                { it.first_publication_year ?: it.release_year ?: Int.MAX_VALUE },
+                // Series-first ordering matches the legacy REST handler so
+                // the SPA's grouped render doesn't reshuffle on migration.
+                { it.book_series_id?.let { id -> seriesById[id]?.name } ?: "zzz" },
+                { it.series_number ?: java.math.BigDecimal.ZERO },
                 { it.name.lowercase() }
             ))
 
         val ownedWorkIds = ownedBooks.mapNotNull { it.open_library_work_id }.toSet()
-        val otherWorks = buildAuthorOtherWorks(author, ownedWorkIds)
+        val wishedWorkIds = net.stewart.mediamanager.service.WishListService
+            .activeBookWishWorkIdsForUser(user.id!!)
+        val otherWorks = buildAuthorOtherWorks(author, ownedWorkIds, wishedWorkIds)
 
         return authorDetail {
             this.author = author.toProto()
-            this.ownedBooks.addAll(ownedBooks.map { it.toProto() })
+            this.ownedBooks.addAll(ownedBooks.map { title ->
+                val series = title.book_series_id?.let { seriesById[it] }
+                title.toProto(
+                    seriesName = series?.name,
+                    seriesNumber = title.series_number?.toPlainString(),
+                )
+            })
             this.otherWorks.addAll(otherWorks)
         }
     }
 
     private fun buildAuthorOtherWorks(
         author: Author,
-        ownedWorkIds: Set<String>
+        ownedWorkIds: Set<String>,
+        wishedWorkIds: Set<String>,
     ): List<BibliographyEntry> {
         val olid = author.open_library_author_id ?: return emptyList()
         return openLibrary.listAuthorWorks(olid, limit = 200)
@@ -248,6 +275,8 @@ class ArtistGrpcService(
                     openlibraryWorkId = work.openLibraryWorkId
                     name = work.title
                     work.firstPublishYear?.let { year = it }
+                    work.seriesRaw?.let { seriesRaw = it }
+                    alreadyWished = work.openLibraryWorkId in wishedWorkIds
                 }
             }
             .toList()

@@ -682,6 +682,16 @@ message Artist {
   optional int32 begin_year = 6;
   optional int32 end_year = 7;
   // Headshot: ImageService with IMAGE_TYPE_ARTIST_HEADSHOT + id.
+  // True when the server can serve a headshot for this artist;
+  // when false the client renders a placeholder rather than an
+  // `<img>` that would briefly show a broken-image indicator.
+  bool has_headshot = 10;
+
+  // Full begin / end dates when MusicBrainz has them. begin_year /
+  // end_year stay populated with just the year part for clients that
+  // only need carousel-card granularity.
+  optional CalendarDate begin_date = 8;
+  optional CalendarDate end_date = 9;
 }
 
 message ArtistDetail {
@@ -699,6 +709,16 @@ message DiscographyEntry {
   string name = 2;
   optional int32 year = 3;
   ReleaseGroupType release_group_type = 4;
+  // True for "Greatest Hits" / "Best Of" — the SPA renders these
+  // dimmed under a separate header so they don't crowd out the
+  // primary discography.
+  bool is_compilation = 5;
+  // MusicBrainz release-group secondary types (e.g. "Live",
+  // "Soundtrack"). Empty when the entry is a plain studio release.
+  repeated string secondary_types = 6;
+  // True when the user already has the release on their wish list —
+  // drives the heart icon's filled state without a second fetch.
+  bool already_wished = 7;
 }
 
 message ArtistMemberEntry {
@@ -706,6 +726,18 @@ message ArtistMemberEntry {
   string name = 2;
   optional int32 begin_year = 3;
   optional int32 end_year = 4;
+  // PERSON for a member of a band; GROUP / ORCHESTRA / CHOIR for a
+  // band a person belongs to. Drives the icon (person vs. group)
+  // next to each membership row.
+  ArtistType artist_type = 5;
+  // Free-text instruments / role attribution from MusicBrainz.
+  // Empty for vocal-only members or when MB has no relationship
+  // attribute.
+  optional string instruments = 6;
+  // Full begin / end dates when MusicBrainz has them. begin_year /
+  // end_year above stay populated with the year only.
+  optional CalendarDate begin_date = 7;
+  optional CalendarDate end_date = 8;
 }
 
 message Track {
@@ -786,6 +818,17 @@ message Author {
   optional int32 birth_year = 6;
   optional int32 death_year = 7;
   // Headshot: ImageService with IMAGE_TYPE_AUTHOR_HEADSHOT + id.
+  // True when the server can serve a headshot for this author from
+  // any source (cached Wikimedia, OpenLibrary fallback). When false
+  // the client renders a placeholder rather than an `<img>` that
+  // would briefly show a broken-image indicator.
+  bool has_headshot = 10;
+
+  // Full birth / death dates when known. birth_year / death_year
+  // above stay populated with just the year for clients that only
+  // need carousel-card granularity.
+  optional CalendarDate birth_date = 8;
+  optional CalendarDate death_date = 9;
 }
 
 message AuthorDetail {
@@ -799,6 +842,12 @@ message BibliographyEntry {
   string openlibrary_work_id = 1;
   string name = 2;
   optional int32 year = 3;
+  // Raw series text from OpenLibrary (free-form, e.g. "Foundation (1)").
+  // SPA renders verbatim under the title row when present.
+  optional string series_raw = 4;
+  // True when the user already has the work on their wish list — drives
+  // the heart icon's filled state without a second fetch.
+  bool already_wished = 5;
 }
 
 message BookDetail {

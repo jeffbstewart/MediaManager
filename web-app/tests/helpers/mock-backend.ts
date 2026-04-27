@@ -4,12 +4,18 @@ import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
 import { clone, create, fromBinary } from '@bufbuild/protobuf';
 import {
   ActorDetailSchema,
+  ArtistDetailSchema,
+  AuthorDetailSchema,
   CollectionDetailSchema,
   EmptySchema,
   MediaType,
   TitleDetailSchema,
   TitleIdRequestSchema,
 } from '../../src/app/proto-gen/common_pb';
+import {
+  ArtistIdRequestSchema,
+  AuthorIdRequestSchema,
+} from '../../src/app/proto-gen/artist_pb';
 import {
   CollectionIdRequestSchema,
   CollectionListResponseSchema,
@@ -28,6 +34,7 @@ import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
 import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fixture';
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
+import { artistMilesDavis, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -182,6 +189,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     if (rpc === 'GetFeatures') {
       return fulfillProto(r, FeaturesSchema, featuresFixture);
     }
+    // Note: GetAuthorDetail / GetArtistDetail live on ArtistService,
+    // not CatalogService — see the mediamanager.ArtistService/* block
+    // below.
     if (rpc === 'GetActorDetail') {
       // Fixture covers Keanu (6384) — every other person id falls back
       // to the same fixture for the smoke-test purposes the existing
@@ -238,6 +248,31 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     return r.fallback();
   });
 
+  // ArtistService gRPC RPCs — lives on a separate service path from
+  // CatalogService. The detail RPCs decode the request id so per-test
+  // overrides registered before mockBackend can dispatch on it.
+  await page.route('**/mediamanager.ArtistService/*', async (r: Route) => {
+    const url = new URL(r.request().url());
+    const rpc = url.pathname.split('/').pop();
+    if (rpc === 'GetArtistDetail') {
+      const req = fromBinary(
+        ArtistIdRequestSchema,
+        unframeGrpcWebRequest(r.request().postDataBuffer()),
+      );
+      void req; // single fixture for now; per-test override dispatches if needed
+      return fulfillProto(r, ArtistDetailSchema, artistMilesDavis);
+    }
+    if (rpc === 'GetAuthorDetail') {
+      const req = fromBinary(
+        AuthorIdRequestSchema,
+        unframeGrpcWebRequest(r.request().postDataBuffer()),
+      );
+      void req;
+      return fulfillProto(r, AuthorDetailSchema, authorFrankHerbert);
+    }
+    return r.fallback();
+  });
+
   // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
   // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
   // Anything else falls back to the movie fixture. Kept in place
@@ -253,14 +288,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     return r.fulfill({ json: loadFixture(fixture) });
   });
 
-  // /api/v2/catalog/actor/:id is no longer hit — getActorDetail() goes
-  // through GetActorDetail gRPC (dispatch above).
-  await page.route('**/api/v2/catalog/authors/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/author.json') })
-  );
-  await page.route('**/api/v2/catalog/artists/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/artist.json') })
-  );
+  // /api/v2/catalog/actor/:id, /authors/:id, /artists/:id are no
+  // longer hit — getActorDetail / getAuthorDetail / getArtistDetail
+  // go through GetActorDetail / GetAuthorDetail / GetArtistDetail
+  // gRPC RPCs (dispatched above).
   await page.route('**/api/v2/catalog/series/*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/series.json') })
   );

@@ -641,8 +641,19 @@ fun ArtistEntity.toProto(): Artist = artist {
     this@toProto.sort_name.takeIf { it.isNotBlank() }?.let { sortName = it }
     artistType = this@toProto.artist_type.toProtoArtistType()
     this@toProto.musicbrainz_artist_id?.takeIf { it.isNotBlank() }?.let { musicbrainzArtistId = it }
-    this@toProto.begin_date?.year?.let { beginYear = it }
-    this@toProto.end_date?.year?.let { endYear = it }
+    this@toProto.begin_date?.let {
+        beginYear = it.year
+        beginDate = it.toProtoCalendarDate()
+    }
+    this@toProto.end_date?.let {
+        endYear = it.year
+        endDate = it.toProtoCalendarDate()
+    }
+    // Headshot retrieval is server-side only — the client uses
+    // /artist-headshots/{id} (or ImageService with
+    // IMAGE_TYPE_ARTIST_HEADSHOT). hasHeadshot lets the SPA pick
+    // placeholder vs. <img> without a HEAD round-trip.
+    hasHeadshot = !this@toProto.headshot_path.isNullOrBlank()
 }
 
 fun ArtistEntity.toListItem(
@@ -663,8 +674,20 @@ fun AuthorEntity.toProto(): Author = author {
     this@toProto.biography?.takeIf { it.isNotBlank() }?.let { biography = it }
     this@toProto.open_library_author_id?.takeIf { it.isNotBlank() }?.let { openlibraryId = it }
     this@toProto.wikidata_id?.takeIf { it.isNotBlank() }?.let { wikidataId = it }
-    this@toProto.birth_date?.year?.let { birthYear = it }
-    this@toProto.death_date?.year?.let { deathYear = it }
+    this@toProto.birth_date?.let {
+        birthYear = it.year
+        birthDate = it.toProtoCalendarDate()
+    }
+    this@toProto.death_date?.let {
+        deathYear = it.year
+        deathDate = it.toProtoCalendarDate()
+    }
+    // /author-headshots/{id} now resolves to the cached Wikimedia
+    // image OR an OpenLibrary fallback (server-side fetch + cache;
+    // the client never talks to OL directly). hasHeadshot is true
+    // when either source can produce bytes.
+    hasHeadshot = !this@toProto.headshot_path.isNullOrBlank() ||
+        !this@toProto.open_library_author_id.isNullOrBlank()
 }
 
 fun AuthorEntity.toListItem(ownedBookCount: Int): AuthorListItem = authorListItem {

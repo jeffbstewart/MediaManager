@@ -22,6 +22,7 @@ import {
   ActorDetail as ProtoActorDetail,
   CreditEntry as ProtoCreditEntry,
   OwnedCredit as ProtoOwnedCredit,
+  ReleaseGroupType as ProtoReleaseGroupType,
   Tag as ProtoTag,
   TagListItem as ProtoTagListItem,
   TitleDetail as ProtoTitleDetail,
@@ -30,6 +31,7 @@ import {
   Transcode as ProtoTranscode,
 } from '../proto-gen/common_pb';
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
+import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1084,11 +1086,15 @@ export class CatalogService {
   }
 
   async getAuthorDetail(authorId: number): Promise<AuthorDetail> {
-    return firstValueFrom(this.http.get<AuthorDetail>(`/api/v2/catalog/authors/${authorId}`));
+    const client = grpcClient(ArtistServiceDesc);
+    const proto = await client.getAuthorDetail({ authorId: BigInt(authorId) });
+    return adaptProtoAuthorDetail(proto);
   }
 
   async getArtistDetail(artistId: number): Promise<ArtistDetail> {
-    return firstValueFrom(this.http.get<ArtistDetail>(`/api/v2/catalog/artists/${artistId}`));
+    const client = grpcClient(ArtistServiceDesc);
+    const proto = await client.getArtistDetail({ artistId: BigInt(artistId) });
+    return adaptProtoArtistDetail(proto);
   }
 
   /**
@@ -1836,6 +1842,130 @@ function adaptActorCredit(c: ProtoCreditEntry): ActorCredit {
     poster_path: stripTmdbWrapper(c.posterUrl),
     popularity: c.popularity,
     already_wished: c.wished,
+  };
+}
+
+// Headshot URL is constructed client-side from the entity id when the
+// server reports has_headshot=true. The server endpoints
+// (/author-headshots/{id}, /artist-headshots/{id}) handle the actual
+// source resolution — they serve the cached image when present and
+// fall back to OL (server-side fetch + cache) for authors. The proto
+// never carries the URL so the wire stays decoupled from the route.
+function authorHeadshotUrl(authorId: number, hasHeadshot: boolean): string | null {
+  return hasHeadshot ? `/author-headshots/${authorId}` : null;
+}
+
+function artistHeadshotUrl(artistId: number, hasHeadshot: boolean): string | null {
+  return hasHeadshot ? `/artist-headshots/${artistId}` : null;
+}
+
+// Proto ReleaseGroupType enum → free-text "primary_type" the legacy
+// REST server emitted. Lossy by design — the SPA doesn't render the
+// value today; it ships through to keep the contract intact for any
+// future template binding.
+const PROTO_RELEASE_GROUP_TYPE_TO_LEGACY: Record<ProtoReleaseGroupType, string | null> = {
+  [ProtoReleaseGroupType.UNKNOWN]: null,
+  [ProtoReleaseGroupType.ALBUM]: 'Album',
+  [ProtoReleaseGroupType.EP]: 'EP',
+  [ProtoReleaseGroupType.SINGLE]: 'Single',
+  [ProtoReleaseGroupType.COMPILATION]: 'Compilation',
+  [ProtoReleaseGroupType.SOUNDTRACK]: 'Soundtrack',
+  [ProtoReleaseGroupType.LIVE]: 'Live',
+  [ProtoReleaseGroupType.REMIX]: 'Remix',
+  [ProtoReleaseGroupType.OTHER]: 'Other',
+};
+
+function adaptProtoAuthorDetail(p: import('../proto-gen/common_pb').AuthorDetail): AuthorDetail {
+  const a = p.author!;
+  const id = Number(a.id);
+  return {
+    id,
+    name: a.name,
+    biography: a.biography ?? null,
+    headshot_url: authorHeadshotUrl(id, a.hasHeadshot),
+    birth_date: calendarDateToIsoDate(a.birthDate),
+    death_date: calendarDateToIsoDate(a.deathDate),
+    open_library_author_id: a.openlibraryId ?? null,
+    owned_books: p.ownedBooks.map(adaptAuthorOwnedBook),
+    other_works: p.otherWorks.map(adaptAuthorOtherWork),
+  };
+}
+
+function adaptAuthorOwnedBook(t: import('../proto-gen/common_pb').Title): AuthorOwnedBook {
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+    series_name: t.seriesName ?? null,
+    series_number: t.seriesNumber ?? null,
+  };
+}
+
+function adaptAuthorOtherWork(b: import('../proto-gen/common_pb').BibliographyEntry): AuthorOtherWork {
+  return {
+    ol_work_id: b.openlibraryWorkId,
+    title: b.name,
+    year: b.year ?? null,
+    // Cover comes from /proxy/ol/olid/{ol_work_id}/M (server-side fetch
+    // + cache; client never talks to OL directly).
+    cover_url: `/proxy/ol/olid/${b.openlibraryWorkId}/M`,
+    series_raw: b.seriesRaw ?? null,
+    already_wished: b.alreadyWished,
+  };
+}
+
+function adaptProtoArtistDetail(p: import('../proto-gen/common_pb').ArtistDetail): ArtistDetail {
+  const a = p.artist!;
+  const id = Number(a.id);
+  return {
+    id,
+    name: a.name,
+    sort_name: a.sortName ?? '',
+    artist_type: PROTO_ARTIST_TYPE_TO_LEGACY[a.artistType] ?? 'OTHER',
+    biography: p.biography ?? null,
+    headshot_url: artistHeadshotUrl(id, a.hasHeadshot),
+    begin_date: calendarDateToIsoDate(a.beginDate),
+    end_date: calendarDateToIsoDate(a.endDate),
+    musicbrainz_artist_id: a.musicbrainzArtistId ?? null,
+    owned_albums: p.ownedAlbums.map(adaptArtistOwnedAlbum),
+    other_works: p.otherWorks.map(adaptArtistOtherWork),
+    band_members: p.members.map(adaptArtistMember),
+    member_of: p.memberOf.map(adaptArtistMember),
+  };
+}
+
+function adaptArtistOwnedAlbum(t: import('../proto-gen/common_pb').Title): ArtistOwnedAlbum {
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+    track_count: t.trackCount ?? null,
+  };
+}
+
+function adaptArtistOtherWork(d: import('../proto-gen/common_pb').DiscographyEntry): ArtistOtherWork {
+  return {
+    release_group_id: d.musicbrainzReleaseGroupId,
+    title: d.name,
+    year: d.year ?? null,
+    primary_type: PROTO_RELEASE_GROUP_TYPE_TO_LEGACY[d.releaseGroupType] ?? null,
+    secondary_types: d.secondaryTypes,
+    is_compilation: d.isCompilation,
+    cover_url: `/proxy/caa/release-group/${d.musicbrainzReleaseGroupId}/front-250`,
+    already_wished: d.alreadyWished,
+  };
+}
+
+function adaptArtistMember(m: import('../proto-gen/common_pb').ArtistMemberEntry): ArtistMembershipEntry {
+  return {
+    id: Number(m.artistId),
+    name: m.name,
+    artist_type: PROTO_ARTIST_TYPE_TO_LEGACY[m.artistType] ?? 'OTHER',
+    begin_date: calendarDateToIsoDate(m.beginDate),
+    end_date: calendarDateToIsoDate(m.endDate),
+    instruments: m.instruments ?? null,
   };
 }
 

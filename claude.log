@@ -4879,3 +4879,53 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Validation: gradle test green, full harness 603/605 (same
   recurring 15-books-and-reader:232 flake).
 ===
+
+=== 2026-04-26 23:50 — Author/Artist detail SPA migrations ===
+- Discovered an existing ArtistService gRPC service in artist.proto
+  with full handlers in ArtistGrpcService.kt — covers ListArtists,
+  GetArtistDetail, ListAuthors, GetAuthorDetail. Initially started
+  duplicating the work in CatalogGrpcService before noticing it; reverted.
+- Server-side: extended Author / Artist proto messages with full
+  CalendarDate fields (birth_date / death_date / begin_date /
+  end_date alongside the existing year-only ints), and a single
+  has_headshot bool. NO URL strings on proto — clients use
+  /author-headshots/{id} and /artist-headshots/{id} (or ImageService
+  for native clients), and the server handles all source resolution.
+- Server-side privacy fix: AuthorHeadshotHttpService now falls back
+  internally to OpenLibrary via serveProxied() when the cached
+  Wikimedia image is missing. Previously the SPA constructed a
+  /proxy/ol/author/{olid}/M URL itself, which is fine (it's
+  same-origin) but the URL pattern leaked into the proto. With the
+  fallback inside the headshots endpoint, the proto carries only
+  has_headshot and the client never knows about OL.
+- Extended BibliographyEntry with series_raw + already_wished;
+  DiscographyEntry with is_compilation + secondary_types +
+  already_wished; ArtistMemberEntry with artist_type +
+  instruments + begin_date / end_date.
+- ProtoMappers' Artist.toProto / Author.toProto helpers now
+  populate the new fields. ArtistGrpcService's getArtistDetail /
+  getAuthorDetail now populate the fuller proto and apply the
+  same series-grouped sort the legacy REST handler used.
+- SPA migrations: getAuthorDetail / getArtistDetail call
+  ArtistService via gRPC. New adapters adaptProtoAuthorDetail /
+  adaptProtoArtistDetail + per-row helpers (adaptAuthorOwnedBook,
+  adaptAuthorOtherWork, adaptArtistOwnedAlbum,
+  adaptArtistOtherWork, adaptArtistMember). Headshot URL is
+  constructed client-side from id+has_headshot
+  (authorHeadshotUrl, artistHeadshotUrl helpers).
+- mock-backend dispatches mediamanager.ArtistService/* to the new
+  typed fixtures (artistMilesDavis, authorFrankHerbert). Legacy
+  /api/v2/catalog/authors/* and /api/v2/catalog/artists/* routes
+  removed.
+- 51-artist-detail.spec.ts: 7 tests rewritten to override the gRPC
+  GetArtistDetail route with proto-typed clones via new
+  overrideArtistDetail helper (mirroring the title-detail
+  overrideMovie100 / overrideAlbum301 pattern).
+- gen-proto.mjs gains artist.proto in the input list so the
+  ArtistService TS bindings are generated.
+- Memory rule strengthened (feedback_proto_design.md): never
+  redirect or expose third-party URLs to clients — server-side
+  fetch + cache + serve. Client IP must never leak.
+- Validation: gradle test green, full harness 610/611 (same
+  recurring 15-books-and-reader:232 flake).
+===
