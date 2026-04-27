@@ -315,6 +315,12 @@ message Title {
   // Track count for ALBUM list cards. Avoids the SPA having to fetch
   // album detail just to label the carousel card.
   optional int32 track_count = 28;
+
+  // 0..1 fraction of the title's primary transcode that has been
+  // watched. Populated on list endpoints so grids can render the
+  // resume progress bar without a per-card RPC. Absent when the user
+  // has no saved progress on the title.
+  optional double progress_fraction = 29;
 }
 
 // Full title detail. Embeds Title to avoid field duplication, then adds
@@ -586,7 +592,13 @@ message CollectionListItem {
   int32 tmdb_collection_id = 1;
   string name = 2;
   optional string poster_url = 3;
+  // Owned titles in this collection (always > 0 — empty collections
+  // are filtered out). Drives the left half of the "X / Y" badge.
   int32 title_count = 4;
+  // Total parts the collection has on TMDB, including parts the user
+  // doesn't own. Right half of the "X / Y" badge. Falls back to
+  // title_count when TMDB hasn't enumerated the parts yet.
+  int32 total_parts = 5;
 }
 
 message TagListItem {

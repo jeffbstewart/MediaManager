@@ -2,14 +2,29 @@ import type { Page, Route } from '@playwright/test';
 import { loadFixture } from './load-fixture';
 import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
 import { create, fromBinary } from '@bufbuild/protobuf';
-import { ActorDetailSchema, EmptySchema, TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
-import { TagListResponseSchema } from '../../src/app/proto-gen/catalog_pb';
+import {
+  ActorDetailSchema,
+  CollectionDetailSchema,
+  EmptySchema,
+  MediaType,
+  TitleDetailSchema,
+  TitleIdRequestSchema,
+} from '../../src/app/proto-gen/common_pb';
+import {
+  CollectionIdRequestSchema,
+  CollectionListResponseSchema,
+  ListTitlesRequestSchema,
+  TagListResponseSchema,
+  TitlePageResponseSchema,
+} from '../../src/app/proto-gen/catalog_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 import { titleBook300 } from '../fixtures-typed/title-300-book.fixture';
 import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
 import { tagsList } from '../fixtures-typed/tags-list.fixture';
 import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
+import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fixture';
+import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -100,21 +115,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   );
 
   // --- Browse grids (Tier 3) ---
-  // /api/v2/catalog/titles is parameterised by `media_type`; dispatch
-  // to the right fixture so movies / tv / books / personal each get
-  // a sensible populated response.
-  await page.route('**/api/v2/catalog/titles*', (r: Route) => {
-    const url = new URL(r.request().url());
-    const mt = url.searchParams.get('media_type');
-    const fixture = mt === 'TV' ? 'catalog/titles.tv.json'
-                  : mt === 'BOOK' ? 'catalog/titles.books.json'
-                  : 'catalog/titles.movies.json';
-    return r.fulfill({ json: loadFixture(fixture) });
-  });
-
-  await page.route('**/api/v2/catalog/collections', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/collections.list.json') })
-  );
+  // /api/v2/catalog/titles + /api/v2/catalog/collections are no longer
+  // hit — getTitles() and getCollections() go through gRPC ListTitles
+  // and ListCollections respectively, dispatched in the gRPC route
+  // block below.
   // /api/v2/catalog/tags (list) is no longer hit — the SPA's getTags()
   // calls ListTags via gRPC, dispatched in the gRPC route block below.
   await page.route('**/api/v2/catalog/artists*', (r: Route) =>
@@ -169,6 +173,29 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       // suite uses; per-test overrides can register a more specific
       // gRPC route handler before mockBackend's catch-all if needed.
       return fulfillProto(r, ActorDetailSchema, actor6384);
+    }
+    if (rpc === 'ListTitles') {
+      const req = fromBinary(
+        ListTitlesRequestSchema,
+        unframeGrpcWebRequest(r.request().postDataBuffer()),
+      );
+      const fixture = req.type === MediaType.TV   ? tvPage
+                    : req.type === MediaType.BOOK ? booksPage
+                    : moviesPage;
+      return fulfillProto(r, TitlePageResponseSchema, fixture);
+    }
+    if (rpc === 'ListCollections') {
+      return fulfillProto(r, CollectionListResponseSchema, collectionsList);
+    }
+    if (rpc === 'GetCollectionDetail') {
+      const req = fromBinary(
+        CollectionIdRequestSchema,
+        unframeGrpcWebRequest(r.request().postDataBuffer()),
+      );
+      // Only one detail fixture currently; any tmdb_collection_id falls
+      // through to it. Per-test overrides can dispatch on req.tmdbCollectionId.
+      void req;
+      return fulfillProto(r, CollectionDetailSchema, collectionDetail2344);
     }
     // No-op tag/music mutations: the SPA awaits an Empty response, the
     // tests don't care about the body. Per-test overrides can intercept
@@ -225,9 +252,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/catalog/tags/*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/tag-detail.json') })
   );
-  await page.route('**/api/v2/catalog/collections/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/collection-detail.json') })
-  );
+  // /api/v2/catalog/collections/:id is no longer hit — getCollectionDetail()
+  // calls GetCollectionDetail via gRPC (dispatched above).
 
   // --- Wishlist / Search / Discover / Profile (Tier 5) ---
   // Title-detail & collection-detail consult the wishlist to drive

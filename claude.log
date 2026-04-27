@@ -4791,3 +4791,51 @@ getHomeFeed stays on REST.
 Validation: gradle test green, full web harness 608/612 (the same
 recurring 15-books-and-reader:226 flake as prior runs).
 ===
+
+=== 2026-04-26 22:42 — ListTitles + ListCollections + GetCollectionDetail on gRPC ===
+- Title.toProto extended with seriesName / seriesNumber / trackCount /
+  progressFraction params (proto Title fields added in last commit).
+  Defaults preserve existing call sites; new callers can pass them
+  for book/album list cards and watched-progress UI.
+- listTitles handler now folds in PlaybackProgressService progress
+  per title (Title.progress_fraction). listCollections folds
+  TmdbCollectionPart counts into CollectionListItem.total_parts.
+- New CollectionListItem.total_parts proto field — was missing for
+  the SPA's "X / Y" badge. Additive change, iOS / Android TV ignore it.
+- Note: Roku does NOT use gRPC (HTTP-only). Only SPA / iOS / Google TV
+  (Android TV) consume gRPC RPCs. Memory updated.
+- SPA migrations:
+  - getTitles → ListTitles. Includes ratings filter, available_ratings,
+    and Title.progress_fraction. legacyMediaTypeToProto + adaptTitleCard.
+    Default playable_only flips proto false→true to preserve the
+    legacy server's @Default("true") semantic.
+  - getCollections → ListCollections. id field becomes tmdb_collection_id
+    (formerly local TmdbCollection row id) — route format changes from
+    /content/collection/{row-id} to /content/collection/{tmdb-id}.
+    Bookmarks break, but the id is now a stable cross-system identifier.
+  - getCollectionDetail → GetCollectionDetail. Adapter splits proto
+    CollectionItem into legacy owned-vs-unowned CollectionPart shapes.
+  - title-detail's collection link now reads Title.tmdb_collection_id
+    (int32 from proto Title) instead of Collection.id (local row id),
+    so the new route format is consistent end-to-end.
+- Test infra:
+  - tests/fixtures-typed/titles-list.fixture.ts — moviesPage / tvPage /
+    booksPage. mock-backend dispatches ListTitles by req.type.
+  - tests/fixtures-typed/collections.fixture.ts — collectionsList +
+    collectionDetail2344 (Matrix). mock-backend dispatches
+    ListCollections + GetCollectionDetail.
+  - 21-movies-list and 26-tv-shows-list tests now decode the
+    ListTitlesRequest protobuf body to assert on sort / ratings /
+    playableOnly. New helper decodeListTitles per file.
+  - 15-books-and-reader tests retargeted to /ListTitles URL with
+    proto body decoding.
+  - 17-collections-view route IDs updated from /content/collection/2 to
+    /content/collection/2344 (tmdb id).
+  - 52-tag-picker dead /api/v2/catalog/titles/100 stub removed; the
+    base titleMovie100 fixture already attaches the Comfort Watch tag.
+- Legacy mock-backend routes for /api/v2/catalog/titles*,
+  /api/v2/catalog/collections, /api/v2/catalog/collections/* removed
+  (no SPA caller after this).
+- Validation: full harness 610/611 — same recurring
+  15-books-and-reader:232 flake; otherwise clean.
+===

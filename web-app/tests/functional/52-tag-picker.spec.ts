@@ -114,18 +114,8 @@ test.describe('tag-picker — exclude already-attached', () => {
     await mockBackend(page, { features: 'admin' });
     await loginAs(page);
     await stubImages(page);
-    // Override the title fixture to give it a tag (id=1) — picker
-    // should drop it from the visible list.
-    await page.route('**/api/v2/catalog/titles/100', r =>
-      r.fulfill({ json: {
-        title_id: 100, title_name: 'The Matrix', media_type: 'MOVIE',
-        release_year: 1999, description: '', poster_url: null, backdrop_url: null,
-        event_date: null, is_starred: false, is_hidden: false,
-        genres: [], formats: [], admin_media_items: [], transcodes: [],
-        cast: [], episodes: [], seasons: [], family_members: [],
-        similar_titles: [], collection: null, artists: [],
-        tags: [{ id: 1, name: 'Comfort Watch', bg_color: '#1B5E20', text_color: '#fff', title_count: 12 }],
-      } }));
+    // Base movie 100 typed fixture already attaches the Comfort Watch
+    // tag (id=1), so the picker should drop it from the visible list.
     await page.goto('/title/100');
     await page.waitForSelector('app-title-detail');
     await openTagPicker(page);

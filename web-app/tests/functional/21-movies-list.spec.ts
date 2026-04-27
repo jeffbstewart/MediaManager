@@ -1,7 +1,20 @@
-import { test, expect, Page } from '../helpers/test-fixture';
+import { test, expect, Page, Request } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
+
+const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
+
+function decodeListTitles(req: Request): { sort: string; ratings: string[]; playableOnly: boolean } {
+  const decoded = fromBinary(
+    ListTitlesRequestSchema,
+    unframeGrpcWebRequest(req.postDataBuffer()),
+  );
+  return { sort: decoded.sort, ratings: decoded.ratings, playableOnly: decoded.playableOnly };
+}
 
 // Movies list view tests.
 //
@@ -28,7 +41,7 @@ import { stubImages } from '../helpers/image-stub';
 function captureTitlesRequests(page: Page) {
   const urls: string[] = [];
   page.on('request', req => {
-    if (req.url().includes('/api/v2/catalog/titles')) urls.push(req.url());
+    if (req.url().endsWith(LIST_TITLES_URL)) urls.push(req.url());
   });
   return () => urls;
 }
@@ -103,40 +116,38 @@ test.describe('movies list view', () => {
     await expect(page.locator('mat-chip', { hasText: /^\s*Author\s*$/ })).toHaveCount(0);
   });
 
-  test('clicking each sort chip fires a request with the right sort=<mode>', async ({ page }) => {
-    // Note: the captureTitlesRequests listener is registered AFTER
-    // goto, so it doesn't see the initial sort=name request — that
-    // ship has sailed by beforeEach return. We assert per-click,
-    // which is the actually meaningful signal anyway.
-    for (const { label, param } of [
-      { label: 'Year',    param: 'sort=year' },
-      { label: 'Recent',  param: 'sort=recent' },
-      { label: 'Popular', param: 'sort=popular' },
-      { label: 'Name',    param: 'sort=name' },
+  test('clicking each sort chip fires a ListTitles request with the right sort', async ({ page }) => {
+    // ListTitles is a gRPC POST; the sort field rides in the binary
+    // request body, so we decode the proto to assert on it.
+    for (const { label, sort } of [
+      { label: 'Year',    sort: 'year' },
+      { label: 'Recent',  sort: 'recent' },
+      { label: 'Popular', sort: 'popular' },
+      { label: 'Name',    sort: 'name' },
     ]) {
       const reqPromise = page.waitForRequest(req =>
-        req.url().includes('/api/v2/catalog/titles')
-          && req.url().includes(param),
+        req.url().endsWith(LIST_TITLES_URL),
         { timeout: 3_000 },
       );
       await page.locator('mat-chip', { hasText: label }).click();
-      await reqPromise;
+      const got = await reqPromise;
+      expect(decodeListTitles(got).sort).toBe(sort);
     }
   });
 
   // -------- Filter chips: Playable + ratings --------
 
-  test('Playable chip starts highlighted (default true) — toggling off adds playable_only=false', async ({ page }) => {
+  test('Playable chip starts highlighted (default true) — toggling off sends playableOnly=false', async ({ page }) => {
     const playable = page.locator('mat-chip', { hasText: 'Playable' }).first();
     await expect(playable).toHaveClass(/mat-mdc-chip-highlighted/);
 
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && req.url().includes('playable_only=false'),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await playable.click();
-    await reqPromise;
+    const got = await reqPromise;
+    expect(decodeListTitles(got).playableOnly).toBe(false);
     await expect(playable).not.toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
@@ -154,14 +165,14 @@ test.describe('movies list view', () => {
       .toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
-  test('clicking a rating chip adds ratings=<rating> to the URL', async ({ page }) => {
+  test('clicking a rating chip sends ratings=[rating] in the request', async ({ page }) => {
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && /ratings=PG-13/.test(req.url()),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'PG-13' }).click();
-    await reqPromise;
+    const got = await reqPromise;
+    expect(decodeListTitles(got).ratings).toEqual(['PG-13']);
     // PG-13 chip is now highlighted; All Ratings is not.
     await expect(page.locator('mat-chip', { hasText: 'PG-13' }))
       .toHaveClass(/mat-mdc-chip-highlighted/);
@@ -172,20 +183,20 @@ test.describe('movies list view', () => {
   test('All Ratings clears the rating filter', async ({ page }) => {
     // First select PG-13 so there's something to clear.
     let pending = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && /ratings=PG-13/.test(req.url()),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'PG-13' }).click();
     await pending;
 
-    // Click All Ratings — request should drop the ratings param entirely.
-    const cleared = page.waitForRequest(req => {
-      if (!req.url().includes('/api/v2/catalog/titles')) return false;
-      return !new URL(req.url()).searchParams.has('ratings');
-    }, { timeout: 3_000 });
+    // Click All Ratings — request should ship an empty ratings list.
+    const cleared = page.waitForRequest(req =>
+      req.url().endsWith(LIST_TITLES_URL),
+      { timeout: 3_000 },
+    );
     await page.locator('mat-chip', { hasText: 'All Ratings' }).click();
-    await cleared;
+    const got = await cleared;
+    expect(decodeListTitles(got).ratings).toEqual([]);
     await expect(page.locator('mat-chip', { hasText: 'All Ratings' }))
       .toHaveClass(/mat-mdc-chip-highlighted/);
   });

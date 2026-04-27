@@ -1,7 +1,28 @@
-import { test, expect } from '../helpers/test-fixture';
+import { test, expect, Request } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
+import { MediaType } from '../../src/app/proto-gen/common_pb';
+
+const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
+
+function decodeListTitles(req: Request): {
+  type: MediaType; sort: string; ratings: string[]; playableOnly: boolean;
+} {
+  const decoded = fromBinary(
+    ListTitlesRequestSchema,
+    unframeGrpcWebRequest(req.postDataBuffer()),
+  );
+  return {
+    type: decoded.type,
+    sort: decoded.sort,
+    ratings: decoded.ratings,
+    playableOnly: decoded.playableOnly,
+  };
+}
 
 // TV shows list view tests.
 //
@@ -84,17 +105,17 @@ test.describe('TV shows list view', () => {
     await expect(page).toHaveURL(/\/title\/200$/);
   });
 
-  test('initial GET fires with media_type=TV', async ({ page }) => {
+  test('initial fetch fires ListTitles with type=TV', async ({ page }) => {
     // beforeEach already triggered the initial load, but Playwright's
     // request listener registered after goto won't see it. Trip a sort
-    // change to fire a fresh request and assert on its query string.
+    // change to fire a fresh request and decode the proto body.
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && req.url().includes('media_type=TV'),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'Year' }).click();
-    await reqPromise;
+    const got = await reqPromise;
+    expect(decodeListTitles(got).type).toBe(MediaType.TV);
   });
 
   // -------- Sort chips --------
@@ -110,38 +131,40 @@ test.describe('TV shows list view', () => {
     await expect(page.locator('mat-chip', { hasText: /^\s*Artist\s*$/ })).toHaveCount(0);
   });
 
-  test('clicking each sort chip fires a request with the right sort=<mode>', async ({ page }) => {
-    for (const { label, param } of [
-      { label: 'Year',    param: 'sort=year' },
-      { label: 'Recent',  param: 'sort=recent' },
-      { label: 'Popular', param: 'sort=popular' },
-      { label: 'Name',    param: 'sort=name' },
+  test('clicking each sort chip fires a ListTitles request with the right sort', async ({ page }) => {
+    for (const { label, sort } of [
+      { label: 'Year',    sort: 'year' },
+      { label: 'Recent',  sort: 'recent' },
+      { label: 'Popular', sort: 'popular' },
+      { label: 'Name',    sort: 'name' },
     ]) {
       const reqPromise = page.waitForRequest(req =>
-        req.url().includes('/api/v2/catalog/titles')
-          && req.url().includes(param)
-          && req.url().includes('media_type=TV'),
+        req.url().endsWith(LIST_TITLES_URL),
         { timeout: 3_000 },
       );
       await page.locator('mat-chip', { hasText: label }).click();
-      await reqPromise;
+      const got = await reqPromise;
+      const decoded = decodeListTitles(got);
+      expect(decoded.type).toBe(MediaType.TV);
+      expect(decoded.sort).toBe(sort);
     }
   });
 
   // -------- Filter chips: Playable + ratings --------
 
-  test('Playable chip starts highlighted (default true) — toggling off adds playable_only=false', async ({ page }) => {
+  test('Playable chip starts highlighted (default true) — toggling off sends playableOnly=false', async ({ page }) => {
     const playable = page.locator('mat-chip', { hasText: 'Playable' }).first();
     await expect(playable).toHaveClass(/mat-mdc-chip-highlighted/);
 
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && req.url().includes('playable_only=false')
-        && req.url().includes('media_type=TV'),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await playable.click();
-    await reqPromise;
+    const got = await reqPromise;
+    const decoded = decodeListTitles(got);
+    expect(decoded.type).toBe(MediaType.TV);
+    expect(decoded.playableOnly).toBe(false);
     await expect(playable).not.toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
@@ -158,15 +181,16 @@ test.describe('TV shows list view', () => {
       .toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
-  test('clicking a rating chip adds ratings=TV-MA to the URL', async ({ page }) => {
+  test('clicking a rating chip sends ratings=[TV-MA]', async ({ page }) => {
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles')
-        && /ratings=TV-MA/.test(req.url())
-        && req.url().includes('media_type=TV'),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'TV-MA' }).click();
-    await reqPromise;
+    const got = await reqPromise;
+    const decoded = decodeListTitles(got);
+    expect(decoded.type).toBe(MediaType.TV);
+    expect(decoded.ratings).toEqual(['TV-MA']);
     await expect(page.locator('mat-chip', { hasText: 'TV-MA' }))
       .toHaveClass(/mat-mdc-chip-highlighted/);
     await expect(page.locator('mat-chip', { hasText: 'All Ratings' }))
@@ -175,18 +199,19 @@ test.describe('TV shows list view', () => {
 
   test('All Ratings clears the rating filter', async ({ page }) => {
     let pending = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/titles') && /ratings=TV-MA/.test(req.url()),
+      req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'TV-MA' }).click();
     await pending;
 
-    const cleared = page.waitForRequest(req => {
-      if (!req.url().includes('/api/v2/catalog/titles')) return false;
-      return !new URL(req.url()).searchParams.has('ratings');
-    }, { timeout: 3_000 });
+    const cleared = page.waitForRequest(req =>
+      req.url().endsWith(LIST_TITLES_URL),
+      { timeout: 3_000 },
+    );
     await page.locator('mat-chip', { hasText: 'All Ratings' }).click();
-    await cleared;
+    const got = await cleared;
+    expect(decodeListTitles(got).ratings).toEqual([]);
     await expect(page.locator('mat-chip', { hasText: 'All Ratings' }))
       .toHaveClass(/mat-mdc-chip-highlighted/);
   });

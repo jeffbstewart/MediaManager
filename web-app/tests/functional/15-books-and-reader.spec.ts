@@ -1,7 +1,20 @@
-import { test, expect, Page } from '../helpers/test-fixture';
+import { test, expect, Page, Request } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
+
+const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
+
+function decodeListTitles(req: Request): { sort: string; playableOnly: boolean } {
+  const decoded = fromBinary(
+    ListTitlesRequestSchema,
+    unframeGrpcWebRequest(req.postDataBuffer()),
+  );
+  return { sort: decoded.sort, playableOnly: decoded.playableOnly };
+}
 
 // Force serial within this file: the EPUB tests load real fixture
 // bytes through epub.js (jszip + epub.min.js + the EPUB itself); under
@@ -35,14 +48,16 @@ const EPUB_ITEM_ID = 8002;
 
 const FIXTURE_EPUB = 'tests/fixtures/ebook/test.epub';
 
-/** Inspect outgoing /api/v2/catalog/titles requests; returns a getter
- *  that resolves to the latest URL hit since the spec started. */
+/** Capture each ListTitles request's decoded body. Returns a getter
+ *  that resolves to the array of decoded params seen so far. */
 function captureTitlesRequests(page: Page) {
-  const urls: string[] = [];
+  const seen: { sort: string; playableOnly: boolean }[] = [];
   page.on('request', req => {
-    if (req.url().includes('/api/v2/catalog/titles')) urls.push(req.url());
+    if (req.url().endsWith(LIST_TITLES_URL)) {
+      try { seen.push(decodeListTitles(req)); } catch { /* ignore framing errors */ }
+    }
   });
-  return () => urls;
+  return () => seen;
 }
 
 test.describe('books page', () => {
@@ -68,52 +83,43 @@ test.describe('books page', () => {
     await expect(page).toHaveURL(/\/title\/300$/);
   });
 
-  test('Playable chip toggle adds playable_only=false to the request', async ({ page }) => {
-    const urls = captureTitlesRequests(page);
+  test('Playable chip toggle sets playableOnly=false on the request', async ({ page }) => {
+    const seen = captureTitlesRequests(page);
     await page.goto('/content/books');
     await page.waitForSelector('app-title-grid .poster-card');
 
-    // Default state: playable_only NOT in URL (it's only sent when false).
-    expect(urls().at(-1)).not.toContain('playable_only');
+    // Default state: playableOnly is true (chip starts highlighted).
+    expect(seen().at(-1)?.playableOnly).toBe(true);
 
-    // Toggle the chip OFF — the chip starts highlighted because
-    // playableOnly defaults to true.
     const reqPromise = page.waitForRequest(
-      req => req.url().includes('/api/v2/catalog/titles') && req.url().includes('playable_only=false'),
+      req => req.url().endsWith(LIST_TITLES_URL),
       { timeout: 3_000 },
     );
     await page.locator('mat-chip', { hasText: 'Playable' }).first().click();
-    await reqPromise;
-    expect(urls().at(-1)).toContain('playable_only=false');
+    const got = await reqPromise;
+    expect(decodeListTitles(got).playableOnly).toBe(false);
   });
 
-  test('sort chip clicks add sort=<mode> to the request', async ({ page }) => {
-    const urls = captureTitlesRequests(page);
+  test('sort chip clicks set sort on the request', async ({ page }) => {
+    const seen = captureTitlesRequests(page);
     await page.goto('/content/books');
     await page.waitForSelector('app-title-grid .poster-card');
-    expect(urls().at(-1)).toContain('sort=name');
+    expect(seen().at(-1)?.sort).toBe('name');
 
     // Books page replaces "Popular" with "Author" in the sort options.
-    // Use substring filter — chip text has surrounding whitespace
-    // from the template, so an anchored regex misses; getByRole
-    // doesn't apply because mat-chip-set (without listbox/grid mode)
-    // doesn't assign chips an ARIA role.
-    for (const { label, param } of [
-      { label: 'Author', param: 'sort=author' },
-      { label: 'Year',   param: 'sort=year' },
-      { label: 'Recent', param: 'sort=recent' },
-      { label: 'Name',   param: 'sort=name' },
+    for (const { label, sort } of [
+      { label: 'Author', sort: 'author' },
+      { label: 'Year',   sort: 'year' },
+      { label: 'Recent', sort: 'recent' },
+      { label: 'Name',   sort: 'name' },
     ]) {
-      // Start the listener BEFORE the click — clicking fires the
-      // refresh request synchronously inside the same task, so a
-      // waitForRequest started after the click misses it.
       const reqPromise = page.waitForRequest(
-        req => req.url().includes('/api/v2/catalog/titles') && req.url().includes(param),
+        req => req.url().endsWith(LIST_TITLES_URL),
         { timeout: 3_000 },
       );
       await page.locator('mat-chip', { hasText: label }).click();
-      await reqPromise;
-      expect(urls().at(-1)).toContain(param);
+      const got = await reqPromise;
+      expect(decodeListTitles(got).sort).toBe(sort);
     }
   });
 

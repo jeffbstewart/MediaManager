@@ -289,7 +289,11 @@ fun TitleEntity.toProto(
     nasRoot: String? = null,
     familyNames: List<String>? = null,
     artistName: String? = null,
-    authorName: String? = null
+    authorName: String? = null,
+    seriesName: String? = null,
+    seriesNumber: String? = null,
+    trackCount: Int? = null,
+    progressFraction: Double? = null,
 ): Title = title {
     id = this@toProto.id!!
     name = this@toProto.name
@@ -311,6 +315,10 @@ fun TitleEntity.toProto(
     lowStorageTranscodeAvailable = bestTranscode?.for_mobile_available == true
     artistName?.takeIf { it.isNotBlank() }?.let { this.artistName = it }
     authorName?.takeIf { it.isNotBlank() }?.let { this.authorName = it }
+    seriesName?.takeIf { it.isNotBlank() }?.let { this.seriesName = it }
+    seriesNumber?.takeIf { it.isNotBlank() }?.let { this.seriesNumber = it }
+    trackCount?.takeIf { it > 0 }?.let { this.trackCount = it }
+    progressFraction?.takeIf { it > 0.0 }?.let { this.progressFraction = it.coerceIn(0.0, 1.0) }
 }
 
 fun TranscodeEntity.toProto(

@@ -5,17 +5,17 @@ import { stubImages } from '../helpers/image-stub';
 
 // Collections list + collection detail tests.
 //
-// Fixture chain:
-//   /api/v2/catalog/collections        → catalog/collections.list.json
-//                                        (3 collections: Dark Knight,
-//                                        Matrix, Star Wars)
-//   /api/v2/catalog/collections/:id    → catalog/collection-detail.json
-//                                        (The Matrix Collection — 2 of
-//                                        4 owned, 2 unowned with TMDB
-//                                        ids; one wished, one not)
+// Fixture chain (gRPC):
+//   ListCollections        → fixtures-typed/collections.fixture.ts
+//                            (3 collections: Dark Knight=263, Matrix=2344,
+//                            Star Wars=10)
+//   GetCollectionDetail/:id → fixtures-typed/collections.fixture.ts
+//                            (The Matrix Collection — 2 of 4 owned, 2
+//                            unowned with TMDB ids; one wished, one not)
 //
-// The unowned-with-tmdb_movie_id parts are what surface the wish
-// heart; the owned parts are anchor links to /title/:id.
+// Route IDs are the tmdb_collection_id (the gRPC GetCollectionDetail
+// RPC takes that). The unowned-with-tmdb_movie_id parts are what
+// surface the wish heart; the owned parts are anchor links to /title/:id.
 
 test.describe('collections list', () => {
   test.beforeEach(async ({ page }) => {
@@ -49,9 +49,9 @@ test.describe('collections list', () => {
     await expect(page.locator('app-collections .status-label')).toContainText('3 collections');
   });
 
-  test('clicking a tile navigates to /content/collection/:id', async ({ page }) => {
+  test('clicking a tile navigates to /content/collection/:tmdb_collection_id', async ({ page }) => {
     await page.locator('app-collections .poster-card').nth(1).click();
-    await expect(page).toHaveURL(/\/content\/collection\/2$/);
+    await expect(page).toHaveURL(/\/content\/collection\/2344$/);
   });
 });
 
@@ -60,7 +60,9 @@ test.describe('collection detail', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.goto('/content/collection/1');
+    // Any tmdb_collection_id falls through to the same Matrix fixture
+    // — mock-backend's dispatch ignores the id for now.
+    await page.goto('/content/collection/2344');
     await page.waitForSelector('app-collection-detail .poster-grid');
   });
 

@@ -876,11 +876,20 @@ export class CatalogService {
   }
 
   async getTitles(params: TitleListParams): Promise<TitleListResponse> {
-    const queryParams: Record<string, string> = { media_type: params.mediaType };
-    if (params.sort) queryParams['sort'] = params.sort;
-    if (params.ratings?.length) queryParams['ratings'] = params.ratings.join(',');
-    if (params.playableOnly === false) queryParams['playable_only'] = 'false';
-    return firstValueFrom(this.http.get<TitleListResponse>('/api/v2/catalog/titles', { params: queryParams }));
+    const client = grpcClient(CatalogServiceDesc);
+    // Legacy default for `playable_only` was true (server `@Default("true")`);
+    // proto bool defaults false. Preserve the legacy semantic.
+    const proto = await client.listTitles({
+      type: legacyMediaTypeToProto(params.mediaType),
+      sort: params.sort ?? '',
+      ratings: params.ratings ?? [],
+      playableOnly: params.playableOnly !== false,
+    });
+    return {
+      titles: proto.titles.map(adaptTitleCard),
+      total: Number(proto.pagination?.total ?? proto.titles.length),
+      available_ratings: proto.availableRatings,
+    };
   }
 
   async clearProgress(transcodeId: number): Promise<void> {
@@ -895,11 +904,26 @@ export class CatalogService {
   }
 
   async getCollections(): Promise<CollectionListResponse> {
-    return firstValueFrom(this.http.get<CollectionListResponse>('/api/v2/catalog/collections'));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.listCollections({});
+    return {
+      collections: proto.collections.map(c => ({
+        // Now the tmdb_collection_id — the SPA's /content/collection/:id
+        // route accepts whatever the gRPC GetCollectionDetail RPC takes.
+        id: c.tmdbCollectionId,
+        name: c.name,
+        poster_url: c.posterUrl ?? null,
+        owned_count: c.titleCount,
+        total_parts: c.totalParts,
+      })),
+      total: proto.collections.length,
+    };
   }
 
   async getCollectionDetail(collectionId: number): Promise<CollectionDetail> {
-    return firstValueFrom(this.http.get<CollectionDetail>(`/api/v2/catalog/collections/${collectionId}`));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getCollectionDetail({ tmdbCollectionId: collectionId });
+    return adaptProtoCollectionDetail(collectionId, proto);
   }
 
   async getTags(): Promise<TagListResponse> {
@@ -1388,7 +1412,13 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     seasons: p.seasons.map(adaptSeason),
     family_members: p.familyMembersFull.map(fm => ({ id: Number(fm.id), name: fm.name })),
     similar_titles: p.similarTitles.map(adaptSimilar),
-    collection: p.collection ? { id: Number(p.collection.id), name: p.collection.name } : null,
+    // The collection link routes to /content/collection/:tmdb_collection_id
+    // — that's the id the gRPC GetCollectionDetail RPC accepts. Take it
+    // from Title.tmdb_collection_id (the int32 TMDB id) rather than the
+    // proto Collection.id, which is the local TmdbCollection row id.
+    collection: p.collection && t.tmdbCollectionId != null
+      ? { id: t.tmdbCollectionId, name: p.collection.name }
+      : null,
     readable_editions: p.readableEditions.map(adaptReadableEdition),
     // Album-specific. Folded into the legacy flat shape from `p.album`.
     artists: album?.albumArtists.map(adaptArtist) ?? undefined,
@@ -1526,6 +1556,82 @@ function adaptTrack(tr: ProtoTrack): AlbumTrack {
 
 function adaptAuthor(a: ProtoAuthor): { id: number; name: string } {
   return { id: Number(a.id), name: a.name };
+}
+
+// MediaType enum keys on the SPA side line up exactly with the proto
+// enum values (MOVIE, TV, PERSONAL, BOOK, ALBUM all share the same
+// names). UNKNOWN sentinels and the "no filter" case both map to
+// MEDIA_TYPE_UNKNOWN, which the server reads as "no filter".
+function legacyMediaTypeToProto(mt: MediaType): ProtoMediaType {
+  switch (mt) {
+    case 'MOVIE': return ProtoMediaType.MOVIE;
+    case 'TV': return ProtoMediaType.TV;
+    case 'PERSONAL': return ProtoMediaType.PERSONAL;
+    case 'BOOK': return ProtoMediaType.BOOK;
+    case 'ALBUM': return ProtoMediaType.ALBUM;
+    default: return ProtoMediaType.UNKNOWN;
+  }
+}
+
+// Title proto → legacy TitleCard. Skips fields the grid template
+// doesn't read (transcode_id, popularity, …) — they stay on the
+// proto value but never need adapting.
+//
+// poster_url is preserved as null when the server explicitly omits
+// it. The legacy template's @if (c.poster_url) gate distinguishes
+// a real poster from a "render the placeholder" cell, so a generic
+// fallback URL would silently flip placeholder cells into broken
+// img tags.
+function adaptTitleCard(t: import('../proto-gen/common_pb').Title): TitleCard {
+  const card: TitleCard = {
+    title_id: Number(t.id),
+    title_name: t.name,
+    media_type: PROTO_MEDIA_TYPE_TO_LEGACY[t.mediaType] ?? 'UNKNOWN',
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+    content_rating: PROTO_CONTENT_RATING_TO_LEGACY[t.contentRating] ?? null,
+    playable: t.playable,
+    progress_fraction: t.progressFraction ?? null,
+  };
+  if (t.artistName) card.artist_name = t.artistName;
+  if (t.authorName) card.author_name = t.authorName;
+  return card;
+}
+
+function adaptProtoCollectionDetail(
+  tmdbCollectionId: number,
+  p: import('../proto-gen/common_pb').CollectionDetail,
+): CollectionDetail {
+  const parts: CollectionPart[] = p.items.map(it => {
+    if (it.owned && it.titleId != null) {
+      return {
+        title_id: Number(it.titleId),
+        title_name: it.name,
+        poster_url: it.posterUrl ?? null,
+        release_year: it.year ?? null,
+        owned: true,
+        playable: it.playable,
+        progress_fraction: it.progressFraction ?? null,
+      };
+    }
+    return {
+      tmdb_movie_id: it.tmdbMovieId,
+      title_name: it.name,
+      poster_url: it.posterUrl ?? null,
+      release_year: it.year ?? null,
+      owned: false,
+      playable: false,
+      progress_fraction: null,
+      wished: it.wished,
+    };
+  });
+  return {
+    id: tmdbCollectionId,
+    name: p.name,
+    owned_count: parts.filter(p => p.owned).length,
+    total_parts: parts.length,
+    parts,
+  };
 }
 
 function adaptTagListItem(t: ProtoTagListItem): TagCard {

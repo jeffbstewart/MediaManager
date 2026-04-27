@@ -401,14 +401,24 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val pageTitles = titles.drop(offset).take(limit)
 
         val familyNames = loadFamilyMemberNames()
+        // Per-user resume progress, keyed by title_id. Used to populate
+        // Title.progress_fraction on each card so the grid can render a
+        // resume bar without a per-card RPC.
+        val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(user.id!!)
         val protoTitles = pageTitles.map { title ->
             val tc = catalog.playableByTitle[title.id]?.firstOrNull()
+            val progress: ProgressEntity? = title.id?.let { progressByTitle[it] }
+            val progressFraction: Double? = progress?.let { p ->
+                val dur = p.duration_seconds
+                if (dur != null && dur > 0) p.position_seconds / dur else null
+            }
             title.toProto(
                 tc,
                 nasRoot,
                 familyNames[title.id],
                 artistName = title.id?.let { primaryArtistByTitle[it] },
-                authorName = title.id?.let { primaryAuthorByTitle[it] }
+                authorName = title.id?.let { primaryAuthorByTitle[it] },
+                progressFraction = progressFraction,
             )
         }
 
@@ -1246,14 +1256,22 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             .filter { it.tmdb_collection_id != null }
             .groupBy { it.tmdb_collection_id!! }
 
+        // Total-parts lookup. TmdbCollectionPart rows are populated by
+        // the enrichment pass — when TMDB hasn't enumerated the
+        // collection yet, partsByCollection[id] is null and we fall
+        // back to the owned-titles count.
+        val partsByCollection = TmdbCollectionPart.findAll().groupBy { it.collection_id }
+
         val items = collections
             .mapNotNull { coll ->
                 val titles = titlesByCollection[coll.tmdb_collection_id] ?: return@mapNotNull null
+                val parts = partsByCollection[coll.id]?.size ?: titles.size
                 collectionListItem {
                     tmdbCollectionId = coll.tmdb_collection_id
                     name = coll.name
                     if (coll.poster_path != null) posterUrl = "/collection-posters/${coll.tmdb_collection_id}"
                     titleCount = titles.size
+                    totalParts = parts
                 }
             }
             .sortedBy { it.name }
