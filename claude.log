@@ -4624,3 +4624,31 @@ Session 2 (Mar 25):
   on proto. Remaining adapter is a transition shim — once consumers
   migrate to proto-derived types, the shim deletes itself.
 ===
+
+=== 2026-04-26 20:08 — ListTags migrated to gRPC + proto/legacy gap audit ===
+- catalog.service.getTags() now calls CatalogService/ListTags via
+  gRPC; adaptTagListItem maps TagListItem → legacy TagCard with
+  pickTextColor() filling text_color (proto carries bg only).
+  total derives from tags.length since proto omits it.
+- tests/fixtures-typed/tags-list.fixture.ts mirrors the legacy
+  tags.list.json (3 tags). mock-backend dispatches ListTags to it.
+- mock-backend's legacy /api/v2/catalog/tags route is gone (dead
+  code post-migration); /api/v2/catalog/tags/:id and friends
+  remain on REST.
+- 52-tag-picker.spec.ts: the "failed tag list" test now overrides
+  /mediamanager.CatalogService/ListTags with HTTP 500, which Connect
+  surfaces as an RPC error and the picker's error branch.
+- Validation: 25 + 52 specs 31/32 with one tag-picker spec re-run
+  flake (passes 9/9 in isolation). Full harness 610/611, same
+  pre-existing 15-books-and-reader:226 flake.
+- Audit: home feed and tag-detail can't migrate cleanly without
+  proto schema changes. HomeFeedResponse is just `repeated Carousel`
+  + missing_seasons; legacy carries 7 typed lists with fields the
+  proto Title/Carousel don't carry (resume_listening's track_id,
+  resume_reading's media_item_id). TagDetail.tracks lacks the
+  parent album's title_name + poster, which TaggedTrackCard
+  needs. ListTitles lacks the `ratings` filter and an
+  `available_ratings` response field.
+- Next migration target should be a single-id detail with full
+  proto coverage: GetActorDetail or GetCollectionDetail.
+===

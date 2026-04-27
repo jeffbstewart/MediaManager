@@ -140,7 +140,10 @@ test.describe('tag-picker — error state', () => {
     await mockBackend(page, { features: 'admin' });
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/tags', r => r.fulfill({ status: 500 }));
+    // ListTags now lands on gRPC; an HTTP 500 still maps to a Connect
+    // RPC error and the picker's error branch.
+    await page.route('**/mediamanager.CatalogService/ListTags', r =>
+      r.fulfill({ status: 500 }));
     await page.goto('/title/100');
     await page.waitForSelector('app-title-detail');
     await openTagPicker(page);

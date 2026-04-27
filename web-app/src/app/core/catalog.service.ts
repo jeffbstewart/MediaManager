@@ -20,6 +20,7 @@ import {
   Season as ProtoSeason,
   SimilarTitle as ProtoSimilarTitle,
   Tag as ProtoTag,
+  TagListItem as ProtoTagListItem,
   TitleDetail as ProtoTitleDetail,
   Track as ProtoTrack,
   TrackArtistRef as ProtoTrackArtistRef,
@@ -896,7 +897,12 @@ export class CatalogService {
   }
 
   async getTags(): Promise<TagListResponse> {
-    return firstValueFrom(this.http.get<TagListResponse>('/api/v2/catalog/tags'));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.listTags({});
+    return {
+      tags: proto.tags.map(adaptTagListItem),
+      total: proto.tags.length,
+    };
   }
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
@@ -1473,6 +1479,17 @@ function adaptTrack(tr: ProtoTrack): AlbumTrack {
 
 function adaptAuthor(a: ProtoAuthor): { id: number; name: string } {
   return { id: Number(a.id), name: a.name };
+}
+
+function adaptTagListItem(t: ProtoTagListItem): TagCard {
+  const bg = t.color?.hex ?? '#666666';
+  return {
+    id: Number(t.id),
+    name: t.name,
+    bg_color: bg,
+    text_color: pickTextColor(bg),
+    title_count: t.titleCount,
+  };
 }
 
 // BookSeriesRef.number rides as a string on the wire to round-trip

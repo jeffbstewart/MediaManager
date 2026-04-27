@@ -3,10 +3,12 @@ import { loadFixture } from './load-fixture';
 import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
 import { fromBinary } from '@bufbuild/protobuf';
 import { TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
+import { TagListResponseSchema } from '../../src/app/proto-gen/catalog_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 import { titleBook300 } from '../fixtures-typed/title-300-book.fixture';
 import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
+import { tagsList } from '../fixtures-typed/tags-list.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -112,9 +114,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/catalog/collections', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/collections.list.json') })
   );
-  await page.route('**/api/v2/catalog/tags', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/tags.list.json') })
-  );
+  // /api/v2/catalog/tags (list) is no longer hit — the SPA's getTags()
+  // calls ListTags via gRPC, dispatched in the gRPC route block below.
   await page.route('**/api/v2/catalog/artists*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/artists.list.json') })
   );
@@ -157,6 +158,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       if (req.titleId === 301n) {
         return fulfillProto(r, TitleDetailSchema, titleAlbum301);
       }
+    }
+    if (rpc === 'ListTags') {
+      return fulfillProto(r, TagListResponseSchema, tagsList);
     }
     return r.fallback();
   });
