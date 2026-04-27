@@ -19,6 +19,12 @@ import {
   type ArtistDetail,
   type AuthorDetail,
 } from '../../src/app/proto-gen/common_pb';
+import {
+  ArtistListResponseSchema,
+  AuthorListResponseSchema,
+  type ArtistListResponse,
+  type AuthorListResponse,
+} from '../../src/app/proto-gen/artist_pb';
 import { Month } from '../../src/app/proto-gen/time_pb';
 
 export const artistMilesDavis: ArtistDetail = create(ArtistDetailSchema, {
@@ -58,6 +64,33 @@ export const artistMilesDavis: ArtistDetail = create(ArtistDetailSchema, {
       alreadyWished: false,
     },
   ],
+});
+
+// Mirrors fixtures/catalog/artists.list.json. The legacy fixture
+// emits headshot_url URLs directly; the proto carries has_headshot
+// instead and the SPA rebuilds the URL from id+flag client-side.
+export const artistsListFixture: ArtistListResponse = create(ArtistListResponseSchema, {
+  artists: [
+    {
+      id: 1n, name: 'Miles Davis', sortName: 'Davis, Miles',
+      artistType: ArtistType.PERSON, ownedAlbumCount: 8,
+      fallbackAlbumTitleId: 500n, hasHeadshot: true,
+    },
+    {
+      id: 2n, name: 'Radiohead', sortName: 'Radiohead',
+      artistType: ArtistType.GROUP, ownedAlbumCount: 9, hasHeadshot: true,
+    },
+    {
+      id: 3n, name: 'Björk', sortName: 'Björk',
+      artistType: ArtistType.PERSON, ownedAlbumCount: 3,
+      fallbackAlbumTitleId: 501n, hasHeadshot: false,
+    },
+    {
+      id: 4n, name: 'Lonesome Crew', sortName: 'Lonesome Crew',
+      artistType: ArtistType.GROUP, ownedAlbumCount: 1, hasHeadshot: false,
+    },
+  ],
+  pagination: { total: 4, page: 1, limit: 50, totalPages: 1 },
 });
 
 export const authorFrankHerbert: AuthorDetail = create(AuthorDetailSchema, {

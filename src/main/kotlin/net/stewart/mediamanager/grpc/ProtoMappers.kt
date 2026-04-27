@@ -666,6 +666,7 @@ fun ArtistEntity.toListItem(
     artistType = this@toListItem.artist_type.toProtoArtistType()
     this.ownedAlbumCount = ownedAlbumCount
     fallbackAlbumTitleId?.let { this.fallbackAlbumTitleId = it }
+    hasHeadshot = !this@toListItem.headshot_path.isNullOrBlank()
 }
 
 fun AuthorEntity.toProto(): Author = author {
@@ -694,6 +695,8 @@ fun AuthorEntity.toListItem(ownedBookCount: Int): AuthorListItem = authorListIte
     id = this@toListItem.id!!
     name = this@toListItem.name
     this.ownedBookCount = ownedBookCount
+    hasHeadshot = !this@toListItem.headshot_path.isNullOrBlank() ||
+        !this@toListItem.open_library_author_id.isNullOrBlank()
 }
 
 fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = track {

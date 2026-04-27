@@ -51,6 +51,11 @@ message ArtistListItem {
   // the album's poster as a hero fallback when no headshot is cached.
   // Fetch via ImageService with IMAGE_TYPE_POSTER_THUMBNAIL + this id.
   optional int64 fallback_album_title_id = 6;
+  // True when /artist-headshots/{id} (or ImageService with
+  // IMAGE_TYPE_ARTIST_HEADSHOT + id) will serve a real headshot.
+  // When false the card falls back to fallback_album_title_id's
+  // poster, then to a placeholder.
+  bool has_headshot = 7;
 }
 
 message ArtistIdRequest { int64 artist_id = 1; }
@@ -71,6 +76,10 @@ message AuthorListItem {
   int64 id = 1;
   string name = 2;
   int32 owned_book_count = 3;
+  // True when /author-headshots/{id} can serve bytes (cached
+  // Wikimedia or OpenLibrary fallback). Same semantic as
+  // Author.has_headshot.
+  bool has_headshot = 4;
 }
 
 message AuthorIdRequest { int64 author_id = 1; }

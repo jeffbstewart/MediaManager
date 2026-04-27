@@ -1103,11 +1103,18 @@ export class CatalogService {
    * Supports an optional substring search and a playable-only filter.
    */
   async listArtists(params: ArtistsListParams = {}): Promise<ArtistsListResponse> {
-    const query: Record<string, string> = {};
-    if (params.sort) query['sort'] = params.sort;
-    if (params.q) query['q'] = params.q;
-    if (params.playableOnly === false) query['playable_only'] = 'false';
-    return firstValueFrom(this.http.get<ArtistsListResponse>('/api/v2/catalog/artists', { params: query }));
+    const client = grpcClient(ArtistServiceDesc);
+    const proto = await client.listArtists({
+      sort: params.sort ?? '',
+      q: params.q ?? '',
+      // Legacy default: server treats absence as true. Proto bool defaults
+      // to false, so flip undefined → true here.
+      playableOnly: params.playableOnly !== false,
+    });
+    return {
+      artists: proto.artists.map(adaptArtistsListItem),
+      total: Number(proto.pagination?.total ?? proto.artists.length),
+    };
   }
 
   async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {
@@ -1955,6 +1962,20 @@ function adaptArtistOtherWork(d: import('../proto-gen/common_pb').DiscographyEnt
     is_compilation: d.isCompilation,
     cover_url: `/proxy/caa/release-group/${d.musicbrainzReleaseGroupId}/front-250`,
     already_wished: d.alreadyWished,
+  };
+}
+
+function adaptArtistsListItem(a: import('../proto-gen/artist_pb').ArtistListItem): ArtistsListItem {
+  const id = Number(a.id);
+  const fallbackTitleId = a.fallbackAlbumTitleId != null ? Number(a.fallbackAlbumTitleId) : null;
+  return {
+    id,
+    name: a.name,
+    sort_name: a.sortName ?? null,
+    artist_type: PROTO_ARTIST_TYPE_TO_LEGACY[a.artistType] ?? 'OTHER',
+    headshot_url: artistHeadshotUrl(id, a.hasHeadshot),
+    album_count: a.ownedAlbumCount,
+    fallback_poster_url: fallbackTitleId != null ? `/posters/w185/${fallbackTitleId}` : null,
   };
 }
 

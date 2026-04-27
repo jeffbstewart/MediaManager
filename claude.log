@@ -4929,3 +4929,28 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Validation: gradle test green, full harness 610/611 (same
   recurring 15-books-and-reader:232 flake).
 ===
+
+=== 2026-04-27 00:25 — listArtists migrated to gRPC ===
+- Proto extension: ArtistListItem gains has_headshot bool;
+  AuthorListItem ditto. Mirrors the detail-level Artist /
+  Author.has_headshot — server populates from headshot_path
+  (cached) or open_library_author_id (Author only, OL fallback);
+  the SPA constructs /artist-headshots/{id} or /author-headshots/{id}
+  client-side from the flag.
+- ProtoMappers' Artist/Author toListItem helpers populate
+  has_headshot.
+- SPA: catalog.service.listArtists() now calls
+  ArtistService.ListArtists. New adapter adaptArtistsListItem
+  reuses the existing artistHeadshotUrl helper. Default
+  playable_only flips proto false→true to preserve the legacy
+  server's @Default("true") semantic.
+- mock-backend dispatches mediamanager.ArtistService/ListArtists
+  to the new artistsListFixture (Miles / Radiohead / Björk /
+  Lonesome Crew, mirroring catalog/artists.list.json). Legacy
+  /api/v2/catalog/artists* route removed.
+- 22-music-list.spec.ts: 5 tests rewritten to wait for
+  /ListArtists URL and decode the ListArtistsRequest protobuf
+  body for sort / q / playableOnly assertions.
+- Validation: full harness 610/611 (same recurring
+  15-books-and-reader:232 flake).
+===

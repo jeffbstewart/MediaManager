@@ -1,7 +1,20 @@
-import { test, expect } from '../helpers/test-fixture';
+import { test, expect, Request } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { ListArtistsRequestSchema } from '../../src/app/proto-gen/artist_pb';
+
+const LIST_ARTISTS_URL = '/mediamanager.ArtistService/ListArtists';
+
+function decodeListArtists(req: Request): { sort: string; q: string; playableOnly: boolean } {
+  const decoded = fromBinary(
+    ListArtistsRequestSchema,
+    unframeGrpcWebRequest(req.postDataBuffer()),
+  );
+  return { sort: decoded.sort, q: decoded.q, playableOnly: decoded.playableOnly };
+}
 
 // Music list view tests.
 //
@@ -73,17 +86,17 @@ test.describe('music list view', () => {
 
   // -------- Filter chips --------
 
-  test('Playable chip starts highlighted (default true) — toggling off adds playable_only=false', async ({ page }) => {
+  test('Playable chip starts highlighted (default true) — toggling off sends playableOnly=false', async ({ page }) => {
     const playable = page.locator('app-music mat-chip', { hasText: 'Playable' });
     await expect(playable).toHaveClass(/mat-mdc-chip-highlighted/);
 
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/artists')
-        && req.url().includes('playable_only=false'),
+      req.url().endsWith(LIST_ARTISTS_URL),
       { timeout: 3_000 },
     );
     await playable.click();
-    await reqPromise;
+    const got = await reqPromise;
+    expect(decodeListArtists(got).playableOnly).toBe(false);
     await expect(playable).not.toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
@@ -97,56 +110,53 @@ test.describe('music list view', () => {
     await expect(albums).not.toHaveClass(/mat-mdc-chip-highlighted/);
   });
 
-  test('clicking each sort chip fires a request with the right sort=<mode>', async ({ page }) => {
+  test('clicking each sort chip fires a ListArtists request with the right sort', async ({ page }) => {
     // Albums is the default; iterate through the other two and back.
-    for (const { label, param } of [
-      { label: 'Name',   param: 'sort=name' },
-      { label: 'Recent', param: 'sort=recent' },
-      { label: 'Albums', param: 'sort=albums' },
+    for (const { label, sort } of [
+      { label: 'Name',   sort: 'name' },
+      { label: 'Recent', sort: 'recent' },
+      { label: 'Albums', sort: 'albums' },
     ]) {
       const reqPromise = page.waitForRequest(req =>
-        req.url().includes('/api/v2/catalog/artists')
-          && req.url().includes(param),
+        req.url().endsWith(LIST_ARTISTS_URL),
         { timeout: 3_000 },
       );
       await page.locator('app-music mat-chip', { hasText: label }).click();
-      await reqPromise;
+      const got = await reqPromise;
+      expect(decodeListArtists(got).sort).toBe(sort);
     }
   });
 
   // -------- Search --------
 
-  test('typing in the search box fires a debounced request with q=<text>', async ({ page }) => {
+  test('typing in the search box fires a debounced ListArtists request with q', async ({ page }) => {
     // 200 ms debounce in the component — wait for the request to
     // land. Using fill() rather than per-keystroke type() because
-    // the test isn't asserting on intermediate keystroke debounce
-    // behaviour, just that the eventual request carries q=miles.
+    // the test isn't asserting on intermediate debounce behaviour,
+    // just that the eventual request carries q=miles.
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/artists')
-        && /q=miles/i.test(req.url()),
+      req.url().endsWith(LIST_ARTISTS_URL),
       { timeout: 3_000 },
     );
     await page.locator('app-music input.search-input').fill('miles');
-    await reqPromise;
+    const got = await reqPromise;
+    expect(decodeListArtists(got).q.toLowerCase()).toBe('miles');
   });
 
   test('clear button empties the search and fires a request without q', async ({ page }) => {
     // Type something first.
-    let typed = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/artists') && /q=miles/.test(req.url()),
-      { timeout: 3_000 },
-    );
+    let typed = page.waitForRequest(req => req.url().endsWith(LIST_ARTISTS_URL),
+      { timeout: 3_000 });
     await page.locator('app-music input.search-input').fill('miles');
     await typed;
 
     // Then click the clear (×) button. Component drops q from the
-    // request entirely.
-    const cleared = page.waitForRequest(req => {
-      if (!req.url().includes('/api/v2/catalog/artists')) return false;
-      return !new URL(req.url()).searchParams.has('q');
-    }, { timeout: 3_000 });
+    // request entirely — proto field is the empty string.
+    const cleared = page.waitForRequest(req => req.url().endsWith(LIST_ARTISTS_URL),
+      { timeout: 3_000 });
     await page.locator('app-music button.search-clear').click();
-    await cleared;
+    const got = await cleared;
+    expect(decodeListArtists(got).q).toBe('');
     await expect(page.locator('app-music input.search-input')).toHaveValue('');
   });
 });

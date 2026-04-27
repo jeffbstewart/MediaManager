@@ -14,7 +14,9 @@ import {
 } from '../../src/app/proto-gen/common_pb';
 import {
   ArtistIdRequestSchema,
+  ArtistListResponseSchema,
   AuthorIdRequestSchema,
+  ListArtistsRequestSchema,
 } from '../../src/app/proto-gen/artist_pb';
 import {
   CollectionIdRequestSchema,
@@ -34,7 +36,7 @@ import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
 import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fixture';
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
-import { artistMilesDavis, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
+import { artistMilesDavis, artistsListFixture, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -137,9 +139,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // block below.
   // /api/v2/catalog/tags (list) is no longer hit — the SPA's getTags()
   // calls ListTags via gRPC, dispatched in the gRPC route block below.
-  await page.route('**/api/v2/catalog/artists*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/artists.list.json') })
-  );
+  // /api/v2/catalog/artists (list) ditto — listArtists() goes through
+  // ArtistService.ListArtists.
   await page.route('**/api/v2/catalog/family-videos*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/family-videos.list.json') })
   );
@@ -254,6 +255,17 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/mediamanager.ArtistService/*', async (r: Route) => {
     const url = new URL(r.request().url());
     const rpc = url.pathname.split('/').pop();
+    if (rpc === 'ListArtists') {
+      // The default fixture is enough for the existing 22-music-list
+      // tests; per-test overrides can dispatch on req.q / req.sort
+      // when finer control is needed.
+      const req = fromBinary(
+        ListArtistsRequestSchema,
+        unframeGrpcWebRequest(r.request().postDataBuffer()),
+      );
+      void req;
+      return fulfillProto(r, ArtistListResponseSchema, artistsListFixture);
+    }
     if (rpc === 'GetArtistDetail') {
       const req = fromBinary(
         ArtistIdRequestSchema,
