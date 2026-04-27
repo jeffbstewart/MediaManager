@@ -4597,3 +4597,30 @@ Session 2 (Mar 25):
   overrideMovie100 pattern. 21/21 in the spec; full harness 610/611
   with one re-run flake unrelated to migration.
 ===
+
+=== 2026-04-26 19:55 — Title-detail migration complete (book + canary drop) ===
+- Book branch wired: adaptAuthor, adaptBookSeries, adaptReadableEdition.
+  TitleDetail.book → authors / book_series / page_count /
+  first_publication_year / open_library_work_id; the top-level
+  readable_editions array (now also populated, was missing) maps
+  to the legacy ReadableEdition[].
+- BookSeriesRef.number is `optional string` on the wire (lossless for
+  "1.5" / "2a" series); adapter parses to number where numeric, falls
+  back to null for non-numeric tails.
+- ReadableEdition has a oneof locator (epub_cfi | pdf_page); adapter
+  collapses both into the legacy `cfi: string | null` field, formatting
+  PDF pages as "/page/N" — the canonical shape ReadingProgressService
+  parses on the way back in.
+- Updated_at maps from proto Timestamp.seconds_since_epoch into
+  ISO-8601 strings (legacy interface).
+- title-300-book.fixture.ts: Frank Herbert's Dune. mock-backend
+  dispatches titleId 300n.
+- Canary gate removed entirely. getTitleDetail is now an unconditional
+  gRPC call. Legacy REST branch + the http injection are both gone.
+- Validation: 11 / 15 / 53 specs all green via gRPC (49/49). Full
+  harness 610/611 (same 15-books-and-reader:226 flake as the prior
+  run — pre-existing, passes in isolation).
+- Phase 0 of the SPA migration plan is done: title detail is fully
+  on proto. Remaining adapter is a transition shim — once consumers
+  migrate to proto-derived types, the shim deletes itself.
+===

@@ -8,12 +8,15 @@ import {
   AlbumPersonnelEntry as ProtoAlbumPersonnelEntry,
   Artist as ProtoArtist,
   ArtistType as ProtoArtistType,
+  Author as ProtoAuthor,
+  BookDetail as ProtoBookDetail,
   CastMember as ProtoCastMember,
   Episode as ProtoEpisode,
   MediaFormat as ProtoMediaFormat,
   MediaType as ProtoMediaType,
   ContentRating as ProtoContentRating,
   PersonnelRole as ProtoPersonnelRole,
+  ReadableEdition as ProtoReadableEdition,
   Season as ProtoSeason,
   SimilarTitle as ProtoSimilarTitle,
   Tag as ProtoTag,
@@ -858,28 +861,14 @@ export class CatalogService {
   }
 
   async getTitleDetail(titleId: number): Promise<TitleDetail> {
-    // ---- Migration in flight ----
-    // The catalog detail endpoint is mid-migration from REST/JSON to a
-    // proto gRPC-JSON wire (single source of truth lives in
-    // proto/catalog.proto + common.proto). Each media type joins the
-    // gRPC path once its typed fixture + adapter mappings are in place.
-    // Currently: 100 (movie), 200 (TV), 301 (album). Book remains on
-    // REST until its adapter mappings land.
-    //
-    // Once every media type runs through `useProto`, the legacy branch
-    // and the adapter both delete.
-    const useProto = titleId === 100 || titleId === 200 || titleId === 301;
-    if (useProto) {
-      // Connect-Web client over gRPC-Web (application/grpc-web+proto).
-      // The transport handles framing + cookie auth; we just call the
-      // generated method and adapt the typed proto response to the
-      // legacy TS interface so component code is unchanged.
-      const client = grpcClient(CatalogServiceDesc);
-      // int64 fields are bigint in @bufbuild/protobuf v2.
-      const proto = await client.getTitleDetail({ titleId: BigInt(titleId) });
-      return adaptProtoTitleDetail(proto);
-    }
-    return firstValueFrom(this.http.get<TitleDetail>(`/api/v2/catalog/titles/${titleId}`));
+    // Every media type now flows through the proto gRPC-JSON wire
+    // (single source of truth: proto/catalog.proto + common.proto).
+    // The proto-to-legacy adapter keeps component types unchanged for
+    // now; it can collapse to a typed pass-through once consumers
+    // migrate off the legacy TitleDetail interface.
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getTitleDetail({ titleId: BigInt(titleId) });
+    return adaptProtoTitleDetail(proto);
   }
 
   async getTitles(params: TitleListParams): Promise<TitleListResponse> {
@@ -1319,6 +1308,7 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
   }
 
   const album = p.album;
+  const book = p.book;
   return {
     title_id: Number(t.id),
     title_name: t.name,
@@ -1346,6 +1336,7 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     family_members: p.familyMembersFull.map(fm => ({ id: Number(fm.id), name: fm.name })),
     similar_titles: p.similarTitles.map(adaptSimilar),
     collection: p.collection ? { id: Number(p.collection.id), name: p.collection.name } : null,
+    readable_editions: p.readableEditions.map(adaptReadableEdition),
     // Album-specific. Folded into the legacy flat shape from `p.album`.
     artists: album?.albumArtists.map(adaptArtist) ?? undefined,
     tracks: album?.tracks.map(adaptTrack) ?? undefined,
@@ -1355,6 +1346,12 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     musicbrainz_release_group_id: album?.musicbrainzReleaseGroupId ?? null,
     musicbrainz_release_id: album?.musicbrainzReleaseId ?? null,
     personnel: album?.personnel.map(adaptPersonnel) ?? undefined,
+    // Book-specific. Folded in from `p.book`.
+    authors: book?.authors.map(adaptAuthor) ?? undefined,
+    book_series: book?.bookSeries ? adaptBookSeries(book.bookSeries) : null,
+    page_count: book?.pageCount ?? null,
+    first_publication_year: book?.firstPublicationYear ?? null,
+    open_library_work_id: book?.openLibraryWorkId ?? null,
   };
 }
 
@@ -1471,6 +1468,49 @@ function adaptTrack(tr: ProtoTrack): AlbumTrack {
     tags: tr.tags.map(adaptTrackTag),
     bpm: tr.bpm ?? null,
     time_signature: tr.timeSignature ?? null,
+  };
+}
+
+function adaptAuthor(a: ProtoAuthor): { id: number; name: string } {
+  return { id: Number(a.id), name: a.name };
+}
+
+// BookSeriesRef.number rides as a string on the wire to round-trip
+// values like "1.5" / "2a" that some series use; the legacy interface
+// types it as `number | null`. parseFloat covers numerics — non-numeric
+// suffixes like "2a" lose the "a" but that's a rare edge case the
+// legacy contract couldn't represent in the first place.
+function adaptBookSeries(b: import('../proto-gen/common_pb').BookSeriesRef): {
+  id: number; name: string; number: number | null;
+} {
+  let num: number | null = null;
+  if (b.number) {
+    const parsed = parseFloat(b.number);
+    if (!Number.isNaN(parsed)) num = parsed;
+  }
+  return { id: Number(b.id), name: b.name, number: num };
+}
+
+// Proto stores the per-format reading locator in a oneof: epub_cfi as a
+// string, pdf_page as an integer page number. Legacy shape collapses
+// both into a single `cfi: string | null` field. PDF pages serialise to
+// "/page/N" — that's the format ReadingProgressService accepts on the
+// way back in, so the round-trip stays lossless.
+function adaptReadableEdition(e: ProtoReadableEdition): ReadableEdition {
+  let cfi: string | null = null;
+  if (e.locator.case === 'epubCfi') {
+    cfi = e.locator.value;
+  } else if (e.locator.case === 'pdfPage') {
+    cfi = `/page/${e.locator.value}`;
+  }
+  return {
+    media_item_id: Number(e.mediaItemId),
+    media_format: PROTO_MEDIA_FORMAT_TO_LEGACY[e.mediaFormat] ?? 'UNKNOWN',
+    percent: e.percent,
+    cfi,
+    updated_at: e.updatedAt
+      ? new Date(Number(e.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
   };
 }
 

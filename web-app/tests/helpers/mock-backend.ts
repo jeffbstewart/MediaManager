@@ -5,6 +5,7 @@ import { fromBinary } from '@bufbuild/protobuf';
 import { TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
+import { titleBook300 } from '../fixtures-typed/title-300-book.fixture';
 import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
 
 /**
@@ -149,6 +150,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       }
       if (req.titleId === 200n) {
         return fulfillProto(r, TitleDetailSchema, titleTv200);
+      }
+      if (req.titleId === 300n) {
+        return fulfillProto(r, TitleDetailSchema, titleBook300);
       }
       if (req.titleId === 301n) {
         return fulfillProto(r, TitleDetailSchema, titleAlbum301);
