@@ -44,6 +44,7 @@ import java.time.LocalDateTime
 import net.stewart.mediamanager.entity.TitleArtist
 import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.service.MissingSeasonService
+import net.stewart.mediamanager.service.PlaybackProgressService
 import net.stewart.mediamanager.service.SearchIndexService
 import net.stewart.mediamanager.service.TmdbService
 import net.stewart.mediamanager.service.TranscoderAgent
@@ -349,6 +350,22 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
         }
 
+        // Available rating values (before rating + playable filters, for
+        // chip display in the SPA's filter bar). Mirrors the order in
+        // TitleListHttpService — playable_only is applied first so we
+        // don't show rating chips for titles the user can't watch.
+        val availableRatings = titles
+            .let { if (playableOnly) it.filter { t -> t.id in playableTitleIds } else it }
+            .mapNotNull { it.content_rating }
+            .distinct()
+            .sorted()
+
+        // Rating filter
+        if (request.ratingsList.isNotEmpty()) {
+            val ratingSet = request.ratingsList.toSet()
+            titles = titles.filter { it.content_rating in ratingSet }
+        }
+
         // Playable filter
         if (playableOnly) {
             titles = titles.filter { it.id in playableTitleIds }
@@ -397,6 +414,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         return titlePageResponse {
             this.titles.addAll(protoTitles)
+            this.availableRatings.addAll(availableRatings)
             pagination = paginationInfo {
                 this.total = total
                 this.page = page
@@ -1268,6 +1286,21 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         // Title IDs that have a physical disc (MediaItemTitle link) — wish-only titles don't count as owned
         val ownedTitleIds = MediaItemTitle.findAll().map { it.title_id }.toSet()
 
+        // Per-user resume progress, keyed by title_id. The collection page
+        // renders the fraction as a thin bar under each owned poster.
+        val progressByTitle = PlaybackProgressService.getProgressByTitleForUser(user.id!!)
+
+        // Active movie wishes for this user — collection parts are always
+        // MOVIE-typed, so the wish lookup is a single tmdb_id set.
+        val wishedTmdbIds = WishListItem.findAll()
+            .filter {
+                it.user_id == user.id &&
+                    it.status == WishStatusEnum.ACTIVE.name &&
+                    it.tmdb_media_type == MediaTypeEnum.MOVIE.name
+            }
+            .mapNotNull { it.tmdb_id }
+            .toSet()
+
         val items = parts.map { part ->
             val title = titlesByTmdbId[part.tmdb_movie_id]
             val tc = if (title != null) playableByTitle[title.id]?.firstOrNull() else null
@@ -1278,17 +1311,34 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
             val year = part.release_date?.take(4)?.toIntOrNull() ?: title?.release_year
 
+            val isOwned = title != null && title.id!! in ownedTitleIds
+            // Explicit type on `p` because the file aliases the entity
+            // PlaybackProgress to ProgressEntity, and inference here
+            // otherwise lands on the proto-generated PlaybackProgress
+            // which has different field names.
+            val progressFraction: Double? = title?.id
+                ?.let { progressByTitle[it] }
+                ?.let { p: ProgressEntity ->
+                    val dur = p.duration_seconds
+                    if (dur != null && dur > 0) p.position_seconds / dur else null
+                }
+            // wished is meaningful only when not owned — the user can't
+            // wish for what they have. Mirrors the legacy semantics.
+            val isWished = !isOwned && part.tmdb_movie_id in wishedTmdbIds
+
             collectionItem {
                 tmdbMovieId = part.tmdb_movie_id
                 name = title?.name ?: part.title
                 posterUrl?.let { this.posterUrl = it }
                 year?.let { this.year = it }
-                owned = title != null && title.id!! in ownedTitleIds
+                owned = isOwned
                 playable = tc != null
                 title?.id?.let { titleId = it }
                 quality = tc?.media_format.toProtoQuality()
                 contentRating = title?.content_rating.toProtoContentRating()
                 tc?.id?.let { transcodeId = it }
+                progressFraction?.let { this.progressFraction = it }
+                wished = isWished
             }
         }
 

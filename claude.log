@@ -4750,3 +4750,44 @@ Session 2 (Mar 25):
   migration; even the recurring 15-books-and-reader:226 flake
   passed this time.
 ===
+
+=== 2026-04-26 21:42 — Proto schema extensions to unblock SPA migrations ===
+Three coordinated proto changes to clear the gaps blocking the next
+batch of SPA migrations.
+
+CollectionItem (common.proto): added optional progress_fraction (0..1
+double) and wished bool. The collection page renders progress bars
+on owned items and heart icons on un-owned wishlisted parts; both
+were missing from the proto so the SPA stayed on REST. The Kotlin
+GetCollectionDetail handler now populates both fields by joining
+PlaybackProgressService.getProgressByTitleForUser() and the active
+movie wishlist set.
+
+ListTitles (catalog.proto): added repeated string ratings (filter)
+on ListTitlesRequest and repeated string available_ratings on
+TitlePageResponse. Mirrors TitleListHttpService's filter ordering —
+available_ratings is computed AFTER type/genre/tag filters but
+BEFORE rating + playable_only filters, so the SPA's rating chip bar
+shows only buckets that exist in the type-filtered set.
+
+HomeFeed (catalog.proto + common.proto): added typed carousel lists
+to HomeFeedResponse alongside the existing `repeated Carousel
+carousels` field — iOS / Android TV continue to read the
+generic carousel shape, the SPA can read the typed lists once the
+Kotlin handler populates them. New fields: continue_watching,
+recently_added, recently_added_books, recently_added_albums,
+resume_listening, resume_reading, recently_watched. Two new
+messages — ResumeTrack (track-level, distinct from Title.resume_*
+which is title-level) and ResumeReading (book-edition-level). Title
+gains series_name / series_number / track_count for book/album
+list cards.
+
+Population status: GetCollectionDetail and ListTitles fully
+populated. HomeFeed handler still emits only the legacy `carousels`
+shape — populating the typed lists is a 488-line REST handler's
+worth of logic and gets its own commit. Until then, SPA's
+getHomeFeed stays on REST.
+
+Validation: gradle test green, full web harness 608/612 (the same
+recurring 15-books-and-reader:226 flake as prior runs).
+===

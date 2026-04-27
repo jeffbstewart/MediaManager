@@ -305,6 +305,16 @@ message Title {
   // TV / PERSONAL titles.
   optional string artist_name = 24;
   optional string author_name = 25;
+
+  // Series context for BOOK list cards (Foundation, Dune, …). Both
+  // populated together; the SPA renders "#{number} of {name}". Series
+  // number is a string because some series use "1.5" / "2a".
+  optional string series_name = 26;
+  optional string series_number = 27;
+
+  // Track count for ALBUM list cards. Avoids the SPA having to fetch
+  // album detail just to label the carousel card.
+  optional int32 track_count = 28;
 }
 
 // Full title detail. Embeds Title to avoid field duplication, then adds
@@ -542,6 +552,15 @@ message CollectionItem {
   Quality quality = 8;
   ContentRating content_rating = 9;
   optional int64 transcode_id = 10;
+  // Resume fraction 0..1 for owned items — collection page renders
+  // this as a thin progress bar under the poster. Absent for items
+  // not owned, or owned but never started.
+  optional double progress_fraction = 11;
+  // True when the user has the unowned title on their wish list. The
+  // collection page paints a heart on these so the user can see at a
+  // glance which gaps they've already flagged. Always false when
+  // `owned` is true (you don't wish for what you have).
+  bool wished = 12;
 }
 
 message TagDetail {
@@ -584,6 +603,40 @@ message TagListItem {
 message Carousel {
   string name = 1;
   repeated Title items = 2;
+}
+
+// Track-level resume entry for the home page's "Resume Listening"
+// carousel. Distinct from Title.resume_position because audio
+// playback resumes inside a specific track, not at a title-level
+// timestamp. Cover image: ImageService with IMAGE_TYPE_TITLE_POSTER
+// + title_id (the parent album).
+message ResumeTrack {
+  int64 track_id = 1;
+  string track_name = 2;
+  int64 title_id = 3;
+  string title_name = 4;
+  optional string artist_name = 5;
+  optional string poster_url = 6;
+  PlaybackOffset position = 7;
+  optional PlaybackOffset duration = 8;
+  // Fraction of the track that has been played, 0..1. Server precomputes
+  // so the home page renders without doing the division client-side.
+  double percent = 9;
+  optional Timestamp updated_at = 10;
+}
+
+// Book-edition reading-progress entry for "Resume Reading". Distinct
+// from MissingSeason / Title because reading progress lives on a
+// specific edition (`media_item_id`) rather than the abstract title.
+message ResumeReading {
+  int64 media_item_id = 1;
+  int64 title_id = 2;
+  string title_name = 3;
+  optional string poster_url = 4;
+  MediaFormat media_format = 5;
+  // 0..1 fraction read.
+  double percent = 6;
+  optional Timestamp updated_at = 7;
 }
 
 message MissingSeason {

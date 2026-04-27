@@ -76,6 +76,11 @@ message ListTitlesRequest {
   optional string tag = 6;
   optional string q = 7;            // free-text search filter
   bool playable_only = 8;
+  // Filter to titles whose content_rating is in this set. Empty list
+  // means no rating filter (all visible ratings included). Strings are
+  // the short form ("G", "PG", "TV-14", …) — same shape the
+  // available_ratings response field uses.
+  repeated string ratings = 9;
 }
 
 message SearchRequest {
@@ -113,13 +118,35 @@ message DismissMissingSeasonRequest {
 // --- Responses ---
 
 message HomeFeedResponse {
+  // Generic carousel list — what iOS / Android TV consume. Server
+  // populates the same data here as in the typed fields below; the
+  // typed fields exist for the SPA, which renders heterogeneous
+  // carousels (track-level resume vs. title cards) that don't fit a
+  // uniform `repeated Title items` shape.
   repeated Carousel carousels = 1;
   repeated MissingSeason missing_seasons = 2;
+
+  // Typed carousel lists. Title-level lists reuse `Title` because
+  // each card needs the same fields (poster, year, artist/author).
+  // Resume-listening / resume-reading need track / edition context
+  // that doesn't fit on Title, hence the dedicated message types.
+  repeated Title continue_watching = 3;
+  repeated Title recently_added = 4;
+  repeated Title recently_added_books = 5;
+  repeated Title recently_added_albums = 6;
+  repeated ResumeTrack resume_listening = 7;
+  repeated ResumeReading resume_reading = 8;
+  repeated Title recently_watched = 9;
 }
 
 message TitlePageResponse {
   repeated Title titles = 1;
   PaginationInfo pagination = 2;
+  // Distinct content_rating values that appear in the unfiltered set
+  // for this media_type. Drives the rating-filter UI's checkbox list
+  // so it shows only buckets that actually exist (e.g. no "TV-MA"
+  // chip on the movies grid).
+  repeated string available_ratings = 3;
 }
 
 message SearchResponse {
