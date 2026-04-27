@@ -1,8 +1,8 @@
 import type { Page, Route } from '@playwright/test';
 import { loadFixture } from './load-fixture';
 import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
-import { fromBinary } from '@bufbuild/protobuf';
-import { ActorDetailSchema, TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import { ActorDetailSchema, EmptySchema, TitleDetailSchema, TitleIdRequestSchema } from '../../src/app/proto-gen/common_pb';
 import { TagListResponseSchema } from '../../src/app/proto-gen/catalog_pb';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
@@ -169,6 +169,25 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
       // suite uses; per-test overrides can register a more specific
       // gRPC route handler before mockBackend's catch-all if needed.
       return fulfillProto(r, ActorDetailSchema, actor6384);
+    }
+    // No-op tag/music mutations: the SPA awaits an Empty response, the
+    // tests don't care about the body. Per-test overrides can intercept
+    // these (registered before mockBackend's catch-all) when they need
+    // to capture the request payload.
+    if (
+      rpc === 'SetTitleTags' ||
+      rpc === 'SetTrackTags' ||
+      rpc === 'SetTrackMusicTags' ||
+      rpc === 'AddTagToTitle' ||
+      rpc === 'RemoveTagFromTitle' ||
+      rpc === 'AddTagToTrack' ||
+      rpc === 'RemoveTagFromTrack'
+    ) {
+      return fulfillProto(r, EmptySchema, create(EmptySchema));
+    }
+    if (rpc === 'ListTagsForTrack') {
+      // Default: track has no tags. Per-test overrides set richer values.
+      return fulfillProto(r, TagListResponseSchema, create(TagListResponseSchema));
     }
     return r.fallback();
   });

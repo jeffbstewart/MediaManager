@@ -2,6 +2,9 @@ import { test, expect, Page, Route } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { SetTitleTagsRequestSchema } from '../../src/app/proto-gen/common_pb';
 
 // Title detail page integration test. Exercises every interactive
 // element on a movie page, every TV-specific surface, and the
@@ -162,14 +165,21 @@ test.describe('title detail — movie (admin)', () => {
   });
 
   test('Tag-remove × posts setTitleTags with the tag dropped', async ({ page }) => {
-    // Existing tag id 1; after remove, the request body should
-    // contain tag_ids: [] (the remaining set).
+    // setTitleTags now lands on gRPC. The request body is a
+    // gRPC-Web framed binary SetTitleTagsRequest, not JSON, so we
+    // unframe + decode before asserting.
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith(`/api/v2/catalog/titles/${MOVIE_ID}/tags`),
+      req.method() === 'POST'
+      && req.url().endsWith('/mediamanager.CatalogService/SetTitleTags'),
     );
     await page.locator('button.tag-remove-btn').first().click();
     const req = await posted;
-    expect(req.postDataJSON()).toEqual({ tag_ids: [] });
+    const decoded = fromBinary(
+      SetTitleTagsRequestSchema,
+      unframeGrpcWebRequest(req.postDataBuffer()),
+    );
+    expect(decoded.titleId).toBe(BigInt(MOVIE_ID));
+    expect(decoded.tagIds).toEqual([]);
   });
 });
 

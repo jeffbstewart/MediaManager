@@ -2,8 +2,8 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { fulfillProto } from '../helpers/proto-fixture';
-import { clone, create } from '@bufbuild/protobuf';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { clone, create, fromBinary } from '@bufbuild/protobuf';
 import {
   AlbumPersonnelEntrySchema,
   ArtistType,
@@ -12,6 +12,9 @@ import {
   PersonnelRole,
   PlaybackProgressSchema,
   Quality,
+  SetTrackMusicTagsRequestSchema,
+  SetTrackTagsRequestSchema,
+  TagListResponseSchema,
   TagSchema,
   TitleDetailSchema,
   TrackSchema,
@@ -72,14 +75,9 @@ async function setupAlbumAdmin(page: Page) {
   await mockBackend(page, { features: 'admin' });
   await loginAs(page);
   await stubImages(page);
-  // Track-tag CRUD endpoints used by openTrackTagPicker / removeTrackTag.
-  await page.route('**/api/v2/catalog/tracks/*/tags', r => {
-    if (r.request().method() === 'POST') return r.fulfill({ status: 204 });
-    if (r.request().method() === 'GET')  return r.fulfill({ json: { tags: [] } });
-    return r.fallback();
-  });
-  await page.route('**/api/v2/catalog/tracks/*/music-tags', r =>
-    r.fulfill({ status: 204 }));
+  // ListTagsForTrack / SetTrackTags / SetTrackMusicTags are no-op'd
+  // by mock-backend's default gRPC dispatch. Tests that need to
+  // capture the request register an override before this helper.
   await page.goto(`/title/${ALBUM_ID}`);
   await page.waitForSelector('app-title-detail .detail-container');
 }
@@ -189,8 +187,12 @@ test.describe('title detail — album admin: track tag picker + remove', () => {
   test('"Tag this track" menu item opens app-tag-picker', async ({ page }) => {
     await setupAlbumAdmin(page);
     await page.locator('.track-row button[aria-label="More track actions"]').first().click();
+    // ListTagsForTrack runs as a POST gRPC call. Default mock-backend
+    // dispatch returns an empty tag list — that's enough for the
+    // picker to render.
     const fetched = page.waitForRequest(r =>
-      r.method() === 'GET' && /\/api\/v2\/catalog\/tracks\/4001\/tags$/.test(r.url()));
+      r.method() === 'POST'
+      && r.url().endsWith('/mediamanager.CatalogService/ListTagsForTrack'));
     await page.locator('.mat-mdc-menu-panel button', { hasText: 'Tag this track' }).click();
     await fetched;
     await expect(page.locator('app-tag-picker .picker')).toBeVisible({ timeout: 2_000 });
@@ -216,22 +218,23 @@ test.describe('title detail — album admin: track tag picker + remove', () => {
       d.album!.trackCount = 1;
       d.album!.totalDuration = create(PlaybackOffsetSchema, { seconds: 565 });
     });
-    // GET returns current; POST captures the filtered list.
-    await page.route('**/api/v2/catalog/tracks/4001/tags', r => {
-      if (r.request().method() === 'GET')
-        return r.fulfill({ json: { tags: [{ id: 7, name: 'Mellow', bg_color: '#333', text_color: '#fff' }] } });
-      if (r.request().method() === 'POST') return r.fulfill({ status: 204 });
-      return r.fallback();
-    });
     await page.goto(`/title/${ALBUM_ID}`);
     await page.waitForSelector('app-title-detail .detail-container');
+    // The remove button calls SetTrackTags via gRPC. Capture the
+    // request and decode the protobuf body to assert the filtered set.
     const posted = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/catalog\/tracks\/4001\/tags$/.test(r.url()),
+      r.method() === 'POST'
+      && r.url().endsWith('/mediamanager.CatalogService/SetTrackTags'),
       { timeout: 3_000 },
     );
     await page.locator('.track-tag-remove-btn').first().click();
     const got = await posted;
-    expect(got.postDataJSON()).toEqual({ tag_ids: [] });
+    const decoded = fromBinary(
+      SetTrackTagsRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.trackId).toBe(4001n);
+    expect(decoded.tagIds).toEqual([]);
   });
 });
 
@@ -241,6 +244,11 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
     await page.locator('.mat-mdc-menu-panel button', { hasText: 'Edit BPM' }).click();
   }
 
+  // SetTrackMusicTags is a gRPC RPC; its endpoint URL ends with the
+  // RPC name so the tests below match on the gRPC path. The request
+  // body is gRPC-Web framed binary, decoded via fromBinary().
+  const SET_MUSIC_TAGS_URL = '/mediamanager.CatalogService/SetTrackMusicTags';
+
   test('happy path: prompts for BPM + time-sig, posts both', async ({ page }) => {
     await setupAlbumAdmin(page);
     const dialogs: string[] = [];
@@ -249,12 +257,18 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
       d.accept(dialogs.length === 1 ? '128' : '4/4');
     });
     const posted = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/catalog\/tracks\/4001\/music-tags$/.test(r.url()),
+      r.method() === 'POST' && r.url().endsWith(SET_MUSIC_TAGS_URL),
       { timeout: 3_000 },
     );
     await openEditMenu(page);
     const got = await posted;
-    expect(got.postDataJSON()).toEqual({ bpm: 128, time_signature: '4/4' });
+    const decoded = fromBinary(
+      SetTrackMusicTagsRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.trackId).toBe(4001n);
+    expect(decoded.bpm).toBe(128);
+    expect(decoded.timeSignature).toBe('4/4');
     expect(dialogs[0]).toMatch(/BPM/i);
     expect(dialogs[1]).toMatch(/Time signature/i);
   });
@@ -263,7 +277,7 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
     await setupAlbumAdmin(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/music-tags')) fired = true;
+      if (r.method() === 'POST' && r.url().endsWith(SET_MUSIC_TAGS_URL)) fired = true;
     });
     page.on('dialog', d => d.dismiss());
     await openEditMenu(page);
@@ -275,7 +289,7 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
     await setupAlbumAdmin(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/music-tags')) fired = true;
+      if (r.method() === 'POST' && r.url().endsWith(SET_MUSIC_TAGS_URL)) fired = true;
     });
     let alerted = false;
     page.on('dialog', d => {
@@ -292,7 +306,7 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
     await setupAlbumAdmin(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/music-tags')) fired = true;
+      if (r.method() === 'POST' && r.url().endsWith(SET_MUSIC_TAGS_URL)) fired = true;
     });
     let alerted = false;
     let promptCount = 0;
@@ -308,16 +322,25 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
     expect(alerted).toBe(true);
   });
 
-  test('blank BPM + blank time-sig clears both (POST { bpm:null, time_signature:null })', async ({ page }) => {
+  test('blank BPM + blank time-sig sets clear flags', async ({ page }) => {
     await setupAlbumAdmin(page);
     page.on('dialog', d => d.accept(''));
     const posted = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/music-tags'),
+      r.method() === 'POST' && r.url().endsWith(SET_MUSIC_TAGS_URL),
       { timeout: 3_000 },
     );
     await openEditMenu(page);
     const got = await posted;
-    expect(got.postDataJSON()).toEqual({ bpm: null, time_signature: null });
+    const decoded = fromBinary(
+      SetTrackMusicTagsRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    // Tri-state contract: clearBpm/clearTimeSignature flag the
+    // intent to delete. The bpm/time_signature fields stay absent
+    // when clearing.
+    expect(decoded.trackId).toBe(4001n);
+    expect(decoded.clearBpm).toBe(true);
+    expect(decoded.clearTimeSignature).toBe(true);
   });
 });
 

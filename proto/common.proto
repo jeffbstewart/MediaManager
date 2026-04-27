@@ -224,17 +224,22 @@ message TrackIdRequest {
   int64 track_id = 1;
 }
 
-// V089 — admin override for ID3-derived music fields.
-// Only fields set in `updates` are changed; absence is left alone. To
-// clear an existing value pass the field with an empty / zero marker.
+// V089 — admin override for ID3-derived music fields. Tri-state per
+// field via an explicit clear flag — beats sentinel values (0 / "")
+// because callers can't accidentally clear by passing a default-
+// constructed value.
+//   - clear flag set        → field is cleared (the value field is
+//                             ignored).
+//   - clear flag false +
+//     value field present   → field is set to that value.
+//   - clear flag false +
+//     value field absent    → field left alone.
 message SetTrackMusicTagsRequest {
   int64 track_id = 1;
-  // Present = use this BPM. Absent = leave the current value alone.
-  // Set to 0 to clear the existing BPM.
   optional int32 bpm = 2;
-  // Present = use this time signature; must match ^\d{1,2}/\d{1,2}$.
-  // Absent = leave it alone. Empty string = clear the existing value.
   optional string time_signature = 3;
+  bool clear_bpm = 4;
+  bool clear_time_signature = 5;
 }
 
 message GenreIdRequest {

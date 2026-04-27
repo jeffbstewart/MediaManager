@@ -1438,21 +1438,25 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val track = TrackRow.findById(request.trackId)
             ?: throw StatusException(Status.NOT_FOUND)
 
-        if (request.hasBpm()) {
-            // bpm = 0 is the "clear" marker; anything else must be in range.
+        // Tri-state per field: clear flag wins; otherwise hasBpm()/
+        // hasTimeSignature() distinguishes "set" from "leave alone".
+        if (request.clearBpm) {
+            track.bpm = null
+        } else if (request.hasBpm()) {
             val v = request.bpm
-            if (v != 0 && v !in 1..999) {
-                throw StatusException(Status.INVALID_ARGUMENT.withDescription("bpm must be 1..999, or 0 to clear"))
+            if (v !in 1..999) {
+                throw StatusException(Status.INVALID_ARGUMENT.withDescription("bpm must be 1..999"))
             }
-            track.bpm = if (v == 0) null else v
+            track.bpm = v
         }
-        if (request.hasTimeSignature()) {
+        if (request.clearTimeSignature) {
+            track.time_signature = null
+        } else if (request.hasTimeSignature()) {
             val raw = request.timeSignature.trim()
-            val normalized = raw.ifBlank { null }
-            if (normalized != null && !TIME_SIG_RE.matches(normalized)) {
+            if (raw.isEmpty() || !TIME_SIG_RE.matches(raw)) {
                 throw StatusException(Status.INVALID_ARGUMENT.withDescription("time_signature must look like '3/4'"))
             }
-            track.time_signature = normalized
+            track.time_signature = raw
         }
         track.updated_at = LocalDateTime.now()
         track.save()

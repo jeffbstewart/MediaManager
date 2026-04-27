@@ -4679,3 +4679,48 @@ Session 2 (Mar 25):
   migration needs proto extensions. Same decision as TagDetail /
   ListTitles / HomeFeed: server work first, then SPA wiring.
 ===
+
+=== 2026-04-26 20:30 — Tag/track mutations migrated to gRPC ===
+- catalog.service.setTitleTags / setTrackTags / getTrackTags /
+  setTrackMusicTags now call CatalogService gRPC RPCs:
+  SetTitleTags, SetTrackTags, ListTagsForTrack, SetTrackMusicTags.
+- SetTrackMusicTags has subtle null/clear semantics: legacy contract
+  uses `undefined` for "leave alone" and `null` for "clear"; proto
+  uses field-absent for "leave alone" and 0/"" sentinels for "clear".
+  Adapter conditionally sets the proto fields and maps null → 0/"".
+- mock-backend gains default no-op gRPC handlers for the mutation
+  RPCs (SetTitleTags, SetTrackTags, SetTrackMusicTags, AddTagToTitle,
+  RemoveTagFromTitle, AddTagToTrack, RemoveTagFromTrack) returning
+  Empty, plus a default ListTagsForTrack returning an empty list.
+  Per-test overrides can intercept any of these before mockBackend's
+  catch-all when assertions on the request body are needed.
+- Test rewrites (6 affected tests):
+  - 11-title-detail.spec.ts:164 — Tag-remove × test now waits for
+    SetTitleTags POST and decodes the protobuf body (was JSON).
+  - 52-tag-picker.spec.ts:69 — clicking-a-tag test waits for
+    SetTitleTags POST. The dead /api/v2/catalog/titles/*/tags route
+    in the helper is removed.
+  - 53-title-detail-album.spec.ts: setupAlbumAdmin no longer stubs
+    /tracks/*/tags or /tracks/*/music-tags (mock-backend handles them
+    by default). The "Tag this track" / removeTrackTag / BPM happy-
+    path / cancel-prompt / invalid-BPM / invalid-time-sig / blank-
+    clears tests all retargeted onto the gRPC URL pattern. The body-
+    asserting tests decode SetTrackTagsRequest /
+    SetTrackMusicTagsRequest from the gRPC-Web framed payload.
+- Validation: 11/52/53 specs 47/47 green; full harness 610/611 with
+  the same pre-existing 15-books-and-reader:226 flake.
+- proto/common.proto SetTrackMusicTagsRequest: replaced sentinel-
+  based clear (bpm=0, time_signature="") with explicit clear_bpm /
+  clear_time_signature booleans. Tri-state per field: clear flag
+  wins; otherwise present-field = set, absent-field = leave alone.
+  Beats sentinels because callers can't accidentally clear by
+  passing a default-constructed value, and the validator can
+  enforce bpm in 1..999 with no carve-out for 0.
+- CatalogGrpcService.setTrackMusicTags() updated to honour the
+  new flags. SPA adapter sets clearBpm/clearTimeSignature when
+  the legacy null is passed; otherwise unchanged.
+- The "blank BPM + blank time-sig" test now asserts on
+  decoded.clearBpm / decoded.clearTimeSignature.
+- No native client (iOS / Android TV / Roku) wires this RPC, so
+  the schema change is SPA-only blast radius.
+===

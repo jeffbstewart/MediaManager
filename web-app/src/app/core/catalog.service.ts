@@ -925,20 +925,26 @@ export class CatalogService {
    * full current tag set in hand.
    */
   async setTitleTags(titleId: number, tagIds: number[]): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/catalog/titles/${titleId}/tags`,
-      { tag_ids: tagIds }));
+    const client = grpcClient(CatalogServiceDesc);
+    await client.setTitleTags({
+      titleId: BigInt(titleId),
+      tagIds: tagIds.map(t => BigInt(t)),
+    });
   }
 
   async getTrackTags(trackId: number): Promise<TagCard[]> {
-    const resp = await firstValueFrom(
-      this.http.get<{ tags: TagCard[] }>(`/api/v2/catalog/tracks/${trackId}/tags`));
-    return resp.tags ?? [];
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.listTagsForTrack({ trackId: BigInt(trackId) });
+    return proto.tags.map(adaptTagListItem);
   }
 
   /** Replace a track's tag set in one shot (admin only). */
   async setTrackTags(trackId: number, tagIds: number[]): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/catalog/tracks/${trackId}/tags`,
-      { tag_ids: tagIds }));
+    const client = grpcClient(CatalogServiceDesc);
+    await client.setTrackTags({
+      trackId: BigInt(trackId),
+      tagIds: tagIds.map(t => BigInt(t)),
+    });
   }
 
   /**
@@ -951,8 +957,22 @@ export class CatalogService {
     bpm?: number | null;
     time_signature?: string | null;
   }): Promise<void> {
-    await firstValueFrom(this.http.post(
-      `/api/v2/catalog/tracks/${trackId}/music-tags`, updates));
+    // Proto contract per field: clearX wins; otherwise field-present =
+    // set, field-absent = leave alone. Maps cleanly from the legacy
+    // {undefined: leave alone, null: clear, value: set} convention.
+    const req: {
+      trackId: bigint;
+      bpm?: number;
+      timeSignature?: string;
+      clearBpm?: boolean;
+      clearTimeSignature?: boolean;
+    } = { trackId: BigInt(trackId) };
+    if (updates.bpm === null) req.clearBpm = true;
+    else if (updates.bpm !== undefined) req.bpm = updates.bpm;
+    if (updates.time_signature === null) req.clearTimeSignature = true;
+    else if (updates.time_signature !== undefined) req.timeSignature = updates.time_signature;
+    const client = grpcClient(CatalogServiceDesc);
+    await client.setTrackMusicTags(req);
   }
 
   /**

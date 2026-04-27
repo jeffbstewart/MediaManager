@@ -17,10 +17,9 @@ async function setup(page: Page) {
     }
     return r.fallback();
   });
-  await page.route('**/api/v2/catalog/titles/*/tags', r => {
-    if (r.request().method() === 'POST') return r.fulfill({ status: 204 });
-    return r.fallback();
-  });
+  // SetTitleTags via gRPC is no-op'd by mock-backend's default
+  // dispatch; tests that want to capture the request register their
+  // own override before this setup runs.
   await page.goto('/title/100');
   await page.waitForSelector('app-title-detail');
 }
@@ -66,11 +65,12 @@ test.describe('tag-picker — render', () => {
 });
 
 test.describe('tag-picker — pick existing', () => {
-  test('clicking a tag fires the parent\'s POST /titles/:id/tags', async ({ page }) => {
+  test('clicking a tag fires the parent\'s SetTitleTags RPC', async ({ page }) => {
     await setup(page);
     await openTagPicker(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/catalog\/titles\/100\/tags$/.test(r.url()),
+      r.method() === 'POST'
+      && r.url().endsWith('/mediamanager.CatalogService/SetTitleTags'),
       { timeout: 3_000 },
     );
     await page.locator('app-tag-picker .picker-row', { hasText: 'For Rainy Days' }).click();
