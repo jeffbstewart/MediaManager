@@ -8,6 +8,7 @@ import {
   AddTracksToPlaylistRequestSchema,
   AddTracksToPlaylistResponseSchema,
   CreatePlaylistRequestSchema,
+  ListPlaylistsResponseSchema,
   PlaylistSummarySchema,
 } from '../../src/app/proto-gen/playlist_pb';
 
@@ -22,31 +23,9 @@ async function setup(page: Page) {
   await mockBackend(page);
   await loginAs(page);
   await stubImages(page);
-  // Override /playlists/mine — mockBackend's `**/api/v2/playlists/*`
-  // catch-all (registered later, LIFO-wins) would otherwise serve
-  // the single-playlist detail JSON to /mine, which doesn't have a
-  // `playlists` key. The picker reads `resp.playlists ?? []` so it'd
-  // render empty.
-  await page.route('**/api/v2/playlists/mine', r =>
-    r.fulfill({ json: {
-      playlists: [
-        { id: 1, name: 'Road Trip',  description: null, owner_user_id: 1, owner_username: 'testuser', is_owner: true,  is_private: false, hero_poster_url: '/posters/w185/301', updated_at: null },
-        { id: 2, name: 'Coffee Shop', description: null, owner_user_id: 1, owner_username: 'testuser', is_owner: true,  is_private: true,  hero_poster_url: null,                  updated_at: null },
-        { id: 3, name: 'Borrowed',    description: null, owner_user_id: 7, owner_username: 'alice',    is_owner: false, is_private: false, hero_poster_url: '/posters/w185/302', updated_at: null },
-      ],
-    } }));
-  // CreatePlaylist + AddTracksToPlaylist now go through gRPC — return
-  // proto-typed responses rather than the legacy REST JSON.
-  await page.route(`**${PS}/CreatePlaylist`, r =>
-    fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
-      id: 99n, name: 'Created',
-    })));
-  await page.route(`**${PS}/AddTracksToPlaylist`, r =>
-    fulfillProto(r, AddTracksToPlaylistResponseSchema, create(AddTracksToPlaylistResponseSchema, {
-      added: 1, playlistTrackIds: [42n],
-    })));
-  // title.album.json (id=301) renders the album branch with a track
-  // table; mockBackend already routes /api/v2/catalog/titles/301 to it.
+  // mock-backend's defaults already cover ListPlaylists (3 playlists),
+  // CreatePlaylist (id=99), and AddTracksToPlaylist (added=1, ids=[42n])
+  // with the values these tests assert on.
   await page.goto('/title/301');
   await page.waitForSelector('app-title-detail');
 }
@@ -194,8 +173,8 @@ test.describe('add-to-playlist — empty + error states', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/playlists/mine', r =>
-      r.fulfill({ json: { playlists: [], smart_playlists: [] } }));
+    await page.route(`**${PS}/ListPlaylists`, r =>
+      fulfillProto(r, ListPlaylistsResponseSchema, create(ListPlaylistsResponseSchema)));
     await page.goto('/title/301');
     await page.waitForSelector('app-title-detail');
     await openTrackPicker(page);
@@ -209,7 +188,7 @@ test.describe('add-to-playlist — empty + error states', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/playlists/mine', r => r.fulfill({ status: 500 }));
+    await page.route(`**${PS}/ListPlaylists`, r => r.fulfill({ status: 500 }));
     await page.goto('/title/301');
     await page.waitForSelector('app-title-detail');
     await openTrackPicker(page);

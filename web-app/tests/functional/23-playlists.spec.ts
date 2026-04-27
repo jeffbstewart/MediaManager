@@ -2,11 +2,13 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
-import { create, fromBinary } from '@bufbuild/protobuf';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
 import {
   CreatePlaylistRequestSchema,
-  PlaylistSummarySchema,
+  DuplicatePlaylistRequestSchema,
+  ListPlaylistsRequestSchema,
+  PlaylistScope,
   RenamePlaylistRequestSchema,
   ReorderPlaylistRequestSchema,
   SetPlaylistPrivacyRequestSchema,
@@ -37,24 +39,12 @@ const PS = '/mediamanager.PlaylistService';
 // Stub all the playlist mutation endpoints with success responses.
 // Registered AFTER mockBackend so they win Playwright's LIFO match.
 //
-// Most mutations are gRPC now (PlaylistService) — mock-backend's
-// default no-op handlers cover them, but we override the ones that
-// need a non-Empty response body (CreatePlaylist returns the new id;
-// DuplicatePlaylist returns the new id + name). The remaining REST
-// endpoints (list, detail, library-shuffle, duplicate) still go
-// through HTTP until their migration lands.
-async function stubPlaylistMutations(page: Page) {
-  await page.route(`**${PS}/CreatePlaylist`, r =>
-    fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
-      id: 99n, name: 'Created',
-    })),
-  );
-  await page.route('**/api/v2/playlists/library-shuffle', route =>
-    route.fulfill({ json: { tracks: [] } }),
-  );
-  await page.route('**/api/v2/playlists/*/duplicate', route =>
-    route.fulfill({ json: { id: 42, name: 'Road Trip (copy)' } }),
-  );
+// All mutations are gRPC now (PlaylistService). mock-backend's
+// defaults already cover Create/Duplicate with the id=99 / id=42
+// fixtures these tests assert on, so per-test stubs aren't needed.
+async function stubPlaylistMutations(_page: Page) {
+  // intentionally empty — kept as a hook in case a future test wants
+  // to override a default before the harness runs.
 }
 
 test.describe('playlists — list view', () => {
@@ -87,33 +77,40 @@ test.describe('playlists — list view', () => {
     await expect(card.locator('.hero-placeholder mat-icon')).toContainText('queue_music');
   });
 
-  test('All / Mine scope chips fire requests at the right endpoint', async ({ page }) => {
-    // Default scope is "all" — confirmed by initial /api/v2/playlists hit
-    // during beforeEach. Now toggle to Mine and assert the /mine endpoint.
-    const minePromise = page.waitForRequest(req =>
-      req.url().endsWith('/api/v2/playlists/mine'),
+  test('All / Mine scope chips fire ListPlaylists with the right scope', async ({ page }) => {
+    // Both scope toggles fire /ListPlaylists. The scope itself rides
+    // in the request body — decode the proto to assert ALL vs MINE.
+    const mineReq = page.waitForRequest(req =>
+      req.url().endsWith(`${PS}/ListPlaylists`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlists mat-chip', { hasText: 'Mine' }).click();
-    await minePromise;
+    const mineGot = await mineReq;
+    expect(fromBinary(
+      ListPlaylistsRequestSchema,
+      unframeGrpcWebRequest(mineGot.postDataBuffer()),
+    ).scope).toBe(PlaylistScope.MINE);
     await expect(page.locator('app-playlists mat-chip', { hasText: 'Mine' }))
       .toHaveClass(/mat-mdc-chip-highlighted/);
 
     // Smart-playlist section is hidden on Mine scope.
     await expect(page.locator('app-playlists .smart-section')).toHaveCount(0);
 
-    // Back to All — request goes to /api/v2/playlists (no /mine).
-    const allPromise = page.waitForRequest(req =>
-      /\/api\/v2\/playlists(\?|$)/.test(req.url()),
+    const allReq = page.waitForRequest(req =>
+      req.url().endsWith(`${PS}/ListPlaylists`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlists mat-chip', { hasText: 'All' }).click();
-    await allPromise;
+    const allGot = await allReq;
+    expect(fromBinary(
+      ListPlaylistsRequestSchema,
+      unframeGrpcWebRequest(allGot.postDataBuffer()),
+    ).scope).toBe(PlaylistScope.ALL);
   });
 
-  test('Shuffle library fires GET /library-shuffle', async ({ page }) => {
+  test('Shuffle library fires LibraryShuffle', async ({ page }) => {
     const reqPromise = page.waitForRequest(req =>
-      req.url().endsWith('/api/v2/playlists/library-shuffle'),
+      req.url().endsWith(`${PS}/LibraryShuffle`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlists button', { hasText: 'Shuffle library' }).click();
@@ -138,16 +135,21 @@ test.describe('playlists — list view', () => {
     await expect(page).toHaveURL(/\/playlist\/99$/);
   });
 
-  test('Duplicate on a card POSTs /duplicate and navigates to the fork', async ({ page }) => {
+  test('Duplicate on a card fires DuplicatePlaylist and navigates to the fork', async ({ page }) => {
     const dup = page.waitForRequest(req =>
-      req.method() === 'POST' && /\/api\/v2\/playlists\/1\/duplicate$/.test(req.url()),
+      req.url().endsWith(`${PS}/DuplicatePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlists .playlist-grid').nth(1)
       .locator('.playlist-card').first()
       .locator('button', { hasText: 'Duplicate' }).click();
-    await dup;
-    // duplicate stub returns id=42 → component navigates to /playlist/42.
+    const got = await dup;
+    expect(fromBinary(
+      DuplicatePlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    ).sourceId).toBe(1n);
+    // mock-backend's DuplicatePlaylist returns id=42 → component
+    // navigates to /playlist/42.
     await expect(page).toHaveURL(/\/playlist\/42$/);
   });
 
@@ -250,13 +252,17 @@ test.describe('playlists — detail view', () => {
     expect(decoded.isPrivate).toBe(true);
   });
 
-  test('Duplicate POSTs /duplicate and navigates', async ({ page }) => {
+  test('Duplicate fires DuplicatePlaylist and navigates', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/playlists/1/duplicate'),
+      r.url().endsWith(`${PS}/DuplicatePlaylist`),
       { timeout: 3_000 },
     );
     await page.locator('app-playlist-detail .hero-actions button', { hasText: 'Duplicate' }).click();
-    await req;
+    const got = await req;
+    expect(fromBinary(
+      DuplicatePlaylistRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    ).sourceId).toBe(1n);
     await expect(page).toHaveURL(/\/playlist\/42$/);
   });
 

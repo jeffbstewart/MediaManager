@@ -32,7 +32,7 @@ import {
 } from '../proto-gen/common_pb';
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
 import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
-import { PlaylistService as PlaylistServiceDesc } from '../proto-gen/playlist_pb';
+import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-gen/playlist_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1191,20 +1191,36 @@ export class CatalogService {
     playlists: PlaylistSummary[];
     smartPlaylists: SmartPlaylistSummary[];
   }> {
-    const url = scope === 'mine' ? '/api/v2/playlists/mine' : '/api/v2/playlists';
-    const resp = await firstValueFrom(this.http.get<{
-      playlists: PlaylistSummary[];
-      smart_playlists?: SmartPlaylistSummary[];
-    }>(url));
+    const client = grpcClient(PlaylistServiceDesc);
+    const protoScope = scope === 'mine' ? PlaylistScope.MINE : PlaylistScope.ALL;
+    // Two parallel RPCs replace the legacy single REST endpoint that
+    // bundled both lists. Server-side they're cheap reads; the SPA
+    // fires them simultaneously rather than sequentially so the home
+    // page renders both grids on the same render tick.
+    const [proto, smart] = await Promise.all([
+      client.listPlaylists({ scope: protoScope }),
+      // Smart playlists exist only on the "All" view. Skip the call
+      // for "mine" scope and return an empty list — keeps the
+      // contract identical to the legacy /playlists/mine response.
+      scope === 'all'
+        ? client.listSmartPlaylists({})
+        : Promise.resolve({ playlists: [] }),
+    ]);
     return {
-      playlists: resp.playlists ?? [],
-      smartPlaylists: resp.smart_playlists ?? [],
+      playlists: proto.playlists.map(adaptProtoPlaylistSummary),
+      smartPlaylists: smart.playlists.map(adaptProtoSmartPlaylistSummary),
     };
   }
 
   async getSmartPlaylist(key: string): Promise<SmartPlaylistDetail> {
-    return firstValueFrom(
-      this.http.get<SmartPlaylistDetail>(`/api/v2/playlists/smart/${encodeURIComponent(key)}`));
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.getSmartPlaylist({ key });
+    const summary = adaptProtoSmartPlaylistSummary(proto.summary!);
+    return {
+      ...summary,
+      total_duration_seconds: proto.totalDurationSeconds,
+      tracks: proto.tracks.map(adaptProtoPlaylistTrackEntry),
+    };
   }
 
   async setPlaylistPrivacy(id: number, isPrivate: boolean): Promise<void> {
@@ -1232,7 +1248,9 @@ export class CatalogService {
   }
 
   async getPlaylist(id: number): Promise<PlaylistDetail> {
-    return firstValueFrom(this.http.get<PlaylistDetail>(`/api/v2/playlists/${id}`));
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.getPlaylist({ id: BigInt(id) });
+    return adaptProtoPlaylistDetail(proto);
   }
 
   async createPlaylist(name: string, description: string | null): Promise<{ id: number; name: string }> {
@@ -1300,15 +1318,18 @@ export class CatalogService {
    * regardless of whether the caller owns the source.
    */
   async duplicatePlaylist(sourceId: number, newName?: string): Promise<{ id: number; name: string }> {
-    return firstValueFrom(this.http.post<{ id: number; name: string }>(
-      `/api/v2/playlists/${sourceId}/duplicate`,
-      newName ? { name: newName } : {}));
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.duplicatePlaylist({
+      sourceId: BigInt(sourceId),
+      newName: newName ?? undefined,
+    });
+    return { id: Number(proto.id), name: proto.name };
   }
 
   async libraryShuffle(): Promise<ShuffleTrack[]> {
-    const resp = await firstValueFrom(
-      this.http.get<{ tracks: ShuffleTrack[] }>('/api/v2/playlists/library-shuffle'));
-    return resp.tracks ?? [];
+    const client = grpcClient(PlaylistServiceDesc);
+    const proto = await client.libraryShuffle({});
+    return proto.tracks.map(adaptProtoShuffleTrack);
   }
 
   async getFamilyVideos(params: { sort?: FamilySortMode; members?: number[]; playableOnly?: boolean } = {}): Promise<FamilyVideosResponse> {
@@ -2021,6 +2042,108 @@ function adaptArtistMember(m: import('../proto-gen/common_pb').ArtistMemberEntry
     begin_date: calendarDateToIsoDate(m.beginDate),
     end_date: calendarDateToIsoDate(m.endDate),
     instruments: m.instruments ?? null,
+  };
+}
+
+// Server resolves the user's hero pick to a parent title id for image
+// fetching; SPA constructs the poster URL same-origin from that id.
+function playlistHeroPosterUrl(heroTitleId: bigint | undefined): string | null {
+  return heroTitleId != null ? `/posters/w185/${Number(heroTitleId)}` : null;
+}
+
+function adaptProtoPlaylistSummary(s: import('../proto-gen/playlist_pb').PlaylistSummary): PlaylistSummary {
+  return {
+    id: Number(s.id),
+    name: s.name,
+    description: s.description ?? null,
+    owner_user_id: Number(s.ownerUserId),
+    owner_username: s.ownerUsername,
+    is_owner: s.isOwner,
+    is_private: s.isPrivate,
+    hero_poster_url: playlistHeroPosterUrl(s.heroTitleId),
+    updated_at: s.updatedAt
+      ? new Date(Number(s.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
+  };
+}
+
+function adaptProtoSmartPlaylistSummary(
+  s: import('../proto-gen/playlist_pb').SmartPlaylistSummary,
+): SmartPlaylistSummary {
+  return {
+    key: s.key,
+    name: s.name,
+    description: s.description,
+    is_smart: true,
+    track_count: s.trackCount,
+    hero_poster_url: playlistHeroPosterUrl(s.heroTitleId),
+  };
+}
+
+function adaptProtoPlaylistTrackEntry(
+  e: import('../proto-gen/playlist_pb').PlaylistTrackEntry,
+): PlaylistTrackEntry {
+  const t = e.track!;
+  return {
+    playlist_track_id: Number(e.playlistTrackId),
+    position: e.position,
+    track_id: Number(t.id),
+    track_name: t.name,
+    duration_seconds: t.duration?.seconds ?? null,
+    title_id: Number(e.titleId),
+    title_name: e.titleName,
+    poster_url: e.titleId != null ? `/posters/w185/${Number(e.titleId)}` : null,
+    playable: t.playable,
+  };
+}
+
+function adaptProtoPlaylistDetail(
+  p: import('../proto-gen/playlist_pb').PlaylistDetail,
+): PlaylistDetail {
+  const summary = p.summary!;
+  // Legacy PlaylistDetail flattens the summary fields onto the top-
+  // level object plus track-list metadata. Field-by-field; the SPA's
+  // playlist-detail.ts touches several explicitly.
+  return {
+    id: Number(summary.id),
+    name: summary.name,
+    description: summary.description ?? null,
+    owner_user_id: Number(summary.ownerUserId),
+    owner_username: summary.ownerUsername,
+    is_owner: summary.isOwner,
+    is_private: summary.isPrivate,
+    hero_track_id: summary.heroTrackId != null ? Number(summary.heroTrackId) : null,
+    hero_poster_url: playlistHeroPosterUrl(summary.heroTitleId),
+    track_count: p.tracks.length,
+    total_duration_seconds: p.totalDurationSeconds,
+    // Legacy carried these but the SPA never reads them — drop them.
+    created_at: null,
+    updated_at: summary.updatedAt
+      ? new Date(Number(summary.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
+    resume: p.resume
+      ? {
+          playlist_track_id: Number(p.resume.playlistTrackId),
+          track_id: Number(p.resume.trackId),
+          position_seconds: p.resume.positionSeconds,
+          updated_at: p.resume.updatedAt
+            ? new Date(Number(p.resume.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+            : null,
+        }
+      : null,
+    tracks: p.tracks.map(adaptProtoPlaylistTrackEntry),
+  };
+}
+
+function adaptProtoShuffleTrack(t: import('../proto-gen/common_pb').Track): ShuffleTrack {
+  return {
+    track_id: Number(t.id),
+    track_name: t.name,
+    title_id: Number(t.titleId),
+    title_name: null,
+    poster_url: t.titleId != null ? `/posters/w185/${Number(t.titleId)}` : null,
+    duration_seconds: t.duration?.seconds ?? null,
+    playable: t.playable,
   };
 }
 

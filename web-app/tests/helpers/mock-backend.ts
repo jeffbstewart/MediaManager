@@ -20,7 +20,13 @@ import {
 } from '../../src/app/proto-gen/artist_pb';
 import {
   AddTracksToPlaylistResponseSchema,
+  LibraryShuffleResponseSchema,
+  ListPlaylistsResponseSchema,
+  ListSmartPlaylistsResponseSchema,
+  PlaylistDetailSchema,
   PlaylistSummarySchema,
+  ListPlaylistsRequestSchema,
+  SmartPlaylistDetailSchema,
 } from '../../src/app/proto-gen/playlist_pb';
 import {
   CollectionIdRequestSchema,
@@ -41,6 +47,12 @@ import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fix
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
 import { artistMilesDavis, artistsListFixture, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
+import {
+  playlistDetailRoadTrip,
+  playlistsList,
+  smartPlaylistDetail,
+  smartPlaylistsList,
+} from '../fixtures-typed/playlists.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -148,179 +160,130 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/catalog/family-videos*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/family-videos.list.json') })
   );
-  await page.route('**/api/v2/playlists', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/playlists.list.json') })
-  );
-  await page.route('**/api/v2/playlists/mine', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/playlists.list.json') })
-  );
+  // /api/v2/playlists, /mine, /:id, /smart/:key are no longer hit —
+  // listPlaylists / getPlaylist / getSmartPlaylist call PlaylistService
+  // RPCs (dispatched in the gRPC route block above).
 
-  // --- Detail pages (Tier 4) ---
-  // gRPC-JSON unary: POST /<service>/<rpc> with a JSON body. Single
-  // entry covers all unary catalog RPCs we route here; we dispatch on
-  // the rpc name. Web → server contract is the proto, so we serve a
-  // proto-typed fixture and round-trip it through TitleDetail.fromJSON
-  // /toJSON in fulfillProto so any fixture drift fails the test setup
-  // loudly instead of silently shipping the wrong shape.
-  await page.route('**/mediamanager.CatalogService/*', async (r: Route) => {
-    const url = new URL(r.request().url());
-    const rpc = url.pathname.split('/').pop();
-    if (rpc === 'GetTitleDetail') {
-      // Body is gRPC-Web framed: 5-byte header + binary protobuf
-      // TitleIdRequest. Strip the frame, decode, dispatch on id;
-      // ids without a typed fixture fall through to the legacy REST
-      // handler below.
-      const payload = unframeGrpcWebRequest(r.request().postDataBuffer());
-      const req = fromBinary(TitleIdRequestSchema, payload);
-      if (req.titleId === 100n) {
-        return fulfillProto(r, TitleDetailSchema, titleMovie100);
-      }
-      if (req.titleId === 200n) {
-        return fulfillProto(r, TitleDetailSchema, titleTv200);
-      }
-      if (req.titleId === 300n) {
-        return fulfillProto(r, TitleDetailSchema, titleBook300);
-      }
-      if (req.titleId === 301n) {
-        return fulfillProto(r, TitleDetailSchema, titleAlbum301);
-      }
-    }
-    if (rpc === 'ListTags') {
-      return fulfillProto(r, TagListResponseSchema, tagsList);
-    }
-    if (rpc === 'HomeFeed') {
-      return fulfillProto(r, HomeFeedResponseSchema, homeFixture);
-    }
-    if (rpc === 'GetFeatures') {
-      return fulfillProto(r, FeaturesSchema, featuresFixture);
-    }
-    // Note: GetAuthorDetail / GetArtistDetail live on ArtistService,
-    // not CatalogService — see the mediamanager.ArtistService/* block
-    // below.
-    if (rpc === 'GetActorDetail') {
-      // Fixture covers Keanu (6384) — every other person id falls back
-      // to the same fixture for the smoke-test purposes the existing
-      // suite uses; per-test overrides can register a more specific
-      // gRPC route handler before mockBackend's catch-all if needed.
-      return fulfillProto(r, ActorDetailSchema, actor6384);
-    }
-    if (rpc === 'ListTitles') {
-      const req = fromBinary(
-        ListTitlesRequestSchema,
-        unframeGrpcWebRequest(r.request().postDataBuffer()),
-      );
+  // --- gRPC dispatch (Tier 4) ---
+  // One handler map per service. Each entry is `RpcName: handler(r)`
+  // returning a Playwright fulfill — fixture lookups and proto round-
+  // tripping (toBinary/fromBinary) happen inside the handler. No-op
+  // mutations share a `noopEmpty` returner; reads share a generic
+  // fixture-returner. fulfillProto itself round-trips through
+  // toJson/fromJson + toBinary so any fixture-shape drift fails the
+  // test setup loudly.
+  //
+  // To dispatch on the request body (e.g. GetTitleDetail by id),
+  // decode the proto inside the handler. The maps stay flat — no
+  // chained ifs, just one entry per RPC.
+  type RpcHandler = (r: Route) => unknown;
+  const noopEmpty: RpcHandler = r => fulfillProto(r, EmptySchema, create(EmptySchema));
+  function readBody<S extends Parameters<typeof fromBinary>[0]>(r: Route, schema: S): ReturnType<typeof fromBinary<S>> {
+    return fromBinary(schema, unframeGrpcWebRequest(r.request().postDataBuffer()));
+  }
+
+  // ---- mediamanager.CatalogService ----
+  const titleDetailById = new Map<bigint, typeof titleMovie100>([
+    [100n, titleMovie100],
+    [200n, titleTv200],
+    [300n, titleBook300],
+    [301n, titleAlbum301],
+  ]);
+  const catalogHandlers: Record<string, RpcHandler> = {
+    GetTitleDetail: r => {
+      const req = readBody(r, TitleIdRequestSchema);
+      const fixture = titleDetailById.get(req.titleId);
+      if (fixture) return fulfillProto(r, TitleDetailSchema, fixture);
+      // Unknown id → fall through to the legacy REST handler below.
+      return r.fallback();
+    },
+    HomeFeed:        r => fulfillProto(r, HomeFeedResponseSchema, homeFixture),
+    GetFeatures:     r => fulfillProto(r, FeaturesSchema, featuresFixture),
+    GetActorDetail:  r => fulfillProto(r, ActorDetailSchema, actor6384),
+    ListTags:        r => fulfillProto(r, TagListResponseSchema, tagsList),
+    ListTagsForTrack:
+      // Default: track has no tags. Per-test overrides set richer values.
+      r => fulfillProto(r, TagListResponseSchema, create(TagListResponseSchema)),
+    ListCollections: r => fulfillProto(r, CollectionListResponseSchema, collectionsList),
+    GetCollectionDetail:
+      // One detail fixture covers every tmdb_collection_id today; per-
+      // test overrides dispatch on req.tmdbCollectionId when needed.
+      r => fulfillProto(r, CollectionDetailSchema, collectionDetail2344),
+    ListTitles: r => {
+      const req = readBody(r, ListTitlesRequestSchema);
       const fixture = req.type === MediaType.TV   ? tvPage
                     : req.type === MediaType.BOOK ? booksPage
                     : moviesPage;
       return fulfillProto(r, TitlePageResponseSchema, fixture);
-    }
-    if (rpc === 'ListCollections') {
-      return fulfillProto(r, CollectionListResponseSchema, collectionsList);
-    }
-    if (rpc === 'GetCollectionDetail') {
-      const req = fromBinary(
-        CollectionIdRequestSchema,
-        unframeGrpcWebRequest(r.request().postDataBuffer()),
-      );
-      // Only one detail fixture currently; any tmdb_collection_id falls
-      // through to it. Per-test overrides can dispatch on req.tmdbCollectionId.
-      void req;
-      return fulfillProto(r, CollectionDetailSchema, collectionDetail2344);
-    }
-    // No-op tag/music mutations: the SPA awaits an Empty response, the
-    // tests don't care about the body. Per-test overrides can intercept
-    // these (registered before mockBackend's catch-all) when they need
-    // to capture the request payload.
-    if (
-      rpc === 'SetTitleTags' ||
-      rpc === 'SetTrackTags' ||
-      rpc === 'SetTrackMusicTags' ||
-      rpc === 'AddTagToTitle' ||
-      rpc === 'RemoveTagFromTitle' ||
-      rpc === 'AddTagToTrack' ||
-      rpc === 'RemoveTagFromTrack' ||
-      rpc === 'SetFavorite' ||
-      rpc === 'SetHidden' ||
-      rpc === 'DismissMissingSeason' ||
-      rpc === 'DismissContinueWatching'
-    ) {
-      return fulfillProto(r, EmptySchema, create(EmptySchema));
-    }
-    if (rpc === 'ListTagsForTrack') {
-      // Default: track has no tags. Per-test overrides set richer values.
-      return fulfillProto(r, TagListResponseSchema, create(TagListResponseSchema));
-    }
-    return r.fallback();
-  });
+    },
+    // No-op mutations (return Empty). The SPA's caller awaits success;
+    // tests that want to capture the request register their own
+    // override before mockBackend's catch-all.
+    SetTitleTags:           noopEmpty,
+    SetTrackTags:           noopEmpty,
+    SetTrackMusicTags:      noopEmpty,
+    AddTagToTitle:          noopEmpty,
+    RemoveTagFromTitle:     noopEmpty,
+    AddTagToTrack:          noopEmpty,
+    RemoveTagFromTrack:     noopEmpty,
+    SetFavorite:            noopEmpty,
+    SetHidden:              noopEmpty,
+    DismissMissingSeason:   noopEmpty,
+    DismissContinueWatching: noopEmpty,
+  };
 
-  // ArtistService gRPC RPCs — lives on a separate service path from
-  // CatalogService. The detail RPCs decode the request id so per-test
-  // overrides registered before mockBackend can dispatch on it.
-  // PlaylistService no-op mutations. The SPA's catalog.service
-  // playlist mutators await Empty / lightweight responses; tests
-  // that need to capture the request register their own override
-  // before mockBackend's catch-all.
-  await page.route('**/mediamanager.PlaylistService/*', async (r: Route) => {
-    const url = new URL(r.request().url());
-    const rpc = url.pathname.split('/').pop();
-    if (
-      rpc === 'SetPlaylistPrivacy' ||
-      rpc === 'ReportPlaylistProgress' ||
-      rpc === 'ClearPlaylistProgress' ||
-      rpc === 'RecordTrackCompletion' ||
-      rpc === 'RenamePlaylist' ||
-      rpc === 'DeletePlaylist' ||
-      rpc === 'RemoveTrackFromPlaylist' ||
-      rpc === 'ReorderPlaylist' ||
-      rpc === 'SetPlaylistHero'
-    ) {
-      return fulfillProto(r, EmptySchema, create(EmptySchema));
-    }
-    if (rpc === 'CreatePlaylist') {
-      return fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
+  // ---- mediamanager.PlaylistService ----
+  const playlistHandlers: Record<string, RpcHandler> = {
+    ListPlaylists:        r => fulfillProto(r, ListPlaylistsResponseSchema, playlistsList),
+    ListSmartPlaylists:   r => fulfillProto(r, ListSmartPlaylistsResponseSchema, smartPlaylistsList),
+    GetPlaylist:          r => fulfillProto(r, PlaylistDetailSchema, playlistDetailRoadTrip),
+    GetSmartPlaylist:     r => fulfillProto(r, SmartPlaylistDetailSchema, smartPlaylistDetail),
+    LibraryShuffle:       r => fulfillProto(r, LibraryShuffleResponseSchema, create(LibraryShuffleResponseSchema)),
+    CreatePlaylist:
+      r => fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
         id: 99n, name: 'Created',
-      }));
-    }
-    if (rpc === 'AddTracksToPlaylist') {
-      return fulfillProto(r, AddTracksToPlaylistResponseSchema, create(AddTracksToPlaylistResponseSchema, {
+      })),
+    DuplicatePlaylist:
+      r => fulfillProto(r, PlaylistSummarySchema, create(PlaylistSummarySchema, {
+        id: 42n, name: 'Road Trip (copy)',
+      })),
+    AddTracksToPlaylist:
+      r => fulfillProto(r, AddTracksToPlaylistResponseSchema, create(AddTracksToPlaylistResponseSchema, {
         added: 1, playlistTrackIds: [42n],
-      }));
-    }
-    return r.fallback();
-  });
+      })),
+    SetPlaylistPrivacy:      noopEmpty,
+    ReportPlaylistProgress:  noopEmpty,
+    ClearPlaylistProgress:   noopEmpty,
+    RecordTrackCompletion:   noopEmpty,
+    RenamePlaylist:          noopEmpty,
+    DeletePlaylist:          noopEmpty,
+    RemoveTrackFromPlaylist: noopEmpty,
+    ReorderPlaylist:         noopEmpty,
+    SetPlaylistHero:         noopEmpty,
+  };
 
-  await page.route('**/mediamanager.ArtistService/*', async (r: Route) => {
-    const url = new URL(r.request().url());
-    const rpc = url.pathname.split('/').pop();
-    if (rpc === 'ListArtists') {
-      // The default fixture is enough for the existing 22-music-list
-      // tests; per-test overrides can dispatch on req.q / req.sort
-      // when finer control is needed.
-      const req = fromBinary(
-        ListArtistsRequestSchema,
-        unframeGrpcWebRequest(r.request().postDataBuffer()),
-      );
-      void req;
-      return fulfillProto(r, ArtistListResponseSchema, artistsListFixture);
-    }
-    if (rpc === 'GetArtistDetail') {
-      const req = fromBinary(
-        ArtistIdRequestSchema,
-        unframeGrpcWebRequest(r.request().postDataBuffer()),
-      );
-      void req; // single fixture for now; per-test override dispatches if needed
-      return fulfillProto(r, ArtistDetailSchema, artistMilesDavis);
-    }
-    if (rpc === 'GetAuthorDetail') {
-      const req = fromBinary(
-        AuthorIdRequestSchema,
-        unframeGrpcWebRequest(r.request().postDataBuffer()),
-      );
-      void req;
-      return fulfillProto(r, AuthorDetailSchema, authorFrankHerbert);
-    }
-    return r.fallback();
-  });
+  // ---- mediamanager.ArtistService ----
+  const artistHandlers: Record<string, RpcHandler> = {
+    ListArtists:     r => fulfillProto(r, ArtistListResponseSchema, artistsListFixture),
+    GetArtistDetail: r => fulfillProto(r, ArtistDetailSchema, artistMilesDavis),
+    GetAuthorDetail: r => fulfillProto(r, AuthorDetailSchema, authorFrankHerbert),
+  };
+
+  // Each gRPC service mounts at its own URL prefix. The dispatcher
+  // peels the rpc name off the path tail and delegates to the
+  // service's handler map; unknown rpcs fall through to r.fallback()
+  // so a per-test page.route() registered earlier (LIFO) can still win.
+  function mountService(prefix: string, handlers: Record<string, RpcHandler>) {
+    return page.route(`**/${prefix}/*`, async (r: Route) => {
+      const rpc = new URL(r.request().url()).pathname.split('/').pop() ?? '';
+      const handler = handlers[rpc];
+      if (handler) return handler(r);
+      return r.fallback();
+    });
+  }
+  await mountService('mediamanager.CatalogService', catalogHandlers);
+  await mountService('mediamanager.PlaylistService', playlistHandlers);
+  await mountService('mediamanager.ArtistService', artistHandlers);
 
   // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
   // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
@@ -388,16 +351,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   );
 
   // --- Media + Live (Tier 6) ---
-  // Playlist endpoints registered after `/api/v2/playlists` and
-  // `/api/v2/playlists/mine` (Tier 3) so trailing-segment paths win
-  // via Playwright's LIFO route matching.
-  await page.route('**/api/v2/playlists/smart/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/smart-playlist.json') })
-  );
-  await page.route('**/api/v2/playlists/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/playlist.json') })
-  );
-
+  // /api/v2/playlists/* trailing-segment routes were retired with the
+  // PlaylistService gRPC migration (see the gRPC dispatch block above).
   await page.route('**/api/v2/catalog/cameras', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/cameras.json') })
   );

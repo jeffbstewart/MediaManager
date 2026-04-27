@@ -94,6 +94,10 @@ message PlaylistSummary {
   optional Timestamp updated_at = 8;
   // Phase 2.
   bool is_private = 9;
+  // The track the user explicitly picked as the hero, if any. The
+  // detail page uses this to drive the per-row star icon — clients
+  // that only render thumbnails read hero_title_id and ignore this.
+  optional int64 hero_track_id = 10;
 }
 
 // Per-user resume cursor for a playlist.

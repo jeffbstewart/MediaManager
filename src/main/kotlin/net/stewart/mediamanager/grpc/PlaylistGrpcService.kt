@@ -252,6 +252,10 @@ class PlaylistGrpcService : PlaylistServiceGrpcKt.PlaylistServiceCoroutineImplBa
             isOwner = pl.owner_user_id == actor.id
             isPrivate = pl.is_private
             heroTitleId?.let { this.heroTitleId = it }
+            // hero_track_id is the literal track the user picked. iOS
+            // / Android TV ignore it; the SPA uses it to render the
+            // star icon on the matching detail-page track row.
+            pl.hero_track_id?.let { this.heroTrackId = it }
             pl.updated_at?.let { updatedAt = it.toProtoTimestamp() }
         }
     }
