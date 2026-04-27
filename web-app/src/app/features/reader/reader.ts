@@ -153,16 +153,25 @@ export class ReaderComponent implements OnInit, OnDestroy {
     });
     this.rendition = rendition;
     rendition.themes.fontSize(`${this.fontSize()}%`);
-    // epub.js fires `relocated` once during the initial display() with
-    // percentage = 0 (locations index isn't built yet); honoring that
-    // would clobber the just-loaded saved percent. Gate on a flag set
-    // after the display() promise resolves so only real navigations
-    // update progress.
+    // epub.js fires `relocated` events both during the initial
+    // display() and (more rarely) shortly after it resolves, BEFORE
+    // the locations index is generated. Both cases hand us
+    // percentage=0 — honouring those would clobber the saved percent
+    // we just loaded from /reading-progress.
+    //
+    // Two layered gates:
+    //   1. initialDisplayDone — drops every event during the first
+    //      display() call.
+    //   2. percentage > 0 — drops the stray "post-display, locations-
+    //      not-built" event that races with the saved-percent set.
+    //      A real percentage=0 (a user re-opening at the very start
+    //      of the book) is fine because that's also their saved
+    //      value, so a no-op overwrite would be a no-op anyway.
     let initialDisplayDone = false;
     rendition.on('relocated', (loc) => {
       this.lastCfi = loc.start.cfi;
       if (!initialDisplayDone) return;
-      if (loc.start.percentage != null) {
+      if (loc.start.percentage != null && loc.start.percentage > 0) {
         this.percent.set(Math.round(loc.start.percentage * 100));
       }
     });
