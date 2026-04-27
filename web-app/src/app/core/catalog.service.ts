@@ -1057,25 +1057,37 @@ export class CatalogService {
   }
 
   async search(query: string, limit = 30): Promise<SearchResponse> {
-    return firstValueFrom(this.http.get<SearchResponse>('/api/v2/search', { params: { q: query, limit: limit.toString() } }));
+    const client = grpcClient(CatalogServiceDesc);
+    // SPA opts in to all result types — books and audio gating exists
+    // for legacy clients that haven't been updated.
+    const proto = await client.search({
+      query,
+      includeBooks: true,
+      includeAudio: true,
+      limit,
+    });
+    return {
+      query: proto.query,
+      results: proto.results.map(adaptProtoSearchResult),
+    };
   }
 
   async listAdvancedSearchPresets(): Promise<AdvancedSearchPreset[]> {
-    const resp = await firstValueFrom(
-      this.http.get<{ presets: AdvancedSearchPreset[] }>('/api/v2/search/presets'));
-    return resp.presets ?? [];
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.listAdvancedSearchPresets({});
+    return proto.presets.map(adaptProtoAdvancedSearchPreset);
   }
 
   async searchTracks(filters: AdvancedTrackSearchFilters): Promise<TrackSearchHit[]> {
-    const params: Record<string, string> = {};
-    if (filters.query) params['q'] = filters.query;
-    if (filters.bpmMin != null) params['bpm_min'] = String(filters.bpmMin);
-    if (filters.bpmMax != null) params['bpm_max'] = String(filters.bpmMax);
-    if (filters.timeSignature) params['time_signature'] = filters.timeSignature;
-    if (filters.limit != null) params['limit'] = String(filters.limit);
-    const resp = await firstValueFrom(
-      this.http.get<{ tracks: TrackSearchHit[] }>('/api/v2/search/tracks', { params }));
-    return resp.tracks ?? [];
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.searchTracks({
+      query: filters.query ?? undefined,
+      bpmMin: filters.bpmMin ?? undefined,
+      bpmMax: filters.bpmMax ?? undefined,
+      timeSignature: filters.timeSignature ?? undefined,
+      limit: filters.limit ?? undefined,
+    });
+    return proto.tracks.map(adaptProtoTrackSearchHit);
   }
 
   async getActorDetail(personId: number): Promise<ActorDetail> {
@@ -2164,6 +2176,80 @@ function adaptProtoShuffleTrack(t: import('../proto-gen/common_pb').Track): Shuf
     title_name: null,
     poster_url: t.titleId != null ? `/posters/w185/${Number(t.titleId)}` : null,
     duration_seconds: t.duration?.seconds ?? null,
+    playable: t.playable,
+  };
+}
+
+// Map proto SearchResultType enum → SPA's literal string union. Keeps
+// the existing render code unchanged; new types added to the proto
+// fall through to a defensive fallback.
+const PROTO_SEARCH_TYPE_TO_LEGACY: Record<number, SearchResult['type']> = {
+  1:  'movie',
+  2:  'tv',
+  3:  'actor',
+  4:  'collection',
+  5:  'tag',
+  6:  'tag',       // GENRE renders the same way as TAG today
+  7:  'book',
+  8:  'album',
+  9:  'artist',
+  10: 'author',
+  11: 'track',
+  12: 'personal',
+  13: 'channel',
+  14: 'camera',
+};
+
+function adaptProtoSearchResult(
+  s: import('../proto-gen/common_pb').SearchResult,
+): SearchResult {
+  const type = PROTO_SEARCH_TYPE_TO_LEGACY[s.resultType] ?? 'movie';
+  return {
+    type,
+    name: s.name,
+    title_id: s.titleId != null ? Number(s.titleId) : undefined,
+    track_id: s.trackId != null ? Number(s.trackId) : undefined,
+    person_id: s.tmdbPersonId ?? undefined,
+    artist_id: s.artistId != null ? Number(s.artistId) : undefined,
+    author_id: s.authorId != null ? Number(s.authorId) : undefined,
+    collection_id: s.tmdbCollectionId ?? undefined,
+    tag_id: s.itemId != null && (type === 'tag') ? Number(s.itemId) : undefined,
+    channel_id: s.channelId != null ? Number(s.channelId) : undefined,
+    camera_id: s.cameraId != null ? Number(s.cameraId) : undefined,
+    poster_url: s.posterUrl ?? null,
+    headshot_url: s.headshotUrl ?? null,
+    album_name: s.albumName ?? null,
+    year: s.year ?? null,
+    title_count: s.titleCount ?? undefined,
+  };
+}
+
+function adaptProtoAdvancedSearchPreset(
+  p: import('../proto-gen/catalog_pb').AdvancedSearchPreset,
+): AdvancedSearchPreset {
+  return {
+    key: p.key,
+    name: p.name,
+    description: p.description,
+    bpm_min: p.bpmMin ?? null,
+    bpm_max: p.bpmMax ?? null,
+    time_signature: p.timeSignature ?? null,
+  };
+}
+
+function adaptProtoTrackSearchHit(
+  t: import('../proto-gen/catalog_pb').TrackSearchHit,
+): TrackSearchHit {
+  return {
+    track_id: Number(t.trackId),
+    title_id: Number(t.titleId),
+    name: t.name,
+    album_name: t.albumName,
+    artist_name: t.artistName ?? null,
+    bpm: t.bpm ?? null,
+    time_signature: t.timeSignature ?? null,
+    duration_seconds: t.durationSeconds ?? null,
+    poster_url: t.posterUrl ?? null,
     playable: t.playable,
   };
 }

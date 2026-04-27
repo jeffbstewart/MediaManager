@@ -95,6 +95,9 @@ message SearchRequest {
   bool include_books = 2;
   // Opt-in: include audio (ALBUM + ARTIST + TRACK results). Default false.
   bool include_audio = 3;
+  // Server caps results at this count after sorting. Server defaults
+  // to 100 when omitted; values <=0 use the default.
+  optional int32 limit = 4;
 }
 
 message ListEpisodesRequest {

@@ -1150,10 +1150,10 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                         if (titleId !in playableTitleIds) continue
                         val tc = catalog.playableByTitle[titleId]?.firstOrNull()
                         results.add(searchResult {
-                            resultType = if (mediaType == MediaTypeEnum.TV.name) {
-                                SearchResultType.SEARCH_RESULT_TYPE_SERIES
-                            } else {
-                                SearchResultType.SEARCH_RESULT_TYPE_MOVIE
+                            resultType = when (mediaType) {
+                                MediaTypeEnum.TV.name -> SearchResultType.SEARCH_RESULT_TYPE_SERIES
+                                MediaTypeEnum.PERSONAL.name -> SearchResultType.SEARCH_RESULT_TYPE_PERSONAL
+                                else -> SearchResultType.SEARCH_RESULT_TYPE_MOVIE
                             }
                             name = title.name
                             this.titleId = title.id!!
@@ -1320,8 +1320,11 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             } to popSum)
         }
 
-        // Sort by score descending
-        val sorted = results.sortedByDescending { it.second }.map { it.first }
+        // Sort by score descending and apply the request's limit.
+        val limit = if (request.hasLimit() && request.limit > 0) request.limit else 100
+        val sorted = results.sortedByDescending { it.second }
+            .map { it.first }
+            .take(limit)
         val countsByType = sorted.groupBy { it.resultType.name.removePrefix("SEARCH_RESULT_TYPE_").lowercase() }
             .mapValues { (_, v) -> v.size }
 

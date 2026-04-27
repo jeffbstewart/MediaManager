@@ -2,6 +2,18 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { create } from '@bufbuild/protobuf';
+import {
+  SearchResultSchema,
+  SearchResultType,
+} from '../../src/app/proto-gen/common_pb';
+import {
+  AdvancedSearchPresetsResponseSchema,
+  SearchResponseSchema,
+  SearchTracksResponseSchema,
+  TrackSearchHitSchema,
+} from '../../src/app/proto-gen/catalog_pb';
 
 // /search results page — SearchComponent. Targets search.ts (52.8%) +
 // search.html (48.5%) + advanced-search-dialog.ts (34.4%) coverage gaps.
@@ -10,6 +22,8 @@ import { stubImages } from '../helpers/image-stub';
 //   - cross-type result grid (default — q=...)
 //   - filtered track list (advanced — bpm_min/bpm_max/ts in URL)
 // And the advanced-search dialog adds preset chips + form submission.
+
+const CS = '/mediamanager.CatalogService';
 
 async function setup(page: Page) {
   await mockBackend(page);
@@ -69,11 +83,14 @@ test.describe('search — cross-type result grid', () => {
 
   test('result with no poster + no headshot renders the type-icon placeholder', async ({ page }) => {
     await setup(page);
-    await page.route(/\/api\/v2\/search(\?|$)/, r => r.fulfill({ json: {
-      query: 'x', results: [
-        { type: 'channel', name: 'CNN', channel_id: 99 },
-      ],
-    } }));
+    await page.route(`**${CS}/Search`, r => fulfillProto(r, SearchResponseSchema, create(SearchResponseSchema, {
+      query: 'x',
+      results: [create(SearchResultSchema, {
+        resultType: SearchResultType.CHANNEL,
+        name: 'CNN',
+        channelId: 99n,
+      })],
+    })));
     await page.goto('/search?q=cnn');
     await page.waitForSelector('app-search .results-grid');
     await expect(page.locator('.result-placeholder')).toBeVisible();
@@ -82,9 +99,13 @@ test.describe('search — cross-type result grid', () => {
 
   test('camera result has the static /cameras href', async ({ page }) => {
     await setup(page);
-    await page.route(/\/api\/v2\/search(\?|$)/, r => r.fulfill({ json: {
-      query: 'cam', results: [{ type: 'camera', name: 'Front Door' }],
-    } }));
+    await page.route(`**${CS}/Search`, r => fulfillProto(r, SearchResponseSchema, create(SearchResponseSchema, {
+      query: 'cam',
+      results: [create(SearchResultSchema, {
+        resultType: SearchResultType.CAMERA,
+        name: 'Front Door',
+      })],
+    })));
     await page.goto('/search?q=cam');
     await page.waitForSelector('app-search .results-grid');
     await expect(page.locator('.result-card')).toHaveAttribute('href', '/cameras');
@@ -92,8 +113,8 @@ test.describe('search — cross-type result grid', () => {
 
   test('empty results renders the "No results found" hint', async ({ page }) => {
     await setup(page);
-    await page.route(/\/api\/v2\/search(\?|$)/, r =>
-      r.fulfill({ json: { query: 'nothing', results: [] } }));
+    await page.route(`**${CS}/Search`, r =>
+      fulfillProto(r, SearchResponseSchema, create(SearchResponseSchema, { query: 'nothing' })));
     await page.goto('/search?q=nothing');
     await page.waitForSelector('app-search');
     await expect(page.locator('.empty-text')).toContainText('No results found');
@@ -101,18 +122,18 @@ test.describe('search — cross-type result grid', () => {
 
   test('search API failure also renders the empty hint (catch branch)', async ({ page }) => {
     await setup(page);
-    await page.route(/\/api\/v2\/search(\?|$)/, r => r.fulfill({ status: 500 }));
+    await page.route(`**${CS}/Search`, r => r.fulfill({ status: 500 }));
     await page.goto('/search?q=boom');
     await page.waitForSelector('app-search');
     await expect(page.locator('.empty-text')).toContainText('No results found');
   });
 
-  test('single-character query short-circuits without firing /search', async ({ page }) => {
+  test('single-character query short-circuits without firing Search', async ({ page }) => {
     await setup(page);
     let fired = false;
-    await page.route(/\/api\/v2\/search(\?|$)/, r => {
+    await page.route(`**${CS}/Search`, r => {
       fired = true;
-      return r.fulfill({ json: { query: '', results: [] } });
+      return fulfillProto(r, SearchResponseSchema, create(SearchResponseSchema));
     });
     await page.goto('/search?q=a');
     await page.waitForSelector('app-search');
@@ -122,20 +143,26 @@ test.describe('search — cross-type result grid', () => {
 });
 
 test.describe('search — advanced track list view', () => {
-  const tracksFixture = {
+  const tracksFixture = create(SearchTracksResponseSchema, {
     tracks: [
-      { track_id: 1, name: 'Stayin Alive', album_name: 'Saturday Night Fever',
-        title_id: 500, artist_name: 'Bee Gees', poster_url: '/posters/w185/500',
-        bpm: 104, time_signature: '4/4', duration_seconds: 285, playable: true },
-      { track_id: 2, name: 'Take Five', album_name: 'Time Out',
-        title_id: 501, artist_name: 'Brubeck', poster_url: null,
-        bpm: 174, time_signature: '5/4', duration_seconds: 324, playable: false },
+      create(TrackSearchHitSchema, {
+        trackId: 1n, name: 'Stayin Alive', albumName: 'Saturday Night Fever',
+        titleId: 500n, artistName: 'Bee Gees', posterUrl: '/posters/w185/500',
+        bpm: 104, timeSignature: '4/4', durationSeconds: 285, playable: true,
+      }),
+      create(TrackSearchHitSchema, {
+        trackId: 2n, name: 'Take Five', albumName: 'Time Out',
+        titleId: 501n, artistName: 'Brubeck',
+        bpm: 174, timeSignature: '5/4', durationSeconds: 324, playable: false,
+      }),
     ],
-  };
+  });
+  const emptyTracks = create(SearchTracksResponseSchema, {});
 
   test('?bpm_min triggers advanced render: filter summary + track list', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: tracksFixture }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, tracksFixture));
     await page.goto('/search?bpm_min=100&bpm_max=120');
     await page.waitForSelector('app-search');
     await expect(page.locator('h2')).toContainText('Advanced search');
@@ -148,7 +175,8 @@ test.describe('search — advanced track list view', () => {
 
   test('open-ended BPM range renders "100--" / "-120" summaries', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: { tracks: [] } }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, emptyTracks));
     await page.goto('/search?bpm_min=100');
     await page.waitForSelector('app-search');
     await expect(page.locator('.filter-summary')).toContainText('100--');
@@ -156,7 +184,8 @@ test.describe('search — advanced track list view', () => {
 
   test('Clear filters button navigates back to /search', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: { tracks: [] } }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, emptyTracks));
     await page.goto('/search?bpm_min=100');
     await page.waitForSelector('app-search');
     await page.locator('button', { hasText: 'Clear filters' }).click();
@@ -165,7 +194,8 @@ test.describe('search — advanced track list view', () => {
 
   test('empty track-results renders the "No tracks match" hint', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: { tracks: [] } }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, emptyTracks));
     await page.goto('/search?bpm_min=400');
     await page.waitForSelector('app-search');
     await expect(page.locator('.empty-text')).toContainText('No tracks match');
@@ -173,7 +203,7 @@ test.describe('search — advanced track list view', () => {
 
   test('searchTracks failure (500) renders the empty hint', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ status: 500 }));
+    await page.route(`**${CS}/SearchTracks`, r => r.fulfill({ status: 500 }));
     await page.goto('/search?bpm_min=100');
     await page.waitForSelector('app-search');
     await expect(page.locator('.empty-text')).toContainText('No tracks match');
@@ -181,7 +211,8 @@ test.describe('search — advanced track list view', () => {
 
   test('Play All starts the queue (playable filtered)', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: tracksFixture }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, tracksFixture));
     await page.route('**/audio/*', r => r.fulfill({ status: 204 }));
     await page.goto('/search?bpm_min=100');
     await page.waitForSelector('app-search .track-row');
@@ -192,7 +223,8 @@ test.describe('search — advanced track list view', () => {
 
   test('per-track play button is disabled for unplayable rows', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: tracksFixture }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, tracksFixture));
     await page.goto('/search?bpm_min=100');
     await page.waitForSelector('app-search .track-row');
     // Take Five is unplayable
@@ -217,9 +249,13 @@ test.describe('search — advanced search dialog', () => {
   test('preset chip click pre-fills bpm + time-sig fields', async ({ page }) => {
     await mockBackend(page);
     await loginAs(page);
-    await page.route('**/api/v2/search/presets*', r => r.fulfill({ json: { presets: [
-      { key: 'waltz', name: 'Waltz', description: 'Slow waltz', bpm_min: 80, bpm_max: 100, time_signature: '3/4' },
-    ] } }));
+    await page.route(`**${CS}/ListAdvancedSearchPresets`, r =>
+      fulfillProto(r, AdvancedSearchPresetsResponseSchema, create(AdvancedSearchPresetsResponseSchema, {
+        presets: [{
+          key: 'waltz', name: 'Waltz', description: 'Slow waltz',
+          bpmMin: 80, bpmMax: 100, timeSignature: '3/4',
+        }],
+      })));
     await page.goto('/search?advanced=1');
     await page.waitForSelector('app-advanced-search-dialog');
     await page.locator('mat-chip', { hasText: 'Waltz' }).click();
@@ -232,7 +268,8 @@ test.describe('search — advanced search dialog', () => {
 
   test('Search button with values closes the dialog and updates URL', async ({ page }) => {
     await setup(page);
-    await page.route('**/api/v2/search/tracks*', r => r.fulfill({ json: { tracks: [] } }));
+    await page.route(`**${CS}/SearchTracks`, r =>
+      fulfillProto(r, SearchTracksResponseSchema, create(SearchTracksResponseSchema)));
     await page.goto('/search?advanced=1');
     await page.waitForSelector('app-advanced-search-dialog');
     await page.locator('app-advanced-search-dialog input[type="text"]').fill('bossa');
@@ -281,7 +318,7 @@ test.describe('search — advanced search dialog', () => {
   test('preset load failure renders "No presets available"', async ({ page }) => {
     await mockBackend(page);
     await loginAs(page);
-    await page.route('**/api/v2/search/presets*', r => r.fulfill({ status: 500 }));
+    await page.route(`**${CS}/ListAdvancedSearchPresets`, r => r.fulfill({ status: 500 }));
     await page.goto('/search?advanced=1');
     await page.waitForSelector('app-advanced-search-dialog');
     await expect(page.locator('app-advanced-search-dialog .muted'))

@@ -113,6 +113,15 @@ enum SearchResultType {
   SEARCH_RESULT_TYPE_ARTIST = 9;
   SEARCH_RESULT_TYPE_AUTHOR = 10;
   SEARCH_RESULT_TYPE_TRACK = 11;
+  // Personal home videos. Distinct from MOVIE so the SPA can render
+  // the family-restroom icon for unmatched entries.
+  SEARCH_RESULT_TYPE_PERSONAL = 12;
+  // Live TV channel — reserved for when the search index starts
+  // covering channel-by-name lookup. Not emitted by the server today.
+  SEARCH_RESULT_TYPE_CHANNEL = 13;
+  // Configured camera — reserved for when the search index starts
+  // covering camera-by-name lookup. Not emitted by the server today.
+  SEARCH_RESULT_TYPE_CAMERA = 14;
 }
 
 // MusicBrainz artist-type taxonomy. Mirrors the Kotlin ArtistType enum.
@@ -507,6 +516,11 @@ message SearchResult {
   optional string artist_name = 19;         // context line for ALBUM/TRACK
   optional string album_name = 20;          // context line for TRACK
   optional int64 media_item_id = 21;        // BOOK edition identifier
+  // Reserved for CHANNEL / CAMERA result types. The server doesn't
+  // populate these today (those types aren't yet indexed), but the
+  // SPA renders by-id href when present.
+  optional int64 channel_id = 22;
+  optional int64 camera_id = 23;
 }
 
 // ============================================================================

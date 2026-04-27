@@ -30,11 +30,14 @@ import {
   SmartPlaylistDetailSchema,
 } from '../../src/app/proto-gen/playlist_pb';
 import {
+  AdvancedSearchPresetsResponseSchema,
   CollectionIdRequestSchema,
   CollectionListResponseSchema,
   FeaturesSchema,
   HomeFeedResponseSchema,
   ListTitlesRequestSchema,
+  SearchResponseSchema,
+  SearchTracksResponseSchema,
   TagListResponseSchema,
   TitlePageResponseSchema,
 } from '../../src/app/proto-gen/catalog_pb';
@@ -49,6 +52,11 @@ import { collectionDetail2344, collectionsList } from '../fixtures-typed/collect
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
 import { artistMilesDavis, artistsListFixture, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
 import { artistRecommendations } from '../fixtures-typed/recommendations.fixture';
+import {
+  advancedSearchPresetsFixture,
+  searchResultsFixture,
+  searchTracksEmptyFixture,
+} from '../fixtures-typed/search.fixture';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -232,6 +240,11 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     SetHidden:              noopEmpty,
     DismissMissingSeason:   noopEmpty,
     DismissContinueWatching: noopEmpty,
+    Search:                 r => fulfillProto(r, SearchResponseSchema, searchResultsFixture),
+    ListAdvancedSearchPresets:
+      r => fulfillProto(r, AdvancedSearchPresetsResponseSchema, advancedSearchPresetsFixture),
+    SearchTracks:
+      r => fulfillProto(r, SearchTracksResponseSchema, searchTracksEmptyFixture),
   };
 
   // ---- mediamanager.PlaylistService ----
@@ -327,20 +340,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     r.fulfill({ json: loadFixture('catalog/wishlist.json') })
   );
 
-  // Search lives under /api/v2/search (NOT /api/v2/catalog/search,
-  // despite the name). Use a regex so the route only matches the
-  // bare endpoint with optional query-string, leaving sub-paths
-  // (/search/presets, /search/tracks) to their own handlers below.
-  await page.route(/\/api\/v2\/search(\?|$)/, (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/search.results.json') })
-  );
-  await page.route('**/api/v2/search/tracks*', (r: Route) =>
-    r.fulfill({ json: { tracks: [] } })
-  );
-  // Advanced-search presets for the search dialog variant.
-  await page.route('**/api/v2/search/presets*', (r: Route) =>
-    r.fulfill({ json: { presets: [] } })
-  );
+  // /api/v2/search, /search/presets, /search/tracks are no longer hit —
+  // search() / listAdvancedSearchPresets() / searchTracks() go through
+  // CatalogService.{Search,ListAdvancedSearchPresets,SearchTracks}
+  // (dispatched in the gRPC route block above).
 
   // /api/v2/recommendations/* are no longer hit — discover-feed reads
   // ArtistService.{ListArtistRecommendations,DismissArtistRecommendation,
