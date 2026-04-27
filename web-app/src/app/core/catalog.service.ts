@@ -824,7 +824,9 @@ export class CatalogService {
   private readonly http = inject(HttpClient);
 
   async getHomeFeed(): Promise<HomeFeed> {
-    return firstValueFrom(this.http.get<HomeFeed>('/api/v2/catalog/home'));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.homeFeed({});
+    return adaptProtoHomeFeed(proto);
   }
 
   async getArtistRecommendations(limit: number = 30): Promise<ArtistRecommendationsResponse> {
@@ -848,7 +850,9 @@ export class CatalogService {
   }
 
   async getFeatures(): Promise<FeatureFlags> {
-    return firstValueFrom(this.http.get<FeatureFlags>('/api/v2/catalog/features'));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getFeatures({});
+    return adaptProtoFeatures(proto);
   }
 
   /**
@@ -1631,6 +1635,151 @@ function adaptProtoCollectionDetail(
     owned_count: parts.filter(p => p.owned).length,
     total_parts: parts.length,
     parts,
+  };
+}
+
+function adaptContinueWatching(t: import('../proto-gen/common_pb').Title): ContinueWatchingItem {
+  // Title carries resume_position / resume_duration on the home-feed
+  // continue_watching slot. Episode context (S/E numbers + name) is
+  // populated only for TV titles.
+  const positionSeconds = t.resumePosition?.seconds ?? 0;
+  const durationSeconds = t.resumeDuration?.seconds ?? 0;
+  const fraction = durationSeconds > 0
+    ? Math.max(0, Math.min(1, positionSeconds / durationSeconds))
+    : 0;
+  const remaining = Math.max(1, Math.floor((durationSeconds - positionSeconds) / 60));
+  const isEpisode = t.resumeSeasonNumber != null;
+  const seasonNumber = t.resumeSeasonNumber ?? null;
+  const episodeNumber = t.resumeEpisodeNumber ?? null;
+  const episodeName = t.resumeEpisodeName ?? null;
+  const sxxexx = isEpisode
+    ? `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber ?? 0).padStart(2, '0')}`
+    : null;
+  return {
+    transcode_id: Number(t.transcodeId ?? 0n),
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    position_seconds: positionSeconds,
+    duration_seconds: durationSeconds,
+    progress_fraction: fraction,
+    time_remaining: `${remaining} min left`,
+    is_episode: isEpisode,
+    episode_label: isEpisode
+      ? (episodeName ? `${sxxexx} — ${episodeName}` : sxxexx)
+      : null,
+    season_number: seasonNumber,
+    episode_number: episodeNumber,
+    episode_name: episodeName,
+  };
+}
+
+function adaptCarouselTitle(t: import('../proto-gen/common_pb').Title): CarouselTitle {
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+  };
+}
+
+function adaptRecentBook(t: import('../proto-gen/common_pb').Title): RecentBook {
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+    author_name: t.authorName ?? null,
+    series_name: t.seriesName ?? null,
+    series_number: t.seriesNumber ?? null,
+  };
+}
+
+function adaptRecentAlbum(t: import('../proto-gen/common_pb').Title): RecentAlbum {
+  return {
+    title_id: Number(t.id),
+    title_name: t.name,
+    poster_url: t.posterUrl ?? null,
+    release_year: t.year ?? null,
+    artist_name: t.artistName ?? null,
+    track_count: t.trackCount ?? null,
+  };
+}
+
+function adaptResumeTrack(rt: import('../proto-gen/common_pb').ResumeTrack): ResumeListeningItem {
+  return {
+    track_id: Number(rt.trackId),
+    track_name: rt.trackName,
+    title_id: Number(rt.titleId),
+    title_name: rt.titleName,
+    poster_url: rt.posterUrl ?? null,
+    artist_name: rt.artistName ?? null,
+    position_seconds: rt.position?.seconds ?? 0,
+    duration_seconds: rt.duration?.seconds ?? 0,
+    percent: rt.percent,
+    updated_at: rt.updatedAt
+      ? new Date(Number(rt.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
+  };
+}
+
+function adaptResumeReading(rr: import('../proto-gen/common_pb').ResumeReading): ResumeReadingItem {
+  return {
+    media_item_id: Number(rr.mediaItemId),
+    title_id: Number(rr.titleId),
+    title_name: rr.titleName,
+    poster_url: rr.posterUrl ?? null,
+    percent: rr.percent,
+    media_format: PROTO_MEDIA_FORMAT_TO_LEGACY[rr.mediaFormat] ?? 'UNKNOWN',
+    updated_at: rr.updatedAt
+      ? new Date(Number(rr.updatedAt.secondsSinceEpoch) * 1000).toISOString()
+      : null,
+  };
+}
+
+function adaptMissingSeason(m: import('../proto-gen/common_pb').MissingSeason): MissingSeason {
+  return {
+    title_id: Number(m.titleId),
+    title_name: m.titleName,
+    poster_url: m.posterUrl ?? null,
+    tmdb_id: m.tmdbId ?? null,
+    // The proto MediaType enum collapses to 'MOVIE' / 'TV' / etc.; the
+    // legacy field is "movie" / "tv" lowercase (TMDB convention) for
+    // the missing-seasons-side dismiss link. Normalise to lowercase.
+    tmdb_media_type: (PROTO_MEDIA_TYPE_TO_LEGACY[m.mediaType] ?? '').toLowerCase() || null,
+    missing_seasons: m.seasons.map(s => ({ season_number: s.seasonNumber })),
+  };
+}
+
+function adaptProtoFeatures(f: import('../proto-gen/catalog_pb').Features | undefined): FeatureFlags {
+  return {
+    has_personal_videos: f?.hasPersonalVideos ?? false,
+    has_books: f?.hasBooks ?? false,
+    has_music: f?.hasMusic ?? false,
+    has_music_radio: f?.hasMusicRadio ?? false,
+    has_cameras: f?.hasCameras ?? false,
+    has_live_tv: f?.hasLiveTv ?? false,
+    is_admin: f?.isAdmin ?? false,
+    wish_ready_count: f?.wishReadyCount ?? 0,
+    unmatched_count: f?.unmatchedCount ?? 0,
+    unmatched_books_count: f?.unmatchedBooksCount ?? 0,
+    unmatched_audio_count: f?.unmatchedAudioCount ?? 0,
+    data_quality_count: f?.dataQualityCount ?? 0,
+    open_reports_count: f?.openReportsCount ?? 0,
+  };
+}
+
+function adaptProtoHomeFeed(p: import('../proto-gen/catalog_pb').HomeFeedResponse): HomeFeed {
+  return {
+    continue_watching: p.continueWatching.map(adaptContinueWatching),
+    recently_added: p.recentlyAdded.map(adaptCarouselTitle),
+    recently_added_books: p.recentlyAddedBooks.map(adaptRecentBook),
+    recently_added_albums: p.recentlyAddedAlbums.map(adaptRecentAlbum),
+    resume_listening: p.resumeListening.map(adaptResumeTrack),
+    resume_reading: p.resumeReading.map(adaptResumeReading),
+    recently_watched: p.recentlyWatched.map(adaptCarouselTitle),
+    missing_seasons: p.missingSeasons.map(adaptMissingSeason),
+    features: adaptProtoFeatures(p.features),
   };
 }
 

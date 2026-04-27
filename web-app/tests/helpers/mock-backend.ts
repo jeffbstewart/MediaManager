@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { loadFixture } from './load-fixture';
 import { fulfillProto, unframeGrpcWebRequest } from './proto-fixture';
-import { create, fromBinary } from '@bufbuild/protobuf';
+import { clone, create, fromBinary } from '@bufbuild/protobuf';
 import {
   ActorDetailSchema,
   CollectionDetailSchema,
@@ -13,6 +13,8 @@ import {
 import {
   CollectionIdRequestSchema,
   CollectionListResponseSchema,
+  FeaturesSchema,
+  HomeFeedResponseSchema,
   ListTitlesRequestSchema,
   TagListResponseSchema,
   TitlePageResponseSchema,
@@ -25,6 +27,7 @@ import { tagsList } from '../fixtures-typed/tags-list.fixture';
 import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
 import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fixture';
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
+import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
 
 /**
  * Backend-mock options. Each key toggles one endpoint's default response.
@@ -100,19 +103,25 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   );
 
   // --- Catalog ---
-  const featuresFixture = opts.features === 'admin'
-    ? 'catalog/features.admin.json'
-    : 'catalog/features.viewer.json';
-  const homeFixture = opts.homeFeed === 'empty'
-    ? 'catalog/home.empty.json'
-    : 'catalog/home.populated.json';
-
-  await page.route('**/api/v2/catalog/features', (r: Route) =>
-    r.fulfill({ json: loadFixture(featuresFixture) })
-  );
-  await page.route('**/api/v2/catalog/home', (r: Route) =>
-    r.fulfill({ json: loadFixture(homeFixture) })
-  );
+  // /api/v2/catalog/features and /api/v2/catalog/home are no longer
+  // hit — getFeatures() and getHomeFeed() go through the gRPC
+  // GetFeatures and HomeFeed RPCs (dispatched in the gRPC route block
+  // below). Per-test gRPC fixtures pick up `opts.features` /
+  // `opts.homeFeed` via the closure variables here.
+  //
+  // The home fixture's nested `features` is paired with the standalone
+  // featuresFixture so the home page's onload-publish to FeatureService
+  // matches what the shell's getFeatures() already set. Otherwise admin
+  // flags would silently flip back to viewer when the home page
+  // resolved.
+  const featuresFixture = opts.features === 'admin' ? featuresAdmin : featuresViewer;
+  const homeFixture = (() => {
+    const base = opts.homeFeed === 'empty' ? homeFeedEmpty : homeFeedPopulated;
+    if (opts.features !== 'admin') return base;
+    const variant = clone(HomeFeedResponseSchema, base);
+    variant.features = clone(FeaturesSchema, featuresAdmin);
+    return variant;
+  })();
 
   // --- Browse grids (Tier 3) ---
   // /api/v2/catalog/titles + /api/v2/catalog/collections are no longer
@@ -166,6 +175,12 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     }
     if (rpc === 'ListTags') {
       return fulfillProto(r, TagListResponseSchema, tagsList);
+    }
+    if (rpc === 'HomeFeed') {
+      return fulfillProto(r, HomeFeedResponseSchema, homeFixture);
+    }
+    if (rpc === 'GetFeatures') {
+      return fulfillProto(r, FeaturesSchema, featuresFixture);
     }
     if (rpc === 'GetActorDetail') {
       // Fixture covers Keanu (6384) — every other person id falls back

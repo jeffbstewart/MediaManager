@@ -64,6 +64,16 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         private const val MAX_CAROUSEL_ITEMS = 25
         private const val DEFAULT_PAGE_LIMIT = 25
         private const val MAX_PAGE_LIMIT = 100
+
+        /** Format enum names representing a book edition. Mirrors MediaFormat.BOOK_FORMATS. */
+        private val BOOK_FORMAT_NAMES: Set<String> = net.stewart.mediamanager.entity.MediaFormat
+            .BOOK_FORMATS.mapTo(mutableSetOf()) { it.name }
+
+        /** Format enum names representing a music edition (CD / vinyl / digital audio). */
+        private val MUSIC_FORMAT_NAMES: Set<String> =
+            (net.stewart.mediamanager.entity.MediaFormat.PHYSICAL_MUSIC_FORMATS +
+                net.stewart.mediamanager.entity.MediaFormat.DIGITAL_AUDIO_FORMATS)
+                .mapTo(mutableSetOf()) { it.name }
     }
 
     // ========================================================================
@@ -244,10 +254,290 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
         }
 
+        // --- SPA-typed lists (alongside `carousels`, which iOS / Android TV
+        // continue to read). Each list reuses `Title.toProto` where the row
+        // is title-shaped; resume_listening / resume_reading have their own
+        // message types because they carry track / edition context that
+        // doesn't fit on Title. ---
+
+        val continueWatching = PlaybackProgressService.getContinueWatchingForUser(user.id!!, 5)
+            .mapNotNull { cw ->
+                val title = catalog.titlesById[cw.titleId] ?: return@mapNotNull null
+                val tc = TranscodeEntity.findById(cw.transcodeId) ?: return@mapNotNull null
+                val base = title.toProto(tc, nasRoot, familyNames[title.id])
+                base.toBuilder().apply {
+                    resumePosition = cw.positionSeconds.toPlaybackOffset()
+                    resumeDuration = cw.durationSeconds.toPlaybackOffset()
+                    cw.seasonNumber?.let { resumeSeasonNumber = it }
+                    cw.episodeNumber?.let { resumeEpisodeNumber = it }
+                    cw.episodeName?.let { resumeEpisodeName = it }
+                }.build()
+            }
+
+        val recentlyAddedTyped = PlaybackProgressService.getRecentlyAddedForUser(user, 10)
+            .map { (title, tc) -> title.toProto(tc, nasRoot, familyNames[title.id]) }
+
+        val recentlyWatched = PlaybackProgressService.getRecentlyWatchedForUser(user.id!!, 10)
+            .map { title ->
+                val tc = catalog.playableByTitle[title.id]?.firstOrNull()
+                title.toProto(tc, nasRoot, familyNames[title.id])
+            }
+
+        // Book + album carousel data — pull from MediaItem ordering so the
+        // carousel surfaces the most recently catalogued additions, not just
+        // titles with playback progress.
+        val recentlyAddedBooks = buildRecentlyAddedBooks(user, 10)
+        val recentlyAddedAlbums = buildRecentlyAddedAlbums(user, 10)
+        val resumeListening = buildResumeListening(user, 10)
+        val resumeReading = buildResumeReading(user, 10)
+
+        val featuresMsg = buildFeatures(user)
+
         return homeFeedResponse {
             this.carousels.addAll(carousels)
             this.missingSeasons.addAll(missingSeasons)
+            this.continueWatching.addAll(continueWatching)
+            this.recentlyAdded.addAll(recentlyAddedTyped)
+            this.recentlyAddedBooks.addAll(recentlyAddedBooks)
+            this.recentlyAddedAlbums.addAll(recentlyAddedAlbums)
+            this.resumeListening.addAll(resumeListening)
+            this.resumeReading.addAll(resumeReading)
+            this.recentlyWatched.addAll(recentlyWatched)
+            features = featuresMsg
         }
+    }
+
+    /**
+     * Per-user feature flags + admin badge counts. Mirrors
+     * HomeFeedHttpService.features — the SPA reads this to gate nav
+     * sections (Cameras / Live TV only when configured) and to render
+     * red badge counts next to admin queues.
+     */
+    private fun buildFeatures(user: AppUser): Features {
+        val allTitles = TitleEntity.findAll()
+        val hasBooks = allTitles.any { it.media_type == MediaTypeEnum.BOOK.name }
+        val hasMusic = allTitles.any { it.media_type == MediaTypeEnum.ALBUM.name }
+        val hasPersonal = allTitles.any { it.media_type == MediaTypeEnum.PERSONAL.name }
+        val isAdmin = user.isAdmin()
+
+        // Admin queue counts. Skip the entity scans entirely for non-admins
+        // so the home page doesn't pay for data the user can never see.
+        val unmatchedTranscodeCount = if (isAdmin) {
+            net.stewart.mediamanager.entity.DiscoveredFile.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.DiscoveredFileStatus.UNMATCHED.name
+            }
+        } else 0
+        val unmatchedBooksCount = if (isAdmin) {
+            net.stewart.mediamanager.entity.UnmatchedBook.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedBookStatus.UNMATCHED.name
+            }
+        } else 0
+        val unmatchedAudioCount = if (isAdmin) {
+            net.stewart.mediamanager.entity.UnmatchedAudio.findAll().count {
+                it.match_status == net.stewart.mediamanager.entity.UnmatchedAudioStatus.UNMATCHED.name
+            }
+        } else 0
+        val dataQualityCount = if (isAdmin) {
+            allTitles.count {
+                it.enrichment_status != net.stewart.mediamanager.entity.EnrichmentStatus.ENRICHED.name &&
+                    it.media_type != MediaTypeEnum.PERSONAL.name &&
+                    it.media_type != MediaTypeEnum.BOOK.name
+            }
+        } else 0
+        val openReportsCount = if (isAdmin) {
+            net.stewart.mediamanager.entity.ProblemReport.findAll().count {
+                it.status == net.stewart.mediamanager.entity.ReportStatus.OPEN.name
+            }
+        } else 0
+
+        return features {
+            hasPersonalVideos = hasPersonal
+            this.hasBooks = hasBooks
+            this.hasMusic = hasMusic
+            hasMusicRadio = net.stewart.mediamanager.service.SimilarArtistService.hasRadio()
+            hasCameras = net.stewart.mediamanager.entity.Camera.findAll().any { it.enabled }
+            hasLiveTv = net.stewart.mediamanager.entity.LiveTvTuner.findAll().any { it.enabled }
+            this.isAdmin = isAdmin
+            wishReadyCount = net.stewart.mediamanager.service.WishListService
+                .getReadyToWatchWishCountForUser(user.id!!)
+            unmatchedCount = unmatchedTranscodeCount
+            this.unmatchedBooksCount = unmatchedBooksCount
+            this.unmatchedAudioCount = unmatchedAudioCount
+            this.dataQualityCount = dataQualityCount
+            this.openReportsCount = openReportsCount
+        }
+    }
+
+    /**
+     * Builds the "Recently added books" carousel. Mirrors the helper in
+     * HomeFeedHttpService — newest book MediaItems first, deduped by title
+     * (we own a book once regardless of how many editions), with
+     * series + author context populated on the proto.
+     */
+    private fun buildRecentlyAddedBooks(user: AppUser, limit: Int): List<Title> {
+        val allTitles = TitleEntity.findAll().associateBy { it.id }
+        val allSeries = net.stewart.mediamanager.entity.BookSeries.findAll().associateBy { it.id }
+        val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
+        val authorsByTitle = net.stewart.mediamanager.entity.TitleAuthor.findAll()
+            .sortedBy { it.author_order }
+            .groupBy { it.title_id }
+        val authors = net.stewart.mediamanager.entity.Author.findAll().associateBy { it.id }
+
+        val seen = mutableSetOf<Long>()
+        val rows = mutableListOf<Title>()
+        val bookItems = MediaItemEntity.findAll()
+            .filter { it.media_format in BOOK_FORMAT_NAMES && it.created_at != null }
+            .sortedByDescending { it.created_at }
+
+        for (item in bookItems) {
+            if (rows.size >= limit) break
+            val titleIds = links[item.id]?.map { it.title_id }.orEmpty()
+            for (titleId in titleIds) {
+                if (titleId in seen) continue
+                val title = allTitles[titleId] ?: continue
+                if (title.media_type != MediaTypeEnum.BOOK.name) continue
+                if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+                seen += titleId
+
+                val series = title.book_series_id?.let { allSeries[it] }
+                val authorName = authorsByTitle[titleId]
+                    ?.mapNotNull { authors[it.author_id]?.name }
+                    ?.firstOrNull()
+                rows += title.toProto(
+                    nasRoot = null,
+                    authorName = authorName,
+                    seriesName = series?.name,
+                    seriesNumber = title.series_number?.toPlainString(),
+                )
+                if (rows.size >= limit) break
+            }
+        }
+        return rows
+    }
+
+    /**
+     * "Recently added albums" — symmetric to [buildRecentlyAddedBooks].
+     * Newest physical + digital music MediaItems, deduped by title, with
+     * the primary artist + track count populated for the album list card.
+     */
+    private fun buildRecentlyAddedAlbums(user: AppUser, limit: Int): List<Title> {
+        val allTitles = TitleEntity.findAll().associateBy { it.id }
+        val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
+        val artistsByTitle = net.stewart.mediamanager.entity.TitleArtist.findAll()
+            .sortedBy { it.artist_order }
+            .groupBy { it.title_id }
+        val artists = net.stewart.mediamanager.entity.Artist.findAll().associateBy { it.id }
+
+        val seen = mutableSetOf<Long>()
+        val rows = mutableListOf<Title>()
+        val musicItems = MediaItemEntity.findAll()
+            .filter { it.media_format in MUSIC_FORMAT_NAMES && it.created_at != null }
+            .sortedByDescending { it.created_at }
+
+        for (item in musicItems) {
+            if (rows.size >= limit) break
+            val titleIds = links[item.id]?.map { it.title_id }.orEmpty()
+            for (titleId in titleIds) {
+                if (titleId in seen) continue
+                val title = allTitles[titleId] ?: continue
+                if (title.media_type != MediaTypeEnum.ALBUM.name) continue
+                if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+                seen += titleId
+
+                val artistName = artistsByTitle[titleId]
+                    ?.mapNotNull { artists[it.artist_id]?.name }
+                    ?.firstOrNull()
+                rows += title.toProto(
+                    nasRoot = null,
+                    artistName = artistName,
+                    trackCount = title.track_count,
+                )
+                if (rows.size >= limit) break
+            }
+        }
+        return rows
+    }
+
+    /**
+     * "Continue Listening" — most recent track listening_progress rows
+     * with the parent album + primary artist resolved.
+     */
+    private fun buildResumeListening(user: AppUser, limit: Int): List<ResumeTrack> {
+        val recent = net.stewart.mediamanager.service.ListeningProgressService.recentForUser(user.id!!, limit * 2)
+        if (recent.isEmpty()) return emptyList()
+
+        val trackIds = recent.map { it.track_id }.toSet()
+        val tracks = TrackRow.findAll()
+            .filter { it.id in trackIds }
+            .associateBy { it.id }
+        val titleIds = tracks.values.map { it.title_id }.toSet()
+        val titles = TitleEntity.findAll().filter { it.id in titleIds }.associateBy { it.id }
+        val artistsByTitle = net.stewart.mediamanager.entity.TitleArtist.findAll()
+            .filter { it.title_id in titleIds && it.artist_order == 0 }
+            .associate { it.title_id to it.artist_id }
+        val artists = net.stewart.mediamanager.entity.Artist.findAll().associateBy { it.id }
+
+        val rows = mutableListOf<ResumeTrack>()
+        for (progress in recent) {
+            if (rows.size >= limit) break
+            val track = tracks[progress.track_id] ?: continue
+            val title = titles[track.title_id] ?: continue
+            if (title.hidden || !user.canSeeRating(title.content_rating)) continue
+
+            val artistName = artistsByTitle[title.id]?.let { artists[it]?.name }
+            val durationSeconds = (progress.duration_seconds ?: track.duration_seconds ?: 0).toDouble()
+            val pct = if (durationSeconds > 0) {
+                (progress.position_seconds.toDouble() / durationSeconds).coerceIn(0.0, 1.0)
+            } else 0.0
+            rows += resumeTrack {
+                trackId = track.id!!
+                trackName = track.name
+                titleId = title.id!!
+                titleName = title.name
+                artistName?.let { this.artistName = it }
+                title.posterUrl(net.stewart.mediamanager.entity.PosterSize.THUMBNAIL)?.let { posterUrl = it }
+                position = progress.position_seconds.toDouble().toPlaybackOffset()
+                if (durationSeconds > 0) duration = durationSeconds.toPlaybackOffset()
+                percent = pct
+                progress.updated_at?.let { updatedAt = it.toProtoTimestamp() }
+            }
+        }
+        return rows
+    }
+
+    /**
+     * "Resume Reading" — newest reading_progress rows joined to the linked
+     * MediaItem + parent Title.
+     */
+    private fun buildResumeReading(user: AppUser, limit: Int): List<ResumeReading> {
+        val rows = ReadingProgressService.recentForUser(user.id!!, limit)
+        if (rows.isEmpty()) return emptyList()
+
+        val itemsById = MediaItemEntity.findAll().associateBy { it.id }
+        val allTitles = TitleEntity.findAll().associateBy { it.id }
+        val linksByItem = MediaItemTitle.findAll().groupBy { it.media_item_id }
+
+        return rows.mapNotNull { progress ->
+            val item = itemsById[progress.media_item_id] ?: return@mapNotNull null
+            val title = linksByItem[item.id]?.firstNotNullOfOrNull { allTitles[it.title_id] }
+                ?: return@mapNotNull null
+            if (title.hidden || !user.canSeeRating(title.content_rating)) return@mapNotNull null
+
+            resumeReading {
+                mediaItemId = item.id!!
+                titleId = title.id!!
+                titleName = title.name
+                title.posterUrl(net.stewart.mediamanager.entity.PosterSize.THUMBNAIL)?.let { posterUrl = it }
+                mediaFormat = item.media_format.toProtoMediaFormat()
+                percent = progress.percent
+                progress.updated_at?.let { updatedAt = it.toProtoTimestamp() }
+            }
+        }
+    }
+
+
+    override suspend fun getFeatures(request: Empty): Features {
+        return buildFeatures(currentUser())
     }
 
     // ========================================================================

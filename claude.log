@@ -4839,3 +4839,43 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Validation: full harness 610/611 — same recurring
   15-books-and-reader:232 flake; otherwise clean.
 ===
+
+=== 2026-04-26 23:05 — HomeFeed + GetFeatures on gRPC ===
+- HomeFeed handler in CatalogGrpcService now populates the SPA-typed
+  fields alongside the existing `carousels` (which iOS / Android TV
+  consume): continue_watching, recently_added, recently_added_books,
+  recently_added_albums, resume_listening, resume_reading,
+  recently_watched, plus the new `features` field.
+- New helpers in CatalogGrpcService: buildRecentlyAddedBooks,
+  buildRecentlyAddedAlbums, buildResumeListening, buildResumeReading,
+  buildFeatures. Each mirrors the legacy REST helper in
+  HomeFeedHttpService 1:1; once the SPA stops calling REST and
+  iOS/Android TV migrate off `carousels`, the REST handler can delete.
+- New gRPC RPC: CatalogService/GetFeatures returns the same Features
+  payload as HomeFeedResponse.features. Lightweight call for nav
+  gating on every page transition without paying carousel
+  computation.
+- New proto Features message (catalog.proto) — added with HomeFeed's
+  features field. Mirrors the legacy /api/v2/catalog/features JSON
+  shape.
+- SPA migrations: getHomeFeed() and getFeatures() now call gRPC.
+  adaptProtoHomeFeed + adaptProtoFeatures + a half-dozen carousel-item
+  adapters (adaptContinueWatching, adaptCarouselTitle, adaptRecentBook,
+  adaptRecentAlbum, adaptResumeTrack, adaptResumeReading,
+  adaptMissingSeason).
+- mock-backend gRPC dispatch covers HomeFeed + GetFeatures. The home
+  fixture is auto-paired with the admin features fixture when
+  opts.features='admin' so the home page's onload-republish to
+  FeatureService keeps the admin flags set.
+- New typed fixture home-feed.fixture.ts mirrors home.populated.json,
+  home.empty.json, features.viewer.json, features.admin.json.
+- 10-sidenav-links setFeatures helper rewritten to override the
+  gRPC GetFeatures + HomeFeed routes with proto-typed payloads
+  instead of legacy REST. The admin sidenav describe block drops
+  its REST override since mock-backend now handles the pairing
+  automatically.
+- Legacy /api/v2/catalog/home and /api/v2/catalog/features routes
+  removed from mock-backend (no SPA caller after this).
+- Validation: gradle test green, full harness 603/605 (same
+  recurring 15-books-and-reader:232 flake).
+===

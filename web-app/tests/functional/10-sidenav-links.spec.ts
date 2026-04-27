@@ -2,7 +2,14 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { loadFixture } from '../helpers/load-fixture';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { clone } from '@bufbuild/protobuf';
+import {
+  FeaturesSchema,
+  HomeFeedResponseSchema,
+  type Features,
+} from '../../src/app/proto-gen/catalog_pb';
+import { featuresViewer, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
 
 // Sidenav navigation test. The shell exposes ~30 routes through the
 // left drawer; this spec verifies each link's href matches the route
@@ -99,21 +106,35 @@ function nestedLink(page: Page, label: string) {
 }
 
 /**
- * Override BOTH endpoints that publish to FeatureService — the
- * shell's /catalog/features call AND the home component's
- * `data.features` re-publish — with a merged payload so the sidenav
- * sees a stable feature set throughout the page lifecycle.
+ * Override BOTH gRPC RPCs that publish to FeatureService — the shell's
+ * GetFeatures call AND the home component's `data.features` re-publish
+ * (which arrives via HomeFeed) — so the sidenav sees a stable feature
+ * set throughout the page lifecycle.
  *
- * Pass partial overrides; the rest comes from features.viewer.json
- * (every flag on, is_admin false).
+ * Pass partial overrides keyed by the legacy snake_case flag name
+ * (has_books, has_cameras, …); the helper translates to proto camelCase
+ * and merges over the viewer base.
  */
 async function setFeatures(page: Page, overrides: Record<string, boolean>) {
-  const base = loadFixture<Record<string, unknown>>('catalog/features.viewer.json');
-  const merged = { ...base, ...overrides };
-  await page.route('**/api/v2/catalog/features', route => route.fulfill({ json: merged }));
-  const home = loadFixture<{ features: Record<string, unknown> }>('catalog/home.populated.json');
-  home.features = merged;
-  await page.route('**/api/v2/catalog/home', route => route.fulfill({ json: home }));
+  const features = clone(FeaturesSchema, featuresViewer);
+  const map: Record<string, keyof Features> = {
+    has_books: 'hasBooks',
+    has_cameras: 'hasCameras',
+    has_music_radio: 'hasMusicRadio',
+    has_personal_videos: 'hasPersonalVideos',
+    has_live_tv: 'hasLiveTv',
+    has_music: 'hasMusic',
+  };
+  for (const [k, v] of Object.entries(overrides)) {
+    const protoKey = map[k];
+    if (protoKey) (features as unknown as Record<string, boolean>)[protoKey] = v;
+  }
+  const home = clone(HomeFeedResponseSchema, homeFeedPopulated);
+  home.features = clone(FeaturesSchema, features);
+  await page.route('**/mediamanager.CatalogService/GetFeatures', r =>
+    fulfillProto(r, FeaturesSchema, features));
+  await page.route('**/mediamanager.CatalogService/HomeFeed', r =>
+    fulfillProto(r, HomeFeedResponseSchema, home));
 }
 
 // Each row: a single feature flag, the labels that should disappear
@@ -172,20 +193,14 @@ test.describe('sidenav — viewer (non-admin)', () => {
 
 test.describe('sidenav — admin', () => {
   test.beforeEach(async ({ page }) => {
+    // mockBackend's gRPC HomeFeed dispatch automatically pairs the
+    // home fixture's nested `features` with the admin features
+    // payload when opts.features === 'admin', so the home page's
+    // onload-republish keeps the admin flags set rather than
+    // overwriting them with the viewer default.
     await mockBackend(page, { features: 'admin' });
     await loginAs(page);
     await stubImages(page);
-    // The home component re-publishes its OWN `features` payload to
-    // FeatureService on load (so admin badges hydrate from the same
-    // round-trip as the home feed). The default home.populated.json
-    // ships with is_admin=false, which immediately overrides what the
-    // shell's getFeatures() set. Override the home endpoint so its
-    // features mirror the admin features fixture.
-    const home = loadFixture<{ features: Record<string, unknown> }>('catalog/home.populated.json');
-    home.features = loadFixture('catalog/features.admin.json');
-    await page.route('**/api/v2/catalog/home', route =>
-      route.fulfill({ json: home }),
-    );
     await page.goto('/');
     await page.waitForSelector('mat-sidenav .section-header');
   });

@@ -11,6 +11,11 @@ import "common.proto";
 service CatalogService {
   // --- Home Feed ---
   rpc HomeFeed(Empty) returns (HomeFeedResponse);
+  // Lightweight features-only endpoint. Same Features payload as the
+  // `features` field on HomeFeedResponse — used by the SPA's nav
+  // gating on every page transition without paying the carousel
+  // computation cost.
+  rpc GetFeatures(Empty) returns (Features);
   rpc DismissContinueWatching(TitleIdRequest) returns (Empty);
   rpc DismissMissingSeason(DismissMissingSeasonRequest) returns (Empty);
 
@@ -137,6 +142,29 @@ message HomeFeedResponse {
   repeated ResumeTrack resume_listening = 7;
   repeated ResumeReading resume_reading = 8;
   repeated Title recently_watched = 9;
+
+  // Per-user feature flags. Drives the SPA's nav gating (cameras /
+  // live tv links shown only when configured) and admin badge counts.
+  // Bundled here because every home-page render needs both the
+  // carousels and the gating bits — separating them would double the
+  // request count.
+  Features features = 10;
+}
+
+message Features {
+  bool has_personal_videos = 1;
+  bool has_books = 2;
+  bool has_music = 3;
+  bool has_music_radio = 4;
+  bool has_cameras = 5;
+  bool has_live_tv = 6;
+  bool is_admin = 7;
+  int32 wish_ready_count = 8;
+  int32 unmatched_count = 9;
+  int32 unmatched_books_count = 10;
+  int32 unmatched_audio_count = 11;
+  int32 data_quality_count = 12;
+  int32 open_reports_count = 13;
 }
 
 message TitlePageResponse {
