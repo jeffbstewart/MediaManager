@@ -60,6 +60,8 @@ import {
 } from '../fixtures-typed/search.fixture';
 import { camerasList, tvChannelsList } from '../fixtures-typed/live.fixture';
 import { CameraListResponseSchema, TvChannelListResponseSchema } from '../../src/app/proto-gen/live_pb';
+import { tagDetailFixture } from '../fixtures-typed/tag-detail.fixture';
+import { TagDetailSchema } from '../../src/app/proto-gen/common_pb';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -243,6 +245,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     SetHidden:              noopEmpty,
     DismissMissingSeason:   noopEmpty,
     DismissContinueWatching: noopEmpty,
+    GetTagDetail:           r => fulfillProto(r, TagDetailSchema, tagDetailFixture),
     Search:                 r => fulfillProto(r, SearchResponseSchema, searchResultsFixture),
     ListAdvancedSearchPresets:
       r => fulfillProto(r, AdvancedSearchPresetsResponseSchema, advancedSearchPresetsFixture),
@@ -353,9 +356,11 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/catalog/series/*', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/series.json') })
   );
-  await page.route('**/api/v2/catalog/tags/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/tag-detail.json') })
-  );
+  // /api/v2/catalog/tags/:id is no longer hit — getTagDetail() goes
+  // through CatalogService.GetTagDetail (dispatched in the gRPC
+  // route block above). The legacy `**/tags/*` glob also caught
+  // /tags/:id/titles/:titleId admin add/remove paths; those still
+  // ride REST and are handled by per-test page.route() overrides.
   // /api/v2/catalog/collections/:id is no longer hit — getCollectionDetail()
   // calls GetCollectionDetail via gRPC (dispatched above).
 

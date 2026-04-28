@@ -1710,11 +1710,17 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             val visibleAlbums = TitleEntity.findAll()
                 .filter { it.id in albumIds && !it.hidden }
                 .filter { user.canSeeRating(it.content_rating) }
-                .mapNotNull { it.id }
-                .toSet()
-            rows.filter { it.title_id in visibleAlbums }
+            val visibleAlbumIds = visibleAlbums.mapNotNull { it.id }.toSet()
+            val albumNamesById = visibleAlbums.associate { it.id!! to it.name }
+            rows.filter { it.title_id in visibleAlbumIds }
                 .sortedWith(compareBy({ it.title_id }, { it.disc_number }, { it.track_number }))
-                .map { it.toProto() }
+                .map { row ->
+                    val proto = row.toProto()
+                    val parentName = albumNamesById[row.title_id]
+                    if (parentName != null) {
+                        proto.toBuilder().setTitleName(parentName).build()
+                    } else proto
+                }
         }
 
         return tagDetail {

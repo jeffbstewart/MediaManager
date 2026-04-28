@@ -944,7 +944,26 @@ export class CatalogService {
   }
 
   async getTagDetail(tagId: number): Promise<TagDetailResponse> {
-    return firstValueFrom(this.http.get<TagDetailResponse>(`/api/v2/catalog/tags/${tagId}`));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getTagDetail({ tagId: BigInt(tagId) });
+    const titles = proto.titles.map(adaptTitleCard);
+    const tracks = proto.tracks.map(adaptProtoTaggedTrack);
+    const bg = proto.color?.hex ?? '#000000';
+    return {
+      tag: {
+        id: tagId,
+        name: proto.name,
+        bg_color: bg,
+        // Server doesn't send text_color — pick black/white for
+        // contrast same as adaptTag below.
+        text_color: pickTextColor(bg),
+        title_count: titles.length,
+      },
+      titles,
+      total: titles.length,
+      tracks,
+      track_total: tracks.length,
+    };
   }
 
   /** Admin only — create a new tag and return its id. */
@@ -1573,6 +1592,33 @@ function adaptProtoTitleDetail(p: ProtoTitleDetail): TitleDetail {
     page_count: book?.pageCount ?? null,
     first_publication_year: book?.firstPublicationYear ?? null,
     open_library_work_id: book?.openLibraryWorkId ?? null,
+  };
+}
+
+// Tagged-tracks rows on the tag detail page. Proto.Track carries the
+// album linkage as title_id + a sibling album lookup; the SPA's
+// TaggedTrackCard wants poster_url constructed same-origin from the
+// title id and a flattened artist string. The track's `tags` list is
+// not surfaced on the tag detail page (it's always at least the
+// current tag), so we drop it.
+function adaptProtoTaggedTrack(t: ProtoTrack): TaggedTrackCard {
+  const titleId = Number(t.titleId);
+  // Prefer track_artists (carries id) for the displayed string;
+  // fall back to track_artist_names when the server hasn't filled
+  // the typed list. Empty join means no per-track artist override.
+  const artistName =
+    t.trackArtists.map(a => a.name).filter(Boolean).join(', ')
+    || t.trackArtistNames.filter(Boolean).join(', ')
+    || null;
+  return {
+    track_id: Number(t.id),
+    track_name: t.name,
+    duration_seconds: t.duration?.seconds ?? null,
+    title_id: titleId,
+    title_name: t.titleName ?? null,
+    artist_name: artistName,
+    poster_url: titleId ? `/posters/w185/${titleId}` : null,
+    playable: t.playable,
   };
 }
 

@@ -777,6 +777,11 @@ message Track {
   // Per-track tags (BPM bucket, dance style, etc.). Filtered to those
   // that don't already appear on the parent album to avoid noise.
   repeated Tag tags = 13;
+  // Parent album's display name. Populated when the track is
+  // surfaced standalone (e.g. tag-detail's tagged-tracks list);
+  // omitted on Track lists that ship alongside the Album / Title
+  // they belong to, where the parent name is already addressable.
+  optional string title_name = 14;
 }
 
 message TrackArtistRef {

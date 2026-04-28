@@ -2,6 +2,11 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { create } from '@bufbuild/protobuf';
+import { TagDetailSchema } from '../../src/app/proto-gen/common_pb';
+
+const CS = '/mediamanager.CatalogService';
 
 // Tag list (/content/tags) + tag detail (/tag/:id) functional tests.
 //
@@ -113,25 +118,24 @@ test.describe('tag detail — tagged tracks', () => {
     await mockBackend(page, VIEWER);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/tags/1', r =>
-      r.fulfill({ json: {
-        tag: { id: 1, name: 'Workout', bg_color: '#222222', text_color: '#ffffff', title_count: 0 },
+    await page.route(`**${CS}/GetTagDetail`, r =>
+      fulfillProto(r, TagDetailSchema, create(TagDetailSchema, {
+        name: 'Workout',
+        color: { hex: '#222222' },
         titles: [],
-        total: 0,
         tracks: [
           {
-            track_id: 9001, track_name: 'So What', duration_seconds: 565,
-            title_id: 301, title_name: 'Kind of Blue', artist_name: 'Miles Davis',
-            poster_url: '/posters/w185/301', playable: true,
+            id: 9001n, name: 'So What', titleId: 301n, playable: true,
+            duration: { seconds: 565 }, titleName: 'Kind of Blue',
+            trackArtists: [{ id: 1n, name: 'Miles Davis' }],
           },
           {
-            track_id: 9002, track_name: 'Freddie Freeloader', duration_seconds: 589,
-            title_id: 301, title_name: 'Kind of Blue', artist_name: 'Miles Davis',
-            poster_url: '/posters/w185/301', playable: true,
+            id: 9002n, name: 'Freddie Freeloader', titleId: 301n, playable: true,
+            duration: { seconds: 589 }, titleName: 'Kind of Blue',
+            trackArtists: [{ id: 1n, name: 'Miles Davis' }],
           },
         ],
-        track_total: 2,
-      } })
+      })),
     );
     await page.goto('/tag/1');
     await page.waitForSelector('app-tag-detail .tagged-tracks-section');
@@ -256,7 +260,7 @@ test.describe('tag detail — admin add-to-tag search', () => {
         { timeout: 3_000 },
       );
       const refreshed = page.waitForRequest(r =>
-        r.method() === 'GET' && r.url().endsWith('/api/v2/catalog/tags/1'),
+        r.url().endsWith(`${CS}/GetTagDetail`),
         { timeout: 3_000 },
       );
       await page.locator('app-tag-detail .search-result-row').nth(c.rowIdx)
