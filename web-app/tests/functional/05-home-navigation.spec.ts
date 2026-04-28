@@ -103,27 +103,19 @@ test.describe('home navigation', () => {
 
   // -------- Dismiss buttons --------
 
-  test('Continue Watching × removes row and calls DELETE', async ({ page }) => {
-    // Capture the DELETE request to confirm the right URL was hit.
-    // Wait alongside the click so the request is in flight when we
-    // start listening.
-    const deleted = page.waitForRequest(req =>
-      req.method() === 'DELETE' && req.url().includes('/api/v2/playback-progress/1'),
+  test('Continue Watching × removes row and fires ClearProgress', async ({ page }) => {
+    // Capture the gRPC ClearProgress request to confirm dismissal
+    // routed to PlaybackService. Listen alongside the click so the
+    // request is in flight when we start.
+    const cleared = page.waitForRequest(req =>
+      req.url().endsWith('/mediamanager.PlaybackService/ClearProgress'),
     );
-
-    // The DELETE handler isn't in mock-backend (only GET is mocked);
-    // override here so the catalog.clearProgress() promise resolves
-    // and the local-state filter runs.
-    await page.route('**/api/v2/playback-progress/1', route => {
-      if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
-      return route.fallback();
-    });
 
     const cw = page.locator('.carousel-section', { hasText: 'Continue Watching' });
     await expect(cw.locator('.poster-card')).toHaveCount(1);
 
     await cw.locator('.dismiss-btn').first().click();
-    await deleted;
+    await cleared;
 
     // Section disappears entirely once continue_watching is empty
     // (the @if (feed.continue_watching.length > 0) guard hides it).

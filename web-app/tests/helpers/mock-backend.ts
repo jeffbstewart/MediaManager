@@ -310,6 +310,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     GetReadingProgress:    r => fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema)),
     ReportReadingProgress: noopEmpty,
     ClearReadingProgress:  noopEmpty,
+    // Video progress: only ClearProgress is migrated yet — the player
+    // itself still reads /playback-progress/:id via HTTP. Once the
+    // player migrates, GetProgress / ReportProgress join here.
+    ClearProgress:         noopEmpty,
   };
 
   await mountService('mediamanager.CatalogService', catalogHandlers);

@@ -899,7 +899,8 @@ export class CatalogService {
   }
 
   async clearProgress(transcodeId: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/playback-progress/${transcodeId}`));
+    const client = grpcClient(PlaybackServiceDesc);
+    await client.clearProgress({ transcodeId: BigInt(transcodeId) });
   }
 
   async dismissMissingSeasons(titleId: number): Promise<void> {
