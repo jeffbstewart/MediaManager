@@ -37,6 +37,10 @@ service CatalogService {
   rpc GetTagDetail(TagIdRequest) returns (TagDetail);
   rpc GetGenreDetail(GenreIdRequest) returns (GenreDetail);
   rpc GetBookSeriesDetail(BookSeriesIdRequest) returns (BookSeriesDetail);
+  // Personal/family videos browse page. Heavier shape than ListTitles
+  // because each card carries event date + tagged family members +
+  // tags inline. Filters: family-member subset, playable-only.
+  rpc ListFamilyVideos(ListFamilyVideosRequest) returns (FamilyVideosResponse);
 
   // --- Title Actions ---
   rpc SetFavorite(SetFlagRequest) returns (Empty);
@@ -248,6 +252,68 @@ message SearchTracksRequest {
 
 message SearchTracksResponse {
   repeated TrackSearchHit tracks = 1;
+}
+
+enum FamilyVideoSort {
+  FAMILY_VIDEO_SORT_UNKNOWN = 0;
+  // Newest event_date first. Default for the family-videos page.
+  FAMILY_VIDEO_SORT_DATE_DESC = 1;
+  // Oldest event_date first.
+  FAMILY_VIDEO_SORT_DATE_ASC = 2;
+  // Title name, ascending. Tie-broken by sort_name.
+  FAMILY_VIDEO_SORT_NAME = 3;
+  // Recently added — title.created_at descending.
+  FAMILY_VIDEO_SORT_RECENT = 4;
+}
+
+message ListFamilyVideosRequest {
+  FamilyVideoSort sort = 1;
+  // Restrict to videos that include any of these family-member ids.
+  // Empty list means no filter.
+  repeated int64 members = 2;
+  // True keeps only videos whose ForBrowser transcode is on disk.
+  bool playable_only = 3;
+}
+
+message FamilyMemberRef {
+  int64 id = 1;
+  string name = 2;
+}
+
+// One row on the family-videos grid. Cover artwork:
+// IMAGE_TYPE_POSTER_THUMBNAIL + title_id (or
+// IMAGE_TYPE_POSTER_FULL + title_id for the hero size).
+message FamilyVideo {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional CalendarDate event_date = 3;
+  optional string description = 4;
+  // True when the ForBrowser transcode is on disk so the play
+  // button should be active.
+  bool playable = 5;
+  // Last playback position; absent when the user hasn't started.
+  // Clients render a progress bar by dividing position by duration.
+  optional PlaybackOffset playback_position = 6;
+  // Total runtime of the video. Sent alongside playback_position so
+  // clients can compute progress without a second round-trip.
+  optional PlaybackOffset playback_duration = 9;
+  repeated FamilyMemberRef family_members = 7;
+  repeated Tag tags = 8;
+  // UUID of the locally-uploaded hero image (LocalImage). Set for
+  // personal videos that have a hand-picked still; absent for
+  // TMDB-sourced videos. Clients fetch via ImageService with
+  // IMAGE_TYPE_LOCAL_IMAGE + uuid, or hit /local-images/{uuid}
+  // same-origin. When absent, fall back to
+  // IMAGE_TYPE_POSTER_THUMBNAIL + title_id.
+  optional string local_image_id = 10;
+}
+
+message FamilyVideosResponse {
+  repeated FamilyVideo videos = 1;
+  int32 total = 2;
+  // The full set of family members, used to populate the filter
+  // chip rail. Independent of the selected filter set.
+  repeated FamilyMemberRef family_members = 3;
 }
 
 message MintPublicArtTokenResponse {

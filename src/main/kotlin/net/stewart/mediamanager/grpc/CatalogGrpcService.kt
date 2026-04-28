@@ -2059,6 +2059,108 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         }
     }
 
+    override suspend fun listFamilyVideos(
+        request: ListFamilyVideosRequest,
+    ): FamilyVideosResponse {
+        val user = currentUser()
+
+        var titles = net.stewart.mediamanager.service.PersonalVideoService.getAllPersonalVideos()
+
+        // Family-member filter.
+        val memberIds = request.membersList.toSet()
+        if (memberIds.isNotEmpty()) {
+            val titleIdsForMembers = net.stewart.mediamanager.service.FamilyMemberService
+                .getTitleIdsForMembers(memberIds)
+            titles = titles.filter { it.id in titleIdsForMembers }
+        }
+
+        // Compute playable set once — used for filter and for the
+        // per-card playable flag.
+        val nasRoot = net.stewart.mediamanager.service.TranscoderAgent.getNasRoot()
+        val playableTitleIds = net.stewart.mediamanager.entity.Transcode.findAll()
+            .filter { it.file_path != null }
+            .filter { tc ->
+                val fp = tc.file_path!!
+                if (net.stewart.mediamanager.service.TranscoderAgent.needsTranscoding(fp)) {
+                    nasRoot != null && net.stewart.mediamanager.service.TranscoderAgent.isTranscoded(nasRoot, fp)
+                } else true
+            }
+            .map { it.title_id }
+            .toSet()
+        if (request.playableOnly) {
+            titles = titles.filter { it.id in playableTitleIds }
+        }
+
+        // Sort.
+        titles = when (request.sort) {
+            FamilyVideoSort.FAMILY_VIDEO_SORT_DATE_ASC ->
+                titles.sortedBy { it.event_date }
+            FamilyVideoSort.FAMILY_VIDEO_SORT_NAME ->
+                titles.sortedBy { (it.sort_name ?: it.name).lowercase() }
+            FamilyVideoSort.FAMILY_VIDEO_SORT_RECENT ->
+                titles.sortedByDescending { it.created_at }
+            // DATE_DESC + UNKNOWN both fall through to the default
+            // (newest-first) so legacy clients that omit the field
+            // get sensible behaviour.
+            else -> titles.sortedByDescending { it.event_date }
+        }
+
+        // Bulk-load related data once.
+        val titleIds = titles.mapNotNull { it.id }.toSet()
+        val membersByTitle = titleIds.associateWith {
+            net.stewart.mediamanager.service.FamilyMemberService.getMembersForTitle(it)
+        }
+        val tagsByTitle = titleIds.associateWith {
+            net.stewart.mediamanager.service.TagService.getTagsForTitle(it)
+        }
+        val progressByTitle = net.stewart.mediamanager.service.PlaybackProgressService
+            .getProgressByTitleForUser(user.id!!)
+
+        return familyVideosResponse {
+            titles.forEach { title ->
+                val progress = progressByTitle[title.id]
+                val titleMembers = membersByTitle[title.id] ?: emptyList()
+                val titleTags = tagsByTitle[title.id] ?: emptyList()
+
+                videos.add(familyVideo {
+                    titleId = title.id!!
+                    titleName = title.name
+                    title.event_date?.let { eventDate = it.toProtoCalendarDate() }
+                    title.description?.takeIf { it.isNotBlank() }?.let { description = it }
+                    playable = title.id in playableTitleIds
+                    title.poster_cache_id?.takeIf { it.isNotBlank() }?.let { localImageId = it }
+                    progress?.let { p ->
+                        playbackPosition = playbackOffset { seconds = p.position_seconds }
+                        p.duration_seconds?.let {
+                            playbackDuration = playbackOffset { seconds = it }
+                        }
+                    }
+                    titleMembers.forEach { m ->
+                        familyMembers.add(familyMemberRef {
+                            id = m.id!!
+                            name = m.name
+                        })
+                    }
+                    titleTags.forEach { t ->
+                        tags.add(tag {
+                            id = t.id!!
+                            name = t.name
+                            color = t.bg_color.toProtoColor()
+                        })
+                    }
+                })
+            }
+            this.total = videos.size
+
+            net.stewart.mediamanager.service.FamilyMemberService.getAllMembers().forEach { m ->
+                familyMembers.add(familyMemberRef {
+                    id = m.id!!
+                    name = m.name
+                })
+            }
+        }
+    }
+
     override suspend fun getBookSeriesDetail(
         request: BookSeriesIdRequest,
     ): BookSeriesDetail {

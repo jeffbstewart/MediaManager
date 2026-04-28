@@ -2,26 +2,51 @@ import { test, expect } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import {
+  FamilyVideoSort,
+  ListFamilyVideosRequestSchema,
+} from '../../src/app/proto-gen/catalog_pb';
 
 // Family / personal-videos page tests.
 //
-// Endpoint: /api/v2/catalog/family-videos
-//   - sort=<mode>            (always set; default 'date_desc')
-//   - members=<id,id>        (only when non-empty)
-//   - playable_only=true     (only when true; default off, opposite
-//                              of the books / movies page)
+// Endpoint: CatalogService.ListFamilyVideos. Body:
+//   sort: FamilyVideoSort enum (default DATE_DESC)
+//   members: repeated int64 (empty list = no filter)
+//   playable_only: bool (default off, opposite of books / movies)
 //
-// Fixture: catalog/family-videos.list.json — 2 videos (Beach Trip
-// 2024 with 2 family members + 1 tag + playable + poster; Holiday
-// Recital with 1 member, no tag, not playable, no poster, mid-watch
-// progress) and a top-level family_members list of {Alex, Jamie}.
+// Default fixture (mock-backend's ListFamilyVideos handler):
+// 2 videos — Beach Trip 2024 (2 members, 1 tag, playable, local_image_id
+// set) and Holiday Recital (1 member, no tag, not playable, no
+// local_image_id, mid-watch progress) — and a top-level family_members
+// list of {Alex, Jamie}.
+
+const CS = '/mediamanager.CatalogService';
+
+interface CapturedReq { sort: FamilyVideoSort; members: bigint[]; playableOnly: boolean }
+
+/** Decode a captured ListFamilyVideos request body. */
+function decodeListFamilyVideos(req: import('@playwright/test').Request): CapturedReq {
+  const decoded = fromBinary(
+    ListFamilyVideosRequestSchema,
+    unframeGrpcWebRequest(req.postDataBuffer()),
+  );
+  return {
+    sort: decoded.sort,
+    members: decoded.members,
+    playableOnly: decoded.playableOnly,
+  };
+}
 
 function captureFamilyVideoRequests(page: import('@playwright/test').Page) {
-  const urls: string[] = [];
+  const reqs: CapturedReq[] = [];
   page.on('request', req => {
-    if (req.url().includes('/api/v2/catalog/family-videos')) urls.push(req.url());
+    if (req.url().endsWith(`${CS}/ListFamilyVideos`)) {
+      reqs.push(decodeListFamilyVideos(req));
+    }
   });
-  return () => urls;
+  return () => reqs;
 }
 
 test.describe('personal videos page', () => {
@@ -47,9 +72,11 @@ test.describe('personal videos page', () => {
     await expect(cards.nth(1).locator('.video-title')).toContainText('Holiday Recital');
   });
 
-  test('hero image renders for cards with a poster_url', async ({ page }) => {
+  test('hero image renders for cards with a local_image_id', async ({ page }) => {
     const heroes = page.locator('app-personal-videos .video-card img.hero-img');
     await expect(heroes).toHaveCount(1);  // only Beach Trip has one
+    // SPA's videoPosterUrl() helper builds /local-images/{uuid} when
+    // the proto sets local_image_id; fixture seeds "700".
     await expect(heroes.first()).toHaveAttribute('src', /\/local-images\/700$/);
   });
 
@@ -104,72 +131,63 @@ test.describe('personal videos page', () => {
 
   // -------- Filter chips --------
 
-  test('Playable chip toggle adds playable_only=true to the request', async ({ page }) => {
-    const urls = captureFamilyVideoRequests(page);
-    // Default: playable_only is OFF (opposite of books/movies).
-    expect(urls().at(-1) ?? '').not.toContain('playable_only');
+  test('Playable chip toggle sets playable_only=true on the request', async ({ page }) => {
+    const reqs = captureFamilyVideoRequests(page);
+    expect(reqs().at(-1)?.playableOnly ?? false).toBe(false);
 
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/family-videos')
-        && req.url().includes('playable_only=true'),
+      req.url().endsWith(`${CS}/ListFamilyVideos`),
       { timeout: 3_000 },
     );
     await page.locator('app-personal-videos mat-chip', { hasText: 'Playable' }).click();
     await reqPromise;
-    expect(urls().at(-1)).toContain('playable_only=true');
+    expect(reqs().at(-1)?.playableOnly).toBe(true);
   });
 
-  test('Member chip toggle adds members=<id> to the request', async ({ page }) => {
-    const urls = captureFamilyVideoRequests(page);
-    expect(urls().at(-1) ?? '').not.toContain('members');
+  test('Member chip toggle sets members=[id] on the request', async ({ page }) => {
+    const reqs = captureFamilyVideoRequests(page);
+    expect(reqs().at(-1)?.members ?? []).toEqual([]);
 
-    // Click "Alex" (id=1).
     const reqPromise = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/family-videos')
-        && /members=1\b/.test(req.url()),
+      req.url().endsWith(`${CS}/ListFamilyVideos`),
       { timeout: 3_000 },
     );
     await page.locator('app-personal-videos mat-chip', { hasText: 'Alex' }).click();
     await reqPromise;
-    expect(urls().at(-1)).toMatch(/members=1\b/);
+    expect(reqs().at(-1)?.members).toEqual([1n]);
   });
 
   test('All People chip clears the member filter', async ({ page }) => {
-    // Pick Alex first so there's something to clear. Set the wait
-    // BEFORE clicking — the refresh fires synchronously inside the
-    // same task as the click, so a wait started after misses it.
     let alexReq = page.waitForRequest(req =>
-      req.url().includes('/api/v2/catalog/family-videos')
-        && /members=1\b/.test(req.url()),
+      req.url().endsWith(`${CS}/ListFamilyVideos`),
       { timeout: 3_000 },
     );
     await page.locator('app-personal-videos mat-chip', { hasText: 'Alex' }).click();
     await alexReq;
 
-    // Then click All People — the resulting request should drop the
-    // members param entirely.
-    const cleared = page.waitForRequest(req => {
-      if (!req.url().includes('/api/v2/catalog/family-videos')) return false;
-      return !new URL(req.url()).searchParams.has('members');
-    }, { timeout: 3_000 });
+    const cleared = page.waitForRequest(req =>
+      req.url().endsWith(`${CS}/ListFamilyVideos`),
+      { timeout: 3_000 },
+    );
     await page.locator('app-personal-videos mat-chip', { hasText: 'All People' }).click();
-    await cleared;
+    const got = await cleared;
+    expect(decodeListFamilyVideos(got).members).toEqual([]);
   });
 
-  test('Sort chips fire requests with the right sort=<mode>', async ({ page }) => {
-    for (const { label, mode } of [
-      { label: 'Oldest', mode: 'date_asc' },
-      { label: 'Name',   mode: 'name' },
-      { label: 'Recent', mode: 'recent' },
-      { label: 'Newest', mode: 'date_desc' },
+  test('Sort chips fire requests with the right sort enum value', async ({ page }) => {
+    for (const { label, sort } of [
+      { label: 'Oldest', sort: FamilyVideoSort.DATE_ASC },
+      { label: 'Name',   sort: FamilyVideoSort.NAME },
+      { label: 'Recent', sort: FamilyVideoSort.RECENT },
+      { label: 'Newest', sort: FamilyVideoSort.DATE_DESC },
     ]) {
       const reqPromise = page.waitForRequest(req =>
-        req.url().includes('/api/v2/catalog/family-videos')
-          && req.url().includes(`sort=${mode}`),
+        req.url().endsWith(`${CS}/ListFamilyVideos`),
         { timeout: 3_000 },
       );
       await page.locator('app-personal-videos mat-chip', { hasText: label }).click();
-      await reqPromise;
+      const got = await reqPromise;
+      expect(decodeListFamilyVideos(got).sort).toBe(sort);
     }
   });
 

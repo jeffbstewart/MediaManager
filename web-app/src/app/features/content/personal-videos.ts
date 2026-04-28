@@ -69,6 +69,14 @@ export class PersonalVideosComponent implements OnInit {
     return this.tz.formatDate(dateStr);
   }
 
+  /** Hero image URL — local-images servlet when the video has a
+   *  hand-picked still, otherwise the title poster servlet. */
+  videoPosterUrl(v: FamilyVideoCard): string {
+    return v.local_image_id != null
+      ? `/local-images/${v.local_image_id}`
+      : `/posters/full/${v.title_id}`;
+  }
+
   private async refresh(): Promise<void> {
     this.loading.set(true);
     this.error.set('');

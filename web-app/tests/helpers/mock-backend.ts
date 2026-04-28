@@ -34,6 +34,7 @@ import {
   AdvancedSearchPresetsResponseSchema,
   CollectionIdRequestSchema,
   CollectionListResponseSchema,
+  FamilyVideosResponseSchema,
   FeaturesSchema,
   HomeFeedResponseSchema,
   ListTitlesRequestSchema,
@@ -43,6 +44,7 @@ import {
   TagListResponseSchema,
   TitlePageResponseSchema,
 } from '../../src/app/proto-gen/catalog_pb';
+import { familyVideosFixture } from '../fixtures-typed/family-videos.fixture';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 import { titleBook300 } from '../fixtures-typed/title-300-book.fixture';
@@ -181,9 +183,8 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // calls ListTags via gRPC, dispatched in the gRPC route block below.
   // /api/v2/catalog/artists (list) ditto — listArtists() goes through
   // ArtistService.ListArtists.
-  await page.route('**/api/v2/catalog/family-videos*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/family-videos.list.json') })
-  );
+  // /api/v2/catalog/family-videos is no longer hit — getFamilyVideos()
+  // goes through CatalogService.ListFamilyVideos (dispatched above).
   // /api/v2/playlists, /mine, /:id, /smart/:key are no longer hit —
   // listPlaylists / getPlaylist / getSmartPlaylist call PlaylistService
   // RPCs (dispatched in the gRPC route block above).
@@ -256,6 +257,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     DismissContinueWatching: noopEmpty,
     GetTagDetail:           r => fulfillProto(r, TagDetailSchema, tagDetailFixture),
     GetBookSeriesDetail:    r => fulfillProto(r, BookSeriesDetailSchema, seriesDetailFixture),
+    ListFamilyVideos:       r => fulfillProto(r, FamilyVideosResponseSchema, familyVideosFixture),
     MintPublicArtToken:
       // Audio player's MediaSession integration calls this to mint a
       // signed token for OS lock-screen art. Tests don't assert on

@@ -38,8 +38,8 @@
     <div class="video-grid">
       @for (video of videos(); track video.title_id) {
         <a class="video-card" [routerLink]="routes.title(video.title_id)">
-          @if (video.poster_url) {
-            <img [src]="video.poster_url" [alt]="video.title_name" class="hero-img" />
+          @if (video.local_image_id) {
+            <img [src]="videoPosterUrl(video)" [alt]="video.title_name" class="hero-img" />
           }
           <div class="card-body">
             <div class="title-row">

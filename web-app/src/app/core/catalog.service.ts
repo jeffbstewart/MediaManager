@@ -404,7 +404,12 @@ export interface TaggedTrackCard {
 export interface FamilyVideoCard {
   title_id: number;
   title_name: string;
-  poster_url: string | null;
+  // UUID of the locally-uploaded hero image when set; null for
+  // TMDB-sourced personal videos that fall back to the title poster.
+  // Templates construct URLs from these ids at render time — no
+  // pre-built URL strings on the SPA-side shape (matches the proto's
+  // ID-only contract).
+  local_image_id: string | null;
   event_date: string | null;
   description: string | null;
   playable: boolean;
@@ -1482,11 +1487,13 @@ export class CatalogService {
   }
 
   async getFamilyVideos(params: { sort?: FamilySortMode; members?: number[]; playableOnly?: boolean } = {}): Promise<FamilyVideosResponse> {
-    const queryParams: Record<string, string> = {};
-    if (params.sort) queryParams['sort'] = params.sort;
-    if (params.members?.length) queryParams['members'] = params.members.join(',');
-    if (params.playableOnly) queryParams['playable_only'] = 'true';
-    return firstValueFrom(this.http.get<FamilyVideosResponse>('/api/v2/catalog/family-videos', { params: queryParams }));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.listFamilyVideos({
+      sort: legacyFamilySortToProto(params.sort),
+      members: (params.members ?? []).map(m => BigInt(m)),
+      playableOnly: params.playableOnly ?? false,
+    });
+    return adaptProtoFamilyVideos(proto);
   }
 }
 
@@ -2429,6 +2436,49 @@ function adaptProtoTrackSearchHit(
     duration_seconds: t.durationSeconds ?? null,
     poster_url: t.posterUrl ?? null,
     playable: t.playable,
+  };
+}
+
+function legacyFamilySortToProto(sort: FamilySortMode | undefined): import('../proto-gen/catalog_pb').FamilyVideoSort {
+  switch (sort) {
+    case 'date_asc': return 2; // FamilyVideoSort.DATE_ASC
+    case 'name':     return 3;
+    case 'recent':   return 4;
+    case 'date_desc':
+    default:         return 1; // DATE_DESC default
+  }
+}
+
+function adaptProtoFamilyVideos(
+  p: import('../proto-gen/catalog_pb').FamilyVideosResponse,
+): FamilyVideosResponse {
+  return {
+    videos: p.videos.map(v => {
+      const posSec = v.playbackPosition?.seconds ?? null;
+      const durSec = v.playbackDuration?.seconds ?? null;
+      const fraction = posSec != null && durSec != null && durSec > 0
+        ? posSec / durSec
+        : null;
+      return {
+        title_id: Number(v.titleId),
+        title_name: v.titleName,
+        local_image_id: v.localImageId ?? null,
+        event_date: calendarDateToIsoDate(v.eventDate),
+        description: v.description ?? null,
+        playable: v.playable,
+        progress_fraction: fraction,
+        family_members: v.familyMembers.map(m => ({
+          id: Number(m.id),
+          name: m.name,
+        })),
+        tags: v.tags.map(adaptTag),
+      };
+    }),
+    total: p.total,
+    family_members: p.familyMembers.map(m => ({
+      id: Number(m.id),
+      name: m.name,
+    })),
   };
 }
 
