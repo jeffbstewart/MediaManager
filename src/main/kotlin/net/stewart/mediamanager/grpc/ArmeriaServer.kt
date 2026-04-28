@@ -248,6 +248,7 @@ object ArmeriaServer {
 
         // Image endpoints
         blocking(PosterHttpService())
+        blocking(net.stewart.mediamanager.armeria.TmdbPosterByIdHttpService())
         blocking(HeadshotHttpService())
         blocking(AuthorHeadshotHttpService())
         blocking(ArtistHeadshotHttpService())

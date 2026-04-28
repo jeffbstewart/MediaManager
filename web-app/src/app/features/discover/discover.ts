@@ -92,11 +92,14 @@ export class DiscoverComponent implements OnInit {
     const mbid = artist.suggested_artist_mbid;
     this.wishSubmitting.update(s => new Set(s).add(mbid));
     try {
-      await firstValueFrom(this.http.post('/api/v2/wishlist/albums', {
+      await this.catalog.addAlbumWish({
         release_group_id: rgid,
         title,
         primary_artist: artist.suggested_artist_name,
-      }));
+        year: null,
+        cover_release_id: null,
+        is_compilation: false,
+      });
       this.wishedMbids.update(s => new Set(s).add(mbid));
     } catch {
       // Soft-fail; leave the card alone so retry is obvious.

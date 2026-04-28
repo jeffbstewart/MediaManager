@@ -63,6 +63,13 @@ import { camerasList, tvChannelsList } from '../fixtures-typed/live.fixture';
 import { CameraListResponseSchema, TvChannelListResponseSchema } from '../../src/app/proto-gen/live_pb';
 import { tagDetailFixture } from '../fixtures-typed/tag-detail.fixture';
 import { TagDetailSchema } from '../../src/app/proto-gen/common_pb';
+import { wishListFixture } from '../fixtures-typed/wishlist.fixture';
+import {
+  AddWishResponseSchema,
+  TmdbSearchResponseSchema,
+  WishListResponseSchema,
+  WishlistSeriesGapsResponseSchema,
+} from '../../src/app/proto-gen/wishlist_pb';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -330,6 +337,24 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     ClearProgress:         noopEmpty,
   };
 
+  // ---- mediamanager.WishListService ----
+  const wishListHandlers: Record<string, RpcHandler> = {
+    ListWishes:         r => fulfillProto(r, WishListResponseSchema, wishListFixture),
+    SearchTmdb:         r => fulfillProto(r, TmdbSearchResponseSchema, create(TmdbSearchResponseSchema)),
+    AddWish:            r => fulfillProto(r, AddWishResponseSchema, create(AddWishResponseSchema, { id: 99n })),
+    AddBookWish:        r => fulfillProto(r, AddWishResponseSchema, create(AddWishResponseSchema, { id: 99n })),
+    AddAlbumWish:       r => fulfillProto(r, AddWishResponseSchema, create(AddWishResponseSchema, { id: 99n })),
+    CancelWish:         noopEmpty,
+    DismissWish:        noopEmpty,
+    VoteOnWish:         noopEmpty,
+    RemoveBookWish:     noopEmpty,
+    RemoveAlbumWish:    noopEmpty,
+    AddTranscodeWish:   r => fulfillProto(r, AddWishResponseSchema, create(AddWishResponseSchema, { id: 99n })),
+    RemoveTranscodeWish: noopEmpty,
+    WishlistSeriesGaps:
+      r => fulfillProto(r, WishlistSeriesGapsResponseSchema, create(WishlistSeriesGapsResponseSchema)),
+  };
+
   // ---- mediamanager.LiveService ----
   // Camera + TV-channel browse.
   const liveHandlers: Record<string, RpcHandler> = {
@@ -342,6 +367,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await mountService('mediamanager.ArtistService', artistHandlers);
   await mountService('mediamanager.PlaybackService', playbackHandlers);
   await mountService('mediamanager.LiveService', liveHandlers);
+  await mountService('mediamanager.WishListService', wishListHandlers);
 
   // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
   // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
@@ -374,12 +400,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // calls GetCollectionDetail via gRPC (dispatched above).
 
   // --- Wishlist / Search / Discover / Profile (Tier 5) ---
-  // Title-detail & collection-detail consult the wishlist to drive
-  // their "add to wishlist" state; the wishlist page itself renders
-  // the same response.
-  await page.route('**/api/v2/wishlist', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/wishlist.json') })
-  );
+  // /api/v2/wishlist + /wishlist/* mutation paths are no longer hit —
+  // the SPA's wishlist methods go through WishListService gRPC RPCs
+  // (dispatched in the gRPC route block above).
 
   // /api/v2/search, /search/presets, /search/tracks are no longer hit —
   // search() / listAdvancedSearchPresets() / searchTracks() go through

@@ -2,6 +2,10 @@ import { test, expect } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { fromBinary } from '@bufbuild/protobuf';
+import { MediaType } from '../../src/app/proto-gen/common_pb';
+import { AddWishRequestSchema } from '../../src/app/proto-gen/wishlist_pb';
 
 // Collections list + collection detail tests.
 //
@@ -139,18 +143,20 @@ test.describe('collection detail', () => {
     page.on('dialog', d => d.accept());
 
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith('/api/v2/wishlist/add'),
+      req.url().endsWith('/mediamanager.WishListService/AddWish'),
     );
 
     // First unowned (Revolutions, tmdb_movie_id 605, not wished).
     await page.locator('app-collection-detail .poster-card.unowned button.wish-heart').first().click();
     const req = await posted;
-    expect(req.postDataJSON()).toMatchObject({
-      tmdb_id: 605,
-      media_type: 'MOVIE',
-      title: 'The Matrix Revolutions',
-      release_year: 2003,
-    });
+    const decoded = fromBinary(
+      AddWishRequestSchema,
+      unframeGrpcWebRequest(req.postDataBuffer()),
+    );
+    expect(decoded.tmdbId).toBe(605);
+    expect(decoded.mediaType).toBe(MediaType.MOVIE);
+    expect(decoded.title).toBe('The Matrix Revolutions');
+    expect(decoded.releaseYear).toBe(2003);
   });
 
   test('clicking the title text on an owned part navigates to /title/:id', async ({ page }) => {

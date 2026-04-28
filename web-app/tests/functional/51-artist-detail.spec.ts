@@ -2,8 +2,11 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { fulfillProto } from '../helpers/proto-fixture';
-import { clone, create } from '@bufbuild/protobuf';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { clone, create, fromBinary } from '@bufbuild/protobuf';
+import { AddAlbumWishRequestSchema } from '../../src/app/proto-gen/wishlist_pb';
+
+const WS = '/mediamanager.WishListService';
 import {
   ArtistDetailSchema,
   ArtistMemberEntrySchema,
@@ -169,33 +172,29 @@ test.describe('artist detail — owned albums', () => {
 });
 
 test.describe('artist detail — other works wish toggle', () => {
-  test('un-wished card click POSTs /wishlist/albums with primary_artist=name', async ({ page }) => {
+  test('un-wished card click fires AddAlbumWish with primary_artist=name', async ({ page }) => {
     await setup(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/albums'),
+      r.url().endsWith(`${WS}/AddAlbumWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-artist .poster-card.unowned button.wish-btn').click();
     const got = await req;
-    const body = got.postDataJSON();
-    // Default fixture's other_works entry has no is_compilation field,
-    // so JSON.stringify drops it from the body. Assert the fields that
-    // do round-trip rather than a strict deepEqual.
-    expect(body.release_group_id).toBe('abc-123');
-    expect(body.title).toBe('Bitches Brew');
-    expect(body.primary_artist).toBe('Miles Davis');
-    expect(body.year).toBe(1970);
-    expect(body.cover_release_id).toBeNull();
+    const decoded = fromBinary(
+      AddAlbumWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.releaseGroupId).toBe('abc-123');
+    expect(decoded.title).toBe('Bitches Brew');
+    expect(decoded.primaryArtist).toBe('Miles Davis');
+    expect(decoded.year).toBe(1970);
+    expect(decoded.coverReleaseId).toBeUndefined();
   });
 
-  test('wished card click DELETEs /wishlist/albums/:rgid', async ({ page }) => {
+  test('wished card click fires RemoveAlbumWish', async ({ page }) => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/wishlist/albums/*', r => {
-      if (r.request().method() === 'DELETE') return r.fulfill({ status: 204 });
-      return r.fallback();
-    });
     await overrideArtistDetail(page, d => {
       d.ownedAlbums = [];
       d.members = [];
@@ -214,7 +213,7 @@ test.describe('artist detail — other works wish toggle', () => {
     await page.goto('/artist/1');
     await page.waitForSelector('app-artist .hero');
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/albums/rg-9'),
+      r.url().endsWith(`${WS}/RemoveAlbumWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-artist .poster-card.unowned button.wish-btn').click();
@@ -225,7 +224,6 @@ test.describe('artist detail — other works wish toggle', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/wishlist/albums', r => r.fulfill({ status: 204 }));
     await overrideArtistDetail(page, d => {
       d.ownedAlbums = [];
       d.members = [];
@@ -245,13 +243,17 @@ test.describe('artist detail — other works wish toggle', () => {
     await page.goto('/artist/1');
     await page.waitForSelector('app-artist .hero');
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/albums'),
+      r.url().endsWith(`${WS}/AddAlbumWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-artist button.wish-btn').click();
     const got = await req;
-    expect(got.postDataJSON().primary_artist).toBe('Various Artists');
-    expect(got.postDataJSON().is_compilation).toBe(true);
+    const decoded = fromBinary(
+      AddAlbumWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.primaryArtist).toBe('Various Artists');
+    expect(decoded.isCompilation).toBe(true);
   });
 });
 

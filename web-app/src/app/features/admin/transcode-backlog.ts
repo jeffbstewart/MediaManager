@@ -7,6 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
+import { CatalogService } from '../../core/catalog.service';
 
 interface BacklogRow {
   title_id: number;
@@ -28,6 +29,7 @@ interface BacklogRow {
 })
 export class TranscodeBacklogComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly catalog = inject(CatalogService);
 
   readonly loading = signal(true);
   readonly rows = signal<BacklogRow[]>([]);
@@ -75,12 +77,9 @@ export class TranscodeBacklogComponent implements OnInit {
 
   async toggleWish(row: BacklogRow): Promise<void> {
     if (row.is_wished) {
-      // Find and remove the wish
-      const wishList = await firstValueFrom(this.http.get<{ transcode_wishes: { id: number; title_id: number }[] }>('/api/v2/wishlist'));
-      const wish = wishList.transcode_wishes.find(w => w.title_id === row.title_id);
-      if (wish) await firstValueFrom(this.http.delete(`/api/v2/wishlist/transcode/${wish.id}`));
+      await this.catalog.removeTranscodeWish(row.title_id);
     } else {
-      await firstValueFrom(this.http.post(`/api/v2/wishlist/transcode/${row.title_id}`, {}));
+      await this.catalog.addTranscodeWish(row.title_id);
     }
     await this.refresh();
   }

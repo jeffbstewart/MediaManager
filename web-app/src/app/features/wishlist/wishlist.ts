@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
-  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish, AlbumWish, tmdbImageUrl,
+  CatalogService, MediaWish, TranscodeWish, TmdbSearchResultItem, BookWish, AlbumWish,
 } from '../../core/catalog.service';
 import { AppRoutes } from '../../core/routes';
 import { WishInterstitialService } from '../../core/wish-interstitial.service';
@@ -133,7 +133,8 @@ export class WishListComponent implements OnInit {
   }
 
   async removeTranscodeWish(wish: TranscodeWish): Promise<void> {
-    await this.catalog.removeTranscodeWish(wish.id);
+    // Proto's RemoveTranscodeWish keys on title_id (matches iOS).
+    await this.catalog.removeTranscodeWish(wish.title_id);
     await this.refresh();
   }
 
@@ -162,7 +163,11 @@ export class WishListComponent implements OnInit {
     return parts.join(' \u00B7 ');
   }
 
-  posterUrl(path: string): string { return tmdbImageUrl(path, 'w185')!; }
+  // tmdb_poster_path on the wishlist response is already a full
+  // same-origin URL (/tmdb-poster/{type}/{tmdb_id}/w185) — the
+  // catalog-service adapter constructed it from the proto's
+  // tmdb_id + media_type. Return as-is.
+  posterUrl(path: string): string { return path; }
 
   lifecycleColor(stage: string): string {
     switch (stage) {

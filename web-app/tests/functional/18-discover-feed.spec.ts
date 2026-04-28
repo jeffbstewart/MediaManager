@@ -7,12 +7,12 @@ import { fromBinary } from '@bufbuild/protobuf';
 import {
   DismissArtistRecommendationRequestSchema,
 } from '../../src/app/proto-gen/artist_pb';
+import { AddAlbumWishRequestSchema } from '../../src/app/proto-gen/wishlist_pb';
 
 // Discover feed (M8) tests. The page reads
 // ArtistService.ListArtistRecommendations, renders one card per
 // recommended artist, and exposes three actions per card / page:
-//   - Wishlist (POST /api/v2/wishlist/albums — REST until that
-//     migration lands)
+//   - Wishlist (WishListService.AddAlbumWish)
 //   - Dismiss  (ArtistService.DismissArtistRecommendation)
 //   - Refresh  (ArtistService.RefreshArtistRecommendations, then re-load)
 //
@@ -28,10 +28,7 @@ test.describe('discover feed', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    // Wishlist write is still REST.
-    await page.route('**/api/v2/wishlist/albums', route =>
-      route.fulfill({ status: 204 }),
-    );
+    // mock-backend's AddAlbumWish handler default returns id=99.
     // Warm up FeatureService before mounting the discover component.
     // discover.ngOnInit reads features.hasMusicRadio() synchronously
     // and bails to the "needs Last.fm" empty state if the flag is
@@ -77,21 +74,23 @@ test.describe('discover feed', () => {
     await expect(cover).toHaveAttribute('src', /\/proxy\/caa\/release-group\/rg-1\/front-250$/);
   });
 
-  test('Wishlist click POSTs the right body and flips the button', async ({ page }) => {
+  test('Wishlist click fires AddAlbumWish and flips the button', async ({ page }) => {
     const card = page.locator('app-discover .rec-card').first();
     const wishBtn = card.locator('button.wish-btn');
     await expect(wishBtn).toContainText('Wishlist');
 
     const posted = page.waitForRequest(req =>
-      req.method() === 'POST' && req.url().endsWith('/api/v2/wishlist/albums'),
+      req.url().endsWith('/mediamanager.WishListService/AddAlbumWish'),
     );
     await wishBtn.click();
     const req = await posted;
-    expect(req.postDataJSON()).toEqual({
-      release_group_id: 'rg-1',
-      title: 'Sunday at the Village Vanguard',
-      primary_artist: 'Bill Evans',
-    });
+    const decoded = fromBinary(
+      AddAlbumWishRequestSchema,
+      unframeGrpcWebRequest(req.postDataBuffer()),
+    );
+    expect(decoded.releaseGroupId).toBe('rg-1');
+    expect(decoded.title).toBe('Sunday at the Village Vanguard');
+    expect(decoded.primaryArtist).toBe('Bill Evans');
 
     // Label flips to "Wishlisted" + the button becomes disabled so
     // double-click can't double-add.

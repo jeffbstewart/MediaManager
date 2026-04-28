@@ -35,6 +35,7 @@ import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
 import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-gen/playlist_pb';
 import { PlaybackService as PlaybackServiceDesc } from '../proto-gen/playback_pb';
 import { LiveService as LiveServiceDesc } from '../proto-gen/live_pb';
+import { WishListService as WishListServiceDesc } from '../proto-gen/wishlist_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1159,32 +1160,86 @@ export class CatalogService {
   }
 
   async getWishList(): Promise<WishListResponse> {
-    return firstValueFrom(this.http.get<WishListResponse>('/api/v2/wishlist'));
+    const client = grpcClient(WishListServiceDesc);
+    const proto = await client.listWishes({});
+    return {
+      media_wishes: proto.wishes.map(adaptProtoMediaWish),
+      transcode_wishes: proto.transcodeWishes.map(adaptProtoTranscodeWish),
+      book_wishes: proto.bookWishes.map(adaptProtoBookWish),
+      album_wishes: proto.albumWishes.map(adaptProtoAlbumWish),
+      has_any_media_wish: proto.hasAnyMediaWish,
+    };
   }
 
   async searchTmdb(query: string): Promise<TmdbSearchResponse> {
-    return firstValueFrom(this.http.get<TmdbSearchResponse>('/api/v2/wishlist/search', { params: { q: query } }));
+    const client = grpcClient(WishListServiceDesc);
+    const proto = await client.searchTmdb({ query });
+    return {
+      results: proto.results.map(r => ({
+        tmdb_id: r.tmdbId,
+        title: r.title,
+        media_type: PROTO_MEDIA_TYPE_TO_LEGACY[r.mediaType] ?? 'MOVIE',
+        // No URLs on the wire — search results without a wish row yet
+        // get a placeholder until the user adds them. Once added, the
+        // wishlist render path resolves /tmdb-poster/{type}/{id}/w185
+        // via the server's TmdbPosterPathResolver.
+        poster_path: null,
+        release_year: r.releaseYear ?? null,
+        popularity: r.popularity ?? null,
+        already_wished: r.wished,
+      })),
+    };
   }
 
   async addMediaWish(item: { tmdb_id: number; title: string; media_type: string; poster_path: string | null; release_year: number | null; popularity: number | null }): Promise<{ ok: boolean }> {
-    return firstValueFrom(this.http.post<{ ok: boolean }>('/api/v2/wishlist/add', item));
+    const client = grpcClient(WishListServiceDesc);
+    await client.addWish({
+      tmdbId: item.tmdb_id,
+      title: item.title,
+      mediaType: legacyMediaTypeToProto(item.media_type as MediaType),
+      posterPath: item.poster_path ?? undefined,
+      releaseYear: item.release_year ?? undefined,
+      popularity: item.popularity ?? undefined,
+    });
+    return { ok: true };
   }
 
   async addBookWish(input: BookWishInput): Promise<{ id: number; status: string }> {
-    return firstValueFrom(this.http.post<{ id: number; status: string }>('/api/v2/wishlist/books', input));
+    const client = grpcClient(WishListServiceDesc);
+    const resp = await client.addBookWish({
+      olWorkId: input.ol_work_id,
+      title: input.title,
+      author: input.author ?? undefined,
+      coverIsbn: input.cover_isbn ?? undefined,
+      seriesId: input.series_id != null ? BigInt(input.series_id) : undefined,
+      seriesNumber: input.series_number ?? undefined,
+    });
+    return { id: Number(resp.id), status: 'ACTIVE' };
   }
 
   async removeBookWish(olWorkId: string): Promise<{ removed: boolean }> {
-    return firstValueFrom(this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/books/${olWorkId}`));
+    const client = grpcClient(WishListServiceDesc);
+    await client.removeBookWish({ olWorkId });
+    return { removed: true };
   }
 
   async addAlbumWish(input: AlbumWishInput): Promise<{ id: number; status: string }> {
-    return firstValueFrom(this.http.post<{ id: number; status: string }>('/api/v2/wishlist/albums', input));
+    const client = grpcClient(WishListServiceDesc);
+    const resp = await client.addAlbumWish({
+      releaseGroupId: input.release_group_id,
+      title: input.title,
+      primaryArtist: input.primary_artist ?? undefined,
+      year: input.year ?? undefined,
+      coverReleaseId: input.cover_release_id ?? undefined,
+      isCompilation: input.is_compilation,
+    });
+    return { id: Number(resp.id), status: 'ACTIVE' };
   }
 
   async removeAlbumWish(releaseGroupId: string): Promise<{ removed: boolean }> {
-    return firstValueFrom(
-      this.http.delete<{ removed: boolean }>(`/api/v2/wishlist/albums/${releaseGroupId}`));
+    const client = grpcClient(WishListServiceDesc);
+    await client.removeAlbumWish({ releaseGroupId });
+    return { removed: true };
   }
 
   async getReadingProgress(mediaItemId: number): Promise<ReadingProgress> {
@@ -1203,21 +1258,36 @@ export class CatalogService {
   }
 
   async wishlistSeriesGaps(seriesId: number): Promise<{ added: number; already_wished: number; error?: string }> {
-    return firstValueFrom(
-      this.http.post<{ added: number; already_wished: number; error?: string }>(
-        `/api/v2/catalog/series/${seriesId}/wishlist-gaps`, {}));
+    const client = grpcClient(WishListServiceDesc);
+    const resp = await client.wishlistSeriesGaps({ seriesId: BigInt(seriesId) });
+    return {
+      added: resp.added,
+      already_wished: resp.alreadyWished,
+      error: resp.error || undefined,
+    };
   }
 
   async cancelWish(wishId: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/wishlist/${wishId}`));
+    const client = grpcClient(WishListServiceDesc);
+    await client.cancelWish({ wishId: BigInt(wishId) });
   }
 
   async dismissWish(wishId: number): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/v2/wishlist/${wishId}/dismiss`, {}));
+    const client = grpcClient(WishListServiceDesc);
+    await client.dismissWish({ wishId: BigInt(wishId) });
   }
 
-  async removeTranscodeWish(wishId: number): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/v2/wishlist/transcode/${wishId}`));
+  // Removes a transcode wish by parent title id. The proto's
+  // RemoveTranscodeWish takes a TitleIdRequest to match iOS, which
+  // already keys its remove flow on title_id.
+  async removeTranscodeWish(titleId: number): Promise<void> {
+    const client = grpcClient(WishListServiceDesc);
+    await client.removeTranscodeWish({ titleId: BigInt(titleId) });
+  }
+
+  async addTranscodeWish(titleId: number): Promise<void> {
+    const client = grpcClient(WishListServiceDesc);
+    await client.addTranscodeWish({ titleId: BigInt(titleId) });
   }
 
   async getTvChannels(): Promise<TvChannelListResponse> {
@@ -2357,6 +2427,108 @@ function adaptProtoTrackSearchHit(
     duration_seconds: t.durationSeconds ?? null,
     poster_url: t.posterUrl ?? null,
     playable: t.playable,
+  };
+}
+
+// Wishlist proto → legacy SPA shape adapters.
+//
+// Image fields on the wire are gone (no third-party host or URL
+// strings) — the adapter constructs same-origin URLs from the IDs
+// the proto carries. The web-app's <img src=...> renderings hit:
+//
+//   /tmdb-poster/{type}/{tmdb_id}/w185      media wishes (TMDB)
+//   /posters/w185/{title_id}                 transcode wishes
+//   /proxy/ol/olid/{ol_work_id}/M            book wishes
+//   /proxy/caa/release-group/{rgid}/large    album wishes
+//
+// Each of those servlets fetches and caches upstream bytes server-
+// side; the client IP never reaches a third-party host.
+const WISH_LIFECYCLE_LABELS: Record<number, string> = {
+  // Mirrors WishLifecycleStage.displayLabel() in WishListService.kt.
+  // Kept on the client because the proto carries the enum, not a
+  // server-rendered string. Translate at render time.
+  0: 'Unknown',
+  1: 'Wished for',
+  2: 'Not feasible',
+  3: "Won't order",
+  4: 'Needs assistance',
+  5: 'Ordered',
+  6: 'In house, pending NAS',
+  7: 'On NAS, pending desktop',
+  8: 'Ready to watch',
+};
+
+const WISH_LIFECYCLE_NAMES: Record<number, string> = {
+  // Stable string identifier (no localisation), used by templates
+  // that branch on stage (e.g. dimming the row when WISHED_FOR).
+  0: 'UNKNOWN',
+  1: 'WISHED_FOR',
+  2: 'NOT_FEASIBLE',
+  3: 'WONT_ORDER',
+  4: 'NEEDS_ASSISTANCE',
+  5: 'ORDERED',
+  6: 'IN_HOUSE_PENDING_NAS',
+  7: 'ON_NAS_PENDING_DESKTOP',
+  8: 'READY_TO_WATCH',
+};
+
+function adaptProtoMediaWish(w: import('../proto-gen/wishlist_pb').WishItem): MediaWish {
+  const mediaType = PROTO_MEDIA_TYPE_TO_LEGACY[w.mediaType] ?? 'MOVIE';
+  return {
+    id: Number(w.id),
+    tmdb_id: w.tmdbId,
+    tmdb_title: w.title,
+    tmdb_media_type: mediaType,
+    // Same-origin servlet that resolves tmdb_id → poster_path → bytes
+    // (server consults Title / WishListItem / TmdbCollectionPart). Empty
+    // when the lookup misses — UI falls back to the first-letter
+    // placeholder.
+    tmdb_poster_path: `/tmdb-poster/${mediaType}/${w.tmdbId}/w185`,
+    tmdb_release_year: w.releaseYear ?? null,
+    season_number: w.seasonNumber ?? null,
+    lifecycle_stage: WISH_LIFECYCLE_NAMES[w.lifecycleStage] ?? 'UNKNOWN',
+    lifecycle_label: WISH_LIFECYCLE_LABELS[w.lifecycleStage] ?? 'Unknown',
+    title_id: w.titleId != null ? Number(w.titleId) : null,
+    vote_count: w.voteCount,
+    dismissible: w.dismissible,
+  };
+}
+
+function adaptProtoTranscodeWish(
+  w: import('../proto-gen/wishlist_pb').TranscodeWishItem,
+): TranscodeWish {
+  return {
+    id: Number(w.id),
+    title_id: Number(w.titleId),
+    title_name: w.titleName,
+    poster_url: `/posters/w185/${Number(w.titleId)}`,
+    // Status enum: 1=READY, 2=PENDING. Anything else → pending so a
+    // future server-side enum value doesn't break the contract.
+    status: w.status === 1 ? 'ready' : 'pending',
+  };
+}
+
+function adaptProtoBookWish(w: import('../proto-gen/wishlist_pb').BookWishItem): BookWish {
+  return {
+    id: Number(w.id),
+    ol_work_id: w.olWorkId,
+    title: w.title,
+    author: w.author ?? null,
+    cover_url: `/proxy/ol/olid/${w.olWorkId}/M`,
+    series_id: w.seriesId != null ? Number(w.seriesId) : null,
+    series_number: w.seriesNumber ?? null,
+  };
+}
+
+function adaptProtoAlbumWish(w: import('../proto-gen/wishlist_pb').AlbumWishItem): AlbumWish {
+  return {
+    id: Number(w.id),
+    release_group_id: w.releaseGroupId,
+    title: w.title,
+    primary_artist: w.primaryArtist ?? null,
+    year: w.year ?? null,
+    cover_url: `/proxy/caa/release-group/${w.releaseGroupId}/large`,
+    is_compilation: w.isCompilation,
   };
 }
 

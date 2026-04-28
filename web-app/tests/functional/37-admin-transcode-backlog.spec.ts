@@ -46,10 +46,10 @@ test.describe('admin transcode-backlog — actions', () => {
     await req;
   });
 
-  test('un-wished row → click POSTs /wishlist/transcode/:titleId', async ({ page }) => {
+  test('un-wished row → click fires AddTranscodeWish for the title id', async ({ page }) => {
     await setup(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/transcode/200'),
+      r.url().endsWith('/mediamanager.WishListService/AddTranscodeWish'),
       { timeout: 3_000 },
     );
     // Inception (row 1) has is_wished=false; click its request button.
@@ -58,10 +58,10 @@ test.describe('admin transcode-backlog — actions', () => {
     await req;
   });
 
-  test('wished row → click DELETEs /wishlist/transcode/:wishId', async ({ page }) => {
+  test('wished row → click fires RemoveTranscodeWish keyed on title id', async ({ page }) => {
     await setup(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/transcode/5'),
+      r.url().endsWith('/mediamanager.WishListService/RemoveTranscodeWish'),
       { timeout: 3_000 },
     );
     await page.locator('app-transcode-backlog tr', { hasText: 'The Matrix' })

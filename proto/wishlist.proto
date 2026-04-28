@@ -22,6 +22,19 @@ service WishListService {
   rpc AddTranscodeWish(TitleIdRequest) returns (AddWishResponse);
   rpc RemoveTranscodeWish(TitleIdRequest) returns (Empty);
 
+  // Book wishes — keyed on Open Library work id
+  rpc AddBookWish(AddBookWishRequest) returns (AddWishResponse);
+  rpc RemoveBookWish(RemoveBookWishRequest) returns (Empty);
+
+  // Album wishes — keyed on MusicBrainz release-group id
+  rpc AddAlbumWish(AddAlbumWishRequest) returns (AddWishResponse);
+  rpc RemoveAlbumWish(RemoveAlbumWishRequest) returns (Empty);
+
+  // Bulk-fill missing volumes for a book series. Server scans the
+  // series for owned vs. wished gaps and creates book wishes for the
+  // unowned, unwished work ids.
+  rpc WishlistSeriesGaps(WishlistSeriesGapsRequest) returns (WishlistSeriesGapsResponse);
+
   // TMDB search proxy (for adding wishes)
   rpc SearchTmdb(TmdbSearchRequest) returns (TmdbSearchResponse);
 }
@@ -60,7 +73,12 @@ message WishItem {
   int32 tmdb_id = 2;
   MediaType media_type = 3;
   string title = 4;
-  optional string poster_url = 5;
+  // DEPRECATED — server no longer populates this field; iOS clients
+  // currently still consume it. Migrate to ImageService with
+  // IMAGE_TYPE_TMDB_POSTER + TmdbMediaId(tmdb_id, media_type), or
+  // IMAGE_TYPE_POSTER_THUMBNAIL + title_id when the wish has been
+  // fulfilled (title_id is set).
+  optional string poster_url = 5 [deprecated = true];
   optional int32 release_year = 6;
   optional int32 season_number = 7;
   WishStatus status = 8;
@@ -71,21 +89,118 @@ message WishItem {
   optional Timestamp created_at = 13;
   WishLifecycleStage lifecycle_stage = 14;
   optional int64 title_id = 15;
+  // True when the wish can be dismissed from the user's view (i.e.
+  // the underlying title has reached READY_TO_WATCH).
+  bool dismissible = 16;
 }
 
 message WishListResponse {
+  // Media wishes — TMDB-driven, lifecycle-tracked.
   repeated WishItem wishes = 1;
+  // Transcode wishes — owned titles the user wants on the NAS.
+  repeated TranscodeWishItem transcode_wishes = 2;
+  // Book wishes — keyed on Open Library work id.
+  repeated BookWishItem book_wishes = 3;
+  // Album wishes — keyed on MusicBrainz release-group id.
+  repeated AlbumWishItem album_wishes = 4;
+  // True when the user has any media wish at all (active or not),
+  // used by the UI to show a contextual empty-state hint.
+  bool has_any_media_wish = 5;
+}
+
+enum TranscodeWishStatus {
+  TRANSCODE_WISH_STATUS_UNKNOWN = 0;
+  // Every transcode for this title has bytes on the NAS.
+  TRANSCODE_WISH_STATUS_READY = 1;
+  // At least one transcode is still missing or in-flight.
+  TRANSCODE_WISH_STATUS_PENDING = 2;
 }
 
 message TranscodeWishItem {
-  int64 title_id = 1;
-  string title_name = 2;
-  optional string poster_url = 3;
+  int64 id = 1;                  // wish row id (used to remove)
+  int64 title_id = 2;
+  string title_name = 3;
   optional int32 year = 4;
+  TranscodeWishStatus status = 5;
+
+  // Field 6 reserved for the previous `poster_url` spelling — clients
+  // now fetch via ImageService (IMAGE_TYPE_POSTER_THUMBNAIL + title_id)
+  // or hit the same-origin /posters/{size}/{title_id} servlet.
+  reserved 6;
+  reserved "poster_url";
 }
 
 message TranscodeWishListResponse {
   repeated TranscodeWishItem wishes = 1;
+}
+
+// Open Library-keyed book wish. Cover artwork: ImageService with
+// IMAGE_TYPE_OPENLIBRARY_COVER + ol_work_id.
+message BookWishItem {
+  int64 id = 1;
+  string ol_work_id = 2;
+  string title = 3;
+  optional string author = 4;
+  optional int64 series_id = 5;
+  // Volume number within the series; raw string because half/decimal
+  // numbers are common ("3.5", "0.5").
+  optional string series_number = 6;
+}
+
+// MusicBrainz-keyed album wish. Cover artwork: ImageService with
+// IMAGE_TYPE_CAA_RELEASE_GROUP + release_group_id.
+message AlbumWishItem {
+  int64 id = 1;
+  string release_group_id = 2;
+  string title = 3;
+  optional string primary_artist = 4;
+  optional int32 year = 5;
+  bool is_compilation = 6;
+}
+
+// Bulk-add new book wishes for every unowned, unwished volume of a
+// series. Used by the series-detail "fill gaps" button.
+message WishlistSeriesGapsRequest {
+  int64 series_id = 1;
+}
+
+message WishlistSeriesGapsResponse {
+  // Number of new book wishes added in this call.
+  int32 added = 1;
+  // Number of volumes already wished by this user (skipped).
+  int32 already_wished = 2;
+  // Server-side reason if the operation can't proceed (e.g. series
+  // not found, OL backend unavailable). Empty on success.
+  optional string error = 3;
+}
+
+message AddBookWishRequest {
+  string ol_work_id = 1;
+  string title = 2;
+  optional string author = 3;
+  optional string cover_isbn = 4;
+  optional int64 series_id = 5;
+  optional string series_number = 6;
+}
+
+message RemoveBookWishRequest {
+  string ol_work_id = 1;
+}
+
+message AddAlbumWishRequest {
+  string release_group_id = 1;
+  string title = 2;
+  optional string primary_artist = 3;
+  optional int32 year = 4;
+  // MusicBrainz release MBID (NOT release_group MBID) the user picked
+  // — server uses this to query Cover Art Archive for that specific
+  // release's cover. Optional; omit for "any release in the group".
+  optional string cover_release_id = 5;
+  bool is_compilation = 6;
+}
+
+message RemoveAlbumWishRequest {
+  string release_group_id = 1;
 }
 
 message TmdbSearchRequest {
@@ -93,12 +208,17 @@ message TmdbSearchRequest {
   MediaType type = 2;    // MEDIA_TYPE_UNKNOWN means search all types
 }
 
+// One TMDB search result. Cover artwork: ImageService with
+// IMAGE_TYPE_TMDB_POSTER + TmdbMediaId(tmdb_id, media_type).
 message TmdbResult {
   int32 tmdb_id = 1;
   string title = 2;
   MediaType media_type = 3;
   optional int32 release_year = 4;
-  optional string poster_url = 5;
+  // DEPRECATED — server no longer populates this field. Use
+  // ImageService.IMAGE_TYPE_TMDB_POSTER + TmdbMediaId(tmdb_id, media_type)
+  // for the cover image.
+  optional string poster_url = 5 [deprecated = true];
   optional double popularity = 6;
   bool owned = 7;
   bool wished = 8;

@@ -214,6 +214,47 @@ class PosterHttpService {
 }
 
 /**
+ * Same-origin servlet for un-owned TMDB posters keyed by (media_type,
+ * tmdb_id). Mirrors [net.stewart.mediamanager.grpc.ImageGrpcService]'s
+ * IMAGE_TYPE_TMDB_POSTER resolution so SPA <img src=...> renderings
+ * never leak the client IP to image.tmdb.org. Used by the wishlist
+ * page (media wishes that haven't been fulfilled yet) and the
+ * "search TMDB" picker.
+ *
+ * Resolution: [TmdbPosterPathResolver] consults owned Title rows, the
+ * user's WishListItem rows, and TmdbCollectionPart rows. When found,
+ * we hand off to [ImageProxyService] via `serveProxied(...)` so the
+ * actual upstream fetch + caching shares one cache shape with
+ * `/proxy/tmdb/{size}/{file}`.
+ */
+class TmdbPosterByIdHttpService {
+
+    @Blocking
+    @Get("/tmdb-poster/{mediaType}/{tmdbId}/{size}")
+    fun tmdbPosterById(
+        @Param("mediaType") mediaType: String,
+        @Param("tmdbId") tmdbId: Int,
+        @Param("size") size: String,
+    ): HttpResponse {
+        val mtUpper = mediaType.uppercase()
+        if (mtUpper !in setOf("MOVIE", "TV")) return badRequest("tmdb_poster_by_id")
+        if (size !in setOf("w92", "w154", "w185", "w342", "w500", "w780", "original")) {
+            return badRequest("tmdb_poster_by_id")
+        }
+        val posterPath = net.stewart.mediamanager.service.TmdbPosterPathResolver.find(tmdbId, mtUpper)
+            ?: return notFound("tmdb_poster_by_id")
+        val file = posterPath.trimStart('/')
+        val extension = file.substringAfterLast('.', "jpg")
+        return serveProxied(
+            provider = ImageProxyService.Provider.TMDB,
+            path = "/t/p/$size/$file",
+            extension = extension,
+            metric = "tmdb_poster_by_id",
+        )
+    }
+}
+
+/**
  * Unauthenticated artwork endpoint, gated by a short-lived signed token.
  * Used by the web-app's MediaSession integration so iOS / macOS lock-screen
  * now-playing UI can render album art (the OS-level fetch doesn't share

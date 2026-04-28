@@ -1,6 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { CatalogService } from './catalog.service';
 
 /**
  * Manages the first-wish interstitial dialog.
@@ -11,7 +10,7 @@ import { firstValueFrom } from 'rxjs';
  */
 @Injectable({ providedIn: 'root' })
 export class WishInterstitialService {
-  private readonly http = inject(HttpClient);
+  private readonly catalog = inject(CatalogService);
 
   /** Whether the user has any existing media wish (loaded from API). */
   private hasAnyWish = false;
@@ -29,7 +28,7 @@ export class WishInterstitialService {
 
     if (!this.loaded) {
       try {
-        const data = await firstValueFrom(this.http.get<{ has_any_media_wish: boolean }>('/api/v2/wishlist'));
+        const data = await this.catalog.getWishList();
         this.hasAnyWish = data.has_any_media_wish;
         this.loaded = true;
       } catch {

@@ -2,59 +2,58 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  AcquisitionStatus,
+  MediaType,
+  WishLifecycleStage,
+} from '../../src/app/proto-gen/common_pb';
+import {
+  AddBookWishRequestSchema,
+  AddWishRequestSchema,
+  AddWishResponseSchema,
+  RemoveAlbumWishRequestSchema,
+  RemoveBookWishRequestSchema,
+  TmdbSearchResponseSchema,
+  TranscodeWishStatus,
+  WishListResponseSchema,
+  WishStatus,
+  type WishListResponse,
+} from '../../src/app/proto-gen/wishlist_pb';
 
 // Wish-list view tests.
 //
 // /wishlist (WishListComponent) is one long page with five sections
 // (Search TMDB, Media Wishes, Transcode Wishes, Book Wishes, Album
-// Wishes). Each section reads from the same /api/v2/wishlist
-// payload and writes through its own mutation endpoint.
+// Wishes). Each section reads from the same WishListService.ListWishes
+// payload and writes through WishListService mutation RPCs.
 //
-// The default fixture (catalog/wishlist.json) is intentionally small
-// — one of each row type — to keep other specs (e.g. collections)
-// fast. Tests here that need richer shapes (TV row with a season,
-// non-dismissible cancel-button row, transcode pending status,
-// album wishes) override the GET /api/v2/wishlist response inline.
+// The default fixture is intentionally small — one of each row type —
+// to keep other specs (e.g. collections) fast. Tests here that need
+// richer shapes (TV row with a season, non-dismissible cancel-button
+// row, transcode pending status, album wishes) override
+// ListWishes inline.
+//
+// No image fields cross the wire any more — the catalog adapter
+// constructs same-origin URLs from IDs:
+//   /tmdb-poster/{type}/{tmdb_id}/w185      media wishes
+//   /posters/w185/{title_id}                 transcode wishes
+//   /proxy/ol/olid/{ol_work_id}/M            book wishes
+//   /proxy/caa/release-group/{rgid}/large    album wishes
 
-const WISHLIST_URL = '**/api/v2/wishlist';
+const WS = '/mediamanager.WishListService';
+const LIST_WISHES = `**${WS}/ListWishes`;
 
-/** Build a wishlist payload for inline route overrides. */
-function wishlistPayload(over: Record<string, unknown> = {}) {
-  return {
-    media_wishes: [],
-    transcode_wishes: [],
-    book_wishes: [],
-    album_wishes: [],
-    has_any_media_wish: true,
+/** Build a typed WishListResponse for inline route overrides. */
+function wishlistPayload(over: Partial<WishListResponse> = {}): WishListResponse {
+  return create(WishListResponseSchema, {
+    wishes: [],
+    transcodeWishes: [],
+    bookWishes: [],
+    albumWishes: [],
+    hasAnyMediaWish: true,
     ...over,
-  };
-}
-
-/** Stub the mutation endpoints with empty 200/204s so awaited promises resolve. */
-async function stubWishlistMutations(page: Page) {
-  await page.route('**/api/v2/wishlist/add', route =>
-    route.fulfill({ json: { ok: true } }),
-  );
-  await page.route('**/api/v2/wishlist/*/dismiss', route =>
-    route.fulfill({ status: 204 }),
-  );
-  // /api/v2/wishlist/transcode/:id and /api/v2/wishlist/books/:id and
-  // /api/v2/wishlist/albums/:id all DELETE — separate routes so the
-  // test can assert which one fired.
-  await page.route('**/api/v2/wishlist/transcode/*', route =>
-    route.fulfill({ status: 204 }),
-  );
-  await page.route('**/api/v2/wishlist/books/*', route =>
-    route.fulfill({ json: { removed: true } }),
-  );
-  await page.route('**/api/v2/wishlist/albums/*', route =>
-    route.fulfill({ json: { removed: true } }),
-  );
-  // The bare /api/v2/wishlist/:id DELETE collides with the GET base
-  // path — only handle DELETE, fall through for GET.
-  await page.route('**/api/v2/wishlist/*', route => {
-    if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
-    return route.fallback();
   });
 }
 
@@ -63,7 +62,6 @@ test.describe('wishlist — default fixture', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await stubWishlistMutations(page);
     await page.goto('/wishlist');
     await page.waitForSelector('app-wishlist .content-page');
   });
@@ -77,17 +75,16 @@ test.describe('wishlist — default fixture', () => {
 
   test('media wish card renders poster, title, year, type "Film"', async ({ page }) => {
     const card = page.locator('app-wishlist .media-card').first();
-    // Poster sources through /proxy/tmdb/w185/<file>.
+    // Poster hits the same-origin /tmdb-poster servlet keyed on
+    // (media_type, tmdb_id). Server resolves via TmdbPosterPathResolver.
     await expect(card.locator('img.media-poster'))
-      .toHaveAttribute('src', /\/proxy\/tmdb\/w185\/fZPSd91yGE9fCcCe6OoQZ6ljZeB\.jpg$/);
+      .toHaveAttribute('src', /\/tmdb-poster\/MOVIE\/245891\/w185$/);
     await expect(card.locator('.media-title')).toContainText('John Wick');
-    // Movie + 2014 → "2014 · Film".
     await expect(card.locator('.media-meta')).toContainText('2014');
     await expect(card.locator('.media-meta')).toContainText('Film');
-    // No season label on a movie wish.
     await expect(card.locator('.season-label')).toHaveCount(0);
-    // Lifecycle pill renders the server-supplied label text.
-    await expect(card.locator('.lifecycle-badge')).toContainText('Pending');
+    // Lifecycle pill is client-rendered from the proto enum (i18n).
+    await expect(card.locator('.lifecycle-badge')).toContainText('Wished for');
   });
 
   test('transcode wish renders ready status + remove button', async ({ page }) => {
@@ -99,28 +96,31 @@ test.describe('wishlist — default fixture', () => {
   });
 
   test('book wish renders cover, title, author', async ({ page }) => {
-    // Book wishes share the .transcode-row container; the second
-    // .transcode-list block on the page is the book section.
     const row = page.locator('app-wishlist .transcode-list').nth(1).locator('.transcode-row');
+    // Cover is now /proxy/ol/olid/{ol_work_id}/M, server-fetched.
     await expect(row.locator('img.transcode-poster'))
-      .toHaveAttribute('src', /\/posters\/w185\/302$/);
+      .toHaveAttribute('src', /\/proxy\/ol\/olid\/OL12345W\/M$/);
     await expect(row.locator('.transcode-title')).toContainText('Dune Messiah');
     await expect(row.locator('.book-wish-author')).toContainText('by Frank Herbert');
   });
 
-  test('book wish remove DELETEs by ol_work_id', async ({ page }) => {
+  test('book wish remove fires RemoveBookWish with ol_work_id', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/books/OL12345W'),
+      r.url().endsWith(`${WS}/RemoveBookWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist .transcode-list').nth(1)
       .locator('button[aria-label="Remove from wish list"]').click();
-    await req;
+    const got = await req;
+    expect(fromBinary(
+      RemoveBookWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    ).olWorkId).toBe('OL12345W');
   });
 
-  test('transcode wish remove DELETEs /api/v2/wishlist/transcode/:id', async ({ page }) => {
+  test('transcode wish remove fires RemoveTranscodeWish keyed on title_id', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/transcode/1'),
+      r.url().endsWith(`${WS}/RemoveTranscodeWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist .transcode-list').first()
@@ -128,13 +128,11 @@ test.describe('wishlist — default fixture', () => {
     await req;
   });
 
-  test('dismissible media wish without title_id POSTs /:id/dismiss and stays on page', async ({ page }) => {
+  test('dismissible media wish without title_id fires DismissWish and stays on page', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/1/dismiss'),
+      r.url().endsWith(`${WS}/DismissWish`),
       { timeout: 3_000 },
     );
-    // Default fixture: John Wick is dismissible=true, title_id=null
-    // → renders the bottom "Dismiss" button, not the corner ×.
     await page.locator('app-wishlist .media-card').first()
       .locator('button.dismiss-btn').click();
     await req;
@@ -149,30 +147,28 @@ test.describe('wishlist — TMDB search', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await stubWishlistMutations(page);
     // Two results: one not yet wished, one already wished — exercise both
     // visible affordances (Add button vs ♥ Wished label).
-    await page.route('**/api/v2/wishlist/search*', route =>
-      route.fulfill({ json: { results: [
-        {
-          tmdb_id: 603, title: 'The Matrix', media_type: 'movie',
-          poster_path: '/matrix.jpg', release_year: 1999, popularity: 80.5,
-          already_wished: false,
-        },
-        {
-          tmdb_id: 1399, title: 'Game of Thrones', media_type: 'TV',
-          poster_path: null, release_year: 2011, popularity: 90.0,
-          already_wished: true,
-        },
-      ] } }),
-    );
+    await page.route(`**${WS}/SearchTmdb`, r =>
+      fulfillProto(r, TmdbSearchResponseSchema, create(TmdbSearchResponseSchema, {
+        results: [
+          {
+            tmdbId: 603, title: 'The Matrix', mediaType: MediaType.MOVIE,
+            releaseYear: 1999, popularity: 80.5, owned: false, wished: false,
+          },
+          {
+            tmdbId: 1399, title: 'Game of Thrones', mediaType: MediaType.TV,
+            releaseYear: 2011, popularity: 90.0, owned: false, wished: true,
+          },
+        ],
+      })));
     await page.goto('/wishlist');
     await page.waitForSelector('app-wishlist .content-page');
   });
 
-  test('Search button fires GET /api/v2/wishlist/search?q=...', async ({ page }) => {
+  test('Search button fires SearchTmdb', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'GET' && /\/api\/v2\/wishlist\/search\?.*q=matrix/i.test(r.url()),
+      r.url().endsWith(`${WS}/SearchTmdb`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist input.search-input').fill('matrix');
@@ -182,7 +178,7 @@ test.describe('wishlist — TMDB search', () => {
 
   test('Enter key in the search input also fires search', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      /\/api\/v2\/wishlist\/search/.test(r.url()), { timeout: 3_000 },
+      r.url().endsWith(`${WS}/SearchTmdb`), { timeout: 3_000 },
     );
     const input = page.locator('app-wishlist input.search-input');
     await input.fill('matrix');
@@ -190,50 +186,49 @@ test.describe('wishlist — TMDB search', () => {
     await req;
   });
 
-  test('search results render poster, title, meta, Add or Wished label', async ({ page }) => {
+  test('search results render placeholder thumb + title + meta + Add or Wished label', async ({ page }) => {
     await page.locator('app-wishlist input.search-input').fill('matrix');
     await page.locator('app-wishlist button.search-btn').click();
     const cards = page.locator('app-wishlist .search-card');
     await expect(cards).toHaveCount(2);
 
-    // Card 0: Matrix (movie, not wished) → poster + Add button.
-    await expect(cards.first().locator('img.search-poster'))
-      .toHaveAttribute('src', /\/proxy\/tmdb\/w185\/matrix\.jpg$/);
+    // No URLs cross the wire any more — search dropdowns render a
+    // first-letter placeholder until the user adds the wish (after
+    // which /tmdb-poster/{type}/{tmdb_id} resolves via the wish row).
+    await expect(cards.first().locator('.search-poster-placeholder')).toContainText('T');
     await expect(cards.first().locator('.search-title')).toContainText('The Matrix');
     await expect(cards.first().locator('.search-meta')).toContainText('1999');
     await expect(cards.first().locator('.search-meta')).toContainText('Film');
     await expect(cards.first().locator('button.add-wish-btn')).toBeVisible();
 
-    // Card 1: Game of Thrones (TV, already wished) → placeholder, no
-    // Add button, ♥ Wished label instead.
     await expect(cards.nth(1).locator('.search-poster-placeholder')).toContainText('G');
     await expect(cards.nth(1).locator('.search-meta')).toContainText('TV');
     await expect(cards.nth(1).locator('button.add-wish-btn')).toHaveCount(0);
     await expect(cards.nth(1).locator('.wished-label')).toBeVisible();
   });
 
-  test('Add fires POST /add with the right payload (no interstitial when has_any_media_wish=true)', async ({ page }) => {
+  test('Add fires AddWish with the right payload (no interstitial when has_any_media_wish=true)', async ({ page }) => {
     await page.locator('app-wishlist input.search-input').fill('matrix');
     await page.locator('app-wishlist button.search-btn').click();
     await page.waitForSelector('app-wishlist .search-card');
 
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/add'),
+      r.url().endsWith(`${WS}/AddWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist .search-card').first()
       .locator('button.add-wish-btn').click();
     const got = await req;
-    expect(got.postDataJSON()).toEqual({
-      tmdb_id: 603,
-      title: 'The Matrix',
-      media_type: 'movie',
-      poster_path: '/matrix.jpg',
-      release_year: 1999,
-      popularity: 80.5,
-    });
+    const decoded = fromBinary(
+      AddWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.tmdbId).toBe(603);
+    expect(decoded.title).toBe('The Matrix');
+    expect(decoded.mediaType).toBe(MediaType.MOVIE);
+    expect(decoded.releaseYear).toBe(1999);
+    expect(decoded.popularity).toBe(80.5);
 
-    // After the POST resolves the card flips to the "Wished" label.
     await expect(page.locator('app-wishlist .search-card').first()
       .locator('.wished-label')).toBeVisible();
   });
@@ -246,18 +241,15 @@ test.describe('wishlist — first-wish interstitial', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await stubWishlistMutations(page);
-    // has_any_media_wish=false → interstitial fires on first add.
-    await page.route(/\/api\/v2\/wishlist(\?|$)/, route =>
-      route.fulfill({ json: wishlistPayload({ has_any_media_wish: false }) }),
-    );
-    await page.route('**/api/v2/wishlist/search*', route =>
-      route.fulfill({ json: { results: [{
-        tmdb_id: 1, title: 'Citizen Kane', media_type: 'movie',
-        poster_path: null, release_year: 1941, popularity: 50,
-        already_wished: false,
-      }] } }),
-    );
+    await page.route(LIST_WISHES, r =>
+      fulfillProto(r, WishListResponseSchema, wishlistPayload({ hasAnyMediaWish: false })));
+    await page.route(`**${WS}/SearchTmdb`, r =>
+      fulfillProto(r, TmdbSearchResponseSchema, create(TmdbSearchResponseSchema, {
+        results: [{
+          tmdbId: 1, title: 'Citizen Kane', mediaType: MediaType.MOVIE,
+          releaseYear: 1941, popularity: 50, owned: false, wished: false,
+        }],
+      })));
     await page.goto('/wishlist');
     await page.waitForSelector('app-wishlist .content-page');
     await page.locator('app-wishlist input.search-input').fill('kane');
@@ -268,7 +260,7 @@ test.describe('wishlist — first-wish interstitial', () => {
   test('first Add shows the interstitial, Cancel suppresses the wish', async ({ page }) => {
     let addFired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/add')) addFired = true;
+      if (r.url().endsWith(`${WS}/AddWish`)) addFired = true;
     });
     await page.locator('app-wishlist button.add-wish-btn').click();
     await expect(page.locator('app-wishlist .modal-overlay')).toBeVisible();
@@ -282,7 +274,7 @@ test.describe('wishlist — first-wish interstitial', () => {
     await expect(page.locator('app-wishlist .modal-overlay')).toBeVisible();
 
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/add'),
+      r.url().endsWith(`${WS}/AddWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist .modal-content button.confirm-btn').click();
@@ -298,42 +290,48 @@ test.describe('wishlist — varied row shapes', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await stubWishlistMutations(page);
-    await page.route(/\/api\/v2\/wishlist(\?|$)/, route =>
-      route.fulfill({ json: wishlistPayload({
-        media_wishes: [
-          // Non-dismissible row → renders the corner cancel × instead of
-          // the bottom Dismiss button.
+    await page.route(LIST_WISHES, r =>
+      fulfillProto(r, WishListResponseSchema, wishlistPayload({
+        wishes: [
+          // Non-dismissible: ORDERED stage, no title_id, dismissible=false.
           {
-            id: 7, tmdb_id: 1399, tmdb_title: 'Game of Thrones',
-            tmdb_media_type: 'TV', tmdb_poster_path: '/got.jpg',
-            tmdb_release_year: 2011, season_number: 4,
-            lifecycle_stage: 'ORDERED', lifecycle_label: 'Ordered',
-            title_id: null, vote_count: 1, dismissible: false,
+            id: 7n, tmdbId: 1399, title: 'Game of Thrones',
+            mediaType: MediaType.TV,
+            releaseYear: 2011, seasonNumber: 4,
+            status: WishStatus.ACTIVE,
+            voteCount: 1, userVoted: true,
+            acquisitionStatus: AcquisitionStatus.ORDERED,
+            lifecycleStage: WishLifecycleStage.ORDERED,
+            dismissible: false,
           },
-          // Dismissible row WITH title_id → click navigates to /title/:id.
+          // Dismissible WITH title_id → click navigates to /title/100.
           {
-            id: 8, tmdb_id: 603, tmdb_title: 'The Matrix',
-            tmdb_media_type: 'movie', tmdb_poster_path: '/matrix.jpg',
-            tmdb_release_year: 1999, season_number: null,
-            lifecycle_stage: 'READY_TO_WATCH', lifecycle_label: 'Ready to watch',
-            title_id: 100, vote_count: 1, dismissible: true,
+            id: 8n, tmdbId: 603, title: 'The Matrix',
+            mediaType: MediaType.MOVIE,
+            releaseYear: 1999,
+            status: WishStatus.FULFILLED,
+            voteCount: 1, userVoted: true,
+            acquisitionStatus: AcquisitionStatus.OWNED,
+            lifecycleStage: WishLifecycleStage.READY_TO_WATCH,
+            titleId: 100n,
+            dismissible: true,
           },
         ],
-        transcode_wishes: [
-          { id: 5, title_id: 200, title_name: 'Inception',
-            poster_url: '/posters/200.jpg', status: 'pending' },
+        transcodeWishes: [{
+          id: 5n, titleId: 200n, titleName: 'Inception',
+          status: TranscodeWishStatus.PENDING,
+        }],
+        albumWishes: [
+          {
+            id: 11n, releaseGroupId: 'rg-single', title: 'Kind of Blue',
+            primaryArtist: 'Miles Davis', year: 1959, isCompilation: false,
+          },
+          {
+            id: 12n, releaseGroupId: 'rg-comp', title: "Now That's What I Call Music!",
+            year: 2024, isCompilation: true,
+          },
         ],
-        album_wishes: [
-          { id: 11, release_group_id: 'rg-single', title: 'Kind of Blue',
-            primary_artist: 'Miles Davis', year: 1959,
-            cover_url: '/posters/w185/301', is_compilation: false },
-          { id: 12, release_group_id: 'rg-comp', title: 'Now That\'s What I Call Music!',
-            primary_artist: null, year: 2024, cover_url: '/posters/w185/302',
-            is_compilation: true },
-        ],
-      }) }),
-    );
+      })));
     await page.goto('/wishlist');
     await page.waitForSelector('app-wishlist .content-page');
   });
@@ -343,17 +341,16 @@ test.describe('wishlist — varied row shapes', () => {
     await expect(card.locator('.media-title')).toContainText('Game of Thrones');
     await expect(card.locator('.media-meta')).toContainText('TV');
     await expect(card.locator('.season-label')).toContainText('Season 4');
-    // Lifecycle pill carries the server-supplied label.
     await expect(card.locator('.lifecycle-badge')).toContainText('Ordered');
   });
 
-  test('non-dismissible media wish shows the corner × cancel button (no Dismiss button)', async ({ page }) => {
+  test('non-dismissible media wish shows the corner × cancel button', async ({ page }) => {
     const card = page.locator('app-wishlist .media-card').first();
     await expect(card.locator('button.cancel-btn')).toBeVisible();
     await expect(card.locator('button.dismiss-btn')).toHaveCount(0);
 
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/7'),
+      r.url().endsWith(`${WS}/CancelWish`),
       { timeout: 3_000 },
     );
     await card.locator('button.cancel-btn').click();
@@ -361,7 +358,6 @@ test.describe('wishlist — varied row shapes', () => {
   });
 
   test('dismissible media wish with title_id navigates to the title detail', async ({ page }) => {
-    // Card 1 is the Matrix entry (title_id=100, dismissible=true).
     await page.locator('app-wishlist .media-card').nth(1)
       .locator('button.dismiss-btn').click();
     await expect(page).toHaveURL(/\/title\/100$/);
@@ -374,7 +370,6 @@ test.describe('wishlist — varied row shapes', () => {
   });
 
   test('album wish — single artist subtitle is "Artist · Year"', async ({ page }) => {
-    // Album section is the LAST .transcode-list block on the page.
     const sections = page.locator('app-wishlist .transcode-list');
     const albumRows = sections.last().locator('.transcode-row');
     const single = albumRows.first();
@@ -391,15 +386,19 @@ test.describe('wishlist — varied row shapes', () => {
     await expect(comp.locator('.book-wish-author')).toContainText('2024');
   });
 
-  test('album wish remove DELETEs by release_group_id', async ({ page }) => {
+  test('album wish remove fires RemoveAlbumWish with release_group_id', async ({ page }) => {
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/albums/rg-single'),
+      r.url().endsWith(`${WS}/RemoveAlbumWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-wishlist .transcode-list').last()
       .locator('.transcode-row').first()
       .locator('button[aria-label="Remove from wish list"]').click();
-    await req;
+    const got = await req;
+    expect(fromBinary(
+      RemoveAlbumWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    ).releaseGroupId).toBe('rg-single');
   });
 });
 
@@ -410,14 +409,12 @@ test.describe('wishlist — empty states', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route(/\/api\/v2\/wishlist(\?|$)/, route =>
-      route.fulfill({ json: wishlistPayload({ has_any_media_wish: false }) }),
-    );
+    await page.route(LIST_WISHES, r =>
+      fulfillProto(r, WishListResponseSchema, wishlistPayload({ hasAnyMediaWish: false })));
     await page.goto('/wishlist');
     await page.waitForSelector('app-wishlist .content-page');
     await expect(page.locator('app-wishlist').getByText(/No media wishes yet/)).toBeVisible();
     await expect(page.locator('app-wishlist').getByText(/No transcode wishes yet/)).toBeVisible();
-    // Book + Album sections aren't rendered at all when their lists are empty.
     await expect(page.locator('app-wishlist h3', { hasText: /^Book Wishes$/ })).toHaveCount(0);
     await expect(page.locator('app-wishlist h3', { hasText: /^Album Wishes$/ })).toHaveCount(0);
   });

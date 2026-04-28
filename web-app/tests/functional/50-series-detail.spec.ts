@@ -2,23 +2,30 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  AddBookWishRequestSchema,
+  WishlistSeriesGapsResponseSchema,
+} from '../../src/app/proto-gen/wishlist_pb';
 
 // /series/:id — SeriesComponent. Book series detail with hero,
 // owned-volumes grid, missing-volumes grid + per-volume wish heart,
 // and a "Wishlist all missing" bulk action.
 
+const WS = '/mediamanager.WishListService';
+
 async function setup(page: Page) {
   await mockBackend(page);
   await loginAs(page);
   await stubImages(page);
-  await page.route('**/api/v2/wishlist/books', r =>
-    r.fulfill({ json: { ok: true } }));
-  await page.route('**/api/v2/wishlist/books/*', r => {
-    if (r.request().method() === 'DELETE') return r.fulfill({ status: 204 });
-    return r.fallback();
-  });
-  await page.route('**/api/v2/catalog/series/*/wishlist-gaps', r =>
-    r.fulfill({ json: { added: 3, already_wished: 1 } }));
+  // Override mock-backend's WishlistSeriesGaps default to return the
+  // counts these tests assert on.
+  await page.route(`**${WS}/WishlistSeriesGaps`, r =>
+    fulfillProto(r, WishlistSeriesGapsResponseSchema, create(WishlistSeriesGapsResponseSchema, {
+      added: 3,
+      alreadyWished: 1,
+    })));
   await page.goto('/series/1');
   await page.waitForSelector('app-series .hero');
 }
@@ -50,31 +57,31 @@ test.describe('series detail — missing volumes', () => {
     await expect(page.locator('app-series .poster-card.unowned')).toContainText('Dune Messiah');
   });
 
-  test('un-wished missing volume click POSTs /wishlist/books with the volume payload', async ({ page }) => {
+  test('un-wished missing volume click fires AddBookWish with the volume payload', async ({ page }) => {
     await setup(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/wishlist/books'),
+      r.url().endsWith(`${WS}/AddBookWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-series .poster-card.unowned button.wish-btn').click();
     const got = await req;
-    expect(got.postDataJSON()).toEqual({
-      ol_work_id: 'OL12345W',
-      title: 'Dune Messiah',
-      author: 'Frank Herbert',
-      series_id: 1,
-      series_number: '2',
-    });
+    const decoded = fromBinary(
+      AddBookWishRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.olWorkId).toBe('OL12345W');
+    expect(decoded.title).toBe('Dune Messiah');
+    expect(decoded.author).toBe('Frank Herbert');
+    expect(Number(decoded.seriesId)).toBe(1);
+    expect(decoded.seriesNumber).toBe('2');
   });
 
-  test('wished volume click DELETEs the wish', async ({ page }) => {
+  test('wished volume click fires RemoveBookWish', async ({ page }) => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/wishlist/books/*', r => {
-      if (r.request().method() === 'DELETE') return r.fulfill({ status: 204 });
-      return r.fallback();
-    });
+    // Series detail itself is still REST until that migrates — keep
+    // the legacy mock for it. Wishlist mutations go through gRPC.
     await page.route('**/api/v2/catalog/series/*', r =>
       r.fulfill({ json: {
         id: 1, name: 'Dune', poster_url: '/posters/300', author: { id: 1, name: 'Frank Herbert' },
@@ -87,17 +94,17 @@ test.describe('series detail — missing volumes', () => {
     await page.goto('/series/1');
     await page.waitForSelector('app-series .hero');
     const req = page.waitForRequest(r =>
-      r.method() === 'DELETE' && r.url().endsWith('/api/v2/wishlist/books/OL999W'),
+      r.url().endsWith(`${WS}/RemoveBookWish`),
       { timeout: 3_000 },
     );
     await page.locator('app-series .poster-card.unowned button.wish-btn').click();
     await req;
   });
 
-  test('Wishlist-all-missing fires POST /wishlist-gaps and renders the result message', async ({ page }) => {
+  test('Wishlist-all-missing fires WishlistSeriesGaps and renders the result message', async ({ page }) => {
     await setup(page);
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/wishlist-gaps$/.test(r.url()),
+      r.url().endsWith(`${WS}/WishlistSeriesGaps`),
       { timeout: 3_000 },
     );
     await page.locator('app-series button', { hasText: 'Wishlist all missing' }).click();

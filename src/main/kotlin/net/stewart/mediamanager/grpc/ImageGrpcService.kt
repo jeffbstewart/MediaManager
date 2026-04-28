@@ -230,7 +230,7 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
             MediaType.MEDIA_TYPE_TV -> "TV"
             else -> "MOVIE"
         }
-        val posterPath = findTmdbPosterPath(tmdbId, mediaTypeStr)
+        val posterPath = net.stewart.mediamanager.service.TmdbPosterPathResolver.find(tmdbId, mediaTypeStr)
             ?: return ImageResult.NotFound
 
         // Fetch from TMDB CDN
@@ -250,28 +250,6 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
             log.warn("TMDB poster fetch failed for tmdb_id={}: {}", tmdbId, e.message)
             ImageResult.NotFound
         }
-    }
-
-    /** Find a TMDB poster_path from local data — checks Title table, then WishListItem. */
-    private fun findTmdbPosterPath(tmdbId: Int, mediaType: String): String? {
-        // Check owned titles first
-        val title = Title.findAll().firstOrNull { it.tmdb_id == tmdbId && it.media_type == mediaType }
-        if (title?.poster_path != null) return title.poster_path
-
-        // Check wish list items
-        val wish = WishListItem.findAll().firstOrNull { it.tmdb_id == tmdbId }
-        if (wish?.tmdb_poster_path != null) return wish.tmdb_poster_path
-
-        // Check TMDB collection parts (for collection detail posters)
-        val collPart = net.stewart.mediamanager.entity.TmdbCollectionPart.findAll()
-            .firstOrNull { it.tmdb_movie_id == tmdbId }
-        if (collPart != null) {
-            // Look up the title for this collection part
-            val partTitle = Title.findAll().firstOrNull { it.tmdb_id == tmdbId && it.media_type == "MOVIE" }
-            if (partTitle?.poster_path != null) return partTitle.poster_path
-        }
-
-        return null
     }
 
     private fun resolveArtistHeadshot(artistId: Long, ifNoneMatch: String?): ImageResult {

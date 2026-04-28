@@ -186,14 +186,14 @@ export class CollectionDetailComponent implements OnInit {
       if (wish) await this.catalog.cancelWish(wish.id);
     } else {
       // Add wish — collection parts are always movies
-      await firstValueFrom(this.http.post('/api/v2/wishlist/add', {
+      await this.catalog.addMediaWish({
         tmdb_id: part.tmdb_movie_id,
         media_type: 'MOVIE',
         title: part.title_name,
         poster_path: null,
         release_year: part.release_year,
         popularity: null,
-      }));
+      });
     }
 
     // Refresh to get updated wish status
