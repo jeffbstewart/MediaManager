@@ -125,9 +125,12 @@ export class PurchaseWishesComponent implements OnInit {
 
   posterUrl(path: string): string { return tmdbImageUrl(path, 'w92')!; }
 
-  /** Cover Art Archive thumbnail URL for an album release. */
+  /** CAA thumbnail URL for an album release. Routes through our
+   *  same-origin /proxy/caa/release servlet so the browser never
+   *  opens a connection to a third-party host — the server fetches
+   *  and caches the bytes. */
   albumCoverUrl(releaseId: string): string {
-    return `https://coverartarchive.org/release/${releaseId}/front-250`;
+    return `/proxy/caa/release/${releaseId}/large`;
   }
 
   /** Display string for the Type column — "Movie" / "TV" / "CD". */

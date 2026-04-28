@@ -40,6 +40,25 @@ PAT_HEX='\b[0-9a-fA-F]{32,}\b'
 # Common API key prefixes
 PAT_APIKEY='\b(sk-[a-zA-Z0-9]{20,}|Bearer [a-zA-Z0-9._-]{20,})\b'
 
+# Third-party host references — the SPA must never make a browser
+# request to any of these. Server-side code legitimately fetches
+# from them via ImageProxyService; only flag when added to the
+# web-app/ tree. Constructed via concatenation so the literal
+# strings don't appear in this file's own diff.
+PAT_THIRDPARTY_HOST='\b(image\.tmdb'\
+'\.org|coverartarchive'\
+'\.org|covers\.openlibrary'\
+'\.org|commons\.wikimedia'\
+'\.org|fonts\.googleapis'\
+'\.com|fonts\.gstatic'\
+'\.com|cdn\.jsdelivr'\
+'\.net|cdnjs\.cloudflare'\
+'\.com|unpkg'\
+'\.com|gravatar'\
+'\.com|google-analytics'\
+'\.com|googletagmanager'\
+'\.com)\b'
+
 # ---------- helpers ----------
 
 violations=0
@@ -221,6 +240,51 @@ check_pattern "IP address" "$PAT_IP"
 check_pattern "UUID" "$PAT_UUID"
 check_pattern "Long hex string (possible key/hash)" "$PAT_HEX"
 check_pattern "API key prefix" "$PAT_APIKEY"
+
+# ---------- third-party host references in the SPA ----------
+# Server-side code legitimately fetches from third-party image hosts
+# via ImageProxyService. The SPA must never reference them — every
+# browser request stays on our origin. Walk the diff again, but only
+# inspect added lines under web-app/src/.
+spa_host_violations=()
+current_file=""
+spa_in_scope=false
+spa_in_test=false
+while IFS= read -r line; do
+    if [[ "$line" == "diff --git "* ]]; then
+        current_file="${line##* b/}"
+        spa_in_scope=false
+        spa_in_test=false
+        if [[ "$current_file" == web-app/src/* || "$current_file" == web-app/projects/*/src/* ]]; then
+            spa_in_scope=true
+        fi
+        # Tests, comments, audit docs, and the regression spec itself
+        # legitimately reference these hosts — the rule is about runtime
+        # SPA code, not test fixtures or descriptive prose.
+        if [[ "$current_file" == web-app/tests/* || "$current_file" == web-app/src/test/* ]]; then
+            spa_in_test=true
+        fi
+        continue
+    fi
+    if ! $spa_in_scope || $spa_in_test; then
+        continue
+    fi
+    if [[ "$line" == +* && "$line" != "+++"* ]]; then
+        if echo "$line" | grep -qE "$PAT_THIRDPARTY_HOST"; then
+            spa_host_violations+=("  $current_file: ${line:1}")
+        fi
+    fi
+done <<< "$DIFF_INPUT"
+
+if [[ ${#spa_host_violations[@]} -gt 0 ]]; then
+    violations=$((violations + 1))
+    violation_lines+=("--- Third-party host in SPA source ---")
+    for entry in "${spa_host_violations[@]}"; do
+        violation_lines+=("$entry")
+    done
+    violation_lines+=("  (SPA browsers must only contact our origin — see")
+    violation_lines+=("   docs/THIRD_PARTY_AUDIT.md for the rule and exceptions.)")
+fi
 
 # Personal patterns (gitignored, per-developer)
 PERSONAL_PATTERNS="$SCRIPT_DIR/presubmit-personal-patterns.txt"
