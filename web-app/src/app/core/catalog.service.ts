@@ -866,9 +866,13 @@ export class CatalogService {
    * share the browser's auth cookies).
    */
   async getPublicArtToken(titleId: number): Promise<{ token: string; ttl_seconds: number }> {
-    return firstValueFrom(this.http.get<{ token: string; ttl_seconds: number }>(
-      '/api/v2/public-art-token', { params: { title_id: String(titleId) } }
-    ));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.mintPublicArtToken({ titleId: BigInt(titleId) });
+    // ttl is a Duration message carrying nanos; the audio-player only
+    // looks at the token string, but expose ttl_seconds for parity
+    // with the legacy REST shape and any future refresh scheduling.
+    const ttlSeconds = proto.ttl ? Number(proto.ttl.nanos) / 1e9 : 0;
+    return { token: proto.token, ttl_seconds: ttlSeconds };
   }
 
   async getTitleDetail(titleId: number): Promise<TitleDetail> {

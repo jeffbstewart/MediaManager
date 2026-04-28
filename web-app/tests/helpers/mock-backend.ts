@@ -37,6 +37,7 @@ import {
   FeaturesSchema,
   HomeFeedResponseSchema,
   ListTitlesRequestSchema,
+  MintPublicArtTokenResponseSchema,
   SearchResponseSchema,
   SearchTracksResponseSchema,
   TagListResponseSchema,
@@ -246,6 +247,14 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     DismissMissingSeason:   noopEmpty,
     DismissContinueWatching: noopEmpty,
     GetTagDetail:           r => fulfillProto(r, TagDetailSchema, tagDetailFixture),
+    MintPublicArtToken:
+      // Audio player's MediaSession integration calls this to mint a
+      // signed token for OS lock-screen art. Tests don't assert on
+      // it; return a stable fake so the audio-player promise resolves.
+      r => fulfillProto(r, MintPublicArtTokenResponseSchema, create(MintPublicArtTokenResponseSchema, {
+        token: 'test-token',
+        ttl: { nanos: 12n * 60n * 60n * 1_000_000_000n },
+      })),
     Search:                 r => fulfillProto(r, SearchResponseSchema, searchResultsFixture),
     ListAdvancedSearchPresets:
       r => fulfillProto(r, AdvancedSearchPresetsResponseSchema, advancedSearchPresetsFixture),

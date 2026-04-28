@@ -7,6 +7,7 @@ option java_multiple_files = true;
 option swift_prefix = "MM";
 
 import "common.proto";
+import "time.proto";
 
 service CatalogService {
   // --- Home Feed ---
@@ -68,6 +69,13 @@ service CatalogService {
   // filter shape without breaking the cross-type free-text search.
   rpc ListAdvancedSearchPresets(Empty) returns (AdvancedSearchPresetsResponse);
   rpc SearchTracks(SearchTracksRequest) returns (SearchTracksResponse);
+
+  // Mint a 12-hour signed token authorising an unauthenticated fetch
+  // of this title's poster via `/public/album-art/{token}`. The web
+  // audio player uses this for the OS lock-screen now-playing
+  // integration (the OS-level fetch doesn't share browser cookies).
+  // Server enforces content-rating visibility before minting.
+  rpc MintPublicArtToken(TitleIdRequest) returns (MintPublicArtTokenResponse);
 }
 
 // --- Requests ---
@@ -239,6 +247,14 @@ message SearchTracksRequest {
 
 message SearchTracksResponse {
   repeated TrackSearchHit tracks = 1;
+}
+
+message MintPublicArtTokenResponse {
+  // Opaque token; embed in /public/album-art/{token} URL.
+  string token = 1;
+  // How long the token is valid (12 hours today). Clients refresh
+  // shortly before this elapses.
+  Duration ttl = 2;
 }
 
 message TrackSearchHit {

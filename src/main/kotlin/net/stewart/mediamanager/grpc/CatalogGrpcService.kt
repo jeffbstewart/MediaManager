@@ -1890,6 +1890,22 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         }
     }
 
+    override suspend fun mintPublicArtToken(request: TitleIdRequest): MintPublicArtTokenResponse {
+        val user = currentUser()
+        val title = TitleEntity.findById(request.titleId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("title not found"))
+        if (!user.canSeeRating(title.content_rating)) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("rating gate"))
+        }
+        val token = net.stewart.mediamanager.service.PublicArtTokenService.mint(request.titleId)
+        return mintPublicArtTokenResponse {
+            this.token = token
+            ttl = duration {
+                nanos = net.stewart.mediamanager.service.PublicArtTokenService.TOKEN_TTL_SECONDS * 1_000_000_000L
+            }
+        }
+    }
+
     override suspend fun searchTracks(request: SearchTracksRequest): SearchTracksResponse {
         val user = currentUser()
         val filters = net.stewart.mediamanager.service.TrackSearchService.Filters(
