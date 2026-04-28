@@ -34,6 +34,7 @@ import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
 import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
 import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-gen/playlist_pb';
 import { PlaybackService as PlaybackServiceDesc } from '../proto-gen/playback_pb';
+import { LiveService as LiveServiceDesc } from '../proto-gen/live_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -1201,7 +1202,13 @@ export class CatalogService {
   }
 
   async getCameras(): Promise<CameraListResponse> {
-    return firstValueFrom(this.http.get<CameraListResponse>('/api/v2/catalog/cameras'));
+    const client = grpcClient(LiveServiceDesc);
+    const proto = await client.listCameras({});
+    const cameras = proto.cameras.map(c => ({
+      id: Number(c.id),
+      name: c.name,
+    }));
+    return { cameras, total: cameras.length };
   }
 
   // ----------------------------- Playlists -------------------------

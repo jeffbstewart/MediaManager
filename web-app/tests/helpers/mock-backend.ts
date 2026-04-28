@@ -58,6 +58,8 @@ import {
   searchResultsFixture,
   searchTracksEmptyFixture,
 } from '../fixtures-typed/search.fixture';
+import { camerasList } from '../fixtures-typed/live.fixture';
+import { CameraListResponseSchema } from '../../src/app/proto-gen/live_pb';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -316,10 +318,19 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     ClearProgress:         noopEmpty,
   };
 
+  // ---- mediamanager.LiveService ----
+  // Camera + TV-channel browse. Only ListCameras is migrated yet —
+  // ListTvChannels still rides REST while the proto's TvChannel
+  // shape sorts out network_affiliation.
+  const liveHandlers: Record<string, RpcHandler> = {
+    ListCameras: r => fulfillProto(r, CameraListResponseSchema, camerasList),
+  };
+
   await mountService('mediamanager.CatalogService', catalogHandlers);
   await mountService('mediamanager.PlaylistService', playlistHandlers);
   await mountService('mediamanager.ArtistService', artistHandlers);
   await mountService('mediamanager.PlaybackService', playbackHandlers);
+  await mountService('mediamanager.LiveService', liveHandlers);
 
   // Legacy REST: /api/v2/catalog/titles/:id — dispatch by id to the
   // right media-type fixture. 100 movie, 200 tv, 300 book, 301 album.
@@ -380,9 +391,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // --- Media + Live (Tier 6) ---
   // /api/v2/playlists/* trailing-segment routes were retired with the
   // PlaylistService gRPC migration (see the gRPC dispatch block above).
-  await page.route('**/api/v2/catalog/cameras', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/cameras.json') })
-  );
+  // /api/v2/catalog/cameras is no longer hit — getCameras() goes
+  // through LiveService.ListCameras (dispatched in the gRPC route
+  // block above).
   await page.route('**/api/v2/catalog/live-tv/channels', (r: Route) =>
     r.fulfill({ json: loadFixture('catalog/tv-channels.json') })
   );

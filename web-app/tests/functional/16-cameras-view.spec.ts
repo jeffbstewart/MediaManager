@@ -2,7 +2,11 @@ import { test, expect } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
-import { loadFixture } from '../helpers/load-fixture';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { create } from '@bufbuild/protobuf';
+import { CameraListResponseSchema } from '../../src/app/proto-gen/live_pb';
+
+const LS = '/mediamanager.LiveService';
 
 // Serial mode for the same reason as 15-books-and-reader: the
 // fullscreen view holds an open MJPEG-style image stream and the
@@ -143,11 +147,10 @@ test.describe('cameras view', () => {
   });
 
   test('empty cameras list shows the empty message', async ({ page }) => {
-    // Replace the cameras endpoint with an empty list. Fresh nav so
-    // ngOnInit re-runs against the override.
-    await page.route('**/api/v2/catalog/cameras', route =>
-      route.fulfill({ json: { cameras: [], total: 0 } })
-    );
+    // Override LiveService.ListCameras with an empty list. Fresh nav
+    // so ngOnInit re-runs against the override.
+    await page.route(`**${LS}/ListCameras`, r =>
+      fulfillProto(r, CameraListResponseSchema, create(CameraListResponseSchema)));
     await page.goto('/cameras');
     await expect(page.locator('app-cameras .empty-message'))
       .toContainText('No cameras configured');
@@ -155,9 +158,7 @@ test.describe('cameras view', () => {
   });
 
   test('cameras endpoint failure shows the error message', async ({ page }) => {
-    await page.route('**/api/v2/catalog/cameras', route =>
-      route.fulfill({ status: 500 })
-    );
+    await page.route(`**${LS}/ListCameras`, route => route.fulfill({ status: 500 }));
     await page.goto('/cameras');
     await expect(page.locator('app-cameras .error-message'))
       .toContainText('Failed to load cameras');
