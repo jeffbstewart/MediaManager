@@ -58,8 +58,8 @@ import {
   searchResultsFixture,
   searchTracksEmptyFixture,
 } from '../fixtures-typed/search.fixture';
-import { camerasList } from '../fixtures-typed/live.fixture';
-import { CameraListResponseSchema } from '../../src/app/proto-gen/live_pb';
+import { camerasList, tvChannelsList } from '../fixtures-typed/live.fixture';
+import { CameraListResponseSchema, TvChannelListResponseSchema } from '../../src/app/proto-gen/live_pb';
 import {
   playlistDetailRoadTrip,
   playlistsList,
@@ -319,11 +319,10 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   };
 
   // ---- mediamanager.LiveService ----
-  // Camera + TV-channel browse. Only ListCameras is migrated yet —
-  // ListTvChannels still rides REST while the proto's TvChannel
-  // shape sorts out network_affiliation.
+  // Camera + TV-channel browse.
   const liveHandlers: Record<string, RpcHandler> = {
-    ListCameras: r => fulfillProto(r, CameraListResponseSchema, camerasList),
+    ListCameras:    r => fulfillProto(r, CameraListResponseSchema, camerasList),
+    ListTvChannels: r => fulfillProto(r, TvChannelListResponseSchema, tvChannelsList),
   };
 
   await mountService('mediamanager.CatalogService', catalogHandlers);
@@ -394,9 +393,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // /api/v2/catalog/cameras is no longer hit — getCameras() goes
   // through LiveService.ListCameras (dispatched in the gRPC route
   // block above).
-  await page.route('**/api/v2/catalog/live-tv/channels', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/tv-channels.json') })
-  );
+  // /api/v2/catalog/live-tv/channels is no longer hit — getTvChannels()
+  // goes through LiveService.ListTvChannels (dispatched in the gRPC
+  // route block above).
   // Live-TV-player launches an HLS stream against
   //   /api/v2/live-tv/stream/:channelId/playlist.m3u8
   // The page renders before the stream is needed; if HLS.js fires

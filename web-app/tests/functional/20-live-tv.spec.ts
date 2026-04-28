@@ -2,6 +2,11 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto } from '../helpers/proto-fixture';
+import { create } from '@bufbuild/protobuf';
+import { TvChannelListResponseSchema } from '../../src/app/proto-gen/live_pb';
+
+const LS = '/mediamanager.LiveService';
 
 // Live TV grid + player tests.
 //
@@ -82,16 +87,15 @@ test.describe('live TV — grid view', () => {
   });
 
   test('empty channel list shows the empty message', async ({ page }) => {
-    await page.route('**/api/v2/catalog/live-tv/channels', route =>
-      route.fulfill({ json: { channels: [], total: 0 } }),
-    );
+    await page.route(`**${LS}/ListTvChannels`, r =>
+      fulfillProto(r, TvChannelListResponseSchema, create(TvChannelListResponseSchema)));
     await page.goto('/live-tv');
     await expect(page.locator('app-live-tv .empty-message'))
       .toContainText('No channels available');
   });
 
   test('403 from channels endpoint shows the not-available message', async ({ page }) => {
-    await page.route('**/api/v2/catalog/live-tv/channels', route =>
+    await page.route(`**${LS}/ListTvChannels`, route =>
       route.fulfill({ status: 403 }),
     );
     await page.goto('/live-tv');

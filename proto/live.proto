@@ -40,6 +40,10 @@ message TvChannel {
   ContentRating content_rating = 4;
   Quality quality = 5;
   string stream_url = 6;         // relative HLS URL
+  // Optional network/affiliate string ("CBS", "Fox affiliate"), shown
+  // as a secondary line in the channel list. Pulled from the
+  // HDHomeRun guide where present.
+  optional string network_affiliation = 7;
 }
 
 message TvChannelListResponse {

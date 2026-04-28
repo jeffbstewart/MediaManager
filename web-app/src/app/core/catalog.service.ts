@@ -1198,7 +1198,35 @@ export class CatalogService {
   }
 
   async getTvChannels(): Promise<TvChannelListResponse> {
-    return firstValueFrom(this.http.get<TvChannelListResponse>('/api/v2/catalog/live-tv/channels'));
+    const client = grpcClient(LiveServiceDesc);
+    let proto;
+    try {
+      proto = await client.listTvChannels({});
+    } catch (e) {
+      // Live TV gating used to surface as HTTP 403 on the REST path;
+      // the live-tv component branches on err.status === 403 to show
+      // the "not available" message. Connect-Web throws a ConnectError
+      // with code === PermissionDenied for the same condition — re-
+      // throw a thin error that preserves the legacy `status` shape
+      // so component-level handling doesn't need to learn gRPC codes.
+      const code = (e as { code?: number })?.code;
+      if (code === 7 /* Code.PermissionDenied */) {
+        throw Object.assign(new Error('forbidden'), { status: 403 });
+      }
+      throw e;
+    }
+    const channels = proto.channels.map(c => ({
+      id: Number(c.id),
+      guide_number: c.number,
+      guide_name: c.name,
+      network_affiliation: c.networkAffiliation ?? null,
+      // Reception quality on the legacy SPA shape was an integer
+      // bucket (1=SD, 3=FHD, 4+=UHD); proto sends the canonical
+      // Quality enum so map back so the existing renderers still
+      // get an int.
+      reception_quality: PROTO_QUALITY_TO_RECEPTION_LEVEL[c.quality] ?? 1,
+    }));
+    return { channels, total: channels.length };
   }
 
   async getCameras(): Promise<CameraListResponse> {
@@ -1441,6 +1469,18 @@ const PROTO_ACQUISITION_STATUS_TO_LEGACY: Record<ProtoAcquisitionStatus, string>
 
 // Same prefix-stripping convention. SPA consumers compare
 // `artist_type === 'PERSON'` and similar — bare uppercase names.
+// Reverse the Kotlin receptionQualityToProto mapping so the legacy
+// SPA shape (integer reception_quality 1=SD, 3=FHD, 4+=UHD) keeps
+// rendering. The exact integer doesn't matter as long as it sorts
+// into the same UI buckets — the live-tv view only inspects whether
+// it's "good" vs "bad" with thresholds that match these.
+const PROTO_QUALITY_TO_RECEPTION_LEVEL: Record<number, number> = {
+  0: 1, // UNKNOWN → SD bucket
+  1: 1, // SD
+  2: 3, // FHD
+  3: 4, // UHD
+};
+
 const PROTO_ARTIST_TYPE_TO_LEGACY: Record<ProtoArtistType, string> = {
   [ProtoArtistType.UNKNOWN]: 'OTHER',
   [ProtoArtistType.PERSON]: 'PERSON',

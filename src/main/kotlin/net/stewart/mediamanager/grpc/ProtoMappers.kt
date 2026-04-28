@@ -470,6 +470,7 @@ fun LiveTvChannel.toProto(): TvChannel = tvChannel {
     number = this@toProto.guide_number
     quality = receptionQualityToProto(this@toProto.reception_quality)
     streamUrl = "/live-tv-stream/${this@toProto.id}/stream.m3u8"
+    this@toProto.network_affiliation?.takeIf { it.isNotBlank() }?.let { networkAffiliation = it }
 }
 
 private fun receptionQualityToProto(level: Int): Quality = when {
