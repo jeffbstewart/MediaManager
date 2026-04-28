@@ -1,17 +1,29 @@
 import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  CreateTagRequestSchema,
+  CreateTagResponseSchema,
+  CreateTagResult,
+} from '../../src/app/proto-gen/admin_pb';
 
 // /admin/tags — TagManagementComponent. Mat-table of tags + per-row
 // Edit/Delete + a New Tag dialog with the Tailwind-700 color picker.
 
+const AS = '/mediamanager.AdminService';
+
 async function setup(page: Page) {
   await mockBackend(page, { features: 'admin' });
   await loginAs(page);
-  await page.route('**/api/v2/admin/tags', r => {
-    if (r.request().method() === 'POST') return r.fulfill({ json: { ok: true } });
-    return r.fallback();
-  });
+  // CreateTag now goes through gRPC; legacy REST mocks for the
+  // PUT/DELETE rows stay as-is until those migrate too.
+  await page.route(`**${AS}/CreateTag`, r =>
+    fulfillProto(r, CreateTagResponseSchema, create(CreateTagResponseSchema, {
+      result: CreateTagResult.CREATED,
+      id: 99n,
+    })));
   await page.route('**/api/v2/admin/tags/*', r => {
     const m = r.request().method();
     if (m === 'PUT') return r.fulfill({ json: { ok: true } });
@@ -53,17 +65,22 @@ test.describe('admin tags — New Tag dialog', () => {
     await expect(save).toBeEnabled();
   });
 
-  test('save POSTs name + bg_color (default red Tailwind-700)', async ({ page }) => {
+  test('save fires CreateTag with name + Color (default red Tailwind-700)', async ({ page }) => {
     await setup(page);
     await page.locator('app-tag-management button', { hasText: 'New Tag' }).click();
     await page.locator('app-tag-management #tag-dialog-name').fill('Anime');
     const req = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/admin/tags'),
+      r.url().endsWith(`${AS}/CreateTag`),
       { timeout: 3_000 },
     );
     await page.locator('app-tag-management .modal-overlay button', { hasText: 'Save' }).click();
     const got = await req;
-    expect(got.postDataJSON()).toEqual({ name: 'Anime', bg_color: '#B91C1C' });
+    const decoded = fromBinary(
+      CreateTagRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Anime');
+    expect(decoded.color?.hex).toBe('#B91C1C');
   });
 
   test('color swatch click updates the preview pill', async ({ page }) => {

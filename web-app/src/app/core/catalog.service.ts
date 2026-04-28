@@ -36,6 +36,7 @@ import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-
 import { PlaybackService as PlaybackServiceDesc } from '../proto-gen/playback_pb';
 import { LiveService as LiveServiceDesc } from '../proto-gen/live_pb';
 import { WishListService as WishListServiceDesc } from '../proto-gen/wishlist_pb';
+import { AdminService as AdminServiceDesc } from '../proto-gen/admin_pb';
 import { grpcClient } from './grpc-client';
 
 export interface CarouselTitle {
@@ -978,8 +979,16 @@ export class CatalogService {
 
   /** Admin only — create a new tag and return its id. */
   async createTag(name: string, bgColor: string): Promise<{ id: number }> {
-    return firstValueFrom(this.http.post<{ ok: boolean; id: number }>(
-      '/api/v2/admin/tags', { name, bg_color: bgColor }));
+    const client = grpcClient(AdminServiceDesc);
+    // Server returns CREATED on a fresh tag and DUPLICATE when the
+    // name already exists (with id pointing to the existing row).
+    // The legacy SPA contract just wanted "give me an id back" so
+    // both branches map to the same shape.
+    const resp = await client.createTag({
+      name,
+      color: { hex: bgColor },
+    });
+    return { id: Number(resp.id) };
   }
 
   /**

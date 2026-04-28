@@ -2,21 +2,29 @@ import { test, expect, Page } from '../helpers/test-fixture';
 import { mockBackend } from '../helpers/mock-backend';
 import { loginAs } from '../helpers/login-as';
 import { stubImages } from '../helpers/image-stub';
+import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
+import { create, fromBinary } from '@bufbuild/protobuf';
+import {
+  CreateTagRequestSchema,
+  CreateTagResponseSchema,
+  CreateTagResult,
+} from '../../src/app/proto-gen/admin_pb';
 
 // shared/tag-picker — modal that lists existing tags + "Create new
 // tag" affordance. Mounted by the title-detail page (admin-only —
 // "+ Tag" button under each title's existing tag chips).
 
+const AS = '/mediamanager.AdminService';
+
 async function setup(page: Page) {
   await mockBackend(page, { features: 'admin' });
   await loginAs(page);
   await stubImages(page);
-  await page.route('**/api/v2/admin/tags', r => {
-    if (r.request().method() === 'POST') {
-      return r.fulfill({ json: { id: 99 } });
-    }
-    return r.fallback();
-  });
+  await page.route(`**${AS}/CreateTag`, r =>
+    fulfillProto(r, CreateTagResponseSchema, create(CreateTagResponseSchema, {
+      result: CreateTagResult.CREATED,
+      id: 99n,
+    })));
   // SetTitleTags via gRPC is no-op'd by mock-backend's default
   // dispatch; tests that want to capture the request register their
   // own override before this setup runs.
@@ -81,17 +89,22 @@ test.describe('tag-picker — pick existing', () => {
 });
 
 test.describe('tag-picker — create new', () => {
-  test('Create-new prompts, POSTs /admin/tags, then refetches', async ({ page }) => {
+  test('Create-new prompts, fires CreateTag, then refetches', async ({ page }) => {
     await setup(page);
     await openTagPicker(page);
     page.on('dialog', d => d.accept('Workout'));
     const created = page.waitForRequest(r =>
-      r.method() === 'POST' && r.url().endsWith('/api/v2/admin/tags'),
+      r.url().endsWith(`${AS}/CreateTag`),
       { timeout: 3_000 },
     );
     await page.locator('app-tag-picker .create-row').click();
     const got = await created;
-    expect(got.postDataJSON()).toEqual({ name: 'Workout', bg_color: '#6B7280' });
+    const decoded = fromBinary(
+      CreateTagRequestSchema,
+      unframeGrpcWebRequest(got.postDataBuffer()),
+    );
+    expect(decoded.name).toBe('Workout');
+    expect(decoded.color?.hex).toBe('#6B7280');
   });
 
   test('Create-new with a blank prompt is a no-op', async ({ page }) => {
@@ -99,7 +112,7 @@ test.describe('tag-picker — create new', () => {
     await openTagPicker(page);
     let fired = false;
     page.on('request', r => {
-      if (r.method() === 'POST' && r.url().endsWith('/api/v2/admin/tags')) fired = true;
+      if (r.url().endsWith(`${AS}/CreateTag`)) fired = true;
     });
     page.on('dialog', d => d.accept('   '));
     await page.locator('app-tag-picker .create-row').click();

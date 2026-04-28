@@ -7,6 +7,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
 import { AppRoutes } from '../../core/routes';
+import { CatalogService } from '../../core/catalog.service';
 
 interface AdminTag {
   id: number;
@@ -51,6 +52,7 @@ const COLOR_PALETTE = [
 })
 export class TagManagementComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly catalog = inject(CatalogService);
   readonly routes = AppRoutes;
 
   readonly loading = signal(true);
@@ -125,8 +127,8 @@ export class TagManagementComponent implements OnInit {
         const result = await firstValueFrom(this.http.put<{ ok: boolean; error?: string }>(`/api/v2/admin/tags/${this.editingTag()!.id}`, body));
         if (!result.ok) { this.dialogError.set(result.error ?? 'Failed'); return; }
       } else {
-        const result = await firstValueFrom(this.http.post<{ ok: boolean; error?: string }>('/api/v2/admin/tags', body));
-        if (!result.ok) { this.dialogError.set(result.error ?? 'Failed'); return; }
+        // Create flows through catalog.createTag → AdminService.CreateTag.
+        await this.catalog.createTag(name, this.dialogColor());
       }
       this.closeDialog();
       await this.refresh();
