@@ -16,6 +16,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.UnmatchedAudio
+import net.stewart.mediamanager.service.AlbumRescanService
 import net.stewart.mediamanager.service.AudioTagReader
 import net.stewart.mediamanager.service.AutoTagApplicator
 import org.slf4j.LoggerFactory
@@ -264,361 +265,45 @@ class TrackDiagnosticHttpService {
     ): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return unauthorized()
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
-
-        // A fallback full-library walk does an ffprobe per audio file;
-        // on a NAS with thousands of files that doesn't fit in the
-        // default 10s request timeout. Give the handler a comfortable
-        // ceiling — this is an admin-initiated one-shot action.
         ctx.setRequestTimeout(java.time.Duration.ofMinutes(5))
 
-        val title = Title.findById(titleId) ?: return notFound("Title $titleId not found")
-        val tracks = Track.findAll()
-            .filter { it.title_id == titleId }
-            .sortedWith(compareBy({ it.disc_number }, { it.track_number }))
-        if (tracks.isEmpty()) {
-            return badRequest("Title $titleId has no tracks — nothing to rescan.")
+        return when (val outcome = AlbumRescanService.rescan(titleId)) {
+            AlbumRescanService.Outcome.TitleNotFound ->
+                notFound("Title $titleId not found")
+            AlbumRescanService.Outcome.NoTracks ->
+                badRequest("Title $titleId has no tracks — nothing to rescan.")
+            AlbumRescanService.Outcome.NoSearchRoot ->
+                badRequest("No linked siblings and music_root_path not configured.")
+            is AlbumRescanService.Outcome.Success ->
+                jsonOk(rescanResultToJsonShape(outcome.result))
         }
-
-        // Determine the search root. If any sibling track already has a
-        // file_path, use the common ancestor of those dirs — covers the
-        // normal "one track missed" case without scanning the whole
-        // library. If NONE are linked, fall back to music_root and
-        // walk everything (user asked for it; admin-initiated only).
-        val linkedDirs = tracks.mapNotNull { it.file_path?.let { fp -> File(fp).parentFile } }
-            .toSet()
-        val siblingRoot = linkedDirs.commonAncestorOrNull()
-        val musicRootDir = musicRoot()?.let { File(it) }?.takeIf { it.isDirectory }
-
-        // Prefer the sibling-derived root for speed, but keep music_root
-        // as a fallback we can rerun from if the focused walk finds
-        // nothing. This handles cases where the sibling-derived root
-        // ends up too narrow (e.g. all linked siblings are in one disc
-        // subdir that doesn't contain the unlinked track) or plain wrong.
-        val primaryRoot = siblingRoot ?: musicRootDir
-        val fallbackRoot = if (siblingRoot != null && musicRootDir != null && siblingRoot != musicRootDir)
-            musicRootDir else null
-
-        if (primaryRoot == null || !primaryRoot.isDirectory) {
-            return badRequest("No linked siblings and music_root_path not configured.")
-        }
-
-        val unlinkedTracks = tracks.filter { it.file_path.isNullOrBlank() }
-        if (unlinkedTracks.isEmpty()) {
-            log.info("rescanAlbum title={} \"{}\": all {} tracks already linked, nothing to do",
-                titleId, title.name, tracks.size)
-            return jsonOk(mapOf(
-                "linked" to 0,
-                "skipped_already_linked" to tracks.size,
-                "no_match" to 0,
-                "candidates_considered" to 0,
-                "message" to "All tracks already linked — nothing to do."
-            ))
-        }
-
-        val alreadyLinkedPaths = tracks.mapNotNull { it.file_path }.toSet()
-        val filesConsidered = mutableListOf<Pair<Path, AudioTagReader.AudioTags>>()
-        val audioExts = setOf("flac", "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav")
-        var filesWalked = 0
-        var filesAlreadyLinked = 0
-        var filesWrongAlbumTag = 0
-        var filesPathRejected = 0
-        var filesAcceptedByArtistPosition = 0
-        var rootsWalked = mutableListOf<String>()
-        // Dedup across walks — the fallback music_root walk overlaps
-        // the sibling-root walk (sibling root is usually a subtree of
-        // music_root), and we don't want to double-count the same
-        // files in the summary.
-        val seenPaths = mutableSetOf<String>()
-        // Keep a handful of rejected album-tag strings so the response
-        // can show the admin exactly why nothing matched (e.g. "files
-        // say 'Whitney Houston: The Greatest Hits', title says 'The
-        // Ultimate Collection'").
-        val rejectedAlbumSamples = linkedSetOf<String>()
-
-        val titleNorm = normalize(title.name)
-        val primaryArtistNames: List<String> = run {
-            val artistLinkIds = net.stewart.mediamanager.entity.TitleArtist.findAll()
-                .filter { it.title_id == titleId }
-                .map { it.artist_id }
-                .toSet()
-            if (artistLinkIds.isEmpty()) emptyList()
-            else net.stewart.mediamanager.entity.Artist.findAll()
-                .filter { it.id in artistLinkIds }
-                .map { normalize(it.name) }
-                .filter { it.isNotBlank() }
-        }
-        // MBID bypasses for the album-tag check. Two signals, either
-        // sufficient:
-        //   - Per-track recording MBID matches any track on this album.
-        //     Written by Picard to MUSICBRAINZ_TRACKID (Vorbis) /
-        //     TXXX:MusicBrainz Track Id (ID3).
-        //   - File's release MBID matches the title's release MBID.
-        //     Written by Picard to MUSICBRAINZ_ALBUMID. Useful when the
-        //     file has no per-track MBID but does have the album one.
-        val albumRecordingMbids: Set<String> = tracks
-            .mapNotNull { it.musicbrainz_recording_id?.takeIf { m -> m.isNotBlank() } }
-            .toSet()
-        val albumReleaseMbid: String? = title.musicbrainz_release_id
-            ?.takeIf { it.isNotBlank() }
-        val albumReleaseGroupMbid: String? = title.musicbrainz_release_group_id
-            ?.takeIf { it.isNotBlank() }
-
-        // (disc, track) slots this album contains. Used by the
-        // artist-plus-position bypass below as a cheap structural match.
-        val albumSlots: Set<Pair<Int, Int>> = tracks
-            .map { it.disc_number to it.track_number }
-            .toSet()
-        val primaryArtistNamesSet: Set<String> = primaryArtistNames.toSet()
-
-        log.info(
-            "rescanAlbum title={} \"{}\": {} tracks total, {} unlinked. " +
-            "Release MBID={} ReleaseGroup={} Recording MBIDs on album={}",
-            titleId, title.name, tracks.size, unlinkedTracks.size,
-            albumReleaseMbid ?: "(none)",
-            albumReleaseGroupMbid ?: "(none)",
-            albumRecordingMbids.size
-        )
-
-        // Walk strategy: start from `primaryRoot`; if that finds zero
-        // audio files, try `fallbackRoot` (typically music_root). This
-        // recovers from cases where the sibling-derived common ancestor
-        // ended up too narrow — the classic multi-disc mis-pick:
-        // linked siblings sit entirely under one disc directory so the
-        // ancestor never walked up far enough to see the other disc's
-        // files. Covered here by retrying from the full library root.
-        fun walkOne(root: File, depth: Int, pathPrefilter: Boolean) {
-            rootsWalked += root.absolutePath
-            Files.walk(root.toPath(), depth).use { stream ->
-                stream.forEach { p ->
-                    if (!p.isRegularFile()) return@forEach
-                    if (p.extension.lowercase() !in audioExts) return@forEach
-                    if (!seenPaths.add(p.toString())) return@forEach
-                    filesWalked++
-                    if (p.toString() in alreadyLinkedPaths) {
-                        filesAlreadyLinked++
-                        return@forEach
-                    }
-                    // Path-based prefilter on the full-library walk so
-                    // we don't ffprobe every file under music_root.
-                    // Require the normalized path to contain either the
-                    // album title OR the primary artist / album artist
-                    // so we still catch files in artist-named folders
-                    // whose directory doesn't carry the album name.
-                    if (pathPrefilter) {
-                        val pathNorm = normalize(p.toString())
-                        val hit = (titleNorm.isNotBlank() && pathNorm.contains(titleNorm)) ||
-                            primaryArtistNames.any { a ->
-                                a.isNotBlank() && pathNorm.contains(a)
-                            }
-                        if (!hit) {
-                            filesPathRejected++
-                            return@forEach
-                        }
-                    }
-                    val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
-                        ?: AudioTagReader.AudioTags.EMPTY
-
-                    // Acceptance gates. Any one of these passing is
-                    // enough to consider the file — downstream
-                    // scoreMatch then gates the actual per-track pick.
-                    //
-                    // MBID bypass. Strong signal, applies when the file
-                    // or the catalog carries any of the three MBID
-                    // flavours we pair up.
-                    val recordingBypass = tags.musicBrainzRecordingId != null &&
-                        tags.musicBrainzRecordingId in albumRecordingMbids
-                    val releaseBypass = albumReleaseMbid != null &&
-                        tags.musicBrainzReleaseId == albumReleaseMbid
-                    val releaseGroupBypass = albumReleaseGroupMbid != null &&
-                        tags.musicBrainzReleaseGroupId == albumReleaseGroupMbid
-                    val mbidOk = recordingBypass || releaseBypass || releaseGroupBypass
-
-                    // Artist-plus-position bypass. Handles the common
-                    // real-world case where the rip carries no MB IDs
-                    // (or IDs that don't match the catalog's chosen
-                    // release), but does tag the artist and the
-                    // (disc, track) position — both present. Only
-                    // fires when BOTH match; scoreMatch enforces the
-                    // final pick by track-name / filename similarity.
-                    val fileArtistNorm = (tags.albumArtist ?: tags.trackArtist)
-                        ?.let { normalize(it) }
-                    val artistHit = fileArtistNorm != null &&
-                        fileArtistNorm in primaryArtistNamesSet
-                    val disc = tags.discNumber
-                    val trackNum = tags.trackNumber
-                    val positionHit = disc != null && trackNum != null &&
-                        (disc to trackNum) in albumSlots
-                    val artistPositionOk = artistHit && positionHit
-
-                    if (!mbidOk && !artistPositionOk && !albumTagLooksRight(tags, title)) {
-                        filesWrongAlbumTag++
-                        if (rejectedAlbumSamples.size < 5) {
-                            tags.album?.takeIf { it.isNotBlank() }
-                                ?.let { rejectedAlbumSamples.add(it) }
-                            // Log first few rejections verbatim so the
-                            // admin can see exactly what the tagger wrote
-                            // vs what the catalog holds. Only the first 5
-                            // per run — we don't want to flood binnacle.
-                            log.info(
-                                "rescanAlbum title={}: REJECTED path={} " +
-                                "FILE[album=\"{}\" recording_mbid={} release_mbid={}] " +
-                                "vs CATALOG[title=\"{}\" release_mbid={}]",
-                                titleId, p,
-                                tags.album ?: "(null)",
-                                tags.musicBrainzRecordingId ?: "(null)",
-                                tags.musicBrainzReleaseId ?: "(null)",
-                                title.name,
-                                albumReleaseMbid ?: "(null)"
-                            )
-                        }
-                        return@forEach
-                    }
-                    if (artistPositionOk && !mbidOk && !albumTagLooksRight(tags, title)) {
-                        filesAcceptedByArtistPosition++
-                        // Cheap-but-handy audit — at most a few per run
-                        // given how artist+position intersects; lets
-                        // the admin verify the bypass fired where they
-                        // expected it to.
-                        if (filesAcceptedByArtistPosition <= 10) {
-                            log.info(
-                                "rescanAlbum title={}: ACCEPT by artist+position path={} " +
-                                "FILE[artist=\"{}\" disc={} track={}]",
-                                titleId, p,
-                                tags.albumArtist ?: tags.trackArtist ?: "(null)",
-                                tags.discNumber, tags.trackNumber
-                            )
-                        }
-                    }
-                    filesConsidered += p to tags
-                }
-            }
-        }
-
-        // Sibling-derived walks stay shallow since we know we're inside
-        // the album directory tree. The full-library fallback walks
-        // deeper because some setups nest several levels under
-        // music_root (e.g. /music/lossless/artist/album/disc/).
-        // Sibling-root walks skip the path prefilter — we're already
-        // inside the album tree so every audio file is a candidate.
-        // The fallback library walk uses the prefilter to avoid
-        // ffprobing every file under music_root.
-        log.info("rescanAlbum title={}: walking primary root {} (prefilter={})",
-            titleId, primaryRoot, siblingRoot == null)
-        walkOne(primaryRoot, depth = if (siblingRoot != null) 4 else 8, pathPrefilter = siblingRoot == null)
-        log.info(
-            "rescanAlbum title={}: primary walk done. " +
-            "walked={}, kept={}, already_linked={}, wrong_album={}, path_skipped={}",
-            titleId, filesWalked, filesConsidered.size,
-            filesAlreadyLinked, filesWrongAlbumTag, filesPathRejected
-        )
-        if (filesConsidered.isEmpty() && fallbackRoot != null) {
-            log.info("rescanAlbum title={}: no candidates from primary root, " +
-                "falling back to music_root {}", titleId, fallbackRoot)
-            walkOne(fallbackRoot, depth = 8, pathPrefilter = true)
-            log.info(
-                "rescanAlbum title={}: fallback walk done. " +
-                "walked={}, kept={}, already_linked={}, wrong_album={}, path_skipped={}",
-                titleId, filesWalked, filesConsidered.size,
-                filesAlreadyLinked, filesWrongAlbumTag, filesPathRejected
-            )
-        }
-
-        val now = LocalDateTime.now()
-        var linkedCount = 0
-        val failures = mutableListOf<Map<String, Any?>>()
-        val perTrackBest = mutableMapOf<Long, Pair<Path, AudioTagReader.AudioTags>>()
-
-        // For each unlinked track, pick the best file by MBID match,
-        // then by (disc, track) number, then by title-name similarity.
-        for (track in unlinkedTracks) {
-            val best = filesConsidered
-                .mapNotNull { (p, tags) ->
-                    val score = scoreMatch(track, tags, p.name)
-                    if (score > 0) Triple(p, tags, score) else null
-                }
-                .maxByOrNull { it.third }
-                ?: continue
-            perTrackBest[track.id!!] = best.first to best.second
-        }
-
-        // Two different tracks could pick the same file if, say, MBIDs
-        // are absent and disc/track numbering collides. Resolve by
-        // score — the better-scoring track wins the file, the other
-        // stays unlinked and reports no match.
-        val fileToTrack = mutableMapOf<Path, Long>()
-        val trackScores = mutableMapOf<Long, Int>()
-        for (track in unlinkedTracks) {
-            val entry = perTrackBest[track.id!!] ?: continue
-            val (path, tags) = entry
-            val score = scoreMatch(track, tags, path.name)
-            val incumbent = fileToTrack[path]
-            if (incumbent == null || score > (trackScores[incumbent] ?: 0)) {
-                if (incumbent != null) trackScores.remove(incumbent)
-                fileToTrack[path] = track.id!!
-                trackScores[track.id!!] = score
-            }
-        }
-
-        for ((path, trackId) in fileToTrack) {
-            val track = tracks.first { it.id == trackId }
-            val tags = perTrackBest[trackId]!!.second
-            val titleYear = title.release_year
-            track.file_path = path.toString()
-            track.bpm = tags.bpm
-            track.time_signature = tags.timeSignature
-            track.updated_at = now
-            track.save()
-            AutoTagApplicator.applyToTrack(AutoTagApplicator.TrackAutoTagInput(
-                trackId = trackId,
-                genres = tags.genres,
-                styles = tags.styles,
-                bpm = tags.bpm,
-                timeSignature = tags.timeSignature,
-                year = titleYear
-            ))
-            linkedCount++
-            log.info("rescanAlbum title={}: linked track {} disc={} track={} \"{}\" -> {}",
-                titleId, trackId, track.disc_number, track.track_number, track.name, path)
-        }
-        if (linkedCount > 0) AutoTagApplicator.applyToAlbum(titleId)
-
-        val stillUnlinked = unlinkedTracks.filter { it.file_path.isNullOrBlank() }
-        for (t in stillUnlinked) {
-            failures += mapOf(
-                "track_id" to t.id,
-                "disc_number" to t.disc_number,
-                "track_number" to t.track_number,
-                "name" to t.name
-            )
-        }
-
-        log.info(
-            "rescanAlbum title={} \"{}\" FINAL: linked={}, still_unlinked={}, " +
-            "candidates_considered={}, accepted_by_artist_position={}, " +
-            "files_walked={}, wrong_album={}, path_skipped={}, already_linked={}, " +
-            "rejected_album_samples={}",
-            titleId, title.name, linkedCount, stillUnlinked.size,
-            filesConsidered.size, filesAcceptedByArtistPosition,
-            filesWalked, filesWrongAlbumTag, filesPathRejected, filesAlreadyLinked,
-            rejectedAlbumSamples.toList()
-        )
-
-        return jsonOk(mapOf(
-            "linked" to linkedCount,
-            "skipped_already_linked" to (tracks.size - unlinkedTracks.size),
-            "no_match" to stillUnlinked.size,
-            "candidates_considered" to filesConsidered.size,
-            "files_walked" to filesWalked,
-            "files_already_linked_elsewhere" to filesAlreadyLinked,
-            "files_wrong_album_tag" to filesWrongAlbumTag,
-            "files_path_rejected" to filesPathRejected,
-            "files_accepted_by_artist_position" to filesAcceptedByArtistPosition,
-            "rejected_album_tag_samples" to rejectedAlbumSamples.toList(),
-            "roots_walked" to rootsWalked,
-            "music_root_configured" to (musicRootDir?.absolutePath ?: "(not set)"),
-            "unlinked_after_rescan" to failures
-        ))
     }
+
+    /** Map the structured rescan [Result] back to the legacy REST JSON shape. */
+    private fun rescanResultToJsonShape(r: AlbumRescanService.Result): Map<String, Any?> = mapOf(
+        "linked" to r.linked,
+        "skipped_already_linked" to r.skippedAlreadyLinked,
+        "no_match" to r.noMatch,
+        "candidates_considered" to r.candidatesConsidered,
+        "files_walked" to r.filesWalked,
+        "files_already_linked_elsewhere" to r.filesAlreadyLinkedElsewhere,
+        "files_wrong_album_tag" to r.filesWrongAlbumTag,
+        "files_path_rejected" to r.filesPathRejected,
+        "files_accepted_by_artist_position" to r.filesAcceptedByArtistPosition,
+        "rejected_album_tag_samples" to r.rejectedAlbumTagSamples,
+        "roots_walked" to r.rootsWalked,
+        "music_root_configured" to r.musicRootConfigured,
+        "unlinked_after_rescan" to r.unlinkedAfterRescan.map {
+            mapOf(
+                "track_id" to it.trackId,
+                "disc_number" to it.discNumber,
+                "track_number" to it.trackNumber,
+                "name" to it.name,
+            )
+        },
+        "message" to r.message,
+    )
+
 
     /**
      * Scoring used by rescanAlbum to pick the best file per track.

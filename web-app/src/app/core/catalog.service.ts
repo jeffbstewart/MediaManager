@@ -1093,8 +1093,29 @@ export class CatalogService {
     }>;
     message?: string;
   }> {
-    return firstValueFrom(this.http.post<any>(
-      `/api/v2/admin/albums/${titleId}/rescan`, {}));
+    const client = grpcClient(AdminServiceDesc);
+    const proto = await client.rescanAlbum({ titleId: BigInt(titleId) });
+    return {
+      linked: proto.linked,
+      skipped_already_linked: proto.skippedAlreadyLinked,
+      no_match: proto.noMatch,
+      candidates_considered: proto.candidatesConsidered,
+      files_walked: proto.filesWalked,
+      files_already_linked_elsewhere: proto.filesAlreadyLinkedElsewhere,
+      files_wrong_album_tag: proto.filesWrongAlbumTag,
+      files_path_rejected: proto.filesPathRejected,
+      files_accepted_by_artist_position: proto.filesAcceptedByArtistPosition,
+      rejected_album_tag_samples: proto.rejectedAlbumTagSamples,
+      roots_walked: proto.rootsWalked,
+      music_root_configured: proto.musicRootConfigured,
+      unlinked_after_rescan: proto.unlinkedAfterRescan.map(u => ({
+        track_id: Number(u.trackId),
+        disc_number: u.discNumber,
+        track_number: u.trackNumber,
+        name: u.name,
+      })),
+      message: proto.message,
+    };
   }
 
   async search(query: string, limit = 30): Promise<SearchResponse> {

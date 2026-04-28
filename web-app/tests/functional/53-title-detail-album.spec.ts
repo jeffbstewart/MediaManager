@@ -23,6 +23,9 @@ import {
   type Transcode,
 } from '../../src/app/proto-gen/common_pb';
 import { PlaybackOffsetSchema } from '../../src/app/proto-gen/time_pb';
+import { RescanAlbumResponseSchema } from '../../src/app/proto-gen/admin_pb';
+
+const AS = '/mediamanager.AdminService';
 import { titleMovie100 } from '../fixtures-typed/title-100-movie.fixture';
 import { titleTv200 } from '../fixtures-typed/title-200-tv.fixture';
 import { titleAlbum301 } from '../fixtures-typed/title-301-album.fixture';
@@ -345,28 +348,30 @@ test.describe('title detail — album admin: edit BPM & time signature', () => {
 });
 
 test.describe('title detail — album admin: rescan + radio', () => {
-  test('Rescan files posts /admin/albums/:id/rescan and alerts the summary', async ({ page }) => {
+  test('Rescan files fires RescanAlbum and alerts the summary', async ({ page }) => {
     await setupAlbumAdmin(page);
-    await page.route('**/api/v2/admin/albums/301/rescan', r =>
-      r.fulfill({ json: {
-        linked: 2, skipped_already_linked: 0, no_match: 1,
-        candidates_considered: 5, files_walked: 8,
-        files_already_linked_elsewhere: 0, files_wrong_album_tag: 1,
-        files_path_rejected: 2, files_accepted_by_artist_position: 0,
-        rejected_album_tag_samples: ['Other Album'],
-        roots_walked: ['/music'], music_root_configured: '/music',
-        unlinked_after_rescan: [], message: null,
-      } }));
+    await page.route(`**${AS}/RescanAlbum`, r =>
+      fulfillProto(r, RescanAlbumResponseSchema, create(RescanAlbumResponseSchema, {
+        linked: 2,
+        skippedAlreadyLinked: 0,
+        noMatch: 1,
+        candidatesConsidered: 5,
+        filesWalked: 8,
+        filesWrongAlbumTag: 1,
+        filesPathRejected: 2,
+        rejectedAlbumTagSamples: ['Other Album'],
+        rootsWalked: ['/music'],
+        musicRootConfigured: '/music',
+      })));
     let alertText = '';
     page.on('dialog', d => { alertText = d.message(); d.accept(); });
     const posted = page.waitForRequest(r =>
-      r.method() === 'POST' && /\/api\/v2\/admin\/albums\/301\/rescan$/.test(r.url()),
+      r.url().endsWith(`${AS}/RescanAlbum`),
       { timeout: 3_000 },
     );
     await page.locator('.album-more-btn').click();
     await page.locator('.mat-mdc-menu-panel button', { hasText: 'Rescan files' }).click();
     await posted;
-    // Wait for the alert handler to capture text.
     await page.waitForTimeout(200);
     expect(alertText).toContain('linked 2');
     expect(alertText).toContain('Other Album');
@@ -374,7 +379,7 @@ test.describe('title detail — album admin: rescan + radio', () => {
 
   test('Rescan failure alerts the error message', async ({ page }) => {
     await setupAlbumAdmin(page);
-    await page.route('**/api/v2/admin/albums/301/rescan', r => r.fulfill({ status: 500 }));
+    await page.route(`**${AS}/RescanAlbum`, r => r.fulfill({ status: 500 }));
     let alertText = '';
     page.on('dialog', d => { alertText = d.message(); d.accept(); });
     await page.locator('.album-more-btn').click();

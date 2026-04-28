@@ -70,6 +70,13 @@ service AdminService {
   rpc AddTagToTitle(TagTitleRequest) returns (Empty);
   rpc RemoveTagFromTitle(TagTitleRequest) returns (Empty);
 
+  // --- Album Rescan ---
+  // Walk the album's directory tree and link any unlinked tracks
+  // whose tags match a file on disk. Long-running; admin-initiated.
+  // Returns FAILED_PRECONDITION when the album has no tracks or no
+  // search root is available, NOT_FOUND for an unknown title id.
+  rpc RescanAlbum(TitleIdRequest) returns (RescanAlbumResponse);
+
   // --- User Management ---
   rpc ListUsers(Empty) returns (UserListResponse);
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
@@ -662,6 +669,41 @@ message UpdateTagRequest {
   int64 tag_id = 1;
   optional string name = 2;
   optional Color color = 3;
+}
+
+// --- Album Rescan ---
+
+message RescanAlbumResponse {
+  // Per-file decision counters from the directory walk.
+  int32 linked = 1;
+  int32 skipped_already_linked = 2;
+  int32 no_match = 3;
+  int32 candidates_considered = 4;
+  int32 files_walked = 5;
+  int32 files_already_linked_elsewhere = 6;
+  int32 files_wrong_album_tag = 7;
+  int32 files_path_rejected = 8;
+  int32 files_accepted_by_artist_position = 9;
+  // Sample of album-tag values from rejected files — admins use
+  // this to spot tag drift ("file says ALBUM='X' vs catalog 'X (Deluxe)'").
+  repeated string rejected_album_tag_samples = 10;
+  // Directories the walker actually traversed.
+  repeated string roots_walked = 11;
+  // Configured music_root_path; surfaced so admins can confirm the
+  // server is searching the right place.
+  string music_root_configured = 12;
+  // Tracks still unresolved after the rescan — empty on a clean run.
+  repeated UnlinkedTrack unlinked_after_rescan = 13;
+  // Free-form note (e.g. "All tracks already linked — nothing to do.").
+  // Empty when the run had nothing notable to report.
+  optional string message = 14;
+}
+
+message UnlinkedTrack {
+  int64 track_id = 1;
+  int32 disc_number = 2;
+  int32 track_number = 3;
+  string name = 4;
 }
 
 // --- User Management ---

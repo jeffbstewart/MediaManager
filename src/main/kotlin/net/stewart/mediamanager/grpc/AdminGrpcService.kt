@@ -860,6 +860,49 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
         }
     }
 
+    override suspend fun rescanAlbum(request: TitleIdRequest): RescanAlbumResponse {
+        val user = currentUser()
+        if (!user.isAdmin()) {
+            throw StatusException(Status.PERMISSION_DENIED.withDescription("admin only"))
+        }
+        return when (val outcome = net.stewart.mediamanager.service.AlbumRescanService.rescan(request.titleId)) {
+            net.stewart.mediamanager.service.AlbumRescanService.Outcome.TitleNotFound ->
+                throw StatusException(Status.NOT_FOUND.withDescription("Title ${request.titleId} not found"))
+            net.stewart.mediamanager.service.AlbumRescanService.Outcome.NoTracks ->
+                throw StatusException(Status.FAILED_PRECONDITION
+                    .withDescription("Title ${request.titleId} has no tracks — nothing to rescan."))
+            net.stewart.mediamanager.service.AlbumRescanService.Outcome.NoSearchRoot ->
+                throw StatusException(Status.FAILED_PRECONDITION
+                    .withDescription("No linked siblings and music_root_path not configured."))
+            is net.stewart.mediamanager.service.AlbumRescanService.Outcome.Success -> {
+                val r = outcome.result
+                rescanAlbumResponse {
+                    linked = r.linked
+                    skippedAlreadyLinked = r.skippedAlreadyLinked
+                    noMatch = r.noMatch
+                    candidatesConsidered = r.candidatesConsidered
+                    filesWalked = r.filesWalked
+                    filesAlreadyLinkedElsewhere = r.filesAlreadyLinkedElsewhere
+                    filesWrongAlbumTag = r.filesWrongAlbumTag
+                    filesPathRejected = r.filesPathRejected
+                    filesAcceptedByArtistPosition = r.filesAcceptedByArtistPosition
+                    rejectedAlbumTagSamples.addAll(r.rejectedAlbumTagSamples)
+                    rootsWalked.addAll(r.rootsWalked)
+                    musicRootConfigured = r.musicRootConfigured
+                    r.unlinkedAfterRescan.forEach { u ->
+                        unlinkedAfterRescan.add(unlinkedTrack {
+                            trackId = u.trackId
+                            discNumber = u.discNumber
+                            trackNumber = u.trackNumber
+                            name = u.name
+                        })
+                    }
+                    r.message?.let { message = it }
+                }
+            }
+        }
+    }
+
     override suspend fun createTag(request: CreateTagRequest): CreateTagResponse {
         val name = request.name.trim()
         val bgColor = request.color.hex
