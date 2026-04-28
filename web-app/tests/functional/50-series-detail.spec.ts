@@ -8,6 +8,9 @@ import {
   AddBookWishRequestSchema,
   WishlistSeriesGapsResponseSchema,
 } from '../../src/app/proto-gen/wishlist_pb';
+import { BookSeriesDetailSchema } from '../../src/app/proto-gen/common_pb';
+
+const CS = '/mediamanager.CatalogService';
 
 // /series/:id — SeriesComponent. Book series detail with hero,
 // owned-volumes grid, missing-volumes grid + per-volume wish heart,
@@ -80,17 +83,17 @@ test.describe('series detail — missing volumes', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    // Series detail itself is still REST until that migrates — keep
-    // the legacy mock for it. Wishlist mutations go through gRPC.
-    await page.route('**/api/v2/catalog/series/*', r =>
-      r.fulfill({ json: {
-        id: 1, name: 'Dune', poster_url: '/posters/300', author: { id: 1, name: 'Frank Herbert' },
-        volumes: [], can_fill_gaps: true,
-        missing_volumes: [{
-          ol_work_id: 'OL999W', title: 'God Emperor of Dune', series_number: '4',
-          year: 1981, cover_url: null, already_wished: true,
+    await page.route(`**${CS}/GetBookSeriesDetail`, r =>
+      fulfillProto(r, BookSeriesDetailSchema, create(BookSeriesDetailSchema, {
+        id: 1n, name: 'Dune',
+        author: { id: 1n, name: 'Frank Herbert' },
+        volumes: [],
+        canFillGaps: true,
+        missingVolumes: [{
+          olWorkId: 'OL999W', title: 'God Emperor of Dune', seriesNumber: '4',
+          year: 1981, alreadyWished: true,
         }],
-      } }));
+      })));
     await page.goto('/series/1');
     await page.waitForSelector('app-series .hero');
     const req = page.waitForRequest(r =>
@@ -121,13 +124,13 @@ test.describe('series detail — gap-filling unavailable', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/series/*', r =>
-      r.fulfill({ json: {
-        id: 1, name: 'Unknown Series', poster_url: null,
-        author: { id: 1, name: 'Author' },
-        volumes: [{ title_id: 100, title_name: 'V1', series_number: '1', poster_url: null, release_year: 2000 }],
-        missing_volumes: [], can_fill_gaps: false,
-      } }));
+    await page.route(`**${CS}/GetBookSeriesDetail`, r =>
+      fulfillProto(r, BookSeriesDetailSchema, create(BookSeriesDetailSchema, {
+        id: 1n, name: 'Unknown Series',
+        author: { id: 1n, name: 'Author' },
+        volumes: [{ titleId: 100n, titleName: 'V1', seriesNumber: '1', firstPublicationYear: 2000, owned: true }],
+        canFillGaps: false,
+      })));
     await page.goto('/series/1');
     await page.waitForSelector('app-series .hero');
     await expect(page.locator('app-series .muted'))
@@ -140,7 +143,7 @@ test.describe('series detail — error state', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
-    await page.route('**/api/v2/catalog/series/*', r => r.fulfill({ status: 500 }));
+    await page.route(`**${CS}/GetBookSeriesDetail`, r => r.fulfill({ status: 500 }));
     await page.goto('/series/1');
     await expect(page.locator('app-series .error-message'))
       .toContainText('Failed to load');

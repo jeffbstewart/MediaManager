@@ -36,6 +36,7 @@ service CatalogService {
   rpc ListTags(Empty) returns (TagListResponse);
   rpc GetTagDetail(TagIdRequest) returns (TagDetail);
   rpc GetGenreDetail(GenreIdRequest) returns (GenreDetail);
+  rpc GetBookSeriesDetail(BookSeriesIdRequest) returns (BookSeriesDetail);
 
   // --- Title Actions ---
   rpc SetFavorite(SetFlagRequest) returns (Empty);

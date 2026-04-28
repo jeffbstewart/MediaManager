@@ -62,7 +62,8 @@ import {
 import { camerasList, tvChannelsList } from '../fixtures-typed/live.fixture';
 import { CameraListResponseSchema, TvChannelListResponseSchema } from '../../src/app/proto-gen/live_pb';
 import { tagDetailFixture } from '../fixtures-typed/tag-detail.fixture';
-import { TagDetailSchema } from '../../src/app/proto-gen/common_pb';
+import { TagDetailSchema, BookSeriesDetailSchema } from '../../src/app/proto-gen/common_pb';
+import { seriesDetailFixture } from '../fixtures-typed/series-detail.fixture';
 import { wishListFixture } from '../fixtures-typed/wishlist.fixture';
 import {
   AddWishResponseSchema,
@@ -254,6 +255,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     DismissMissingSeason:   noopEmpty,
     DismissContinueWatching: noopEmpty,
     GetTagDetail:           r => fulfillProto(r, TagDetailSchema, tagDetailFixture),
+    GetBookSeriesDetail:    r => fulfillProto(r, BookSeriesDetailSchema, seriesDetailFixture),
     MintPublicArtToken:
       // Audio player's MediaSession integration calls this to mint a
       // signed token for OS lock-screen art. Tests don't assert on
@@ -388,9 +390,9 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   // longer hit — getActorDetail / getAuthorDetail / getArtistDetail
   // go through GetActorDetail / GetAuthorDetail / GetArtistDetail
   // gRPC RPCs (dispatched above).
-  await page.route('**/api/v2/catalog/series/*', (r: Route) =>
-    r.fulfill({ json: loadFixture('catalog/series.json') })
-  );
+  // /api/v2/catalog/series/:id is no longer hit — getSeriesDetail()
+  // goes through CatalogService.GetBookSeriesDetail (dispatched
+  // above).
   // /api/v2/catalog/tags/:id is no longer hit — getTagDetail() goes
   // through CatalogService.GetTagDetail (dispatched in the gRPC
   // route block above). The legacy `**/tags/*` glob also caught

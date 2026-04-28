@@ -255,6 +255,10 @@ message GenreIdRequest {
   int64 genre_id = 1;
 }
 
+message BookSeriesIdRequest {
+  int64 series_id = 1;
+}
+
 // CSS hex color. The string includes the leading '#' and uses uppercase hex,
 // e.g. "#FF5733", "#2196F3". Always exactly 7 characters (#RRGGBB).
 message Color {
@@ -596,6 +600,60 @@ message TagDetail {
 message GenreDetail {
   string name = 1;
   repeated Title titles = 2;
+}
+
+// Book-series detail page. Hero artwork is fetched via
+// IMAGE_TYPE_OPENLIBRARY_COVER + cover_isbn (when populated) or
+// IMAGE_TYPE_POSTER_THUMBNAIL + first volume's title_id as a
+// fallback. No URL strings on the wire.
+message BookSeriesDetail {
+  int64 id = 1;
+  string name = 2;
+  optional string description = 3;
+  // Set when the series row stores a representative ISBN — clients
+  // fetch the cover via /proxy/ol/isbn/{cover_isbn}/M (web) or
+  // ImageService (iOS / Android TV; ImageType is not yet wired for
+  // ISBN, so iOS falls back to the first volume's poster).
+  optional string cover_isbn = 4;
+  optional BookSeriesAuthor author = 5;
+  // Owned volumes, ordered by series_number then sort name.
+  repeated BookSeriesVolume volumes = 6;
+  // Author bibliography entries this series is missing — only
+  // populated when can_fill_gaps is true.
+  repeated BookSeriesMissingVolume missing_volumes = 7;
+  // True when [author] has an Open Library id we can enumerate
+  // against. Drives the visibility of the "Missing Volumes" section
+  // and the "Wishlist all missing" bulk action.
+  bool can_fill_gaps = 8;
+}
+
+message BookSeriesAuthor {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Owned volume row on the book-series page. Cover artwork:
+// IMAGE_TYPE_POSTER_THUMBNAIL + title_id.
+message BookSeriesVolume {
+  int64 title_id = 1;
+  string title_name = 2;
+  // Volume number; raw string because half/decimal numbers are
+  // common ("3.5", "0.5").
+  optional string series_number = 3;
+  optional int32 first_publication_year = 4;
+  // Always true today — the missing case is in [BookSeriesMissingVolume].
+  bool owned = 5;
+}
+
+// Un-owned volume from the author's Open Library bibliography.
+// Cover artwork: IMAGE_TYPE_OPENLIBRARY_COVER + ol_work_id.
+message BookSeriesMissingVolume {
+  string ol_work_id = 1;
+  string title = 2;
+  optional string series_number = 3;
+  optional int32 year = 4;
+  // True when the user already has this volume on their book wishlist.
+  bool already_wished = 5;
 }
 
 // ============================================================================

@@ -2059,6 +2059,93 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         }
     }
 
+    override suspend fun getBookSeriesDetail(
+        request: BookSeriesIdRequest,
+    ): BookSeriesDetail {
+        val user = currentUser()
+        val series = BookSeriesEntity.findById(request.seriesId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("series not found"))
+
+        // Owned volumes — books linked to this series, sorted by series_number.
+        val volumes = TitleEntity.findAll()
+            .filter {
+                it.media_type == MediaTypeEnum.BOOK.name &&
+                    it.book_series_id == request.seriesId
+            }
+            .filter { !it.hidden && user.canSeeRating(it.content_rating) }
+            .sortedWith(compareBy(
+                { it.series_number ?: java.math.BigDecimal("9999") },
+                { it.sort_name ?: it.name.lowercase() }
+            ))
+
+        val author = series.author_id?.let { Author.findById(it) }
+        val canFillGaps = author?.open_library_author_id != null
+
+        // Missing volumes — author's bibliography minus owned + caller's
+        // wished work ids. Only computed when can_fill_gaps; the section
+        // is hidden otherwise so the OpenLibrary fetch is wasted.
+        val missing = if (!canFillGaps) emptyList() else {
+            val olid = author!!.open_library_author_id!!
+            val ownedWorkIds = volumes.mapNotNull { it.open_library_work_id }.toSet()
+            val wishedIds = net.stewart.mediamanager.service.WishListService
+                .activeBookWishWorkIdsForUser(user.id!!)
+            val seriesNameLower = series.name.lowercase()
+            val ol = net.stewart.mediamanager.service.OpenLibraryHttpService()
+            ol.listAuthorWorks(olid, limit = 200).asSequence()
+                .filter { it.seriesRaw != null }
+                .mapNotNull { work ->
+                    val raw = work.seriesRaw ?: return@mapNotNull null
+                    val (parsedName, number) = net.stewart.mediamanager.service.parseSeriesLine(raw)
+                    val matches = parsedName.equals(series.name, ignoreCase = true) ||
+                        parsedName.lowercase().contains(seriesNameLower)
+                    if (!matches) return@mapNotNull null
+                    if (work.openLibraryWorkId in ownedWorkIds) return@mapNotNull null
+                    Triple(work, parsedName, number)
+                }
+                .sortedBy { it.third ?: java.math.BigDecimal("9999") }
+                .map { (work, _, number) -> Triple(work, number, work.openLibraryWorkId in wishedIds) }
+                .toList()
+        }
+
+        return bookSeriesDetail {
+            id = series.id!!
+            name = series.name
+            series.description?.takeIf { it.isNotBlank() }?.let { description = it }
+            // Series posters are stored as "isbn/<isbn>" by the
+            // ingestion path. Other prefixes are legacy and dropped
+            // — no URL strings on the wire; the SPA falls back to
+            // the first volume's title_id when cover_isbn is empty.
+            series.poster_path?.takeIf { it.startsWith("isbn/") }?.let {
+                coverIsbn = it.removePrefix("isbn/")
+            }
+            author?.let {
+                this.author = bookSeriesAuthor {
+                    id = it.id!!
+                    name = it.name
+                }
+            }
+            volumes.forEach { vol ->
+                this.volumes.add(bookSeriesVolume {
+                    titleId = vol.id!!
+                    titleName = vol.name
+                    vol.series_number?.toPlainString()?.let { seriesNumber = it }
+                    vol.first_publication_year?.let { firstPublicationYear = it }
+                    owned = true
+                })
+            }
+            missing.forEach { (work, number, wished) ->
+                missingVolumes.add(bookSeriesMissingVolume {
+                    olWorkId = work.openLibraryWorkId
+                    title = work.title
+                    number?.toPlainString()?.let { seriesNumber = it }
+                    work.firstPublishYear?.let { year = it }
+                    alreadyWished = wished
+                })
+            }
+            this.canFillGaps = canFillGaps
+        }
+    }
+
     // ========================================================================
     // Title Actions: Favorite / Hidden
     // ========================================================================

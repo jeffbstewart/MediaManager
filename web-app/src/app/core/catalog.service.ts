@@ -1156,7 +1156,9 @@ export class CatalogService {
   }
 
   async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {
-    return firstValueFrom(this.http.get<BookSeriesDetail>(`/api/v2/catalog/series/${seriesId}`));
+    const client = grpcClient(CatalogServiceDesc);
+    const proto = await client.getBookSeriesDetail({ seriesId: BigInt(seriesId) });
+    return adaptProtoBookSeriesDetail(proto);
   }
 
   async getWishList(): Promise<WishListResponse> {
@@ -2427,6 +2429,49 @@ function adaptProtoTrackSearchHit(
     duration_seconds: t.durationSeconds ?? null,
     poster_url: t.posterUrl ?? null,
     playable: t.playable,
+  };
+}
+
+// Book-series detail. No URLs on the wire; the adapter constructs
+// same-origin cover URLs from the ids the proto carries.
+//   - series cover: /proxy/ol/isbn/{cover_isbn}/M when present, else
+//     fall back to the first volume's title_id (the original BookSeries
+//     row's poster_path was usually filled from volume[0] anyway).
+//   - owned volume cover: /posters/w185/{title_id}.
+//   - missing volume cover: /proxy/ol/olid/{ol_work_id}/M.
+function adaptProtoBookSeriesDetail(
+  p: import('../proto-gen/common_pb').BookSeriesDetail,
+): BookSeriesDetail {
+  const volumes = p.volumes.map(v => ({
+    title_id: Number(v.titleId),
+    title_name: v.titleName,
+    poster_url: `/posters/w185/${Number(v.titleId)}`,
+    series_number: v.seriesNumber ?? null,
+    first_publication_year: v.firstPublicationYear ?? null,
+    owned: v.owned,
+  }));
+  const fallbackTitleId = volumes.length > 0 ? volumes[0].title_id : null;
+  const seriesPoster = p.coverIsbn
+    ? `/proxy/ol/isbn/${p.coverIsbn}/M`
+    : (fallbackTitleId != null ? `/posters/w185/${fallbackTitleId}` : null);
+  return {
+    id: Number(p.id),
+    name: p.name,
+    description: p.description ?? null,
+    poster_url: seriesPoster,
+    author: p.author
+      ? { id: Number(p.author.id), name: p.author.name }
+      : null,
+    volumes,
+    missing_volumes: p.missingVolumes.map(m => ({
+      ol_work_id: m.olWorkId,
+      title: m.title,
+      series_number: m.seriesNumber ?? null,
+      year: m.year ?? null,
+      cover_url: `/proxy/ol/olid/${m.olWorkId}/M`,
+      already_wished: m.alreadyWished,
+    })),
+    can_fill_gaps: p.canFillGaps,
   };
 }
 
