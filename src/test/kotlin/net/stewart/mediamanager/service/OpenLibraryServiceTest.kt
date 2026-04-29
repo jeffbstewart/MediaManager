@@ -100,7 +100,7 @@ class OpenLibraryServiceTest {
         )
 
         assertTrue(result is OpenLibraryResult.Success, "expected success, got $result")
-        val book = (result as OpenLibraryResult.Success).book
+        val book = result.book
         assertEquals("OL46125W", book.openLibraryWorkId)
         assertEquals("OL7440033M", book.openLibraryEditionId)
         assertEquals("Foundation", book.workTitle)
@@ -125,7 +125,7 @@ class OpenLibraryServiceTest {
         val svc = OpenLibraryHttpService()
         val result = svc.parse("1234567890", editionJson, { null }, { null })
         assertTrue(result is OpenLibraryResult.Success)
-        val book = (result as OpenLibraryResult.Success).book
+        val book = result.book
         assertEquals("Unknown Author", book.authors.single().name)
     }
 

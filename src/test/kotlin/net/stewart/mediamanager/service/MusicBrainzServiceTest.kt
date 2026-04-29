@@ -74,7 +74,7 @@ class MusicBrainzServiceTest {
 
         val result = svc.parseRelease(body)
         assertTrue(result is MusicBrainzResult.Success)
-        val release = (result as MusicBrainzResult.Success).release
+        val release = result.release
 
         assertEquals("TEST-release-id-0001", release.musicBrainzReleaseId)
         assertEquals("TEST-release-group-la-woman", release.musicBrainzReleaseGroupId)
@@ -151,7 +151,7 @@ class MusicBrainzServiceTest {
 
         val result = svc.parseRelease(body)
         assertTrue(result is MusicBrainzResult.Success)
-        val release = (result as MusicBrainzResult.Success).release
+        val release = result.release
 
         assertEquals(1, release.albumArtistCredits.size)
         assertEquals("Various Artists", release.albumArtistCredits.first().name)
@@ -198,7 +198,7 @@ class MusicBrainzServiceTest {
 
         val result = svc.parseRelease(body)
         assertTrue(result is MusicBrainzResult.Success)
-        val release = (result as MusicBrainzResult.Success).release
+        val release = result.release
         assertEquals(2, release.tracks.size)
         assertEquals(1, release.tracks[0].discNumber)
         assertEquals(1, release.tracks[0].trackNumber)
@@ -218,7 +218,7 @@ class MusicBrainzServiceTest {
         """.trimIndent()
         val result = svc.parseRelease(body)
         assertTrue(result is MusicBrainzResult.Success)
-        val release = (result as MusicBrainzResult.Success).release
+        val release = result.release
         assertTrue(release.tracks.isEmpty())
         assertNull(release.totalDurationSeconds)
         assertTrue(release.albumArtistCredits.isEmpty())

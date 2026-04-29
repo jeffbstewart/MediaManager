@@ -103,12 +103,12 @@ class AlbumRescanServiceTest {
 
         val outcome = AlbumRescanService.rescan(title.id!!)
         assertTrue(outcome is AlbumRescanService.Outcome.Success)
-        val r = (outcome as AlbumRescanService.Outcome.Success).result
+        val r = outcome.result
         assertEquals(0, r.linked)
         assertEquals(2, r.skippedAlreadyLinked)
         assertEquals(0, r.candidatesConsidered)
         assertNotNull(r.message)
-        assertTrue(r.message!!.contains("already linked"))
+        assertTrue(r.message.contains("already linked"))
     }
 
     @Test
@@ -126,7 +126,7 @@ class AlbumRescanServiceTest {
 
         val outcome = AlbumRescanService.rescan(title.id!!)
         assertTrue(outcome is AlbumRescanService.Outcome.Success)
-        val r = (outcome as AlbumRescanService.Outcome.Success).result
+        val r = outcome.result
         assertEquals(0, r.linked)
         assertEquals(0, r.candidatesConsidered)
         // The walker still records the music_root path it traversed.
