@@ -4,11 +4,14 @@ WORKDIR /build
 COPY web-app/package.json web-app/package-lock.json ./
 RUN npm ci
 COPY web-app/ ./
-# Proto sources for the web-side codegen. `npm run prebuild` (fired
-# automatically by `ng build` below) reads from /proto/ via the
-# repo-root resolution in tests/scripts/gen-proto.mjs.
+# Proto sources for the web-side codegen. `npm run build` fires the
+# `prebuild` lifecycle hook (`node tests/scripts/gen-proto.mjs`),
+# which reads from /proto/ via the repo-root resolution in
+# tests/scripts/gen-proto.mjs. Direct `npx ng build` would skip the
+# hook — fine locally because the gitignored proto-gen/ directory
+# exists on disk, broken on a fresh GitHub checkout where it doesn't.
 COPY proto/ /proto/
-RUN npx ng build --base-href="/app/"
+RUN npm run build -- --base-href="/app/"
 
 # Stage 1b: Build server (glibc-based image for protoc plugin compatibility)
 FROM --platform=$BUILDPLATFORM amazoncorretto:25 AS builder
