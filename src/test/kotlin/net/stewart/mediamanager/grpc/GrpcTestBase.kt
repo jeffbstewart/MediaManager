@@ -74,7 +74,12 @@ open class GrpcTestBase {
                 ProfileGrpcService(),
                 LiveGrpcService(),
                 AdminGrpcService(),
-                ObservabilityGrpcService()
+                ObservabilityGrpcService(),
+                // ArtistGrpcService takes optional MusicBrainz/OpenLibrary
+                // HTTP collaborators in its constructor. Tests that don't
+                // hit those code paths can use the defaults; tests that do
+                // would need their own InProcess server wiring.
+                ArtistGrpcService(),
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()
