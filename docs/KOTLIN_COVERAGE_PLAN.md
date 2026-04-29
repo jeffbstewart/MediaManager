@@ -315,3 +315,14 @@ need their own tests.
 - iOS / Android TV coverage — separate test stacks.
 - Performance / load tests — these run in `lifecycle/perf-*.sh` and
   measure throughput, not coverage.
+
+## Testability blockers (interactive backlog)
+
+When a test class would require modifying production code to be
+testable (extracting a helper, taking a clock, threading a fake
+through a singleton, weakening visibility, etc.), the autonomous
+test-coverage loop **must not** make that change. It records the
+blocker here instead, and we tackle them interactively later.
+
+Format: one bullet per class, with `Class.kt — what would need to
+change — why it blocks the test`. Add new entries to the bottom.
