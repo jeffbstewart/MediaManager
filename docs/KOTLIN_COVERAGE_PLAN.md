@@ -326,3 +326,15 @@ blocker here instead, and we tackle them interactively later.
 
 Format: one bullet per class, with `Class.kt — what would need to
 change — why it blocks the test`. Add new entries to the bottom.
+
+- `AdminGrpcService.reorderTracks` — the loop saves tracks
+  sequentially, but the `track` table has a UNIQUE constraint on
+  `(title_id, disc_number, track_number)`. A swap of two tracks at
+  the same disc collides mid-save (e.g. swap (1,1)↔(1,2): saving
+  the first to (1,2) collides with the existing (1,2) row, raising
+  `JdbcSQLIntegrityConstraintViolationException` which the gRPC
+  layer surfaces as UNKNOWN). Tests have to choose new (disc,
+  track) coordinates that don't overlap with existing rows.
+  Production fix would do the writes inside a transaction with
+  deferred constraint check, or reorder via a two-pass scheme
+  (offset all to a non-conflicting range first, then settle).
