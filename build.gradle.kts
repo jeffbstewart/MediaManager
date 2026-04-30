@@ -300,7 +300,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 tasks.withType<Test>().configureEach {
-    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+    val override = (project.findProperty("maxForks") as? String)?.toIntOrNull()
+    maxParallelForks = override
+        ?: (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
 }
 
 // OWASP dependency-check: fail on HIGH+ CVEs (CVSS >= 7.0). Lower-severity

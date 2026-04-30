@@ -36,6 +36,14 @@ class LegalRequirementsTest {
 
         @AfterClass @JvmStatic
         fun teardownDatabase() {
+            // The LegalRequirements singleton caches required versions in
+            // @Volatile fields. Tests in this class set them to non-zero;
+            // if we leave them set, subsequent test classes (running in
+            // the same JVM fork under low-parallelism / CI configs) get
+            // PERMISSION_DENIED at the AuthInterceptor's legal-agreement
+            // gate. Reset by clearing AppConfig and re-reading.
+            AppConfig.deleteAll()
+            LegalRequirements.refresh()
             JdbiOrm.destroy()
             dataSource.close()
         }

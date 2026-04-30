@@ -2187,7 +2187,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         // wished work ids. Only computed when can_fill_gaps; the section
         // is hidden otherwise so the OpenLibrary fetch is wasted.
         val missing = if (!canFillGaps) emptyList() else {
-            val olid = author!!.open_library_author_id!!
+            val olid = author.open_library_author_id!!
             val ownedWorkIds = volumes.mapNotNull { it.open_library_work_id }.toSet()
             val wishedIds = net.stewart.mediamanager.service.WishListService
                 .activeBookWishWorkIdsForUser(user.id!!)
