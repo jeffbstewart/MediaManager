@@ -80,6 +80,7 @@ open class GrpcTestBase {
                 // hit those code paths can use the defaults; tests that do
                 // would need their own InProcess server wiring.
                 ArtistGrpcService(),
+                PlaylistGrpcService(),
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()
