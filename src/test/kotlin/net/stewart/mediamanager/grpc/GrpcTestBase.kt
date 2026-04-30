@@ -124,6 +124,9 @@ open class GrpcTestBase {
         net.stewart.mediamanager.entity.MediaItemTitleSeason.deleteAll()
         net.stewart.mediamanager.entity.TitleSeason.deleteAll()
         net.stewart.mediamanager.entity.MediaItemTitle.deleteAll()
+        // AmazonOrder has FKs to both app_user and media_item, so it
+        // must be cleared before MediaItem and AppUser below.
+        net.stewart.mediamanager.entity.AmazonOrder.deleteAll()
         net.stewart.mediamanager.entity.MediaItem.deleteAll()
         EpisodeEntity.deleteAll()
         TranscodeEntity.deleteAll()
