@@ -81,6 +81,8 @@ open class GrpcTestBase {
                 // would need their own InProcess server wiring.
                 ArtistGrpcService(),
                 PlaylistGrpcService(),
+                RadioGrpcService(),
+                RecommendationGrpcService(),
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()
@@ -135,6 +137,12 @@ open class GrpcTestBase {
         GenreEntity.deleteAll()
         AppUser.deleteAll()
         AppConfig.deleteAll()
+
+        // Defensive: any test class can mutate LegalRequirements'
+        // @Volatile cached versions and forget to reset them. Reading
+        // a now-empty AppConfig zeroes the cache so the AuthInterceptor
+        // legal-agreement gate stays open by default for fresh tests.
+        net.stewart.mediamanager.service.LegalRequirements.refresh()
     }
 
     // ========================================================================
