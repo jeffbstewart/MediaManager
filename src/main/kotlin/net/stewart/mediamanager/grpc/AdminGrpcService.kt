@@ -62,6 +62,7 @@ import net.stewart.mediamanager.service.AudioTranscodeCache
 import net.stewart.mediamanager.service.FirstPartyImageMigrationVerifier
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookIngestionService
+import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.OpenLibraryHttpService
 import net.stewart.mediamanager.service.OpenLibraryResult
 import net.stewart.mediamanager.service.OpenLibraryService
@@ -74,8 +75,17 @@ import java.time.ZoneOffset
 
 /**
  * Admin-only service. Auth interceptor enforces admin role for all RPCs.
+ *
+ * The MusicBrainz and Open Library collaborators are constructor injected
+ * with HTTP-backed defaults so production wiring stays a no-arg `AdminGrpcService()`.
+ * Tests that need to drive the unmatched-book / unmatched-audio MB
+ * branches deterministically pass in their own fakes — see
+ * `FakeMusicBrainzService` / `FakeOpenLibraryService` in test sources.
  */
-class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
+class AdminGrpcService(
+    private val openLibrary: OpenLibraryService = OpenLibraryHttpService(),
+    private val unmatchedAudioMb: MusicBrainzService = net.stewart.mediamanager.service.MusicBrainzHttpService(),
+) : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(AdminGrpcService::class.java)
 
@@ -1913,8 +1923,6 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     // Unmatched Books (M4 admin queue)
     // ========================================================================
 
-    private val openLibrary: OpenLibraryService = OpenLibraryHttpService()
-
     override suspend fun listUnmatchedBooks(request: Empty): UnmatchedBookListResponse {
         val rows = UnmatchedBookEntity.findAll()
             .filter { it.match_status == UnmatchedBookStatusEnum.UNMATCHED.name }
@@ -2098,9 +2106,6 @@ class AdminGrpcService : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
     // ========================================================================
     // Unmatched-audio group triage (parity with the HTTP admin endpoints)
     // ========================================================================
-
-    private val unmatchedAudioMb: net.stewart.mediamanager.service.MusicBrainzService =
-        net.stewart.mediamanager.service.MusicBrainzHttpService()
 
     private val unmatchedAudioMbidRegex =
         Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
