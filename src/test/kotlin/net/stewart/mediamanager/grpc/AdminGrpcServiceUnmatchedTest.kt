@@ -247,6 +247,78 @@ class AdminGrpcServiceUnmatchedTest : GrpcTestBase() {
     }
 
     @Test
+    fun `getScanDetail returns full detail for a linked, enriched scan`() = runBlocking {
+        val admin = createAdminUser(username = "admin-scandetail-ok")
+        val title = createTitle(
+            name = "Linked Title",
+            mediaType = net.stewart.mediamanager.entity.MediaType.MOVIE.name,
+            tmdbId = 555,
+            posterPath = "/poster.jpg",
+            releaseYear = 2020
+        ).apply {
+            description = "Description text"
+            save()
+        }
+        val item = net.stewart.mediamanager.entity.MediaItem(
+            product_name = "DVD Box",
+            media_format = net.stewart.mediamanager.entity.MediaFormat.BLURAY.name,
+            purchase_place = "Amazon",
+            purchase_price = java.math.BigDecimal("9.99"),
+            purchase_date = java.time.LocalDate.of(2024, 6, 1)
+        ).apply { save() }
+        net.stewart.mediamanager.entity.MediaItemTitle(
+            media_item_id = item.id!!, title_id = title.id!!, disc_number = 1
+        ).save()
+        val scan = BarcodeScan(
+            upc = "012345678905",
+            lookup_status = net.stewart.mediamanager.entity.LookupStatus.FOUND.name,
+            media_item_id = item.id,
+            scanned_at = java.time.LocalDateTime.now()
+        ).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.getScanDetail(scanIdRequest { scanId = scan.id!! })
+            assertEquals(scan.id!!, resp.scanId)
+            assertEquals("012345678905", resp.upc)
+            assertEquals("DVD Box", resp.productName)
+            assertEquals(title.id!!, resp.titleId)
+            assertEquals("Linked Title", resp.titleName)
+            assertEquals(2020, resp.releaseYear)
+            assertEquals("Description text", resp.description)
+            assertEquals("Amazon", resp.purchasePlace)
+            assertEquals(9.99, resp.purchasePrice, 0.001)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `getScanDetail handles a bare scan with no media item or title`() = runBlocking {
+        val admin = createAdminUser(username = "admin-scandetail-bare")
+        val scan = BarcodeScan(
+            upc = "999111222333",
+            lookup_status = net.stewart.mediamanager.entity.LookupStatus.NOT_LOOKED_UP.name,
+            scanned_at = java.time.LocalDateTime.now()
+        ).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.getScanDetail(scanIdRequest { scanId = scan.id!! })
+            assertEquals(scan.id!!, resp.scanId)
+            assertEquals("999111222333", resp.upc)
+            // Defaults applied when media item / title are absent.
+            assertEquals(MediaFormat.MEDIA_FORMAT_DVD, resp.mediaFormat)
+            assertEquals("", resp.productName)
+            assertEquals(0L, resp.titleId)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
     fun `assignTmdb routes media_type and resolves through ScanDetailService`() = runBlocking {
         val admin = createAdminUser(username = "admin-assign-tmdb")
         // ScanDetailService.assignTmdb hits the DB; with no title it returns

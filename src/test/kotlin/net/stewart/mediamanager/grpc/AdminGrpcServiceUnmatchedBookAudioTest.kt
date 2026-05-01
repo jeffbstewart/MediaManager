@@ -191,6 +191,66 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `linkUnmatchedBookToTitle links the file to the title and flips the row to LINKED`() = runBlocking {
+        val admin = createAdminUser(username = "ub-link-ok")
+        val book = createTitle(name = "Real Book",
+            mediaType = MediaTypeEntity.BOOK.name)
+        val row = UnmatchedBook(file_path = "/library/sibling.epub",
+            file_name = "sibling.epub",
+            media_format = MediaFormat.EBOOK_EPUB.name,
+            match_status = UnmatchedBookStatus.UNMATCHED.name,
+            discovered_at = LocalDateTime.now()).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.linkUnmatchedBookToTitle(linkUnmatchedBookToTitleRequest {
+                unmatchedBookId = row.id!!
+                titleId = book.id!!
+            })
+            assertEquals(book.id!!, resp.titleId)
+            assertEquals("Real Book", resp.titleName)
+            assertFalse(resp.createdNewTitle, "sibling-link reuses the title")
+
+            val refreshed = UnmatchedBook.findById(row.id!!)!!
+            assertEquals(UnmatchedBookStatus.LINKED.name, refreshed.match_status)
+            assertEquals(book.id!!, refreshed.linked_title_id)
+            // BookIngestionService creates a new MediaItem for the sibling edition.
+            val item = net.stewart.mediamanager.entity.MediaItem.findAll().single()
+            assertEquals("/library/sibling.epub", item.file_path)
+            assertEquals(MediaFormat.EBOOK_EPUB.name, item.media_format)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `linkUnmatchedBookToTitle falls back to EBOOK_EPUB when row format is invalid`() = runBlocking {
+        val admin = createAdminUser(username = "ub-link-bad-fmt")
+        val book = createTitle(name = "Book", mediaType = MediaTypeEntity.BOOK.name)
+        // Row with a non-MediaFormat string forces the runCatching fallback.
+        val row = UnmatchedBook(file_path = "/library/x.epub",
+            file_name = "x.epub",
+            media_format = "NOT_A_REAL_FORMAT",
+            match_status = UnmatchedBookStatus.UNMATCHED.name,
+            discovered_at = LocalDateTime.now()).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.linkUnmatchedBookToTitle(linkUnmatchedBookToTitleRequest {
+                unmatchedBookId = row.id!!
+                titleId = book.id!!
+            })
+            val item = net.stewart.mediamanager.entity.MediaItem.findAll().single()
+            assertEquals(MediaFormat.EBOOK_EPUB.name, item.media_format,
+                "invalid row format falls back to EBOOK_EPUB default")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- unmatched audio ----------------------
 
     @Test
@@ -409,6 +469,79 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
             val names = resp.matchesList.map { it.name }
             assertTrue("Visible Foundation" in names)
             assertFalse(names.any { it.contains("Hidden") })
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    // ---------------------- linkUnmatchedAudioAlbumManual ----------------------
+
+    @Test
+    fun `linkUnmatchedAudioAlbumManual ingests a manual album and links every matched track`() = runBlocking {
+        val admin = createAdminUser(username = "ua-manual-ok")
+        // Three rows that all share an album_artist + album so MusicIngestionService
+        // creates one Title with three Tracks; track_number drives the link.
+        val rows = (1..3).map { i ->
+            UnmatchedAudio(
+                file_path = "/music/album-x/0$i.flac",
+                file_name = "0$i.flac",
+                parsed_album = "Album X",
+                parsed_album_artist = "Artist X",
+                parsed_track_artist = "Artist X",
+                parsed_track_number = i,
+                parsed_disc_number = 1,
+                parsed_title = "Track $i",
+                parsed_duration_seconds = 200,
+                match_status = UnmatchedAudioStatus.UNMATCHED.name,
+                discovered_at = LocalDateTime.now()
+            ).apply { save() }
+        }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.linkUnmatchedAudioAlbumManual(
+                linkUnmatchedAudioAlbumManualRequest {
+                    rows.forEach { unmatchedAudioIds.add(it.id!!) }
+                }
+            )
+            assertEquals("Album X", resp.titleName)
+            assertEquals(3, resp.linked, "all three rows linked to fresh tracks")
+            assertEquals(0, resp.failedCount)
+
+            // Tracks were created and now point at the source files.
+            val tracks = Track.findAll().filter { it.title_id == resp.titleId }
+                .sortedBy { it.track_number }
+            assertEquals(3, tracks.size)
+            assertEquals(listOf("/music/album-x/01.flac",
+                "/music/album-x/02.flac",
+                "/music/album-x/03.flac"),
+                tracks.map { it.file_path })
+            // Rows flipped to LINKED with linked_track_id set.
+            for (row in rows) {
+                val refreshed = UnmatchedAudio.findById(row.id!!)!!
+                assertEquals(UnmatchedAudioStatus.LINKED.name, refreshed.match_status)
+                assertTrue(refreshed.linked_track_id != null)
+            }
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `linkUnmatchedAudioAlbumManual returns NOT_FOUND when no row ids match`() = runBlocking {
+        val admin = createAdminUser(username = "ua-manual-404")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.linkUnmatchedAudioAlbumManual(
+                    linkUnmatchedAudioAlbumManualRequest {
+                        unmatchedAudioIds.add(999_999)
+                    }
+                )
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code)
         } finally {
             authed.shutdownNow()
         }
