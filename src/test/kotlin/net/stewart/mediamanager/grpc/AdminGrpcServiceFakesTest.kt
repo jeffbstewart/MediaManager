@@ -25,9 +25,13 @@ import net.stewart.mediamanager.entity.UnmatchedAudio
 import net.stewart.mediamanager.entity.UnmatchedAudioStatus
 import net.stewart.mediamanager.entity.UnmatchedBook
 import net.stewart.mediamanager.entity.UnmatchedBookStatus
+import net.stewart.mediamanager.service.ArtistEnrichmentAgent
+import net.stewart.mediamanager.service.AuthorEnrichmentAgent
+import net.stewart.mediamanager.service.FakeHttpFetcher
 import net.stewart.mediamanager.service.FakeMusicBrainzService
 import net.stewart.mediamanager.service.FakeOpenLibraryService
 import net.stewart.mediamanager.service.JwtService
+import net.stewart.mediamanager.service.TestClock
 import net.stewart.mediamanager.service.MusicBrainzArtistCredit
 import net.stewart.mediamanager.service.MusicBrainzReleaseLookup
 import net.stewart.mediamanager.service.MusicBrainzResult
@@ -67,11 +71,14 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
             private set
         lateinit var fakeOl: FakeOpenLibraryService
             private set
+        lateinit var fakeHttp: FakeHttpFetcher
+            private set
 
         @BeforeClass @JvmStatic
         fun setupFakesServer() {
             fakeMb = FakeMusicBrainzService()
             fakeOl = FakeOpenLibraryService()
+            fakeHttp = FakeHttpFetcher()
             val admin = AdminGrpcService(
                 openLibrary = fakeOl,
                 unmatchedAudioMb = fakeMb,
@@ -79,6 +86,16 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
                 // the calling thread before the RPC returns, so tests can
                 // assert the side effects without polling.
                 reEnrichExecutor = java.util.concurrent.Executor { it.run() },
+                // Per-call agent factories built around the same fakeHttp
+                // fetcher so tests can script OL / MB / Wikipedia responses
+                // deterministically. TestClock short-circuits the API_GAP
+                // sleeps the agents put between fetches.
+                authorAgentFactory = {
+                    AuthorEnrichmentAgent(clock = TestClock(), http = fakeHttp)
+                },
+                artistAgentFactory = {
+                    ArtistEnrichmentAgent(clock = TestClock(), http = fakeHttp)
+                },
             )
             fakeServer = InProcessServerBuilder.forName(FAKES_SERVER_NAME)
                 .directExecutor()
@@ -106,12 +123,19 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
         UnmatchedAudio.deleteAll()
         UnmatchedBook.deleteAll()
         Track.deleteAll()
+        // Authors / Artists for the agent-dispatch tests.
+        TitleAuthor.deleteAll()
+        TitleArtist.deleteAll()
+        Author.deleteAll()
+        Artist.deleteAll()
 
         fakeMb.byBarcode = emptyMap()
         fakeMb.byReleaseMbid = emptyMap()
         fakeMb.byArtistAndAlbum = emptyMap()
         fakeOl.byIsbn = emptyMap()
         fakeOl.bySearch = emptyMap()
+        fakeHttp.responses = emptyMap()
+        fakeHttp.requestedUrls.clear()
     }
 
     private fun fakeAdminChannel(user: AppUser): ManagedChannel {
@@ -673,6 +697,133 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
             val refreshed = Title.findById(title.id!!)!!
             assertEquals(EnrichmentStatusEntity.ENRICHED.name,
                 refreshed.enrichment_status)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reEnrichWithAgent AUTHOR_HEADSHOT runs AuthorEnrichmentAgent over linked authors`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-author-ok")
+        val title = createTitle(name = "Foundation",
+            mediaType = MediaTypeEntity.BOOK.name)
+        val author = Author(
+            name = "Isaac Asimov", sort_name = "Asimov, Isaac",
+            open_library_author_id = "OL34184A",
+        ).apply { save() }
+        TitleAuthor(title_id = title.id!!, author_id = author.id!!,
+            author_order = 0).save()
+
+        // Script the OL author endpoint with bio + wikidata + birth_date.
+        // Headshot stays null so needsWikipediaData returns true and the
+        // Wikipedia branch fires too; we leave its URLs un-scripted, so the
+        // fetcher returns null and the Wikipedia path bails cleanly.
+        fakeHttp.responses = mapOf(
+            "https://openlibrary.org/authors/OL34184A.json" to """
+                {
+                    "bio": "Isaac Asimov was a prolific American writer and biochemist.",
+                    "remote_ids": {"wikidata": "Q34981"},
+                    "birth_date": "1920-01-02",
+                    "death_date": "1992-04-06"
+                }
+            """.trimIndent(),
+        )
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                titleId = title.id!!
+                agent = EnrichmentAgent.ENRICHMENT_AGENT_AUTHOR_HEADSHOT
+            })
+            val refreshed = Author.findById(author.id!!)!!
+            assertTrue(refreshed.biography!!.contains("biochemist"))
+            assertEquals("Q34981", refreshed.wikidata_id)
+            assertEquals(java.time.LocalDate.of(1920, 1, 2),
+                refreshed.birth_date)
+            assertTrue(fakeHttp.requestedUrls.any { it.endsWith("OL34184A.json") },
+                "OL author endpoint must have been hit")
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reEnrichWithAgent ARTIST_HEADSHOT runs ArtistEnrichmentAgent over linked artists`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-artist-ok")
+        val title = createTitle(name = "The Wall",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        val artistMbid = java.util.UUID.randomUUID().toString()
+        val artist = Artist(
+            name = "Pink Floyd", sort_name = "Pink Floyd",
+            artist_type = ArtistTypeEntity.GROUP.name,
+            musicbrainz_artist_id = artistMbid,
+        ).apply { save() }
+        TitleArtist(title_id = title.id!!, artist_id = artist.id!!,
+            artist_order = 0).save()
+
+        // MB artist endpoint: life-span gives begin_date, relations have a
+        // wikidata URL the agent strips down to the Q-number, and
+        // disambiguation seeds the bio.
+        fakeHttp.responses = mapOf(
+            "https://musicbrainz.org/ws/2/artist/$artistMbid?inc=url-rels&fmt=json" to """
+                {
+                    "disambiguation": "English progressive rock band",
+                    "life-span": {"begin": "1965", "ended": "false"},
+                    "relations": [
+                        {"type": "wikidata",
+                         "url": {"resource": "https://www.wikidata.org/wiki/Q2306"}}
+                    ]
+                }
+            """.trimIndent(),
+        )
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                titleId = title.id!!
+                agent = EnrichmentAgent.ENRICHMENT_AGENT_ARTIST_HEADSHOT
+            })
+            val refreshed = Artist.findById(artist.id!!)!!
+            assertEquals("English progressive rock band", refreshed.biography)
+            assertEquals("Q2306", refreshed.wikidata_id)
+            // begin_date parsed from year-only "1965" → 1965-01-01.
+            assertEquals(java.time.LocalDate.of(1965, 1, 1),
+                refreshed.begin_date)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    // ---------------------- triggerArtistEnrichment ----------------------
+
+    @Test
+    fun `triggerArtistEnrichment dispatches the agent for a known artist`() = runBlocking {
+        val admin = createAdminUser(username = "tae-ok")
+        val artistMbid = java.util.UUID.randomUUID().toString()
+        val artist = Artist(
+            name = "The Beatles", sort_name = "Beatles, The",
+            artist_type = ArtistTypeEntity.GROUP.name,
+            musicbrainz_artist_id = artistMbid,
+        ).apply { save() }
+        fakeHttp.responses = mapOf(
+            "https://musicbrainz.org/ws/2/artist/$artistMbid?inc=url-rels&fmt=json" to """
+                {
+                    "disambiguation": "English rock band from Liverpool",
+                    "life-span": {"begin": "1960"},
+                    "relations": []
+                }
+            """.trimIndent(),
+        )
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            stub.triggerArtistEnrichment(adminArtistIdRequest { artistId = artist.id!! })
+            val refreshed = Artist.findById(artist.id!!)!!
+            assertEquals("English rock band from Liverpool", refreshed.biography)
+            assertEquals(java.time.LocalDate.of(1960, 1, 1), refreshed.begin_date)
         } finally {
             channel.shutdownNow()
         }

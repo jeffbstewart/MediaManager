@@ -5,12 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.Author
 import org.slf4j.LoggerFactory
-import java.net.URI
 import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,16 +27,14 @@ import kotlin.time.Duration.Companion.seconds
  * `wikidata_id` resolved here) is a separate, later job — not in M2.
  */
 class AuthorEnrichmentAgent(
-    private val clock: Clock = SystemClock
+    private val clock: Clock = SystemClock,
+    private val http: HttpFetcher = JdkHttpFetcher(),
 ) {
     private val log = LoggerFactory.getLogger(AuthorEnrichmentAgent::class.java)
     internal val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
     private val mapper = ObjectMapper()
-    private val httpClient: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .build()
 
     companion object {
         // Active cycle gap while there's a backlog; longer idle poll once
@@ -55,7 +48,6 @@ class AuthorEnrichmentAgent(
         private const val BASE = "https://openlibrary.org"
         private const val WIKIDATA_BASE = "https://www.wikidata.org"
         private const val WIKIPEDIA_BASE = "https://en.wikipedia.org"
-        private const val USER_AGENT = "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"
 
         /** Bios under this length trigger Wikipedia fallback to pick up a richer extract. */
         private const val SHORT_BIO_THRESHOLD = 200
@@ -213,7 +205,7 @@ class AuthorEnrichmentAgent(
 
     private fun enrichFromOpenLibrary(author: Author) {
         val olid = author.open_library_author_id ?: return
-        val body = fetch("$BASE/authors/$olid.json") ?: return
+        val body = http.fetch("$BASE/authors/$olid.json") ?: return
         val node = mapper.readTree(body)
 
         val bio = extractBio(node)
@@ -251,7 +243,7 @@ class AuthorEnrichmentAgent(
     private fun enrichFromWikipedia(author: Author) {
         val wikidataId = author.wikidata_id ?: return
 
-        val entityBody = fetch("$WIKIDATA_BASE/wiki/Special:EntityData/$wikidataId.json") ?: return
+        val entityBody = http.fetch("$WIKIDATA_BASE/wiki/Special:EntityData/$wikidataId.json") ?: return
         val entity = mapper.readTree(entityBody)
         val enwikiTitle = entity.path("entities").path(wikidataId).path("sitelinks").path("enwiki").path("title")
             .asText().takeIf { it.isNotBlank() } ?: return
@@ -259,7 +251,7 @@ class AuthorEnrichmentAgent(
         try { clock.sleep(API_GAP) } catch (_: InterruptedException) { return }
 
         val encoded = URLEncoder.encode(enwikiTitle.replace(' ', '_'), Charsets.UTF_8)
-        val summaryBody = fetch("$WIKIPEDIA_BASE/api/rest_v1/page/summary/$encoded") ?: return
+        val summaryBody = http.fetch("$WIKIPEDIA_BASE/api/rest_v1/page/summary/$encoded") ?: return
         val summary = mapper.readTree(summaryBody)
 
         val extract = summary.path("extract").asText().takeIf { it.isNotBlank() }
@@ -285,22 +277,6 @@ class AuthorEnrichmentAgent(
             author.save()
             log.info("Enriched author id={} '{}' from Wikipedia ({})",
                 author.id, author.name, enwikiTitle)
-        }
-    }
-
-    private fun fetch(url: String): String? {
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .timeout(Duration.ofSeconds(15))
-            .header("User-Agent", USER_AGENT)
-            .GET()
-            .build()
-        val response: HttpResponse<String> = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        return when (response.statusCode()) {
-            200 -> response.body()
-            404 -> null
-            429 -> { log.warn("Open Library rate limited; skipping this cycle"); null }
-            else -> { log.warn("Open Library returned HTTP {} for {}", response.statusCode(), url); null }
         }
     }
 

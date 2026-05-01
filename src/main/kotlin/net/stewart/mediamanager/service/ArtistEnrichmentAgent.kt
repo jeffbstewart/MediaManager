@@ -4,12 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.Artist
 import org.slf4j.LoggerFactory
-import java.net.URI
 import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
@@ -31,17 +26,14 @@ import kotlin.time.Duration.Companion.seconds
  *    [AuthorEnrichmentAgent] — same fallback semantics.
  */
 class ArtistEnrichmentAgent(
-    private val clock: Clock = SystemClock
+    private val clock: Clock = SystemClock,
+    private val http: HttpFetcher = JdkHttpFetcher(),
 ) {
     private val log = LoggerFactory.getLogger(ArtistEnrichmentAgent::class.java)
     internal val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
     private val mapper = ObjectMapper()
-    private val httpClient: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build()
 
     companion object {
         // Cycle between batches. Long idle poll when the queue is empty,
@@ -58,8 +50,6 @@ class ArtistEnrichmentAgent(
         private const val MB_BASE = "https://musicbrainz.org/ws/2"
         private const val WIKIDATA_BASE = "https://www.wikidata.org"
         private const val WIKIPEDIA_BASE = "https://en.wikipedia.org"
-        private const val USER_AGENT =
-            "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"
         private const val SHORT_BIO_THRESHOLD = 200
     }
 
@@ -208,7 +198,7 @@ class ArtistEnrichmentAgent(
 
     private fun enrichFromMusicBrainz(artist: Artist) {
         val mbid = artist.musicbrainz_artist_id ?: return
-        val body = fetch("$MB_BASE/artist/$mbid?inc=url-rels&fmt=json") ?: return
+        val body = http.fetch("$MB_BASE/artist/$mbid?inc=url-rels&fmt=json") ?: return
         val node = mapper.readTree(body)
 
         // life-span.begin / end are ISO-shaped: YYYY, YYYY-MM, or YYYY-MM-DD.
@@ -255,7 +245,7 @@ class ArtistEnrichmentAgent(
     private fun enrichFromWikipedia(artist: Artist) {
         val wikidataId = artist.wikidata_id ?: return
 
-        val entityBody = fetch("$WIKIDATA_BASE/wiki/Special:EntityData/$wikidataId.json") ?: return
+        val entityBody = http.fetch("$WIKIDATA_BASE/wiki/Special:EntityData/$wikidataId.json") ?: return
         val entity = mapper.readTree(entityBody)
         val enwikiTitle = entity.path("entities").path(wikidataId)
             .path("sitelinks").path("enwiki").path("title")
@@ -264,7 +254,7 @@ class ArtistEnrichmentAgent(
         try { clock.sleep(WIKI_GAP) } catch (_: InterruptedException) { return }
 
         val encoded = URLEncoder.encode(enwikiTitle.replace(' ', '_'), Charsets.UTF_8)
-        val summaryBody = fetch("$WIKIPEDIA_BASE/api/rest_v1/page/summary/$encoded") ?: return
+        val summaryBody = http.fetch("$WIKIPEDIA_BASE/api/rest_v1/page/summary/$encoded") ?: return
         val summary = mapper.readTree(summaryBody)
 
         val extract = summary.path("extract").asText().takeIf { it.isNotBlank() }
@@ -293,20 +283,5 @@ class ArtistEnrichmentAgent(
         }
     }
 
-    private fun fetch(url: String): String? {
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .timeout(Duration.ofSeconds(15))
-            .header("User-Agent", USER_AGENT)
-            .GET()
-            .build()
-        val response: HttpResponse<String> = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        return when (response.statusCode()) {
-            200 -> response.body()
-            404 -> null
-            429, 503 -> { log.warn("Enrichment source rate limited ({}); skipping {}", response.statusCode(), url); null }
-            else -> { log.warn("Enrichment source returned HTTP {} for {}", response.statusCode(), url); null }
-        }
-    }
 }
 

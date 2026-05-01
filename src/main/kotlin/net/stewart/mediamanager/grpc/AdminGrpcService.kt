@@ -95,6 +95,15 @@ class AdminGrpcService(
         java.util.concurrent.Executors.newSingleThreadExecutor { r ->
             Thread(r, "re-enrich-dispatch").apply { isDaemon = true }
         },
+    /**
+     * Factories for the per-call enrichment agents reEnrichWithAgent and
+     * triggerArtistEnrichment dispatch to. Production uses real
+     * HTTP-backed agents; tests pass factories that hand back agents
+     * wired with FakeHttpFetcher so the AUTHOR_HEADSHOT and ARTIST_*
+     * dispatch paths can be exercised without a live network.
+     */
+    private val authorAgentFactory: () -> AuthorEnrichmentAgent = ::AuthorEnrichmentAgent,
+    private val artistAgentFactory: () -> ArtistEnrichmentAgent = ::ArtistEnrichmentAgent,
 ) : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(AdminGrpcService::class.java)
@@ -2713,7 +2722,7 @@ class AdminGrpcService(
                             .filter { it.title_id == title.id }
                             .map { it.author_id }
                             .toSet()
-                        val agent = AuthorEnrichmentAgent()
+                        val agent = authorAgentFactory()
                         AuthorEntity.findAll().filter { it.id in authorIds }.forEach {
                             agent.enrichOne(it)
                         }
@@ -2724,7 +2733,7 @@ class AdminGrpcService(
                             .filter { it.title_id == title.id }
                             .map { it.artist_id }
                             .toSet()
-                        val agent = ArtistEnrichmentAgent()
+                        val agent = artistAgentFactory()
                         ArtistEntity.findAll().filter { it.id in artistIds }.forEach {
                             agent.enrichOne(it)
                         }
@@ -2910,11 +2919,11 @@ class AdminGrpcService(
     override suspend fun triggerArtistEnrichment(request: AdminArtistIdRequest): Empty {
         val artist = ArtistEntity.findById(request.artistId)
             ?: throw StatusException(Status.NOT_FOUND)
-        val agent = ArtistEnrichmentAgent()
-        Thread({
+        val agent = artistAgentFactory()
+        reEnrichExecutor.execute {
             try { agent.enrichOne(artist) }
             catch (e: Exception) { log.warn("triggerArtistEnrichment {} failed: {}", artist.id, e.message) }
-        }, "artist-enrich-manual-${artist.id}").apply { isDaemon = true; start() }
+        }
         return Empty.getDefaultInstance()
     }
 
