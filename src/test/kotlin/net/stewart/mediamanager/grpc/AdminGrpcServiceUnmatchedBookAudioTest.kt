@@ -406,6 +406,102 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `listUnmatchedAudioGroups groups by album+artist and ranks by total files desc`() = runBlocking {
+        val admin = createAdminUser(username = "uag-two-groups")
+        // Group "AA" — three files, fully tagged with album/artist/UPC/MB.
+        repeat(3) { i ->
+            UnmatchedAudio(
+                file_path = "/music/aa/0$i.flac",
+                file_name = "0$i.flac",
+                parsed_album = "Album AA",
+                parsed_album_artist = "Artist AA",
+                parsed_upc = "111111111111",
+                parsed_mb_release_id = "rel-aa-mbid",
+                parsed_label = "Label AA",
+                parsed_catalog_number = "AA-001",
+                parsed_track_number = i + 1,
+                parsed_disc_number = 1,
+                parsed_mb_recording_id = "rec-aa-$i",
+                match_status = UnmatchedAudioStatus.UNMATCHED.name,
+                discovered_at = LocalDateTime.now()
+            ).save()
+        }
+        // Group "BB" — two files, sharing the same album/artist as each other.
+        repeat(2) { i ->
+            UnmatchedAudio(
+                file_path = "/music/bb/0$i.flac",
+                file_name = "0$i.flac",
+                parsed_album = "Album BB",
+                parsed_album_artist = "Artist BB",
+                parsed_track_number = i + 1,
+                parsed_disc_number = 1,
+                match_status = UnmatchedAudioStatus.UNMATCHED.name,
+                discovered_at = LocalDateTime.now()
+            ).save()
+        }
+        // A LINKED row should not show up in any group.
+        UnmatchedAudio(file_path = "/music/aa/skip.flac", file_name = "skip.flac",
+            parsed_album = "Album AA", parsed_album_artist = "Artist AA",
+            match_status = UnmatchedAudioStatus.LINKED.name,
+            discovered_at = LocalDateTime.now()).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.listUnmatchedAudioGroups(Empty.getDefaultInstance())
+            assertEquals(2, resp.totalGroups)
+            assertEquals(5, resp.totalFiles, "LINKED row excluded from totals")
+            // AA has more files so it sorts first.
+            val first = resp.groupsList[0]
+            assertEquals("Album AA", first.dominantAlbum)
+            assertEquals("Artist AA", first.dominantAlbumArtist)
+            assertEquals("111111111111", first.dominantUpc)
+            assertEquals("rel-aa-mbid", first.dominantMbReleaseId)
+            assertEquals("Label AA", first.dominantLabel)
+            assertEquals("AA-001", first.dominantCatalogNumber)
+            assertEquals(3, first.totalFiles)
+            assertEquals(3, first.recordingMbidCount)
+            assertEquals(listOf("/music/aa"), first.dirsList)
+            assertEquals(3, first.filesList.size)
+
+            val second = resp.groupsList[1]
+            assertEquals("Album BB", second.dominantAlbum)
+            assertEquals(2, second.totalFiles)
+            assertEquals(0, second.recordingMbidCount,
+                "no MB recording ids on BB rows")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listUnmatchedAudioGroups falls back to parent dir when album is blank`() = runBlocking {
+        val admin = createAdminUser(username = "uag-dir-fallback")
+        // No parsed_album means mergeKeyForRow keys on parentDir(file_path).
+        listOf("/incoming/scratch/01.flac",
+            "/incoming/scratch/02.flac").forEach { p ->
+            UnmatchedAudio(file_path = p,
+                file_name = p.substringAfterLast('/'),
+                match_status = UnmatchedAudioStatus.UNMATCHED.name,
+                discovered_at = LocalDateTime.now()).save()
+        }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.listUnmatchedAudioGroups(Empty.getDefaultInstance())
+            assertEquals(1, resp.groupsCount,
+                "both files share the same parent dir → one group")
+            val group = resp.groupsList.single()
+            assertEquals("", group.dominantAlbum, "no album field exposed")
+            assertEquals(2, group.totalFiles)
+            assertEquals(listOf("/incoming/scratch"), group.dirsList)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- searchCatalogTitles ----------------------
 
     @Test
