@@ -80,13 +80,21 @@ object AlbumRescanService {
         val linkedDirs = tracks.mapNotNull { it.file_path?.let { fp -> File(fp).parentFile } }
             .toSet()
         val siblingRoot = linkedDirs.commonAncestorOrNull()
-        val musicRootDir = musicRoot()?.let { File(it) }?.takeIf { it.isDirectory }
+        // isDirectory check routes through Filesystems.current so Jimfs-backed
+        // tests can seed the music root and exercise the post-guard branches.
+        // `.replace('\\', '/')` normalizes host-separator path strings into
+        // a form Jimfs Unix can parse; the default Windows FS accepts the
+        // forward-slash form too, so production behavior is unchanged.
+        val musicRootDir = musicRoot()?.let { File(it) }?.takeIf {
+            Files.isDirectory(Filesystems.current.getPath(it.path.replace('\\', '/')))
+        }
 
         val primaryRoot = siblingRoot ?: musicRootDir
         val fallbackRoot = if (siblingRoot != null && musicRootDir != null && siblingRoot != musicRootDir)
             musicRootDir else null
 
-        if (primaryRoot == null || !primaryRoot.isDirectory) {
+        if (primaryRoot == null ||
+            !Files.isDirectory(Filesystems.current.getPath(primaryRoot.path.replace('\\', '/')))) {
             return Outcome.NoSearchRoot
         }
 
@@ -165,7 +173,13 @@ object AlbumRescanService {
 
         fun walkOne(root: File, depth: Int, pathPrefilter: Boolean) {
             rootsWalked += root.absolutePath
-            Files.walk(root.toPath(), depth).use { stream ->
+            // Walk via Filesystems.current so a Jimfs-backed test sees the
+            // seeded tree. Path arithmetic above stays File-shaped because
+            // it's pure string manipulation; only the actual disk-walk
+            // needs the FS swap. Slash-normalize for the same reason as
+            // the isDirectory checks above.
+            Files.walk(Filesystems.current.getPath(root.path.replace('\\', '/')), depth)
+                .use { stream ->
                 stream.forEach { p ->
                     if (!p.isRegularFile()) return@forEach
                     if (p.extension.lowercase() !in audioExts) return@forEach
@@ -412,7 +426,11 @@ object AlbumRescanService {
         }
         if (commonDepth == 0) return null
         val common = parts[0].take(commonDepth).joinToString(File.separator)
-        return File(common).takeIf { it.isDirectory }
+        // isDirectory check routes through Filesystems.current — same
+        // motivation as the musicRootDir gate above.
+        return File(common).takeIf {
+            Files.isDirectory(Filesystems.current.getPath(it.path.replace('\\', '/')))
+        }
     }
 
     private fun musicRoot(): String? =

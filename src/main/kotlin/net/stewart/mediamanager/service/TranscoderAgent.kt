@@ -29,6 +29,15 @@ import kotlin.time.Duration.Companion.milliseconds
  * Processes one file at a time, prioritized by TMDB popularity (most popular first).
  *
  * Follows the same daemon pattern as [UpcLookupAgent] and [TmdbEnrichmentAgent].
+ *
+ * **Future testability seam:** the FFmpeg `ProcessBuilder` invocations in
+ * this file fork real OS processes that can't see Jimfs paths. When we
+ * want to drive the transcode happy path under test, we'll need a
+ * `SubprocessRunner` interface wrapping the `ProcessBuilder` calls so a
+ * test fake can record the invocation, validate the argv, and inject a
+ * synthetic exit code + stdout/stderr. Filesystem injection (via
+ * [Filesystems.current]) covers the existence checks; the subprocess
+ * seam is tracked separately and is not in this slice.
  */
 class TranscoderAgent(
     private val clock: Clock = SystemClock
@@ -121,9 +130,43 @@ class TranscoderAgent(
 
         /**
          * Returns true if a ForBrowser MP4 already exists for this source file.
+         *
+         * The path arithmetic *and* the existence check both run on
+         * [Filesystems.current]. Doing the math on the active FS keeps
+         * separator conventions coherent end-to-end — necessary so that
+         * a Jimfs-Unix in-memory FS (used by tests on Windows hosts)
+         * doesn't see backslashes from `File.toPath()` against the host
+         * default FS. Production behavior is unchanged: [Filesystems.current]
+         * defaults to the JVM default FS, which is what `File` uses.
          */
         fun isTranscoded(nasRoot: String, sourceFilePath: String): Boolean {
-            return getForBrowserPath(nasRoot, sourceFilePath).exists()
+            return java.nio.file.Files.exists(
+                forBrowserPathOn(Filesystems.current, nasRoot, sourceFilePath))
+        }
+
+        /**
+         * Build the ForBrowser mirrored path against an explicit
+         * [java.nio.file.FileSystem]. Internal helper so existence checks
+         * can use [Filesystems.current] while [getForBrowserPath] keeps
+         * its `File` return type for FFmpeg-bound callers.
+         */
+        private fun forBrowserPathOn(
+            fs: java.nio.file.FileSystem,
+            nasRoot: String,
+            sourceFilePath: String,
+        ): java.nio.file.Path {
+            val nasRootPath = fs.getPath(nasRoot)
+            val sourcePath = fs.getPath(sourceFilePath)
+            val relativePath = nasRootPath.relativize(sourcePath)
+            val fileName = relativePath.fileName.toString()
+            val mp4Name = fileName.substringBeforeLast('.', fileName) + ".mp4"
+            val relativeDir = relativePath.parent
+            val output = nasRootPath.resolve(FOR_BROWSER_DIR)
+            return if (relativeDir != null) {
+                output.resolve(relativeDir).resolve(mp4Name)
+            } else {
+                output.resolve(mp4Name)
+            }
         }
 
         /**
@@ -142,7 +185,27 @@ class TranscoderAgent(
         }
 
         fun isMobileTranscoded(nasRoot: String, sourceFilePath: String): Boolean {
-            return getForMobilePath(nasRoot, sourceFilePath).exists()
+            return java.nio.file.Files.exists(
+                forMobilePathOn(Filesystems.current, nasRoot, sourceFilePath))
+        }
+
+        private fun forMobilePathOn(
+            fs: java.nio.file.FileSystem,
+            nasRoot: String,
+            sourceFilePath: String,
+        ): java.nio.file.Path {
+            val nasRootPath = fs.getPath(nasRoot)
+            val sourcePath = fs.getPath(sourceFilePath)
+            val relativePath = nasRootPath.relativize(sourcePath)
+            val fileName = relativePath.fileName.toString()
+            val mp4Name = fileName.substringBeforeLast('.', fileName) + ".mp4"
+            val relativeDir = relativePath.parent
+            val output = nasRootPath.resolve(FOR_MOBILE_DIR)
+            return if (relativeDir != null) {
+                output.resolve(relativeDir).resolve(mp4Name)
+            } else {
+                output.resolve(mp4Name)
+            }
         }
 
         /**
@@ -164,18 +227,30 @@ class TranscoderAgent(
          * @param suffix file suffix including dot, e.g. ".thumbs.vtt", ".en.srt"
          */
         fun findAuxFile(nasRoot: String?, sourceFilePath: String, suffix: String): File? {
-            val sourceFile = File(sourceFilePath)
-            val baseName = sourceFile.nameWithoutExtension
+            // Path arithmetic + existence checks both run on Filesystems.current
+            // for the same separator-coherence reason as isTranscoded.
+            val fs = Filesystems.current
+            val sourcePath = fs.getPath(sourceFilePath)
+            val sourceParent = sourcePath.parent ?: return null
+            val sourceFileName = sourcePath.fileName.toString()
+            val baseName = sourceFileName.substringBeforeLast('.', sourceFileName)
 
-            // Check alongside source first (canonical location)
-            val sourceCandidate = File(sourceFile.parentFile, baseName + suffix)
-            if (sourceCandidate.exists()) return sourceCandidate
+            // Check alongside source first (canonical location).
+            val sourceCandidate = sourceParent.resolve(baseName + suffix)
+            if (java.nio.file.Files.exists(sourceCandidate)) {
+                return File(sourceCandidate.toString())
+            }
 
-            // Fall back to ForBrowser for MKV/AVI (legacy location)
+            // Fall back to ForBrowser for MKV/AVI (legacy location).
             if (nasRoot != null && needsTranscoding(sourceFilePath)) {
-                val forBrowserMp4 = getForBrowserPath(nasRoot, sourceFilePath)
-                val fbCandidate = File(forBrowserMp4.parentFile, forBrowserMp4.nameWithoutExtension + suffix)
-                if (fbCandidate.exists()) return fbCandidate
+                val forBrowserMp4 = forBrowserPathOn(fs, nasRoot, sourceFilePath)
+                val fbParent = forBrowserMp4.parent ?: return null
+                val fbFileName = forBrowserMp4.fileName.toString()
+                val fbBase = fbFileName.substringBeforeLast('.', fbFileName)
+                val fbCandidate = fbParent.resolve(fbBase + suffix)
+                if (java.nio.file.Files.exists(fbCandidate)) {
+                    return File(fbCandidate.toString())
+                }
             }
 
             return null

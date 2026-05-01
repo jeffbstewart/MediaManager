@@ -139,9 +139,14 @@ object OwnershipPhotoStorage {
         return slug.take(15)
     }
 
-    /** Resolve a relative diskPath to an absolute Path for sidecar / filesystem use. */
+    /**
+     * Resolve a relative diskPath to an absolute Path for sidecar / filesystem use.
+     * Routes through [Filesystems.current] so Jimfs-backed tests see the
+     * legacy tree under the in-memory root rather than the host's `data/`
+     * directory. Production wiring is unchanged (default FS).
+     */
     fun resolveAbsolute(diskPath: String): java.nio.file.Path =
-        File("$BASE_DIR/$diskPath").toPath()
+        Filesystems.current.getPath(BASE_DIR, diskPath)
 
     private fun nextSeq(storageKey: String): Int {
         val existing = OwnershipPhoto.findAll()

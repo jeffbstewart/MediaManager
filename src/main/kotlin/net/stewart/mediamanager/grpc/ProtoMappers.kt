@@ -273,7 +273,9 @@ fun isPlayable(transcode: TranscodeEntity, nasRoot: String?): Boolean {
     val filePath = transcode.file_path ?: return false
     val ext = File(filePath).extension.lowercase()
     return when {
-        ext in DIRECT_EXTENSIONS -> File(filePath).exists()
+        ext in DIRECT_EXTENSIONS ->
+            java.nio.file.Files.exists(
+                net.stewart.mediamanager.service.Filesystems.current.getPath(filePath))
         ext in TRANSCODE_EXTENSIONS -> nasRoot != null && TranscoderAgent.isTranscoded(nasRoot, filePath)
         else -> false
     }

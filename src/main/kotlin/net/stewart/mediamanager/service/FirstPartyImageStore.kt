@@ -31,7 +31,14 @@ object FirstPartyImageStore {
 
     private val log = LoggerFactory.getLogger(FirstPartyImageStore::class.java)
 
-    val root: Path = Path.of("data", "first-party-images")
+    /**
+     * Resolved against [Filesystems.current] every read so a Jimfs-backed
+     * test sees an in-memory tree under `/data/first-party-images/`. In
+     * production the field is effectively constant — the default FS is
+     * never swapped at runtime.
+     */
+    val root: Path
+        get() = Filesystems.current.getPath("data", "first-party-images")
 
     object Category {
         const val OWNERSHIP_PHOTOS = "ownership-photos"

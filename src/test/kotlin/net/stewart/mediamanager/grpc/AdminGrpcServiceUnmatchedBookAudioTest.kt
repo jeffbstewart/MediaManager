@@ -8,9 +8,12 @@ import net.stewart.mediamanager.entity.MediaType as MediaTypeEntity
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.UnmatchedAudio
 import net.stewart.mediamanager.entity.UnmatchedAudioStatus
+import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.UnmatchedBook
 import net.stewart.mediamanager.entity.UnmatchedBookStatus
+import net.stewart.mediamanager.service.JimfsRule
 import org.junit.Before
+import org.junit.Rule
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +31,8 @@ import kotlin.test.assertTrue
  * tested here — they require HTTP fixtures.
  */
 class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
+
+    @get:Rule val fsRule = JimfsRule()
 
     @Before
     fun cleanUnmatchedTables() {
@@ -713,6 +718,35 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
             assertEquals(Status.Code.FAILED_PRECONDITION, ex.status.code)
             assertTrue(ex.status.description!!.contains("music_root_path"),
                 "error must point at the missing config")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `rescanAlbum returns Success when every track is already linked, no walk needed`() = runBlocking {
+        val admin = createAdminUser(username = "ra-already-linked")
+        // Music root configured + seeded as an in-memory directory.
+        AppConfig(config_key = "music_root_path", config_val = "/music").save()
+        fsRule.seedDir("/music/album-x")
+        val album = createTitle(name = "Already Linked",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        // Both tracks have file_path set → unlinkedTracks is empty → the
+        // RPC returns Success("All tracks already linked") before any
+        // disk walk runs.
+        Track(title_id = album.id!!, track_number = 1, disc_number = 1,
+            name = "T1", file_path = "/music/album-x/01.flac").save()
+        Track(title_id = album.id!!, track_number = 2, disc_number = 1,
+            name = "T2", file_path = "/music/album-x/02.flac").save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.rescanAlbum(titleIdRequest { titleId = album.id!! })
+            assertEquals(0, resp.linked, "no fresh links — all tracks already had file_path")
+            assertEquals(2, resp.skippedAlreadyLinked)
+            assertEquals(0, resp.filesWalked, "early-return skips the disk walk entirely")
+            assertTrue(resp.message.contains("nothing to do"))
         } finally {
             authed.shutdownNow()
         }

@@ -9,8 +9,12 @@ import io.grpc.inprocess.InProcessChannelBuilder
 import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.stub.MetadataUtils
 import kotlinx.coroutines.runBlocking
+import com.google.protobuf.ByteString
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.BarcodeScan
+import net.stewart.mediamanager.entity.LookupStatus
+import net.stewart.mediamanager.entity.OwnershipPhoto
 import net.stewart.mediamanager.entity.ArtistType as ArtistTypeEntity
 import net.stewart.mediamanager.entity.Author
 import net.stewart.mediamanager.entity.EnrichmentStatus as EnrichmentStatusEntity
@@ -30,6 +34,7 @@ import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.FakeHttpFetcher
 import net.stewart.mediamanager.service.FakeMusicBrainzService
 import net.stewart.mediamanager.service.FakeOpenLibraryService
+import net.stewart.mediamanager.service.JimfsRule
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.TestClock
 import net.stewart.mediamanager.service.MusicBrainzArtistCredit
@@ -43,6 +48,7 @@ import net.stewart.mediamanager.service.OpenLibrarySearchHit
 import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
+import org.junit.Rule
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -116,6 +122,8 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
         }
     }
 
+    @get:Rule val fsRule = JimfsRule()
+
     @Before
     fun resetFakesAndUnmatchedTables() {
         // Base class doesn't reset these — they have unique-index constraints
@@ -128,6 +136,8 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
         TitleArtist.deleteAll()
         Author.deleteAll()
         Artist.deleteAll()
+        // OwnershipPhoto for the upload/delete tests.
+        OwnershipPhoto.deleteAll()
 
         fakeMb.byBarcode = emptyMap()
         fakeMb.byReleaseMbid = emptyMap()
@@ -824,6 +834,137 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
             val refreshed = Artist.findById(artist.id!!)!!
             assertEquals("English rock band from Liverpool", refreshed.biography)
             assertEquals(java.time.LocalDate.of(1960, 1, 1), refreshed.begin_date)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    // ---------------------- uploadOwnershipPhoto / deleteOwnershipPhoto ----------------------
+
+    @Test
+    fun `uploadOwnershipPhoto stores bytes via FirstPartyImageStore and returns a fresh photo id`() = runBlocking {
+        val admin = createAdminUser(username = "uop-ok")
+        val item = MediaItem(product_name = "Item",
+            media_format = MediaFormat.BLURAY.name,
+            upc = "012345678905").apply { save() }
+        val scan = BarcodeScan(
+            upc = "012345678905",
+            lookup_status = LookupStatus.FOUND.name,
+            media_item_id = item.id,
+            scanned_at = java.time.LocalDateTime.now(),
+        ).apply { save() }
+        val photoBytes = "some jpeg bytes".toByteArray()
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            val resp = stub.uploadOwnershipPhoto(uploadOwnershipPhotoRequest {
+                scanId = scan.id!!
+                contentType = "image/jpeg"
+                photoData = ByteString.copyFrom(photoBytes)
+            })
+            assertTrue(resp.photoId.isNotBlank())
+            // Bytes landed under the new content-addressed layout in Jimfs.
+            val record = OwnershipPhoto.findById(resp.photoId)!!
+            assertEquals(item.id!!, record.media_item_id)
+            assertEquals("image/jpeg", record.content_type)
+            // Verify the actual bytes were written under FirstPartyImageStore's
+            // root in the in-memory FS.
+            val stored = net.stewart.mediamanager.service.FirstPartyImageStore.pathFor(
+                net.stewart.mediamanager.service.FirstPartyImageStore.Category.OWNERSHIP_PHOTOS,
+                resp.photoId,
+                extension = "jpg",
+            )
+            assertTrue(java.nio.file.Files.exists(stored))
+            assertTrue(java.nio.file.Files.readAllBytes(stored)
+                .contentEquals(photoBytes))
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `uploadOwnershipPhoto routes to the orphan-by-UPC path when scan has no media item`() = runBlocking {
+        val admin = createAdminUser(username = "uop-orphan")
+        // Scan with no media_item_id → photo lands under the UPC, not a
+        // mediaItemId-keyed slot.
+        val scan = BarcodeScan(
+            upc = "999000111222",
+            lookup_status = LookupStatus.NOT_LOOKED_UP.name,
+            scanned_at = java.time.LocalDateTime.now(),
+        ).apply { save() }
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            val resp = stub.uploadOwnershipPhoto(uploadOwnershipPhotoRequest {
+                scanId = scan.id!!
+                contentType = "image/jpeg"
+                photoData = ByteString.copyFromUtf8("orphan bytes")
+            })
+            val record = OwnershipPhoto.findById(resp.photoId)!!
+            assertEquals(null, record.media_item_id,
+                "orphan path keeps media_item_id null, only upc set")
+            assertEquals("999000111222", record.upc)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `uploadOwnershipPhoto returns NOT_FOUND for unknown scan id`() = runBlocking {
+        val admin = createAdminUser(username = "uop-404")
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            val ex = assertFailsWith<StatusException> {
+                stub.uploadOwnershipPhoto(uploadOwnershipPhotoRequest {
+                    scanId = 999_999
+                    contentType = "image/jpeg"
+                    photoData = ByteString.copyFromUtf8("anything")
+                })
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `deleteOwnershipPhoto removes the in-memory bytes plus the OwnershipPhoto entity`() = runBlocking {
+        val admin = createAdminUser(username = "dop-ok")
+        val item = MediaItem(product_name = "Item",
+            media_format = MediaFormat.BLURAY.name,
+            upc = "012345678905").apply { save() }
+        val scan = BarcodeScan(
+            upc = "012345678905",
+            lookup_status = LookupStatus.FOUND.name,
+            media_item_id = item.id,
+            scanned_at = java.time.LocalDateTime.now(),
+        ).apply { save() }
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            // Upload first so there's something to delete.
+            val photoId = stub.uploadOwnershipPhoto(uploadOwnershipPhotoRequest {
+                scanId = scan.id!!
+                contentType = "image/jpeg"
+                photoData = ByteString.copyFromUtf8("delete me")
+            }).photoId
+            val storedPath = net.stewart.mediamanager.service.FirstPartyImageStore.pathFor(
+                net.stewart.mediamanager.service.FirstPartyImageStore.Category.OWNERSHIP_PHOTOS,
+                photoId,
+                extension = "jpg",
+            )
+            assertTrue(java.nio.file.Files.exists(storedPath))
+
+            stub.deleteOwnershipPhoto(deleteOwnershipPhotoRequest { this.photoId = photoId })
+
+            assertFalse(java.nio.file.Files.exists(storedPath),
+                "FirstPartyImageStore.deleteNewLayout removed the bytes")
+            kotlin.test.assertNull(OwnershipPhoto.findById(photoId),
+                "entity row gone")
         } finally {
             channel.shutdownNow()
         }

@@ -244,6 +244,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.grpc.inprocess)
     testImplementation(libs.grpc.testing)
+    testImplementation(libs.jimfs)
 
     // Security-driven transitive version pins. Each line below fixes a CVE
     // reported by OWASP dependency-check; drop a pin once the root dep that
