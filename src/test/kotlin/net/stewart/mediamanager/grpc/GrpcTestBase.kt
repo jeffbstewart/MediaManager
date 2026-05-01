@@ -129,8 +129,9 @@ open class GrpcTestBase {
         net.stewart.mediamanager.entity.AmazonOrder.deleteAll()
         net.stewart.mediamanager.entity.BarcodeScan.deleteAll()
         net.stewart.mediamanager.entity.MediaItem.deleteAll()
-        EpisodeEntity.deleteAll()
+        // Transcode FKs Episode → must clear transcodes first.
         TranscodeEntity.deleteAll()
+        EpisodeEntity.deleteAll()
         net.stewart.mediamanager.entity.WishListItem.deleteAll()
         net.stewart.mediamanager.entity.DismissedNotification.deleteAll()
         net.stewart.mediamanager.entity.DeviceToken.deleteAll()
