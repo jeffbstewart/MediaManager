@@ -253,11 +253,15 @@ object JwtService {
     private fun enforceFamilyCap(userId: Long) {
         val families = JdbiOrm.jdbi().withHandle<List<String>, Exception> { handle ->
             handle.createQuery(
+                // Tiebreaker on MAX(id) DESC keeps the eviction
+                // deterministic when several families were created within
+                // the same millisecond — the newest family (by insertion
+                // id) wins ties and the oldest gets revoked.
                 """SELECT family_id
                    FROM refresh_token
                    WHERE user_id = :uid AND revoked = FALSE AND expires_at > :now
                    GROUP BY family_id
-                   ORDER BY MAX(created_at) DESC"""
+                   ORDER BY MAX(created_at) DESC, MAX(id) DESC"""
             )
                 .bind("uid", userId)
                 .bind("now", LocalDateTime.now())

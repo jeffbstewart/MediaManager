@@ -102,4 +102,63 @@ class JwtServiceTest {
         assertTrue(eleventhResult is RefreshResult.Success,
             "Newest login should refresh; got $eleventhResult")
     }
+
+    @Test
+    fun `cap eviction is by MAX(created_at) per family — a rotated old family beats a never-rotated newer one`() {
+        // The oldest-by-LOGIN family also rotates last, so its
+        // MAX(created_at) is the newest of all 10 families. The cap
+        // contract says we evict by "most recent token's created_at"
+        // — so this old-by-login but freshly-rotated family must NOT
+        // be evicted; the never-rotated next-oldest must be instead.
+        //
+        // 2 ms sleeps separate every operation so each row gets a
+        // distinct H2 millisecond-precision timestamp.
+
+        // Family A logs in first.
+        val aOriginal = JwtService.createTokenPair(user, "A").refreshToken
+        Thread.sleep(2)
+
+        // Families B..J are 9 fresh logins, all later than A's initial
+        // login but (because we rotate A next) all earlier than A's
+        // current MAX(created_at). Capture B's token specifically — B
+        // is the next-oldest after A and is what we expect to be
+        // evicted under MAX semantics.
+        val bToken = JwtService.createTokenPair(user, "B").refreshToken
+        Thread.sleep(2)
+        val midTokens = (3..10).map { idx ->
+            val t = JwtService.createTokenPair(user, "Device-$idx").refreshToken
+            Thread.sleep(2)
+            t
+        }
+
+        // Rotate A — this inserts a new row into family A with the
+        // latest created_at of any row in the table, bumping A's MAX
+        // above every other family's.
+        val aRotated = (JwtService.refresh(aOriginal) as RefreshResult.Success)
+            .tokenPair.refreshToken
+        Thread.sleep(2)
+
+        // 11th login triggers enforceFamilyCap. By MAX(created_at)
+        // DESC: A (just rotated) > Device-10 > … > Device-3 > B.
+        // drop(9) keeps the first 9 families, evicts B.
+        JwtService.createTokenPair(user, "K")
+
+        val aResult = JwtService.refresh(aRotated)
+        assertTrue(aResult is RefreshResult.Success,
+            "Family A (rotated last) must NOT be evicted under MAX " +
+                "semantics — got $aResult. If this fails with " +
+                "InvalidToken, the cap query is sorting by MIN " +
+                "(login time) instead of MAX (last activity).")
+
+        val bResult = JwtService.refresh(bToken)
+        assertTrue(bResult is RefreshResult.InvalidToken,
+            "Family B (no rotations, oldest by MAX) must be evicted; " +
+                "got $bResult")
+
+        // Spot-check a middle family: Device-5 (one rotation ago in
+        // the timeline) should still be valid.
+        val mid = JwtService.refresh(midTokens[2]) // Device-5
+        assertTrue(mid is RefreshResult.Success,
+            "Mid-stack family Device-5 must still refresh; got $mid")
+    }
 }
