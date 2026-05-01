@@ -55,8 +55,14 @@ class TranscoderAgent(
     /** File size of the file currently being transcoded. */
     private var currentFileSize: Long = 0L
 
-    /** Live FFmpeg process reference for metrics. */
-    @Volatile var currentProcess: Process? = null
+    /**
+     * Live FFmpeg process reference for metrics + the `monitorTranscodeStatus`
+     * stream that needs to know whether a transcode is currently running.
+     * Held as a [StreamingProcess] (internal-typed) so tests can drive
+     * the run via the [Subprocesses.current] fake. The field itself is
+     * internal because [StreamingProcess] is module-scoped.
+     */
+    @Volatile internal var currentProcess: StreamingProcess? = null
 
     /** Pending transcode count for gauge. */
     private val pendingCount = AtomicInteger(0)
@@ -91,7 +97,7 @@ class TranscoderAgent(
         val proc = currentProcess ?: return 0.0
         if (!proc.isAlive) return 0.0
         return try {
-            val pid = proc.pid()
+            val pid = proc.pid
             val statm = File("/proc/$pid/statm").readText().trim().split(" ")
             if (statm.size >= 2) statm[1].toLong() * 4096.0 else 0.0
         } catch (_: Exception) {
@@ -304,11 +310,14 @@ class TranscoderAgent(
         fun probeAudioChannels(ffmpegPath: String, file: File): Int? {
             val log = LoggerFactory.getLogger(TranscoderAgent::class.java)
             return try {
-                val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
-                    .redirectErrorStream(true)
-                    .start()
-                val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-                process.waitFor()
+                // One-shot via Subprocesses.current — `ffmpeg -i <file>` exits
+                // quickly after writing its info to stderr (merged into stdout
+                // here via redirectErrorStream).
+                val result = Subprocesses.current.run(
+                    command = listOf(ffmpegPath, "-i", file.absolutePath),
+                    redirectErrorStream = true,
+                )
+                val output = sanitizeFfmpegOutput(result.stdout)
 
                 // Match audio stream line, e.g.:
                 // Stream #0:1(eng): Audio: aac (LC), 48000 Hz, 5.1, fltp, 394 kb/s
@@ -338,11 +347,11 @@ class TranscoderAgent(
         fun probeStreamCount(ffmpegPath: String, file: File): Int {
             val log = LoggerFactory.getLogger(TranscoderAgent::class.java)
             return try {
-                val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
-                    .redirectErrorStream(true)
-                    .start()
-                val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-                process.waitFor()
+                val result = Subprocesses.current.run(
+                    command = listOf(ffmpegPath, "-i", file.absolutePath),
+                    redirectErrorStream = true,
+                )
+                val output = sanitizeFfmpegOutput(result.stdout)
                 Regex("""Stream #\d+:\d+""").findAll(output).count()
             } catch (e: Exception) {
                 log.warn("Failed to probe stream count: {}", e.message)
@@ -524,11 +533,11 @@ class TranscoderAgent(
             )
 
             log.info("Running: {}", command.joinToString(" "))
-            val process = ProcessBuilder(command).redirectErrorStream(true).start()
+            val process = Subprocesses.current.start(command, redirectErrorStream = true)
             currentProcess = process
 
             val timeRegex = Regex("""time=(\d+):(\d+):(\d+)\.(\d+)""")
-            val reader = process.inputStream.bufferedReader()
+            val reader = process.stdout.bufferedReader()
             val outputBuilder = StringBuilder()
 
             reader.forEachLine { rawLine ->

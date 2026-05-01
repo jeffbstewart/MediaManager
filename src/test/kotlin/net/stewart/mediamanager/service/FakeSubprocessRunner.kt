@@ -16,10 +16,14 @@ import java.time.Duration
  */
 internal class FakeSubprocessRunner : SubprocessRunner {
 
-    /** Every command observed, in order. Inspect to assert argv shape. */
+    /** Every command observed (one-shot run + streaming start), in order. */
     val invocations: MutableList<List<String>> = mutableListOf()
 
+    /** Every streaming process the fake handed back, in start order. */
+    val streamingInvocations: MutableList<FakeStreamingProcess> = mutableListOf()
+
     private val rules = mutableListOf<Rule>()
+    private val startRules = mutableListOf<StartRule>()
 
     /**
      * Register a response. [matcher] receives the full argv; the first
@@ -63,6 +67,53 @@ internal class FakeSubprocessRunner : SubprocessRunner {
         )
     }
 
+    /**
+     * Register a streaming-start response. Tests pass a [build] lambda
+     * that returns a [FakeStreamingProcess] (each invocation can
+     * customize, e.g. different stdout per call). The fake records the
+     * argv and the produced process before handing it to the caller.
+     *
+     * Side effects (writing files, etc.) belong in [build] — it runs
+     * before the streaming process is exposed to production code.
+     */
+    fun onStart(
+        matcher: (List<String>) -> Boolean,
+        build: (List<String>) -> FakeStreamingProcess = { FakeStreamingProcess() },
+    ) {
+        startRules += StartRule(matcher, build)
+    }
+
+    /** Convenience: match streaming starts by binary basename, like [onBinary]. */
+    fun onStartBinary(
+        name: String,
+        build: (List<String>) -> FakeStreamingProcess = { FakeStreamingProcess() },
+    ) {
+        onStart(
+            matcher = { argv ->
+                val first = argv.firstOrNull() ?: return@onStart false
+                first == name || first.endsWith("/$name") || first.endsWith("\\$name")
+            },
+            build = build,
+        )
+    }
+
+    override fun start(
+        command: List<String>,
+        redirectErrorStream: Boolean,
+        workingDir: java.nio.file.Path?,
+    ): StreamingProcess {
+        invocations += command
+        val rule = startRules.firstOrNull { it.matcher(command) }
+            ?: error(
+                "FakeSubprocessRunner has no streaming rule for: " +
+                    command.joinToString(" ") +
+                    "\nAdd one with onStart(...) / onStartBinary(...) before the call."
+            )
+        val proc = rule.build(command)
+        streamingInvocations += proc
+        return proc
+    }
+
     override fun run(
         command: List<String>,
         timeout: Duration,
@@ -102,5 +153,10 @@ internal class FakeSubprocessRunner : SubprocessRunner {
         val stderr: String,
         val timedOut: Boolean,
         val sideEffect: ((List<String>) -> Unit)?,
+    )
+
+    private class StartRule(
+        val matcher: (List<String>) -> Boolean,
+        val build: (List<String>) -> FakeStreamingProcess,
     )
 }

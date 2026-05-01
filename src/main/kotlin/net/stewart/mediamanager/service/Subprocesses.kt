@@ -22,6 +22,85 @@ internal interface SubprocessRunner {
         timeout: Duration = Duration.ofSeconds(30),
         redirectErrorStream: Boolean = false,
     ): SubprocessResult
+
+    /**
+     * Spawn a long-lived subprocess and hand back a [StreamingProcess]
+     * the caller drives via line-by-line reads on [StreamingProcess.stdout]
+     * (or the merged stdout when `redirectErrorStream` is true), polling
+     * [StreamingProcess.isAlive], waiting via [StreamingProcess.waitFor],
+     * and shutting down via [StreamingProcess.destroyForcibly].
+     *
+     * This is the FFmpeg-transcode / go2rtc-daemon / FFmpeg-HLS shape:
+     * the caller wants a handle that's *running*, not a finished result.
+     * For one-shot calls (run-and-collect), prefer [run].
+     */
+    fun start(
+        command: List<String>,
+        redirectErrorStream: Boolean = false,
+        workingDir: java.nio.file.Path? = null,
+    ): StreamingProcess
+}
+
+/**
+ * Mirror of [java.lang.Process] under our control, so the [Subprocesses.current]
+ * fake can hand callers a fully scriptable handle without ever forking
+ * a real OS process.
+ *
+ * The shape mirrors `Process` deliberately: production migrations from
+ * `ProcessBuilder.start()` should be near-mechanical, and the contract
+ * is small enough that the fake can implement it without surprises.
+ */
+internal interface StreamingProcess {
+    /** True until the process has exited or been destroyed. */
+    val isAlive: Boolean
+
+    /**
+     * OS process id. The JDK runner returns the real pid; the fake
+     * returns a synthetic value that's stable for the lifetime of the
+     * fake instance (so tests can assert pid-based bookkeeping).
+     */
+    val pid: Long
+
+    /**
+     * Stdout of the spawned process. When the process was started with
+     * `redirectErrorStream = true` this carries the merged output
+     * (stdout + stderr), matching what `Process.getInputStream()` does.
+     */
+    val stdout: java.io.InputStream
+
+    /**
+     * Stderr of the spawned process. Always present on the JDK side, but
+     * carries no useful bytes when `redirectErrorStream = true` (callers
+     * should consume [stdout] in that case). The fake exposes it the
+     * same way for parity.
+     */
+    val stderr: java.io.InputStream
+
+    /**
+     * Stdin of the spawned process. Production callers typically close
+     * it immediately to keep ffmpeg / go2rtc from blocking on a parent
+     * that never writes; tests don't usually care.
+     */
+    val stdin: java.io.OutputStream
+
+    /** Block until the process exits and return its exit code. */
+    fun waitFor(): Int
+
+    /**
+     * Block up to [timeout] for the process to exit. Returns true when
+     * exited within the window; false on timeout. Mirrors
+     * [Process.waitFor] (long, TimeUnit).
+     */
+    fun waitFor(timeout: Duration): Boolean
+
+    /** The exit code. Throws [IllegalThreadStateException] while alive. */
+    fun exitValue(): Int
+
+    /** Polite request to terminate. */
+    fun destroy()
+
+    /** Force-kill the process. Used by shutdown paths. */
+    fun destroyForcibly()
 }
 
 /**
@@ -59,8 +138,36 @@ internal object Subprocesses {
  * captures stdout (and optionally stderr separately), waits for exit
  * up to [timeout], and force-kills on timeout.
  */
+/**
+ * Production [StreamingProcess] — a thin pass-through to [java.lang.Process].
+ * Holds no state of its own beyond the wrapped process.
+ */
+internal class JdkStreamingProcess(private val process: Process) : StreamingProcess {
+    override val isAlive: Boolean get() = process.isAlive
+    override val pid: Long get() = process.pid()
+    override val stdout: java.io.InputStream get() = process.inputStream
+    override val stderr: java.io.InputStream get() = process.errorStream
+    override val stdin: java.io.OutputStream get() = process.outputStream
+    override fun waitFor(): Int = process.waitFor()
+    override fun waitFor(timeout: Duration): Boolean =
+        process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)
+    override fun exitValue(): Int = process.exitValue()
+    override fun destroy() { process.destroy() }
+    override fun destroyForcibly() { process.destroyForcibly() }
+}
+
 internal object JdkSubprocessRunner : SubprocessRunner {
     private val log = LoggerFactory.getLogger(JdkSubprocessRunner::class.java)
+
+    override fun start(
+        command: List<String>,
+        redirectErrorStream: Boolean,
+        workingDir: java.nio.file.Path?,
+    ): StreamingProcess {
+        val pb = ProcessBuilder(command).redirectErrorStream(redirectErrorStream)
+        if (workingDir != null) pb.directory(workingDir.toFile())
+        return JdkStreamingProcess(pb.start())
+    }
 
     override fun run(
         command: List<String>,

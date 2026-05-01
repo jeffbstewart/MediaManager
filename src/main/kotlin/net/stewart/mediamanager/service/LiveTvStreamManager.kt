@@ -15,11 +15,16 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Represents a single active live TV HLS stream backed by an FFmpeg process.
+ *
+ * Marked `internal` because the constructor exposes [StreamingProcess],
+ * which is the test-only seam for the FFmpeg subprocess. The class
+ * stays accessible to the HTTP servlet that consumes streams in the
+ * same module; nothing outside the module ever instantiates one.
  */
-class LiveTvStream(
+internal class LiveTvStream(
     val channelId: Long,
     val userId: Long,
-    private val process: Process,
+    private val process: StreamingProcess,
     val outputDir: File,
     private val stderrThread: Thread
 ) {
@@ -100,7 +105,7 @@ object LiveTvStreamManager {
      * Gets or creates a stream for the given channel. Enforces concurrency limits.
      * Returns the stream, or null with an error reason.
      */
-    fun getOrCreateStream(channel: LiveTvChannel, userId: Long): Pair<LiveTvStream?, String?> {
+    internal fun getOrCreateStream(channel: LiveTvChannel, userId: Long): Pair<LiveTvStream?, String?> {
         val chId = channel.id!!
 
         // If stream already exists and is healthy, just touch and return it
@@ -168,18 +173,19 @@ object LiveTvStreamManager {
 
         return try {
             log.info("Starting live TV stream for channel {} ({}) guide={}, cmd: {}", chId, channel.guide_name, channel.guide_number, cmd.joinToString(" "))
-            val process = ProcessBuilder(cmd)
-                .redirectErrorStream(false)
-                .directory(outputDir)
-                .start()
+            val process = Subprocesses.current.start(
+                command = cmd,
+                redirectErrorStream = false,
+                workingDir = outputDir.toPath(),
+            )
 
             // Consume stdin to prevent blocking
-            process.outputStream.close()
+            process.stdin.close()
 
             // Stderr reader thread (filtered through sanitizeFfmpegOutput)
             val stderrThread = Thread({
                 try {
-                    process.errorStream.bufferedReader().forEachLine { line ->
+                    process.stderr.bufferedReader().forEachLine { line ->
                         val sanitized = sanitizeFfmpegOutput(line)
                         if (sanitized.isNotBlank()) {
                             log.info("FFmpeg [ch-{}]: {}", chId, sanitized)
@@ -201,7 +207,7 @@ object LiveTvStreamManager {
         }
     }
 
-    fun getStream(channelId: Long): LiveTvStream? = streams[channelId]
+    internal fun getStream(channelId: Long): LiveTvStream? = streams[channelId]
 
     fun activeStreamCount(): Int = streams.values.count { it.isHealthy() }
 

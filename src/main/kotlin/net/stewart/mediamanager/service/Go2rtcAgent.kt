@@ -26,7 +26,8 @@ class Go2rtcAgent(
     private val log = LoggerFactory.getLogger(Go2rtcAgent::class.java)
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
-    @Volatile var currentProcess: Process? = null
+    /** Internal because [StreamingProcess] is internal-scoped. */
+    @Volatile internal var currentProcess: StreamingProcess? = null
     @Volatile var apiPort: Int = 1984
 
     companion object {
@@ -137,15 +138,13 @@ class Go2rtcAgent(
             val command = listOf(go2rtcPath, "-c", configFile.absolutePath)
 
             log.info("Starting go2rtc: {} ({} cameras)", go2rtcPath, cameras.size)
-            val process = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
+            val process = Subprocesses.current.start(command, redirectErrorStream = true)
             currentProcess = process
 
             // Read stdout/stderr in a separate thread, filtering credentials
             val outputThread = Thread({
                 try {
-                    BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
+                    BufferedReader(InputStreamReader(process.stdout)).use { reader ->
                         reader.forEachLine { line ->
                             val redacted = UriCredentialRedactor.redactAll(line)
                             log.info("go2rtc: {}", redacted)
