@@ -17,6 +17,7 @@ import org.junit.Before
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import java.time.LocalDate
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -296,6 +297,35 @@ class AdminGrpcServiceMetadataTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `updateArtist maps every ArtistType proto value to the matching entity`() = runBlocking {
+        val admin = createAdminUser(username = "art-update-types")
+        val a = Artist(name = "Type Walker", sort_name = "Type Walker",
+            artist_type = ArtistTypeEntity.PERSON.name).apply { save() }
+
+        val cases = listOf(
+            ArtistType.ARTIST_TYPE_GROUP to ArtistTypeEntity.GROUP,
+            ArtistType.ARTIST_TYPE_ORCHESTRA to ArtistTypeEntity.ORCHESTRA,
+            ArtistType.ARTIST_TYPE_CHOIR to ArtistTypeEntity.CHOIR,
+            ArtistType.ARTIST_TYPE_OTHER to ArtistTypeEntity.OTHER,
+        )
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            for ((proto, entity) in cases) {
+                stub.updateArtist(updateArtistRequest {
+                    artistId = a.id!!
+                    artistType = proto
+                })
+                assertEquals(entity.name,
+                    Artist.findById(a.id!!)!!.artist_type,
+                    "$proto must map to entity $entity")
+            }
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- deleteArtist ----------------------
 
     @Test
@@ -386,6 +416,86 @@ class AdminGrpcServiceMetadataTest : GrpcTestBase() {
                 })
             }
             assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `mergeArtists returns NOT_FOUND when keep or drop is missing`() = runBlocking {
+        val admin = createAdminUser(username = "art-merge-404")
+        val real = Artist(name = "Real", sort_name = "Real",
+            artist_type = ArtistTypeEntity.PERSON.name).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val noKeep = assertFailsWith<StatusException> {
+                stub.mergeArtists(mergeArtistsRequest {
+                    keepArtistId = 999_999
+                    dropArtistId = real.id!!
+                })
+            }
+            assertEquals(Status.Code.NOT_FOUND, noKeep.status.code)
+
+            val noDrop = assertFailsWith<StatusException> {
+                stub.mergeArtists(mergeArtistsRequest {
+                    keepArtistId = real.id!!
+                    dropArtistId = 999_999
+                })
+            }
+            assertEquals(Status.Code.NOT_FOUND, noDrop.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `mergeArtists deletes redundant TitleArtist links and re-points memberships`() = runBlocking {
+        val admin = createAdminUser(username = "art-merge-membership")
+        val keep = Artist(name = "Keeper", sort_name = "Keeper",
+            artist_type = ArtistTypeEntity.GROUP.name).apply { save() }
+        val drop = Artist(name = "Dropper", sort_name = "Dropper",
+            artist_type = ArtistTypeEntity.GROUP.name).apply { save() }
+        // Album already credits BOTH keep and drop — drop's row must be
+        // deleted (not re-pointed) because keep already covers that title.
+        val sharedAlbum = createTitle(name = "Shared",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        TitleArtist(title_id = sharedAlbum.id!!, artist_id = keep.id!!,
+            artist_order = 0).save()
+        TitleArtist(title_id = sharedAlbum.id!!, artist_id = drop.id!!,
+            artist_order = 1).save()
+
+        // Membership where drop appears as a group → must re-point to keep.
+        val member = Artist(name = "Member", sort_name = "Member",
+            artist_type = ArtistTypeEntity.PERSON.name).apply { save() }
+        val rePointed = ArtistMembership(
+            group_artist_id = drop.id!!, member_artist_id = member.id!!,
+            begin_date = LocalDate.of(2010, 1, 1)).apply { save() }
+        // Membership where drop is BOTH sides → after rewrite collapses
+        // to keep↔keep, which is a self-loop and gets deleted.
+        val selfLoop = ArtistMembership(
+            group_artist_id = drop.id!!, member_artist_id = drop.id!!,
+            begin_date = LocalDate.of(2011, 1, 1)).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.mergeArtists(mergeArtistsRequest {
+                keepArtistId = keep.id!!
+                dropArtistId = drop.id!!
+            })
+            assertNull(Artist.findById(drop.id!!))
+            // Only one TitleArtist row remains for the shared album, on keep.
+            val remainingLinks = TitleArtist.findAll()
+                .filter { it.title_id == sharedAlbum.id }
+            assertEquals(1, remainingLinks.size)
+            assertEquals(keep.id!!, remainingLinks.single().artist_id)
+            // Re-pointed membership now references keep on the group side.
+            val refreshed = ArtistMembership.findById(rePointed.id!!)!!
+            assertEquals(keep.id!!, refreshed.group_artist_id)
+            // Self-loop dropped.
+            assertNull(ArtistMembership.findById(selfLoop.id!!))
         } finally {
             authed.shutdownNow()
         }

@@ -10,10 +10,16 @@ import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.stub.MetadataUtils
 import kotlinx.coroutines.runBlocking
 import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.entity.Artist
+import net.stewart.mediamanager.entity.ArtistType as ArtistTypeEntity
+import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.EnrichmentStatus as EnrichmentStatusEntity
 import net.stewart.mediamanager.entity.MediaFormat
 import net.stewart.mediamanager.entity.MediaItem
 import net.stewart.mediamanager.entity.MediaType as MediaTypeEntity
 import net.stewart.mediamanager.entity.Title
+import net.stewart.mediamanager.entity.TitleArtist
+import net.stewart.mediamanager.entity.TitleAuthor
 import net.stewart.mediamanager.entity.Track
 import net.stewart.mediamanager.entity.UnmatchedAudio
 import net.stewart.mediamanager.entity.UnmatchedAudioStatus
@@ -69,6 +75,10 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
             val admin = AdminGrpcService(
                 openLibrary = fakeOl,
                 unmatchedAudioMb = fakeMb,
+                // Synchronous executor — reEnrichWithAgent's lambda runs on
+                // the calling thread before the RPC returns, so tests can
+                // assert the side effects without polling.
+                reEnrichExecutor = java.util.concurrent.Executor { it.run() },
             )
             fakeServer = InProcessServerBuilder.forName(FAKES_SERVER_NAME)
                 .directExecutor()
@@ -551,6 +561,118 @@ class AdminGrpcServiceFakesTest : GrpcTestBase() {
                 )
             }
             assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    // ---------------------- reEnrichWithAgent ----------------------
+
+    /**
+     * The synchronous executor wired up in [setupFakesServer] makes
+     * reEnrichWithAgent's body run on the calling thread, so the side
+     * effects (status flip, agent dispatch loops) are observable
+     * immediately after the RPC returns.
+     */
+
+    @Test
+    fun `reEnrichWithAgent flips status to PENDING for TMDB OL and MB agent kinds`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-status-reset")
+        val cases = listOf(
+            EnrichmentAgent.ENRICHMENT_AGENT_TMDB,
+            EnrichmentAgent.ENRICHMENT_AGENT_OPENLIBRARY,
+            EnrichmentAgent.ENRICHMENT_AGENT_MUSICBRAINZ,
+        )
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            for (agent in cases) {
+                val title = createTitle(name = "T-${agent.name}")
+                    .apply {
+                        enrichment_status = EnrichmentStatusEntity.ENRICHED.name
+                        save()
+                    }
+                stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                    titleId = title.id!!
+                    this.agent = agent
+                })
+                val refreshed = Title.findById(title.id!!)!!
+                assertEquals(EnrichmentStatusEntity.PENDING.name,
+                    refreshed.enrichment_status,
+                    "agent $agent must reset enrichment_status")
+            }
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reEnrichWithAgent AUTHOR_HEADSHOT walks linked authors with no-op when none are linked`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-author")
+        val title = createTitle(name = "Bookless",
+            mediaType = MediaTypeEntity.BOOK.name)
+        // No TitleAuthor links → forEach loop runs over an empty list;
+        // the AuthorEnrichmentAgent constructor builds with no I/O.
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                titleId = title.id!!
+                agent = EnrichmentAgent.ENRICHMENT_AGENT_AUTHOR_HEADSHOT
+            })
+            // Status not touched on this path.
+            val refreshed = Title.findById(title.id!!)!!
+            assertEquals(EnrichmentStatusEntity.ENRICHED.name,
+                refreshed.enrichment_status,
+                "AUTHOR_HEADSHOT path must not flip enrichment_status")
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reEnrichWithAgent ARTIST_HEADSHOT and ARTIST_PERSONNEL walk linked artists`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-artist")
+        val title = createTitle(name = "Artistless",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        // No TitleArtist links → both branches share the same body and
+        // the forEach loop over an empty list returns without HTTP I/O.
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            for (agent in listOf(
+                EnrichmentAgent.ENRICHMENT_AGENT_ARTIST_HEADSHOT,
+                EnrichmentAgent.ENRICHMENT_AGENT_ARTIST_PERSONNEL,
+            )) {
+                stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                    titleId = title.id!!
+                    this.agent = agent
+                })
+            }
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reEnrichWithAgent UNKNOWN agent falls through to the warn log without throwing`() = runBlocking {
+        val admin = createAdminUser(username = "rewa-unknown")
+        val title = createTitle(name = "WhoKnows")
+
+        val channel = fakeAdminChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(channel)
+            stub.reEnrichWithAgent(reEnrichWithAgentRequest {
+                titleId = title.id!!
+                agent = EnrichmentAgent.ENRICHMENT_AGENT_UNKNOWN
+            })
+            // No-op: status preserved.
+            val refreshed = Title.findById(title.id!!)!!
+            assertEquals(EnrichmentStatusEntity.ENRICHED.name,
+                refreshed.enrichment_status)
         } finally {
             channel.shutdownNow()
         }

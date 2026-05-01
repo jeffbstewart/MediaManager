@@ -10,6 +10,7 @@ import org.junit.Before
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -229,6 +230,54 @@ class AdminGrpcServiceUnmatchedTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `linkUnmatched success path returns linked=true and the title name`() = runBlocking {
+        val admin = createAdminUser(username = "admin-um-link-ok")
+        val title = createTitle(name = "Linkable Title")
+        val df = DiscoveredFile(file_path = "/movies/linkable.mkv",
+            file_name = "linkable.mkv",
+            directory = "/movies",
+            match_status = DiscoveredFileStatus.UNMATCHED.name,
+            parsed_title = "Linkable Title").apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.linkUnmatched(linkUnmatchedRequest {
+                unmatchedId = df.id!!
+                titleId = title.id!!
+            })
+            assertTrue(resp.linked, "DiscoveredFileLinkService should land a transcode")
+            assertEquals("Linkable Title", resp.titleName)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `acceptUnmatched success path uses fuzzy match to land the link`() = runBlocking {
+        val admin = createAdminUser(username = "admin-um-accept-ok")
+        // FuzzyMatchService is loose enough that the parsed_title only needs
+        // to be similar to a real Title's name — a reused real title's name
+        // ensures the suggester ranks it first.
+        val title = createTitle(name = "Inception")
+        val df = DiscoveredFile(file_path = "/movies/inception.mkv",
+            file_name = "inception.mkv",
+            directory = "/movies",
+            match_status = DiscoveredFileStatus.UNMATCHED.name,
+            parsed_title = "Inception").apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.acceptUnmatched(unmatchedIdRequest { unmatchedId = df.id!! })
+            assertTrue(resp.linked)
+            assertEquals(title.name, resp.titleName)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- updatePurchaseInfo (only if scan exists) ----------------------
 
     @Test
@@ -330,10 +379,66 @@ class AdminGrpcServiceUnmatchedTest : GrpcTestBase() {
                 stub.assignTmdb(assignTmdbRequest {
                     titleId = 999_999
                     tmdbId = 12345
-                    mediaType = MediaType.MEDIA_TYPE_MOVIE
+                    mediaType = net.stewart.mediamanager.grpc.MediaType.MEDIA_TYPE_MOVIE
                 })
             }
             assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `assignTmdb Assigned writes tmdb_id and returns merged=false`() = runBlocking {
+        val admin = createAdminUser(username = "admin-assign-tmdb-ok")
+        // Bare title with no tmdb_id, no duplicate to merge into.
+        val title = createTitle(name = "Untagged",
+            mediaType = net.stewart.mediamanager.entity.MediaType.MOVIE.name,
+            tmdbId = null)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.assignTmdb(assignTmdbRequest {
+                titleId = title.id!!
+                tmdbId = 70_007
+                mediaType = net.stewart.mediamanager.grpc.MediaType.MEDIA_TYPE_TV
+            })
+            assertFalse(resp.merged)
+            val refreshed = net.stewart.mediamanager.entity.Title.findById(title.id!!)!!
+            assertEquals(70_007, refreshed.tmdb_id)
+            // mediaType=TV maps to "TV".
+            assertEquals(net.stewart.mediamanager.entity.MediaType.TV.name,
+                refreshed.media_type)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `assignTmdb Merged folds the source title into the existing duplicate`() = runBlocking {
+        val admin = createAdminUser(username = "admin-assign-tmdb-merge")
+        // The pre-existing title that already owns this tmdb_id.
+        val existing = createTitle(name = "Original",
+            mediaType = net.stewart.mediamanager.entity.MediaType.MOVIE.name,
+            tmdbId = 808)
+        // Source title that's about to be merged into existing.
+        val source = createTitle(name = "Duplicate",
+            mediaType = net.stewart.mediamanager.entity.MediaType.MOVIE.name,
+            tmdbId = null)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.assignTmdb(assignTmdbRequest {
+                titleId = source.id!!
+                tmdbId = 808
+                mediaType = net.stewart.mediamanager.grpc.MediaType.MEDIA_TYPE_MOVIE
+            })
+            assertTrue(resp.merged, "duplicate tmdb_id triggers a merge")
+            assertEquals(existing.name, resp.mergedTitleName)
+            // Source title is gone.
+            assertNull(net.stewart.mediamanager.entity.Title.findById(source.id!!))
         } finally {
             authed.shutdownNow()
         }

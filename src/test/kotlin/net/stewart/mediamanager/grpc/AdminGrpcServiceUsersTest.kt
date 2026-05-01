@@ -393,4 +393,73 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             authed.shutdownNow()
         }
     }
+
+    // ---------------------- updateUserRatingCeiling ----------------------
+
+    @Test
+    fun `updateUserRatingCeiling maps every RatingLevel to the right entity ceiling`() = runBlocking {
+        val admin = createAdminUser(username = "urc-map")
+        val viewer = createViewerUser(username = "urc-target")
+        val cases = listOf(
+            RatingLevel.RATING_LEVEL_CHILDREN to 2,
+            RatingLevel.RATING_LEVEL_GENERAL to 3,
+            RatingLevel.RATING_LEVEL_TEEN to 4,
+            RatingLevel.RATING_LEVEL_MATURE to 5,
+            RatingLevel.RATING_LEVEL_ADULT to 6,
+        )
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            for ((proto, expected) in cases) {
+                stub.updateUserRatingCeiling(updateUserRatingCeilingRequest {
+                    userId = viewer.id!!
+                    ceiling = proto
+                })
+                assertEquals(expected,
+                    AppUser.findById(viewer.id!!)!!.rating_ceiling,
+                    "RatingLevel $proto must map to entity ceiling $expected")
+            }
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `updateUserRatingCeiling clears rating_ceiling when no ceiling is sent`() = runBlocking {
+        val admin = createAdminUser(username = "urc-clear")
+        val viewer = createViewerUser(username = "urc-clear-target").apply {
+            rating_ceiling = 4
+            save()
+        }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.updateUserRatingCeiling(updateUserRatingCeilingRequest {
+                userId = viewer.id!!
+                // No `ceiling` set → unrestricted.
+            })
+            assertNull(AppUser.findById(viewer.id!!)!!.rating_ceiling)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `updateUserRatingCeiling returns NOT_FOUND for unknown user id`() = runBlocking {
+        val admin = createAdminUser(username = "urc-404")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.updateUserRatingCeiling(updateUserRatingCeilingRequest {
+                    userId = 999_999
+                    ceiling = RatingLevel.RATING_LEVEL_TEEN
+                })
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
 }

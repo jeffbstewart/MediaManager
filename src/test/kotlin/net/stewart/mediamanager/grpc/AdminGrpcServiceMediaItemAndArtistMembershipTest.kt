@@ -494,16 +494,67 @@ class AdminGrpcServiceMediaItemAndArtistMembershipTest : GrpcTestBase() {
             }
             assertEquals(Status.Code.INVALID_ARGUMENT, badEx.status.code)
 
+            val rgMbid = java.util.UUID.randomUUID().toString()
             stub.assignExternalIdentifier(assignExternalIdentifierRequest {
                 titleId = title.id!!
                 kind = ExternalIdentifierKind
                     .EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE_GROUP
-                value = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                value = rgMbid
             })
             val refreshed = Title.findById(title.id!!)!!
-            assertEquals("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                refreshed.musicbrainz_release_group_id)
+            assertEquals(rgMbid, refreshed.musicbrainz_release_group_id)
             assertEquals(MediaTypeEntity.ALBUM.name, refreshed.media_type)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `assignExternalIdentifier success path sets musicbrainz_release_id for MUSICBRAINZ_RELEASE`() = runBlocking {
+        val admin = createAdminUser(username = "aei-mb-release")
+        val title = createTitle(name = "PressingTitle")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val badEx = assertFailsWith<StatusException> {
+                stub.assignExternalIdentifier(assignExternalIdentifierRequest {
+                    titleId = title.id!!
+                    kind = ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE
+                    value = "obviously-not-an-mbid"
+                })
+            }
+            assertEquals(Status.Code.INVALID_ARGUMENT, badEx.status.code)
+
+            val releaseMbid = java.util.UUID.randomUUID().toString()
+            stub.assignExternalIdentifier(assignExternalIdentifierRequest {
+                titleId = title.id!!
+                kind = ExternalIdentifierKind.EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE
+                value = releaseMbid
+            })
+            val refreshed = Title.findById(title.id!!)!!
+            assertEquals(releaseMbid, refreshed.musicbrainz_release_id)
+            assertEquals(MediaTypeEntity.ALBUM.name, refreshed.media_type)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `assignExternalIdentifier rejects EXTERNAL_IDENTIFIER_KIND_UNKNOWN with INVALID_ARGUMENT`() = runBlocking {
+        val admin = createAdminUser(username = "aei-unknown-kind")
+        val title = createTitle(name = "Unknown Kind")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.assignExternalIdentifier(assignExternalIdentifierRequest {
+                    titleId = title.id!!
+                    kind = ExternalIdentifierKind
+                        .EXTERNAL_IDENTIFIER_KIND_UNKNOWN
+                    value = "anything"
+                })
+            }
+            assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
         } finally {
             authed.shutdownNow()
         }

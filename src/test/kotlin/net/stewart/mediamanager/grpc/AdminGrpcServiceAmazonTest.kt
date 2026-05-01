@@ -324,4 +324,57 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
             authed.shutdownNow()
         }
     }
+
+    @Test
+    fun `importAmazonOrders parses a well-formed CSV and inserts AmazonOrder rows`() = runBlocking {
+        val admin = createAdminUser(username = "amz-import-ok")
+        // Minimal CSV with the canonical Amazon export columns
+        // AmazonImportService.parseCsv expects.
+        val csv = listOf(
+            "Order ID,Order Date,ASIN/ISBN,Product Name,Quantity,Item Total,Order Status",
+            "111-2222222-3333333,2024-06-15,B0ABC12345,The Imported Movie,1,9.99,Closed",
+            "111-2222222-4444444,2024-06-16,B0DEF67890,Another Imported Item,2,19.98,Closed",
+        ).joinToString("\n")
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.importAmazonOrders(importAmazonOrdersRequest {
+                filename = "good.csv"
+                csvData = ByteString.copyFromUtf8(csv)
+            })
+            assertEquals(2, resp.imported)
+            assertEquals(2, AmazonOrder.findAll().size)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `importAmazonOrders extracts the CSV from a zipped export`() = runBlocking {
+        val admin = createAdminUser(username = "amz-import-zip")
+        val csv = listOf(
+            "Order ID,Order Date,ASIN/ISBN,Product Name,Quantity,Item Total,Order Status",
+            "112-3333333-4444444,2024-07-01,B0ZIP00001,Zipped Movie,1,12.34,Closed",
+        ).joinToString("\n")
+        val zipped = java.io.ByteArrayOutputStream().also { baos ->
+            java.util.zip.ZipOutputStream(baos).use { zip ->
+                zip.putNextEntry(java.util.zip.ZipEntry("retail.OrderHistory.1.csv"))
+                zip.write(csv.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.importAmazonOrders(importAmazonOrdersRequest {
+                filename = "amazon-export.zip"
+                csvData = ByteString.copyFrom(zipped)
+            })
+            assertEquals(1, resp.imported)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
 }

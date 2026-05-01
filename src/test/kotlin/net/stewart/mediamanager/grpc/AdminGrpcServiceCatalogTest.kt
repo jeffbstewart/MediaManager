@@ -272,6 +272,39 @@ class AdminGrpcServiceCatalogTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `listUnmatchedFiles attaches a fuzzy-matched suggestion when one exists`() = runBlocking {
+        val admin = createAdminUser(username = "admin-unmatched-suggest")
+        val title = createTitle(name = "Inception")
+        DiscoveredFile(file_path = "/movies/inception.mkv",
+            file_name = "inception.mkv", directory = "/movies",
+            match_status = DiscoveredFileStatus.UNMATCHED.name,
+            parsed_title = "Inception").apply { save() }
+        // No parsed_title → suggestion stays empty (skip-the-fuzzy branch).
+        DiscoveredFile(file_path = "/movies/blank.mkv",
+            file_name = "blank.mkv", directory = "/movies",
+            match_status = DiscoveredFileStatus.UNMATCHED.name,
+            parsed_title = null).apply { save() }
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.listUnmatchedFiles(Empty.getDefaultInstance())
+            assertEquals(2, resp.unmatchedCount)
+            val withSuggestion = resp.unmatchedList
+                .single { it.filePath == "/movies/inception.mkv" }
+            assertEquals("Inception", withSuggestion.suggestedTitle)
+            assertEquals(title.id!!, withSuggestion.suggestedTitleId)
+            assertTrue(withSuggestion.matchScore > 0.0)
+            // The blank-parsed-title row stays without a suggestion.
+            val withoutSuggestion = resp.unmatchedList
+                .single { it.filePath == "/movies/blank.mkv" }
+            assertEquals("", withoutSuggestion.suggestedTitle)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- listRipBacklog ----------------------
 
     @Test

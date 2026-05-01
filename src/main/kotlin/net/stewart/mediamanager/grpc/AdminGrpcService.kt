@@ -85,6 +85,16 @@ import java.time.ZoneOffset
 class AdminGrpcService(
     private val openLibrary: OpenLibraryService = OpenLibraryHttpService(),
     private val unmatchedAudioMb: MusicBrainzService = net.stewart.mediamanager.service.MusicBrainzHttpService(),
+    /**
+     * Where the fire-and-forget reEnrichWithAgent body runs. Production
+     * uses a daemon single-thread executor so the RPC returns instantly;
+     * tests pass `Runnable::run` to make the dispatch synchronous and
+     * observable.
+     */
+    private val reEnrichExecutor: java.util.concurrent.Executor =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "re-enrich-dispatch").apply { isDaemon = true }
+        },
 ) : AdminServiceGrpcKt.AdminServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(AdminGrpcService::class.java)
@@ -2684,7 +2694,7 @@ class AdminGrpcService(
             ?: throw StatusException(Status.NOT_FOUND)
         // Fire-and-forget — agents log their own failures.
         val agentName = request.agent.name.removePrefix("ENRICHMENT_AGENT_")
-        Thread({
+        reEnrichExecutor.execute {
             try {
                 when (request.agent) {
                     EnrichmentAgent.ENRICHMENT_AGENT_TMDB,
@@ -2724,9 +2734,6 @@ class AdminGrpcService(
             } catch (e: Exception) {
                 log.warn("ReEnrichWithAgent {} for title {} failed: {}", agentName, title.id, e.message)
             }
-        }, "re-enrich-${agentName.lowercase()}-${title.id}").apply {
-            isDaemon = true
-            start()
         }
         return Empty.getDefaultInstance()
     }
