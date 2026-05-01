@@ -642,5 +642,80 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
             authed.shutdownNow()
         }
     }
+
+    // ---------------------- rescanAlbum ----------------------
+
+    @Test
+    fun `rescanAlbum requires admin — viewer gets PERMISSION_DENIED`() = runBlocking {
+        val viewer = createViewerUser(username = "ra-viewer")
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.rescanAlbum(titleIdRequest { titleId = 1 })
+            }
+            assertEquals(Status.Code.PERMISSION_DENIED, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `rescanAlbum returns NOT_FOUND for unknown title id`() = runBlocking {
+        val admin = createAdminUser(username = "ra-404")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.rescanAlbum(titleIdRequest { titleId = 999_999 })
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `rescanAlbum returns FAILED_PRECONDITION when the title has no tracks`() = runBlocking {
+        val admin = createAdminUser(username = "ra-no-tracks")
+        val album = createTitle(name = "Empty Album",
+            mediaType = MediaTypeEntity.ALBUM.name)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.rescanAlbum(titleIdRequest { titleId = album.id!! })
+            }
+            assertEquals(Status.Code.FAILED_PRECONDITION, ex.status.code)
+            assertTrue(ex.status.description!!.contains("no tracks"))
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `rescanAlbum returns FAILED_PRECONDITION when no search root is available`() = runBlocking {
+        val admin = createAdminUser(username = "ra-no-root")
+        val album = createTitle(name = "Tracked",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        // Track with no file_path means no sibling root can be derived;
+        // music_root_path is unset, so the rescan has nowhere to walk.
+        Track(title_id = album.id!!, track_number = 1, disc_number = 1,
+            name = "T1", file_path = null).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.rescanAlbum(titleIdRequest { titleId = album.id!! })
+            }
+            assertEquals(Status.Code.FAILED_PRECONDITION, ex.status.code)
+            assertTrue(ex.status.description!!.contains("music_root_path"),
+                "error must point at the missing config")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
 }
 
