@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
-import java.util.concurrent.TimeUnit
 
 /**
  * Wraps the `essentia_streaming_extractor_music` command-line binary.
@@ -41,12 +40,17 @@ object EssentiaService {
     /** Returns true when the binary is on PATH and responds to `--help`. */
     fun isAvailable(binaryPath: String = "essentia_streaming_extractor_music"): Boolean {
         return try {
-            val proc = ProcessBuilder(binaryPath, "--help")
-                .redirectErrorStream(true).start()
-            proc.waitFor(5, TimeUnit.SECONDS)
-            // The extractor exits non-zero on --help (prints usage to
-            // stderr then bails), so we treat "ran at all" as proof of
-            // availability rather than checking exit code.
+            // Routes through Subprocesses.current; the production runner
+            // reports a non-zero exit (the extractor exits non-zero on
+            // --help), but the seam keeps that as "ran at all". The
+            // fake either responds (treated as available) or throws if
+            // no rule matches (treated as unavailable, matching the
+            // real ProcessBuilder behavior when the binary is missing).
+            Subprocesses.current.run(
+                command = listOf(binaryPath, "--help"),
+                timeout = java.time.Duration.ofSeconds(5),
+                redirectErrorStream = true,
+            )
             true
         } catch (e: Exception) {
             log.warn("Essentia binary not available at '{}': {}", binaryPath, e.message)
@@ -69,20 +73,21 @@ object EssentiaService {
         }
         val tempOut = Files.createTempFile("essentia-", ".json").toFile()
         try {
-            val proc = ProcessBuilder(
-                binaryPath,
-                file.absolutePath,
-                tempOut.absolutePath
-            ).redirectErrorStream(false).start()
-            val finished = proc.waitFor(timeout.toSeconds(), TimeUnit.SECONDS)
-            if (!finished) {
-                proc.destroyForcibly()
+            // The binary writes its JSON output to argv[2]; in tests, the
+            // FakeSubprocessRunner's sideEffect can drop a scripted
+            // payload at that path so parseRhythm sees real bytes.
+            val result = Subprocesses.current.run(
+                command = listOf(binaryPath, file.absolutePath, tempOut.absolutePath),
+                timeout = timeout,
+                redirectErrorStream = false,
+            )
+            if (result.timedOut) {
                 log.warn("Essentia timed out on {}", file.absolutePath)
                 return null
             }
-            if (proc.exitValue() != 0) {
-                val stderr = proc.errorStream.bufferedReader().readText().take(500)
-                log.warn("Essentia exit={} on {}: {}", proc.exitValue(), file.absolutePath, stderr)
+            if (result.exitCode != 0) {
+                log.warn("Essentia exit={} on {}: {}", result.exitCode, file.absolutePath,
+                    result.stderr.take(500))
                 return null
             }
             return parseRhythm(tempOut)

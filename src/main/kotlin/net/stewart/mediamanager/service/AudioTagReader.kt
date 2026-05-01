@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * Reads audio-file metadata via FFprobe. Decision recorded in docs/MUSIC.md
@@ -103,14 +102,31 @@ object AudioTagReader {
      */
     fun read(file: File, ffprobePath: String = "ffprobe"): AudioTags {
         if (!file.isFile) return AudioTags.EMPTY
-        val stdout = runCatching { runFfprobe(ffprobePath, file) }
-            .onFailure { log.warn("ffprobe failed for {}: {}", file.absolutePath, it.message) }
+        return readFromPathString(file.absolutePath, ffprobePath)
+    }
+
+    /**
+     * Path-typed overload — primary for callers walking via NIO. The
+     * caller is responsible for the existence check (`Files.isRegularFile`).
+     * This is the seam that lets AlbumRescanService walk a Jimfs tree
+     * and feed the path strings (which only the in-memory FS knows about)
+     * straight into ffprobe via the [Subprocesses.current] fake without
+     * a `Path.toFile()` round-trip that Jimfs doesn't support.
+     */
+    fun read(path: java.nio.file.Path, ffprobePath: String = "ffprobe"): AudioTags {
+        if (!java.nio.file.Files.isRegularFile(path)) return AudioTags.EMPTY
+        return readFromPathString(path.toString(), ffprobePath)
+    }
+
+    private fun readFromPathString(pathStr: String, ffprobePath: String): AudioTags {
+        val stdout = runCatching { runFfprobe(ffprobePath, pathStr) }
+            .onFailure { log.warn("ffprobe failed for {}: {}", pathStr, it.message) }
             .getOrNull() ?: return AudioTags.EMPTY
 
         return try {
             parse(stdout)
         } catch (e: Exception) {
-            log.warn("ffprobe parse failed for {}: {}", file.absolutePath, e.message)
+            log.warn("ffprobe parse failed for {}: {}", pathStr, e.message)
             AudioTags.EMPTY
         }
     }
@@ -216,25 +232,29 @@ object AudioTagReader {
         return head.toIntOrNull()
     }
 
-    private fun runFfprobe(ffprobePath: String, file: File): String? {
-        val proc = ProcessBuilder(
-            ffprobePath,
-            "-v", "error",
-            "-print_format", "json",
-            "-show_format",
-            "-show_streams",
-            file.absolutePath
-        ).redirectErrorStream(false).start()
-        val finished = proc.waitFor(30, TimeUnit.SECONDS)
-        if (!finished) {
-            proc.destroyForcibly()
-            log.warn("ffprobe timed out on {}", file.absolutePath)
+    private fun runFfprobe(ffprobePath: String, pathStr: String): String? {
+        // Routes through Subprocesses.current so tests can script the
+        // ffprobe stdout JSON directly without a real binary on PATH.
+        val result = Subprocesses.current.run(
+            command = listOf(
+                ffprobePath,
+                "-v", "error",
+                "-print_format", "json",
+                "-show_format",
+                "-show_streams",
+                pathStr,
+            ),
+            timeout = java.time.Duration.ofSeconds(30),
+            redirectErrorStream = false,
+        )
+        if (result.timedOut) {
+            log.warn("ffprobe timed out on {}", pathStr)
             return null
         }
-        return if (proc.exitValue() == 0) {
-            proc.inputStream.bufferedReader().readText()
+        return if (result.exitCode == 0) {
+            result.stdout
         } else {
-            log.warn("ffprobe exit {} on {}", proc.exitValue(), file.absolutePath)
+            log.warn("ffprobe exit {} on {}", result.exitCode, pathStr)
             null
         }
     }

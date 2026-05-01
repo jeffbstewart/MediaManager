@@ -1,10 +1,17 @@
 package net.stewart.mediamanager.service
 
+import org.junit.Rule
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
-class AudioTagReaderTest {
+internal class AudioTagReaderTest {
+
+    @get:Rule val subprocs = SubprocessRule()
 
     @Test
     fun `parses dBpoweramp-style FLAC tags including MB IDs`() {
@@ -185,5 +192,102 @@ class AudioTagReaderTest {
         )
         assertEquals(emptyList(), AudioTagReader.splitMulti(null))
         assertEquals(emptyList(), AudioTagReader.splitMulti("   "))
+    }
+
+    // ---------------------- read(File) end-to-end via SubprocessRule ----------------------
+
+    private fun realTempAudio(): File {
+        // The read() path early-returns AudioTags.EMPTY when the file
+        // doesn't exist on disk, so the test seeds a real (empty) file
+        // on the host FS. The Jimfs seam isn't engaged here because
+        // AudioTagReader uses File.isFile, which always hits the host.
+        val tmp = Files.createTempFile("audiotag-test-", ".flac").toFile()
+        tmp.deleteOnExit()
+        return tmp
+    }
+
+    @Test
+    fun `read returns parsed tags when ffprobe exits 0 with JSON stdout`() {
+        val file = realTempAudio()
+        subprocs.fake.onBinary("ffprobe", stdout = """
+            {
+              "format": {
+                "duration": "200.0",
+                "tags": {
+                  "TITLE": "Pigs on the Wing",
+                  "ALBUM": "Animals",
+                  "ALBUMARTIST": "Pink Floyd",
+                  "ARTIST": "Pink Floyd",
+                  "TRACKNUMBER": "1",
+                  "DATE": "1977"
+                }
+              },
+              "streams": []
+            }
+        """.trimIndent())
+
+        val tags = AudioTagReader.read(file)
+        assertEquals("Pigs on the Wing", tags.title)
+        assertEquals("Animals", tags.album)
+        assertEquals("Pink Floyd", tags.albumArtist)
+        assertEquals(1, tags.trackNumber)
+        assertEquals(1977, tags.year)
+        assertEquals(200, tags.durationSeconds)
+
+        // The fake recorded the exact argv ffprobe would have been called with.
+        val argv = subprocs.fake.invocations.single()
+        assertEquals("ffprobe", argv[0])
+        assertTrue("-show_format" in argv)
+        assertTrue("-show_streams" in argv)
+        assertEquals(file.absolutePath, argv.last())
+    }
+
+    @Test
+    fun `read returns EMPTY when ffprobe exits non-zero`() {
+        val file = realTempAudio()
+        subprocs.fake.onBinary("ffprobe",
+            exitCode = 1,
+            stderr = "ffprobe: invalid data found when processing input")
+
+        val tags = AudioTagReader.read(file)
+        assertEquals(AudioTagReader.AudioTags.EMPTY, tags)
+    }
+
+    @Test
+    fun `read returns EMPTY on subprocess timeout`() {
+        val file = realTempAudio()
+        subprocs.fake.onBinary("ffprobe", timedOut = true, exitCode = -1)
+
+        val tags = AudioTagReader.read(file)
+        assertEquals(AudioTagReader.AudioTags.EMPTY, tags)
+    }
+
+    @Test
+    fun `read returns EMPTY for a non-file input without invoking the subprocess`() {
+        val notAFile = File("/no/such/path/that/exists.flac")
+        // Intentionally no fake rule registered — if AudioTagReader calls
+        // ffprobe anyway, the fake will throw.
+        val tags = AudioTagReader.read(notAFile)
+        assertEquals(AudioTagReader.AudioTags.EMPTY, tags)
+        assertEquals(0, subprocs.fake.invocations.size)
+    }
+
+    @Test
+    fun `read returns EMPTY when ffprobe stdout is malformed JSON`() {
+        val file = realTempAudio()
+        subprocs.fake.onBinary("ffprobe", stdout = "not actually json {{{")
+
+        val tags = AudioTagReader.read(file)
+        assertEquals(AudioTagReader.AudioTags.EMPTY, tags)
+    }
+
+    @Test
+    fun `read uses the supplied ffprobePath as argv0`() {
+        val file = realTempAudio()
+        subprocs.fake.onBinary("ffprobe", stdout = """{"format":{"tags":{}},"streams":[]}""")
+
+        AudioTagReader.read(file, ffprobePath = "/usr/local/bin/ffprobe")
+        assertEquals("/usr/local/bin/ffprobe",
+            subprocs.fake.invocations.single().first())
     }
 }

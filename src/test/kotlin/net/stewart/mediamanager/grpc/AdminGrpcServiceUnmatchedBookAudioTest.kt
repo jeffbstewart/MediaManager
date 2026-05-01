@@ -12,6 +12,7 @@ import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.UnmatchedBook
 import net.stewart.mediamanager.entity.UnmatchedBookStatus
 import net.stewart.mediamanager.service.JimfsRule
+import net.stewart.mediamanager.service.SubprocessRule
 import org.junit.Before
 import org.junit.Rule
 import java.time.LocalDateTime
@@ -33,6 +34,9 @@ import kotlin.test.assertTrue
 class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
 
     @get:Rule val fsRule = JimfsRule()
+
+    /** Internal because [SubprocessRule] is internal-scoped (module-only). */
+    @get:Rule internal val subprocs = SubprocessRule()
 
     @Before
     fun cleanUnmatchedTables() {
@@ -718,6 +722,75 @@ class AdminGrpcServiceUnmatchedBookAudioTest : GrpcTestBase() {
             assertEquals(Status.Code.FAILED_PRECONDITION, ex.status.code)
             assertTrue(ex.status.description!!.contains("music_root_path"),
                 "error must point at the missing config")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `rescanAlbum links unlinked tracks against on-disk files via ffprobe-tagged matches`() = runBlocking {
+        // End-to-end driver: Jimfs holds the audio files, the
+        // SubprocessRule fakes ffprobe so tags come back that match the
+        // catalog tracks by (disc, track_number) + album title.
+        val admin = createAdminUser(username = "ra-walk-success")
+        AppConfig(config_key = "music_root_path", config_val = "/music").save()
+        fsRule.seed("/music/animals/01.flac")
+        fsRule.seed("/music/animals/02.flac")
+        val album = createTitle(name = "Animals",
+            mediaType = MediaTypeEntity.ALBUM.name)
+        // Two unlinked tracks the rescan should fill in.
+        val track1 = Track(title_id = album.id!!, track_number = 1,
+            disc_number = 1, name = "Pigs on the Wing").apply { save() }
+        val track2 = Track(title_id = album.id!!, track_number = 2,
+            disc_number = 1, name = "Dogs").apply { save() }
+
+        // Tag JSON for each file. Album matches the title name (used for
+        // the album-tag-look-right bypass), disc/track number land each
+        // file in the matching catalog slot.
+        fun tagsFor(title: String, trackNum: Int) = """
+            {
+              "format": {
+                "duration": "200.0",
+                "tags": {
+                  "ALBUM": "Animals",
+                  "ALBUMARTIST": "Pink Floyd",
+                  "ARTIST": "Pink Floyd",
+                  "TITLE": "$title",
+                  "DISCNUMBER": "1",
+                  "TRACKNUMBER": "$trackNum"
+                }
+              },
+              "streams": []
+            }
+        """.trimIndent()
+
+        subprocs.fake.on(
+            matcher = { argv ->
+                argv.firstOrNull() == "ffprobe" && argv.last().endsWith("01.flac")
+            },
+            stdout = tagsFor("Pigs on the Wing", 1),
+        )
+        subprocs.fake.on(
+            matcher = { argv ->
+                argv.firstOrNull() == "ffprobe" && argv.last().endsWith("02.flac")
+            },
+            stdout = tagsFor("Dogs", 2),
+        )
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.rescanAlbum(titleIdRequest { titleId = album.id!! })
+            assertEquals(2, resp.linked, "both tracks land their matched file")
+            assertEquals(2, resp.filesWalked,
+                "the walk visited the two seeded audio files")
+            // Track rows now carry the linked file paths.
+            val refreshed1 = Track.findById(track1.id!!)!!
+            val refreshed2 = Track.findById(track2.id!!)!!
+            assertTrue(refreshed1.file_path?.endsWith("01.flac") == true,
+                "track 1 → 01.flac; got ${refreshed1.file_path}")
+            assertTrue(refreshed2.file_path?.endsWith("02.flac") == true,
+                "track 2 → 02.flac; got ${refreshed2.file_path}")
         } finally {
             authed.shutdownNow()
         }

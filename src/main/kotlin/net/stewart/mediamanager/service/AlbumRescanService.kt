@@ -200,7 +200,10 @@ object AlbumRescanService {
                             return@forEach
                         }
                     }
-                    val tags = runCatching { AudioTagReader.read(p.toFile()) }.getOrNull()
+                    // Path-typed read so the walked-on-Jimfs path doesn't
+                    // need a .toFile() round-trip (which Jimfs paths don't
+                    // support).
+                    val tags = runCatching { AudioTagReader.read(p) }.getOrNull()
                         ?: AudioTagReader.AudioTags.EMPTY
 
                     val recordingBypass = tags.musicBrainzRecordingId != null &&
@@ -285,7 +288,7 @@ object AlbumRescanService {
         for (track in unlinkedTracks) {
             val best = filesConsidered
                 .mapNotNull { (p, tags) ->
-                    val score = scoreMatch(track, tags, p.toFile().name)
+                    val score = scoreMatch(track, tags, p.fileName.toString())
                     if (score > 0) Triple(p, tags, score) else null
                 }
                 .maxByOrNull { it.third }
@@ -298,7 +301,7 @@ object AlbumRescanService {
         for (track in unlinkedTracks) {
             val entry = perTrackBest[track.id!!] ?: continue
             val (path, tags) = entry
-            val score = scoreMatch(track, tags, path.toFile().name)
+            val score = scoreMatch(track, tags, path.fileName.toString())
             val incumbent = fileToTrack[path]
             if (incumbent == null || score > (trackScores[incumbent] ?: 0)) {
                 if (incumbent != null) trackScores.remove(incumbent)
