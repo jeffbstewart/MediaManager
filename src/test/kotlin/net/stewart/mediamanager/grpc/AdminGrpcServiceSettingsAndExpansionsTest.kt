@@ -458,4 +458,127 @@ class AdminGrpcServiceSettingsAndExpansionsTest : GrpcTestBase() {
             authed.shutdownNow()
         }
     }
+
+    // ---------------------- addTitleToExpansion ----------------------
+
+    @Test
+    fun `addTitleToExpansion creates a new placeholder Title and links it as the first disc`() = runBlocking {
+        val admin = createAdminUser(username = "exp-add-new")
+        val item = seedNeedsExpansionItem("AddNew")
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.addTitleToExpansion(addTitleToExpansionRequest {
+                mediaItemId = item.id!!
+                tmdbId = 7777
+                mediaType = MediaType.MEDIA_TYPE_MOVIE
+            })
+            assertFalse(resp.alreadyExisted)
+            assertEquals(1, resp.discNumber)
+            // TMDB API key isn't configured under test, so the implementation
+            // falls back to a "Unknown"-named placeholder with REASSIGNMENT_REQUESTED.
+            val newTitle = Title.findById(resp.titleId)!!
+            assertEquals(7777, newTitle.tmdb_id)
+            assertEquals(MediaTypeEntity.MOVIE.name, newTitle.media_type)
+            assertEquals(EnrichmentStatus.REASSIGNMENT_REQUESTED.name,
+                newTitle.enrichment_status)
+            assertEquals(1, MediaItemTitle.findAll()
+                .count { it.media_item_id == item.id })
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `addTitleToExpansion reuses an existing Title with the same tmdbKey`() = runBlocking {
+        val admin = createAdminUser(username = "exp-add-existing")
+        val item = seedNeedsExpansionItem("AddExisting")
+        val existing = createTitle(name = "Already Here", tmdbId = 8888)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.addTitleToExpansion(addTitleToExpansionRequest {
+                mediaItemId = item.id!!
+                tmdbId = 8888
+                mediaType = MediaType.MEDIA_TYPE_MOVIE
+            })
+            assertTrue(resp.alreadyExisted)
+            assertEquals(existing.id!!, resp.titleId)
+            assertEquals("Already Here", resp.titleName)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `addTitleToExpansion increments disc_number when prior titles are already linked`() = runBlocking {
+        val admin = createAdminUser(username = "exp-add-disc")
+        val item = seedNeedsExpansionItem("AddDisc")
+        val first = createTitle(name = "Disc One", tmdbId = 100)
+        val second = createTitle(name = "Disc Two", tmdbId = 200)
+        MediaItemTitle(media_item_id = item.id!!, title_id = first.id!!,
+            disc_number = 1).save()
+        MediaItemTitle(media_item_id = item.id!!, title_id = second.id!!,
+            disc_number = 2).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val resp = stub.addTitleToExpansion(addTitleToExpansionRequest {
+                mediaItemId = item.id!!
+                tmdbId = 300
+                mediaType = MediaType.MEDIA_TYPE_MOVIE
+            })
+            assertEquals(3, resp.discNumber)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `addTitleToExpansion returns NOT_FOUND for unknown media item`() = runBlocking {
+        val admin = createAdminUser(username = "exp-add-404")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.addTitleToExpansion(addTitleToExpansionRequest {
+                    mediaItemId = 999_999
+                    tmdbId = 1
+                    mediaType = MediaType.MEDIA_TYPE_MOVIE
+                })
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `addTitleToExpansion enforces 50-title cap with RESOURCE_EXHAUSTED`() = runBlocking {
+        val admin = createAdminUser(username = "exp-add-cap")
+        val item = seedNeedsExpansionItem("AddCap")
+        // Pre-fill 50 join rows under this media item; the next add must fail.
+        repeat(50) { i ->
+            val t = createTitle(name = "Disc-$i", tmdbId = 5000 + i)
+            MediaItemTitle(media_item_id = item.id!!, title_id = t.id!!,
+                disc_number = i + 1).save()
+        }
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.addTitleToExpansion(addTitleToExpansionRequest {
+                    mediaItemId = item.id!!
+                    tmdbId = 9999
+                    mediaType = MediaType.MEDIA_TYPE_MOVIE
+                })
+            }
+            assertEquals(Status.Code.RESOURCE_EXHAUSTED, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
 }

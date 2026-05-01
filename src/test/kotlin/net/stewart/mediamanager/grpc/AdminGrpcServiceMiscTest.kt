@@ -247,6 +247,78 @@ class AdminGrpcServiceMiscTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `updatePurchaseWishStatus matches by season_number for TV wishes`() = runBlocking {
+        val admin = createAdminUser(username = "upws-tv-season")
+        val viewer = createViewerUser(username = "upws-tv-voter")
+        // Two season-2 wishes from the same user are ignored as duplicates;
+        // we only need one — the aggregate is keyed by tmdbId+type+season.
+        WishListService.addMediaWishForUser(viewer.id!!,
+            TmdbId(404, MediaTypeEntity.TV), "TV Show",
+            null, 2024, 50.0, seasonNumber = 2)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.updatePurchaseWishStatus(updatePurchaseWishStatusRequest {
+                tmdbId = 404
+                mediaType = MediaType.MEDIA_TYPE_TV
+                seasonNumber = 2
+                status = AcquisitionStatus.ACQUISITION_STATUS_OWNED
+            })
+            val title = net.stewart.mediamanager.entity.Title.findAll()
+                .single { it.tmdb_id == 404 }
+            val season = TitleSeason.findAll()
+                .single { it.title_id == title.id && it.season_number == 2 }
+            assertEquals(net.stewart.mediamanager.entity.AcquisitionStatus.OWNED.name,
+                season.acquisition_status)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `updatePurchaseWishStatus maps every AcquisitionStatus enum value`() = runBlocking {
+        val admin = createAdminUser(username = "upws-status-map")
+        val viewer = createViewerUser(username = "upws-status-voter")
+        WishListService.addMediaWishForUser(viewer.id!!,
+            TmdbId(505, MediaTypeEntity.MOVIE), "Status Map Movie",
+            null, 2024, 50.0)
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            // Walk every proto -> entity mapping branch in updatePurchaseWishStatus.
+            val cases = listOf(
+                AcquisitionStatus.ACQUISITION_STATUS_NOT_AVAILABLE
+                    to net.stewart.mediamanager.entity.AcquisitionStatus.NOT_AVAILABLE,
+                AcquisitionStatus.ACQUISITION_STATUS_REJECTED
+                    to net.stewart.mediamanager.entity.AcquisitionStatus.REJECTED,
+                AcquisitionStatus.ACQUISITION_STATUS_NEEDS_ASSISTANCE
+                    to net.stewart.mediamanager.entity.AcquisitionStatus.NEEDS_ASSISTANCE,
+                AcquisitionStatus.ACQUISITION_STATUS_OWNED
+                    to net.stewart.mediamanager.entity.AcquisitionStatus.OWNED,
+                AcquisitionStatus.ACQUISITION_STATUS_UNKNOWN
+                    to net.stewart.mediamanager.entity.AcquisitionStatus.UNKNOWN
+            )
+            for ((proto, entity) in cases) {
+                stub.updatePurchaseWishStatus(updatePurchaseWishStatusRequest {
+                    tmdbId = 505
+                    mediaType = MediaType.MEDIA_TYPE_MOVIE
+                    status = proto
+                })
+                val title = net.stewart.mediamanager.entity.Title.findAll()
+                    .single { it.tmdb_id == 505 }
+                val season = TitleSeason.findAll()
+                    .single { it.title_id == title.id }
+                assertEquals(entity.name, season.acquisition_status,
+                    "proto $proto must map to entity $entity")
+            }
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- searchCatalogTracks ----------------------
 
     @Test

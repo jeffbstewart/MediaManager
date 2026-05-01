@@ -194,6 +194,111 @@ class AdminGrpcServiceMediaItemAndArtistMembershipTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `setMediaItemFormat on un-linked item accepts any format and clears price`() = runBlocking {
+        val admin = createAdminUser(username = "mi-fmt-unlinked")
+        val item = seedItem("Unlinked",
+            replacementValue = BigDecimal("19.99"),
+            format = MediaFormatEntity.DVD)
+        item.replacement_value_updated_at = LocalDateTime.now()
+        item.save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.setMediaItemFormat(setMediaItemFormatRequest {
+                mediaItemId = item.id!!
+                mediaFormat = MediaFormat.MEDIA_FORMAT_BLURAY
+            })
+            val refreshed = MediaItem.findById(item.id!!)!!
+            assertEquals(MediaFormatEntity.BLURAY.name, refreshed.media_format)
+            // Un-linked path returns clearPrice=true so replacement_value clears.
+            assertNull(refreshed.replacement_value)
+            assertNull(refreshed.replacement_value_updated_at)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `setMediaItemFormat — book-title format change clears replacement_value`() = runBlocking {
+        val admin = createAdminUser(username = "mi-fmt-book")
+        val book = createTitle(name = "Book", mediaType = MediaTypeEntity.BOOK.name)
+        val item = seedItem("BookItem",
+            replacementValue = BigDecimal("12.00"),
+            format = MediaFormatEntity.MASS_MARKET_PAPERBACK)
+        item.replacement_value_updated_at = LocalDateTime.now()
+        item.save()
+        MediaItemTitle(media_item_id = item.id!!,
+            title_id = book.id!!, disc_number = 1).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.setMediaItemFormat(setMediaItemFormatRequest {
+                mediaItemId = item.id!!
+                mediaFormat = MediaFormat.MEDIA_FORMAT_HARDBACK
+            })
+            val refreshed = MediaItem.findById(item.id!!)!!
+            assertEquals(MediaFormatEntity.HARDBACK.name, refreshed.media_format)
+            assertNull(refreshed.replacement_value, "format change clears price")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `setMediaItemFormat — same format keeps replacement_value`() = runBlocking {
+        val admin = createAdminUser(username = "mi-fmt-noop")
+        val movie = createTitle(name = "Movie",
+            mediaType = MediaTypeEntity.MOVIE.name)
+        val item = seedItem("MovieItem",
+            replacementValue = BigDecimal("25.00"),
+            format = MediaFormatEntity.BLURAY)
+        item.replacement_value_updated_at = LocalDateTime.of(2024, 1, 1, 0, 0)
+        item.save()
+        MediaItemTitle(media_item_id = item.id!!,
+            title_id = movie.id!!, disc_number = 1).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            stub.setMediaItemFormat(setMediaItemFormatRequest {
+                mediaItemId = item.id!!
+                mediaFormat = MediaFormat.MEDIA_FORMAT_BLURAY
+            })
+            val refreshed = MediaItem.findById(item.id!!)!!
+            assertEquals(0, refreshed.replacement_value!!.compareTo(BigDecimal("25.00")),
+                "no-op format change preserves price")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `setMediaItemFormat rejects a format that doesn't match the linked title's media_type`() = runBlocking {
+        val admin = createAdminUser(username = "mi-fmt-mismatch")
+        val movie = createTitle(name = "Movie",
+            mediaType = MediaTypeEntity.MOVIE.name)
+        val item = seedItem("MovieItem")
+        MediaItemTitle(media_item_id = item.id!!,
+            title_id = movie.id!!, disc_number = 1).save()
+
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.setMediaItemFormat(setMediaItemFormatRequest {
+                    mediaItemId = item.id!!
+                    mediaFormat = MediaFormat.MEDIA_FORMAT_HARDBACK
+                })
+            }
+            assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
     // ---------------------- triggerKeepaLookup ----------------------
 
     @Test
