@@ -35,11 +35,36 @@ data class CachedSegment(
  * Clients request a generated m3u8 playlist and segments from the ring buffer,
  * decoupled from go2rtc's ephemeral session lifecycle.
  */
-class HlsCameraRelay(
+/**
+ * HTTP fetch seam for [HlsCameraRelay]. Production hits go2rtc via the
+ * JDK's [HttpURLConnection] (see [JdkRelayFetcher]); tests substitute a
+ * fake that returns scripted bytes for each requested URL. Visibility
+ * is `internal` because the seam is project-only — there's no published
+ * API consumer.
+ */
+internal interface RelayHttpFetcher {
+    fun fetchText(url: String): String?
+    fun fetchBinary(url: String): ByteArray?
+}
+
+class HlsCameraRelay internal constructor(
     val cameraId: Long,
     private val go2rtcStreamName: String,
-    private val apiPort: Int
+    private val apiPort: Int,
+    /**
+     * Internal — only tests pass a non-default value. Defaults to a
+     * direct-JDK fetcher that mirrors the original behaviour.
+     */
+    internal val fetcher: RelayHttpFetcher,
 ) {
+
+    /**
+     * Production constructor (no fetcher param) — uses the JDK-backed
+     * fetcher. Kept separate from the [internal] constructor above so
+     * the seam stays out of the public API.
+     */
+    constructor(cameraId: Long, go2rtcStreamName: String, apiPort: Int) :
+        this(cameraId, go2rtcStreamName, apiPort, JdkRelayFetcher)
     private val log = LoggerFactory.getLogger(HlsCameraRelay::class.java)
 
     companion object {
@@ -290,7 +315,19 @@ class HlsCameraRelay(
         }
     }
 
-    private fun fetchText(url: String): String? {
+    private fun fetchText(url: String): String? = fetcher.fetchText(url)
+
+    private fun fetchBinary(url: String): ByteArray? = fetcher.fetchBinary(url)
+}
+
+/**
+ * Production [RelayHttpFetcher] — the original implementation, now
+ * extracted so [HlsCameraRelay] can swap it for a fake in tests.
+ */
+internal object JdkRelayFetcher : RelayHttpFetcher {
+    private val log = LoggerFactory.getLogger(JdkRelayFetcher::class.java)
+
+    override fun fetchText(url: String): String? {
         return try {
             val conn = URI(url).toURL().openConnection() as HttpURLConnection
             conn.connectTimeout = 5000
@@ -305,15 +342,13 @@ class HlsCameraRelay(
                 conn.disconnect()
             }
         } catch (e: Exception) {
-            log.debug(
-                "HLS relay fetch failed for camera {}: {}",
-                cameraId, UriCredentialRedactor.redactAll(e.message ?: "")
-            )
+            log.debug("HLS relay fetch failed: {}",
+                UriCredentialRedactor.redactAll(e.message ?: ""))
             null
         }
     }
 
-    private fun fetchBinary(url: String): ByteArray? {
+    override fun fetchBinary(url: String): ByteArray? {
         return try {
             val conn = URI(url).toURL().openConnection() as HttpURLConnection
             conn.connectTimeout = 5000
@@ -328,10 +363,8 @@ class HlsCameraRelay(
                 conn.disconnect()
             }
         } catch (e: Exception) {
-            log.debug(
-                "HLS relay segment fetch failed for camera {}: {}",
-                cameraId, UriCredentialRedactor.redactAll(e.message ?: "")
-            )
+            log.debug("HLS relay segment fetch failed: {}",
+                UriCredentialRedactor.redactAll(e.message ?: ""))
             null
         }
     }
