@@ -17,6 +17,7 @@ import org.junit.BeforeClass
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -431,8 +432,312 @@ class TranscodeLeaseServiceTest {
         val byBuddy = TranscodeLease.findAll().groupBy { it.buddy_name }
         val buddyA = byBuddy["buddy-a"]!!
         assertEquals(2, buddyA.count { it.status == LeaseStatus.EXPIRED.name })
+        // Buddy-a's leases now carry the released-on-restart marker so
+        // operators can distinguish from organic expiry.
+        assertTrue(buddyA.filter { it.status == LeaseStatus.EXPIRED.name }
+            .all { it.error_message == "Released on buddy restart" })
         // Other buddies untouched.
         assertEquals(LeaseStatus.CLAIMED.name,
             byBuddy["buddy-b"]!!.single().status)
+    }
+
+    @Test
+    fun `releaseLeases is a no-op when buddy has no active leases`() {
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        // Only terminal leases for the buddy → nothing to release.
+        seedLease(tc.id!!, buddyName = "ghost",
+            status = LeaseStatus.COMPLETED, completedAt = LocalDateTime.now())
+        assertEquals(0, TranscodeLeaseService.releaseLeases("ghost"))
+        assertEquals(LeaseStatus.COMPLETED.name,
+            TranscodeLease.findAll().single().status,
+            "completed leases stay completed")
+    }
+
+    // ---------------------- getStatusSummary ----------------------
+
+    @Test
+    fun `getStatusSummary counts active, completedToday, and poison pills`() {
+        val title = seedTitle()
+        val a = seedTranscode(title.id!!, "/nas/a.mkv")
+        val b = seedTranscode(title.id!!, "/nas/b.mkv")
+        // Two active leases.
+        seedLease(a.id!!)
+        seedLease(b.id!!, leaseType = LeaseType.THUMBNAILS)
+        // One completed today.
+        seedLease(a.id!!, status = LeaseStatus.COMPLETED,
+            completedAt = LocalDateTime.now())
+        // One completed yesterday — outside today's count.
+        seedLease(a.id!!, status = LeaseStatus.COMPLETED,
+            completedAt = LocalDateTime.now().minusDays(1).withHour(12))
+        // 3 failed → counts as a poison pill on transcode b.
+        repeat(3) {
+            seedLease(b.id!!, status = LeaseStatus.FAILED,
+                completedAt = LocalDateTime.now())
+        }
+
+        val summary = TranscodeLeaseService.getStatusSummary()
+        assertEquals(2, summary.activeLeases)
+        assertEquals(1, summary.completedToday)
+        assertEquals(1, summary.poisonPills)
+    }
+
+    // ---------------------- getThumbnailStats / getSubtitleStats / getChapterStats ----------------------
+
+    @Test
+    fun `getThumbnailStats counts only THUMBNAILS COMPLETED, splitting today vs total`() {
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        // 2 completed today + 1 completed yesterday + 1 active + 1 of a different type.
+        repeat(2) {
+            seedLease(tc.id!!, leaseType = LeaseType.THUMBNAILS,
+                status = LeaseStatus.COMPLETED,
+                completedAt = LocalDateTime.now().minusMinutes(it.toLong()))
+        }
+        seedLease(tc.id!!, leaseType = LeaseType.THUMBNAILS,
+            status = LeaseStatus.COMPLETED,
+            completedAt = LocalDateTime.now().minusDays(1).withHour(12))
+        seedLease(tc.id!!, leaseType = LeaseType.THUMBNAILS)  // active
+        seedLease(tc.id!!, leaseType = LeaseType.TRANSCODE,
+            status = LeaseStatus.COMPLETED, completedAt = LocalDateTime.now())
+
+        val (total, today) = TranscodeLeaseService.getThumbnailStats()
+        assertEquals(3, total, "all completed THUMBNAILS leases (across days)")
+        assertEquals(2, today, "only today's completions")
+    }
+
+    @Test
+    fun `getSubtitleStats and getChapterStats follow the same shape as thumbnails`() {
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        seedLease(tc.id!!, leaseType = LeaseType.SUBTITLES,
+            status = LeaseStatus.COMPLETED, completedAt = LocalDateTime.now())
+        seedLease(tc.id!!, leaseType = LeaseType.CHAPTERS,
+            status = LeaseStatus.COMPLETED,
+            completedAt = LocalDateTime.now().minusDays(2))
+
+        val subs = TranscodeLeaseService.getSubtitleStats()
+        assertEquals(1 to 1, subs)
+
+        val chapters = TranscodeLeaseService.getChapterStats()
+        assertEquals(1 to 0,
+            chapters,
+            "old completion shows up in total but not in today's count")
+    }
+
+    // ---------------------- getChapterExtractedTranscodeIds ----------------------
+
+    @Test
+    fun `getChapterExtractedTranscodeIds unions Chapter rows and completed CHAPTERS leases`() {
+        val title = seedTitle()
+        val a = seedTranscode(title.id!!, "/nas/a.mkv")
+        val b = seedTranscode(title.id!!, "/nas/b.mkv")
+        // Transcode a has chapters in the DB but no completed lease — covered.
+        net.stewart.mediamanager.entity.Chapter(
+            transcode_id = a.id!!, chapter_number = 1,
+            start_seconds = 0.0, end_seconds = 60.0,
+            title = "Opening").create()
+        // Transcode b has a completed CHAPTERS lease but no Chapter rows — covered.
+        seedLease(b.id!!, leaseType = LeaseType.CHAPTERS,
+            status = LeaseStatus.COMPLETED, completedAt = LocalDateTime.now())
+
+        val extracted = TranscodeLeaseService.getChapterExtractedTranscodeIds()
+        assertEquals(setOf(a.id!!, b.id!!), extracted)
+    }
+
+    // ---------------------- getThroughputStats ----------------------
+
+    @Test
+    fun `getThroughputStats reports zeros on an empty table`() {
+        val stats = TranscodeLeaseService.getThroughputStats()
+        assertEquals(0, stats.totalCompleted)
+        assertEquals(0L, stats.totalBytes)
+        assertEquals(0.0, stats.transcodeRate)
+        assertEquals(0, stats.activeWorkers)
+        assertEquals(0, stats.failedCount)
+    }
+
+    @Test
+    fun `getThroughputStats sums totals across completed leases and counts failures`() {
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        val now = LocalDateTime.now()
+        // Two completed transcodes within the rolling window. claimed_at
+        // must precede completed_at so the rate calc's span is positive
+        // — seedLease's default claimed_at is `now`, which is wrong if
+        // we then backdate completed_at.
+        seedLease(tc.id!!, status = LeaseStatus.COMPLETED,
+            completedAt = now.minusMinutes(30)).apply {
+            claimed_at = now.minusMinutes(60)
+            file_size_bytes = 1_000_000_000; save()
+        }
+        seedLease(tc.id!!, status = LeaseStatus.COMPLETED,
+            completedAt = now.minusMinutes(10)).apply {
+            claimed_at = now.minusMinutes(40)
+            file_size_bytes = 2_000_000_000; save()
+        }
+        // One active.
+        seedLease(tc.id!!)
+        // Two failures.
+        seedLease(tc.id!!, status = LeaseStatus.FAILED, completedAt = now)
+        seedLease(tc.id!!, status = LeaseStatus.EXPIRED, completedAt = now)
+
+        val stats = TranscodeLeaseService.getThroughputStats()
+        assertEquals(2, stats.totalCompleted)
+        assertEquals(3_000_000_000L, stats.totalBytes)
+        assertEquals(1, stats.activeWorkers)
+        assertEquals(2, stats.failedCount, "FAILED + EXPIRED both count as failure")
+        assertTrue(stats.transcodeRate > 0.0, "two completions across ~20m → non-zero rate")
+        assertTrue(stats.bytesPerHour > 0.0)
+    }
+
+    @Test
+    fun `getThroughputStats returns zero rates with fewer than two completions in a category`() {
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        // Single completion in each non-default category — needs >= 2 to compute a rate.
+        seedLease(tc.id!!, leaseType = LeaseType.THUMBNAILS,
+            status = LeaseStatus.COMPLETED, completedAt = LocalDateTime.now())
+
+        val stats = TranscodeLeaseService.getThroughputStats()
+        assertEquals(0.0, stats.thumbnailRate)
+        assertEquals(0.0, stats.transcodeRate)
+        assertEquals(0.0, stats.subtitleRate)
+        assertEquals(0.0, stats.chapterRate)
+        assertEquals(0.0, stats.mobileRate)
+    }
+
+    // ---------------------- ThroughputStats.estimateSecondsLeft ----------------------
+
+    @Test
+    fun `ThroughputStats estimateSecondsLeft returns null when nothing is pending`() {
+        val stats = ThroughputStats(
+            totalCompleted = 5,
+            totalBytes = 0,
+            transcodeRate = 1.0,
+            thumbnailRate = 0.0,
+            subtitleRate = 0.0,
+            bytesPerHour = 0.0,
+            activeWorkers = 0,
+            failedCount = 0,
+        )
+        assertNull(stats.estimateSecondsLeft(PendingWork(0, 0, 0)))
+    }
+
+    @Test
+    fun `ThroughputStats estimateSecondsLeft scales pending work by the per-type rate`() {
+        // 60 transcodes/hour = 1 per minute; 60 pending → ~1 hour = 3600 s.
+        val stats = ThroughputStats(
+            totalCompleted = 100,
+            totalBytes = 0,
+            transcodeRate = 60.0,
+            thumbnailRate = 0.0,
+            subtitleRate = 0.0,
+            bytesPerHour = 0.0,
+            activeWorkers = 0,
+            failedCount = 0,
+        )
+        val seconds = stats.estimateSecondsLeft(PendingWork(transcodes = 60,
+            thumbnails = 0, subtitles = 0))!!
+        assertTrue(seconds in 3500..3700,
+            "60 transcodes / 60 per hour ≈ 3600s; got $seconds")
+    }
+
+    // ---------------------- hasSubtitleFile / hasSubtitleSentinel ----------------------
+
+    @Test
+    fun `hasSubtitleFile sees the en-srt sibling and ignores unrelated files`() {
+        val tmp = java.nio.file.Files.createTempDirectory("sub-test-").toFile()
+        tmp.deleteOnExit()
+        val mp4 = java.io.File(tmp, "Movie.mp4").apply { writeBytes(ByteArray(0)) }
+        // No sibling yet.
+        assertFalse(TranscodeLeaseService.hasSubtitleFile(mp4))
+        // Drop the SRT next to it.
+        java.io.File(tmp, "Movie.en.srt").writeText("1\n00:00:00,000 --> 00:00:01,000\nhi\n")
+        assertTrue(TranscodeLeaseService.hasSubtitleFile(mp4))
+    }
+
+    @Test
+    fun `hasSubtitleSentinel sees the en-srt-failed sibling`() {
+        val tmp = java.nio.file.Files.createTempDirectory("sub-sentinel-").toFile()
+        tmp.deleteOnExit()
+        val mp4 = java.io.File(tmp, "Movie.mp4").apply { writeBytes(ByteArray(0)) }
+        assertFalse(TranscodeLeaseService.hasSubtitleSentinel(mp4))
+        java.io.File(tmp, "Movie.en.srt.failed").writeText("")
+        assertTrue(TranscodeLeaseService.hasSubtitleSentinel(mp4))
+    }
+
+    // ---------------------- countPendingWork ----------------------
+
+    @Test
+    fun `countPendingWork returns zero when no transcodes need work`() {
+        // No nas_root_path → countPendingWork returns zeros (early return).
+        val pending = TranscodeLeaseService.countPendingWork()
+        assertEquals(0, pending.transcodes)
+        assertEquals(0, pending.thumbnails)
+        assertEquals(0, pending.subtitles)
+        assertEquals(0, pending.chapters)
+        assertEquals(0, pending.mobileTranscodes)
+        assertEquals(0, pending.total)
+        assertEquals(0, TranscodeLeaseService.countPendingTranscodes())
+    }
+
+    // ---------------------- claimWork early returns ----------------------
+
+    @Test
+    fun `claimWork returns null when nas_root_path is not configured`() {
+        // No AppConfig row → TranscoderAgent.getNasRoot returns null →
+        // claimWork bails before scanning candidates.
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!, "/nas/movies/foo.mkv")
+        // Even with a transcode in flight, no nas_root → null.
+        assertNull(TranscodeLeaseService.claimWork("local"))
+        // Sanity: we didn't create any leases trying.
+        assertEquals(0, TranscodeLease.findAll().size)
+    }
+
+    @Test
+    fun `claimWork returns null when buddy is at the bundle limit`() {
+        AppConfig(config_key = "nas_root_path", config_val = "/nas").save()
+        val title = seedTitle()
+        val tc = seedTranscode(title.id!!)
+        // Three active bundles for `busy-buddy` — equals MAX_BUNDLES_PER_BUDDY.
+        repeat(3) { i ->
+            seedLease(tc.id!!, buddyName = "busy-buddy",
+                leaseType = LeaseType.TRANSCODE).apply {
+                // Each bundle needs a unique transcode_id so the buddy-bundle
+                // count counts unique IDs, not duplicate leases on one tc.
+                this.transcode_id = seedTranscode(title.id!!, "/nas/movies/x$i.mkv").id!!
+                save()
+            }
+        }
+        assertNull(TranscodeLeaseService.claimWork("busy-buddy"))
+    }
+
+    @Test
+    fun `claimWork returns null when nothing in the catalog is eligible`() {
+        AppConfig(config_key = "nas_root_path", config_val = "/nas").save()
+        // No Transcode rows → workItems stays empty → returns null.
+        assertNull(TranscodeLeaseService.claimWork("local"))
+    }
+
+    @Test
+    fun `claimWork skips transcodes whose source file does not exist`() {
+        AppConfig(config_key = "nas_root_path", config_val = "/nas").save()
+        val title = seedTitle()
+        // Transcode points at /nas/movies/missing.mkv — File(...).exists()
+        // is false → not eligible for any work item type.
+        seedTranscode(title.id!!, "/nas/movies/missing.mkv")
+        assertNull(TranscodeLeaseService.claimWork("local"))
+    }
+
+    @Test
+    fun `claimWork skips transcodes whose title is hidden`() {
+        AppConfig(config_key = "nas_root_path", config_val = "/nas").save()
+        val title = seedTitle().apply { hidden = true; save() }
+        // Even if a real file existed, hidden-title transcodes are
+        // filtered before any per-type check.
+        seedTranscode(title.id!!, "/nas/movies/foo.mkv")
+        assertNull(TranscodeLeaseService.claimWork("local"))
     }
 }
