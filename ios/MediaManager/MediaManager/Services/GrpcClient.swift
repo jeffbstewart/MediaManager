@@ -438,12 +438,14 @@ actor GrpcClient {
         try await wishListService.listWishes(MMEmpty(), metadata: authMetadata())
     }
 
-    func addWish(tmdbId: Int32, mediaType: MMMediaType, title: String, posterPath: String?, releaseYear: Int32?, seasonNumber: Int32?) async throws -> Int64 {
+    /// Image artwork is intentionally not a parameter — server populates
+    /// poster_path on the wish row from TMDB metadata using `tmdbId` +
+    /// `mediaType`. Clients no longer traffic in image URLs / paths.
+    func addWish(tmdbId: Int32, mediaType: MMMediaType, title: String, releaseYear: Int32?, seasonNumber: Int32?) async throws -> Int64 {
         var request = MMAddWishRequest()
         request.tmdbID = tmdbId
         request.mediaType = mediaType
         request.title = title
-        if let pp = posterPath { request.posterPath = pp }
         if let ry = releaseYear { request.releaseYear = ry }
         if let sn = seasonNumber { request.seasonNumber = sn }
         let response = try await wishListService.addWish(request, metadata: authMetadata())

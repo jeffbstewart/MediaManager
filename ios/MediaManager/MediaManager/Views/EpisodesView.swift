@@ -63,7 +63,6 @@ struct EpisodesView: View {
                                         episode: episode,
                                         titleId: route.titleId,
                                         titleName: route.titleName,
-                                        posterUrl: route.posterUrl,
                                         isOfflineUnavailable: isOffline && !isPlayable
                                     )
                                 }
@@ -72,7 +71,6 @@ struct EpisodesView: View {
                                     episode: episode,
                                     titleId: route.titleId,
                                     titleName: route.titleName,
-                                    posterUrl: route.posterUrl,
                                     isOfflineUnavailable: isOffline && !isPlayable
                                 )
                             }
@@ -137,16 +135,14 @@ struct EpisodeRow: View {
     let episode: ApiEpisode
     let titleId: TitleID
     let titleName: String
-    let posterUrl: String?
     var isOfflineUnavailable: Bool = false
     @State private var mobileRequested: Bool
 
-    init(episode: ApiEpisode, titleId: TitleID, titleName: String, posterUrl: String?,
+    init(episode: ApiEpisode, titleId: TitleID, titleName: String,
          isOfflineUnavailable: Bool = false) {
         self.episode = episode
         self.titleId = titleId
         self.titleName = titleName
-        self.posterUrl = posterUrl
         self.isOfflineUnavailable = isOfflineUnavailable
         self._mobileRequested = State(initialValue: episode.forMobileRequested ?? false)
     }

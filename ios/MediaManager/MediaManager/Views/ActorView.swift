@@ -151,21 +151,11 @@ struct ActorView: View {
         let wished = isWished(credit)
         VStack(alignment: .center, spacing: 4) {
             ZStack(alignment: .topTrailing) {
-                if let posterUrl = credit.posterUrl, let url = URL(string: posterUrl) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Rectangle().fill(.quaternary)
-                            .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                    }
+                CachedImage(ref: .tmdbPoster(
+                    tmdbId: credit.tmdbId.protoValue,
+                    mediaType: credit.mediaType.protoMediaType))
                     .frame(width: 120, height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Rectangle().fill(.quaternary)
-                        .frame(width: 120, height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                }
 
                 Button {
                     Task { await toggleWish(credit) }
@@ -232,13 +222,11 @@ struct ActorView: View {
                 try? await dataModel.deleteWish(id: wishId)
             }
         } else {
-            let posterPath = credit.posterUrl?.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
             try? await dataModel.addWish(
                 tmdbId: credit.tmdbId,
                 mediaType: credit.mediaType,
                 title: credit.title,
                 year: credit.releaseYear,
-                posterPath: posterPath,
                 seasonNumber: nil
             )
         }

@@ -121,15 +121,10 @@ struct TmdbResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if result.hasPosterURL {
-                AsyncImage(url: URL(string: "https://image.tmdb.org/t/p/w92\(result.posterURL)")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(.quaternary)
-                }
+            CachedImage(
+                ref: .tmdbPoster(tmdbId: result.tmdbID, mediaType: result.mediaType),
+                cornerRadius: 4)
                 .frame(width: 46, height: 69)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)

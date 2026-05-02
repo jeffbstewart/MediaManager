@@ -1,5 +1,24 @@
 import SwiftUI
 
+/// Hero image for a wish: prefer the linked title once fulfilled, otherwise
+/// the TMDB poster keyed by (tmdb_id, media_type). Returns nil for wishes
+/// missing both, in which case CachedImage shows its placeholder.
+fileprivate func wishPosterRef(_ wish: ApiWish) -> MMImageRef? {
+    if let titleId = wish.titleId {
+        return .posterThumbnail(titleId: titleId.protoValue)
+    }
+    if let tmdbId = wish.tmdbId, let mediaType = wish.mediaType {
+        return .tmdbPoster(tmdbId: tmdbId.protoValue, mediaType: mediaType.protoMediaType)
+    }
+    return nil
+}
+
+/// Hero image for a TMDB search result row.
+fileprivate func tmdbResultPosterRef(_ item: TmdbSearchItem) -> MMImageRef? {
+    guard let tmdbId = item.tmdbId, let mediaType = item.mediaType else { return nil }
+    return .tmdbPoster(tmdbId: tmdbId.protoValue, mediaType: mediaType.protoMediaType)
+}
+
 struct WishListView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @State private var wishes: [ApiWish] = []
@@ -131,16 +150,8 @@ struct WishRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let posterUrl = wish.posterUrl, let url = URL(string: posterUrl) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(.quaternary)
-                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                }
+            CachedImage(ref: wishPosterRef(wish), cornerRadius: 6)
                 .frame(width: 50, height: 75)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(wish.title)
@@ -219,16 +230,8 @@ struct FulfilledWishRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let posterUrl = wish.posterUrl, let url = URL(string: posterUrl) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(.quaternary)
-                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                }
+            CachedImage(ref: wishPosterRef(wish), cornerRadius: 6)
                 .frame(width: 50, height: 75)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(wish.title)
@@ -350,7 +353,6 @@ struct WishSearchView: View {
             mediaType: mediaType,
             title: title,
             year: item.releaseYear,
-            posterPath: item.posterPath,
             seasonNumber: nil
         )
         addedIds.insert(item.id)
@@ -364,16 +366,8 @@ struct TmdbSearchRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let posterUrl = item.posterUrl, let url = URL(string: posterUrl) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle().fill(.quaternary)
-                        .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                }
+            CachedImage(ref: tmdbResultPosterRef(item), cornerRadius: 6)
                 .frame(width: 50, height: 75)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title ?? "Unknown")

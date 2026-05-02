@@ -196,7 +196,6 @@ struct BarcodeScanView: View {
         if let idx = recentScans.firstIndex(where: { $0.id == event.scanID }) {
             recentScans[idx].status = event.status
             if event.hasTitleName { recentScans[idx].titleName = event.titleName }
-            if event.hasPosterURL { recentScans[idx].posterUrl = event.posterURL }
             if event.hasTitleID { recentScans[idx].titleId = event.titleID }
         } else {
             // New scan — add to top
@@ -205,7 +204,6 @@ struct BarcodeScanView: View {
                 upc: event.upc,
                 status: event.status,
                 titleName: event.hasTitleName ? event.titleName : nil,
-                posterUrl: event.hasPosterURL ? event.posterURL : nil,
                 titleId: event.hasTitleID ? event.titleID : nil,
                 scannedAt: nil
             ), at: 0)
@@ -220,7 +218,6 @@ struct ScanItem: Identifiable {
     var upc: String
     var status: MMScanStatus
     var titleName: String?
-    var posterUrl: String?
     var titleId: Int64?
     var scannedAt: String?
 
@@ -229,17 +226,15 @@ struct ScanItem: Identifiable {
         self.upc = proto.upc
         self.status = proto.status
         self.titleName = proto.hasTitleName ? proto.titleName : nil
-        self.posterUrl = proto.hasPosterURL ? proto.posterURL : nil
         self.titleId = proto.hasTitleID ? proto.titleID : nil
         self.scannedAt = proto.hasScannedAt ? proto.scannedAt.isoString : nil
     }
 
-    init(id: Int64, upc: String, status: MMScanStatus, titleName: String?, posterUrl: String?, titleId: Int64?, scannedAt: String?) {
+    init(id: Int64, upc: String, status: MMScanStatus, titleName: String?, titleId: Int64?, scannedAt: String?) {
         self.id = id
         self.upc = upc
         self.status = status
         self.titleName = titleName
-        self.posterUrl = posterUrl
         self.titleId = titleId
         self.scannedAt = scannedAt
     }

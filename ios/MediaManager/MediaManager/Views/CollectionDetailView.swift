@@ -23,7 +23,7 @@ struct CollectionDetailView: View {
                                 NavigationLink(value: ApiTitle(
                                     id: titleId, name: item.name,
                                     mediaType: .movie, year: item.year,
-                                    description: nil, posterUrl: item.posterUrl,
+                                    description: nil,
                                     backdropUrl: nil, contentRating: item.contentRating,
                                     popularity: nil, quality: item.quality,
                                     playable: item.playable, transcodeId: item.transcodeId,
@@ -120,16 +120,11 @@ struct CollectionDetailView: View {
                 try? await dataModel.deleteWish(id: wishId)
             }
         } else {
-            var posterPath: String? = nil
-            if let posterUrl = item.posterUrl, posterUrl.contains("image.tmdb.org") {
-                posterPath = posterUrl.replacingOccurrences(of: "https://image.tmdb.org/t/p/w500", with: "")
-            }
             try? await dataModel.addWish(
                 tmdbId: item.tmdbMovieId,
                 mediaType: .movie,
                 title: item.name,
                 year: item.year,
-                posterPath: posterPath,
                 seasonNumber: nil
             )
         }

@@ -27,7 +27,6 @@ struct SearchView: View {
                                 id: titleId, name: result.name,
                                 mediaType: result.mediaType ?? .movie,
                                 year: result.year, description: nil,
-                                posterUrl: result.posterUrl,
                                 backdropUrl: nil,
                                 contentRating: result.contentRating,
                                 popularity: nil,

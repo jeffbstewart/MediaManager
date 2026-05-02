@@ -191,17 +191,11 @@ final class OnlineDataModel: DataModel {
     }
 
     func addWish(tmdbId: TmdbID, mediaType: MediaType, title: String, year: Int?,
-                 posterPath: String?, seasonNumber: Int?) async throws {
-        let protoType: MMMediaType = switch mediaType {
-        case .movie: .movie
-        case .tv: .tv
-        case .personal: .personal
-        }
+                 seasonNumber: Int?) async throws {
         _ = try await grpcClient.addWish(
             tmdbId: tmdbId.protoValue,
-            mediaType: protoType,
+            mediaType: mediaType.protoMediaType,
             title: title,
-            posterPath: posterPath,
             releaseYear: year.map { Int32($0) },
             seasonNumber: seasonNumber.map { Int32($0) })
     }

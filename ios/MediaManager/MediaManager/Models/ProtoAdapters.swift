@@ -74,6 +74,18 @@ extension MMMediaType {
     }
 }
 
+extension MediaType {
+    /// Conversion to the proto enum, used when constructing requests or
+    /// `MMImageRef.tmdbPoster(tmdbId:mediaType:)` from app-side state.
+    var protoMediaType: MMMediaType {
+        switch self {
+        case .movie: return .movie
+        case .tv: return .tv
+        case .personal: return .personal
+        }
+    }
+}
+
 extension MMSearchResultType {
     var appType: SearchResultType? {
         switch self {
@@ -209,7 +221,6 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     var description: String? { proto.hasDescription_p ? proto.description_p : nil }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var backdropUrl: String? { proto.hasBackdropURL ? proto.backdropURL : nil }
     var contentRating: String? { proto.contentRating.displayString }
     var popularity: Double? { proto.hasPopularity ? proto.popularity : nil }
@@ -235,8 +246,10 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     }
 
     /// Convenience init for constructing ApiTitle from fields (used by views like DownloadsView).
+    /// Image artwork is intentionally NOT a parameter — consumers fetch via
+    /// ImageService keyed by `id` (and `tmdbId` for unfulfilled wishes).
     init(id: TitleID, name: String, mediaType: MediaType, year: Int? = nil,
-         description: String? = nil, posterUrl: String? = nil, backdropUrl: String? = nil,
+         description: String? = nil, backdropUrl: String? = nil,
          contentRating: String? = nil, popularity: Double? = nil, quality: String? = nil,
          playable: Bool = false, transcodeId: TranscodeID? = nil, tmdbId: TmdbID? = nil,
          tmdbCollectionId: TmdbCollectionID? = nil, tmdbCollectionName: String? = nil,
@@ -247,7 +260,6 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
         t.mediaType = mediaType == .movie ? .movie : mediaType == .tv ? .tv : .personal
         if let y = year { t.year = Int32(y) }
         if let d = description { t.description_p = d }
-        if let p = posterUrl { t.posterURL = p }
         if let b = backdropUrl { t.backdropURL = b }
         if let p = popularity { t.popularity = p }
         t.playable = playable
@@ -291,7 +303,6 @@ struct ApiMissingSeason: Identifiable, Sendable {
     var id: TitleID { titleId }
     var titleId: TitleID { TitleID(proto: proto.titleID) }
     var titleName: String { proto.titleName }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: proto.tmdbID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var seasons: [ApiMissingSeasonEntry] { proto.seasons.map { ApiMissingSeasonEntry(proto: $0) } }
@@ -378,7 +389,6 @@ struct ApiTitleDetail: Sendable {
     var mediaType: MediaType { t.mediaType.appMediaType ?? .movie }
     var year: Int? { t.hasYear ? Int(t.year) : nil }
     var description: String? { t.hasDescription_p ? t.description_p : nil }
-    var posterUrl: String? { t.hasPosterURL ? t.posterURL : nil }
     var backdropUrl: String? { t.hasBackdropURL ? t.backdropURL : nil }
     var contentRating: String? { t.contentRating.displayString }
     var popularity: Double? { t.hasPopularity ? t.popularity : nil }
@@ -413,7 +423,6 @@ struct ApiSearchResult: Identifiable, Sendable {
     var resultType: String { proto.resultType.displayString }
     var name: String { proto.name }
     var titleId: TitleID? { proto.hasTitleID ? TitleID(proto: proto.titleID) : nil }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     var quality: String? { proto.quality.displayString }
     var contentRating: String? { proto.contentRating.displayString }
@@ -442,7 +451,6 @@ struct ApiCollectionListItem: Identifiable, Sendable {
     var id: TmdbCollectionID { tmdbCollectionId }
     var tmdbCollectionId: TmdbCollectionID { TmdbCollectionID(proto: proto.tmdbCollectionID) }
     var name: String { proto.name }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var titleCount: Int { Int(proto.titleCount) }
 }
 
@@ -519,7 +527,6 @@ struct ApiCreditEntry: Identifiable, Sendable {
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var popularity: Double { proto.popularity }
     var wished: Bool { proto.wished }
 }
@@ -528,7 +535,6 @@ struct ApiCollectionDetail: Sendable {
     let proto: MMCollectionDetail
 
     var name: String { proto.name }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var items: [ApiCollectionItem] { proto.items.map { ApiCollectionItem(proto: $0) } }
 }
 
@@ -538,7 +544,6 @@ struct ApiCollectionItem: Identifiable, Sendable {
     var id: TmdbID { tmdbMovieId }
     var tmdbMovieId: TmdbID { TmdbID(proto: proto.tmdbMovieID) }
     var name: String { proto.name }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     var owned: Bool { proto.owned }
     var playable: Bool { proto.playable }
@@ -660,7 +665,6 @@ struct ApiWish: Identifiable, Sendable {
     var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var title: String { proto.title }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     var voteCount: Int { Int(proto.voteCount) }
@@ -690,7 +694,6 @@ struct ApiTranscodeWish: Identifiable, Sendable {
     // poster_url was retired from TranscodeWishItem (proto field 6 is reserved).
     // Clients now derive cover art from title_id via ImageService /
     // /posters/{size}/{title_id}.
-    var posterUrl: String? { nil }
     var mediaType: MediaType? { nil }
     var requestedAt: String? { nil }
 }
@@ -709,8 +712,6 @@ struct TmdbSearchItem: Identifiable, Sendable {
     var title: String? { proto.title.isEmpty ? nil : proto.title }
     var mediaType: MediaType? { proto.mediaType.appMediaType }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
-    var posterPath: String? { nil }
     var popularity: Double? { proto.hasPopularity ? proto.popularity : nil }
     var overview: String? { nil }
 }
@@ -914,7 +915,6 @@ struct AdminPurchaseWish: Identifiable, Sendable {
     var tmdbId: TmdbID { TmdbID(proto: proto.tmdbID) }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     var title: String { proto.title }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     var voteCount: Int { Int(proto.voteCount) }
@@ -940,7 +940,6 @@ struct AdminDataQualityTitle: Identifiable, Sendable {
     var tmdbId: TmdbID? { nil }
     var releaseYear: Int? { nil }
     var contentRating: String? { nil }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
     var hidden: Bool { false }
     var createdAt: String? { nil }
 }
@@ -984,7 +983,6 @@ struct AdminLinkedTranscode: Identifiable, Sendable {
     var titleId: TitleID { TitleID(proto: proto.titleID) }
     var titleName: String { proto.titleName }
     var mediaType: MediaType? { nil }
-    var posterUrl: String? { nil }
     var filePath: String? { proto.hasFilePath ? proto.filePath : nil }
     var mediaFormat: String? { proto.mediaFormat.displayString }
     var seasonNumber: Int? { nil }

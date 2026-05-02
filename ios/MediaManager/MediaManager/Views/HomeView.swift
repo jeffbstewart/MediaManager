@@ -100,7 +100,6 @@ struct HomeView: View {
                 mediaType: ms.mediaType ?? .tv,
                 title: ms.titleName,
                 year: nil,
-                posterPath: nil,
                 seasonNumber: season.seasonNumber
             )
         }

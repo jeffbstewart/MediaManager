@@ -131,7 +131,7 @@ struct TitleDetailView: View {
 
                             // Seasons button for TV
                             if detail.mediaType == .tv {
-                                NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name, posterUrl: detail.posterUrl)) {
+                                NavigationLink(value: TvShowRoute(titleId: detail.id, titleName: detail.name)) {
                                     Label("Seasons & Episodes", systemImage: "list.number")
                                         .frame(maxWidth: .infinity)
                                 }

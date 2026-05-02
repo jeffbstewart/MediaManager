@@ -47,7 +47,6 @@ struct DownloadItem: Identifiable {
     var transcodeId: TranscodeID { TranscodeID(rawValue: Int(entry.transcodeID)) }
     var titleId: TitleID { TitleID(rawValue: Int(entry.titleID)) }
     var titleName: String { entry.titleName }
-    var posterUrl: String? { nil } // posters now via ImageProvider
     var quality: String? { entry.qualityLabel.isEmpty ? nil : entry.qualityLabel }
     var year: Int? { entry.year > 0 ? Int(entry.year) : nil }
     var state: MMDownloadState { entry.state }

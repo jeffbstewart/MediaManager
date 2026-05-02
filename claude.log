@@ -5009,3 +5009,61 @@ recurring 15-books-and-reader:226 flake as prior runs).
   ImageStreamClient.swift, SsdpDiscovery.swift,
   ProtoAdapters.swift, lifecycle/ios-build.sh, CLAUDE.md.
 ===
+
+=== 2026-05-02 13:33 — iOS image URL trafficking removed ===
+- iOS clients no longer carry image URLs anywhere in user-
+  facing code paths. All hero / poster / headshot retrievals
+  go through `CachedImage` + `MMImageRef` keyed by
+  (image_type, id) — the rule from feedback_no_image_urls.md.
+- ProtoAdapters.swift: dropped `var posterUrl` from 13 adapter
+  structs (ApiTitle, ApiMissingSeason, ApiTitleDetail,
+  ApiSearchResult, ApiCollectionListItem, ApiCreditEntry,
+  ApiCollectionDetail, ApiCollectionItem, ApiWish,
+  ApiTranscodeWish, AdminPurchaseWish, AdminDataQualityTitle,
+  AdminLinkedTranscode); also dropped `posterUrl:` parameter
+  from `ApiTitle.init` (and the `t.posterURL = p` write) and
+  `posterPath: String? { nil }` stub from TmdbSearchItem. Added
+  `MediaType.protoMediaType` helper for tmdb-poster ImageRef
+  construction.
+- View refactors:
+  - ActorView: AsyncImage(url:) → CachedImage(.tmdbPoster);
+    dropped TMDB-CDN-URL stripping into posterPath.
+  - WishListView: WishRow / FulfilledWishRow / TmdbSearchRow
+    swap their AsyncImage blocks for CachedImage. Added
+    file-private `wishPosterRef(_:)` (prefer
+    posterThumbnail(titleId:) for fulfilled wishes, fall back
+    to tmdbPoster) and `tmdbResultPosterRef(_:)`.
+  - TmdbSearchSheet: TmdbResultRow's hand-built
+    "https://image.tmdb.org/t/p/w92..." URL replaced with
+    CachedImage(.tmdbPoster).
+  - CollectionDetailView: dropped URL stripping into
+    posterPath in toggleWish; ApiTitle navigation no longer
+    receives posterUrl.
+  - SearchView, TitleDetailView: dropped posterUrl from
+    ApiTitle / TvShowRoute construction.
+  - SeasonsView: dropped posterUrl field from TvShowRoute and
+    SeasonRoute.
+  - EpisodesView: dropped posterUrl field from EpisodeRow
+    (was stored but never read).
+  - BarcodeScanView: dropped vestigial posterUrl from local
+    ScanItem struct (ScanRow already used CachedImage).
+  - DownloadModels: dropped DownloadItem.posterUrl stub.
+- AddWish chain: dropped `posterPath: String?` parameter
+  through GrpcClient.addWish, OnlineDataModel.addWish,
+  OfflineDataModel.addWish, WishListDataModel protocol, and
+  all 4 view callers (ActorView, HomeView,
+  CollectionDetailView, WishListView). Server populates wish
+  artwork from (tmdb_id, media_type) on its own.
+- DownloadStore.posterPath(for:) intentionally NOT touched —
+  it returns a local file:// URL for the on-disk poster
+  cache used during offline playback, not an image URL
+  trafficked over the wire.
+- Verification: rebuilt and reinstalled to iPhone 16e
+  simulator; binnacle-tail showed restoreSession resumed
+  from the prior session, gRPC reconnected, ImageStreamClient
+  opened, ImageDiskCache loaded 12 entries — UI image
+  pipeline still healthy. Pre-existing "Download database
+  corrupt" error in DownloadStore is unrelated and was
+  visible in the previous run too.
+- Total: 16 Swift files modified.
+===
