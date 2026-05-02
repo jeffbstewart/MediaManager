@@ -78,6 +78,7 @@ abstract class ArmeriaTestBase {
         user: AppUser? = null,
         jsonBody: String? = null,
         cookieHeader: String? = null,
+        extraHeaders: Map<String, String> = emptyMap(),
     ): ServiceRequestContext {
         val headersBuilder = RequestHeaders.builder(method, path)
         if (jsonBody != null) {
@@ -86,6 +87,7 @@ abstract class ArmeriaTestBase {
         if (cookieHeader != null) {
             headersBuilder.add("cookie", cookieHeader)
         }
+        for ((k, v) in extraHeaders) headersBuilder.add(k, v)
         val headers = headersBuilder.build()
         val req = if (jsonBody != null) {
             HttpRequest.of(headers, HttpData.ofUtf8(jsonBody))
