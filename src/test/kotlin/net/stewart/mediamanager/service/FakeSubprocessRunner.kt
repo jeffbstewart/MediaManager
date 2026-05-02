@@ -1,5 +1,8 @@
 package net.stewart.mediamanager.service
 
+import net.stewart.transcode.StreamingProcess
+import net.stewart.transcode.SubprocessResult
+import net.stewart.transcode.SubprocessRunner
 import java.time.Duration
 
 /**

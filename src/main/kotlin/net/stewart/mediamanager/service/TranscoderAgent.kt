@@ -6,6 +6,8 @@ import net.stewart.mediamanager.entity.LeaseType
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.entity.Title
 import net.stewart.transcode.EncoderProfile
+import net.stewart.transcode.StreamingProcess
+import net.stewart.transcode.Subprocesses
 import net.stewart.transcode.TranscodeCommand
 import net.stewart.transcode.VideoProbeResult
 import net.stewart.transcode.ThumbnailSpriteGenerator
@@ -58,9 +60,9 @@ class TranscoderAgent(
     /**
      * Live FFmpeg process reference for metrics + the `monitorTranscodeStatus`
      * stream that needs to know whether a transcode is currently running.
-     * Held as a [StreamingProcess] (internal-typed) so tests can drive
-     * the run via the [Subprocesses.current] fake. The field itself is
-     * internal because [StreamingProcess] is module-scoped.
+     * Held as a [StreamingProcess] so tests can drive the run via the
+     * [Subprocesses.current] fake. Marked `internal` to keep the live
+     * process handle out of the public class surface.
      */
     @Volatile internal var currentProcess: StreamingProcess? = null
 

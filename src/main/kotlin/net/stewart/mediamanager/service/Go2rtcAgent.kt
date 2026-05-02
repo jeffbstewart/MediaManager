@@ -3,6 +3,8 @@ package net.stewart.mediamanager.service
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.Camera
+import net.stewart.transcode.StreamingProcess
+import net.stewart.transcode.Subprocesses
 import org.slf4j.LoggerFactory
 import java.io.BufferedReader
 import java.io.File
@@ -26,7 +28,7 @@ class Go2rtcAgent(
     private val log = LoggerFactory.getLogger(Go2rtcAgent::class.java)
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
-    /** Internal because [StreamingProcess] is internal-scoped. */
+    /** Live process handle; tests reach into this to assert lifecycle. */
     @Volatile internal var currentProcess: StreamingProcess? = null
     @Volatile var apiPort: Int = 1984
 

@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.service
 
+import net.stewart.transcode.StreamingProcess
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

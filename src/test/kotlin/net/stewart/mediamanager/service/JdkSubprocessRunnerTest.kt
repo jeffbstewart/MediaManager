@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.service
 
+import net.stewart.transcode.JdkSubprocessRunner
 import org.junit.Test
 import java.time.Duration
 import kotlin.test.assertEquals

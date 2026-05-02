@@ -2,6 +2,7 @@ package net.stewart.transcode
 
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.time.Duration
 
 /**
  * Generates thumbnail sprite sheets and a WebVTT index file for a ForBrowser MP4.
@@ -64,9 +65,13 @@ object ThumbnailSpriteGenerator {
         )
 
         log.info("Running: {}", command.joinToString(" "))
-        val process = ProcessBuilder(command).redirectErrorStream(true).start()
-        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-        val exitCode = process.waitFor()
+        val result = Subprocesses.current.run(
+            command,
+            timeout = Duration.ofMinutes(30),
+            redirectErrorStream = true,
+        )
+        val output = sanitizeFfmpegOutput(result.stdout)
+        val exitCode = result.exitCode
 
         if (exitCode != 0) {
             log.error("FFmpeg thumbnail extraction failed (exit {}): {}", exitCode, output.takeLast(1000))
@@ -162,11 +167,12 @@ object ThumbnailSpriteGenerator {
 
     private fun probeDurationSecs(ffmpegPath: String, file: File): Double? {
         return try {
-            val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
-                .redirectErrorStream(true)
-                .start()
-            val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-            process.waitFor()
+            val result = Subprocesses.current.run(
+                listOf(ffmpegPath, "-i", file.absolutePath),
+                timeout = Duration.ofSeconds(60),
+                redirectErrorStream = true,
+            )
+            val output = sanitizeFfmpegOutput(result.stdout)
 
             val match = Regex("""Duration: (\d+):(\d+):(\d+)\.(\d+)""").find(output)
             if (match != null) {

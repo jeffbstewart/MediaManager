@@ -1,5 +1,7 @@
 package net.stewart.mediamanager.service
 
+import net.stewart.transcode.JdkSubprocessRunner
+import net.stewart.transcode.Subprocesses
 import org.junit.rules.ExternalResource
 
 /**

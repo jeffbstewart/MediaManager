@@ -1,23 +1,22 @@
-package net.stewart.mediamanager.service
+package net.stewart.transcode
 
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 
 /**
- * One-shot subprocess seam — same pattern as [Filesystems]. Production
- * forks a real OS process via [JdkSubprocessRunner]; tests substitute a
- * fake that records the argv and returns scripted exit code + stdout +
- * stderr.
+ * Cross-module subprocess seam — production forks a real OS process via
+ * [JdkSubprocessRunner]; tests substitute a fake that records the argv and
+ * returns scripted exit code + stdout + stderr.
  *
- * Scope is deliberately one-shot (run, wait for exit, read full stdout
- * + stderr). Long-lived processes that stream output line-by-line while
- * still alive (FFmpeg full transcode, go2rtc daemon, FFmpeg-as-HLS-relay)
- * are not in scope here — they need a different abstraction and stay on
- * direct `ProcessBuilder` for now.
+ * Lives in transcode-common so both the main MediaManager module and the
+ * shared transcode helpers (VideoProbe, ThumbnailSpriteGenerator, etc.)
+ * route through the same swap point. Visibility is `public` because Kotlin's
+ * `internal` is module-scoped — the seam is still effectively project-only:
+ * not part of any published API.
  */
-internal interface SubprocessRunner {
-    fun run(
+public interface SubprocessRunner {
+    public fun run(
         command: List<String>,
         timeout: Duration = Duration.ofSeconds(30),
         redirectErrorStream: Boolean = false,
@@ -34,7 +33,7 @@ internal interface SubprocessRunner {
      * the caller wants a handle that's *running*, not a finished result.
      * For one-shot calls (run-and-collect), prefer [run].
      */
-    fun start(
+    public fun start(
         command: List<String>,
         redirectErrorStream: Boolean = false,
         workingDir: java.nio.file.Path? = null,
@@ -45,76 +44,58 @@ internal interface SubprocessRunner {
  * Mirror of [java.lang.Process] under our control, so the [Subprocesses.current]
  * fake can hand callers a fully scriptable handle without ever forking
  * a real OS process.
- *
- * The shape mirrors `Process` deliberately: production migrations from
- * `ProcessBuilder.start()` should be near-mechanical, and the contract
- * is small enough that the fake can implement it without surprises.
  */
-internal interface StreamingProcess {
+public interface StreamingProcess {
     /** True until the process has exited or been destroyed. */
-    val isAlive: Boolean
+    public val isAlive: Boolean
 
     /**
      * OS process id. The JDK runner returns the real pid; the fake
      * returns a synthetic value that's stable for the lifetime of the
      * fake instance (so tests can assert pid-based bookkeeping).
      */
-    val pid: Long
+    public val pid: Long
 
     /**
-     * Stdout of the spawned process. When the process was started with
+     * Stdout of the spawned process. When started with
      * `redirectErrorStream = true` this carries the merged output
      * (stdout + stderr), matching what `Process.getInputStream()` does.
      */
-    val stdout: java.io.InputStream
+    public val stdout: java.io.InputStream
 
-    /**
-     * Stderr of the spawned process. Always present on the JDK side, but
-     * carries no useful bytes when `redirectErrorStream = true` (callers
-     * should consume [stdout] in that case). The fake exposes it the
-     * same way for parity.
-     */
-    val stderr: java.io.InputStream
+    /** Stderr of the spawned process. */
+    public val stderr: java.io.InputStream
 
-    /**
-     * Stdin of the spawned process. Production callers typically close
-     * it immediately to keep ffmpeg / go2rtc from blocking on a parent
-     * that never writes; tests don't usually care.
-     */
-    val stdin: java.io.OutputStream
+    /** Stdin of the spawned process. */
+    public val stdin: java.io.OutputStream
 
     /** Block until the process exits and return its exit code. */
-    fun waitFor(): Int
+    public fun waitFor(): Int
 
-    /**
-     * Block up to [timeout] for the process to exit. Returns true when
-     * exited within the window; false on timeout. Mirrors
-     * [Process.waitFor] (long, TimeUnit).
-     */
-    fun waitFor(timeout: Duration): Boolean
+    /** Block up to [timeout] for the process to exit. Returns true when exited within the window; false on timeout. */
+    public fun waitFor(timeout: Duration): Boolean
 
     /** The exit code. Throws [IllegalThreadStateException] while alive. */
-    fun exitValue(): Int
+    public fun exitValue(): Int
 
     /** Polite request to terminate. */
-    fun destroy()
+    public fun destroy()
 
     /** Force-kill the process. Used by shutdown paths. */
-    fun destroyForcibly()
+    public fun destroyForcibly()
 }
 
 /**
  * Result of a one-shot subprocess invocation.
  *
  * [stdout] always carries the merged output when `redirectErrorStream`
- * was true (matching what real-world ProcessBuilder does); [stderr] is
- * the empty string in that case.
+ * was true; [stderr] is the empty string in that case.
  *
  * [timedOut] is `true` only when the wall-clock exceeded the supplied
  * timeout; in that case [exitCode] is `-1` and the process was forcibly
  * killed.
  */
-internal data class SubprocessResult(
+public data class SubprocessResult(
     val exitCode: Int,
     val timedOut: Boolean,
     val stdout: String,
@@ -123,26 +104,17 @@ internal data class SubprocessResult(
 
 /**
  * Single swap point. Reads [current] every call so a test can install a
- * fake without restarting anything. `internal` visibility keeps the
- * seam confined to this module (test code in the same module can swap;
- * external code never sees it). Production code should never write
- * [current] — only test infrastructure does, paired with a setup/teardown.
+ * fake without restarting anything.
  */
-internal object Subprocesses {
+public object Subprocesses {
     @Volatile
-    internal var current: SubprocessRunner = JdkSubprocessRunner
+    public var current: SubprocessRunner = JdkSubprocessRunner
 }
 
 /**
- * Default ProcessBuilder-backed runner. Forks a real OS process,
- * captures stdout (and optionally stderr separately), waits for exit
- * up to [timeout], and force-kills on timeout.
- */
-/**
  * Production [StreamingProcess] — a thin pass-through to [java.lang.Process].
- * Holds no state of its own beyond the wrapped process.
  */
-internal class JdkStreamingProcess(private val process: Process) : StreamingProcess {
+public class JdkStreamingProcess(private val process: Process) : StreamingProcess {
     override val isAlive: Boolean get() = process.isAlive
     override val pid: Long get() = process.pid()
     override val stdout: java.io.InputStream get() = process.inputStream
@@ -156,7 +128,12 @@ internal class JdkStreamingProcess(private val process: Process) : StreamingProc
     override fun destroyForcibly() { process.destroyForcibly() }
 }
 
-internal object JdkSubprocessRunner : SubprocessRunner {
+/**
+ * Default ProcessBuilder-backed runner. Forks a real OS process,
+ * captures stdout (and optionally stderr separately), waits for exit
+ * up to [timeout], and force-kills on timeout.
+ */
+public object JdkSubprocessRunner : SubprocessRunner {
     private val log = LoggerFactory.getLogger(JdkSubprocessRunner::class.java)
 
     override fun start(
@@ -177,8 +154,6 @@ internal object JdkSubprocessRunner : SubprocessRunner {
         val pb = ProcessBuilder(command).redirectErrorStream(redirectErrorStream)
         val process = pb.start()
 
-        // Drain output streams in background threads so a chatty child
-        // process doesn't block on a full pipe buffer while we wait.
         val stdoutBuf = StringBuilder()
         val stderrBuf = StringBuilder()
         val stdoutThread = Thread({
@@ -205,8 +180,6 @@ internal object JdkSubprocessRunner : SubprocessRunner {
                 stderr = stderrBuf.toString(),
             )
         }
-        // Process is done — give the drain threads a brief moment to
-        // finish reading any tail bytes that hadn't yet been pumped.
         stdoutThread.join(2_000)
         stderrThread?.join(2_000)
         return SubprocessResult(

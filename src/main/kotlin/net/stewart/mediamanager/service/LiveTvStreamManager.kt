@@ -4,6 +4,8 @@ import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.AppConfig
 import net.stewart.mediamanager.entity.LiveTvChannel
 import net.stewart.mediamanager.entity.LiveTvTuner
+import net.stewart.transcode.StreamingProcess
+import net.stewart.transcode.Subprocesses
 import net.stewart.transcode.sanitizeFfmpegOutput
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -16,10 +18,9 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * Represents a single active live TV HLS stream backed by an FFmpeg process.
  *
- * Marked `internal` because the constructor exposes [StreamingProcess],
- * which is the test-only seam for the FFmpeg subprocess. The class
- * stays accessible to the HTTP servlet that consumes streams in the
- * same module; nothing outside the module ever instantiates one.
+ * Marked `internal` because nothing outside the module should
+ * instantiate one — the HTTP servlet that consumes streams lives in the
+ * same module.
  */
 internal class LiveTvStream(
     val channelId: Long,

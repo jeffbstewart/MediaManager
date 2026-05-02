@@ -2,6 +2,7 @@ package net.stewart.transcode
 
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.time.Duration
 
 /**
  * Strips ASCII control characters (BEL, backspace, escape, etc.) from ffmpeg output
@@ -46,11 +47,12 @@ private val log = LoggerFactory.getLogger("net.stewart.transcode.VideoProbe")
  */
 fun probeVideo(ffmpegPath: String, sourceFile: File): VideoProbeResult {
     return try {
-        val process = ProcessBuilder(ffmpegPath, "-i", sourceFile.absolutePath)
-            .redirectErrorStream(true)
-            .start()
-        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-        process.waitFor()
+        val result = Subprocesses.current.run(
+            listOf(ffmpegPath, "-i", sourceFile.absolutePath),
+            timeout = Duration.ofSeconds(60),
+            redirectErrorStream = true,
+        )
+        val output = sanitizeFfmpegOutput(result.stdout)
 
         // Codec: "Stream #0:0: Video: h264 (High), ..."
         val codecMatch = Regex("""Stream #\d+:\d+.*?: Video: (\w+)""").find(output)
@@ -133,21 +135,19 @@ fun ffprobePath(ffmpegPath: String): String {
 fun probeChapters(ffmpegPath: String, sourceFile: File): List<ChapterInfo> {
     return try {
         val probe = ffprobePath(ffmpegPath)
-        val process = ProcessBuilder(
-            probe, "-show_chapters", "-print_format", "json", "-v", "quiet",
-            sourceFile.absolutePath
+        val result = Subprocesses.current.run(
+            listOf(probe, "-show_chapters", "-print_format", "json", "-v", "quiet",
+                sourceFile.absolutePath),
+            timeout = Duration.ofSeconds(30),
+            redirectErrorStream = true,
         )
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
 
-        if (process.exitValue() != 0) {
-            log.warn("FFprobe chapters failed for {} (exit {})", sourceFile.name, process.exitValue())
+        if (result.exitCode != 0) {
+            log.warn("FFprobe chapters failed for {} (exit {})", sourceFile.name, result.exitCode)
             return emptyList()
         }
 
-        parseChaptersJson(output)
+        parseChaptersJson(result.stdout)
     } catch (e: Exception) {
         log.warn("Failed to probe chapters for {}: {}", sourceFile.name, e.message)
         emptyList()
@@ -294,11 +294,12 @@ data class ForBrowserProbeResult(
  */
 fun probeForBrowser(ffmpegPath: String, file: File): ForBrowserProbeResult {
     return try {
-        val process = ProcessBuilder(ffmpegPath, "-i", file.absolutePath)
-            .redirectErrorStream(true)
-            .start()
-        val output = sanitizeFfmpegOutput(process.inputStream.bufferedReader().readText())
-        process.waitFor()
+        val result = Subprocesses.current.run(
+            listOf(ffmpegPath, "-i", file.absolutePath),
+            timeout = Duration.ofSeconds(60),
+            redirectErrorStream = true,
+        )
+        val output = sanitizeFfmpegOutput(result.stdout)
 
         // Duration
         val durMatch = Regex("""Duration:\s*(\d+):(\d+):(\d+)\.(\d+)""").find(output)
