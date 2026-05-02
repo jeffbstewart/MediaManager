@@ -195,6 +195,101 @@ tasks.register("coverageSummary") {
     }
 }
 
+/**
+ * Per-method coverage report for a single class (or for every class
+ * matching a substring). Reads the same JaCoCo XML as [coverageSummary]
+ * — never the HTML — so the data is structured and parsing is dull.
+ *
+ * Usage:
+ *   ./gradlew coverageMethods -Pclass=CatalogGrpcService
+ *   ./gradlew coverageMethods -Pclass=Service             # substring match
+ *   ./gradlew coverageMethods -Pclass=CatalogGrpcService -PminMissed=10
+ *
+ * Output: rows of "<missed>/<total>  <className>  <methodName(args)>"
+ * sorted by missed lines descending. Defaults to suppressing methods
+ * with zero missed lines (already fully covered) — pass `-PminMissed=0`
+ * to see everything.
+ */
+tasks.register("coverageMethods") {
+    group = "verification"
+    description = "Per-method line-coverage gaps for a class. Use -Pclass=<name>."
+    dependsOn("jacocoTestReport")
+    val reportFile = layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml")
+    inputs.file(reportFile)
+    val classProp = providers.gradleProperty("class").orElse("")
+    val minMissedProp = providers.gradleProperty("minMissed").orElse("1")
+    val limitProp = providers.gradleProperty("limit").orElse("50")
+    val taskLogger = logger
+    doLast {
+        val xmlFile = reportFile.get().asFile
+        if (!xmlFile.exists()) {
+            error("Coverage XML not found at ${xmlFile.path}. Run jacocoTestReport first.")
+        }
+        val classFilter = classProp.get().takeIf { it.isNotBlank() }
+            ?: error("Pass -Pclass=<name> (substring match against the class short name).")
+        val minMissed = minMissedProp.get().toLong()
+        val limit = limitProp.get().toInt()
+
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            setFeature("http://xml.org/sax/features/external-general-entities", false)
+            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            isValidating = false
+        }
+        val doc = factory.newDocumentBuilder().parse(xmlFile)
+        val root = doc.documentElement
+
+        fun directChildren(el: org.w3c.dom.Element, tag: String): List<org.w3c.dom.Element> {
+            val out = mutableListOf<org.w3c.dom.Element>()
+            val children = el.childNodes
+            for (i in 0 until children.length) {
+                val n = children.item(i)
+                if (n is org.w3c.dom.Element && n.tagName == tag) out += n
+            }
+            return out
+        }
+        // (missed, total) for the LINE counter inside [el], or (0, 0)
+        // when JaCoCo emits no LINE counter (e.g. abstract methods).
+        fun lineCounter(el: org.w3c.dom.Element): Pair<Long, Long> {
+            for (c in directChildren(el, "counter")) {
+                if (c.getAttribute("type") == "LINE") {
+                    val missed = c.getAttribute("missed").toLong()
+                    val covered = c.getAttribute("covered").toLong()
+                    return missed to (missed + covered)
+                }
+            }
+            return 0L to 0L
+        }
+
+        data class Row(val cls: String, val method: String, val missed: Long, val total: Long)
+        val rows = mutableListOf<Row>()
+        directChildren(root, "package").forEach { pkg ->
+            directChildren(pkg, "class").forEach { cls ->
+                val raw = cls.getAttribute("name")
+                val short = raw.substringAfterLast('/')
+                if (!short.contains(classFilter, ignoreCase = true)) return@forEach
+                directChildren(cls, "method").forEach { m ->
+                    val (missed, total) = lineCounter(m)
+                    if (missed < minMissed) return@forEach
+                    val sig = "${m.getAttribute("name")}${m.getAttribute("desc")}"
+                    rows += Row(short, sig, missed, total)
+                }
+            }
+        }
+        if (rows.isEmpty()) {
+            taskLogger.lifecycle("No matching methods (filter='$classFilter', minMissed=$minMissed)")
+            return@doLast
+        }
+        val classWidth = rows.maxOf { it.cls.length }
+        rows.sortedByDescending { it.missed }
+            .take(limit)
+            .forEach { r ->
+                taskLogger.lifecycle("%4d/%-4d  %-${classWidth}s  %s".format(
+                    r.missed, r.total, r.cls, r.method))
+            }
+    }
+}
+
 group = "net.stewart"
 version = "0.1.0"
 
