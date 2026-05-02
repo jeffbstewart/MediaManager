@@ -54,9 +54,14 @@ class ObservabilityGrpcService : ObservabilityServiceGrpcKt.ObservabilityService
             if (accepted) forwarded++ else rejected++
         }
 
-        val user = currentUser()
-        log.info("AUDIT: Client logs streamed forwarded={} rejected={} user='{}'",
-            forwarded, rejected, user.username)
+        // Suppress the audit line on empty streams so transient client
+        // reconnects (which carry no records) don't spam the server log.
+        // Only audit when the stream actually moved at least one record.
+        if (forwarded > 0 || rejected > 0) {
+            val user = currentUser()
+            log.info("AUDIT: Client logs streamed forwarded={} rejected={} user='{}'",
+                forwarded, rejected, user.username)
+        }
 
         return streamLogsAck {
             recordsForwarded = forwarded

@@ -5067,3 +5067,36 @@ recurring 15-books-and-reader:226 flake as prior runs).
   visible in the previous run too.
 - Total: 16 Swift files modified.
 ===
+
+=== 2026-05-02 13:46 — Stop empty StreamLogs reconnect spam ===
+- Server log was filling with `AUDIT: Client logs streamed
+  forwarded=0 rejected=0` plus paired grpc.access /
+  http.access lines every ~2 seconds.
+- Root cause on iOS: MediaManagerApp had default
+  initializers on `@State private var authManager =
+  AuthManager()` and `@State private var downloadManager =
+  DownloadManager()`. The property initializer fires before
+  init(), creating a throwaway AuthManager #A; init() then
+  builds a real AuthManager #B and reassigns the @State.
+  But #A's restoreSession() spawns a Task with strong
+  `self` capture — that Task survived the @State
+  reassignment, eventually called transitionAfterAuth →
+  logStreamer.start(), and ran a parallel LogStreamer in
+  addition to #B's. Confirmed by two
+  "starting log stream to Binnacle" lines in Binnacle on a
+  single launch. Each streamer's RPC was apparently being
+  closed empty by gRPC's client-side flow control and
+  reconnecting on the 2s backoff floor.
+- Fix on iOS (MediaManagerApp.swift): dropped the default
+  initializers from the two @State properties — same
+  pattern already used for `dataModel` and `imageProvider`.
+  Now there's exactly one AuthManager / DownloadManager,
+  built in init().
+- Defense-in-depth on server
+  (ObservabilityGrpcService.kt): gated the AUDIT log on
+  `forwarded > 0 || rejected > 0`, so transient empty
+  reconnects from any client (Android TV, future web
+  client) never spam the audit line.
+- Files: ios/MediaManager/MediaManager/MediaManagerApp.swift,
+  src/main/kotlin/.../grpc/ObservabilityGrpcService.kt.
+===

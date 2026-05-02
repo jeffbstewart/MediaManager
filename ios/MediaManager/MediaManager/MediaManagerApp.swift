@@ -11,8 +11,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct MediaManagerApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var authManager = AuthManager()
-    @State private var downloadManager = DownloadManager()
+    // No default initializers on @State — they cause SwiftUI to construct a
+    // throwaway value before init() runs, and AuthManager's restoreSession
+    // spawns a strongly-captured Task that keeps the throwaway alive long
+    // enough to start its own LogStreamer (resulting in two concurrent
+    // streams to ObservabilityService).
+    @State private var authManager: AuthManager
+    @State private var downloadManager: DownloadManager
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
 
