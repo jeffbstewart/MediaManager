@@ -83,6 +83,8 @@ open class GrpcTestBase {
                 PlaylistGrpcService(),
                 RadioGrpcService(),
                 RecommendationGrpcService(),
+                ImageGrpcService(),
+                BuddyGrpcService(),
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()
