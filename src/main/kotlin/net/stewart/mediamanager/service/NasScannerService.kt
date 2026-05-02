@@ -53,7 +53,7 @@ object NasScannerService {
         }
     }
 
-    private fun doScan() {
+    internal fun doScan() {
         val nasRoot = getNasRootPath()
         if (nasRoot == null) {
             log.warn("NAS scan aborted: nas_root_path not configured. " +
@@ -268,7 +268,7 @@ object NasScannerService {
         }
     }
 
-    private fun discoverFlat(dir: Path, mediaType: String, out: MutableList<DiscoveredFileCandidate>) {
+    internal fun discoverFlat(dir: Path, mediaType: String, out: MutableList<DiscoveredFileCandidate>) {
         try {
             Files.list(dir).use { stream ->
                 stream.forEach { path ->
@@ -289,7 +289,7 @@ object NasScannerService {
         }
     }
 
-    private fun discoverRecursive(dir: Path, mediaType: String, out: MutableList<DiscoveredFileCandidate>) {
+    internal fun discoverRecursive(dir: Path, mediaType: String, out: MutableList<DiscoveredFileCandidate>) {
         try {
             Files.walk(dir).use { stream ->
                 stream.forEach { path ->
@@ -318,7 +318,7 @@ object NasScannerService {
      * - If media files sit directly in the directory (depth 1) → MOVIE
      * - SxxExx patterns in any filename override to TV regardless of depth
      */
-    private fun classifyDirectory(dir: Path): DirectoryType {
+    internal fun classifyDirectory(dir: Path): DirectoryType {
         var hasDirectFiles = false
         var hasNestedFiles = false
         var hasEpisodePattern = false
@@ -349,7 +349,7 @@ object NasScannerService {
         }
     }
 
-    private enum class DirectoryType { MOVIE, TV, EMPTY }
+    internal enum class DirectoryType { MOVIE, TV, EMPTY }
 
     private fun readFileModifiedAt(path: Path): LocalDateTime? {
         return try {
@@ -360,12 +360,12 @@ object NasScannerService {
         }
     }
 
-    private fun isVideoFile(path: Path): Boolean {
+    internal fun isVideoFile(path: Path): Boolean {
         val ext = path.extension.lowercase()
         return ext in VIDEO_EXTENSIONS
     }
 
-    private fun findOrCreateEpisode(titleId: Long, season: Int, episode: Int, episodeTitle: String?): Long {
+    internal fun findOrCreateEpisode(titleId: Long, season: Int, episode: Int, episodeTitle: String?): Long {
         val existing = Episode.findAll().firstOrNull {
             it.title_id == titleId && it.season_number == season && it.episode_number == episode
         }
@@ -385,7 +385,7 @@ object NasScannerService {
      * Processes a single discovered file: parses, matches, and creates DB records.
      * Returns true if matched, false if unmatched.
      */
-    private fun processCandidate(
+    internal fun processCandidate(
         candidate: DiscoveredFileCandidate,
         titles: List<Title>,
         titleById: Map<Long?, Title>,
@@ -504,7 +504,7 @@ object NasScannerService {
         }
     }
 
-    private fun cleanupDeletedFiles(): Int {
+    internal fun cleanupDeletedFiles(): Int {
         val maxDeletes = CommandLineFlags.maxTranscodeDeletes
         val transcodes = Transcode.findAll().filter { it.file_path != null }
 
@@ -546,7 +546,7 @@ object NasScannerService {
      * File naming: {video_basename}.{agentname}.skip.json
      * Each file contains a JSON array of {start, end, region_type, ...}.
      */
-    private fun importSkipFiles(): Int {
+    internal fun importSkipFiles(): Int {
         val transcodes = Transcode.findAll().filter { it.file_path != null }
         val existingSegments = SkipSegment.findAll()
         var imported = 0
@@ -608,13 +608,13 @@ object NasScannerService {
         return imported
     }
 
-    private data class SkipEntry(val start: Double, val end: Double, val regionType: String)
+    internal data class SkipEntry(val start: Double, val end: Double, val regionType: String)
 
     /**
      * Parses a .skip.json file. Expects a JSON array of objects with
      * at minimum "start", "end", and "region_type" fields.
      */
-    private fun parseSkipJson(text: String): List<SkipEntry> {
+    internal fun parseSkipJson(text: String): List<SkipEntry> {
         val results = mutableListOf<SkipEntry>()
         try {
             // Simple regex-based JSON array parser — no external JSON dependency needed
@@ -642,7 +642,7 @@ object NasScannerService {
      * Updates DB records (transcodes and discovered_files) whose file_path
      * references a file that was just renamed by the sanitizer.
      */
-    private fun updateRenamedPaths(renames: List<FilenameSanitizer.RenameResult>) {
+    internal fun updateRenamedPaths(renames: List<FilenameSanitizer.RenameResult>) {
         val nasRoot = getNasRootPath() ?: return
         val rootPath = Path.of(nasRoot)
         val sep = rootPath.fileSystem.separator
@@ -747,7 +747,7 @@ object NasScannerService {
             ?.ifBlank { null }
     }
 
-    private data class DiscoveredFileCandidate(
+    internal data class DiscoveredFileCandidate(
         val filePath: String,
         val fileName: String,
         val directory: String,
@@ -761,7 +761,7 @@ object NasScannerService {
      * managed output directories (ForBrowser, ForMobile). These are output dirs that
      * should never be treated as source media. Runs on every scan as a safety net.
      */
-    private fun cleanupManagedDirectoryRecords(nasRoot: String) {
+    internal fun cleanupManagedDirectoryRecords(nasRoot: String) {
         val managedPrefixes = ManagedDirectoryService.MANAGED_DIRS.map { "$nasRoot${File.separator}$it" } +
             ManagedDirectoryService.MANAGED_DIRS.map { "$nasRoot/$it" }
 
