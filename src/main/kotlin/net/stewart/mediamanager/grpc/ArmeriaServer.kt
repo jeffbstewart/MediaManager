@@ -10,8 +10,10 @@ import com.linecorp.armeria.server.file.HttpFile
 import com.linecorp.armeria.server.grpc.GrpcService
 import io.grpc.ServerInterceptors
 import java.nio.file.Path
+import net.stewart.mediamanager.armeria.AccessLogDecorator
 import net.stewart.mediamanager.armeria.ArmeriaAuthDecorator
 import net.stewart.mediamanager.armeria.BackdropHttpService
+import net.stewart.mediamanager.armeria.CspDecorator
 import net.stewart.mediamanager.armeria.CollectionPosterHttpService
 import net.stewart.mediamanager.armeria.ArtistHeadshotHttpService
 import net.stewart.mediamanager.armeria.ArtistHttpService
@@ -44,6 +46,7 @@ import net.stewart.mediamanager.armeria.ProfileHttpService
 import net.stewart.mediamanager.armeria.PurchaseWishesHttpService
 import net.stewart.mediamanager.armeria.SearchHttpService
 import net.stewart.mediamanager.armeria.SettingsHttpService
+import net.stewart.mediamanager.armeria.SlowHandlerDecorator
 import net.stewart.mediamanager.armeria.UserManagementHttpService
 import net.stewart.mediamanager.armeria.ValuationHttpService
 import net.stewart.mediamanager.armeria.TagManagementHttpService
@@ -145,24 +148,17 @@ object ArmeriaServer {
         )
 
         val grpcService = grpcServiceBuilder.build()
-        val authDecorator = ArmeriaAuthDecorator()
 
         // Use the builder API (.annotatedService().decorator().build()) to avoid
         // varargs ambiguity with annotatedService(Object, Object...) which interprets
         // Function/DecoratingHttpServiceFunction as exception handlers instead of decorators.
         val meterRegistry = net.stewart.mediamanager.service.MetricsRegistry.registry
 
-        val slowHandlerDecorator = net.stewart.mediamanager.armeria.SlowHandlerDecorator()
-        val accessLogDecorator = net.stewart.mediamanager.armeria.AccessLogDecorator()
-        val cspDecorator = net.stewart.mediamanager.armeria.CspDecorator()
-
         val sb = Server.builder()
             .http(port)
             .meterRegistry(meterRegistry)
-            .decorator(accessLogDecorator)
-            .decorator(slowHandlerDecorator)
-            .decorator(cspDecorator)
-            .service(grpcService)
+        registerGlobalDecorators(sb)
+        sb.service(grpcService)
 
         // All annotated HTTP services run on the blocking executor by default.
         // This prevents any handler from accidentally blocking the Netty event loop
@@ -222,6 +218,20 @@ object ArmeriaServer {
     fun stop() {
         server?.stop()?.join()
         log.info("Armeria server stopped")
+    }
+
+    /**
+     * Attaches the cross-cutting [DecoratingHttpServiceFunction]s every
+     * HTTP service should be wrapped in: access logging, event-loop
+     * blocking detection, and Content-Security-Policy + companion
+     * security headers. Extracted so [DecoratorWiringTest] can call the
+     * exact same wiring production uses and prove via real HTTP that
+     * each decorator is on the chain.
+     */
+    fun registerGlobalDecorators(sb: com.linecorp.armeria.server.ServerBuilder) {
+        sb.decorator(AccessLogDecorator())
+        sb.decorator(SlowHandlerDecorator())
+        sb.decorator(CspDecorator())
     }
 
     /**
