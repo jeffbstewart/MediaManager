@@ -156,8 +156,12 @@ export interface AuthorsListItem {
   name: string;
   owned_book_count: number;
   /** Resolves to /author-headshots/{id} when the server has cached
-   *  imagery; null when the placeholder should render. */
+   *  imagery; null when the headshot is missing. The card falls back
+   *  to fallback_poster_url before showing the icon placeholder. */
   headshot_url: string | null;
+  /** First owned book's poster — used as a hero when no headshot is
+   *  available. Mirrors ArtistsListItem.fallback_poster_url. */
+  fallback_poster_url: string | null;
 }
 
 export interface AuthorsListResponse {
@@ -2291,11 +2295,13 @@ function adaptArtistOtherWork(d: import('../proto-gen/common_pb').DiscographyEnt
 
 function adaptAuthorsListItem(a: import('../proto-gen/artist_pb').AuthorListItem): AuthorsListItem {
   const id = Number(a.id);
+  const fallbackTitleId = a.fallbackBookTitleId != null ? Number(a.fallbackBookTitleId) : null;
   return {
     id,
     name: a.name,
     owned_book_count: a.ownedBookCount,
     headshot_url: authorHeadshotUrl(id, a.hasHeadshot),
+    fallback_poster_url: fallbackTitleId != null ? `/posters/w185/${fallbackTitleId}` : null,
   };
 }
 

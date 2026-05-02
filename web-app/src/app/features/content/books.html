@@ -35,7 +35,7 @@
       @for (a of authors(); track a.id) {
         <a class="author-card" [routerLink]="routes.author(a.id)">
           <div class="author-image">
-            @if (a.headshot_url; as src) {
+            @if (cardImageUrl(a); as src) {
               <img [src]="src" [alt]="a.name" loading="lazy" decoding="async" />
             } @else {
               <div class="author-placeholder">

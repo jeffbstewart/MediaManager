@@ -101,12 +101,21 @@ test.describe('books page', () => {
     await expect(herbertImg).toHaveAttribute('src', /\/author-headshots\/1$/);
   });
 
-  test('placeholder shows when has_headshot is false', async ({ page }) => {
-    // Isaac Asimov has hasHeadshot=false → placeholder mat-icon, no <img>.
+  test('hero image falls back to /posters/w185/:id when has_headshot is false but fallback_book_title_id is set', async ({ page }) => {
+    // Isaac Asimov has hasHeadshot=false but fallbackBookTitleId=700.
     const asimov = page.locator('app-books .author-card').nth(2);
-    await expect(asimov.locator('img')).toHaveCount(0);
-    await expect(asimov.locator('.author-placeholder mat-icon')).toBeVisible();
-    await expect(asimov.locator('.author-placeholder mat-icon')).toContainText('person');
+    const img = asimov.locator('img');
+    await expect(img).toBeVisible();
+    await expect(img).toHaveAttribute('src', /\/posters\/w185\/700$/);
+  });
+
+  test('placeholder shows when neither headshot nor fallback book is available', async ({ page }) => {
+    // Solo Author has no headshot and no fallbackBookTitleId →
+    // placeholder mat-icon, no <img>.
+    const solo = page.locator('app-books .author-card').nth(3);
+    await expect(solo.locator('img')).toHaveCount(0);
+    await expect(solo.locator('.author-placeholder mat-icon')).toBeVisible();
+    await expect(solo.locator('.author-placeholder mat-icon')).toContainText('person');
   });
 
   test('clicking an author card navigates to /author/:id', async ({ page }) => {

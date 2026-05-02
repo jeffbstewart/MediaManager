@@ -694,10 +694,14 @@ fun AuthorEntity.toProto(): Author = author {
         !this@toProto.open_library_author_id.isNullOrBlank()
 }
 
-fun AuthorEntity.toListItem(ownedBookCount: Int): AuthorListItem = authorListItem {
+fun AuthorEntity.toListItem(
+    ownedBookCount: Int,
+    fallbackBookTitleId: Long? = null,
+): AuthorListItem = authorListItem {
     id = this@toListItem.id!!
     name = this@toListItem.name
     this.ownedBookCount = ownedBookCount
+    fallbackBookTitleId?.let { this.fallbackBookTitleId = it }
     hasHeadshot = !this@toListItem.headshot_path.isNullOrBlank() ||
         !this@toListItem.open_library_author_id.isNullOrBlank()
 }

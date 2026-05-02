@@ -68,6 +68,11 @@ export class BooksComponent implements OnInit {
     await this.refresh();
   }
 
+  /** Hero image for a card: real headshot first, owned-book cover fallback. */
+  cardImageUrl(a: AuthorsListItem): string | null {
+    return a.headshot_url ?? a.fallback_poster_url;
+  }
+
   private async refresh(): Promise<void> {
     this.loading.set(true);
     this.error.set('');

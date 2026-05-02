@@ -260,6 +260,101 @@ class ArtistGrpcServiceTest : GrpcTestBase() {
     }
 
     @Test
+    fun `listAuthors populates fallback_book_title_id with primary-credit book user can see`() = runBlocking {
+        // The author-grid card uses fallback_book_title_id as a hero
+        // image when has_headshot is false, fetched via /posters/w185/
+        // {id}. Server picks the FIRST book by author_order so a
+        // recognisable cover wins over a guest contribution.
+        val viewer = createViewerUser(username = "authors-fallback-book")
+        val asimov = Author(name = "Isaac Asimov", sort_name = "Asimov, Isaac").apply { save() }
+
+        // Co-authored guest spot first by insertion, but author_order=1
+        // — should NOT be picked.
+        val guest = createTitle(name = "Guest Anthology", mediaType = MediaTypeEntity.BOOK.name)
+        TitleAuthor(title_id = guest.id!!, author_id = asimov.id!!, author_order = 1).save()
+
+        // Primary credit, second by insertion but author_order=0 —
+        // should win.
+        val foundation = createTitle(name = "Foundation", mediaType = MediaTypeEntity.BOOK.name)
+        TitleAuthor(title_id = foundation.id!!, author_id = asimov.id!!, author_order = 0).save()
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_NAME })
+            val item = resp.authorsList.single { it.name == "Isaac Asimov" }
+            assertEquals(true, item.hasFallbackBookTitleId(),
+                "fallback_book_title_id should be set when the author has visible owned books")
+            assertEquals(foundation.id!!, item.fallbackBookTitleId,
+                "primary-credit book (author_order=0) should win over the guest spot")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors omits fallback_book_title_id when author has no visible books`() = runBlocking {
+        // No TitleAuthor links → no fallback. Equally, a hidden / out-of-
+        // visible-rating book should be skipped — covered by `visible
+        // BookIds` filtering on the server.
+        val viewer = createViewerUser(username = "authors-no-fallback")
+        Author(name = "Lonely Author", sort_name = "Lonely Author").apply { save() }
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_NAME })
+            val item = resp.authorsList.single { it.name == "Lonely Author" }
+            assertEquals(false, item.hasFallbackBookTitleId(),
+                "fallback_book_title_id should be unset when no visible books")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors fallback_book_title_id skips hidden books and rating-gated books`() = runBlocking {
+        // A book that's hidden, or whose content_rating exceeds the
+        // viewer's ceiling, must NOT be picked as the fallback. This
+        // guards against the cover image leaking the existence of a
+        // title the user can't otherwise see.
+        val viewer = createViewerUser(username = "authors-fallback-hidden")
+        // PG/TV-PG ceiling (ordinal 3) — sees G/PG, blocks R/PG-13.
+        viewer.rating_ceiling = 3
+        viewer.save()
+
+        val author = Author(name = "Hidden Catalog", sort_name = "Hidden Catalog").apply { save() }
+
+        // First by author_order — but hidden. Should be skipped.
+        val hidden = createTitle(name = "Hidden Book",
+            mediaType = MediaTypeEntity.BOOK.name, contentRating = "G")
+            .apply { this.hidden = true; save() }
+        TitleAuthor(title_id = hidden.id!!, author_id = author.id!!, author_order = 0).save()
+
+        // Second by author_order — content_rating R, blocked by the
+        // PG/TV-PG ceiling. Should also be skipped.
+        val r = createTitle(name = "Adult Book",
+            mediaType = MediaTypeEntity.BOOK.name, contentRating = "R")
+        TitleAuthor(title_id = r.id!!, author_id = author.id!!, author_order = 1).save()
+
+        // Third — visible (G, not hidden). Picked.
+        val visible = createTitle(name = "Family-Friendly Book",
+            mediaType = MediaTypeEntity.BOOK.name, contentRating = "G")
+        TitleAuthor(title_id = visible.id!!, author_id = author.id!!, author_order = 2).save()
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_NAME })
+            val item = resp.authorsList.single { it.name == "Hidden Catalog" }
+            assertEquals(visible.id!!, item.fallbackBookTitleId,
+                "fallback should skip past hidden and rating-gated books to the first visible one")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
     fun `listAuthors response carries owned_book_count and has_headshot per author`() = runBlocking {
         // The SPA's author-grid card depends on both fields (book count
         // for the meta line, headshot flag to choose between the cached

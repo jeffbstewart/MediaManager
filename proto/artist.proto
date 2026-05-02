@@ -102,6 +102,14 @@ message AuthorListItem {
   // Wikimedia or OpenLibrary fallback). Same semantic as
   // Author.has_headshot.
   bool has_headshot = 4;
+  // Populated when the author has at least one owned book and
+  // hasHeadshot is false. Cards use that book's poster as a hero
+  // fallback so authors-without-a-Wikipedia-thumbnail still render
+  // a meaningful image instead of a person-icon placeholder. Fetch
+  // via ImageService with IMAGE_TYPE_POSTER_THUMBNAIL + this id, or
+  // /posters/w185/{id} same-origin. Mirrors fallback_album_title_id
+  // on ArtistListItem.
+  optional int64 fallback_book_title_id = 5;
 }
 
 message AuthorIdRequest { int64 author_id = 1; }

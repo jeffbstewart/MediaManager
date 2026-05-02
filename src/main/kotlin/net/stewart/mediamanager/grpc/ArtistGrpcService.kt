@@ -207,8 +207,24 @@ class ArtistGrpcService(
     // ------------------------------------------------------------------
 
     override suspend fun listAuthors(request: ListAuthorsRequest): AuthorListResponse {
-        currentUser()
+        val user = currentUser()
         val ownedBooksByAuthor = TitleAuthor.findAll().groupingBy { it.author_id }.eachCount()
+
+        // Book-cover fallback: ordered by author_order so the primary
+        // credit on a co-authored book wins. Mirrors the artist
+        // fallback path.
+        val booksByAuthor: Map<Long, List<Long>> = TitleAuthor.findAll()
+            .sortedBy { it.author_order }
+            .groupBy({ it.author_id }, { it.title_id })
+        val visibleBookIds: Set<Long> = TitleEntity.findAll()
+            .filter {
+                it.media_type == MediaTypeEnum.BOOK.name &&
+                    !it.hidden &&
+                    user.canSeeRating(it.content_rating)
+            }
+            .mapNotNull { it.id }
+            .toSet()
+
         val all = Author.findAll()
         val filtered = request.q.takeIf { request.hasQ() && it.isNotBlank() }?.lowercase()?.let { needle ->
             all.filter { it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
@@ -227,7 +243,14 @@ class ArtistGrpcService(
 
         val (paged, pagination) = paginate(sorted, request.page, request.limit)
         return authorListResponse {
-            authors.addAll(paged.map { it.toListItem(ownedBooksByAuthor[it.id] ?: 0) })
+            authors.addAll(paged.map { author ->
+                val fallbackBookId = booksByAuthor[author.id]
+                    ?.firstOrNull { it in visibleBookIds }
+                author.toListItem(
+                    ownedBookCount = ownedBooksByAuthor[author.id] ?: 0,
+                    fallbackBookTitleId = fallbackBookId,
+                )
+            })
             this.pagination = pagination
         }
     }

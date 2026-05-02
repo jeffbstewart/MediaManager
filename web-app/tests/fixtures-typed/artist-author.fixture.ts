@@ -67,14 +67,18 @@ export const artistMilesDavis: ArtistDetail = create(ArtistDetailSchema, {
 });
 
 // Default ListAuthors payload. The Books landing page renders an
-// author exploration grid; this fixture has four authors with mixed
-// owned-book counts and headshot availability so the spec can cover
-// pluralization, hero-image fallback, and the placeholder branch.
+// author exploration grid; this fixture has four authors covering
+// every hero-image branch:
+//   1. Headshot available (Wikimedia/OL) — uses /author-headshots/:id
+//   2. Headshot available — same as above
+//   3. No headshot, but a fallback book cover is set
+//   4. No headshot and no books — placeholder icon branch
 export const authorsListFixture: AuthorListResponse = create(AuthorListResponseSchema, {
   authors: [
     { id: 1n, name: 'Frank Herbert',     ownedBookCount: 6, hasHeadshot: true  },
     { id: 2n, name: 'Ursula K. Le Guin', ownedBookCount: 4, hasHeadshot: true  },
-    { id: 3n, name: 'Isaac Asimov',      ownedBookCount: 2, hasHeadshot: false },
+    { id: 3n, name: 'Isaac Asimov',      ownedBookCount: 2, hasHeadshot: false,
+      fallbackBookTitleId: 700n },
     { id: 4n, name: 'Solo Author',       ownedBookCount: 1, hasHeadshot: false },
   ],
   pagination: { total: 4, page: 1, limit: 50, totalPages: 1 },
