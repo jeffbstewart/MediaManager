@@ -187,6 +187,149 @@ class ArtistGrpcServiceTest : GrpcTestBase() {
     }
 
     @Test
+    fun `listAuthors AUTHOR_SORT_NAME sorts by sort_name ascending`() = runBlocking {
+        val viewer = createViewerUser(username = "authors-sort-name")
+        // Display names in non-alphabetical order; sort_name (used for
+        // sorting) puts them in canonical order.
+        Author(name = "Frank Herbert",     sort_name = "Herbert, Frank").apply { save() }
+        Author(name = "Isaac Asimov",      sort_name = "Asimov, Isaac").apply { save() }
+        Author(name = "Ursula K. Le Guin", sort_name = "Le Guin, Ursula K.").apply { save() }
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_NAME })
+            // sort_name order: Asimov < Herbert < Le Guin.
+            assertEquals(
+                listOf("Isaac Asimov", "Frank Herbert", "Ursula K. Le Guin"),
+                resp.authorsList.map { it.name },
+            )
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors AUTHOR_SORT_RECENT sorts by updated_at descending`() = runBlocking {
+        val viewer = createViewerUser(username = "authors-sort-recent")
+        // Seed three authors with explicit updated_at so the test isn't
+        // sensitive to insertion-order timing.
+        val now = java.time.LocalDateTime.now()
+        Author(name = "Oldest",  sort_name = "Oldest",
+            updated_at = now.minusDays(10)).apply { save() }
+        Author(name = "Newest",  sort_name = "Newest",
+            updated_at = now).apply { save() }
+        Author(name = "Middle",  sort_name = "Middle",
+            updated_at = now.minusDays(2)).apply { save() }
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_RECENT })
+            assertEquals(
+                listOf("Newest", "Middle", "Oldest"),
+                resp.authorsList.map { it.name },
+            )
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors AUTHOR_SORT_UNKNOWN falls back to name-sort`() = runBlocking {
+        // The default proto-3 enum value (AUTHOR_SORT_UNKNOWN, ordinal 0)
+        // is what unset clients (or future clients sending a value the
+        // server doesn't recognise) end up at. The server must not throw
+        // and must return rows in the safe default order — name asc.
+        val viewer = createViewerUser(username = "authors-sort-unknown")
+        Author(name = "Frank Herbert",     sort_name = "Herbert, Frank").apply { save() }
+        Author(name = "Isaac Asimov",      sort_name = "Asimov, Isaac").apply { save() }
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            // Build a request without setting `sort` — UNKNOWN by default.
+            val resp = stub.listAuthors(listAuthorsRequest { })
+            assertEquals(
+                listOf("Isaac Asimov", "Frank Herbert"),
+                resp.authorsList.map { it.name },
+            )
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors response carries owned_book_count and has_headshot per author`() = runBlocking {
+        // The SPA's author-grid card depends on both fields (book count
+        // for the meta line, headshot flag to choose between the cached
+        // image and the placeholder icon). Verify the wire form carries
+        // them with the right values.
+        val viewer = createViewerUser(username = "authors-list-fields")
+        val withHeadshot = Author(
+            name = "Frank Herbert",
+            sort_name = "Herbert, Frank",
+            headshot_path = "data/cache/headshots/foo.jpg",
+        ).apply { save() }
+        val withoutHeadshot = Author(
+            name = "Solo Author",
+            sort_name = "Solo Author",
+            headshot_path = null,
+        ).apply { save() }
+        repeat(2) { i ->
+            val t = createTitle(name = "Herbert Book ${i + 1}", mediaType = MediaTypeEntity.BOOK.name)
+            TitleAuthor(title_id = t.id!!, author_id = withHeadshot.id!!, author_order = 0).save()
+        }
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_NAME })
+            val byName = resp.authorsList.associateBy { it.name }
+            assertEquals(2, byName["Frank Herbert"]?.ownedBookCount)
+            assertEquals(true, byName["Frank Herbert"]?.hasHeadshot)
+            assertEquals(0, byName["Solo Author"]?.ownedBookCount)
+            assertEquals(false, byName["Solo Author"]?.hasHeadshot)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `listAuthors honours AUTHOR_SORT_BOOKS by ordering by owned-book count desc`() = runBlocking {
+        val viewer = createViewerUser(username = "authors-sort-books")
+        // Three authors; seed differing numbers of TitleAuthor links to
+        // drive the owned-book count.
+        val asimov = Author(name = "Isaac Asimov", sort_name = "Asimov, Isaac").apply { save() }
+        val herbert = Author(name = "Frank Herbert", sort_name = "Herbert, Frank").apply { save() }
+        val leguin  = Author(name = "Ursula K. Le Guin", sort_name = "Le Guin, Ursula K.").apply { save() }
+
+        repeat(3) { i ->
+            val t = createTitle(name = "Asimov Book ${i + 1}", mediaType = MediaTypeEntity.BOOK.name)
+            TitleAuthor(title_id = t.id!!, author_id = asimov.id!!, author_order = 0).save()
+        }
+        repeat(2) { i ->
+            val t = createTitle(name = "Herbert Book ${i + 1}", mediaType = MediaTypeEntity.BOOK.name)
+            TitleAuthor(title_id = t.id!!, author_id = herbert.id!!, author_order = 0).save()
+        }
+        // Le Guin has zero linked books.
+
+        val authed = authenticatedChannel(viewer)
+        try {
+            val stub = ArtistServiceGrpcKt.ArtistServiceCoroutineStub(authed)
+            val resp = stub.listAuthors(listAuthorsRequest { sort = AuthorSort.AUTHOR_SORT_BOOKS })
+            val names = resp.authorsList.map { it.name }
+            assertEquals(listOf("Isaac Asimov", "Frank Herbert", "Ursula K. Le Guin"), names)
+            // owned_book_count rides the response too — verify it tracks.
+            assertEquals(3, resp.authorsList[0].ownedBookCount)
+            assertEquals(2, resp.authorsList[1].ownedBookCount)
+            assertEquals(0, resp.authorsList[2].ownedBookCount)
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
     fun `getAuthorDetail returns NOT_FOUND for unknown id`() = runBlocking {
         val viewer = createViewerUser(username = "author-404")
         val authed = authenticatedChannel(viewer)

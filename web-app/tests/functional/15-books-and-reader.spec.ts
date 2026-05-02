@@ -5,18 +5,18 @@ import { stubImages } from '../helpers/image-stub';
 import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
 import { create, fromBinary } from '@bufbuild/protobuf';
 import { ReadingProgressSchema } from '../../src/app/proto-gen/common_pb';
-import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
+import { AuthorSort, ListAuthorsRequestSchema } from '../../src/app/proto-gen/artist_pb';
 import { ReportReadingProgressRequestSchema } from '../../src/app/proto-gen/playback_pb';
 
-const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
+const LIST_AUTHORS_URL = '/mediamanager.ArtistService/ListAuthors';
 const PB = '/mediamanager.PlaybackService';
 
-function decodeListTitles(req: Request): { sort: string; playableOnly: boolean } {
+function decodeListAuthors(req: Request): { sort: AuthorSort; q: string } {
   const decoded = fromBinary(
-    ListTitlesRequestSchema,
+    ListAuthorsRequestSchema,
     unframeGrpcWebRequest(req.postDataBuffer()),
   );
-  return { sort: decoded.sort, playableOnly: decoded.playableOnly };
+  return { sort: decoded.sort, q: decoded.q ?? '' };
 }
 
 // Force serial within this file: the EPUB tests load real fixture
@@ -29,35 +29,39 @@ test.describe.configure({ mode: 'serial' });
 
 // Books page + reader integration tests.
 //
-// Books page (5)
-//   - Filter chip toggling (playable / sort) updates request params
-//   - Both fixture books render with title + author
-//   - Clicking a book navigates to /title/:id
+// Books page (author-grid, mirrors music-list)
+//   - Author cards render with name + owned-book count
+//   - Hero image uses /author-headshots/:id when has_headshot is true
+//   - Placeholder mat-icon shows when has_headshot is false
+//   - Clicking an author navigates to /author/:id
+//   - Sort chips (Books / Name / Recent) update the request
+//   - Search input fires a debounced ListAuthors with q
 //
-// Reader (4)
+// Reader (PDF + EPUB)
 //   - PDF: percent display from saved progress + iframe src
-//   - EPUB: percent display from saved progress + reader still
-//     calls /reading-progress GET on open + font-size controls work
+//   - EPUB: percent display from saved progress + font-size controls
+//     + saved-CFI navigation + progress reporting
+//   - Repro for the "progress always 0%" bug — percent must climb past
+//     0% as the reader paginates AND the POSTed fraction must follow.
 //
 // Fixture chain:
-//   /api/v2/catalog/titles?media_type=BOOK → titles.books.json
-//   /api/v2/reading-progress/:id           → per-test override
-//   /ebook/:id (HEAD)                      → per-test override (CT sniff)
-//   /ebook/:id (GET)                       → per-test override (binary)
+//   ArtistService.ListAuthors               → authorsListFixture
+//   ArtistService.GetAuthorDetail           → authorFrankHerbert
+//   PlaybackService.GetReadingProgress      → per-test override
+//   /ebook/:id (HEAD)                       → per-test override (CT sniff)
+//   /ebook/:id (GET)                        → per-test override (binary)
 
-const BOOK_ID = 300;          // Dune
 const PDF_ITEM_ID = 8001;
 const EPUB_ITEM_ID = 8002;
 
 const FIXTURE_EPUB = 'tests/fixtures/ebook/test.epub';
 
-/** Capture each ListTitles request's decoded body. Returns a getter
- *  that resolves to the array of decoded params seen so far. */
-function captureTitlesRequests(page: Page) {
-  const seen: { sort: string; playableOnly: boolean }[] = [];
+/** Capture each ListAuthors request's decoded body. */
+function captureAuthorRequests(page: Page) {
+  const seen: { sort: AuthorSort; q: string }[] = [];
   page.on('request', req => {
-    if (req.url().endsWith(LIST_TITLES_URL)) {
-      try { seen.push(decodeListTitles(req)); } catch { /* ignore framing errors */ }
+    if (req.url().endsWith(LIST_AUTHORS_URL)) {
+      try { seen.push(decodeListAuthors(req)); } catch { /* ignore framing errors */ }
     }
   });
   return () => seen;
@@ -68,74 +72,100 @@ test.describe('books page', () => {
     await mockBackend(page);
     await loginAs(page);
     await stubImages(page);
+    await page.goto('/content/books');
+    await page.waitForSelector('app-books .author-grid');
   });
 
-  test('renders both books with title + author', async ({ page }) => {
-    await page.goto('/content/books');
-    await page.waitForSelector('app-title-grid .poster-card');
-    const cards = page.locator('app-title-grid .poster-card');
-    await expect(cards).toHaveCount(2);
-    await expect(cards.first().locator('.poster-title')).toContainText('Dune');
-    await expect(cards.nth(1).locator('.poster-title')).toContainText('The Left Hand of Darkness');
+  // -------- Display --------
+
+  test('renders all 4 authors with name + book count', async ({ page }) => {
+    const cards = page.locator('app-books .author-card');
+    await expect(cards).toHaveCount(4);
+
+    await expect(cards.first().locator('.author-name')).toContainText('Frank Herbert');
+    await expect(cards.first().locator('.author-meta')).toContainText('6 books');
+
+    // Pluralization: 1 book (no "s") for the singleton author.
+    await expect(cards.nth(3).locator('.author-name')).toContainText('Solo Author');
+    await expect(cards.nth(3).locator('.author-meta')).toContainText('1 book');
+    await expect(cards.nth(3).locator('.author-meta')).not.toContainText('1 books');
   });
 
-  test('clicking a book navigates to /title/:id', async ({ page }) => {
-    await page.goto('/content/books');
-    await page.waitForSelector('app-title-grid .poster-card');
-    await page.locator('app-title-grid .poster-card').first().click();
-    await expect(page).toHaveURL(/\/title\/300$/);
+  test('total label reflects author count', async ({ page }) => {
+    await expect(page.locator('app-books .status-label')).toContainText('4 authors');
   });
 
-  test('Playable chip toggle sets playableOnly=false on the request', async ({ page }) => {
-    const seen = captureTitlesRequests(page);
-    await page.goto('/content/books');
-    await page.waitForSelector('app-title-grid .poster-card');
-
-    // Default state: playableOnly is true (chip starts highlighted).
-    expect(seen().at(-1)?.playableOnly).toBe(true);
-
-    const reqPromise = page.waitForRequest(
-      req => req.url().endsWith(LIST_TITLES_URL),
-      { timeout: 3_000 },
-    );
-    await page.locator('mat-chip', { hasText: 'Playable' }).first().click();
-    const got = await reqPromise;
-    expect(decodeListTitles(got).playableOnly).toBe(false);
+  test('hero image uses /author-headshots/:id when has_headshot is true', async ({ page }) => {
+    const herbertImg = page.locator('app-books .author-card').first().locator('img');
+    await expect(herbertImg).toBeVisible();
+    await expect(herbertImg).toHaveAttribute('src', /\/author-headshots\/1$/);
   });
 
-  test('sort chip clicks set sort on the request', async ({ page }) => {
-    const seen = captureTitlesRequests(page);
-    await page.goto('/content/books');
-    await page.waitForSelector('app-title-grid .poster-card');
-    expect(seen().at(-1)?.sort).toBe('name');
+  test('placeholder shows when has_headshot is false', async ({ page }) => {
+    // Isaac Asimov has hasHeadshot=false → placeholder mat-icon, no <img>.
+    const asimov = page.locator('app-books .author-card').nth(2);
+    await expect(asimov.locator('img')).toHaveCount(0);
+    await expect(asimov.locator('.author-placeholder mat-icon')).toBeVisible();
+    await expect(asimov.locator('.author-placeholder mat-icon')).toContainText('person');
+  });
 
-    // Books page replaces "Popular" with "Author" in the sort options.
+  test('clicking an author card navigates to /author/:id', async ({ page }) => {
+    await page.locator('app-books .author-card').first().click();
+    await expect(page).toHaveURL(/\/author\/1$/);
+  });
+
+  // -------- Sort chips --------
+
+  test('selected sort chip is highlighted (Books by default)', async ({ page }) => {
+    const books = page.locator('app-books mat-chip', { hasText: 'Books' });
+    await expect(books).toHaveClass(/mat-mdc-chip-highlighted/);
+
+    await page.locator('app-books mat-chip', { hasText: 'Name' }).click();
+    await expect(page.locator('app-books mat-chip', { hasText: 'Name' }))
+      .toHaveClass(/mat-mdc-chip-highlighted/);
+    await expect(books).not.toHaveClass(/mat-mdc-chip-highlighted/);
+  });
+
+  test('clicking each sort chip fires a ListAuthors request with the right enum sort', async ({ page }) => {
     for (const { label, sort } of [
-      { label: 'Author', sort: 'author' },
-      { label: 'Year',   sort: 'year' },
-      { label: 'Recent', sort: 'recent' },
-      { label: 'Name',   sort: 'name' },
+      { label: 'Name',   sort: AuthorSort.NAME },
+      { label: 'Recent', sort: AuthorSort.RECENT },
+      { label: 'Books',  sort: AuthorSort.BOOKS },
     ]) {
-      const reqPromise = page.waitForRequest(
-        req => req.url().endsWith(LIST_TITLES_URL),
+      const reqPromise = page.waitForRequest(req =>
+        req.url().endsWith(LIST_AUTHORS_URL),
         { timeout: 3_000 },
       );
-      await page.locator('mat-chip', { hasText: label }).click();
+      await page.locator('app-books mat-chip', { hasText: label }).click();
       const got = await reqPromise;
-      expect(decodeListTitles(got).sort).toBe(sort);
+      expect(decodeListAuthors(got).sort).toBe(sort);
     }
   });
 
-  test('selected sort chip is highlighted', async ({ page }) => {
-    await page.goto('/content/books');
-    await page.waitForSelector('app-title-grid .poster-card');
-    const nameChip = page.locator('mat-chip', { hasText: 'Name' });
-    await expect(nameChip).toHaveClass(/mat-mdc-chip-highlighted/);
+  // -------- Search --------
 
-    await page.locator('mat-chip', { hasText: 'Author' }).click();
-    await expect(page.locator('mat-chip', { hasText: 'Author' }))
-      .toHaveClass(/mat-mdc-chip-highlighted/);
-    await expect(nameChip).not.toHaveClass(/mat-mdc-chip-highlighted/);
+  test('typing in the search box fires a debounced ListAuthors request with q', async ({ page }) => {
+    const reqPromise = page.waitForRequest(req =>
+      req.url().endsWith(LIST_AUTHORS_URL),
+      { timeout: 3_000 },
+    );
+    await page.locator('app-books input.search-input').fill('herbert');
+    const got = await reqPromise;
+    expect(decodeListAuthors(got).q.toLowerCase()).toBe('herbert');
+  });
+
+  test('clear button empties the search and fires a request without q', async ({ page }) => {
+    const typed = page.waitForRequest(req => req.url().endsWith(LIST_AUTHORS_URL),
+      { timeout: 3_000 });
+    await page.locator('app-books input.search-input').fill('herbert');
+    await typed;
+
+    const cleared = page.waitForRequest(req => req.url().endsWith(LIST_AUTHORS_URL),
+      { timeout: 3_000 });
+    await page.locator('app-books button.search-clear').click();
+    const got = await cleared;
+    expect(decodeListAuthors(got).q).toBe('');
+    await expect(page.locator('app-books input.search-input')).toHaveValue('');
   });
 });
 

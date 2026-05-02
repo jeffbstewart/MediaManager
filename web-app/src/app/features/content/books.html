@@ -1,0 +1,58 @@
+<div class="content-page">
+  <div class="filter-bar">
+    <mat-chip-set>
+      @for (opt of sortOptions; track opt.value) {
+        <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
+          {{ opt.label }}
+        </mat-chip>
+      }
+    </mat-chip-set>
+
+    <span class="chip-separator">&middot;</span>
+
+    <div class="search-wrapper">
+      <mat-icon class="search-icon">search</mat-icon>
+      <input type="search" class="search-input"
+             placeholder="Search authors"
+             [value]="query()"
+             (input)="onQueryInput($any($event.target).value)" />
+      @if (query()) {
+        <button class="search-clear" type="button" aria-label="Clear search" (click)="clearQuery()">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading() && authors().length === 0) {
+    <div class="loading-container"><mat-spinner diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else {
+    <span class="status-label">{{ total() }} {{ total() === 1 ? 'author' : 'authors' }}</span>
+
+    <div class="author-grid">
+      @for (a of authors(); track a.id) {
+        <a class="author-card" [routerLink]="routes.author(a.id)">
+          <div class="author-image">
+            @if (a.headshot_url; as src) {
+              <img [src]="src" [alt]="a.name" loading="lazy" decoding="async" />
+            } @else {
+              <div class="author-placeholder">
+                <mat-icon>person</mat-icon>
+              </div>
+            }
+          </div>
+          <span class="author-name">{{ a.name }}</span>
+          <span class="author-meta">
+            {{ a.owned_book_count }} {{ a.owned_book_count === 1 ? 'book' : 'books' }}
+          </span>
+        </a>
+      }
+    </div>
+
+    @if (authors().length === 0 && !loading()) {
+      <p class="empty-state">No authors match your filters.</p>
+    }
+  }
+</div>

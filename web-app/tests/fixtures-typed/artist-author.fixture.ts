@@ -66,6 +66,20 @@ export const artistMilesDavis: ArtistDetail = create(ArtistDetailSchema, {
   ],
 });
 
+// Default ListAuthors payload. The Books landing page renders an
+// author exploration grid; this fixture has four authors with mixed
+// owned-book counts and headshot availability so the spec can cover
+// pluralization, hero-image fallback, and the placeholder branch.
+export const authorsListFixture: AuthorListResponse = create(AuthorListResponseSchema, {
+  authors: [
+    { id: 1n, name: 'Frank Herbert',     ownedBookCount: 6, hasHeadshot: true  },
+    { id: 2n, name: 'Ursula K. Le Guin', ownedBookCount: 4, hasHeadshot: true  },
+    { id: 3n, name: 'Isaac Asimov',      ownedBookCount: 2, hasHeadshot: false },
+    { id: 4n, name: 'Solo Author',       ownedBookCount: 1, hasHeadshot: false },
+  ],
+  pagination: { total: 4, page: 1, limit: 50, totalPages: 1 },
+});
+
 // Mirrors fixtures/catalog/artists.list.json. The legacy fixture
 // emits headshot_url URLs directly; the proto carries has_headshot
 // instead and the SPA rebuilds the URL from id+flag client-side.

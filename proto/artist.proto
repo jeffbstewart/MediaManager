@@ -71,10 +71,21 @@ message ArtistListItem {
 
 message ArtistIdRequest { int64 artist_id = 1; }
 
+// Sort modes for ListAuthors.
+enum AuthorSort {
+  AUTHOR_SORT_UNKNOWN = 0;
+  // Default. Author sort_name ascending (falls back to display name).
+  AUTHOR_SORT_NAME = 1;
+  // Owned-book count descending — most-collected authors first.
+  AUTHOR_SORT_BOOKS = 2;
+  // Most-recently-updated authors first.
+  AUTHOR_SORT_RECENT = 3;
+}
+
 message ListAuthorsRequest {
   int32 page = 1;
   int32 limit = 2;
-  optional string sort = 3;
+  AuthorSort sort = 3;
   optional string q = 4;
 }
 

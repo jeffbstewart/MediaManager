@@ -16,6 +16,7 @@ import {
 import {
   ArtistIdRequestSchema,
   ArtistListResponseSchema,
+  AuthorListResponseSchema,
   ArtistRecommendationsResponseSchema,
   AuthorIdRequestSchema,
   ListArtistsRequestSchema,
@@ -54,7 +55,7 @@ import { actor6384 } from '../fixtures-typed/actor-6384.fixture';
 import { booksPage, moviesPage, tvPage } from '../fixtures-typed/titles-list.fixture';
 import { collectionDetail2344, collectionsList } from '../fixtures-typed/collections.fixture';
 import { featuresAdmin, featuresViewer, homeFeedEmpty, homeFeedPopulated } from '../fixtures-typed/home-feed.fixture';
-import { artistMilesDavis, artistsListFixture, authorFrankHerbert } from '../fixtures-typed/artist-author.fixture';
+import { artistMilesDavis, artistsListFixture, authorFrankHerbert, authorsListFixture } from '../fixtures-typed/artist-author.fixture';
 import { artistRecommendations } from '../fixtures-typed/recommendations.fixture';
 import {
   advancedSearchPresetsFixture,
@@ -307,6 +308,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   const artistHandlers: Record<string, RpcHandler> = {
     ListArtists:     r => fulfillProto(r, ArtistListResponseSchema, artistsListFixture),
     GetArtistDetail: r => fulfillProto(r, ArtistDetailSchema, artistMilesDavis),
+    ListAuthors:     r => fulfillProto(r, AuthorListResponseSchema, authorsListFixture),
     GetAuthorDetail: r => fulfillProto(r, AuthorDetailSchema, authorFrankHerbert),
     ListArtistRecommendations:
       r => fulfillProto(r, ArtistRecommendationsResponseSchema, artistRecommendations),

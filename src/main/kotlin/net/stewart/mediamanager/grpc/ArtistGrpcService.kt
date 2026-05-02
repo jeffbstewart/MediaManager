@@ -214,10 +214,15 @@ class ArtistGrpcService(
             all.filter { it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
         } ?: all
 
-        val sorted = when (request.sort.takeIf { request.hasSort() }) {
-            "recent" -> filtered.sortedByDescending { it.updated_at ?: it.created_at ?: java.time.LocalDateTime.MIN }
-            "popularity" -> filtered.sortedByDescending { ownedBooksByAuthor[it.id] ?: 0 }
-            else -> filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
+        val sorted = when (request.sort) {
+            AuthorSort.AUTHOR_SORT_RECENT ->
+                filtered.sortedByDescending { it.updated_at ?: it.created_at ?: java.time.LocalDateTime.MIN }
+            AuthorSort.AUTHOR_SORT_BOOKS ->
+                filtered.sortedByDescending { ownedBooksByAuthor[it.id] ?: 0 }
+            // AUTHOR_SORT_NAME (default), AUTHOR_SORT_UNKNOWN, and any
+            // future-but-unrecognised value all collapse to name-sort.
+            else ->
+                filtered.sortedBy { it.sort_name.ifBlank { it.name }.lowercase() }
         }
 
         val (paged, pagination) = paginate(sorted, request.page, request.limit)

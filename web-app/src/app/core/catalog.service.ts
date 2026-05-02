@@ -31,7 +31,10 @@ import {
   Transcode as ProtoTranscode,
 } from '../proto-gen/common_pb';
 import { CatalogService as CatalogServiceDesc } from '../proto-gen/catalog_pb';
-import { ArtistService as ArtistServiceDesc } from '../proto-gen/artist_pb';
+import {
+  ArtistService as ArtistServiceDesc,
+  AuthorSort as ProtoAuthorSort,
+} from '../proto-gen/artist_pb';
 import { PlaylistService as PlaylistServiceDesc, PlaylistScope } from '../proto-gen/playlist_pb';
 import { PlaybackService as PlaybackServiceDesc } from '../proto-gen/playback_pb';
 import { LiveService as LiveServiceDesc } from '../proto-gen/live_pb';
@@ -137,6 +140,28 @@ export interface ArtistsListItem {
 
 export interface ArtistsListResponse {
   artists: ArtistsListItem[];
+  total: number;
+}
+
+/** Sort modes for the author-exploration landing page. */
+export type AuthorsSortMode = 'books' | 'name' | 'recent';
+
+export interface AuthorsListParams {
+  sort?: AuthorsSortMode;
+  q?: string;
+}
+
+export interface AuthorsListItem {
+  id: number;
+  name: string;
+  owned_book_count: number;
+  /** Resolves to /author-headshots/{id} when the server has cached
+   *  imagery; null when the placeholder should render. */
+  headshot_url: string | null;
+}
+
+export interface AuthorsListResponse {
+  authors: AuthorsListItem[];
   total: number;
 }
 
@@ -1196,6 +1221,19 @@ export class CatalogService {
     };
   }
 
+  /** Books landing page driver — paginated author list. */
+  async listAuthors(params: AuthorsListParams = {}): Promise<AuthorsListResponse> {
+    const client = grpcClient(ArtistServiceDesc);
+    const proto = await client.listAuthors({
+      sort: authorSortToProto(params.sort),
+      q: params.q ?? '',
+    });
+    return {
+      authors: proto.authors.map(adaptAuthorsListItem),
+      total: Number(proto.pagination?.total ?? proto.authors.length),
+    };
+  }
+
   async getSeriesDetail(seriesId: number): Promise<BookSeriesDetail> {
     const client = grpcClient(CatalogServiceDesc);
     const proto = await client.getBookSeriesDetail({ seriesId: BigInt(seriesId) });
@@ -2251,6 +2289,16 @@ function adaptArtistOtherWork(d: import('../proto-gen/common_pb').DiscographyEnt
   };
 }
 
+function adaptAuthorsListItem(a: import('../proto-gen/artist_pb').AuthorListItem): AuthorsListItem {
+  const id = Number(a.id);
+  return {
+    id,
+    name: a.name,
+    owned_book_count: a.ownedBookCount,
+    headshot_url: authorHeadshotUrl(id, a.hasHeadshot),
+  };
+}
+
 function adaptArtistsListItem(a: import('../proto-gen/artist_pb').ArtistListItem): ArtistsListItem {
   const id = Number(a.id);
   const fallbackTitleId = a.fallbackAlbumTitleId != null ? Number(a.fallbackAlbumTitleId) : null;
@@ -2473,6 +2521,19 @@ function adaptProtoTrackSearchHit(
     poster_url: t.posterUrl ?? null,
     playable: t.playable,
   };
+}
+
+/** Map the SPA's AuthorsSortMode union to the proto AuthorSort enum.
+ *  Unknown / undefined values map to AUTHOR_SORT_NAME so the server's
+ *  default behaviour is explicit on the wire (rather than relying on
+ *  the implicit AUTHOR_SORT_UNKNOWN → name fallback). */
+function authorSortToProto(sort: AuthorsSortMode | undefined): ProtoAuthorSort {
+  switch (sort) {
+    case 'books':  return ProtoAuthorSort.BOOKS;
+    case 'recent': return ProtoAuthorSort.RECENT;
+    case 'name':
+    default:       return ProtoAuthorSort.NAME;
+  }
 }
 
 function legacyFamilySortToProto(sort: FamilySortMode | undefined): import('../proto-gen/catalog_pb').FamilyVideoSort {
