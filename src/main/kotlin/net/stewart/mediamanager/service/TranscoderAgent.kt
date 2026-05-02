@@ -674,7 +674,7 @@ class TranscoderAgent(
     /**
      * Processes a CHAPTERS lease: extracts chapter markers from the source file via FFprobe.
      */
-    private fun processChaptersLease(
+    internal fun processChaptersLease(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
         nasRoot: String,
         ffmpegPath: String
@@ -734,7 +734,7 @@ class TranscoderAgent(
      * Processes a THUMBNAILS lease: generates sprite sheets + VTT.
      * Uses the source file directly (FFmpeg handles MKV/AVI/MP4).
      */
-    private fun processThumbnails(
+    internal fun processThumbnails(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
         nasRoot: String,
         ffmpegPath: String
@@ -781,7 +781,7 @@ class TranscoderAgent(
     /**
      * Processes a SUBTITLES lease: local agent has no Whisper, reports failure.
      */
-    private fun processSubtitles(
+    internal fun processSubtitles(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
         @Suppress("UNUSED_PARAMETER") nasRoot: String
     ) {
@@ -811,7 +811,7 @@ class TranscoderAgent(
      * Handles re-transcode requests: if the source MKV was replaced, deletes
      * the ForBrowser copy so it gets re-queued for transcoding.
      */
-    private fun handleRetranscodeRequests(nasRoot: String) {
+    internal fun handleRetranscodeRequests(nasRoot: String) {
         val transcodes = Transcode.findAll().filter { it.retranscode_requested && it.file_path != null }
         for (tc in transcodes) {
             val sourceFile = File(tc.file_path!!)
