@@ -14,7 +14,10 @@ interface Profile {
   username: string;
   display_name: string;
   is_admin: boolean;
-  rating_ceiling: string | null;
+  /** Raw ordinal level (0–6); see rating_ceiling_label for display. */
+  rating_ceiling: number | null;
+  /** Human-readable ceiling, e.g. "PG-13 / TV-14". Null when unrestricted. */
+  rating_ceiling_label: string | null;
   live_tv_min_quality: number;
   has_live_tv: boolean;
   passkeys_enabled: boolean;

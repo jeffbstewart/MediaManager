@@ -65,15 +65,18 @@ test.describe('profile — account info', () => {
     await page.route('**/api/v2/profile', r =>
       r.fulfill({ json: {
         id: 1, username: 'testuser', display_name: 'Test User',
-        is_admin: false, rating_ceiling: 'PG-13', live_tv_min_quality: 0,
+        is_admin: false, rating_ceiling: 4, rating_ceiling_label: 'PG-13 / TV-14',
+        live_tv_min_quality: 0,
         has_live_tv: true, passkeys_enabled: false,
       } })
     );
     await page.goto('/profile');
     await page.waitForSelector('app-profile .info-row');
     await expect(page.locator('app-profile .info-row')).toHaveCount(4);
+    // Server now sends a human-readable label like "PG-13 / TV-14"
+    // alongside the raw ordinal — assert on the label text.
     await expect(page.locator('app-profile .info-row').nth(3).locator('.info-value'))
-      .toContainText('PG-13');
+      .toContainText('PG-13 / TV-14');
   });
 });
 

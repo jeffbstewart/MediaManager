@@ -14,6 +14,7 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.entity.ContentRating
 import net.stewart.mediamanager.entity.LiveTvTuner
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.SessionToken
@@ -45,12 +46,18 @@ class ProfileHttpService {
 
         val hasLiveTv = LiveTvTuner.findAll().any { it.enabled }
 
+        // Display label for the rating ceiling (e.g. "PG-13 / TV-14")
+        // — the bare ordinal isn't user-readable. Null when the user
+        // is unrestricted.
+        val ceilingLabel = user.rating_ceiling?.let { ContentRating.ceilingLabel(it) }
+
         val profile = mapOf(
             "id" to user.id,
             "username" to user.username,
             "display_name" to user.display_name,
             "is_admin" to user.isAdmin(),
             "rating_ceiling" to user.rating_ceiling,
+            "rating_ceiling_label" to ceilingLabel,
             "live_tv_min_quality" to user.live_tv_min_quality,
             "has_live_tv" to hasLiveTv,
             "passkeys_enabled" to (WebAuthnService.rpId != null)

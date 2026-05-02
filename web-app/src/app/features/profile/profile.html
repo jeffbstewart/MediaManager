@@ -18,10 +18,10 @@
         <span class="info-label">Role</span>
         <span class="info-value">{{ p.is_admin ? 'Admin' : 'Viewer' }}</span>
       </div>
-      @if (p.rating_ceiling) {
+      @if (p.rating_ceiling_label) {
         <div class="info-row">
           <span class="info-label">Content Rating Limit</span>
-          <span class="info-value">{{ p.rating_ceiling }}</span>
+          <span class="info-value">{{ p.rating_ceiling_label }}</span>
         </div>
       }
     </div>
