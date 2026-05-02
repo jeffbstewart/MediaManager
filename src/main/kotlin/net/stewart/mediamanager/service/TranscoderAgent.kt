@@ -45,7 +45,7 @@ class TranscoderAgent(
     private val clock: Clock = SystemClock
 ) {
     private val log = LoggerFactory.getLogger(TranscoderAgent::class.java)
-    private val running = AtomicBoolean(false)
+    internal val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
     /** Measured throughput from current/recent transcode (bytes per second). */
@@ -482,7 +482,7 @@ class TranscoderAgent(
     /**
      * Processes a TRANSCODE lease: FFmpeg re-encode to ForBrowser MP4.
      */
-    private fun processTranscodeLease(
+    internal fun processTranscodeLease(
         lease: net.stewart.mediamanager.entity.TranscodeLease,
         nasRoot: String,
         ffmpegPath: String,
