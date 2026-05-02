@@ -145,6 +145,10 @@ export interface TitleListParams {
   sort?: SortMode;
   ratings?: string[];
   playableOnly?: boolean;
+  /** 1-indexed page number. Omit for page 1. */
+  page?: number;
+  /** Items per page. Omit to accept the server default. */
+  limit?: number;
 }
 
 export interface FeatureFlags {
@@ -902,6 +906,8 @@ export class CatalogService {
       sort: params.sort ?? '',
       ratings: params.ratings ?? [],
       playableOnly: params.playableOnly !== false,
+      page: params.page ?? 1,
+      limit: params.limit ?? 0,
     });
     return {
       titles: proto.titles.map(adaptTitleCard),

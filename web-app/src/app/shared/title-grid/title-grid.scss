@@ -132,3 +132,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+// Zero-height invisible div under the grid that the IntersectionObserver
+// in title-grid.ts watches for "user has scrolled near the bottom"
+// signals. The observer's rootMargin starts the next-page fetch
+// ~400px before this element actually hits the viewport.
+.scroll-sentinel {
+  width: 100%;
+  height: 1px;
+}
+
+.loading-more {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+// Visible to screen readers, invisible to sighted users — used to
+// announce the "Loading more titles" state without cluttering the UI.
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -70,4 +70,17 @@
       </a>
     }
   </div>
+
+  <!-- Sentinel — when this scrolls into view, the IntersectionObserver
+       in title-grid.ts fires loadMore(). rootMargin on the observer
+       starts the next-page fetch ~400px before the sentinel hits the
+       viewport so the grid feels uninterrupted. -->
+  <div #sentinel class="scroll-sentinel" aria-hidden="true"></div>
+
+  @if (loadingMore()) {
+    <div class="loading-more" role="status" aria-live="polite">
+      <mat-spinner diameter="28" />
+      <span class="visually-hidden">Loading more titles</span>
+    </div>
+  }
 }
