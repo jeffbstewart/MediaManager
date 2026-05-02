@@ -5100,3 +5100,52 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Files: ios/MediaManager/MediaManager/MediaManagerApp.swift,
   src/main/kotlin/.../grpc/ObservabilityGrpcService.kt.
 ===
+
+=== 2026-05-02 14:00 — Fix iOS playback (CoreMedia content range mismatch) ===
+- Symptom: tapping play on a movie in the iOS app showed
+  a black screen. Server logs reported a couple of range
+  requests that hit the wire and then
+  "Range stream error: CancelledSubscriptionException";
+  no obvious failure. Web playback was fine.
+- Diagnostic instrumentation added to CustomPlayerView:
+  KVO on AVPlayerItem.status, plus notification observers
+  for newErrorLogEntry / failedToPlayToEndTime /
+  playbackStalled. NSError unpacker (`describeNSError`)
+  now walks NSUnderlyingErrorKey and the URL/recovery
+  keys so the log line names the real cause.
+- That instrumentation revealed the actual error:
+  CoreMediaErrorDomain code -12939 (kCMHTTPRequest-
+  ErrorContentRangeMismatch) — "should be start 0
+  length 9100503453 is start 0 length 10485759".
+  AVFoundation issued `Range: bytes=0-` (the whole 8.5
+  GiB file) and the server returned 206 with
+  `Content-Range: bytes 0-10485759/9100503453` —
+  truncated at 10 MiB. RFC-legal but progressive players
+  reject it.
+- Root cause in VideoStreamHttpService.kt: the 10 MiB
+  chunk cap was gated only on `isRokuClient(ctx)`. iOS
+  AVFoundation/CoreMedia behaves the same way as Roku
+  (single linear read of the response body to EOF) but
+  fell into the chunked branch.
+- Fix: introduced `isProgressiveClient(ctx)` /
+  `isProgressiveUserAgent(ua)` returning true when the
+  User-Agent contains "Roku" OR "AppleCoreMedia". Both
+  the chunk-cap and the 6-hour request timeout now use
+  the broader predicate. Browser MSE clients still get
+  the chunked path.
+- Tests: added 7 unit tests in
+  StreamingServicesTest.VideoStreamHttpServiceTest
+  covering iOS UA, macOS UA, Roku UA, MSE browser UAs,
+  null/blank UAs, case-insensitive Roku, and one
+  end-to-end through ctxFor() that reads the header off
+  the request context. All pass (8/8 in that suite).
+- Verification: deployed via lifecycle/docker-build.sh
+  (docker desktop initially down — relaunched and
+  redeployed); iOS app retried playback and reported
+  AVPlayerItem.status: readyToPlay; the simulator
+  filled the screen with video.
+- Files: src/main/kotlin/.../armeria/
+  VideoStreamHttpService.kt,
+  src/test/kotlin/.../armeria/StreamingServicesTest.kt,
+  ios/MediaManager/MediaManager/Views/CustomPlayerView.swift.
+===

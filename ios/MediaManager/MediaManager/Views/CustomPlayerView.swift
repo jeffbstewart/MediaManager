@@ -2,6 +2,8 @@ import SwiftUI
 import AVKit
 import MediaPlayer
 
+private let log = MMLogger(category: "CustomPlayerView")
+
 /// Raw AVPlayerLayer wrapped for SwiftUI — no native controls.
 struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
@@ -49,6 +51,15 @@ struct CustomPlayerView: View {
     @State private var thumbnails = ThumbnailScrubber()
     @State private var scrubThumbnail: UIImage?
     @State private var skipController = SkipSegmentController()
+
+    // Player diagnostics — attached in loadStream(), torn down in cleanup().
+    // KVO observation token for AVPlayerItem.status.
+    @State private var statusObservation: NSKeyValueObservation?
+    // Notification observers for AVPlayerItem error / stall events. Captured
+    // by reference so we can pass them back to NotificationCenter.removeObserver.
+    @State private var errorLogObserver: NSObjectProtocol?
+    @State private var failedToEndObserver: NSObjectProtocol?
+    @State private var stalledObserver: NSObjectProtocol?
 
     // Controls state
     @State private var showControls = true
@@ -502,6 +513,14 @@ struct CustomPlayerView: View {
         timeObserver = nil
         subtitles.stop(player: player)
         skipController.stop(player: player)
+        statusObservation?.invalidate()
+        statusObservation = nil
+        for token in [errorLogObserver, failedToEndObserver, stalledObserver] {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+        errorLogObserver = nil
+        failedToEndObserver = nil
+        stalledObserver = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -514,13 +533,17 @@ struct CustomPlayerView: View {
         let offlineDir = dataModel.downloads.localDir(for: tcId)
 
         guard let asset = await dataModel.streamAsset(transcodeId: tcId) else {
+            log.error("loadStream: streamAsset returned nil for transcode \(tcId.rawValue)")
             error = "Unable to build stream URL"
             return
         }
 
+        log.info("loadStream: transcode=\(tcId.rawValue) source=\(asset.url.scheme ?? "?"):\(asset.url.host ?? "?") path=\(asset.url.path)")
+
         let item = AVPlayerItem(asset: asset)
         let avPlayer = AVPlayer(playerItem: item)
         item.preferredForwardBufferDuration = 30
+        attachDiagnostics(to: item)
 
         avPlayer.allowsExternalPlayback = true
         avPlayer.usesExternalPlaybackWhileExternalScreenIsActive = true
@@ -560,6 +583,56 @@ struct CustomPlayerView: View {
         _ = await (subLoad, thumbLoad, skipLoad)
         subtitles.startObserving(player: avPlayer)
         skipController.startObserving(player: avPlayer)
+    }
+
+    /// Attach observers that surface why the player isn't drawing video.
+    /// AVFoundation otherwise fails silently — the layer just stays black —
+    /// so we have to ask explicitly for status, error-log entries,
+    /// failed-to-play-to-end, and stall notifications.
+    private func attachDiagnostics(to item: AVPlayerItem) {
+        statusObservation = item.observe(\.status, options: [.new, .initial]) { item, _ in
+            Task { @MainActor in
+                switch item.status {
+                case .unknown:
+                    log.info("AVPlayerItem.status: unknown (still loading)")
+                case .readyToPlay:
+                    let video = item.asset.tracks(withMediaType: .video).count
+                    let audio = item.asset.tracks(withMediaType: .audio).count
+                    log.info("AVPlayerItem.status: readyToPlay (video tracks=\(video), audio tracks=\(audio), duration=\(CMTimeGetSeconds(item.asset.duration))s)")
+                case .failed:
+                    let detail = describeNSError(item.error)
+                    log.error("AVPlayerItem.status: failed — \(detail)")
+                @unknown default:
+                    log.warning("AVPlayerItem.status: unknown raw value \(item.status.rawValue)")
+                }
+            }
+        }
+
+        errorLogObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.newErrorLogEntryNotification,
+            object: item,
+            queue: .main
+        ) { note in
+            guard let event = (note.object as? AVPlayerItem)?.errorLog()?.events.last else { return }
+            log.warning("AVPlayerItem error-log entry: status=\(event.errorStatusCode) domain=\(event.errorDomain) comment=\(event.errorComment ?? "(none)") uri=\(event.uri ?? "(none)") server=\(event.serverAddress ?? "(none)")")
+        }
+
+        failedToEndObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: item,
+            queue: .main
+        ) { note in
+            let err = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            log.error("AVPlayerItem failedToPlayToEndTime — \(describeNSError(err))")
+        }
+
+        stalledObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.playbackStalledNotification,
+            object: item,
+            queue: .main
+        ) { _ in
+            log.warning("AVPlayerItem playbackStalled")
+        }
     }
 
     private func startTimeObserver(player: AVPlayer) {
@@ -636,6 +709,39 @@ struct CustomPlayerView: View {
 }
 
 // MARK: - AirPlay Button
+
+/// AVFoundation surfaces failures as plain NSError; `localizedDescription`
+/// alone is usually a generic "unknown error". Unpack domain, code, and the
+/// useful userInfo keys (including NSUnderlyingError, which is where the
+/// HTTP status / OSStatus / chained reason actually lives) so the log line
+/// is self-explanatory.
+private func describeNSError(_ error: Error?) -> String {
+    guard let error else { return "(no error attached)" }
+    let ns = error as NSError
+    var parts: [String] = [
+        "domain=\(ns.domain)",
+        "code=\(ns.code)",
+        "msg=\"\(ns.localizedDescription)\"",
+    ]
+    let interesting: [String] = [
+        NSUnderlyingErrorKey,
+        NSURLErrorFailingURLErrorKey,
+        NSURLErrorFailingURLStringErrorKey,
+        "NSLocalizedFailureReason",
+        "NSLocalizedRecoverySuggestion",
+        "NSDebugDescription",
+    ]
+    for key in interesting {
+        if let value = ns.userInfo[key] {
+            if key == NSUnderlyingErrorKey, let nested = value as? Error {
+                parts.append("underlying={\(describeNSError(nested))}")
+            } else {
+                parts.append("\(key)=\(value)")
+            }
+        }
+    }
+    return parts.joined(separator: " ")
+}
 
 /// Reference-type wrapper so AVPlayer closures can read/write current state.
 /// @State on a struct creates copies in closures — this class avoids that.

@@ -54,13 +54,16 @@ class VideoStreamHttpService {
      */
     @Get("/stream/{transcodeId}")
     fun streamVideo(ctx: ServiceRequestContext, @Param("transcodeId") transcodeId: Long): HttpResponse {
-        // Roku's Video node is a progressive MP4 player: if the server caps the response
-        // at a small chunk (browser-friendly), Roku treats the chunk end as file EOF and
-        // transitions to "finished" after a few seconds. Browsers re-range seamlessly via
-        // MediaSource Extensions; Roku does not. For Roku clients we stream the full
-        // requested range on one response and extend the request timeout to cover a
-        // feature-length file at realtime playback.
-        if (isRokuClient(ctx)) {
+        // Roku's Video node and iOS AVFoundation/CoreMedia are progressive MP4 players:
+        // if the server caps the response at a small chunk (browser-friendly), Roku
+        // treats the chunk end as file EOF, and CoreMedia rejects the response with
+        // kCMHTTPRequestErrorContentRangeMismatch (-12939) because the returned range
+        // is smaller than what it requested via `Range: bytes=0-`. Browsers re-range
+        // seamlessly via MediaSource Extensions; progressive players do not. For
+        // progressive clients we stream the full requested range on one response and
+        // extend the request timeout to cover a feature-length file at realtime
+        // playback.
+        if (isProgressiveClient(ctx)) {
             ctx.setRequestTimeout(6.hours.toJavaDuration())
         }
         val writer = HttpResponse.streaming()
@@ -74,6 +77,28 @@ class VideoStreamHttpService {
     private fun isRokuClient(ctx: ServiceRequestContext): Boolean {
         val ua = ctx.request().headers().get("user-agent") ?: return false
         return ua.contains("Roku", ignoreCase = true)
+    }
+
+    /**
+     * Progressive MP4 clients that read a single response body straight through
+     * to EOF and expect the server to honor the full requested byte range. This
+     * covers Roku's Video node and iOS AVFoundation/CoreMedia (User-Agent
+     * "AppleCoreMedia/..."), as well as Mac apps that wrap AVFoundation.
+     * Browsers using MediaSource Extensions are NOT in this set — they
+     * cooperate with chunked responses and re-range as needed.
+     */
+    internal fun isProgressiveClient(ctx: ServiceRequestContext): Boolean =
+        isProgressiveUserAgent(ctx.request().headers().get("user-agent"))
+
+    /**
+     * Pure-function variant of [isProgressiveClient] for unit testing.
+     * Returns false for null / blank user-agents so unrecognised clients
+     * default to the chunked browser path.
+     */
+    internal fun isProgressiveUserAgent(userAgent: String?): Boolean {
+        if (userAgent.isNullOrBlank()) return false
+        return userAgent.contains("Roku", ignoreCase = true)
+            || userAgent.contains("AppleCoreMedia", ignoreCase = true)
     }
 
     private fun doStreamVideo(ctx: ServiceRequestContext, transcodeId: Long, writer: HttpResponseWriter) {
@@ -193,10 +218,11 @@ class VideoStreamHttpService {
         val (start, requestedEnd) = range
         // Browsers using MediaSource Extensions are happy with a capped response and
         // re-range seamlessly; capping keeps any single response well under the default
-        // Armeria request timeout. Roku's progressive MP4 player treats the response end
-        // as file EOF, so for Roku we honor the requested range in full — the long
-        // request timeout is set up front in streamVideo().
-        val end = if (isRokuClient(ctx)) {
+        // Armeria request timeout. Progressive MP4 players (Roku, iOS CoreMedia) treat
+        // the response end as file EOF and reject truncated ranges with -12939, so for
+        // those clients we honor the requested range in full — the long request
+        // timeout is set up front in streamVideo().
+        val end = if (isProgressiveClient(ctx)) {
             requestedEnd
         } else {
             val maxChunkSize = 10L * 1024 * 1024

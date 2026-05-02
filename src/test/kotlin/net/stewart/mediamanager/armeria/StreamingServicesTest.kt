@@ -20,6 +20,7 @@ import org.junit.Before
 import org.junit.BeforeClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 internal class VideoStreamHttpServiceTest : ArmeriaTestBase() {
@@ -49,6 +50,99 @@ internal class VideoStreamHttpServiceTest : ArmeriaTestBase() {
             transcodeId = 9999L, subPath = "thumbs.vtt",
         )
         assertEquals(HttpStatus.NOT_FOUND, statusOf(resp))
+    }
+
+    // -------- progressive-player User-Agent classification --------
+    //
+    // The 10 MiB chunk cap on streamed video must NOT apply to clients
+    // whose MP4 player reads the response straight through to EOF (Roku's
+    // Video node, iOS AVFoundation/CoreMedia, Mac apps wrapping
+    // AVFoundation). Those clients send `Range: bytes=0-` to mean "the
+    // whole file" and reject capped 206 responses with
+    // kCMHTTPRequestErrorContentRangeMismatch (-12939). MSE-using browsers
+    // are happy with chunked responses and must stay on the capped path.
+
+    @Test
+    fun `isProgressiveUserAgent detects iOS AVFoundation`() {
+        // Real iOS user-agent shape from AVFoundation HTTP requests.
+        assertTrue(service.isProgressiveUserAgent(
+            "AppleCoreMedia/1.0.0.21B91 (iPad; U; CPU OS 16_7 like Mac OS X; en_us)"))
+        assertTrue(service.isProgressiveUserAgent(
+            "AppleCoreMedia/1.0.0.22A3354 (iPhone; U; CPU OS 18_0 like Mac OS X; en_us)"))
+    }
+
+    @Test
+    fun `isProgressiveUserAgent detects macOS AVFoundation`() {
+        // QuickTime / Mac apps wrapping AVFoundation share the AppleCoreMedia prefix.
+        assertTrue(service.isProgressiveUserAgent(
+            "AppleCoreMedia/1.0.0.24A335 (Macintosh; U; Intel Mac OS X 14_4; en_us)"))
+    }
+
+    @Test
+    fun `isProgressiveUserAgent detects Roku Video node`() {
+        // Roku's Video node identifies itself with a "Roku/DVP-..." UA;
+        // accept any UA containing "Roku" so future channel UAs still match.
+        assertTrue(service.isProgressiveUserAgent(
+            "Roku/DVP-13.0 (13.0.0.4225-1A)"))
+        assertTrue(service.isProgressiveUserAgent("Roku Channel"))
+    }
+
+    @Test
+    fun `isProgressiveUserAgent rejects MSE-using browsers`() {
+        // MSE browsers cooperate with the capped chunk + re-range path —
+        // they MUST go through the chunked branch.
+        assertFalse(service.isProgressiveUserAgent(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 " +
+            "(KHTML, like Gecko) Version/17.4 Safari/605.1.15"))
+        assertFalse(service.isProgressiveUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"))
+        assertFalse(service.isProgressiveUserAgent(
+            "Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0"))
+    }
+
+    @Test
+    fun `isProgressiveUserAgent rejects null and blank user agents`() {
+        // Unrecognised clients default to the safer chunked path.
+        assertFalse(service.isProgressiveUserAgent(null))
+        assertFalse(service.isProgressiveUserAgent(""))
+        assertFalse(service.isProgressiveUserAgent("   "))
+    }
+
+    @Test
+    fun `isProgressiveUserAgent matches Roku case-insensitively`() {
+        // Defensive: Roku has shipped UAs with mixed casing; we shouldn't
+        // miss any of them.
+        assertTrue(service.isProgressiveUserAgent("ROKU/DVP-13.0"))
+        assertTrue(service.isProgressiveUserAgent("roku-dev-channel"))
+    }
+
+    @Test
+    fun `isProgressiveClient reads the User-Agent off the request context`() {
+        // End-to-end through the request-context wrapper that production
+        // code actually calls — the unit-test ctxFor uses the same plumbing
+        // as the live Armeria pipeline, just synthesised in memory.
+        val coreMediaCtx = ctxFor(
+            "/stream/1",
+            user = getOrCreateUser("admin", level = 2),
+            extraHeaders = mapOf("user-agent" to
+                "AppleCoreMedia/1.0.0.21B91 (iPad; U; CPU OS 16_7 like Mac OS X; en_us)"),
+        )
+        assertTrue(service.isProgressiveClient(coreMediaCtx))
+
+        val safariCtx = ctxFor(
+            "/stream/1",
+            user = getOrCreateUser("admin", level = 2),
+            extraHeaders = mapOf("user-agent" to
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 " +
+                "(KHTML, like Gecko) Version/17.4 Safari/605.1.15"),
+        )
+        assertFalse(service.isProgressiveClient(safariCtx))
+
+        // Header missing entirely.
+        val noUaCtx = ctxFor("/stream/1",
+            user = getOrCreateUser("admin", level = 2))
+        assertFalse(service.isProgressiveClient(noUaCtx))
     }
 }
 
