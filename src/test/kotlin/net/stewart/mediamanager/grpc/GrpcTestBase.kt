@@ -84,7 +84,6 @@ open class GrpcTestBase {
                 RadioGrpcService(),
                 RecommendationGrpcService(),
                 ImageGrpcService(),
-                BuddyGrpcService(),
             )
 
             val builder = InProcessServerBuilder.forName(SERVER_NAME).directExecutor()
@@ -93,6 +92,16 @@ open class GrpcTestBase {
                     ServerInterceptors.intercept(service, loggingInterceptor, authInterceptor)
                 )
             }
+            // Buddy service uses its own auth — in-band via Connect on the
+            // streaming RPC, or x-buddy-key metadata for unary CheckPending.
+            // Production wires it with BuddyAuthInterceptor (which only
+            // populates context keys; no validation), not the user
+            // AuthInterceptor that would reject anonymous calls.
+            builder.addService(
+                ServerInterceptors.intercept(
+                    BuddyGrpcService(), loggingInterceptor, BuddyAuthInterceptor()
+                )
+            )
             server = builder.build().start()
 
             channel = InProcessChannelBuilder.forName(SERVER_NAME)
