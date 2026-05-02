@@ -25,9 +25,24 @@ interface EpubJsLocation {
   start: { cfi: string; percentage: number };
   end: { cfi: string; percentage: number };
 }
+interface EpubJsLocations {
+  /**
+   * Build the locations index. Until this resolves, `loc.start.percentage`
+   * on relocated events is always 0 — without an index, epub.js has no
+   * way to convert a CFI to a fraction of the book.
+   *
+   * The argument is the target characters-per-page; 1024 is epub.js's
+   * documented default.
+   */
+  generate(charsPerPage: number): Promise<unknown>;
+  /** Returns 0..1 for a given CFI once the index is built. */
+  percentageFromCfi(cfi: string): number;
+}
 interface EpubJsBook {
   renderTo(el: HTMLElement, opts: Record<string, unknown>): EpubJsRendition;
   destroy(): void;
+  locations: EpubJsLocations;
+  ready: Promise<unknown>;
 }
 declare global {
   interface Window {
@@ -75,6 +90,7 @@ export class ReaderComponent implements OnInit, OnDestroy {
   private rendition: EpubJsRendition | null = null;
   private book: EpubJsBook | null = null;
   private lastCfi: string | null = null;
+  private locationsReady = false;
   private reportTimer: ReturnType<typeof setInterval> | null = null;
   private readonly container = viewChild<ElementRef<HTMLDivElement>>('epubContainer');
 
@@ -153,31 +169,41 @@ export class ReaderComponent implements OnInit, OnDestroy {
     });
     this.rendition = rendition;
     rendition.themes.fontSize(`${this.fontSize()}%`);
-    // epub.js fires `relocated` events both during the initial
-    // display() and (more rarely) shortly after it resolves, BEFORE
-    // the locations index is generated. Both cases hand us
-    // percentage=0 — honouring those would clobber the saved percent
-    // we just loaded from /reading-progress.
-    //
-    // Two layered gates:
-    //   1. initialDisplayDone — drops every event during the first
-    //      display() call.
-    //   2. percentage > 0 — drops the stray "post-display, locations-
-    //      not-built" event that races with the saved-percent set.
-    //      A real percentage=0 (a user re-opening at the very start
-    //      of the book) is fine because that's also their saved
-    //      value, so a no-op overwrite would be a no-op anyway.
-    let initialDisplayDone = false;
+    // Track CFI on every relocated event. We only update the displayed
+    // percent against the locations index (built below) — `loc.start.
+    // percentage` is 0 until then.
     rendition.on('relocated', (loc) => {
       this.lastCfi = loc.start.cfi;
-      if (!initialDisplayDone) return;
-      if (loc.start.percentage != null && loc.start.percentage > 0) {
-        this.percent.set(Math.round(loc.start.percentage * 100));
+      if (this.locationsReady) {
+        const pct = book.locations.percentageFromCfi(loc.start.cfi);
+        if (Number.isFinite(pct)) {
+          this.percent.set(Math.round(pct * 100));
+        }
       }
     });
 
     await rendition.display(resumeCfi ?? undefined);
-    initialDisplayDone = true;
+
+    // Build the locations index in the background so percent updates
+    // as the user paginates. Without this, epub.js can't convert a
+    // CFI to a fraction of the book and percent stays stuck at the
+    // saved value (or 0% on a fresh open). 1024 chars/page is the
+    // epub.js default — accurate enough for a progress bar without
+    // the cost of a finer-grained scan.
+    void book.ready
+      .then(() => book.locations.generate(1024))
+      .then(() => {
+        this.locationsReady = true;
+        // Recompute against the most-recent CFI so the header reflects
+        // the user's current position the moment the index is ready.
+        if (this.lastCfi) {
+          const pct = book.locations.percentageFromCfi(this.lastCfi);
+          if (Number.isFinite(pct) && pct > 0) {
+            this.percent.set(Math.round(pct * 100));
+          }
+        }
+      })
+      .catch(e => console.warn('epub locations index failed', e));
 
     // Report progress every 10 s; suppresses duplicate reports when the user
     // hasn't moved since the last tick.

@@ -6,6 +6,7 @@ import { fulfillProto, unframeGrpcWebRequest } from '../helpers/proto-fixture';
 import { create, fromBinary } from '@bufbuild/protobuf';
 import { ReadingProgressSchema } from '../../src/app/proto-gen/common_pb';
 import { ListTitlesRequestSchema } from '../../src/app/proto-gen/catalog_pb';
+import { ReportReadingProgressRequestSchema } from '../../src/app/proto-gen/playback_pb';
 
 const LIST_TITLES_URL = '/mediamanager.CatalogService/ListTitles';
 const PB = '/mediamanager.PlaybackService';
@@ -230,6 +231,73 @@ test.describe('reader — EPUB', () => {
     // signal fires); the percent text comes from progress.percent
     // immediately, before epub.js has rendered anything.
     await expect(page.locator('app-reader .percent')).toContainText('50%', { timeout: 5_000 });
+  });
+
+  test('percent climbs past 0% as the reader paginates through the book', async ({ page }) => {
+    // Reproduces the "progress always shows 0%" bug. The reader binds
+    // its percent display to epub.js's `loc.start.percentage`, but
+    // epub.js can't compute a meaningful percentage until
+    // book.locations has been generated. The reader never calls
+    // book.locations.generate(...), so as the user paginates the
+    // header stays stuck at whatever the saved value was when the
+    // reader opened. New users open at 0% and never see it move.
+    //
+    // Test scenario: first-open of a fresh book (saved fraction=0,
+    // locator empty), advance the reader past the title page into
+    // chapter content, assert the percent has gone above 0%.
+
+    // Override the default mock so this test starts with no progress.
+    await page.route(`**${PB}/GetReadingProgress`, r =>
+      fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema, {
+        mediaItemId: BigInt(EPUB_ITEM_ID),
+        locator: '',
+        // No fraction set → defaults to 0.
+      })));
+
+    // Capture every ReportReadingProgress POST body so we can assert
+    // the reader sends a non-zero fraction back to the server.
+    const reported: number[] = [];
+    page.on('request', req => {
+      if (!req.url().endsWith(`${PB}/ReportReadingProgress`)) return;
+      const buf = req.postDataBuffer();
+      if (!buf) return;
+      const decoded = fromBinary(ReportReadingProgressRequestSchema,
+        unframeGrpcWebRequest(buf));
+      reported.push(decoded.fraction);
+    });
+
+    await page.goto(`/reader/${EPUB_ITEM_ID}`);
+    await page.waitForSelector('app-reader .epub-container iframe', { timeout: 10_000 });
+    await expect(page.locator('app-reader .percent')).toHaveText('0%');
+
+    // Advance enough pages to land deep in the book. After enough
+    // forward navigation the percent should reflect the current
+    // position. Click the rendered "next page" arrow rather than
+    // poking at epub.js internals.
+    const next = page.locator('app-reader button[aria-label="Next page"]');
+    for (let i = 0; i < 5; i++) {
+      await next.click();
+    }
+
+    // After paginating forward, the header MUST report a non-zero
+    // percent. Without book.locations.generate() the value is stuck
+    // at 0% and this assertion fails — that is the user-visible bug.
+    await expect.poll(
+      async () => {
+        const txt = await page.locator('app-reader .percent').textContent();
+        return Number((txt ?? '0%').replace('%', '').trim());
+      },
+      { timeout: 10_000, message: 'percent should climb above 0% after paginating' },
+    ).toBeGreaterThan(0);
+
+    // Tear down the reader to flush a final ReportReadingProgress
+    // POST through ngOnDestroy. We then assert at least one report
+    // carried a non-zero fraction — proving the value the server
+    // persists is the lived position, not a stuck zero.
+    await page.locator('app-reader button[aria-label="Close"]').click();
+    await expect.poll(() => reported.some(f => f > 0),
+      { timeout: 5_000, message: 'reader must POST a non-zero fraction' })
+      .toBe(true);
   });
 
   test('font-size controls update the displayed value', async ({ page }) => {
