@@ -40,6 +40,21 @@ extension MMMediaFormat {
         case .bluray: return "Blu-ray"
         case .uhdBluray: return "UHD Blu-ray"
         case .hdDvd: return "HD DVD"
+        case .massMarketPaperback: return "Mass Market Paperback"
+        case .tradePaperback: return "Trade Paperback"
+        case .hardback: return "Hardback"
+        case .ebookEpub: return "EPUB"
+        case .ebookPdf: return "PDF"
+        case .audiobookCd: return "Audiobook CD"
+        case .audiobookDigital: return "Audiobook"
+        case .cd: return "CD"
+        case .vinylLp: return "Vinyl"
+        case .audioFlac: return "FLAC"
+        case .audioMp3: return "MP3"
+        case .audioAac: return "AAC"
+        case .audioOgg: return "OGG"
+        case .audioWav: return "WAV"
+        case .other: return nil
         case .unknown, .UNRECOGNIZED: return nil
         }
     }
@@ -51,6 +66,9 @@ extension MMMediaType {
         case .movie: return .movie
         case .tv: return .tv
         case .personal: return .personal
+        // Books and albums don't yet have iOS app-side enum cases —
+        // they'll arrive with the Books / Audio feature modules.
+        case .book, .album: return nil
         case .unknown, .UNRECOGNIZED: return nil
         }
     }
@@ -65,6 +83,10 @@ extension MMSearchResultType {
         case .collection: return .collection
         case .tag: return .tag
         case .genre: return .genre
+        // New result types from the Books / Audio / Live modules. The
+        // iOS SearchResultType doesn't yet model them; surface as nil
+        // until the corresponding feature work lands.
+        case .book, .album, .artist, .author, .track, .personal, .channel, .camera: return nil
         case .unknown, .UNRECOGNIZED: return nil
         }
     }
@@ -77,6 +99,14 @@ extension MMSearchResultType {
         case .collection: return "collection"
         case .tag: return "tag"
         case .genre: return "genre"
+        case .book: return "book"
+        case .album: return "album"
+        case .artist: return "artist"
+        case .author: return "author"
+        case .track: return "track"
+        case .personal: return "home video"
+        case .channel: return "channel"
+        case .camera: return "camera"
         case .unknown, .UNRECOGNIZED: return "unknown"
         }
     }
@@ -657,7 +687,10 @@ struct ApiTranscodeWish: Identifiable, Sendable {
     var id: TranscodeID { TranscodeID(proto: proto.titleID) }
     var titleId: TitleID { TitleID(proto: proto.titleID) }
     var titleName: String { proto.titleName }
-    var posterUrl: String? { proto.hasPosterURL ? proto.posterURL : nil }
+    // poster_url was retired from TranscodeWishItem (proto field 6 is reserved).
+    // Clients now derive cover art from title_id via ImageService /
+    // /posters/{size}/{title_id}.
+    var posterUrl: String? { nil }
     var mediaType: MediaType? { nil }
     var requestedAt: String? { nil }
 }

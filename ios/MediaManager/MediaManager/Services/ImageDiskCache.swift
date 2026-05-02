@@ -3,7 +3,7 @@ import UIKit
 import CryptoKit
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "ImageDiskCache")
+private let logger = MMLogger(category: "ImageDiskCache")
 
 /// Disk-backed LRU image cache with in-memory front layer.
 /// Stores up to `maxCount` images on disk in Library/Caches/images/.

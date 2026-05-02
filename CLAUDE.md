@@ -463,6 +463,25 @@ curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&lim
 - `mediamanager-ios` — the iOS app
 - `mediamanager-android-tv` — the Android TV app
 
+### Helper script: `lifecycle/binnacle-tail.sh`
+
+Wraps the `/api/logs/query` endpoint and pretty-prints results so you don't
+have to remember the curl + jq incantation. Defaults to the iOS app, last 50
+records, oldest-first (so the most recent line is at the bottom).
+
+```bash
+lifecycle/binnacle-tail.sh                     # last 50 from mediamanager-ios
+lifecycle/binnacle-tail.sh -n 200              # last 200
+lifecycle/binnacle-tail.sh -s server           # short alias (server|ios|tv)
+lifecycle/binnacle-tail.sh -s ios -l WARN      # min severity
+lifecycle/binnacle-tail.sh --since 2026-05-01T00:00:00Z
+lifecycle/binnacle-tail.sh --raw               # raw JSON instead of formatted lines
+```
+
+Override the endpoint with `BINNACLE_URL=...` (default `https://172.16.4.12:8088`).
+The script uses `curl -k` because Binnacle terminates with an internal
+self-signed cert.
+
 ### Other endpoints
 
 - `GET /logs` — HTML viewer (redirect from `/`). Useful for eyeball

@@ -5,7 +5,7 @@ import Observation
 import UIKit
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "AuthManager")
+private let logger = MMLogger(category: "AuthManager")
 
 @Observable
 @MainActor
@@ -31,6 +31,11 @@ final class AuthManager {
 
     let apiClient = APIClient()
     let grpcClient = GrpcClient()
+    /// Ships os.Logger output to Binnacle via ObservabilityService.StreamLogs.
+    /// Started once an authenticated grpcClient is available; stopped on logout.
+    /// One streamer per AuthManager instance so the underlying LogBuffer iterator
+    /// stays single-consumer for the lifetime of the app.
+    let logStreamer: LogStreamer
     private var refreshTask: Task<Void, Never>?
 
     private static let legalDocsKey = "cachedLegalDocs"
@@ -63,6 +68,7 @@ final class AuthManager {
     }
 
     init() {
+        self.logStreamer = LogStreamer(grpcClient: grpcClient, identity: .current())
         restoreLegalDocs()
         restoreSession()
     }
@@ -220,6 +226,7 @@ final class AuthManager {
             if case .needsSetup(let url) = state {
                 state = .authenticated(serverURL: url)
             }
+            await logStreamer.start()
             scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
             await refreshServerInfo()
         } catch let rpcError as RPCError {
@@ -290,6 +297,7 @@ final class AuthManager {
     func logout() async {
         refreshTask?.cancel()
         refreshTask = nil
+        await logStreamer.stop()
 
         // Best-effort revoke — always clear local state regardless
         if let refreshBase64 = KeychainService.load(key: .refreshToken),
@@ -339,6 +347,7 @@ final class AuthManager {
             legalStatus = status
             if status.compliant {
                 state = .authenticated(serverURL: serverURL)
+                await logStreamer.start()
                 await refreshServerInfo()
             } else {
                 logger.info("transitionAfterAuth: legal agreement required")
@@ -363,6 +372,7 @@ final class AuthManager {
             legalStatus = nil
             if case .needsLegalAgreement(let url) = state {
                 state = .authenticated(serverURL: url)
+                await logStreamer.start()
                 await refreshServerInfo()
             }
         } catch let rpcError as RPCError {

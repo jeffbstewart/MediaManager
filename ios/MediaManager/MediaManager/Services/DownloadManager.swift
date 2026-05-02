@@ -3,7 +3,7 @@ import Network
 import Observation
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "DownloadManager")
+private let logger = MMLogger(category: "DownloadManager")
 
 @Observable
 @MainActor

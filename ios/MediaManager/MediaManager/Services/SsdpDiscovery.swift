@@ -3,7 +3,7 @@ import Network
 import Synchronization
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "SsdpDiscovery")
+private let logger = MMLogger(category: "SsdpDiscovery")
 
 actor SsdpDiscovery {
     static let serviceType = "urn:stewart:service:mediamanager:1"

@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "ImageProvider")
+private let logger = MMLogger(category: "ImageProvider")
 
 /// Provides images by reference, abstracting gRPC streaming and disk/memory caching.
 ///

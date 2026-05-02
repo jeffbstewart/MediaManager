@@ -5,7 +5,7 @@ import GRPCProtobuf
 import UIKit
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "ImageStreamClient")
+private let logger = MMLogger(category: "ImageStreamClient")
 
 /// Manages a single bidirectional gRPC stream for image delivery.
 /// Opens the stream lazily on first request, reconnects transparently on failure.

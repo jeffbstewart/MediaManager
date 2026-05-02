@@ -4954,3 +4954,58 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Validation: full harness 610/611 (same recurring
   15-books-and-reader:232 flake).
 ===
+
+=== 2026-05-02 13:12 — iOS log shipping to Binnacle ===
+- iOS app now forwards os.Logger output to Binnacle via the
+  new ObservabilityService.StreamLogs gRPC.
+- New MMLogger struct (Services/MMLogger.swift): drop-in for
+  os.Logger that calls the underlying Apple Logger AND queues
+  a LogRecord onto a 2000-slot AsyncStream buffer
+  (drop-oldest on overflow).
+- New LogStreamer actor (Services/LogStreamer.swift): drains
+  the buffer onto a long-lived StreamLogs RPC; exponential
+  backoff 2s→60s with jitter on reconnect; iterator created
+  lazily on first start() so the throwaway AuthManager built
+  during MediaManagerApp.init doesn't claim the singleton
+  buffer's only consumer iterator. Identity stamp:
+  service_name=mediamanager-ios, service_version from
+  CFBundleShortVersionString-CFBundleVersion, base attrs
+  device.model / device.system / locale.
+- GrpcClient.swift: added observabilityService accessor and
+  streamLogs(producer:) wrapper that injects auth metadata.
+- AuthManager.swift: owns one LogStreamer for its lifetime;
+  start() after every auth-success transition (login,
+  createFirstUser, agreeToTerms, restoreSession→
+  transitionAfterAuth), stop() on logout.
+- Migrated all 9 file-scope `Logger(subsystem:..., category:)`
+  declarations to `MMLogger(category:)`. Method names match
+  (info/warning/error/debug/trace) so call sites unchanged.
+- Side quests:
+  - lifecycle/ios-build.sh now writes both passes to
+    data/ios-build.log and tails the last 5 on phase-2
+    failure (so xcodebuild errors aren't lost).
+  - New lifecycle/binnacle-tail.sh helper: wraps
+    /api/logs/query with short service aliases (ios/tv/
+    server) and pretty-prints results oldest-first. CLAUDE.md
+    "Querying Binnacle Logs" section updated to point at it.
+  - ProtoAdapters.swift: switches for MMMediaFormat,
+    MMMediaType, MMSearchResultType made exhaustive against
+    the new BOOK / ALBUM / ARTIST / AUTHOR / TRACK / PERSONAL
+    / CHANNEL / CAMERA cases plus ebook/audio formats.
+    ApiTranscodeWish.posterUrl returns nil since proto field
+    6 is reserved (no longer trafficking image URLs).
+- Verification: launched in iPhone 16e simulator, signed in
+  to mediamanagergrpc.15mcmahon.net:8443; binnacle-tail.sh
+  showed pre-auth logs (SsdpDiscovery, restoreSession,
+  GrpcClient.discover) buffered and shipped on first
+  connect, plus real-time logs after streamer start. The
+  AuthManager double-init from MediaManagerApp.init shows
+  in the trace; lazy iterator held up.
+- Files created: Services/MMLogger.swift,
+  Services/LogStreamer.swift, lifecycle/binnacle-tail.sh.
+- Files modified: AuthManager.swift, GrpcClient.swift,
+  DownloadManager.swift, DownloadStore.swift,
+  ImageDiskCache.swift, ImageProvider.swift,
+  ImageStreamClient.swift, SsdpDiscovery.swift,
+  ProtoAdapters.swift, lifecycle/ios-build.sh, CLAUDE.md.
+===

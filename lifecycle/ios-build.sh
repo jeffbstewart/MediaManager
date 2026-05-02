@@ -90,15 +90,27 @@ BUILD_CMD=(
     build
 )
 
+LOG_FILE="$PROJECT_ROOT/data/ios-build.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+: > "$LOG_FILE"
+
 # Pass 1: Generate proto files. The build phase runs protoc to create
 # .pb.swift and .grpc.swift files. Compilation will fail because the
 # compiler hasn't indexed the newly-generated source yet — expected.
 echo "=== Pass 1: Generating proto stubs ==="
-"${BUILD_CMD[@]}" >/dev/null 2>&1 || true
+echo "=== Pass 1 ===" >> "$LOG_FILE"
+"${BUILD_CMD[@]}" >> "$LOG_FILE" 2>&1 || true
 
 # Pass 2: Compile everything including the generated proto files.
 echo "=== Pass 2: Compiling ==="
-"${BUILD_CMD[@]}" 2>&1 | tail -5
+echo "" >> "$LOG_FILE"
+echo "=== Pass 2 ===" >> "$LOG_FILE"
+if ! "${BUILD_CMD[@]}" >> "$LOG_FILE" 2>&1; then
+    tail -5 "$LOG_FILE"
+    echo ""
+    echo "Build FAILED ($CONFIGURATION). Full log: $LOG_FILE"
+    exit 1
+fi
 
 echo ""
-echo "Build succeeded ($CONFIGURATION)."
+echo "Build succeeded ($CONFIGURATION). Full log: $LOG_FILE"

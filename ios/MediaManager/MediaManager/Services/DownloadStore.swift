@@ -2,7 +2,7 @@ import Foundation
 import SwiftProtobuf
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "DownloadStore")
+private let logger = MMLogger(category: "DownloadStore")
 
 /// Atomic protobuf-encoded persistence for download metadata.
 ///

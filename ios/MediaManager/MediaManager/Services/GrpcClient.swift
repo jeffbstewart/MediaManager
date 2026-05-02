@@ -4,7 +4,7 @@ import GRPCNIOTransportHTTP2
 import GRPCProtobuf
 import os.log
 
-private let logger = Logger(subsystem: "net.stewart.mediamanager", category: "GrpcClient")
+private let logger = MMLogger(category: "GrpcClient")
 
 /// gRPC client that manages the connection to the MediaManager server.
 /// Analogous to APIClient but speaks gRPC over HTTP/2 cleartext (h2c).
@@ -116,6 +116,23 @@ actor GrpcClient {
 
     var imageService: MMImageService.Client<HTTP2ClientTransport.Posix> {
         get throws { MMImageService.Client(wrapping: try requireClient()) }
+    }
+
+    var observabilityService: MMObservabilityService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMObservabilityService.Client(wrapping: try requireClient()) }
+    }
+
+    /// Open a long-lived StreamLogs client-streaming RPC. The producer
+    /// closure is handed an `RPCWriter<MMLogRecord>` and runs until it
+    /// returns; the server then returns a `StreamLogsAck` summarising
+    /// forwarded/rejected counts. Auth metadata is attached automatically.
+    func streamLogs(
+        producer: @Sendable @escaping (RPCWriter<MMLogRecord>) async throws -> Void
+    ) async throws -> MMStreamLogsAck {
+        try await observabilityService.streamLogs(
+            metadata: authMetadata(),
+            requestProducer: producer
+        )
     }
 
     /// Auth metadata for long-lived streams (ImageStreamClient needs this).
