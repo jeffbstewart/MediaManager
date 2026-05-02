@@ -423,6 +423,16 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
   await page.route('**/api/v2/profile', (r: Route) =>
     r.fulfill({ json: loadFixture('profile/profile.json') })
   );
+  // Default: no registered passkeys. Per-test overrides supply richer
+  // payloads. Without this the SPA's listPasskeys() falls through to
+  // the dev proxy → 401 from the real backend → authInterceptor calls
+  // auth.logout() → cascade redirect to /, masquerading as a route bug.
+  await page.route('**/api/v2/profile/passkeys', (r: Route) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ json: { passkeys: [] } });
+    }
+    return r.fallback();
+  });
   await page.route('**/api/v2/profile/sessions', (r: Route) =>
     r.fulfill({ json: loadFixture('profile/sessions.json') })
   );
@@ -582,6 +592,26 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
     }
     return r.fulfill({ json: loadFixture('admin/media-item-detail.json') });
   });
+
+  // Amazon-orders ride a sibling URL that the broader '*' route above
+  // does not see (the `*` glob doesn't span '/'). MediaItemEdit calls
+  // this during init; without a mock the request falls through to
+  // the dev proxy, the upstream rejects the fake bearer token with
+  // 401, and the auth interceptor cascades into auth.logout() →
+  // navigate('/login') → silent refresh → '/'. Tests then look like
+  // mysterious "element detached from the DOM" failures.
+  await page.route('**/api/v2/admin/media-item/*/amazon-orders*', (r: Route) =>
+    r.fulfill({ json: { orders: [], search_query: '' } })
+  );
+
+  // Ownership photos: the edit page may upload or delete; default to
+  // accepting silently. Per-test overrides supply richer behaviour.
+  await page.route('**/api/v2/admin/ownership/upload', (r: Route) =>
+    r.fulfill({ json: { ok: true } })
+  );
+  await page.route('**/api/v2/admin/ownership/photos/*', (r: Route) =>
+    r.fulfill({ status: 204 })
+  );
 
   await page.route('**/api/v2/admin/amazon-orders*', (r: Route) =>
     r.fulfill({ json: loadFixture('admin/amazon-orders.json') })
