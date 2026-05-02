@@ -4,10 +4,13 @@ import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.linecorp.armeria.common.HttpData
 import com.linecorp.armeria.common.HttpMethod
 import com.linecorp.armeria.common.HttpRequest
 import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
+import com.linecorp.armeria.common.MediaType
+import com.linecorp.armeria.common.RequestHeaders
 import com.linecorp.armeria.server.ServiceRequestContext
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -73,8 +76,22 @@ abstract class ArmeriaTestBase {
         path: String,
         method: HttpMethod = HttpMethod.GET,
         user: AppUser? = null,
+        jsonBody: String? = null,
+        cookieHeader: String? = null,
     ): ServiceRequestContext {
-        val req = HttpRequest.of(method, path)
+        val headersBuilder = RequestHeaders.builder(method, path)
+        if (jsonBody != null) {
+            headersBuilder.contentType(MediaType.JSON_UTF_8)
+        }
+        if (cookieHeader != null) {
+            headersBuilder.add("cookie", cookieHeader)
+        }
+        val headers = headersBuilder.build()
+        val req = if (jsonBody != null) {
+            HttpRequest.of(headers, HttpData.ofUtf8(jsonBody))
+        } else {
+            HttpRequest.of(headers)
+        }
         val ctx = ServiceRequestContext.builder(req).build()
         if (user != null) ctx.setAttr(ArmeriaAuthDecorator.USER_KEY, user)
         return ctx
