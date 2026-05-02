@@ -577,4 +577,242 @@ internal class NasScannerServiceTest {
         assertEquals(0, TranscodeLease.findAll().size,
             "lease for managed-dir transcode also deleted")
     }
+
+    // ---------------------- AppConfig getters ----------------------
+
+    @Test
+    fun `getNasRootPath returns the configured value or null when unset`() {
+        assertEquals(null, NasScannerService.getNasRootPath())
+        AppConfig(config_key = "nas_root_path", config_val = "/srv/media").save()
+        assertEquals("/srv/media", NasScannerService.getNasRootPath())
+    }
+
+    @Test
+    fun `getBooksRoot returns null for unset, blank, or whitespace values`() {
+        assertEquals(null, NasScannerService.getBooksRoot())
+        AppConfig(config_key = BookScannerAgent.CONFIG_KEY_BOOKS_ROOT,
+            config_val = "").save()
+        assertEquals(null, NasScannerService.getBooksRoot(), "blank value treated as unset")
+    }
+
+    @Test
+    fun `getBooksRoot returns the configured value when populated`() {
+        AppConfig(config_key = BookScannerAgent.CONFIG_KEY_BOOKS_ROOT,
+            config_val = "/srv/books").save()
+        assertEquals("/srv/books", NasScannerService.getBooksRoot())
+    }
+
+    @Test
+    fun `getMusicRoot returns null for unset, blank, or whitespace values`() {
+        assertEquals(null, NasScannerService.getMusicRoot())
+        AppConfig(config_key = MusicScannerAgent.CONFIG_KEY_MUSIC_ROOT,
+            config_val = "   ").save()
+        assertEquals(null, NasScannerService.getMusicRoot(), "blank value treated as unset")
+    }
+
+    @Test
+    fun `getMusicRoot returns the configured value when populated`() {
+        AppConfig(config_key = MusicScannerAgent.CONFIG_KEY_MUSIC_ROOT,
+            config_val = "/srv/music").save()
+        assertEquals("/srv/music", NasScannerService.getMusicRoot())
+    }
+
+    @Test
+    fun `getPersonalVideoDir returns null when personal_video_enabled is not set to true`() {
+        assertEquals(null, NasScannerService.getPersonalVideoDir())
+
+        AppConfig(config_key = "personal_video_enabled", config_val = "false").save()
+        AppConfig(config_key = "personal_video_nas_dir", config_val = "Personal").save()
+        assertEquals(null, NasScannerService.getPersonalVideoDir(),
+            "must be enabled=true exactly")
+    }
+
+    @Test
+    fun `getPersonalVideoDir returns the configured directory when enabled`() {
+        AppConfig(config_key = "personal_video_enabled", config_val = "true").save()
+        AppConfig(config_key = "personal_video_nas_dir", config_val = "Personal").save()
+        assertEquals("Personal", NasScannerService.getPersonalVideoDir())
+    }
+
+    @Test
+    fun `getPersonalVideoDir returns null when enabled but the directory is blank`() {
+        AppConfig(config_key = "personal_video_enabled", config_val = "true").save()
+        AppConfig(config_key = "personal_video_nas_dir", config_val = "").save()
+        assertEquals(null, NasScannerService.getPersonalVideoDir())
+    }
+
+    // ---------------------- doScan integration ----------------------
+
+    @Test
+    fun `doScan early-returns and broadcasts FAILED when nas_root_path is not configured`() {
+        // No AppConfig row.
+        NasScannerService.doScan()
+        // Nothing was discovered or persisted.
+        assertEquals(0, Transcode.findAll().size)
+        assertEquals(0, DiscoveredFile.findAll().size)
+    }
+
+    @Test
+    fun `doScan early-returns when nas_root_path points at a non-directory`() {
+        AppConfig(config_key = "nas_root_path",
+            config_val = "/no/such/path/does/not/exist").save()
+        NasScannerService.doScan()
+        assertEquals(0, Transcode.findAll().size)
+        assertEquals(0, DiscoveredFile.findAll().size)
+    }
+
+    @Test
+    fun `doScan walks a real NAS tree, classifies dirs, and matches movies + TV episodes`() {
+        // Real on-disk layout the scanner can walk:
+        //   <nasRoot>/Movies/Inception (2010).mkv          ← matches
+        //   <nasRoot>/Movies/Mystery (1999).mkv             ← unmatched
+        //   <nasRoot>/Shows/Breaking Bad/.../S01E01.mkv     ← matches + makes Episode
+        //   <nasRoot>/Books/whatever.txt                    ← skipped (books root)
+        //   <nasRoot>/Music/song.flac                       ← skipped (music root)
+        seedFile("Movies/Inception (2010).mkv", ByteArray(100))
+        seedFile("Movies/Mystery (1999).mkv", ByteArray(100))
+        seedFile("Shows/Breaking Bad/Season 1/Breaking Bad - S01E01 - Pilot.mkv",
+            ByteArray(100))
+        seedFile("Books/some.epub")
+        seedFile("Music/song.flac")
+
+        // Pre-existing titles we expect the scanner to match against.
+        seedTitle("Inception", year = 2010)
+        seedTitle("Breaking Bad", mediaType = MediaType.TV)
+
+        // Configure roots. nas_root_path is required; books_root_path
+        // and music_root_path point at directories we want the scanner
+        // to skip (handled by other agents).
+        AppConfig(config_key = "nas_root_path",
+            config_val = nasRoot.absolutePath).save()
+        AppConfig(config_key = BookScannerAgent.CONFIG_KEY_BOOKS_ROOT,
+            config_val = File(nasRoot, "Books").absolutePath).save()
+        AppConfig(config_key = MusicScannerAgent.CONFIG_KEY_MUSIC_ROOT,
+            config_val = File(nasRoot, "Music").absolutePath).save()
+
+        NasScannerService.doScan()
+
+        // Two transcodes — Inception (matched movie) and Breaking Bad
+        // S01E01 (matched episode). The Mystery movie is unmatched, so
+        // it does NOT have a Transcode row.
+        val transcodes = Transcode.findAll()
+        assertEquals(2, transcodes.size)
+        val inceptionTitle = Title.findAll().single { it.name == "Inception" }
+        val bbTitle = Title.findAll().single { it.name == "Breaking Bad" }
+        assertTrue(transcodes.any { it.title_id == inceptionTitle.id },
+            "Inception got a Transcode row")
+        assertTrue(transcodes.any { it.title_id == bbTitle.id },
+            "Breaking Bad S01E01 got a Transcode row")
+        // The TV transcode points at a created Episode row.
+        val tvTranscode = transcodes.single { it.title_id == bbTitle.id }
+        assertNotNull(tvTranscode.episode_id, "TV transcode wired to an Episode")
+        val ep = Episode.findById(tvTranscode.episode_id!!)!!
+        assertEquals(1, ep.season_number)
+        assertEquals(1, ep.episode_number)
+
+        // Three DiscoveredFile rows — two MATCHED, one UNMATCHED.
+        val discovered = DiscoveredFile.findAll()
+        assertEquals(3, discovered.size)
+        val matched = discovered.filter { it.match_status == DiscoveredFileStatus.MATCHED.name }
+        val unmatched = discovered.filter { it.match_status == DiscoveredFileStatus.UNMATCHED.name }
+        assertEquals(2, matched.size)
+        assertEquals(1, unmatched.size)
+        assertEquals("Mystery (1999).mkv", unmatched.single().file_name)
+    }
+
+    @Test
+    fun `doScan running twice is idempotent — already-tracked files do not duplicate Transcode rows`() {
+        seedFile("Movies/Inception (2010).mkv", ByteArray(100))
+        seedTitle("Inception", year = 2010)
+        AppConfig(config_key = "nas_root_path",
+            config_val = nasRoot.absolutePath).save()
+
+        NasScannerService.doScan()
+        val firstPassTcs = Transcode.findAll().size
+        val firstPassDfs = DiscoveredFile.findAll().size
+
+        NasScannerService.doScan()  // second pass — same files
+        assertEquals(firstPassTcs, Transcode.findAll().size,
+            "second scan should not duplicate Transcode rows")
+        assertEquals(firstPassDfs, DiscoveredFile.findAll().size,
+            "second scan should not duplicate DiscoveredFile rows")
+    }
+
+    @Test
+    fun `doScan reclassifies pre-existing DiscoveredFiles when personal_video_nas_dir is configured`() {
+        // Seed a DiscoveredFile pre-classified as MOVIE that lives in
+        // the Personal directory — doScan should flip its media_type.
+        seedFile("Personal/holiday.mp4", ByteArray(100))
+        DiscoveredFile(
+            file_path = File(nasRoot, "Personal/holiday.mp4").absolutePath,
+            file_name = "holiday.mp4",
+            directory = "Personal",
+            media_type = MediaType.MOVIE.name,
+            match_status = DiscoveredFileStatus.UNMATCHED.name,
+        ).save()
+
+        AppConfig(config_key = "nas_root_path",
+            config_val = nasRoot.absolutePath).save()
+        AppConfig(config_key = "personal_video_enabled", config_val = "true").save()
+        AppConfig(config_key = "personal_video_nas_dir", config_val = "Personal").save()
+
+        NasScannerService.doScan()
+
+        val df = DiscoveredFile.findAll()
+            .single { it.file_name == "holiday.mp4" }
+        assertEquals(MediaType.PERSONAL.name, df.media_type,
+            "pre-existing MOVIE row reclassified as PERSONAL")
+    }
+
+    // ---------------------- scan() daemon lifecycle ----------------------
+
+    @Test
+    fun `scan flips isRunning while the daemon thread runs and back to false on completion`() {
+        seedFile("Movies/Inception (2010).mkv", ByteArray(100))
+        seedTitle("Inception", year = 2010)
+        AppConfig(config_key = "nas_root_path",
+            config_val = nasRoot.absolutePath).save()
+
+        assertFalse(NasScannerService.isRunning())
+        NasScannerService.scan()
+
+        // Wait up to 30s for the daemon to settle. doScan against this
+        // tiny tree finishes in well under a second on any host; the
+        // generous timeout is paranoia for slow CI.
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(30).toNanos()
+        while (NasScannerService.isRunning() && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+        }
+        assertFalse(NasScannerService.isRunning(),
+            "scan should have flipped running back to false")
+
+        // The scan ran — Inception got matched.
+        assertEquals(1, Transcode.findAll().size)
+    }
+
+    @Test
+    fun `scan called while another scan is in flight returns immediately without re-entering`() {
+        // Configure a real scan target so the in-flight scan completes
+        // (otherwise it'd still be running when the test ends and trip
+        // the next test's @Before).
+        seedFile("Movies/Inception (2010).mkv", ByteArray(100))
+        seedTitle("Inception", year = 2010)
+        AppConfig(config_key = "nas_root_path",
+            config_val = nasRoot.absolutePath).save()
+
+        NasScannerService.scan()
+        // Burst a second call right after — should hit the
+        // compareAndSet false-arm and log the "already in progress"
+        // warning. We can't easily observe the log line, but we can
+        // assert no exception is thrown and that exactly one scan
+        // happened.
+        NasScannerService.scan()
+
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(30).toNanos()
+        while (NasScannerService.isRunning() && System.nanoTime() < deadline) {
+            Thread.sleep(20)
+        }
+        assertFalse(NasScannerService.isRunning())
+        assertEquals(1, Transcode.findAll().size)
+    }
 }

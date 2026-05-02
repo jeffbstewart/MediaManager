@@ -707,21 +707,21 @@ object NasScannerService {
      * Copies ForBrowser sprite files (VTT + JPGs) to source directories for all
      * transcodes where ForBrowser sprites exist but source sprites don't.
      */
-    private fun getNasRootPath(): String? {
+    internal fun getNasRootPath(): String? {
         return AppConfig.findAll()
             .firstOrNull { it.config_key == "nas_root_path" }
             ?.config_val
     }
 
     /** Absolute books_root_path setting, or null if unset. */
-    private fun getBooksRoot(): String? =
+    internal fun getBooksRoot(): String? =
         AppConfig.findAll()
             .firstOrNull { it.config_key == BookScannerAgent.CONFIG_KEY_BOOKS_ROOT }
             ?.config_val
             ?.ifBlank { null }
 
     /** Absolute music_root_path setting, or null if unset. */
-    private fun getMusicRoot(): String? =
+    internal fun getMusicRoot(): String? =
         AppConfig.findAll()
             .firstOrNull { it.config_key == MusicScannerAgent.CONFIG_KEY_MUSIC_ROOT }
             ?.config_val
@@ -736,7 +736,7 @@ object NasScannerService {
         dir.toAbsolutePath().toString().equals(other, ignoreCase = true)
     }
 
-    private fun getPersonalVideoDir(): String? {
+    internal fun getPersonalVideoDir(): String? {
         val enabled = AppConfig.findAll()
             .firstOrNull { it.config_key == "personal_video_enabled" }
             ?.config_val
