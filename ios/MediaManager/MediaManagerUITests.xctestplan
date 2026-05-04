@@ -13,17 +13,6 @@
   },
   "testTargets" : [
     {
-      "skippedTests" : [
-        "ReaderBridgeTests",
-        "ReaderBridgeTests\/testEpubFetchableViaXHR()",
-        "ReaderBridgeTests\/testEpubJsParsesBookSpine()",
-        "ReaderBridgeTests\/testFixturesAreBundled()",
-        "ReaderBridgeTests\/testReaderHtmlLoadsAndBridgeDefined()",
-        "ReaderUITests",
-        "ReaderUITests\/testReaderLaunchesAndShowsToolbar()",
-        "ReaderUITests\/testTOCSheetListsChapters()",
-        "ReaderUITests\/testThemeButtonRemainsResponsive()"
-      ],
       "target" : {
         "containerPath" : "container:MediaManager.xcodeproj",
         "identifier" : "BB000040",
