@@ -13,10 +13,17 @@ import { AppRoutes } from '../../core/routes';
  * Minimal epub.js surface used by the reader. The full API is large — only the
  * bits we touch are typed here.
  */
+interface EpubJsThemes {
+  fontSize(size: string): void;
+  /** Register a named theme; rules are a CSS-rule-tree (selector → declarations). */
+  register(name: string, rules: Record<string, Record<string, string>>): void;
+  /** Activate a previously-registered theme. */
+  select(name: string): void;
+}
 interface EpubJsRendition {
   display(target?: string): Promise<unknown>;
   on(event: 'relocated', handler: (loc: EpubJsLocation) => void): void;
-  themes: { fontSize(size: string): void };
+  themes: EpubJsThemes;
   next(): void;
   prev(): void;
   destroy(): void;
@@ -168,6 +175,20 @@ export class ReaderComponent implements OnInit, OnDestroy {
       allowScriptedContent: false,
     });
     this.rendition = rendition;
+    // EPUB stylesheets routinely set `p { font-size: 12pt }` (or some
+    // other absolute unit) directly on inner elements. Without an
+    // override, themes.fontSize() — which only injects on body —
+    // gets ignored: paragraphs keep their fixed font-size while the
+    // body-derived line-height scales, so the user just sees the
+    // gaps between lines stretch when they hit + or –. Force the
+    // common text containers to inherit body's font-size so the
+    // body-level override actually flows into the rendered text.
+    rendition.themes.register('mm-reader', {
+      'p, div, span, li, blockquote, dt, dd, td, th': {
+        'font-size': 'inherit !important',
+      },
+    });
+    rendition.themes.select('mm-reader');
     rendition.themes.fontSize(`${this.fontSize()}%`);
     // Track CFI on every relocated event. We only update the displayed
     // percent against the locations index (built below) — `loc.start.

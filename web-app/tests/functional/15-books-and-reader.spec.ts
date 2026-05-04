@@ -53,8 +53,15 @@ test.describe.configure({ mode: 'serial' });
 
 const PDF_ITEM_ID = 8001;
 const EPUB_ITEM_ID = 8002;
+// Separate fixture: same shape as test.epub but ships a stylesheet
+// that pins paragraphs at an absolute font-size. The reader's
+// theme.fontSize() override only injects a body-level rule, so this
+// fixture exists to prove the inheritance reset in the reader's
+// custom theme actually scales the visible text.
+const EPUB_WITH_CSS_ITEM_ID = 8003;
 
 const FIXTURE_EPUB = 'tests/fixtures/ebook/test.epub';
+const FIXTURE_EPUB_WITH_CSS = 'tests/fixtures/ebook/test-with-css.epub';
 
 /** Capture each ListAuthors request's decoded body. */
 function captureAuthorRequests(page: Page) {
@@ -351,6 +358,56 @@ test.describe('reader — EPUB', () => {
     await page.locator('app-reader button[aria-label="Decrease font size"]').click();
     await page.locator('app-reader button[aria-label="Decrease font size"]').click();
     await expect(indicator).toContainText('90%');
+  });
+
+  test('font-size controls actually scale paragraph text against an absolute-size stylesheet', async ({ page }) => {
+    // Regression for the "controls only change line spacing" bug.
+    // Many real EPUBs declare `p { font-size: NNpx }` directly on
+    // inner elements; the reader's theme.fontSize() injects a
+    // body-level rule which gets overridden, so the body-derived
+    // line-height grows but paragraph text stays the same size.
+    // Open an EPUB whose stylesheet pins paragraphs at 16px and
+    // assert the iframe's computed font-size on a real <p> goes up
+    // when the user clicks Increase.
+    await page.route(`**/ebook/${EPUB_WITH_CSS_ITEM_ID}`, route => {
+      const headers = { 'Content-Type': 'application/epub+zip' };
+      if (route.request().method() === 'HEAD') {
+        return route.fulfill({ status: 200, headers, body: '' });
+      }
+      return route.fulfill({
+        status: 200,
+        headers: { ...headers, 'Accept-Ranges': 'bytes' },
+        path: FIXTURE_EPUB_WITH_CSS,
+      });
+    });
+    await page.route(`**${PB}/GetReadingProgress`, r =>
+      fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema, {
+        mediaItemId: BigInt(EPUB_WITH_CSS_ITEM_ID),
+      })));
+
+    await page.goto(`/reader/${EPUB_WITH_CSS_ITEM_ID}`);
+    await page.waitForSelector('app-reader .epub-container iframe', { timeout: 10_000 });
+    const epubFrame = page.frameLocator('app-reader .epub-container iframe');
+    // Wait until epub.js has rendered the chapter content.
+    await expect(epubFrame.locator('p#t')).toBeVisible({ timeout: 10_000 });
+
+    const fontSizeOf = async () => {
+      const v = await epubFrame.locator('p#t').evaluate((el) =>
+        getComputedStyle(el).fontSize,
+      );
+      return Number(v.replace('px', ''));
+    };
+
+    const baseline = await fontSizeOf();
+    expect(baseline).toBeGreaterThan(0);
+
+    // Three consecutive Increase clicks (10 % per click, so +30 % total)
+    // — easily large enough to clear any sub-pixel rounding noise.
+    for (let i = 0; i < 3; i++) {
+      await page.locator('app-reader button[aria-label="Increase font size"]').click();
+    }
+
+    await expect.poll(fontSizeOf, { timeout: 5_000 }).toBeGreaterThan(baseline);
   });
 
   test('reader uses the saved CFI to jump on open', async ({ page }) => {
