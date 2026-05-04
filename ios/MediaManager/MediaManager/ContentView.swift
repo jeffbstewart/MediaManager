@@ -296,6 +296,9 @@ struct ContentView: View {
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
                 }
+                .navigationDestination(for: BookReaderRoute.self) { route in
+                    BookReaderView(route: route)
+                }
                 .navigationDestination(for: TvShowRoute.self) { route in
                     SeasonsView(route: route)
                 }

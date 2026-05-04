@@ -173,6 +173,13 @@ final class OfflineDataModel: DataModel {
         downloads.queueProgressUpdate(transcodeId: transcodeId.protoValue, position: position, duration: duration)
     }
 
+    // Reading progress (offline: the reader doesn't run offline yet —
+    // book download cache lands in a later phase, until then both
+    // calls are no-ops). Returning nil mirrors the no-progress case
+    // so the reader still opens at the start of the book.
+    func readingProgress(mediaItemId: Int64) async -> ApiReadingProgress? { nil }
+    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async { }
+
     // MARK: - WishListDataModel
 
     func wishList() async throws -> ApiWishListResponse { throw DataModelError.offline }

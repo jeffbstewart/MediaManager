@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>MM Reader</title>
+  <style>
+    /* Edge-to-edge container that fills the WKWebView. epub.js renders
+       its iframe into #epub. The native chrome (close, font, page
+       controls) lives in the SwiftUI parent — this page is just the
+       book pane. */
+    html, body, #epub {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #fff;
+    }
+    body {
+      -webkit-text-size-adjust: 100%;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+    /* Tap-zones for page navigation. Native could send next/prev via
+       evaluateJavaScript, but a tap on the rendered epub page is more
+       responsive than round-tripping a UITapGesture into the bridge.
+       The two halves overlay #epub at full transparency. */
+    .nav {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 25%;
+      z-index: 10;
+    }
+    .nav-prev { left: 0; }
+    .nav-next { right: 0; }
+  </style>
+  <script src="jszip.min.js"></script>
+  <script src="epub.min.js"></script>
+</head>
+<body>
+  <div id="epub"></div>
+  <div class="nav nav-prev" onclick="window.MMReader.prev()"></div>
+  <div class="nav nav-next" onclick="window.MMReader.next()"></div>
+  <script>
+    /**
+     * Native ↔ JS bridge for the iOS book reader.
+     *
+     * Native (Swift) calls into JS via WKWebView.evaluateJavaScript:
+     *
+     *   window.MMReader.boot(epubUrl, resumeCfi, fontPct)
+     *   window.MMReader.setFont(pct)
+     *   window.MMReader.next() / .prev()
+     *
+     * JS notifies native via window.webkit.messageHandlers.reader.postMessage(...):
+     *
+     *   { type: 'ready' }                              — book opened, first page rendered
+     *   { type: 'relocated', cfi, percent }            — every page change
+     *   { type: 'error', message }                     — fatal load / parse error
+     */
+    (function() {
+      let book = null;
+      let rendition = null;
+      let lastCfi = null;
+      let percent = 0;
+      let locationsReady = false;
+
+      function postNative(payload) {
+        try {
+          window.webkit.messageHandlers.reader.postMessage(payload);
+        } catch (e) {
+          // No-op outside the WKWebView host (e.g. during a manual
+          // open-in-browser of the bundled HTML). Real native runs go
+          // through the message-handler path.
+          console.warn('postNative failed', e);
+        }
+      }
+
+      function step(label, extra) {
+        const m = { type: 'step', label: label };
+        if (extra !== undefined) m.extra = String(extra);
+        postNative(m);
+      }
+
+      // Surface uncaught errors from anywhere in the page (epub.js
+      // internals, async tasks not awaited by us, etc.) so the
+      // native side can show something better than a perpetual
+      // spinner.
+      window.addEventListener('error', function(e) {
+        postNative({ type: 'error', message: 'window.onerror: ' + (e.message || e) });
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        const m = (e && e.reason && (e.reason.message || e.reason)) || 'unknown rejection';
+        postNative({ type: 'error', message: 'unhandledrejection: ' + m });
+      });
+
+      window.MMReader = {
+        async boot(epubUrl, resumeCfi, fontPct) {
+          try {
+            step('boot.start', epubUrl);
+            if (!window.ePub) throw new Error('epub.js missing');
+
+            // `openAs: 'epub'` forces the binary-archive parser. Default
+            // sniffing by extension fails for our staged file path
+            // (typically `book-{N}.epub` — sometimes without a real
+            // extension when we get the format wrong).
+            book = window.ePub(epubUrl, { openAs: 'epub' });
+            step('book.created');
+
+            const el = document.getElementById('epub');
+            rendition = book.renderTo(el, {
+              width: '100%',
+              height: '100%',
+              flow: 'paginated',
+              allowScriptedContent: false,
+            });
+            step('rendition.created');
+
+            // Font-size inheritance fix. Web commit 22add35:
+            // EPUB stylesheets routinely pin `p { font-size: NNpx }` on
+            // inner text containers. themes.fontSize() only injects a
+            // body-level rule, so the inner text never resizes — but
+            // line-height (which is computed from body) keeps scaling.
+            // The visible bug: + / − buttons stretch the gaps between
+            // lines, not the letters. Forcing inheritance on common
+            // text containers makes the body-level rule actually flow
+            // down. Headings (h1–h6) are deliberately omitted so they
+            // keep their relative sizing.
+            rendition.themes.register('mm-reader', {
+              'p, div, span, li, blockquote, dt, dd, td, th': {
+                'font-size': 'inherit !important',
+              },
+            });
+            rendition.themes.select('mm-reader');
+            rendition.themes.fontSize((fontPct || 100) + '%');
+
+            // Track CFI on every relocation. percent stays at the
+            // resume value until the locations index finishes building
+            // — `loc.start.percentage` is 0 without it.
+            rendition.on('relocated', function(loc) {
+              lastCfi = loc.start.cfi;
+              if (locationsReady) {
+                const p = book.locations.percentageFromCfi(loc.start.cfi);
+                if (Number.isFinite(p)) {
+                  percent = p;
+                }
+              }
+              postNative({ type: 'relocated', cfi: lastCfi, percent: percent });
+            });
+
+            step('display.start');
+            await rendition.display(resumeCfi || undefined);
+            step('display.done');
+            postNative({ type: 'ready' });
+
+            // Build the locations index in the background — turning a
+            // CFI into a fraction of the book costs a full chapter
+            // scan but only happens once. 1024 chars/page is the
+            // epub.js default.
+            book.ready
+              .then(function() { return book.locations.generate(1024); })
+              .then(function() {
+                locationsReady = true;
+                if (lastCfi) {
+                  const p = book.locations.percentageFromCfi(lastCfi);
+                  if (Number.isFinite(p) && p > 0) {
+                    percent = p;
+                    postNative({ type: 'relocated', cfi: lastCfi, percent: percent });
+                  }
+                }
+              })
+              .catch(function(e) { console.warn('locations index failed', e); });
+          } catch (e) {
+            postNative({ type: 'error', message: String(e && e.message || e) });
+          }
+        },
+        setFont: function(pct) {
+          if (rendition) rendition.themes.fontSize(pct + '%');
+        },
+        next: function() { if (rendition) rendition.next(); },
+        prev: function() { if (rendition) rendition.prev(); },
+      };
+    })();
+  </script>
+</body>
+</html>

@@ -200,6 +200,20 @@ final class OnlineDataModel: DataModel {
         try? await grpcClient.reportProgress(transcodeId: transcodeId.protoValue, position: position, duration: duration)
     }
 
+    func readingProgress(mediaItemId: Int64) async -> ApiReadingProgress? {
+        if !isOnline { return nil }
+        guard let response = try? await grpcClient.getReadingProgress(mediaItemId: mediaItemId) else {
+            return nil
+        }
+        return ApiReadingProgress(proto: response)
+    }
+
+    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async {
+        if !isOnline { return }
+        try? await grpcClient.reportReadingProgress(
+            mediaItemId: mediaItemId, locator: locator, fraction: fraction)
+    }
+
     // MARK: - WishListDataModel
 
     func wishList() async throws -> ApiWishListResponse {

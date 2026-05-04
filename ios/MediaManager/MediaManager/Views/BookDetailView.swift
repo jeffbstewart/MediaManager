@@ -124,23 +124,40 @@ struct BookDetailView: View {
         }
     }
 
-    /// Disabled Read button — placeholder for the WKWebView reader. The
-    /// label is "Read" rather than "Coming soon" so the affordance is
-    /// recognisable, but it's deliberately greyed out via
-    /// `.disabled(true)` until the reader is wired up.
+    /// Read button. Enabled when the book has at least one downloadable
+    /// EPUB edition; tap routes into `BookReaderView`. PDF and audiobook
+    /// formats stay disabled in v1 — the reader is EPUB-only for now.
     @ViewBuilder
     private func readButton(_ detail: ApiTitleDetail) -> some View {
-        let canRead = detail.book?.hasDigitalEdition ?? false
-        Button {
-            // Intentionally empty until the reader is implemented.
-        } label: {
-            Label("Read", systemImage: "book")
-                .frame(maxWidth: .infinity)
+        let epub = epubEdition(detail.book?.editions ?? [])
+        if let epub {
+            NavigationLink(value: BookReaderRoute(
+                mediaItemId: epub.id,
+                titleName: detail.name)) {
+                Label("Read", systemImage: "book")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        } else {
+            Button {
+                // No-op: book has no readable edition (physical only,
+                // or only PDF / audiobook which v1 doesn't render).
+            } label: {
+                Label("Read", systemImage: "book")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(true)
+            .opacity(0.4)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(true)
-        .opacity(canRead ? 1.0 : 0.4)
+    }
+
+    /// First downloadable EPUB edition, or nil. v2 will broaden this
+    /// to PDF (via PDFKit) and digital audiobooks.
+    private func epubEdition(_ editions: [ApiBookEdition]) -> ApiBookEdition? {
+        editions.first { $0.downloadable && $0.format == .ebookEpub }
     }
 
     @ViewBuilder

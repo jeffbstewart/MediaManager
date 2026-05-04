@@ -346,6 +346,22 @@ actor GrpcClient {
         return try await playbackService.getChapters(request, metadata: authMetadata())
     }
 
+    // MARK: - Reading-progress RPCs (ebook reader)
+
+    func getReadingProgress(mediaItemId: Int64) async throws -> MMReadingProgress {
+        var request = MMReadingProgressRequest()
+        request.mediaItemID = mediaItemId
+        return try await playbackService.getReadingProgress(request, metadata: authMetadata())
+    }
+
+    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async throws {
+        var request = MMReportReadingProgressRequest()
+        request.mediaItemID = mediaItemId
+        request.locator = locator
+        if let fraction { request.fraction = fraction }
+        _ = try await playbackService.reportReadingProgress(request, metadata: authMetadata())
+    }
+
     func reportProgress(transcodeId: Int64, position: Double, duration: Double?) async throws {
         var request = MMReportProgressRequest()
         request.transcodeID = transcodeId
@@ -415,6 +431,36 @@ actor GrpcClient {
         var request = MMBatchManifestRequest()
         request.transcodeIds = transcodeIds
         return try await downloadService.batchManifest(request, metadata: authMetadata())
+    }
+
+    // MARK: - Book downloads (ebook / PDF / digital audiobook)
+
+    func getBookManifest(mediaItemId: Int64) async throws -> MMBookManifest {
+        var request = MMBookManifestRequest()
+        request.mediaItemID = mediaItemId
+        return try await downloadService.getBookManifest(request, metadata: authMetadata())
+    }
+
+    /// Server-streaming download of a book file (EPUB / PDF / audiobook).
+    /// Mirrors `downloadFile`: invokes `onChunk` for each ~1MB chunk so
+    /// the caller can stream straight to disk without buffering the
+    /// whole file in memory.
+    func downloadBookFile(
+        mediaItemId: Int64,
+        offset: Int64 = 0,
+        onChunk: @Sendable @escaping (MMDownloadChunk) async -> Void
+    ) async throws {
+        var request = MMDownloadBookFileRequest()
+        request.mediaItemID = mediaItemId
+        request.offset = offset
+        try await downloadService.downloadBookFile(
+            request,
+            metadata: authMetadata()
+        ) { response in
+            for try await chunk in response.messages {
+                await onChunk(chunk)
+            }
+        }
     }
 
     /// Server-streaming file download. Calls onChunk for each ~1MB chunk received.

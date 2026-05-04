@@ -5241,3 +5241,74 @@ recurring 15-books-and-reader:226 flake as prior runs).
   Bootstrap.kt, the iOS data model layer + GrpcClient,
   and ContentView's navigation destinations.
 ===
+
+=== 2026-05-04 — Reader v1 (EPUB) ===
+- BookReaderView (SwiftUI + WKWebView) renders EPUBs in
+  paginated mode using bundled epub.js + JSZip. Native
+  chrome owns close + font controls + percent indicator;
+  invisible left/right tap-zones flip pages.
+- Bundled assets under ios/.../MediaManager/Reader/:
+  reader.html, epub.min.js, jszip.min.js (vendored from
+  the web app's `web-app/public/vendor/`). reader.html
+  exposes `window.MMReader.{boot,setFont,next,prev}` and
+  posts `ready` / `relocated` / `error` / step pings via
+  `window.webkit.messageHandlers.reader.postMessage`.
+- Inheritance fix from web commit 22add35 ported over:
+  reader.html registers an `mm-reader` theme that forces
+  `font-size: inherit !important` on common text
+  containers (p, div, span, li, blockquote, dt, dd, td,
+  th) so the body-level themes.fontSize() override
+  actually flows through EPUBs whose stylesheets pin
+  absolute font sizes on inner elements.
+- Lifecycle in BookReaderView.loadAndOpen(): stage
+  reader.html + epub.min.js + jszip.min.js into
+  Caches/reader/ once per launch via ReaderStaging,
+  download the EPUB to `book-{mediaItemId}.epub` if
+  missing (DownloadService.DownloadBookFile,
+  ~1MB chunks streamed straight to a FileHandle), fetch
+  the user's resume position from
+  PlaybackService.GetReadingProgress, latch boot args,
+  then mount the WKWebView. ReportReadingProgress fires
+  every 10s and once more on dismiss so the tail of
+  progress isn't lost.
+- Two debugging detours:
+  - WKWebView's evaluateJavaScript can't serialise the
+    Promise that an async function returns, surfacing as
+    "JavaScript execution returned a result of an
+    unsupported type". Wrapped the boot call as
+    `MMReader.boot(...); null;` so the expression
+    returns a serialisable value; JS-side runtime
+    failures still flow through postNative.
+  - Initial mount race: stagedEpubFile was set BEFORE
+    bridge.bootArgs, so didFinish fired with bootArgs
+    nil and skipped the boot call. Restructured
+    loadAndOpen so onMessage + bootArgs are latched
+    BEFORE setting the staged URLs that trigger the
+    WebView mount.
+  - rendition.display() hung forever because epub.js's
+    binary XHR was blocked by WKWebView's default
+    file://-origin policy even with
+    allowingReadAccessTo. Setting
+    `allowFileAccessFromFileURLs` and
+    `allowUniversalAccessFromFileURLs` on the config
+    unblocked it. If a future iOS update tightens this,
+    fall back to a WKURLSchemeHandler at `mmreader://`.
+- BookDetailView.readButton flips from disabled to a
+  NavigationLink(BookReaderRoute) when the book has at
+  least one downloadable EBOOK_EPUB edition. PDF and
+  audiobook editions stay disabled in v1.
+- ContentView routes BookReaderRoute → BookReaderView.
+- GrpcClient + data model passthroughs:
+  getBookManifest, downloadBookFile (server-streaming),
+  getReadingProgress, reportReadingProgress.
+- Verified end-to-end in the iPhone 16e simulator:
+  paginated text renders, font + / − scale paragraph
+  text (proves the inheritance fix took), tap-zones
+  navigate, close + reopen resumes from the saved CFI.
+- Files: BookReaderView.swift, Reader/reader.html,
+  Reader/epub.min.js, Reader/jszip.min.js,
+  Reader/epub.LICENSE, Reader/jszip.LICENSE,
+  GrpcClient.swift, PlaybackDataModel.swift,
+  OnlineDataModel.swift, OfflineDataModel.swift,
+  BookDetailView.swift, ContentView.swift.
+===
