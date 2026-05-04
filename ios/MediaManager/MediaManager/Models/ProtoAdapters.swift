@@ -301,6 +301,26 @@ struct ApiHomeFeed: Sendable {
     var missingSeasons: [ApiMissingSeason]? {
         proto.missingSeasons.isEmpty ? nil : proto.missingSeasons.map { ApiMissingSeason(proto: $0) }
     }
+    /// Books with active reading progress, newest first. Drives the
+    /// "Continue Reading" carousel on HomeView. Server populates
+    /// from the reading_progress table joined to MediaItem + Title.
+    var resumeReading: [ApiResumeReading] {
+        proto.resumeReading.map { ApiResumeReading(proto: $0) }
+    }
+}
+
+/// One row in the home page's "Continue Reading" carousel. Card art
+/// uses `MMImageRef.posterThumbnail(titleId:)`; tapping a card
+/// navigates straight into `BookReaderView` since the user's intent
+/// is unambiguous when they pick from a resume list.
+struct ApiResumeReading: Identifiable, Sendable {
+    let proto: MMResumeReading
+
+    var id: Int64 { proto.mediaItemID }
+    var mediaItemId: Int64 { proto.mediaItemID }
+    var titleId: TitleID { TitleID(proto: proto.titleID) }
+    var titleName: String { proto.titleName }
+    var percent: Double { proto.percent }
 }
 
 struct ApiMissingSeason: Identifiable, Sendable {

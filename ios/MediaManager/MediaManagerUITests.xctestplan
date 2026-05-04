@@ -1,0 +1,29 @@
+{
+  "configurations" : [
+    {
+      "id" : "2DF2C710-1762-4B81-B4E1-87190C22BB05",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "skippedTests" : [
+        "MediaManagerUITests",
+        "MediaManagerUITests\/testConnectButtonDisabledWhenEmpty()",
+        "MediaManagerUITests\/testServerSetupScreenAppears()"
+      ],
+      "target" : {
+        "containerPath" : "container:MediaManager.xcodeproj",
+        "identifier" : "BB000040",
+        "name" : "MediaManagerUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

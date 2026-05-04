@@ -47,5 +47,15 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!--
+	  Pre-answers the App Store Connect "does your app use encryption?"
+	  question every TestFlight upload. We use only HTTPS / TLS via the
+	  system networking stack and Apple's Keychain — both exempt under
+	  US BIS rules — so we declare "no non-exempt encryption" and
+	  uploads flow straight to "Ready to Test" without a manual click.
+	  Flip to <true/> only if we ever ship custom crypto.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

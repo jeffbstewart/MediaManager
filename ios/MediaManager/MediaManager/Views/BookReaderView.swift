@@ -44,11 +44,68 @@ struct BookReaderView: View {
     @State private var reportTimer: Timer? = nil
     @State private var stagedEpubFile: URL? = nil
     @State private var stagedReaderHtml: URL? = nil
+    @State private var theme: ReaderTheme = .stored
+    @State private var showTOC = false
+    @State private var toc: [TocEntry] = []
 
     enum Status: Equatable {
         case loading(String)
         case reading
         case error(String)
+    }
+
+    /// Reader theme. The choice is persisted via UserDefaults so the
+    /// reader keeps the user's preferred mode across sessions /
+    /// books. The names match the registered themes in `reader.html`.
+    enum ReaderTheme: String, CaseIterable {
+        case light, sepia, dark
+        var icon: String {
+            switch self {
+            case .light: return "sun.max"
+            case .sepia: return "book.closed"
+            case .dark: return "moon"
+            }
+        }
+        var next: ReaderTheme {
+            switch self {
+            case .light: return .sepia
+            case .sepia: return .dark
+            case .dark: return .light
+            }
+        }
+        /// Background colour that matches the WKWebView paint, used
+        /// to tint the SwiftUI nav bar so the reader feels like one
+        /// surface. RGB values mirror the constants in
+        /// `reader.html`'s THEMES table.
+        var background: Color {
+            switch self {
+            case .light: return Color(red: 1.0, green: 1.0, blue: 1.0)
+            case .sepia: return Color(red: 244/255, green: 236/255, blue: 216/255)
+            case .dark:  return Color(red: 26/255, green: 26/255, blue: 26/255)
+            }
+        }
+        /// Foreground colour for the nav-bar title + buttons. Same
+        /// values as the reader's body `color`.
+        var foreground: Color {
+            switch self {
+            case .light: return Color(red: 26/255, green: 26/255, blue: 26/255)
+            case .sepia: return Color(red: 61/255, green: 47/255, blue: 32/255)
+            case .dark:  return Color(red: 230/255, green: 230/255, blue: 230/255)
+            }
+        }
+        static var stored: ReaderTheme {
+            ReaderTheme(rawValue: UserDefaults.standard.string(forKey: "readerTheme") ?? "") ?? .light
+        }
+        func persist() {
+            UserDefaults.standard.set(rawValue, forKey: "readerTheme")
+        }
+    }
+
+    struct TocEntry: Identifiable {
+        let id: Int
+        let label: String
+        let href: String
+        let depth: Int
     }
 
     var body: some View {
@@ -92,6 +149,15 @@ struct BookReaderView: View {
         }
         .navigationTitle(route.titleName)
         .navigationBarTitleDisplayMode(.inline)
+        // Tint the navigation bar to match the reader theme so the
+        // top chrome doesn't read as a separate layer floating over
+        // the page. The toolbar tint colour drives back chevron +
+        // toolbar icons; the foreground titlebar colour scopes only
+        // to this view's nav bar (we set `for: .navigationBar`).
+        .toolbarBackground(theme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(theme == .dark ? .dark : .light, for: .navigationBar)
+        .tint(theme.foreground)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
@@ -101,6 +167,12 @@ struct BookReaderView: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
+                    Button { Task { await loadTOCAndShow() } } label: {
+                        Image(systemName: "list.bullet")
+                    }
+                    .disabled(status != .reading)
+                    Button { cycleTheme() } label: { Image(systemName: theme.icon) }
+                        .disabled(status != .reading)
                     Button { decreaseFont() } label: { Image(systemName: "textformat.size.smaller") }
                         .disabled(status != .reading || fontPct <= 60)
                     Button { increaseFont() } label: { Image(systemName: "textformat.size.larger") }
@@ -108,8 +180,38 @@ struct BookReaderView: View {
                 }
             }
         }
+        .sheet(isPresented: $showTOC) {
+            TOCSheet(entries: toc) { entry in
+                bridge.runJS("window.MMReader.gotoHref('\(entry.href.replacingOccurrences(of: "'", with: "\\'"))')")
+                showTOC = false
+            }
+            .presentationDetents([.medium, .large])
+        }
         .task { await loadAndOpen() }
         .onDisappear { cleanup() }
+    }
+
+    // MARK: - TOC + theme
+
+    private func cycleTheme() {
+        theme = theme.next
+        theme.persist()
+        bridge.runJS("window.MMReader.setTheme('\(theme.rawValue)')")
+        // Theme switch resets epub.js's body-level font-size — re-apply
+        // ours so the page doesn't snap back to 100%.
+        bridge.runJS("window.MMReader.setFont(\(fontPct))")
+    }
+
+    private func loadTOCAndShow() async {
+        // Fetch the TOC each time the sheet opens. The list rarely
+        // changes, but `getToc` is cheap (it walks an in-memory
+        // structure inside epub.js) and avoids a stale snapshot if
+        // the book is replaced.
+        let entries = await bridge.evalToc("window.MMReader.getToc()")
+        toc = entries.enumerated().map { idx, e in
+            TocEntry(id: idx, label: e.label, href: e.href, depth: e.depth)
+        }
+        showTOC = true
     }
 
     // MARK: - Lifecycle
@@ -153,6 +255,16 @@ struct BookReaderView: View {
         }
     }
 
+    /// Re-applies persisted preferences (theme + font) once the
+    /// rendition reports ready. epub.js's `themes.select(...)` resets
+    /// the body-level font-size to the new theme's default, so the
+    /// font-size has to be re-pushed after every theme change too —
+    /// `cycleTheme` makes the same pair of calls for the same reason.
+    private func handleReadyApplyPrefs() {
+        bridge.runJS("window.MMReader.setTheme('\(theme.rawValue)')")
+        bridge.runJS("window.MMReader.setFont(\(fontPct))")
+    }
+
     private func ensureEpubDownloaded(into dir: URL) async throws -> URL {
         let dest = dir.appendingPathComponent("book-\(route.mediaItemId).epub")
         if FileManager.default.fileExists(atPath: dest.path) {
@@ -183,6 +295,7 @@ struct BookReaderView: View {
         switch msg {
         case .ready:
             status = .reading
+            handleReadyApplyPrefs()
             startReportTimer()
         case .relocated(let cfi, let pct):
             lastCfi = cfi
@@ -326,22 +439,20 @@ private struct ReaderWebView: UIViewRepresentable {
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: Any] else { return }
             guard let type = body["type"] as? String else { return }
-            // Forward all bridge messages through MMLogger so the JS
-            // side's step pings + errors land in the iOS log without
-            // needing to attach Safari's web inspector.
-            log.info("reader bridge: \(body)")
             let parsed: ReaderBridge.Message?
             switch type {
             case "ready":
                 parsed = .ready
             case "relocated":
+                // Hot path — fires on every page flip. No log line.
                 parsed = .relocated(
                     cfi: (body["cfi"] as? String) ?? "",
                     percent: (body["percent"] as? Double) ?? 0)
             case "error":
-                parsed = .error((body["message"] as? String) ?? "Unknown reader error")
+                let m = (body["message"] as? String) ?? "Unknown reader error"
+                log.warning("reader.html error: \(m)")
+                parsed = .error(m)
             default:
-                // step / progress pings — logged above, no UI side-effect
                 parsed = nil
             }
             if let parsed {
@@ -377,6 +488,85 @@ final class ReaderBridge {
 
     func runJS(_ script: String) {
         webView?.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    /// Like `runJS` but returns the script's result. Used for getToc
+    /// where we need the array back. epub.js's getToc is synchronous
+    /// (walks an in-memory structure), so the JS expression evaluates
+    /// to a serialisable array of dictionaries — no Promise warning.
+    /// Fetches the TOC from epub.js. The conversion from JS-bridged
+    /// `[[String: Any]]` (which isn't `Sendable`) to a typed
+    /// `[TocRecord]` happens inside the WKWebView callback so only
+    /// `Sendable` values cross the continuation. Without this the
+    /// Swift 6 strict-sending checker rejects the bridge call.
+    func evalToc(_ script: String) async -> [TocRecord] {
+        guard let webView else { return [] }
+        return await withCheckedContinuation { (cont: CheckedContinuation<[TocRecord], Never>) in
+            webView.evaluateJavaScript(script) { result, _ in
+                let raw = (result as? [[String: Any]]) ?? []
+                let parsed: [TocRecord] = raw.map { e in
+                    TocRecord(
+                        label: (e["label"] as? String) ?? "",
+                        href: (e["href"] as? String) ?? "",
+                        depth: (e["depth"] as? Int) ?? 0)
+                }
+                cont.resume(returning: parsed)
+            }
+        }
+    }
+}
+
+/// Sendable mirror of `BookReaderView.TocEntry` used to ferry results
+/// across the WKWebView completion-handler continuation.
+struct TocRecord: Sendable {
+    let label: String
+    let href: String
+    let depth: Int
+}
+
+/// Chapter list sheet shown from the reader's toolbar. The TOC is
+/// fetched fresh each open via `MMReader.getToc()` rather than
+/// cached on the Swift side, so a reload of the same book on a
+/// different device picks up the latest spine without manual
+/// invalidation.
+private struct TOCSheet: View {
+    let entries: [BookReaderView.TocEntry]
+    let onTap: (BookReaderView.TocEntry) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if entries.isEmpty {
+                    ContentUnavailableView("No chapters", systemImage: "list.bullet",
+                        description: Text("This book doesn't expose a table of contents."))
+                } else {
+                    List(entries) { e in
+                        Button {
+                            onTap(e)
+                        } label: {
+                            // Indent by depth to convey nesting; epub.js
+                            // hands us a flat list with a depth marker.
+                            HStack {
+                                if e.depth > 0 {
+                                    Spacer().frame(width: CGFloat(e.depth) * 16)
+                                }
+                                Text(e.label.isEmpty ? "Untitled" : e.label)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Chapters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 

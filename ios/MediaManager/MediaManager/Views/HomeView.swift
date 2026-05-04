@@ -61,6 +61,14 @@ struct HomeView: View {
                             }
                         }
 
+                        // Continue Reading: rendered above the
+                        // generic carousels because the user's intent
+                        // is most likely to land here (the book they
+                        // were reading) when they pop the home tab.
+                        if !feed.resumeReading.isEmpty {
+                            ContinueReadingCarousel(items: feed.resumeReading)
+                        }
+
                         ForEach(feed.carousels, id: \.name) { carousel in
                             if carousel.name == "Resume Playing" {
                                 CarouselView(
@@ -133,6 +141,80 @@ struct HomeView: View {
             self.error = error.localizedDescription
         }
         loading = false
+    }
+}
+
+/// Resume-Reading carousel. Mirrors `CarouselView`'s row layout but
+/// drives off `ApiResumeReading` instead of `ApiTitle`, so each tap
+/// can navigate straight into `BookReaderView` (resume directly)
+/// rather than the book detail page. The progress fraction is the
+/// reading_progress.percent value the server stamps on every
+/// `ReportReadingProgress` call.
+struct ContinueReadingCarousel: View {
+    let items: [ApiResumeReading]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Continue Reading")
+                .font(.title2)
+                .fontWeight(.bold)
+                .padding(.horizontal)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(items) { item in
+                        NavigationLink(value: BookReaderRoute(
+                            mediaItemId: item.mediaItemId,
+                            titleName: item.titleName)) {
+                            ResumeReadingCard(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
+private struct ResumeReadingCard: View {
+    let item: ApiResumeReading
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .bottom) {
+                BookCoverView(
+                    ref: .posterThumbnail(titleId: item.titleId.protoValue),
+                    seed: item.titleName)
+                    .frame(width: 120, height: 180)
+
+                // Reading-progress bar in the same shape as the
+                // video resume bar on PosterCard, so the home page
+                // reads consistently across media types.
+                if item.percent > 0 {
+                    GeometryReader { geo in
+                        VStack {
+                            Spacer()
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(.black.opacity(0.5))
+                                    .frame(height: 3)
+                                Rectangle()
+                                    .fill(.blue)
+                                    .frame(width: geo.size.width * item.percent, height: 3)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: 120, height: 180)
+
+            Text(item.titleName)
+                .font(.caption)
+                .lineLimit(2)
+                .frame(width: 120, alignment: .leading)
+        }
+        .frame(width: 120)
     }
 }
 

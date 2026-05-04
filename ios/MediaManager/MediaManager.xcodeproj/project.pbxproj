@@ -27,6 +27,7 @@
 		AA000001 /* MediaManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MediaManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000002 /* Developer.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Developer.xcconfig; sourceTree = "<group>"; };
 		BB000010 /* MediaManagerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MediaManagerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C78C12652FA8FDE000248C98 /* MediaManagerUITests.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = MediaManagerUITests.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -80,6 +81,7 @@
 		AA000030 = {
 			isa = PBXGroup;
 			children = (
+				C78C12652FA8FDE000248C98 /* MediaManagerUITests.xctestplan */,
 				AA000010 /* MediaManager */,
 				BB000020 /* MediaManagerUITests */,
 				AA000031 /* Products */,
@@ -266,7 +268,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
@@ -298,7 +300,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
