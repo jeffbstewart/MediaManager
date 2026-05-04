@@ -14,9 +14,15 @@
   "testTargets" : [
     {
       "skippedTests" : [
-        "MediaManagerUITests",
-        "MediaManagerUITests\/testConnectButtonDisabledWhenEmpty()",
-        "MediaManagerUITests\/testServerSetupScreenAppears()"
+        "ReaderBridgeTests",
+        "ReaderBridgeTests\/testEpubFetchableViaXHR()",
+        "ReaderBridgeTests\/testEpubJsParsesBookSpine()",
+        "ReaderBridgeTests\/testFixturesAreBundled()",
+        "ReaderBridgeTests\/testReaderHtmlLoadsAndBridgeDefined()",
+        "ReaderUITests",
+        "ReaderUITests\/testReaderLaunchesAndShowsToolbar()",
+        "ReaderUITests\/testTOCSheetListsChapters()",
+        "ReaderUITests\/testThemeButtonRemainsResponsive()"
       ],
       "target" : {
         "containerPath" : "container:MediaManager.xcodeproj",

@@ -7,9 +7,17 @@ private let log = MMLogger(category: "BookReaderView")
 /// `media_item_id` that keys both the download
 /// (`DownloadService.DownloadBookFile`) and the reading-progress
 /// stream (`PlaybackService.ReportReadingProgress`).
+///
+/// `testBundleEpub`: when non-nil, the reader skips the gRPC
+/// download and progress-report paths and copies the named EPUB
+/// from the app bundle (`Bundle.main.url(forResource:withExtension:)`)
+/// into the staging dir. Used by the UI test target via the
+/// `-MMReaderTestMode` launch arg; production navigation always
+/// leaves this nil.
 struct BookReaderRoute: Hashable {
     let mediaItemId: Int64
     let titleName: String
+    var testBundleEpub: String? = nil
 }
 
 /// Ebook reader (v1: EPUB only). The WKWebView hosts a bundled
@@ -222,16 +230,26 @@ struct BookReaderView: View {
             let dir = try ReaderStaging.shared.ensureReaderDir()
             let htmlURL = dir.appendingPathComponent("reader.html")
 
-            status = .loading("Downloading book…")
-            let epubURL = try await ensureEpubDownloaded(into: dir)
+            // Test-mode shortcut: copy the bundled EPUB into staging
+            // and skip all gRPC paths. The route only carries
+            // `testBundleEpub` when the UI-test launch arg set it,
+            // so production navigation flows past this branch
+            // unchanged.
+            let epubURL: URL
+            if let bundleName = route.testBundleEpub {
+                epubURL = try copyTestEpubFromBundle(named: bundleName, into: dir)
+            } else {
+                status = .loading("Downloading book…")
+                epubURL = try await ensureEpubDownloaded(into: dir)
 
-            // Resume position before bootArgs land. Booting with a
-            // `resumeCfi` tells epub.js where to render the first
-            // page; without it we'd flash the cover before the first
-            // relocation event lands.
-            if let progress = await dataModel.readingProgress(mediaItemId: route.mediaItemId) {
-                lastCfi = progress.locator.isEmpty ? nil : progress.locator
-                progressPct = progress.fraction
+                // Resume position before bootArgs land. Booting with a
+                // `resumeCfi` tells epub.js where to render the first
+                // page; without it we'd flash the cover before the first
+                // relocation event lands.
+                if let progress = await dataModel.readingProgress(mediaItemId: route.mediaItemId) {
+                    lastCfi = progress.locator.isEmpty ? nil : progress.locator
+                    progressPct = progress.fraction
+                }
             }
 
             // Latch the boot args + message handler BEFORE the WebView
@@ -291,6 +309,29 @@ struct BookReaderView: View {
         return dest
     }
 
+    /// Test-mode counterpart to `ensureEpubDownloaded`. Resolves the
+    /// named resource from `Bundle.main`, copies it into the staging
+    /// dir under a sentinel filename so multiple test launches don't
+    /// collide with cached production EPUBs, and returns the staged
+    /// URL. Throws if the bundled resource is missing — better than
+    /// silently rendering nothing.
+    private func copyTestEpubFromBundle(named resourceName: String, into dir: URL) throws -> URL {
+        let stem = (resourceName as NSString).deletingPathExtension
+        let ext = (resourceName as NSString).pathExtension
+        guard let src = Bundle.main.url(forResource: stem, withExtension: ext) else {
+            throw NSError(domain: "BookReaderView", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "test EPUB '\(resourceName)' not found in app bundle",
+            ])
+        }
+        let dest = dir.appendingPathComponent("test-\(resourceName)")
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.removeItem(at: dest)
+        }
+        try FileManager.default.copyItem(at: src, to: dest)
+        log.info("test-mode EPUB staged from bundle: \(dest.lastPathComponent)")
+        return dest
+    }
+
     private func handleBridgeMessage(_ msg: ReaderBridge.Message) {
         switch msg {
         case .ready:
@@ -307,6 +348,10 @@ struct BookReaderView: View {
     }
 
     private func startReportTimer() {
+        // Test mode runs without a live server, so progress reporting
+        // is just dead noise — skip the timer entirely.
+        if route.testBundleEpub != nil { return }
+
         reportTimer?.invalidate()
         // 10 s mirrors the web reader's PROGRESS_REPORT_MS. Tight enough
         // that closing the app loses at most ten seconds of progress;
@@ -319,6 +364,7 @@ struct BookReaderView: View {
 
     private func reportProgress() async {
         guard let cfi = lastCfi else { return }
+        if route.testBundleEpub != nil { return }
         await dataModel.reportReadingProgress(
             mediaItemId: route.mediaItemId,
             locator: cfi,

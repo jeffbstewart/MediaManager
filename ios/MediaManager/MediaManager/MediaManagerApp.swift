@@ -37,14 +37,33 @@ struct MediaManagerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            // UI-test hook: when launched with `-MMReaderTestMode`, root
+            // straight into a NavigationStack rendering BookReaderView
+            // against the bundled `test.epub`. Bypasses login, server
+            // discovery, and the home feed — the test only needs the
+            // reader pane reachable in a deterministic state. Production
+            // launches don't carry the arg and fall through to RootView.
+            if ProcessInfo.processInfo.arguments.contains("-MMReaderTestMode") {
+                NavigationStack {
+                    BookReaderView(route: BookReaderRoute(
+                        mediaItemId: -1,
+                        titleName: "Test Book",
+                        testBundleEpub: "test.epub"))
+                }
                 .environment(authManager)
                 .environment(downloadManager)
                 .environment(dataModel)
                 .environment(imageProvider)
-                .onAppear {
-                    downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
-                }
+            } else {
+                RootView()
+                    .environment(authManager)
+                    .environment(downloadManager)
+                    .environment(dataModel)
+                    .environment(imageProvider)
+                    .onAppear {
+                        downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
+                    }
+            }
         }
     }
 }
