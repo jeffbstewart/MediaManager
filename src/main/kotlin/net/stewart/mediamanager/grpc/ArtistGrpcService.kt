@@ -7,6 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import net.stewart.mediamanager.entity.Artist
 import net.stewart.mediamanager.entity.ArtistMembership
 import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.AuthorRole
+import net.stewart.mediamanager.entity.MediaFormat
+import net.stewart.mediamanager.entity.MediaItem
+import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.MediaType as MediaTypeEnum
 import net.stewart.mediamanager.entity.RecommendedArtist
 import net.stewart.mediamanager.entity.Title as TitleEntity
@@ -208,12 +212,17 @@ class ArtistGrpcService(
 
     override suspend fun listAuthors(request: ListAuthorsRequest): AuthorListResponse {
         val user = currentUser()
-        val ownedBooksByAuthor = TitleAuthor.findAll().groupingBy { it.author_id }.eachCount()
+        // Author-grid queries always restrict to role=AUTHOR. Translators
+        // and illustrators are tracked on the same table for book-detail
+        // credits but don't get a card on the authors landing page.
+        val authorRoleLinks = TitleAuthor.findAll()
+            .filter { it.role == AuthorRole.AUTHOR.name }
+        val ownedBooksByAuthor = authorRoleLinks.groupingBy { it.author_id }.eachCount()
 
         // Book-cover fallback: ordered by author_order so the primary
         // credit on a co-authored book wins. Mirrors the artist
         // fallback path.
-        val booksByAuthor: Map<Long, List<Long>> = TitleAuthor.findAll()
+        val booksByAuthor: Map<Long, List<Long>> = authorRoleLinks
             .sortedBy { it.author_order }
             .groupBy({ it.author_id }, { it.title_id })
         val visibleBookIds: Set<Long> = TitleEntity.findAll()
@@ -225,7 +234,34 @@ class ArtistGrpcService(
             .mapNotNull { it.id }
             .toSet()
 
-        val all = Author.findAll()
+        // Playable-only: author has at least one Title linked to a
+        // MediaItem in EBOOK_EPUB or EBOOK_PDF format with a populated
+        // file_path. Computed once vs. per-row. Audiobooks (CD or
+        // digital) are intentionally excluded for now — the iOS reader
+        // is text-only and exposing audiobook-only authors would lead
+        // users to a dead end. Broaden when the audio module ships.
+        val playableAuthorIds: Set<Long> = if (request.playableOnly) {
+            authorRoleLinks
+                .filter { it.title_id in readableBookTitleIds() }
+                .map { it.author_id }
+                .toSet()
+        } else emptySet()
+
+        val all = Author.findAll().asSequence()
+            .let { seq ->
+                if (request.playableOnly) seq.filter { it.id in playableAuthorIds } else seq
+            }
+            // hidden_only is the admin escape-hatch view: visible-only by
+            // default; admin's "Hidden Authors" filter flips the predicate
+            // so they can navigate to a hidden row and unhide it. Only
+            // admins should be sending hidden_only=true; for non-admins
+            // we still filter to !hidden to prevent leakage.
+            .let { seq ->
+                val isAdmin = user.isAdmin()
+                if (request.hiddenOnly && isAdmin) seq.filter { it.hidden }
+                else seq.filter { !it.hidden }
+            }
+            .toList()
         val filtered = request.q.takeIf { request.hasQ() && it.isNotBlank() }?.lowercase()?.let { needle ->
             all.filter { it.name.lowercase().contains(needle) || it.sort_name.lowercase().contains(needle) }
         } ?: all
@@ -260,13 +296,22 @@ class ArtistGrpcService(
         val author = Author.findById(request.authorId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("author not found"))
 
-        val links = TitleAuthor.findAll().filter { it.author_id == author.id }
+        // Owned-book list on the author detail page: only AUTHOR-role
+        // links count. Translators and illustrators on the same table
+        // are surfaced in a separate credits row on the book-detail page.
+        val links = TitleAuthor.findAll()
+            .filter { it.author_id == author.id && it.role == AuthorRole.AUTHOR.name }
         val linkedTitleIds = links.map { it.title_id }.toSet()
         val seriesById = net.stewart.mediamanager.entity.BookSeries.findAll().associateBy { it.id }
+        // iOS sets playable_only=true so phone users only see books they
+        // can actually read in-app. Web leaves it false and gets the
+        // full library (physical-only books included).
+        val playableTitleIds = if (request.playableOnly) readableBookTitleIds() else null
         val ownedBooks = TitleEntity.findAll()
             .filter { it.id in linkedTitleIds }
             .filter { it.media_type == MediaTypeEnum.BOOK.name }
             .filter { !it.hidden && user.canSeeRating(it.content_rating) }
+            .filter { playableTitleIds == null || it.id in playableTitleIds }
             .sortedWith(compareBy(
                 // Series-first ordering matches the legacy REST handler so
                 // the SPA's grouped render doesn't reshuffle on migration.
@@ -291,6 +336,28 @@ class ArtistGrpcService(
             })
             this.otherWorks.addAll(otherWorks)
         }
+    }
+
+    /**
+     * Set of Title ids that have at least one digital (EPUB or PDF)
+     * MediaItem with a populated file_path — i.e., titles the iOS
+     * reader can actually open. Used by both [listAuthors]
+     * (`playable_only` author filter) and [getAuthorDetail]
+     * (`playable_only` book filter on the owned-books list).
+     */
+    private fun readableBookTitleIds(): Set<Long> {
+        val ebookMediaItemIds = MediaItem.findAll()
+            .filter {
+                !it.file_path.isNullOrBlank() &&
+                    (it.media_format == MediaFormat.EBOOK_EPUB.name ||
+                     it.media_format == MediaFormat.EBOOK_PDF.name)
+            }
+            .mapNotNull { it.id }
+            .toSet()
+        return MediaItemTitle.findAll()
+            .filter { it.media_item_id in ebookMediaItemIds }
+            .map { it.title_id }
+            .toSet()
     }
 
     private fun buildAuthorOtherWorks(

@@ -50,7 +50,17 @@ class LoggingInterceptor : ServerInterceptor {
 
                 when {
                     status.isOk -> {
-                        log.info("OK {} {}ms user={}", method, elapsedMs, username)
+                        // StreamLogs is a long-lived client-streaming
+                        // RPC the iOS / Android-TV apps reconnect to on
+                        // every cycle of gRPC's flow-control timer. An
+                        // OK INFO line per reconnect floods the access
+                        // log without telling us anything (the audit
+                        // line in ObservabilityGrpcService already
+                        // covers the records-actually-forwarded
+                        // accounting). Skip the access entry here.
+                        if (method !in HIGH_FREQUENCY_OK_METHODS) {
+                            log.info("OK {} {}ms user={}", method, elapsedMs, username)
+                        }
                     }
                     else -> {
                         // Any non-OK close — client OR server error — is logged
@@ -138,6 +148,12 @@ class LoggingInterceptor : ServerInterceptor {
             "mediamanager.AuthService/Refresh",
             "mediamanager.AuthService/Revoke",
             "mediamanager.AuthService/ChangePassword"
+        )
+
+        /** Methods that fire often enough that an OK INFO per call is
+         *  pure noise. Errors still log normally. */
+        private val HIGH_FREQUENCY_OK_METHODS = setOf(
+            "mediamanager.ObservabilityService/StreamLogs",
         )
 
         /** Client-error status codes — user's fault, not a server bug. */

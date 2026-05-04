@@ -2522,6 +2522,20 @@ class AdminGrpcService(
         return Empty.getDefaultInstance()
     }
 
+    override suspend fun setAuthorHidden(request: SetAuthorHiddenRequest): Empty {
+        val author = AuthorEntity.findById(request.authorId)
+            ?: throw StatusException(Status.NOT_FOUND.withDescription("author not found"))
+        // No-op when state already matches — keeps updated_at stable so
+        // the AuthorEnrichmentAgent's no-progress-streak heuristic doesn't
+        // misinterpret the toggle as a real edit.
+        if (author.hidden != request.hidden) {
+            author.hidden = request.hidden
+            author.updated_at = LocalDateTime.now()
+            author.save()
+        }
+        return Empty.getDefaultInstance()
+    }
+
     override suspend fun mergeAuthors(request: MergeAuthorsRequest): Empty {
         if (request.keepAuthorId == request.dropAuthorId) {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("keep and drop must differ"))

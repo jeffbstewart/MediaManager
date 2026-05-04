@@ -87,6 +87,20 @@ message ListAuthorsRequest {
   int32 limit = 2;
   AuthorSort sort = 3;
   optional string q = 4;
+  // True keeps only authors with at least one downloadable ebook
+  // edition (EBOOK_EPUB or EBOOK_PDF MediaItem with a populated
+  // file_path). The iOS client always sets this — physical-only
+  // authors aren't useful on a phone where the only consumption
+  // path is the in-app reader. Mirrors `playable_only` on
+  // ListArtistsRequest.
+  bool playable_only = 5;
+  // Admin-only escape hatch. False (default) returns visible authors;
+  // true returns only authors with `hidden=true` so an admin can find
+  // them and unhide via SetAuthorHidden. Non-admin clients should leave
+  // this at the default — server-side filtering still hides the entries
+  // either way for non-admins, but the field is the iOS admin's switch
+  // for the Hidden-only view.
+  bool hidden_only = 6;
 }
 
 message AuthorListResponse {
@@ -110,9 +124,20 @@ message AuthorListItem {
   // /posters/w185/{id} same-origin. Mirrors fallback_album_title_id
   // on ArtistListItem.
   optional int64 fallback_book_title_id = 5;
+  // Admin-controlled hide flag. Mirrors Author.hidden — set when an
+  // admin has hidden this author. Drives the iOS admin "Hidden
+  // Authors" view, where the toggle button reads as Unhide.
+  bool hidden = 6;
 }
 
-message AuthorIdRequest { int64 author_id = 1; }
+message AuthorIdRequest {
+  int64 author_id = 1;
+  // True omits owned books that don't have a downloadable EPUB or PDF
+  // edition — i.e., books the iOS reader cannot open. iOS sets this to
+  // true so phone users only see books they can actually read on the
+  // device. Web leaves it false (default) and gets the full library.
+  bool playable_only = 2;
+}
 
 message ListArtistRecommendationsRequest {
   // Server clamps to [1, 100]; default 30 when omitted.

@@ -164,6 +164,11 @@ service AdminService {
   rpc UpdateAuthor(UpdateAuthorRequest) returns (Empty);
   rpc DeleteAuthor(AdminAuthorIdRequest) returns (Empty);
   rpc MergeAuthors(MergeAuthorsRequest) returns (Empty);
+  // Admin-toggleable hide. Sets author.hidden so the author drops out
+  // of the default authors grid; iOS surfaces a Hide / Unhide button
+  // on the author detail page. Also reachable via the
+  // ListAuthorsRequest.hidden_only=true admin view.
+  rpc SetAuthorHidden(SetAuthorHiddenRequest) returns (Empty);
 
   // --- Artist admin ---
   rpc ListAdminArtists(ListAdminArtistsRequest) returns (AdminArtistListResponse);
@@ -1290,6 +1295,11 @@ message TrackSearchMatch {
 // ============================================================================
 
 message AdminAuthorIdRequest { int64 author_id = 1; }
+
+message SetAuthorHiddenRequest {
+  int64 author_id = 1;
+  bool hidden = 2;
+}
 message AdminArtistIdRequest { int64 artist_id = 1; }
 
 message ListAdminAuthorsRequest {

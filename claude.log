@@ -5149,3 +5149,95 @@ recurring 15-books-and-reader:226 flake as prior runs).
   src/test/kotlin/.../armeria/StreamingServicesTest.kt,
   ios/MediaManager/MediaManager/Views/CustomPlayerView.swift.
 ===
+
+=== 2026-05-03 — Books module v1: browse + detail + author cleanup ===
+- iOS Books tab landing: AuthorsView (paginated grid by
+  ArtistService.ListAuthors, sort by name/books/recent,
+  searchable). Author cards layer the headshot over a
+  fallback book cover (/posterThumbnail of fallback_book_title_id)
+  and finally a synthesised colour swatch (BookCoverView)
+  whose hue+initial mirror the server's
+  servePlaceholder SVG. Admin-only "Visible / Hidden
+  authors" filter in the toolbar. ListAuthorsRequest
+  gained `playable_only` and `hidden_only` flags.
+- AuthorDetailView: layered hero (book cover + headshot
+  with transparentPlaceholder so 404s don't show through);
+  bio, owned books grid, OpenLibrary "Other Works" with
+  already_wished hearts; admin-only Hide / Unhide button
+  at the bottom that toggles author.hidden via
+  AdminService.SetAuthorHidden.
+- BookSeriesDetailView: hero from first owned volume,
+  author tap-through, owned volumes list, missing volumes
+  via OL bibliography. Hooked into the navigation graph
+  with BookSeriesRoute.
+- BookDetailView: dispatched from ApiTitle.self when
+  `proto.media_type == BOOK`. Cover, author / year /
+  series link / page count / description / editions list,
+  plus a deliberately-disabled "Read" button (placeholder
+  until the WKWebView reader lands tomorrow).
+- Image-cache key bug: ImageDiskCache.cacheKey and
+  CachedImage.refKey both omitted authorID, tmdbMedia,
+  and openlibraryWorkID. Every author headshot collapsed
+  to the same on-disk slot and the first-loaded image
+  bled across all author cards. Fixed both keys to
+  enumerate every discriminating field on MMImageRef.
+- ImageRef constructors for .authorHeadshot(authorId:)
+  and .openlibraryCover(workId:); ImageGrpcService
+  resolvePoster now handles `isbn/...` and `caa/...`
+  poster_path sentinels (book / album covers via the OL
+  and CoverArtArchive proxies) instead of returning
+  NotFound. resolveAuthorHeadshot falls back to OL when
+  the local cache misses.
+- AuthorManager throwaway-double-construct fix:
+  MediaManagerApp.init had default initializers on the
+  @State authManager / downloadManager properties; the
+  property initializer fired before init() ran,
+  spawning a throwaway whose restoreSession() Task kept
+  it alive long enough to start a second LogStreamer.
+  Two streamers fed back-to-back empty StreamLogs reconnects.
+  Dropped the default initializers (matches dataModel /
+  imageProvider). Belt-and-braces server-side fix:
+  ObservabilityGrpcService skips its AUDIT line when
+  forwarded == 0 && rejected == 0; LoggingInterceptor
+  suppresses OK INFO for high-frequency StreamLogs;
+  AccessLogDecorator now skips `/mediamanager.*` so our
+  gRPC calls don't double-log via http.access.
+- Title-author role + audiobook scrub:
+  - V096 adds title_author.role (default AUTHOR).
+  - BookIngestionService rejects AUDIOBOOK_CD /
+    AUDIOBOOK_DIGITAL formats outright (the iOS reader
+    is text-only and OL audiobook editions routinely
+    list narrators in `authors`).
+  - OpenLibraryService now pulls AUTHORs from
+    work.authors only (no edition.authors fallback) and
+    cross-references each author against
+    edition.contributors with non-Author roles.
+    Falls through to a "skeleton vs fleshed-out OL author
+    record" heuristic (bio / birth_date /
+    alternate_names — `personal_name` is too weak a signal,
+    Dick Hill had it set despite being a narrator).
+  - RebuildBookAuthorsUpdater (v4): wipes audiobook
+    MediaItems and orphan BOOK Titles, drops every
+    title_author row for BOOK titles, deletes orphaned
+    Authors, then refetches OL for each remaining BOOK
+    title on a background thread. Re-runnable via
+    version bump.
+  - listAuthors / getAuthorDetail / getTitleDetail / etc.
+    queries restrict TitleAuthor to role=AUTHOR for
+    author-grid surfaces.
+- V097 adds author.hidden (default false). listAuthors
+  filters !hidden by default; admins flipping the new
+  hidden_only=true flag get the inverse view. New
+  AdminService.SetAuthorHidden(authorId, hidden) RPC.
+- Files: V096, V097, RebuildBookAuthorsUpdater.kt,
+  AuthorsView.swift, AuthorDetailView.swift,
+  BookCoverView.swift, BookDetailView.swift,
+  BookSeriesDetailView.swift, plus modifications to
+  Author.kt, TitleAuthor.kt, OpenLibraryService.kt,
+  BookIngestionService.kt, ArtistGrpcService.kt,
+  CatalogGrpcService.kt, AdminGrpcService.kt,
+  ProtoMappers.kt, ImageGrpcService.kt,
+  AccessLogDecorator.kt, LoggingInterceptor.kt,
+  Bootstrap.kt, the iOS data model layer + GrpcClient,
+  and ContentView's navigation destinations.
+===

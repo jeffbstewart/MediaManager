@@ -125,15 +125,26 @@ actor ImageDiskCache {
     // MARK: - Cache Key
 
     private func cacheKey(for ref: MMImageRef) -> String {
-        // Deterministic hash of type + identifying field
+        // Deterministic hash of type + every identifying field. Every new
+        // ImageRef variant must hash its discriminating field here, or
+        // entries in that variant will all collide on the same on-disk
+        // slot — see Author headshots / TMDB posters / OpenLibrary covers
+        // which previously shared a single key because their fields were
+        // omitted.
         var hasher = SHA256()
-        let typeStr = "\(ref.type.rawValue)"
-        hasher.update(data: Data(typeStr.utf8))
+        hasher.update(data: Data("\(ref.type.rawValue)".utf8))
         hasher.update(data: Data("\(ref.titleID)".utf8))
         hasher.update(data: Data("\(ref.tmdbPersonID)".utf8))
         hasher.update(data: Data("\(ref.tmdbCollectionID)".utf8))
         hasher.update(data: Data(ref.uuid.utf8))
         hasher.update(data: Data("\(ref.cameraID)".utf8))
+        hasher.update(data: Data("\(ref.artistID)".utf8))
+        hasher.update(data: Data("\(ref.authorID)".utf8))
+        hasher.update(data: Data(ref.musicbrainzReleaseGroupID.utf8))
+        hasher.update(data: Data(ref.openlibraryWorkID.utf8))
+        if ref.hasTmdbMedia {
+            hasher.update(data: Data("\(ref.tmdbMedia.tmdbID)/\(ref.tmdbMedia.mediaType.rawValue)".utf8))
+        }
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
     }

@@ -122,6 +122,10 @@ actor GrpcClient {
         get throws { MMObservabilityService.Client(wrapping: try requireClient()) }
     }
 
+    var artistService: MMArtistService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMArtistService.Client(wrapping: try requireClient()) }
+    }
+
     /// Open a long-lived StreamLogs client-streaming RPC. The producer
     /// closure is handed an `RPCWriter<MMLogRecord>` and runs until it
     /// returns; the server then returns a `StreamLogsAck` summarising
@@ -486,6 +490,40 @@ actor GrpcClient {
         request.query = query
         request.type = type
         return try await wishListService.searchTmdb(request, metadata: authMetadata())
+    }
+
+    // MARK: - Author / Book RPCs
+
+    func listAuthors(page: Int32, limit: Int32, sort: MMAuthorSort, query: String?, playableOnly: Bool = true, hiddenOnly: Bool = false) async throws -> MMAuthorListResponse {
+        var request = MMListAuthorsRequest()
+        request.page = page
+        request.limit = limit
+        request.sort = sort
+        if let query, !query.isEmpty { request.q = query }
+        request.playableOnly = playableOnly
+        request.hiddenOnly = hiddenOnly
+        return try await artistService.listAuthors(request, metadata: authMetadata())
+    }
+
+    func adminSetAuthorHidden(authorId: Int64, hidden: Bool) async throws {
+        var request = MMSetAuthorHiddenRequest()
+        request.authorID = authorId
+        request.hidden = hidden
+        _ = try await adminService.setAuthorHidden(request, metadata: authMetadata())
+    }
+
+    func getAuthorDetail(id: Int64, playableOnly: Bool = true) async throws -> MMAuthorDetail {
+        var request = MMAuthorIdRequest()
+        request.authorID = id
+        request.playableOnly = playableOnly
+        return try await artistService.getAuthorDetail(request, metadata: authMetadata())
+    }
+
+    func getBookSeriesDetail(id: Int64, playableOnly: Bool = true) async throws -> MMBookSeriesDetail {
+        var request = MMBookSeriesIdRequest()
+        request.seriesID = id
+        request.playableOnly = playableOnly
+        return try await catalogService.getBookSeriesDetail(request, metadata: authMetadata())
     }
     // MARK: - Admin RPCs
 

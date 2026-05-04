@@ -41,8 +41,12 @@ class AccessLogDecorator : DecoratingHttpServiceFunction {
             val username = ArmeriaAuthDecorator.getUser(ctx)?.username ?: "-"
 
             // Skip gRPC — those are logged with proper granularity by
-            // LoggingInterceptor at grpc.access.
-            if (path.startsWith("/grpc.") || path.startsWith("/armeria.")) {
+            // LoggingInterceptor at grpc.access. Our services live under
+            // /mediamanager.<Service>/<method>; reflection lives under
+            // /grpc.reflection.*; armeria's own healthcheck under
+            // /armeria.*. All three would otherwise be double-logged.
+            if (path.startsWith("/grpc.") || path.startsWith("/armeria.")
+                || path.startsWith("/mediamanager.")) {
                 return@thenAccept
             }
 

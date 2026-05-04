@@ -2,6 +2,7 @@ package net.stewart.mediamanager.service
 
 import com.github.vokorm.findAll
 import net.stewart.mediamanager.entity.Author
+import net.stewart.mediamanager.entity.AuthorRole
 import net.stewart.mediamanager.entity.BookSeries
 import net.stewart.mediamanager.entity.EnrichmentStatus
 import net.stewart.mediamanager.entity.ExpansionStatus
@@ -36,6 +37,22 @@ object BookIngestionService {
     )
 
     /**
+     * Sentinel thrown when a caller asks us to ingest an audiobook
+     * format. The iOS reader is text-only and the OL editions for
+     * audiobooks routinely list the narrator in the author array
+     * (which contaminated the author grid before this guard was
+     * added). Audiobook support — with proper narrator modelling —
+     * arrives with the audio module.
+     */
+    class AudiobookFormatNotSupported(format: MediaFormat) :
+        IllegalStateException("Audiobook formats not yet supported: $format")
+
+    private val SKIPPED_AUDIOBOOK_FORMATS = setOf(
+        MediaFormat.AUDIOBOOK_CD,
+        MediaFormat.AUDIOBOOK_DIGITAL,
+    )
+
+    /**
      * Physical-book scan path. [isbn] is the EAN-13 the user scanned. The
      * MediaItem's `media_format` falls back to [lookup.mediaFormat] and
      * then to [MediaFormat.MASS_MARKET_PAPERBACK] — a reasonable default
@@ -62,14 +79,18 @@ object BookIngestionService {
         isbn: String?,
         lookup: OpenLibraryBookLookup,
         clock: Clock = SystemClock
-    ): IngestResult =
-        ingestInternal(
+    ): IngestResult {
+        if (fileFormat in SKIPPED_AUDIOBOOK_FORMATS) {
+            throw AudiobookFormatNotSupported(fileFormat)
+        }
+        return ingestInternal(
             isbn = isbn,
             filePath = filePath,
             fileFormat = fileFormat,
             lookup = lookup,
             clock = clock
         )
+    }
 
     /**
      * Registers a digital edition [filePath] as a new [MediaItem] linked to an
@@ -87,6 +108,9 @@ object BookIngestionService {
         title: Title,
         clock: Clock = SystemClock
     ): IngestResult {
+        if (fileFormat in SKIPPED_AUDIOBOOK_FORMATS) {
+            throw AudiobookFormatNotSupported(fileFormat)
+        }
         val now = clock.now()
         val mediaItem = MediaItem(
             media_format = fileFormat.name,
@@ -125,10 +149,16 @@ object BookIngestionService {
 
         if (!reused) {
             authors.forEachIndexed { index, author ->
+                // OL `work.authors` is the only source we trust for AUTHOR
+                // links — see OpenLibraryService.parse. Translators and
+                // illustrators (TitleAuthor.role != AUTHOR) come from
+                // edition.contributors and are wired in once the book-detail
+                // credits row needs them.
                 TitleAuthor(
                     title_id = title.id!!,
                     author_id = author.id!!,
-                    author_order = index
+                    author_order = index,
+                    role = AuthorRole.AUTHOR.name,
                 ).save()
             }
             SearchIndexService.onTitleChanged(title.id!!)
@@ -176,6 +206,36 @@ object BookIngestionService {
             isbn, filePath, lookup.openLibraryWorkId, lookup.workTitle, reused)
 
         return IngestResult(mediaItem, title, reused)
+    }
+
+    /**
+     * Rebuilds the AUTHOR-role TitleAuthor links for an existing
+     * [title]. Used by the [net.stewart.mediamanager.service.RebuildBookAuthorsUpdater]
+     * one-shot migration after the wipe step. Wipes existing AUTHOR
+     * rows for this title and re-creates them from [lookup.authors];
+     * leaves TRANSLATOR / ILLUSTRATOR rows alone (none today, future-
+     * proofing the call shape).
+     *
+     * Returns the number of AUTHOR rows written. Caller is responsible
+     * for upserting series / mediaitems if needed.
+     */
+    fun rebuildAuthorLinks(title: Title, lookup: OpenLibraryBookLookup, clock: Clock = SystemClock): Int {
+        val now = clock.now()
+        // Drop existing AUTHOR rows for this title; keep other roles.
+        TitleAuthor.findAll()
+            .filter { it.title_id == title.id && it.role == AuthorRole.AUTHOR.name }
+            .forEach { it.delete() }
+
+        val authors = lookup.authors.map { upsertAuthor(it, now) }
+        authors.forEachIndexed { index, author ->
+            TitleAuthor(
+                title_id = title.id!!,
+                author_id = author.id!!,
+                author_order = index,
+                role = AuthorRole.AUTHOR.name,
+            ).save()
+        }
+        return authors.size
     }
 
     private fun upsertAuthor(ol: OpenLibraryAuthor, now: LocalDateTime): Author {

@@ -23,7 +23,17 @@ data class OpenLibraryAuthor(
     /** Open Library author ID, e.g. "OL34184A". */
     val openLibraryAuthorId: String,
     /** Display name as OL stores it ("Isaac Asimov"). */
-    val name: String
+    val name: String,
+    /**
+     * True when the OL author record has a populated `bio` /
+     * `personal_name` / `birth_date` / `alternate_names` field —
+     * any of these signals a fleshed-out author entry. Skeleton
+     * records (just `name`) are typically illustrators or
+     * translators that OL has filed as co-authors of a work.
+     * The parser uses this to disambiguate when a work lists
+     * multiple authors and at least one is fleshed-out.
+     */
+    val hasBio: Boolean = false,
 )
 
 /** Result of looking up an ISBN. */
@@ -168,7 +178,7 @@ class OpenLibraryHttpService : OpenLibraryService {
 
         return try {
             parse(isbn, editionBody, workFetcher = { key -> runCatching { fetch("$BASE$key.json") }.getOrNull() },
-                authorFetcher = { id -> runCatching { fetchAuthorName(id) }.getOrNull() })
+                authorFetcher = { id -> runCatching { fetchAuthorMeta(id) }.getOrNull() })
         } catch (e: Exception) {
             log.error("ISBN parse failed for {}: {}", isbn, e.message, e)
             OpenLibraryResult.Error("parse failed: ${e.message}")
@@ -180,11 +190,16 @@ class OpenLibraryHttpService : OpenLibraryService {
      * tests inject stub fetchers so the full parse path runs without touching
      * the network.
      */
+    /** Author metadata returned by the meta-fetcher. Surfaced as a
+     *  pair so the parser can promote real authors over skeleton
+     *  records that OL files as co-authors. */
+    internal data class AuthorMeta(val name: String, val hasBio: Boolean)
+
     internal fun parse(
         isbn: String,
         editionBody: String,
         workFetcher: (String) -> String?,
-        authorFetcher: (String) -> String?
+        authorFetcher: (String) -> AuthorMeta?
     ): OpenLibraryResult {
         val edition = mapper.readTree(editionBody)
 
@@ -206,15 +221,70 @@ class OpenLibraryHttpService : OpenLibraryService {
         val firstPubYear = work?.textOrNull("first_publish_date")?.let { extractYear(it) }
         val description = workOrEditionDescription(work, edition)
 
-        val authorIds = (work?.path("authors") ?: edition.path("authors"))
+        // AUTHORs come from work.authors ONLY. Audiobook editions
+        // historically listed the narrator in `edition.authors`, which
+        // is why we no longer fall back to that field. But OL's work
+        // records are themselves not always clean — illustrators
+        // (Laura Ellen Anderson on The Shepherd's Crown) and adapters
+        // (Stephen Briggs on a few Pratchett works) are sometimes
+        // listed as co-authors at the work level.
+        //
+        // The disambiguator is `edition.contributors`, an array of
+        // `{role, name}` entries with an explicit role string.
+        // Anyone whose work-author name matches a contributor entry
+        // whose role is not "Author" gets filtered out of the AUTHOR
+        // list. Name-match is case-insensitive but exact; OL is
+        // reasonably consistent within a single work record.
+        val nonAuthorContributorNames: Set<String> = edition.path("contributors")
+            .mapNotNull { node ->
+                val name = node.textOrNull("name")?.trim() ?: return@mapNotNull null
+                val role = node.textOrNull("role")?.trim() ?: return@mapNotNull null
+                if (role.equals("Author", ignoreCase = true)) null
+                else name.lowercase()
+            }
+            .toSet()
+
+        val authorIds = (work?.path("authors") ?: mapper.createArrayNode())
             .mapNotNull { node ->
                 node.path("author").olKey("key")
                     ?: node.olKey("key")
             }
             .map { it.removePrefix("/authors/") }
 
-        val authors = authorIds.map { id ->
-            OpenLibraryAuthor(id, authorFetcher(id) ?: "Unknown Author")
+        val rawAuthors = authorIds.map { id ->
+            val meta = authorFetcher(id)
+            OpenLibraryAuthor(
+                openLibraryAuthorId = id,
+                name = meta?.name ?: "Unknown Author",
+                hasBio = meta?.hasBio ?: false,
+            )
+        }
+
+        // Two-stage filter:
+        //
+        //  1. Drop anyone who appears in `edition.contributors` with a
+        //     non-Author role string. This catches the cases OL has
+        //     correctly tagged.
+        //
+        //  2. When the work record lists multiple authors AND at least
+        //     one of them has a fleshed-out OL record (`hasBio`), drop
+        //     the skeleton entries. OL routinely lists illustrators
+        //     and translators in `work.authors` with no role
+        //     discrimination — Laura Ellen Anderson on The Shepherd's
+        //     Crown, Manuel Viciano Delibano (Spanish translator) on
+        //     several Pratchett works, etc. — and their author
+        //     records are bare-name skeletons. The asymmetry is the
+        //     diagnostic: a real co-author (Neil Gaiman on Good Omens)
+        //     also has a bio, so legitimate collaborations survive.
+        //
+        // If every entry is a skeleton (no bio anywhere), keep them
+        // all — we don't have a signal and shouldn't drop everyone.
+        val nameFiltered = rawAuthors
+            .filter { it.name.trim().lowercase() !in nonAuthorContributorNames }
+        val authors = if (nameFiltered.size > 1 && nameFiltered.any { it.hasBio }) {
+            nameFiltered.filter { it.hasBio }
+        } else {
+            nameFiltered
         }
 
         val series = parseSeries(work?.get("series"))
@@ -237,9 +307,22 @@ class OpenLibraryHttpService : OpenLibraryService {
         ))
     }
 
-    private fun fetchAuthorName(authorId: String): String? {
+    private fun fetchAuthorMeta(authorId: String): AuthorMeta? {
         val body = fetch("$BASE/authors/$authorId.json") ?: return null
-        return mapper.readTree(body).textOrNull("name")
+        val node = mapper.readTree(body)
+        val name = node.textOrNull("name") ?: return null
+        // Treat any of these as "fleshed-out": a real bio, a
+        // birth_date, or alternate_names with at least one entry.
+        // `personal_name` is intentionally NOT a signal — OL's data
+        // entry form auto-fills it from `name`, so narrators and
+        // illustrators get it too (Dick Hill had it set despite a
+        // bare-name record otherwise). Real authors almost always
+        // accumulate at least one of the three fields below over
+        // time as OL editors fill in biographical detail.
+        val hasBio = node.path("bio").let { it.isObject || (it.isTextual && it.asText().isNotBlank()) }
+            || node.textOrNull("birth_date") != null
+            || (node.path("alternate_names").isArray && node.path("alternate_names").size() > 0)
+        return AuthorMeta(name = name, hasBio = hasBio)
     }
 
     /** Very small in-process cache for author bibliographies. ~1 hour TTL. */

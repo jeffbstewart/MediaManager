@@ -219,6 +219,12 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     var id: TitleID { TitleID(proto: Int64(proto.id)) }
     var name: String { proto.name }
     var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
+    /// True when the underlying proto media_type is BOOK. Distinct from
+    /// `mediaType`, which collapses BOOK / ALBUM to .movie because the
+    /// app-side `MediaType` enum doesn't model them yet. Used to dispatch
+    /// navigation to `BookDetailView` instead of the movie-centric
+    /// `TitleDetailView`.
+    var isBook: Bool { proto.mediaType == .book }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     var description: String? { proto.hasDescription_p ? proto.description_p : nil }
     var backdropUrl: String? { proto.hasBackdropURL ? proto.backdropURL : nil }
@@ -387,6 +393,7 @@ struct ApiTitleDetail: Sendable {
     var id: TitleID { TitleID(proto: Int64(t.id)) }
     var name: String { t.name }
     var mediaType: MediaType { t.mediaType.appMediaType ?? .movie }
+    var isBook: Bool { t.mediaType == .book }
     var year: Int? { t.hasYear ? Int(t.year) : nil }
     var description: String? { t.hasDescription_p ? t.description_p : nil }
     var backdropUrl: String? { t.hasBackdropURL ? t.backdropURL : nil }
@@ -412,6 +419,24 @@ struct ApiTitleDetail: Sendable {
     var isFavorite: Bool? { proto.isFavorite }
     var isHidden: Bool? { proto.isHidden }
     var wished: Bool? { proto.wished }
+
+    /// Populated only when `isBook` — author list, editions, series link,
+    /// reading progress, page count, first publication year. Returns nil
+    /// for non-book titles.
+    var book: ApiBookDetail? {
+        proto.hasBook ? ApiBookDetail(proto: proto.book) : nil
+    }
+
+    /// Single primary author name from the embedded Title row. Books
+    /// always have at least one credit; the server populates the
+    /// primary author here so list cards don't need to walk
+    /// `book.authors`.
+    var authorName: String? { t.hasAuthorName ? t.authorName : nil }
+
+    /// Series link from the embedded Title row. Both fields are populated
+    /// together; nil when the book is a standalone work.
+    var seriesName: String? { t.hasSeriesName ? t.seriesName : nil }
+    var seriesNumber: String? { t.hasSeriesNumber ? t.seriesNumber : nil }
 }
 
 struct ApiSearchResult: Identifiable, Sendable {
@@ -1179,3 +1204,189 @@ extension MMSettingKey {
 }
 
 // ID wrapper proto initializers are in Types.swift
+
+// MARK: - Author / Book Adapters
+
+/// Card-row author for the Authors grid. Hero artwork is fetched via
+/// `MMImageRef.authorHeadshot(authorId:)` when `hasHeadshot`, with a
+/// fallback to `MMImageRef.posterThumbnail(titleId: fallbackBookTitleId!)`
+/// for authors who have owned books but no Wikimedia/OpenLibrary thumbnail.
+struct ApiAuthorListItem: Identifiable, Sendable {
+    let proto: MMAuthorListItem
+
+    var id: AuthorID { AuthorID(proto: proto.id) }
+    var name: String { proto.name }
+    var ownedBookCount: Int { Int(proto.ownedBookCount) }
+    var hasHeadshot: Bool { proto.hasHeadshot_p }
+    var hidden: Bool { proto.hidden }
+    /// Title id of an owned book to use as a hero fallback when the
+    /// author lacks a headshot. Returns nil for authors with neither
+    /// owned books nor a headshot — those render as a placeholder.
+    var fallbackBookTitleId: TitleID? {
+        proto.hasFallbackBookTitleID ? TitleID(proto: proto.fallbackBookTitleID) : nil
+    }
+}
+
+struct ApiAuthorListResponse: Sendable {
+    let proto: MMAuthorListResponse
+
+    var authors: [ApiAuthorListItem] { proto.authors.map { ApiAuthorListItem(proto: $0) } }
+    var totalPages: Int { Int(proto.pagination.totalPages) }
+    var currentPage: Int { Int(proto.pagination.page) }
+}
+
+/// Author bio used on the author-detail header. Headshot via
+/// `MMImageRef.authorHeadshot(authorId:)`; the bool keeps the UI from
+/// flashing a broken-image placeholder while the stream warms up.
+struct ApiAuthor: Sendable {
+    let proto: MMAuthor
+
+    var id: AuthorID { AuthorID(proto: proto.id) }
+    var name: String { proto.name }
+    var biography: String? { proto.hasBiography ? proto.biography : nil }
+    var openLibraryId: String? { proto.hasOpenlibraryID ? proto.openlibraryID : nil }
+    var birthYear: Int? { proto.hasBirthYear ? Int(proto.birthYear) : nil }
+    var deathYear: Int? { proto.hasDeathYear ? Int(proto.deathYear) : nil }
+    var hasHeadshot: Bool { proto.hasHeadshot_p }
+    var hidden: Bool { proto.hidden }
+}
+
+/// Author detail = bio + the owned books we have on the shelf + the
+/// "other works" bibliography pulled from OpenLibrary.
+struct ApiAuthorDetail: Sendable {
+    let proto: MMAuthorDetail
+
+    var author: ApiAuthor { ApiAuthor(proto: proto.author) }
+    var ownedBooks: [ApiTitle] { proto.ownedBooks.map { ApiTitle(proto: $0) } }
+    var otherWorks: [ApiBibliographyEntry] { proto.otherWorks.map { ApiBibliographyEntry(proto: $0) } }
+}
+
+/// Unowned bibliography entry. Cover via
+/// `MMImageRef.openlibraryCover(workId:)`.
+struct ApiBibliographyEntry: Identifiable, Sendable {
+    let proto: MMBibliographyEntry
+
+    var id: String { proto.openlibraryWorkID }
+    var openLibraryWorkId: String { proto.openlibraryWorkID }
+    var name: String { proto.name }
+    var year: Int? { proto.hasYear ? Int(proto.year) : nil }
+    var seriesRaw: String? { proto.hasSeriesRaw ? proto.seriesRaw : nil }
+    var alreadyWished: Bool { proto.alreadyWished }
+}
+
+/// Book-series detail. Hero cover preference: when the user has owned
+/// volumes, use the first volume's `posterThumbnail`. The proto's
+/// `coverIsbn` is not yet wired into ImageService so we fall back to
+/// the first owned volume.
+struct ApiBookSeriesDetail: Sendable {
+    let proto: MMBookSeriesDetail
+
+    var id: BookSeriesID { BookSeriesID(proto: proto.id) }
+    var name: String { proto.name }
+    var description: String? { proto.hasDescription_p ? proto.description_p : nil }
+    var coverIsbn: String? { proto.hasCoverIsbn ? proto.coverIsbn : nil }
+    var author: ApiBookSeriesAuthor? {
+        proto.hasAuthor ? ApiBookSeriesAuthor(proto: proto.author) : nil
+    }
+    var volumes: [ApiBookSeriesVolume] {
+        proto.volumes.map { ApiBookSeriesVolume(proto: $0) }
+    }
+    var missingVolumes: [ApiBookSeriesMissingVolume] {
+        proto.missingVolumes.map { ApiBookSeriesMissingVolume(proto: $0) }
+    }
+    var canFillGaps: Bool { proto.canFillGaps }
+}
+
+struct ApiBookSeriesAuthor: Sendable {
+    let proto: MMBookSeriesAuthor
+
+    var id: AuthorID { AuthorID(proto: proto.id) }
+    var name: String { proto.name }
+}
+
+struct ApiBookSeriesVolume: Identifiable, Sendable {
+    let proto: MMBookSeriesVolume
+
+    var id: TitleID { titleId }
+    var titleId: TitleID { TitleID(proto: proto.titleID) }
+    var titleName: String { proto.titleName }
+    var seriesNumber: String? { proto.hasSeriesNumber ? proto.seriesNumber : nil }
+    var firstPublicationYear: Int? { proto.hasFirstPublicationYear ? Int(proto.firstPublicationYear) : nil }
+    var owned: Bool { proto.owned }
+}
+
+struct ApiBookSeriesMissingVolume: Identifiable, Sendable {
+    let proto: MMBookSeriesMissingVolume
+
+    var id: String { proto.olWorkID }
+    var openLibraryWorkId: String { proto.olWorkID }
+    var title: String { proto.title }
+    var seriesNumber: String? { proto.hasSeriesNumber ? proto.seriesNumber : nil }
+    var year: Int? { proto.hasYear ? Int(proto.year) : nil }
+    var alreadyWished: Bool { proto.alreadyWished }
+}
+
+/// Book-specific fields nested under `MMTitleDetail.book` for BOOK titles.
+/// The reader uses `editions` to know whether the book is digitally
+/// available and `readingProgress` to resume from the last position.
+struct ApiBookDetail: Sendable {
+    let proto: MMBookDetail
+
+    var authors: [ApiAuthor] { proto.authors.map { ApiAuthor(proto: $0) } }
+    var editions: [ApiBookEdition] { proto.editions.map { ApiBookEdition(proto: $0) } }
+    var readingProgress: ApiReadingProgress? {
+        proto.hasReadingProgress ? ApiReadingProgress(proto: proto.readingProgress) : nil
+    }
+    var bookSeries: ApiBookSeriesRef? {
+        proto.hasBookSeries ? ApiBookSeriesRef(proto: proto.bookSeries) : nil
+    }
+    var pageCount: Int? { proto.hasPageCount ? Int(proto.pageCount) : nil }
+    var firstPublicationYear: Int? {
+        proto.hasFirstPublicationYear ? Int(proto.firstPublicationYear) : nil
+    }
+    var openLibraryWorkId: String? {
+        proto.hasOpenLibraryWorkID ? proto.openLibraryWorkID : nil
+    }
+
+    /// Convenience: at least one editions row is digital (downloadable),
+    /// i.e. the book can be opened in the in-app reader.
+    var hasDigitalEdition: Bool { editions.contains { $0.downloadable } }
+}
+
+/// One physical or digital edition of a book.
+struct ApiBookEdition: Identifiable, Sendable {
+    let proto: MMBookEdition
+
+    var id: Int64 { proto.mediaItemID }
+    var format: MMBookEditionFormat { proto.editionFormat }
+    var fileSizeBytes: Int64? {
+        proto.hasFileSizeBytes ? proto.fileSizeBytes : nil
+    }
+    /// Physical shelf for non-digital editions ("Living room shelf 3").
+    var storageLocation: String? {
+        proto.hasStorageLocation ? proto.storageLocation : nil
+    }
+    var downloadable: Bool { proto.downloadable }
+}
+
+/// Reading position within a book. Locator is an EPUB CFI for EPUB
+/// editions or "/page/N" for PDFs; `fraction` is the 0..1 progress.
+struct ApiReadingProgress: Sendable {
+    let proto: MMReadingProgress
+
+    var locator: String { proto.locator }
+    var fraction: Double { proto.fraction }
+    var updatedAt: String? {
+        proto.hasUpdatedAt ? proto.updatedAt.isoString : nil
+    }
+}
+
+/// Lightweight series link from `BookDetail.book_series`. Tap-through
+/// builds a `BookSeriesRoute` with id + name.
+struct ApiBookSeriesRef: Sendable {
+    let proto: MMBookSeriesRef
+
+    var id: BookSeriesID { BookSeriesID(proto: proto.id) }
+    var name: String { proto.name }
+    var number: String? { proto.hasNumber ? proto.number : nil }
+}

@@ -96,7 +96,7 @@ class OpenLibraryServiceTest {
             isbn = "0553293354",
             editionBody = editionJson,
             workFetcher = { key -> if (key == "/works/OL46125W") workJson else null },
-            authorFetcher = { id -> if (id == "OL34184A") "Isaac Asimov" else null }
+            authorFetcher = { id -> if (id == "OL34184A") OpenLibraryHttpService.AuthorMeta("Isaac Asimov", hasBio = true) else null }
         )
 
         assertTrue(result is OpenLibraryResult.Success, "expected success, got $result")
@@ -121,12 +121,80 @@ class OpenLibraryServiceTest {
 
     @Test
     fun `parse falls back to Unknown Author when the author fetch returns null`() {
-        val editionJson = """{"key":"/books/OL1M","title":"T","works":[{"key":"/works/OL2W"}],"authors":[{"key":"/authors/OL3A"}]}"""
+        // Authors come from work.authors (no edition fallback). The work
+        // fetch returns the author key but the per-author meta fetch
+        // resolves to null — exercise the "Unknown Author" path.
+        val editionJson = """{"key":"/books/OL1M","title":"T","works":[{"key":"/works/OL2W"}]}"""
+        val workJson = """{"key":"/works/OL2W","title":"T","authors":[{"author":{"key":"/authors/OL3A"}}]}"""
         val svc = OpenLibraryHttpService()
-        val result = svc.parse("1234567890", editionJson, { null }, { null })
+        val result = svc.parse(
+            isbn = "1234567890",
+            editionBody = editionJson,
+            workFetcher = { key -> if (key == "/works/OL2W") workJson else null },
+            authorFetcher = { null },
+        )
         assertTrue(result is OpenLibraryResult.Success)
         val book = result.book
         assertEquals("Unknown Author", book.authors.single().name)
+    }
+
+    @Test
+    fun `parse drops skeleton OL co-authors when at least one author has a bio`() {
+        // OL's work.authors regularly lists illustrators / translators
+        // alongside the real author with no role discrimination —
+        // Laura Ellen Anderson on The Shepherd's Crown is the
+        // canonical case. The disambiguator is that the real author's
+        // OL record has a populated `bio` (or personal_name /
+        // birth_date / alternate_names) while the contributor's is a
+        // bare-name skeleton. When the parser sees both shapes in one
+        // work, the skeletons get filtered out.
+        val editionJson = """{"key":"/books/OL10M","title":"T","works":[{"key":"/works/OL20W"}]}"""
+        val workJson = """{"key":"/works/OL20W","title":"T","authors":[
+            {"author":{"key":"/authors/OL_REAL"}},
+            {"author":{"key":"/authors/OL_ILLU"}}
+        ]}"""
+        val svc = OpenLibraryHttpService()
+        val result = svc.parse(
+            isbn = "1234567890",
+            editionBody = editionJson,
+            workFetcher = { key -> if (key == "/works/OL20W") workJson else null },
+            authorFetcher = { id ->
+                when (id) {
+                    "OL_REAL" -> OpenLibraryHttpService.AuthorMeta("Real Author", hasBio = true)
+                    "OL_ILLU" -> OpenLibraryHttpService.AuthorMeta("Skeleton Illustrator", hasBio = false)
+                    else -> null
+                }
+            },
+        )
+        assertTrue(result is OpenLibraryResult.Success)
+        assertEquals(listOf("Real Author"), result.book.authors.map { it.name })
+    }
+
+    @Test
+    fun `parse keeps every author when nobody has a bio`() {
+        // Without a fleshed-out record to anchor the heuristic the
+        // parser shouldn't drop the entire author list — better to
+        // keep what we have and let admin curate.
+        val editionJson = """{"key":"/books/OL11M","title":"T","works":[{"key":"/works/OL21W"}]}"""
+        val workJson = """{"key":"/works/OL21W","title":"T","authors":[
+            {"author":{"key":"/authors/OL_A"}},
+            {"author":{"key":"/authors/OL_B"}}
+        ]}"""
+        val svc = OpenLibraryHttpService()
+        val result = svc.parse(
+            isbn = "1234567890",
+            editionBody = editionJson,
+            workFetcher = { key -> if (key == "/works/OL21W") workJson else null },
+            authorFetcher = { id ->
+                when (id) {
+                    "OL_A" -> OpenLibraryHttpService.AuthorMeta("Author A", hasBio = false)
+                    "OL_B" -> OpenLibraryHttpService.AuthorMeta("Author B", hasBio = false)
+                    else -> null
+                }
+            },
+        )
+        assertTrue(result is OpenLibraryResult.Success)
+        assertEquals(listOf("Author A", "Author B"), result.book.authors.map { it.name })
     }
 
     @Test

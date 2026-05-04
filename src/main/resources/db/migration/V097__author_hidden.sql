@@ -1,0 +1,13 @@
+-- Manual cleanup affordance for the author grid. The OL-author-name
+-- ingestion path inevitably mis-files the occasional narrator /
+-- illustrator / translator as an AUTHOR (Dick Hill turned up on
+-- Pratchett audiobooks; Laura Ellen Anderson on The Shepherd's Crown
+-- as illustrator; etc.). Heuristics in OpenLibraryService catch most
+-- of them but not all — admins need a one-tap escape hatch.
+--
+-- Hidden authors are excluded from listAuthors by default but are
+-- still reachable via getAuthorDetail (so an admin can navigate back
+-- to a hidden author from the "Hidden Authors" admin view and unhide
+-- them). title_author rows pointing at hidden authors are kept
+-- intact, so unhiding restores the previous state exactly.
+ALTER TABLE author ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT FALSE;

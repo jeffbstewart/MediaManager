@@ -184,6 +184,30 @@ struct BuddyKeyID: Hashable, Codable, Sendable {
     }
 }
 
+struct AuthorID: Hashable, Codable, Sendable {
+    let rawValue: Int
+    init(rawValue: Int) { self.rawValue = rawValue }
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(Int.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
+    }
+}
+
+struct BookSeriesID: Hashable, Codable, Sendable {
+    let rawValue: Int
+    init(rawValue: Int) { self.rawValue = rawValue }
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(Int.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
+    }
+}
+
 struct TmdbID: Hashable, Codable, Sendable {
     let rawValue: Int
     init(rawValue: Int) { self.rawValue = rawValue }
@@ -264,6 +288,14 @@ extension BuddyKeyID {
     init(proto value: Int64) { self.init(rawValue: Int(value)) }
     var protoValue: Int64 { Int64(rawValue) }
 }
+extension AuthorID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
+extension BookSeriesID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
 
 // MARK: - Enums replacing string constants
 
@@ -275,6 +307,29 @@ enum MediaType: String, Codable, Sendable, CaseIterable {
 
 enum SearchResultType: String, Codable, Sendable {
     case movie, series, actor, collection, tag, genre
+}
+
+/// Author-grid sort, translated to `MMAuthorSort` at the gRPC boundary.
+enum AuthorSort: String, Codable, Sendable, CaseIterable, Identifiable {
+    case name, books, recent
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .name: return "Name"
+        case .books: return "Most books"
+        case .recent: return "Recent"
+        }
+    }
+
+    var protoValue: MMAuthorSort {
+        switch self {
+        case .name: return .name
+        case .books: return .books
+        case .recent: return .recent
+        }
+    }
 }
 
 enum AcquisitionStatus: String, Codable, Sendable {

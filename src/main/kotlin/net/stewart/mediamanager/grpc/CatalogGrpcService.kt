@@ -378,7 +378,11 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val allTitles = TitleEntity.findAll().associateBy { it.id }
         val allSeries = net.stewart.mediamanager.entity.BookSeries.findAll().associateBy { it.id }
         val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
+        // BOOK list cards label "by <name>" with AUTHOR-role credits only.
+        // Translators / illustrators on the same table don't get top-level
+        // author labels.
         val authorsByTitle = net.stewart.mediamanager.entity.TitleAuthor.findAll()
+            .filter { it.role == net.stewart.mediamanager.entity.AuthorRole.AUTHOR.name }
             .sortedBy { it.author_order }
             .groupBy { it.title_id }
         val authors = net.stewart.mediamanager.entity.Author.findAll().associateBy { it.id }
@@ -1074,8 +1078,12 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
     private fun buildBookDetail(userId: Long, title: TitleEntity): BookDetail {
         val titleId = title.id!!
+        // Book detail's `authors` array is for the AUTHOR-role credits.
+        // Translators / illustrators (when we ingest them) belong on a
+        // separate credits row, not the author list.
         val authorLinks = TitleAuthor.findAll()
-            .filter { it.title_id == titleId }
+            .filter { it.title_id == titleId
+                && it.role == net.stewart.mediamanager.entity.AuthorRole.AUTHOR.name }
             .sortedBy { it.author_order }
         val authorIds = authorLinks.map { it.author_id }.toSet()
         val authors = Author.findAll().filter { it.id in authorIds }
@@ -1229,7 +1237,13 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         // 1d. Author search (when include_books)
         if (request.includeBooks) {
             val queryTokensBooks = query.lowercase().split(Regex("\\s+"))
-            val ownedBooksByAuthor = TitleAuthor.findAll().groupingBy { it.author_id }.eachCount()
+            // Author search restricts to AUTHOR-role credits — searching
+            // "Mel Foster" should never surface a narrator masquerading
+            // as a book author.
+            val ownedBooksByAuthor = TitleAuthor.findAll()
+                .filter { it.role == net.stewart.mediamanager.entity.AuthorRole.AUTHOR.name }
+                .groupingBy { it.author_id }
+                .eachCount()
             for (author in Author.findAll()) {
                 if (!queryTokensBooks.all { author.name.lowercase().contains(it) }) continue
                 val ownedCount = ownedBooksByAuthor[author.id] ?: 0
@@ -1361,7 +1375,13 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
     }
 
     private fun buildPrimaryAuthorNameMap(): Map<Long, String> {
-        val primaryLinks = TitleAuthor.findAll().filter { it.author_order == 0 }
+        // Primary-author lookup for list cards: AUTHOR role only — a
+        // book translated by Person X but written by Person Y should
+        // be labeled "by Y", never "by X".
+        val primaryLinks = TitleAuthor.findAll().filter {
+            it.author_order == 0
+                && it.role == net.stewart.mediamanager.entity.AuthorRole.AUTHOR.name
+        }
         val authorIds = primaryLinks.map { it.author_id }.toSet()
         val authorsById = Author.findAll().filter { it.id in authorIds }.associateBy { it.id }
         return primaryLinks.mapNotNull { link ->
@@ -2168,6 +2188,24 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         val series = BookSeriesEntity.findById(request.seriesId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("series not found"))
 
+        // iOS sets playable_only=true so phone users only see volumes
+        // with a downloadable EPUB or PDF edition. Web leaves it false
+        // and gets every owned volume in the series.
+        val readableTitleIds: Set<Long>? = if (request.playableOnly) {
+            val ebookMediaItemIds = MediaItemEntity.findAll()
+                .filter {
+                    !it.file_path.isNullOrBlank() &&
+                        (it.media_format == MediaFormatEnum.EBOOK_EPUB.name ||
+                         it.media_format == MediaFormatEnum.EBOOK_PDF.name)
+                }
+                .mapNotNull { it.id }
+                .toSet()
+            MediaItemTitle.findAll()
+                .filter { it.media_item_id in ebookMediaItemIds }
+                .map { it.title_id }
+                .toSet()
+        } else null
+
         // Owned volumes — books linked to this series, sorted by series_number.
         val volumes = TitleEntity.findAll()
             .filter {
@@ -2175,6 +2213,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                     it.book_series_id == request.seriesId
             }
             .filter { !it.hidden && user.canSeeRating(it.content_rating) }
+            .filter { readableTitleIds == null || it.id in readableTitleIds }
             .sortedWith(compareBy(
                 { it.series_number ?: java.math.BigDecimal("9999") },
                 { it.sort_name ?: it.name.lowercase() }

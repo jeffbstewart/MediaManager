@@ -19,4 +19,9 @@ import Foundation
     func requestMobileTranscode(titleId: TitleID) async throws
     func dismissContinueWatching(titleId: TitleID) async throws
     func dismissMissingSeason(titleId: TitleID, tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int) async throws
+
+    // Books
+    func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse
+    func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail
+    func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail
 }

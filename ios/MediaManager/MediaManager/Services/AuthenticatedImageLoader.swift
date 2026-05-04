@@ -89,6 +89,11 @@ struct CachedImage: View {
     @Environment(ImageProvider.self) private var imageProvider
     var cornerRadius: CGFloat = 8
     var contentMode: ContentMode = .fill
+    /// When true, the placeholder branch renders `Color.clear` instead
+    /// of the gray-filled `film` rectangle. Use for overlay layers
+    /// (e.g. an author headshot stacked on top of a fallback book
+    /// cover) so a missing top-layer image lets the lower layer show.
+    var transparentPlaceholder: Bool = false
 
     @State private var image: UIImage?
     @State private var loading = false
@@ -99,6 +104,8 @@ struct CachedImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+            } else if transparentPlaceholder {
+                Color.clear
             } else {
                 Rectangle()
                     .fill(.quaternary)
@@ -124,6 +131,26 @@ struct CachedImage: View {
 
     private var refKey: String {
         guard let ref else { return "" }
-        return "\(ref.type.rawValue)-\(ref.titleID)-\(ref.tmdbPersonID)-\(ref.tmdbCollectionID)-\(ref.uuid)-\(ref.cameraID)"
+        // Must enumerate every discriminating field on MMImageRef. Missing
+        // any field causes SwiftUI's `.task(id:)` to skip re-fetches when
+        // navigating between two different refs that share the omitted
+        // fields' default values — manifested as author cards all
+        // showing the first author's headshot.
+        let tmdb = ref.hasTmdbMedia
+            ? "\(ref.tmdbMedia.tmdbID)/\(ref.tmdbMedia.mediaType.rawValue)"
+            : ""
+        return [
+            "\(ref.type.rawValue)",
+            "\(ref.titleID)",
+            "\(ref.tmdbPersonID)",
+            "\(ref.tmdbCollectionID)",
+            ref.uuid,
+            "\(ref.cameraID)",
+            "\(ref.artistID)",
+            "\(ref.authorID)",
+            ref.musicbrainzReleaseGroupID,
+            ref.openlibraryWorkID,
+            tmdb,
+        ].joined(separator: "-")
     }
 }

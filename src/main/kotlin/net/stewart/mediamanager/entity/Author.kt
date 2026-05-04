@@ -26,6 +26,13 @@ data class Author(
     var enrichment_last_attempt_at: LocalDateTime? = null,
     /** Consecutive no-progress attempts. Resets to 0 on any progress. */
     var enrichment_no_progress_streak: Int = 0,
+    /**
+     * Admin-controlled escape hatch. True hides the author from the
+     * default authors grid (still reachable via [getAuthorDetail], so
+     * the admin "Hidden Authors" view can navigate back to unhide).
+     * Toggled via `AdminService.SetAuthorHidden`.
+     */
+    var hidden: Boolean = false,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

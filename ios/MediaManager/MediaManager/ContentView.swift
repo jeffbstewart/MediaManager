@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
+    case home, movies, tvShows, books, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
@@ -37,6 +37,8 @@ struct ContentView: View {
                             .tag(Tab.movies)
                         Label("TV Shows", systemImage: "tv")
                             .tag(Tab.tvShows)
+                        Label("Books", systemImage: "books.vertical")
+                            .tag(Tab.books)
                         Label("Collections", systemImage: "square.stack")
                             .tag(Tab.collections)
                         Label("Tags", systemImage: "tag")
@@ -212,6 +214,8 @@ struct ContentView: View {
                         CatalogView(typeFilter: .movie, navigationTitle: "Movies")
                     case .tvShows:
                         CatalogView(typeFilter: .tv, navigationTitle: "TV Shows")
+                    case .books:
+                        AuthorsView()
                     case .collections:
                         CollectionsListView()
                     case .tags:
@@ -275,7 +279,22 @@ struct ContentView: View {
                     }
                 }
                 .navigationDestination(for: ApiTitle.self) { title in
-                    TitleDetailView(titleId: title.id)
+                    // Books get a dedicated detail page; the movie-centric
+                    // TitleDetailView (Play / Seasons & Episodes / transcode
+                    // controls) doesn't fit. Routing on ApiTitle.isBook
+                    // keeps a single navigation surface from the catalog,
+                    // search, author detail, and series detail.
+                    if title.isBook {
+                        BookDetailView(titleId: title.id)
+                    } else {
+                        TitleDetailView(titleId: title.id)
+                    }
+                }
+                .navigationDestination(for: AuthorRoute.self) { route in
+                    AuthorDetailView(route: route)
+                }
+                .navigationDestination(for: BookSeriesRoute.self) { route in
+                    BookSeriesDetailView(route: route)
                 }
                 .navigationDestination(for: TvShowRoute.self) { route in
                     SeasonsView(route: route)

@@ -145,6 +145,17 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
 
+    // Books (offline: nothing yet — book download cache lands in a later phase)
+    func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse {
+        throw DataModelError.offline
+    }
+    func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail {
+        throw DataModelError.offline
+    }
+    func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail {
+        throw DataModelError.offline
+    }
+
     // MARK: - PlaybackDataModel (offline: local files + queued progress)
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {
@@ -234,4 +245,5 @@ final class OfflineDataModel: DataModel {
     func acceptUnmatched(id: UnmatchedFileID) async throws { throw DataModelError.offline }
     func ignoreUnmatched(id: UnmatchedFileID) async throws { throw DataModelError.offline }
     func linkUnmatched(id: UnmatchedFileID, titleId: TitleID) async throws { throw DataModelError.offline }
+    func setAuthorHidden(id: AuthorID, hidden: Bool) async throws { throw DataModelError.offline }
 }

@@ -257,6 +257,9 @@ message GenreIdRequest {
 
 message BookSeriesIdRequest {
   int64 series_id = 1;
+  // True omits owned volumes that don't have a downloadable EPUB or
+  // PDF edition. Same rationale as AuthorIdRequest.playable_only.
+  bool playable_only = 2;
 }
 
 // CSS hex color. The string includes the leading '#' and uses uppercase hex,
@@ -900,6 +903,12 @@ message Author {
   // the client renders a placeholder rather than an `<img>` that
   // would briefly show a broken-image indicator.
   bool has_headshot = 10;
+
+  // Admin-controlled hide flag. Mirrors Author.hidden — set when an
+  // admin has hidden this author from the default authors grid.
+  // Surfaced on getAuthorDetail so the admin "Hide/Unhide" button
+  // can pick the right label.
+  bool hidden = 11;
 
   // Full birth / death dates when known. birth_year / death_year
   // above stay populated with just the year for clients that only

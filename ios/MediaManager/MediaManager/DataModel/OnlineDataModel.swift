@@ -149,6 +149,28 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.dismissMissingSeason(titleId: titleId.protoValue, seasonNumber: Int32(seasonNumber))
     }
 
+    // MARK: - Books
+
+    func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.listAuthors(
+            page: Int32(page), limit: 60, sort: sort.protoValue,
+            query: query, hiddenOnly: hiddenOnly)
+        return ApiAuthorListResponse(proto: response)
+    }
+
+    func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.getAuthorDetail(id: id.protoValue)
+        return ApiAuthorDetail(proto: response)
+    }
+
+    func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.getBookSeriesDetail(id: id.protoValue)
+        return ApiBookSeriesDetail(proto: response)
+    }
+
     // MARK: - PlaybackDataModel
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {
@@ -468,5 +490,10 @@ final class OnlineDataModel: DataModel {
 
     func linkUnmatched(id: UnmatchedFileID, titleId: TitleID) async throws {
         try await grpcClient.adminLinkUnmatched(id: id.protoValue, titleId: titleId.protoValue)
+    }
+
+    func setAuthorHidden(id: AuthorID, hidden: Bool) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.adminSetAuthorHidden(authorId: id.protoValue, hidden: hidden)
     }
 }

@@ -43,4 +43,9 @@ import Foundation
     func acceptUnmatched(id: UnmatchedFileID) async throws
     func ignoreUnmatched(id: UnmatchedFileID) async throws
     func linkUnmatched(id: UnmatchedFileID, titleId: TitleID) async throws
+
+    /// Admin escape-hatch toggle. Hidden authors drop out of the
+    /// default authors grid; reachable via the admin-only "Hidden
+    /// Authors" filter or by direct getAuthorDetail.
+    func setAuthorHidden(id: AuthorID, hidden: Bool) async throws
 }

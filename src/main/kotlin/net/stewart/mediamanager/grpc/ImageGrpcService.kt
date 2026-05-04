@@ -38,6 +38,9 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
     companion object {
         private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         private val OL_WORK_RE = Regex("^OL\\d+[WM]$")
+        // Mirrors AuthorHeadshotHttpService.OL_AUTHOR_RE — guards the
+        // upstream path component before it's pasted into the URL.
+        private val OL_AUTHOR_RE = Regex("^OL\\d+A$")
     }
 
     override fun streamImages(requests: Flow<ImageRequest>): Flow<ImageResponse> = flow {
@@ -146,14 +149,48 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
             return resolveLocalImage(title.poster_cache_id!!, ifNoneMatch)
         }
 
-        if (title.poster_path == null) return ImageResult.NotFound
-
-        val etag = title.poster_cache_id ?: title.poster_path!!
+        val posterPath = title.poster_path ?: return ImageResult.NotFound
+        val etag = title.poster_cache_id ?: posterPath
         if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
 
-        val path = PosterCacheService.cacheAndServe(title, size) ?: return ImageResult.NotFound
-        if (!Files.exists(path)) return ImageResult.NotFound
-        return ImageResult.Found(Files.readAllBytes(path), "image/jpeg", etag)
+        // Cache hit on disk — return regardless of which upstream populated it.
+        val cached = PosterCacheService.cacheAndServe(title, size)
+        if (cached != null && Files.exists(cached)) {
+            return ImageResult.Found(Files.readAllBytes(cached), "image/jpeg", etag)
+        }
+
+        // Cache miss: book and album titles store sentinel paths
+        // ("isbn/<isbn>", "caa/<release-mbid>") that PosterCacheService
+        // declines to fetch — TMDB isn't their source. Mirror the HTTP
+        // /posters route's fallback to the corresponding upstream proxy
+        // (OpenLibrary, Cover Art Archive) so book covers fetched via
+        // gRPC reach the same bytes as the web app.
+        if (posterPath.startsWith("isbn/")) {
+            val isbn = posterPath.removePrefix("isbn/")
+            val olSize = if (size == PosterSize.THUMBNAIL) "M" else "L"
+            val upstream = ImageProxyService.ProxiedUpstream(
+                provider = ImageProxyService.Provider.OPEN_LIBRARY,
+                path = "/b/isbn/$isbn-$olSize.jpg?default=false",
+                extension = "jpg")
+            return when (val r = ImageProxyService.serve(upstream)) {
+                is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
+                is ImageProxyService.Result.Failure -> ImageResult.NotFound
+            }
+        }
+        if (posterPath.startsWith("caa/")) {
+            val mbid = posterPath.removePrefix("caa/")
+            val caaSize = if (size == PosterSize.THUMBNAIL) "front-250" else "front-500"
+            val upstream = ImageProxyService.ProxiedUpstream(
+                provider = ImageProxyService.Provider.COVER_ART_ARCHIVE,
+                path = "/release/$mbid/$caaSize.jpg",
+                extension = "jpg")
+            return when (val r = ImageProxyService.serve(upstream)) {
+                is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
+                is ImageProxyService.Result.Failure -> ImageResult.NotFound
+            }
+        }
+
+        return ImageResult.NotFound
     }
 
     private fun resolveBackdrop(titleId: Long, ifNoneMatch: String?): ImageResult {
@@ -268,14 +305,42 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
     private fun resolveAuthorHeadshot(authorId: Long, ifNoneMatch: String?): ImageResult {
         if (authorId <= 0) return ImageResult.NotFound
         val author = Author.findById(authorId) ?: return ImageResult.NotFound
-        val source = author.headshot_path?.takeIf { it.isNotBlank() } ?: return ImageResult.NotFound
 
-        val etag = "author-$authorId-${source.hashCode()}"
-        if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+        // Preferred source: a Wikimedia (or otherwise cached) headshot
+        // resolved via AuthorHeadshotCacheService. Available only when
+        // the author has a populated headshot_path.
+        val source = author.headshot_path?.takeIf { it.isNotBlank() }
+        if (source != null) {
+            val etag = "author-$authorId-${source.hashCode()}"
+            if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
 
-        val path = AuthorHeadshotCacheService.cacheAndServe(author) ?: return ImageResult.NotFound
-        if (!Files.exists(path)) return ImageResult.NotFound
-        return ImageResult.Found(Files.readAllBytes(path), "image/jpeg", etag)
+            val path = AuthorHeadshotCacheService.cacheAndServe(author)
+            if (path != null && Files.exists(path)) {
+                return ImageResult.Found(Files.readAllBytes(path), "image/jpeg", etag)
+            }
+        }
+
+        // Fallback: OpenLibrary author photo. Mirrors AuthorHeadshotHttpService
+        // so authors without a Wikimedia headshot still show real cover art
+        // from OL's `/a/olid/<id>-M.jpg`. Has_headshot stays accurate because
+        // the server-side resolver (Author.toListItem) sets it whenever
+        // either source is reachable.
+        val olid = author.open_library_author_id?.takeIf { it.isNotBlank() }
+        if (olid != null && OL_AUTHOR_RE.matches(olid)) {
+            val etag = "author-$authorId-ol-$olid"
+            if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
+
+            val upstream = ImageProxyService.ProxiedUpstream(
+                provider = ImageProxyService.Provider.OPEN_LIBRARY,
+                path = "/a/olid/$olid-M.jpg?default=false",
+                extension = "jpg")
+            return when (val r = ImageProxyService.serve(upstream)) {
+                is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
+                is ImageProxyService.Result.Failure -> ImageResult.NotFound
+            }
+        }
+
+        return ImageResult.NotFound
     }
 
     private fun resolveCaaReleaseGroup(rgMbid: String, ifNoneMatch: String?): ImageResult {

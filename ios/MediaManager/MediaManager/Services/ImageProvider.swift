@@ -154,4 +154,20 @@ extension MMImageRef {
         ref.tmdbMedia = media
         return ref
     }
+
+    static func authorHeadshot(authorId: Int64) -> MMImageRef {
+        var ref = MMImageRef()
+        ref.type = .authorHeadshot
+        ref.authorID = authorId
+        return ref
+    }
+
+    /// Open Library cover by abstract work id (e.g. "OL45804W"). Used for
+    /// unowned bibliography entries and missing series volumes.
+    static func openlibraryCover(workId: String) -> MMImageRef {
+        var ref = MMImageRef()
+        ref.type = .openlibraryCover
+        ref.openlibraryWorkID = workId
+        return ref
+    }
 }

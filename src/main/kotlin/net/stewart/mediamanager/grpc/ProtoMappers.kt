@@ -692,6 +692,7 @@ fun AuthorEntity.toProto(): Author = author {
     // when either source can produce bytes.
     hasHeadshot = !this@toProto.headshot_path.isNullOrBlank() ||
         !this@toProto.open_library_author_id.isNullOrBlank()
+    hidden = this@toProto.hidden
 }
 
 fun AuthorEntity.toListItem(
@@ -704,6 +705,7 @@ fun AuthorEntity.toListItem(
     fallbackBookTitleId?.let { this.fallbackBookTitleId = it }
     hasHeadshot = !this@toListItem.headshot_path.isNullOrBlank() ||
         !this@toListItem.open_library_author_id.isNullOrBlank()
+    hidden = this@toListItem.hidden
 }
 
 fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = track {
