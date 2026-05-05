@@ -189,6 +189,7 @@ struct BookDetailView: View {
         let mediaItemId = epub.id
         let isDownloaded = bookCache.isDownloaded(mediaItemId)
         let active = bookCache.activeDownloads[mediaItemId]
+        let failure = bookCache.failedDownloads[mediaItemId]
 
         if let active {
             Button {
@@ -208,6 +209,34 @@ struct BookDetailView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
+        } else if let failure {
+            // Failure state: red Retry button stacked over the actual
+            // error text, so the user knows the click had an effect
+            // and what went wrong. Tap re-runs startDownload, which
+            // clears the failure entry and starts fresh.
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    do {
+                        try bookCache.startDownload(
+                            mediaItemId: mediaItemId,
+                            titleId: detail.id.protoValue,
+                            titleName: detail.name,
+                            authorName: detail.authorName ?? "Unknown")
+                    } catch {
+                        log.warning("retry startDownload failed: \(error.localizedDescription)")
+                    }
+                } label: {
+                    Label("Retry Download", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .tint(.red)
+                Text(failure)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(3)
+            }
         } else if isDownloaded {
             Button {
                 pendingRemoval = mediaItemId

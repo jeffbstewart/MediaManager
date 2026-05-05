@@ -109,6 +109,12 @@ final class BookCacheManager {
     /// in BookDetailView.
     private(set) var activeDownloads: [Int64: BookDownloadProgress] = [:]
 
+    /// `mediaItemId → human-readable error message` for the most
+    /// recent failed attempt per book. Tap-to-retry clears the row.
+    /// Surfaces a "Retry" affordance with the actual failure text
+    /// instead of the silent fall-back-to-Download we had before.
+    private(set) var failedDownloads: [Int64: String] = [:]
+
     private var grpcClient: GrpcClient?
     /// Cancel tokens for in-flight downloads. Cancelling the Task
     /// causes the streaming gRPC call to bail; we then remove the
@@ -125,8 +131,17 @@ final class BookCacheManager {
         booksDir = downloadsRoot.appendingPathComponent("Books", isDirectory: true)
         indexPath = booksDir.appendingPathComponent("index.json")
 
-        let fm = FileManager.default
-        try? fm.createDirectory(at: booksDir, withIntermediateDirectories: true)
+        // Best-effort directory creation here. If it fails (e.g. the
+        // sandbox isn't fully set up yet on first launch),
+        // [ensureBooksDir] is called again before each download as a
+        // defensive backstop — earlier versions silently swallowed
+        // this error and every download then failed with a confusing
+        // "file doesn't exist" from FileHandle.
+        do {
+            try FileManager.default.createDirectory(at: booksDir, withIntermediateDirectories: true)
+        } catch {
+            logger.error("init: createDirectory failed at \(booksDir.path): \(error.localizedDescription)")
+        }
 
         // Exclude from iCloud backup — books re-download cleanly on
         // a new device and we don't want to bloat user iCloud quotas.
@@ -137,6 +152,17 @@ final class BookCacheManager {
 
         downloads = Self.loadIndex(at: indexPath)
         logger.info("BookCacheManager initialised; \(downloads.count) downloaded books at \(booksDir.path)")
+    }
+
+    /// Defensive directory-existence check. Cheap when the dir already
+    /// exists (a single `fileExists` syscall); creates it otherwise.
+    /// Throws so the caller surfaces a real error instead of the
+    /// downstream "file doesn't exist" from FileHandle later.
+    private func ensureBooksDir() throws {
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: booksDir.path, isDirectory: &isDir)
+        if exists && isDir.boolValue { return }
+        try FileManager.default.createDirectory(at: booksDir, withIntermediateDirectories: true)
     }
 
     func configure(grpcClient: GrpcClient) {
@@ -193,6 +219,22 @@ final class BookCacheManager {
         if downloadTasks[mediaItemId] != nil { throw BookCacheError.downloadInFlight(mediaItemId: mediaItemId) }
         guard let grpcClient else { throw BookCacheError.grpcUnavailable }
 
+        // Clear any prior failure for this book so the UI returns to
+        // "downloading" instead of "Retry — error".
+        failedDownloads.removeValue(forKey: mediaItemId)
+
+        // Defensive: if booksDir didn't get created in init (or got
+        // deleted out from under us), make it now. Without this, the
+        // FileHandle below throws "file doesn't exist" with no
+        // visible explanation in the UI.
+        do {
+            try ensureBooksDir()
+        } catch {
+            recordFailure(mediaItemId: mediaItemId,
+                message: "Couldn't prepare downloads folder: \(error.localizedDescription)")
+            throw BookCacheError.ioFailure(underlying: error)
+        }
+
         activeDownloads[mediaItemId] = BookDownloadProgress(
             mediaItemId: mediaItemId, bytesReceived: 0, totalBytes: nil)
 
@@ -202,7 +244,19 @@ final class BookCacheManager {
         if FileManager.default.fileExists(atPath: dest.path) {
             try? FileManager.default.removeItem(at: dest)
         }
-        FileManager.default.createFile(atPath: dest.path, contents: nil)
+        // createFile returns false silently on parent-dir issues —
+        // check the return value so we surface a real error instead
+        // of the misleading "file doesn't exist" the FileHandle below
+        // would otherwise throw.
+        guard FileManager.default.createFile(atPath: dest.path, contents: nil) else {
+            let msg = "Couldn't create file at \(dest.path)"
+            activeDownloads.removeValue(forKey: mediaItemId)
+            recordFailure(mediaItemId: mediaItemId, message: msg)
+            throw BookCacheError.ioFailure(
+                underlying: NSError(domain: "BookCacheManager", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: msg,
+                ]))
+        }
 
         // The chunk closure is @Sendable so it can't mutate a captured
         // counter; route running totals through a small reference-typed
@@ -242,12 +296,24 @@ final class BookCacheManager {
                 try? FileManager.default.removeItem(at: dest)
                 self.clearActive(mediaItemId)
             } catch {
-                logger.error("download failed for mediaItemId=\(mediaItemId)", error: error)
+                let detail = error.localizedDescription
+                // Inline the underlying message so log scrapes (Binnacle
+                // / os_log) carry it in the message field rather than
+                // an opaque `error:` attribute that some viewers strip.
+                logger.error("download failed for mediaItemId=\(mediaItemId) at \(dest.path): \(detail)")
                 try? FileManager.default.removeItem(at: dest)
                 self.clearActive(mediaItemId)
+                self.recordFailure(mediaItemId: mediaItemId, message: detail)
             }
         }
         downloadTasks[mediaItemId] = task
+    }
+
+    /// Records a download failure so the UI can render a Retry
+    /// affordance with the actual error text. Cleared on the next
+    /// successful start.
+    private func recordFailure(mediaItemId: Int64, message: String) {
+        failedDownloads[mediaItemId] = message
     }
 
     /// Cancels the in-flight task and discards the partial file.

@@ -145,7 +145,19 @@ class DownloadGrpcService : DownloadServiceGrpcKt.DownloadServiceCoroutineImplBa
     }
 
     override fun downloadBookFile(request: DownloadBookFileRequest): Flow<DownloadChunk> = flow {
-        val (item, title, path) = resolveBookSource(request.mediaItemId)
+        // Resolve the source up-front and surface validation failures
+        // (NOT_FOUND / FAILED_PRECONDITION / PERMISSION_DENIED) at WARN
+        // before they propagate. Without this, a client trying to
+        // download a non-existent or restricted media_item just sees a
+        // gRPC error with no corresponding server log line.
+        val resolved = try {
+            resolveBookSource(request.mediaItemId)
+        } catch (e: StatusException) {
+            log.warn("Book download rejected: media_item={} status={} description={}",
+                request.mediaItemId, e.status.code, e.status.description)
+            throw e
+        }
+        val (item, title, path) = resolved
         val file = path.toFile()
         val totalSize = file.length()
         val startOffset = request.offset.coerceIn(0, totalSize)
