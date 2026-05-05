@@ -104,7 +104,12 @@ class PlaybackGrpcService : PlaybackServiceGrpcKt.PlaybackServiceCoroutineImplBa
         val user = currentUser()
         requireAccessToMediaItem(request.mediaItemId)
         val fraction = if (request.hasFraction()) request.fraction else 0.0
-        ReadingProgressService.save(user.id!!, request.mediaItemId, request.locator, fraction)
+        val clientRecordedAt = if (request.hasClientRecordedAt()) {
+            java.time.LocalDateTime.ofEpochSecond(
+                request.clientRecordedAt.secondsSinceEpoch, 0, java.time.ZoneOffset.UTC)
+        } else null
+        ReadingProgressService.save(
+            user.id!!, request.mediaItemId, request.locator, fraction, clientRecordedAt)
         return Empty.getDefaultInstance()
     }
 

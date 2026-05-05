@@ -51,6 +51,15 @@ message ReportReadingProgressRequest {
   int64 media_item_id = 1;
   string locator = 2;                        // EPUB CFI or "/page/N" for PDF
   optional double fraction = 3;              // 0.0–1.0, dimensionless
+
+  // Client wall-clock at the moment the relocation event fired,
+  // used by the server's most-recent-wins resolution. Lets a queued
+  // offline write — flushed minutes later — still settle into the
+  // correct relative position against any server-side writes that
+  // happened in between (e.g. the user reading on web). When absent
+  // the server falls back to receipt time, matching pre-rollout
+  // client behaviour.
+  optional Timestamp client_recorded_at = 4;
 }
 
 message ReportProgressRequest {

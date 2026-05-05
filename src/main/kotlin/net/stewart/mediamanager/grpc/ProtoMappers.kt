@@ -760,4 +760,5 @@ fun ReadingProgressEntity.toProto(): ReadingProgress = readingProgress {
     locator = this@toProto.cfi
     fraction = this@toProto.percent
     this@toProto.updated_at?.let { updatedAt = it.toProtoTimestamp() }
+    this@toProto.client_recorded_at?.let { clientRecordedAt = it.toProtoTimestamp() }
 }

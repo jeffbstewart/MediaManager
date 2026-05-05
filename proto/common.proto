@@ -980,5 +980,10 @@ message ReadingProgress {
   int64 media_item_id = 1;
   string locator = 2;
   optional double fraction = 3;              // 0.0–1.0, dimensionless
-  optional Timestamp updated_at = 4;
+  optional Timestamp updated_at = 4;          // server wall-clock of last write
+  // Client wall-clock that produced this row — used by clients to
+  // compare a locally-queued offline write against what the server
+  // already knows, so the newer one wins regardless of which side
+  // got there first.
+  optional Timestamp client_recorded_at = 5;
 }

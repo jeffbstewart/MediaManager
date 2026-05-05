@@ -20,7 +20,12 @@ data class ReadingProgress(
     var media_item_id: Long = 0,
     var cfi: String = "",
     var percent: Double = 0.0,
-    var updated_at: LocalDateTime? = null
+    var updated_at: LocalDateTime? = null,
+    // Client-supplied wall-clock at the moment of the relocation that
+    // produced this row. Used by [ReadingProgressService.save] to drop
+    // an incoming write that's older than what's already stored. Null
+    // for pre-V098 rows and for clients that don't send the field.
+    var client_recorded_at: LocalDateTime? = null,
 ) : KEntity<Long> {
     companion object : Dao<ReadingProgress, Long>(ReadingProgress::class.java)
 }

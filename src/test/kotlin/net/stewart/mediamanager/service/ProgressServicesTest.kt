@@ -13,8 +13,11 @@ import org.flywaydb.core.Flyway
 import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
+import java.time.Duration
+import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -158,6 +161,118 @@ class ProgressServicesTest {
         val ofUserOne = ReadingProgressService.recentForUser(userOneId)
         assertEquals(1, ofUserOne.size)
         assertEquals(userOneId, ofUserOne.first().user_id)
+    }
+
+    // ---------------------- Most-recent-wins on client_recorded_at ----------------------
+
+    @Test
+    fun `reading save accepts a write with no client timestamp`() {
+        // Pre-rollout clients (and any future caller that just doesn't
+        // bother with the timestamp) should still get their writes
+        // accepted — this is the back-compat path.
+        val saved = ReadingProgressService.save(userOneId, bookItemA, "cfi-old", 0.1)
+        assertEquals("cfi-old", saved.cfi)
+        assertNull(saved.client_recorded_at, "no client timestamp passed → row stores null")
+    }
+
+    @Test
+    fun `reading save records client_recorded_at when supplied`() {
+        val ts = LocalDateTime.of(2026, 5, 1, 12, 0)
+        val saved = ReadingProgressService.save(
+            userOneId, bookItemA, "cfi", 0.1, clientRecordedAt = ts)
+        assertEquals(ts, saved.client_recorded_at)
+    }
+
+    @Test
+    fun `reading save drops a strictly older client write`() {
+        val newer = LocalDateTime.of(2026, 5, 1, 12, 0)
+        val older = LocalDateTime.of(2026, 5, 1, 11, 0)
+        ReadingProgressService.save(userOneId, bookItemA, "newer-cfi", 0.5, clientRecordedAt = newer)
+        ReadingProgressService.save(userOneId, bookItemA, "older-cfi", 0.2, clientRecordedAt = older)
+        val row = ReadingProgressService.get(userOneId, bookItemA)
+        assertNotNull(row)
+        assertEquals("newer-cfi", row.cfi, "older client write should be dropped")
+        assertEquals(0.5, row.percent)
+        assertEquals(newer, row.client_recorded_at)
+    }
+
+    @Test
+    fun `reading save accepts a strictly newer client write`() {
+        val older = LocalDateTime.of(2026, 5, 1, 11, 0)
+        val newer = LocalDateTime.of(2026, 5, 1, 12, 0)
+        ReadingProgressService.save(userOneId, bookItemA, "old-cfi", 0.1, clientRecordedAt = older)
+        ReadingProgressService.save(userOneId, bookItemA, "new-cfi", 0.6, clientRecordedAt = newer)
+        val row = ReadingProgressService.get(userOneId, bookItemA)
+        assertNotNull(row)
+        assertEquals("new-cfi", row.cfi)
+        assertEquals(0.6, row.percent)
+        assertEquals(newer, row.client_recorded_at)
+    }
+
+    @Test
+    fun `reading save drops a duplicate client timestamp`() {
+        val ts = LocalDateTime.of(2026, 5, 1, 12, 0)
+        ReadingProgressService.save(userOneId, bookItemA, "first", 0.3, clientRecordedAt = ts)
+        ReadingProgressService.save(userOneId, bookItemA, "duplicate", 0.4, clientRecordedAt = ts)
+        val row = ReadingProgressService.get(userOneId, bookItemA)
+        assertNotNull(row)
+        assertEquals("first", row.cfi, "equal-timestamp write should be treated as duplicate and dropped")
+    }
+
+    @Test
+    fun `reading save accepts client write when existing has no timestamp`() {
+        // Old row from a pre-rollout client (no client_recorded_at).
+        // First write with a real timestamp upgrades the row.
+        ReadingProgressService.save(userOneId, bookItemA, "old", 0.1)
+        val ts = LocalDateTime.of(2026, 5, 1, 12, 0)
+        ReadingProgressService.save(userOneId, bookItemA, "upgraded", 0.4, clientRecordedAt = ts)
+        val row = ReadingProgressService.get(userOneId, bookItemA)
+        assertNotNull(row)
+        assertEquals("upgraded", row.cfi)
+        assertEquals(ts, row.client_recorded_at)
+    }
+
+    @Test
+    fun `reading save accepts no-timestamp write even when existing has one`() {
+        // Mixed-fleet case: a new client wrote with a timestamp, then
+        // an old client (no timestamp) writes. The old client doesn't
+        // know enough to compare, so we accept its write — matches
+        // pre-rollout semantics. The row's timestamp goes back to null.
+        val ts = LocalDateTime.of(2026, 5, 1, 12, 0)
+        ReadingProgressService.save(userOneId, bookItemA, "new-client", 0.5, clientRecordedAt = ts)
+        ReadingProgressService.save(userOneId, bookItemA, "old-client", 0.6)
+        val row = ReadingProgressService.get(userOneId, bookItemA)
+        assertNotNull(row)
+        assertEquals("old-client", row.cfi)
+        assertNull(row.client_recorded_at, "no-timestamp write clears the timestamp column")
+    }
+
+    @Test
+    fun `reading save clamps far-future client timestamps to now`() {
+        // Client clock 10 years in the future would otherwise lock out
+        // any sane future write. The save should clamp it to ~now.
+        val farFuture = LocalDateTime.now().plusYears(10)
+        val saved = ReadingProgressService.save(
+            userOneId, bookItemA, "cfi", 0.5, clientRecordedAt = farFuture)
+        assertNotEquals(farFuture, saved.client_recorded_at)
+        // Clamped value should be within a few seconds of "now"; well
+        // inside the 5-minute tolerance window the service uses.
+        val recordedAt = saved.client_recorded_at
+        assertNotNull(recordedAt)
+        val diffSeconds = Duration.between(recordedAt, LocalDateTime.now()).abs().seconds
+        assertTrue(diffSeconds < 60, "clamped to ~now (within 60s); got diff=${diffSeconds}s")
+    }
+
+    @Test
+    fun `reading save accepts client timestamps slightly in the future`() {
+        // A small future skew (up to 5 minutes per the service's
+        // tolerance) should be accepted as-is — clients aren't
+        // perfectly synced and we don't want to penalise rounding.
+        val nearFuture = LocalDateTime.now().plusMinutes(2)
+        val saved = ReadingProgressService.save(
+            userOneId, bookItemA, "cfi", 0.5, clientRecordedAt = nearFuture)
+        assertEquals(nearFuture, saved.client_recorded_at,
+            "near-future timestamp within tolerance should land unchanged")
     }
 
     // ---------------------- ListeningProgressService ----------------------
