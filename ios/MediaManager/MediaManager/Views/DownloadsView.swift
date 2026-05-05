@@ -2,6 +2,8 @@ import SwiftUI
 
 struct DownloadsView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
+    @State private var pendingBookRemoval: Int64? = nil
 
     private var isOffline: Bool { dataModel.downloads.isEffectivelyOffline }
 
@@ -90,19 +92,132 @@ struct DownloadsView: View {
                 }
             }
 
+            // ---- Books ----
+
+            let activeBooks = Array(bookCache.activeDownloads.values)
+                .sorted { $0.mediaItemId < $1.mediaItemId }
+            let downloadedBooks = bookCache.downloads
+                .sorted { $0.titleName < $1.titleName }
+
+            if !activeBooks.isEmpty && !isOffline {
+                Section("Active Books") {
+                    ForEach(activeBooks, id: \.mediaItemId) { progress in
+                        activeBookRow(progress)
+                    }
+                }
+            }
+
+            if !downloadedBooks.isEmpty {
+                Section("Books") {
+                    ForEach(downloadedBooks) { book in
+                        bookRow(book)
+                    }
+                }
+            }
+
             Section("Storage") {
                 storageRow(items: items)
             }
 
-            if active.isEmpty && completed.isEmpty {
+            if active.isEmpty && completed.isEmpty && activeBooks.isEmpty && downloadedBooks.isEmpty {
                 ContentUnavailableView(
                     "No Downloads",
                     systemImage: "arrow.down.circle",
-                    description: Text("Download movies from the title detail page to watch offline.")
+                    description: Text("Download movies or books from their detail pages to use them offline.")
                 )
             }
         }
         .navigationTitle("Downloads")
+    }
+
+    @ViewBuilder
+    private func activeBookRow(_ progress: BookDownloadProgress) -> some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Book \(progress.mediaItemId)")
+                    .font(.headline)
+                    .lineLimit(1)
+                if let total = progress.totalBytes, total > 0 {
+                    let pct = Int((Double(progress.bytesReceived) / Double(total)) * 100)
+                    Text("\(pct)% (\(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button {
+                bookCache.cancelDownload(progress.mediaItemId)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.red.opacity(0.7))
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func bookRow(_ book: DownloadedBook) -> some View {
+        NavigationLink(value: BookReaderRoute(
+            mediaItemId: book.mediaItemId,
+            titleName: book.titleName)
+        ) {
+            HStack(spacing: 12) {
+                CachedImage(ref: .posterThumbnail(titleId: book.titleId), cornerRadius: 4)
+                    .frame(width: 44, height: 64)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(book.titleName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(book.authorName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(ByteCountFormatter.string(fromByteCount: book.sizeBytes, countStyle: .file))
+                        if book.completedFraction > 0 {
+                            Text("·")
+                            Text("\(Int(book.completedFraction * 100))%")
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                pendingBookRemoval = book.mediaItemId
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .confirmationDialog(
+            "Remove this download?",
+            isPresented: Binding(
+                get: { pendingBookRemoval == book.mediaItemId },
+                set: { if !$0 { pendingBookRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove from Device", role: .destructive) {
+                try? bookCache.deleteDownload(book.mediaItemId)
+                pendingBookRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingBookRemoval = nil }
+        } message: {
+            Text("\"\(book.titleName)\" (\(ByteCountFormatter.string(fromByteCount: book.sizeBytes, countStyle: .file))) will be removed. You can re-download any time.")
+        }
     }
 
     @ViewBuilder
@@ -375,7 +490,8 @@ struct DownloadsView: View {
 
     private func storageRow(items: [DownloadItem]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            let used = dataModel.downloads.totalStorageUsed
+            let videoUsed = dataModel.downloads.totalStorageUsed
+            let bookUsed = bookCache.totalBytes
             let free = (try? FileManager.default.attributesOfFileSystem(
                 forPath: NSHomeDirectory())[.systemFreeSize] as? Int64) ?? 0
             let pendingBytes = items
@@ -387,11 +503,22 @@ struct DownloadsView: View {
                 .map { $0.bytesDownloaded }
                 .reduce(Int64(0), +)
 
-            HStack {
-                Text("Downloads")
-                Spacer()
-                Text(ByteCountFormatter.string(fromByteCount: used, countStyle: .file))
-                    .foregroundStyle(.secondary)
+            if videoUsed > 0 {
+                HStack {
+                    Text("Movies & TV")
+                    Spacer()
+                    Text(ByteCountFormatter.string(fromByteCount: videoUsed, countStyle: .file))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if bookUsed > 0 {
+                HStack {
+                    Text("Books")
+                    Spacer()
+                    Text(ByteCountFormatter.string(fromByteCount: bookUsed, countStyle: .file))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if remaining > 0 {
