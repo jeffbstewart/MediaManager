@@ -1615,6 +1615,7 @@ class AdminGrpcService(
         if (request.hasPurchasePrice()) item.purchase_price = java.math.BigDecimal.valueOf(request.purchasePrice)
         if (request.hasReplacementValue()) item.replacement_value = java.math.BigDecimal.valueOf(request.replacementValue)
         if (request.hasOverrideAsin()) item.override_asin = request.overrideAsin.ifBlank { null }
+        if (request.hasStorageLocation()) item.storage_location = request.storageLocation.ifBlank { null }
         item.updated_at = LocalDateTime.now()
         item.save()
         return empty {}

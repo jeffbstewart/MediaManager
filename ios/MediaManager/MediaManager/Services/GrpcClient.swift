@@ -745,6 +745,30 @@ actor GrpcClient {
         return try await adminService.searchOpenLibrary(request, metadata: authMetadata())
     }
 
+    /// Updates the admin-editable fields on a media item (book
+    /// edition, video transcode, or album release). Each parameter
+    /// is optional — pass nil to leave the field untouched, or an
+    /// empty string to clear it. Date is ISO-8601 (yyyy-MM-dd).
+    func adminUpdateMediaItem(
+        mediaItemId: Int64,
+        purchasePlace: String? = nil,
+        purchaseDate: String? = nil,
+        purchasePrice: Double? = nil,
+        replacementValue: Double? = nil,
+        overrideAsin: String? = nil,
+        storageLocation: String? = nil
+    ) async throws {
+        var request = MMUpdateMediaItemRequest()
+        request.mediaItemID = mediaItemId
+        if let v = purchasePlace { request.purchasePlace = v }
+        if let v = purchaseDate { request.purchaseDate = v }
+        if let v = purchasePrice { request.purchasePrice = v }
+        if let v = replacementValue { request.replacementValue = v }
+        if let v = overrideAsin { request.overrideAsin = v }
+        if let v = storageLocation { request.storageLocation = v }
+        _ = try await adminService.updateMediaItem(request, metadata: authMetadata())
+    }
+
     // MARK: - Camera Admin RPCs
 
     func adminListCameras() async throws -> MMAdminCameraListResponse {

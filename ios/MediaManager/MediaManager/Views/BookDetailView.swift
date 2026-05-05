@@ -19,6 +19,12 @@ struct BookDetailView: View {
     /// "Downloaded ✓" tap → "Remove from Device?" prompt is
     /// discoverable rather than buried in a long-press.
     @State private var pendingRemoval: Int64? = nil
+    /// Edition currently being edited via the admin sheet. nil =
+    /// sheet closed. Only set by admin paths — non-admin users
+    /// never see the pencil button that opens it.
+    @State private var editingEdition: ApiBookEdition? = nil
+
+    private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
 
     var body: some View {
         Group {
@@ -328,15 +334,31 @@ struct BookDetailView: View {
                         Text(location)
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
                     if edition.downloadable {
-                        Spacer()
                         Text("digital")
                             .font(.caption)
                             .foregroundStyle(.tint)
                     }
+                    if isAdmin {
+                        Button {
+                            editingEdition = edition
+                        } label: {
+                            Image(systemName: "pencil.circle")
+                                .foregroundStyle(.tint)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .font(.subheadline)
                 Divider()
+            }
+        }
+        .sheet(item: $editingEdition) { edition in
+            EditEditionSheet(edition: edition) {
+                // Reload the detail so the editions row shows the
+                // updated storage_location without leaving the page.
+                Task { await load() }
             }
         }
     }
@@ -353,6 +375,78 @@ struct BookDetailView: View {
         case .hardcover: return "Hardcover"
         case .unknown, .UNRECOGNIZED:
             return "Other"
+        }
+    }
+}
+
+/// Admin-only sheet for editing a book edition's metadata. v1 covers
+/// `storage_location` (the most useful per-edition field — purchase
+/// price / replacement value aren't on the BookEdition proto yet, so
+/// we'd be editing blind). When more fields land they slot in here.
+private struct EditEditionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AuthManager.self) private var authManager
+    let edition: ApiBookEdition
+    let onSave: () -> Void
+
+    @State private var storageLocation: String = ""
+    @State private var saving = false
+    @State private var error: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Storage location") {
+                    TextField("e.g. Living room, shelf 3", text: $storageLocation)
+                        .textInputAutocapitalization(.sentences)
+                        .autocorrectionDisabled(false)
+                }
+
+                if let error {
+                    Section {
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Edition")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(saving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: save) {
+                        if saving { ProgressView() } else { Text("Save") }
+                    }
+                    .disabled(saving)
+                }
+            }
+            .onAppear {
+                storageLocation = edition.storageLocation ?? ""
+            }
+        }
+    }
+
+    private func save() {
+        saving = true
+        error = nil
+        Task {
+            do {
+                try await authManager.grpcClient.adminUpdateMediaItem(
+                    mediaItemId: edition.id,
+                    // Pass the field even when blank — empty string
+                    // clears the value server-side, matching the web
+                    // edit-page behaviour.
+                    storageLocation: storageLocation)
+                onSave()
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+                saving = false
+            }
         }
     }
 }
