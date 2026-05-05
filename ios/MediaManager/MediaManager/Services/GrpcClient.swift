@@ -733,6 +733,18 @@ actor GrpcClient {
         return try await adminService.addTitle(request, metadata: authMetadata())
     }
 
+    /// Free-text search against Open Library, used by the AddTitleView's
+    /// Book mode. The response is the same OpenLibraryHit shape the
+    /// admin-side unmatched-book linker uses; we re-use that proto
+    /// instead of inventing a parallel one. AddBookWish then picks up
+    /// the chosen hit's `openlibrary_work_id`.
+    func adminSearchOpenLibrary(query: String, limit: Int32 = 10) async throws -> MMSearchOpenLibraryResponse {
+        var request = MMSearchOpenLibraryRequest()
+        request.query = query
+        request.limit = limit
+        return try await adminService.searchOpenLibrary(request, metadata: authMetadata())
+    }
+
     // MARK: - Camera Admin RPCs
 
     func adminListCameras() async throws -> MMAdminCameraListResponse {
