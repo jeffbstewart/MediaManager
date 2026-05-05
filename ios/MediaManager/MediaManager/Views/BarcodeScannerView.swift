@@ -2,7 +2,11 @@ import SwiftUI
 import VisionKit
 
 /// Camera barcode scanner using VisionKit's DataScannerViewController.
-/// Scans UPC-A (via EAN-13), UPC-E, and EAN-8 barcodes from the device camera.
+/// Scans UPC-A (via EAN-13), UPC-E, and EAN-8 barcodes from the device
+/// camera. EAN-13 also covers Bookland (ISBN-13) — books dispatch on
+/// the 978/979 prefix server-side and route through Open Library
+/// instead of the disc-lookup pipeline, so no client-side branching
+/// is required here.
 struct BarcodeScannerView: UIViewControllerRepresentable {
     let onBarcodeScanned: (String) -> Void
     let onDismiss: () -> Void

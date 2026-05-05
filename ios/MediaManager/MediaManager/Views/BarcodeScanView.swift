@@ -15,10 +15,13 @@ struct BarcodeScanView: View {
 
     var body: some View {
         List {
-            // Input section
-            Section("Scan Barcode") {
+            // Input section. Accepts UPC for discs and EAN-13 (ISBN)
+            // for books interchangeably — the server dispatches based
+            // on the 978/979 prefix to either UPCitemdb (DVD/Blu-ray /
+            // CD) or Open Library (book).
+            Section {
                 HStack(spacing: 12) {
-                    TextField("UPC", text: $upcText)
+                    TextField("UPC or ISBN", text: $upcText)
                         .keyboardType(.numberPad)
                         .textContentType(.none)
                         .autocorrectionDisabled()
@@ -50,6 +53,11 @@ struct BarcodeScanView: View {
                         .font(.caption)
                         .foregroundStyle(statusIsError ? .red : .green)
                 }
+            } header: {
+                Text("Scan Barcode")
+            } footer: {
+                Text("Scan a UPC for movies, TV, or music — or an EAN-13 (ISBN) for a book. The server picks the right lookup automatically.")
+                    .font(.caption2)
             }
 
             // Recent scans with live status
@@ -121,7 +129,9 @@ struct BarcodeScanView: View {
                 case .duplicate:
                     showStatus(response.hasMessage ? response.message : "Already scanned", isError: false)
                 case .invalid:
-                    showStatus(response.hasMessage ? response.message : "Invalid UPC", isError: true)
+                    // "Invalid barcode" is format-agnostic; matches the
+                    // mixed UPC/ISBN scope of the input field.
+                    showStatus(response.hasMessage ? response.message : "Invalid barcode", isError: true)
                 default:
                     showStatus("Unexpected response", isError: true)
                 }
