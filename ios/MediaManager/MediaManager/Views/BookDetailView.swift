@@ -9,10 +9,16 @@ private let log = MMLogger(category: "BookDetailView")
 /// vocabulary (Play, Seasons & Episodes, transcoding).
 struct BookDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
     let titleId: TitleID
 
     @State private var detail: ApiTitleDetail?
     @State private var loading = true
+    /// Set to the mediaItemId we're prompting to remove. nil = sheet
+    /// closed. Drives the SwiftUI `confirmationDialog` so the
+    /// "Downloaded ✓" tap → "Remove from Device?" prompt is
+    /// discoverable rather than buried in a long-press.
+    @State private var pendingRemoval: Int64? = nil
 
     var body: some View {
         Group {
@@ -45,7 +51,7 @@ struct BookDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 hero(detail)
                 titleBlock(detail)
-                readButton(detail)
+                readDownloadRow(detail)
                 if let desc = detail.description, !desc.isEmpty {
                     descriptionBlock(desc)
                 }
@@ -124,12 +130,28 @@ struct BookDetailView: View {
         }
     }
 
-    /// Read button. Enabled when the book has at least one downloadable
-    /// EPUB edition; tap routes into `BookReaderView`. PDF and audiobook
-    /// formats stay disabled in v1 — the reader is EPUB-only for now.
+    /// Read + Download buttons. Read is the primary action (always
+    /// shown, disabled when no readable edition exists); Download is
+    /// the offline-pin affordance and only shows when the book has
+    /// a downloadable EPUB. Sits in an HStack so the two share the
+    /// row equally — discoverable from a single screen of detail
+    /// without scrolling, and explicit about both capabilities.
     @ViewBuilder
-    private func readButton(_ detail: ApiTitleDetail) -> some View {
+    private func readDownloadRow(_ detail: ApiTitleDetail) -> some View {
         let epub = epubEdition(detail.book?.editions ?? [])
+        HStack(spacing: 12) {
+            readButton(detail, epub: epub)
+            if let epub {
+                downloadButton(detail, epub: epub)
+            }
+        }
+    }
+
+    /// Read button. Routes to `BookReaderView` when an EPUB edition
+    /// exists; disabled when not. PDF and audiobook formats stay
+    /// unsupported in v1 — the reader is EPUB-only.
+    @ViewBuilder
+    private func readButton(_ detail: ApiTitleDetail, epub: ApiBookEdition?) -> some View {
         if let epub {
             NavigationLink(value: BookReaderRoute(
                 mediaItemId: epub.id,
@@ -141,8 +163,8 @@ struct BookDetailView: View {
             .controlSize(.large)
         } else {
             Button {
-                // No-op: book has no readable edition (physical only,
-                // or only PDF / audiobook which v1 doesn't render).
+                // No-op: no readable edition (physical only, or only
+                // PDF / audiobook which v1 doesn't render).
             } label: {
                 Label("Read", systemImage: "book")
                     .frame(maxWidth: .infinity)
@@ -152,6 +174,96 @@ struct BookDetailView: View {
             .disabled(true)
             .opacity(0.4)
         }
+    }
+
+    /// Download button. Three visual states driven by `BookCacheManager`:
+    ///   - **idle / not downloaded** → "Download" (cloud icon), tap starts.
+    ///   - **downloading** → spinner with optional percentage label,
+    ///     tap cancels.
+    ///   - **downloaded** → "Downloaded ✓", tap opens a confirmation
+    ///     dialog asking to remove from device. The button label
+    ///     literally says what tapping does — discoverable, no
+    ///     hidden long-press / swipe.
+    @ViewBuilder
+    private func downloadButton(_ detail: ApiTitleDetail, epub: ApiBookEdition) -> some View {
+        let mediaItemId = epub.id
+        let isDownloaded = bookCache.isDownloaded(mediaItemId)
+        let active = bookCache.activeDownloads[mediaItemId]
+
+        if let active {
+            Button {
+                bookCache.cancelDownload(mediaItemId)
+            } label: {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    if let total = active.totalBytes, total > 0 {
+                        let pct = Int((Double(active.bytesReceived) / Double(total)) * 100)
+                        Text("\(pct)%")
+                    } else {
+                        Text("Downloading…")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        } else if isDownloaded {
+            Button {
+                pendingRemoval = mediaItemId
+            } label: {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .confirmationDialog(
+                "Remove this download?",
+                isPresented: Binding(
+                    get: { pendingRemoval == mediaItemId },
+                    set: { if !$0 { pendingRemoval = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Remove from Device", role: .destructive) {
+                    do {
+                        try bookCache.deleteDownload(mediaItemId)
+                    } catch {
+                        log.warning("delete download failed: \(error.localizedDescription)")
+                    }
+                    pendingRemoval = nil
+                }
+                Button("Cancel", role: .cancel) { pendingRemoval = nil }
+            } message: {
+                Text("The book file (\(byteSize(of: mediaItemId))) will be removed. You can re-download it any time.")
+            }
+        } else {
+            Button {
+                do {
+                    try bookCache.startDownload(
+                        mediaItemId: mediaItemId,
+                        titleName: detail.name,
+                        authorName: detail.authorName ?? "Unknown")
+                } catch {
+                    log.warning("startDownload failed: \(error.localizedDescription)")
+                }
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+    }
+
+    /// Human-readable size of the downloaded book, looked up by id.
+    /// Returns "—" if the row is missing (shouldn't happen on the
+    /// downloaded-state path, but the fallback keeps the dialog
+    /// rendering even in the race where the row was just deleted).
+    private func byteSize(of mediaItemId: Int64) -> String {
+        guard let row = bookCache.downloads.first(where: { $0.mediaItemId == mediaItemId }) else {
+            return "—"
+        }
+        return ByteCountFormatter.string(fromByteCount: row.sizeBytes, countStyle: .file)
     }
 
     /// First downloadable EPUB edition, or nil. v2 will broaden this
