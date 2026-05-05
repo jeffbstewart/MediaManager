@@ -14,6 +14,11 @@ struct DownloadedBook: Codable, Identifiable, Sendable, Hashable {
     var id: Int64 { mediaItemId }
 
     let mediaItemId: Int64
+    /// The book's `title_id` on the server. Captured at download time
+    /// so offline browse views can look up the cover via the existing
+    /// image-cache path (`CachedImage(ref: .posterThumbnail(titleId:))`)
+    /// without a server round-trip.
+    let titleId: Int64
     let titleName: String
     let authorName: String
     let sizeBytes: Int64
@@ -180,6 +185,7 @@ final class BookCacheManager {
     /// `activeDownloads[mediaItemId]`.
     func startDownload(
         mediaItemId: Int64,
+        titleId: Int64,
         titleName: String,
         authorName: String,
     ) throws {
@@ -227,6 +233,7 @@ final class BookCacheManager {
                 }
                 self.finishDownload(
                     mediaItemId: mediaItemId,
+                    titleId: titleId,
                     titleName: titleName,
                     authorName: authorName,
                     fileSize: counter.value)
@@ -279,6 +286,7 @@ final class BookCacheManager {
 
     private func finishDownload(
         mediaItemId: Int64,
+        titleId: Int64,
         titleName: String,
         authorName: String,
         fileSize: Int64,
@@ -286,6 +294,7 @@ final class BookCacheManager {
         let now = Date()
         let entry = DownloadedBook(
             mediaItemId: mediaItemId,
+            titleId: titleId,
             titleName: titleName,
             authorName: authorName,
             sizeBytes: fileSize,

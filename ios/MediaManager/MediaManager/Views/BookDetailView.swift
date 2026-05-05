@@ -241,6 +241,7 @@ struct BookDetailView: View {
                 do {
                     try bookCache.startDownload(
                         mediaItemId: mediaItemId,
+                        titleId: detail.id.protoValue,
                         titleName: detail.name,
                         authorName: detail.authorName ?? "Unknown")
                 } catch {

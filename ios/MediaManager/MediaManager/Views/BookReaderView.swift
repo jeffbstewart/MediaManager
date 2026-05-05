@@ -41,6 +41,7 @@ struct BookReaderRoute: Hashable {
 ///     `cleanup()` so closing the page captures the tail.
 struct BookReaderView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
     @Environment(\.dismiss) private var dismiss
     let route: BookReaderRoute
 
@@ -238,6 +239,17 @@ struct BookReaderView: View {
             let epubURL: URL
             if let bundleName = route.testBundleEpub {
                 epubURL = try copyTestEpubFromBundle(named: bundleName, into: dir)
+            } else if let downloadedURL = bookCache.localBookURL(route.mediaItemId) {
+                // Offline-friendly fast path: this book is in the
+                // explicit-download cache. Stage the local file into
+                // the reader dir under the same naming the gRPC path
+                // would have produced, so the rest of the boot is
+                // identical. No network needed.
+                epubURL = try stageLocalEpub(from: downloadedURL, into: dir)
+                if let progress = await dataModel.readingProgress(mediaItemId: route.mediaItemId) {
+                    lastCfi = progress.locator.isEmpty ? nil : progress.locator
+                    progressPct = progress.fraction
+                }
             } else {
                 status = .loading("Downloading book…")
                 epubURL = try await ensureEpubDownloaded(into: dir)
@@ -306,6 +318,22 @@ struct BookReaderView: View {
             }
         }
         log.info("EPUB downloaded \(dest.lastPathComponent) (\(FileManager.default.attributes(at: dest)?[.size] ?? 0) bytes)")
+        return dest
+    }
+
+    /// Stages a downloaded EPUB from `BookCacheManager`'s permanent
+    /// cache into the reader's staging dir under the same name the
+    /// gRPC path would have produced. Removes any existing staged
+    /// file first so we always run against the latest download —
+    /// matters if the user re-downloaded the book after server-side
+    /// metadata changes.
+    private func stageLocalEpub(from src: URL, into dir: URL) throws -> URL {
+        let dest = dir.appendingPathComponent("book-\(route.mediaItemId).epub")
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.removeItem(at: dest)
+        }
+        try FileManager.default.copyItem(at: src, to: dest)
+        log.info("staged downloaded EPUB into reader dir: \(dest.lastPathComponent)")
         return dest
     }
 

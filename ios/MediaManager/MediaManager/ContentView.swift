@@ -12,6 +12,7 @@ enum Tab: Hashable {
 struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
     @State private var navigationPath = NavigationPath()
@@ -118,7 +119,7 @@ struct ContentView: View {
                         .tag(Tab.wishList)
                     }
 
-                    if isOffline && dataModel.downloads.hasCompletedDownloads {
+                    if isOffline && (dataModel.downloads.hasCompletedDownloads || !bookCache.downloads.isEmpty) {
                     Label("Library", systemImage: "books.vertical")
                         .tag(Tab.offlineLibrary)
                 }
