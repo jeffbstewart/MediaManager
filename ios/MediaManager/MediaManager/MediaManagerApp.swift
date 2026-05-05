@@ -18,6 +18,7 @@ struct MediaManagerApp: App {
     // streams to ObservabilityService).
     @State private var authManager: AuthManager
     @State private var downloadManager: DownloadManager
+    @State private var bookCache: BookCacheManager
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
 
@@ -29,8 +30,10 @@ struct MediaManagerApp: App {
 
         let am = AuthManager()
         let dm = DownloadManager()
+        let bc = BookCacheManager()
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
+        _bookCache = State(initialValue: bc)
         _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
         _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
     }
@@ -52,16 +55,19 @@ struct MediaManagerApp: App {
                 }
                 .environment(authManager)
                 .environment(downloadManager)
+                .environment(bookCache)
                 .environment(dataModel)
                 .environment(imageProvider)
             } else {
                 RootView()
                     .environment(authManager)
                     .environment(downloadManager)
+                    .environment(bookCache)
                     .environment(dataModel)
                     .environment(imageProvider)
                     .onAppear {
                         downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
+                        bookCache.configure(grpcClient: authManager.grpcClient)
                     }
             }
         }
