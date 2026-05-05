@@ -190,6 +190,9 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
     func removeBookWish(olWorkId: String) async throws { throw DataModelError.offline }
+    func wishlistSeriesGaps(seriesId: BookSeriesID) async throws -> (added: Int, alreadyWished: Int) {
+        throw DataModelError.offline
+    }
     func deleteWish(id: WishID) async throws { throw DataModelError.offline }
     func voteOnWish(id: WishID, vote: Bool) async throws { throw DataModelError.offline }
     func dismissWish(id: WishID) async throws { throw DataModelError.offline }

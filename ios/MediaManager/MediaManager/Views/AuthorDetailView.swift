@@ -20,6 +20,12 @@ struct AuthorDetailView: View {
     /// double-tap and the heart icon appears to "flip" while the
     /// server round-trip is happening.
     @State private var togglingWish: Set<String> = []
+    /// Optimistic-update overlay. Maps OL work id → whether the user
+    /// has wished it locally regardless of what the server-known
+    /// `alreadyWished` says. Avoids a full page reload after every
+    /// toggle (the server canonicalises edition collapse, but we
+    /// don't need to wait for that to flip the heart).
+    @State private var wishOverrides: [String: Bool] = [:]
 
     private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
 
@@ -200,8 +206,9 @@ struct AuthorDetailView: View {
     @ViewBuilder
     private func bibliographyCard(_ entry: ApiBibliographyEntry) -> some View {
         let inFlight = togglingWish.contains(entry.openLibraryWorkId)
+        let wished = wishOverrides[entry.openLibraryWorkId] ?? entry.alreadyWished
         Button {
-            Task { await toggleWish(entry) }
+            Task { await toggleWish(entry, currentlyWished: wished) }
         } label: {
             VStack(spacing: 4) {
                 BookCoverView(
@@ -216,7 +223,7 @@ struct AuthorDetailView: View {
                                     .padding(6)
                                     .background(.black.opacity(0.5))
                                     .clipShape(Circle())
-                            } else if entry.alreadyWished {
+                            } else if wished {
                                 Image(systemName: "heart.fill")
                                     .foregroundStyle(.red)
                                     .padding(6)
@@ -248,29 +255,30 @@ struct AuthorDetailView: View {
         .disabled(inFlight)
     }
 
-    /// Toggle the wishlist row for an OL bibliography entry. We don't
-    /// have the data-model layer drive optimistic updates because the
-    /// server canonicalises the OL id on insert (paperback / hardcover
-    /// / ebook editions of the same work all collapse to one row), so
-    /// we just refetch the detail after each mutation. ~150 ms in
-    /// practice; the inFlight spinner papers over the visible delay.
-    private func toggleWish(_ entry: ApiBibliographyEntry) async {
+    /// Toggle the wishlist row for an OL bibliography entry.
+    /// Optimistic: flip `wishOverrides` immediately so the heart
+    /// updates without a reload. On error the override is reverted
+    /// so the visible state matches the server again.
+    private func toggleWish(_ entry: ApiBibliographyEntry, currentlyWished: Bool) async {
         let workId = entry.openLibraryWorkId
         guard !togglingWish.contains(workId) else { return }
         togglingWish.insert(workId)
         defer { togglingWish.remove(workId) }
 
+        // Optimistic flip. If the API call fails we'll revert below.
+        wishOverrides[workId] = !currentlyWished
+
         do {
-            if entry.alreadyWished {
+            if currentlyWished {
                 try await dataModel.removeBookWish(olWorkId: workId)
             } else {
                 let authorName = detail?.author.name
                 try await dataModel.addBookWish(
                     olWorkId: workId, title: entry.name, author: authorName)
             }
-            await load()
         } catch {
             log.warning("toggleWish failed for \(workId): \(error.localizedDescription)")
+            wishOverrides[workId] = currentlyWished
         }
     }
 

@@ -13,6 +13,14 @@ struct BookSeriesDetailView: View {
 
     @State private var detail: ApiBookSeriesDetail?
     @State private var loading = true
+    @State private var fillingGaps = false
+    @State private var fillResult: String? = nil
+    /// Optimistic-update overlay for the missing-volumes section.
+    /// Maps OL work id → whether the user has wished it locally
+    /// (regardless of what the server-side `alreadyWished` says).
+    /// Lets "Fill Gaps" instantly mark every missing volume as wished
+    /// without round-tripping through a full reload.
+    @State private var wishOverrides: [String: Bool] = [:]
 
     var body: some View {
         Group {
@@ -32,7 +40,7 @@ struct BookSeriesDetailView: View {
                         }
                         volumesSection(detail.volumes)
                         if !detail.missingVolumes.isEmpty {
-                            missingSection(detail.missingVolumes)
+                            missingSection(detail.missingVolumes, canFill: detail.canFillGaps)
                         }
                     }
                     .padding()
@@ -141,10 +149,41 @@ struct BookSeriesDetailView: View {
     }
 
     @ViewBuilder
-    private func missingSection(_ missing: [ApiBookSeriesMissingVolume]) -> some View {
+    private func missingSection(_ missing: [ApiBookSeriesMissingVolume], canFill: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Missing Volumes")
-                .font(.headline)
+            HStack {
+                Text("Missing Volumes")
+                    .font(.headline)
+                Spacer()
+                // "Fill Gaps" is the bulk-wishlist affordance the
+                // web app has had for a while — only render when the
+                // server says it's actionable (the author has an OL
+                // bibliography it can enumerate from). Disabled +
+                // spinner during the round-trip; leaves a result
+                // summary line below for one full UI cycle.
+                if canFill {
+                    Button {
+                        Task { await fillGaps() }
+                    } label: {
+                        if fillingGaps {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Fill Gaps", systemImage: "wand.and.stars")
+                                .font(.caption)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(fillingGaps)
+                }
+            }
+
+            if let summary = fillResult {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.tint)
+            }
+
             ForEach(missing) { volume in
                 HStack(spacing: 12) {
                     BookCoverView(
@@ -168,7 +207,8 @@ struct BookSeriesDetailView: View {
                         .font(.caption)
                     }
                     Spacer()
-                    if volume.alreadyWished {
+                    let wished = wishOverrides[volume.openLibraryWorkId] ?? volume.alreadyWished
+                    if wished {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(.red)
                     }
@@ -176,6 +216,32 @@ struct BookSeriesDetailView: View {
                 .padding(.vertical, 4)
                 Divider()
             }
+        }
+    }
+
+    /// Bulk-add wishes for every missing volume in this series via
+    /// the server's WishlistSeriesGaps RPC. Optimistically marks every
+    /// missing entry as wished in the UI; the server resolves
+    /// `already_wished` separately so the summary line tells the user
+    /// what actually happened.
+    private func fillGaps() async {
+        fillingGaps = true
+        defer { fillingGaps = false }
+        do {
+            let result = try await dataModel.wishlistSeriesGaps(seriesId: route.id)
+            if let detail {
+                for v in detail.missingVolumes {
+                    wishOverrides[v.openLibraryWorkId] = true
+                }
+            }
+            switch (result.added, result.alreadyWished) {
+            case (0, _): fillResult = "Already wished — no new volumes."
+            case (let n, 0): fillResult = "Added \(n) wish\(n == 1 ? "" : "es")."
+            case (let n, let already): fillResult = "Added \(n), already wished \(already)."
+            }
+        } catch {
+            log.warning("fillGaps failed: \(error.localizedDescription)")
+            fillResult = "Couldn't fill gaps: \(error.localizedDescription)"
         }
     }
 }

@@ -561,6 +561,15 @@ actor GrpcClient {
         _ = try await wishListService.removeBookWish(request, metadata: authMetadata())
     }
 
+    /// Bulk-fills missing volumes of a book series with new wishes.
+    /// Returns the result so the calling view can surface the
+    /// "added X, already wished Y" summary.
+    func wishlistSeriesGaps(seriesId: Int64) async throws -> MMWishlistSeriesGapsResponse {
+        var request = MMWishlistSeriesGapsRequest()
+        request.seriesID = seriesId
+        return try await wishListService.wishlistSeriesGaps(request, metadata: authMetadata())
+    }
+
     func voteOnWish(id: Int64, vote: Bool) async throws {
         var request = MMVoteRequest()
         request.wishID = id

@@ -14,6 +14,11 @@ import Foundation
     /// the calling view actually has, since the bibliography only
     /// surfaces the work id, not a row id).
     func removeBookWish(olWorkId: String) async throws
+    /// Bulk-add wishes for every missing volume in a book series.
+    /// Used by BookSeriesDetailView's "Fill Gaps" button. Returns
+    /// `(added, alreadyWished)` so the UI can show a summary.
+    /// Throws if the server reports `error` in the response.
+    func wishlistSeriesGaps(seriesId: BookSeriesID) async throws -> (added: Int, alreadyWished: Int)
     func deleteWish(id: WishID) async throws
     func voteOnWish(id: WishID, vote: Bool) async throws
     func dismissWish(id: WishID) async throws

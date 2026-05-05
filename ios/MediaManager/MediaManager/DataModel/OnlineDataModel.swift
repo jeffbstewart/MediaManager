@@ -248,6 +248,17 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.removeBookWish(olWorkId: olWorkId)
     }
 
+    func wishlistSeriesGaps(seriesId: BookSeriesID) async throws -> (added: Int, alreadyWished: Int) {
+        if !isOnline { return try await offlineDelegate.wishlistSeriesGaps(seriesId: seriesId) }
+        let response = try await grpcClient.wishlistSeriesGaps(seriesId: seriesId.protoValue)
+        if response.hasError, !response.error.isEmpty {
+            throw NSError(domain: "WishlistSeriesGaps", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: response.error,
+            ])
+        }
+        return (added: Int(response.added), alreadyWished: Int(response.alreadyWished))
+    }
+
     func deleteWish(id: WishID) async throws {
         try await grpcClient.deleteWish(id: id.protoValue)
     }
