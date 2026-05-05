@@ -7,6 +7,18 @@ struct RootView: View {
 
     var body: some View {
         switch authManager.state {
+        case .restoring:
+            // Brief gap on every launch while AuthManager's async
+            // Task settles whether we have valid tokens. Showing a
+            // spinner here avoids a flash of ServerSetupView when
+            // the user is in fact already logged in.
+            VStack(spacing: 16) {
+                ProgressView().controlSize(.large)
+                Text("Connecting…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .needsServer:
             ServerSetupView()
         case .needsSetup(let serverURL):

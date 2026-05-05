@@ -11,9 +11,24 @@ struct AuthorsView: View {
     @State private var authors: [ApiAuthorListItem] = []
     @State private var page = 1
     @State private var totalPages = 0
-    @State private var loading = true
+    /// Three explicit phases — the previous (loading: Bool, authors: [])
+    /// pair allowed a sliver where loading was momentarily false with an
+    /// empty list and the body briefly painted the "No authors yet"
+    /// empty state. With an enum, the *only* path to `.empty` is via
+    /// `loadPage()`'s post-fetch branch when the response was actually
+    /// empty — there's no longer a starting position that looks like
+    /// "we tried and got nothing".
+    @State private var phase: LoadPhase = .initial
     @State private var sort: AuthorSort = .name
     @State private var query = ""
+
+    enum LoadPhase: Equatable {
+        case initial      // never attempted — show spinner
+        case loading      // refresh in flight — show spinner
+        case empty        // attempt completed with no results — show empty state
+        case loaded       // results in hand — show grid
+        case failed(String)
+    }
     /// Admin escape-hatch view. When true the grid shows authors with
     /// `hidden=true` so an admin can navigate to one and unhide via
     /// `AuthorDetailView`. Only togglable for admins; non-admins see
@@ -28,12 +43,17 @@ struct AuthorsView: View {
 
     var body: some View {
         Group {
-            if loading && authors.isEmpty {
+            switch phase {
+            case .initial, .loading:
                 ProgressView("Loading...")
-            } else if authors.isEmpty {
+            case .empty:
                 ContentUnavailableView("No authors yet", systemImage: "books.vertical",
                     description: Text("Scan a book by ISBN or import an ebook to populate your library."))
-            } else {
+            case .failed(let message):
+                ContentUnavailableView("Couldn't load authors",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(message))
+            case .loaded:
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(authors) { author in
@@ -97,14 +117,18 @@ struct AuthorsView: View {
     }
 
     private func reload() async {
+        phase = .loading
         authors = []
         page = 1
         totalPages = 0
         await loadPage()
     }
 
-    private func loadPage() async {
-        loading = true
+    private func loadPage(retriesRemaining: Int = 1) async {
+        // First-page fetches go to `.loading`; pagination from a
+        // populated grid keeps `.loaded` so we don't dump the user
+        // back to a spinner mid-scroll.
+        if authors.isEmpty { phase = .loading }
         do {
             let response = try await dataModel.authors(
                 page: page,
@@ -113,10 +137,27 @@ struct AuthorsView: View {
                 hiddenOnly: hiddenOnly)
             authors.append(contentsOf: response.authors)
             totalPages = response.totalPages
+            phase = authors.isEmpty ? .empty : .loaded
         } catch {
+            // First-call gRPC transport setup occasionally races with
+            // SwiftUI's task firing — a fresh post-auth navigation
+            // sometimes hits an UNAVAILABLE transport error before the
+            // connection's fully warm, and the *second* attempt
+            // succeeds within a fraction of a second. Suppress the
+            // user-visible failure for one quick retry; only commit
+            // to `.failed` if a second attempt also flunks. Pagination
+            // failures on later pages keep the populated grid visible.
+            if retriesRemaining > 0 && authors.isEmpty {
+                log.info("loadPage transient failure, retrying once: \(error.localizedDescription)")
+                try? await Task.sleep(for: .milliseconds(400))
+                await loadPage(retriesRemaining: retriesRemaining - 1)
+                return
+            }
             log.warning("loadPage failed: \(error.localizedDescription)")
+            if authors.isEmpty {
+                phase = .failed(error.localizedDescription)
+            }
         }
-        loading = false
     }
 
     private func loadMore() async {

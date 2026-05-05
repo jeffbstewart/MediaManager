@@ -11,6 +11,13 @@ private let logger = MMLogger(category: "AuthManager")
 @MainActor
 final class AuthManager {
     enum State: Equatable {
+        /// Initial state on every launch. Held until restoreSession's
+        /// async Task either completes auth or commits to one of the
+        /// other states. Without it, RootView painted ServerSetupView
+        /// for the brief gap between init() returning and the Task
+        /// running, even when the keychain already had server URL +
+        /// valid tokens — looked like the app forgot the user.
+        case restoring
         case needsServer
         case needsSetup(serverURL: URL)
         case needsLogin(serverURL: URL)
@@ -19,7 +26,7 @@ final class AuthManager {
         case fingerprintMismatch(serverURL: URL, expected: String, received: String)
     }
 
-    private(set) var state: State = .needsServer
+    private(set) var state: State = .restoring
     private(set) var serverInfo: ServerInfo?
     private(set) var error: String?
     private(set) var passwordChangeRequired = false
