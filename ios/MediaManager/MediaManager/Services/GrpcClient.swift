@@ -354,11 +354,24 @@ actor GrpcClient {
         return try await playbackService.getReadingProgress(request, metadata: authMetadata())
     }
 
-    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async throws {
+    func reportReadingProgress(
+        mediaItemId: Int64,
+        locator: String,
+        fraction: Double?,
+        clientRecordedAt: Date? = nil
+    ) async throws {
         var request = MMReportReadingProgressRequest()
         request.mediaItemID = mediaItemId
         request.locator = locator
         if let fraction { request.fraction = fraction }
+        if let clientRecordedAt {
+            // Server expects seconds since epoch UTC. The proto type
+            // is the project's own `time.Timestamp`, not the Google
+            // well-known one — same shape, different message.
+            var ts = MMTimestamp()
+            ts.secondsSinceEpoch = Int64(clientRecordedAt.timeIntervalSince1970)
+            request.clientRecordedAt = ts
+        }
         _ = try await playbackService.reportReadingProgress(request, metadata: authMetadata())
     }
 

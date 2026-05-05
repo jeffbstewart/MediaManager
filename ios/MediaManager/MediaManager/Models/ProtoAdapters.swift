@@ -1396,8 +1396,20 @@ struct ApiReadingProgress: Sendable {
 
     var locator: String { proto.locator }
     var fraction: Double { proto.fraction }
-    var updatedAt: String? {
-        proto.hasUpdatedAt ? proto.updatedAt.isoString : nil
+    /// Server's wall-clock at the moment the row was last written.
+    var updatedAt: Date? {
+        proto.hasUpdatedAt
+            ? Date(timeIntervalSince1970: TimeInterval(proto.updatedAt.secondsSinceEpoch))
+            : nil
+    }
+    /// Client wall-clock that produced the row, when known. Pre-V098
+    /// rows from old clients have nil here even though `updatedAt`
+    /// is set; the reader's resume picker treats absence as
+    /// "infinitely old" so a fresh client write supersedes.
+    var clientRecordedAt: Date? {
+        proto.hasClientRecordedAt
+            ? Date(timeIntervalSince1970: TimeInterval(proto.clientRecordedAt.secondsSinceEpoch))
+            : nil
     }
 }
 

@@ -42,6 +42,10 @@ struct BookReaderRoute: Hashable {
 struct BookReaderView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(ProgressFlusher.self) private var progressFlusher
+    /// Local progress queue is a process-wide actor singleton — see
+    /// the type's class doc for why it isn't injected via @Environment.
+    private let progressQueue = ReadingProgressQueue.shared
     @Environment(\.dismiss) private var dismiss
     let route: BookReaderRoute
 
@@ -50,7 +54,6 @@ struct BookReaderView: View {
     @State private var progressPct: Double = 0
     @State private var lastCfi: String? = nil
     @State private var bridge = ReaderBridge()
-    @State private var reportTimer: Timer? = nil
     @State private var stagedEpubFile: URL? = nil
     @State private var stagedReaderHtml: URL? = nil
     @State private var theme: ReaderTheme = .stored
@@ -246,22 +249,11 @@ struct BookReaderView: View {
                 // would have produced, so the rest of the boot is
                 // identical. No network needed.
                 epubURL = try stageLocalEpub(from: downloadedURL, into: dir)
-                if let progress = await dataModel.readingProgress(mediaItemId: route.mediaItemId) {
-                    lastCfi = progress.locator.isEmpty ? nil : progress.locator
-                    progressPct = progress.fraction
-                }
+                await resolveResumePosition()
             } else {
                 status = .loading("Downloading book…")
                 epubURL = try await ensureEpubDownloaded(into: dir)
-
-                // Resume position before bootArgs land. Booting with a
-                // `resumeCfi` tells epub.js where to render the first
-                // page; without it we'd flash the cover before the first
-                // relocation event lands.
-                if let progress = await dataModel.readingProgress(mediaItemId: route.mediaItemId) {
-                    lastCfi = progress.locator.isEmpty ? nil : progress.locator
-                    progressPct = progress.fraction
-                }
+                await resolveResumePosition()
             }
 
             // Latch the boot args + message handler BEFORE the WebView
@@ -321,6 +313,41 @@ struct BookReaderView: View {
         return dest
     }
 
+    /// Picks the resume position from the freshest source available.
+    /// Local queue wins when newer than the server (covers the
+    /// "read offline, queued progress is ahead of what the server
+    /// knows" case). Server wins when newer (covers the "read on web
+    /// while phone was offline" case). Either side may be nil — if
+    /// neither has a position the reader opens at the cover.
+    private func resolveResumePosition() async {
+        let local = await progressQueue.entry(mediaItemId: route.mediaItemId)
+        let remote = await dataModel.readingProgress(mediaItemId: route.mediaItemId)
+
+        // Pick by latest timestamp. The remote side carries
+        // `clientRecordedAt` (or falls back to `updatedAt` for
+        // pre-V098 rows from old clients) — local always carries
+        // its own `recordedAt`.
+        let localStamp = local?.recordedAt
+        let remoteStamp = remote?.clientRecordedAt ?? remote?.updatedAt
+        let useLocal: Bool = {
+            switch (localStamp, remoteStamp) {
+            case (nil, nil): return false
+            case (.some, nil): return true
+            case (nil, .some): return false
+            case let (lts?, rts?): return lts > rts
+            default: return false
+            }
+        }()
+
+        if useLocal, let local {
+            lastCfi = local.locator.isEmpty ? nil : local.locator
+            progressPct = local.fraction
+        } else if let remote {
+            lastCfi = remote.locator.isEmpty ? nil : remote.locator
+            progressPct = remote.fraction
+        }
+    }
+
     /// Stages a downloaded EPUB from `BookCacheManager`'s permanent
     /// cache into the reader's staging dir under the same name the
     /// gRPC path would have produced. Removes any existing staged
@@ -365,38 +392,36 @@ struct BookReaderView: View {
         case .ready:
             status = .reading
             handleReadyApplyPrefs()
-            startReportTimer()
         case .relocated(let cfi, let pct):
             lastCfi = cfi
             progressPct = pct
+            recordProgressLocally(cfi: cfi, fraction: pct)
         case .error(let m):
             log.warning("reader.html reported error: \(m)")
             status = .error(m)
         }
     }
 
-    private func startReportTimer() {
-        // Test mode runs without a live server, so progress reporting
-        // is just dead noise — skip the timer entirely.
+    /// Writes the current position to the local queue. Replaces the
+    /// previous timer-based polling — every relocation now produces
+    /// exactly one queue entry, the [ProgressFlusher] handles
+    /// shipping it to the server. Test-mode books skip this since
+    /// they don't correspond to a server-side row.
+    private func recordProgressLocally(cfi: String, fraction: Double) {
         if route.testBundleEpub != nil { return }
-
-        reportTimer?.invalidate()
-        // 10 s mirrors the web reader's PROGRESS_REPORT_MS. Tight enough
-        // that closing the app loses at most ten seconds of progress;
-        // loose enough that we're not hammering the server while the
-        // user reads.
-        reportTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
-            Task { @MainActor in await reportProgress() }
+        let mediaItemId = route.mediaItemId
+        let now = Date()
+        Task { @MainActor in
+            // Best-effort image-cache + Downloads-view bookkeeping —
+            // BookCacheManager only knows downloaded books, no-ops
+            // for anything else.
+            bookCache.updateLastAccessed(mediaItemId, completedFraction: fraction)
+            await progressQueue.record(
+                mediaItemId: mediaItemId,
+                locator: cfi,
+                fraction: fraction,
+                recordedAt: now)
         }
-    }
-
-    private func reportProgress() async {
-        guard let cfi = lastCfi else { return }
-        if route.testBundleEpub != nil { return }
-        await dataModel.reportReadingProgress(
-            mediaItemId: route.mediaItemId,
-            locator: cfi,
-            fraction: progressPct)
     }
 
     private func increaseFont() {
@@ -410,12 +435,12 @@ struct BookReaderView: View {
     }
 
     private func cleanup() {
-        reportTimer?.invalidate()
-        reportTimer = nil
-        // Final report so the tail of progress isn't lost between the
-        // last timer tick and dismissal.
-        if lastCfi != nil {
-            Task { @MainActor in await reportProgress() }
+        // Best-effort flush so the tail of progress goes to the
+        // server before the view tears down. The flusher handles
+        // queue iteration + retries; a network failure here just
+        // leaves the queue intact for the next opportunity.
+        if route.testBundleEpub == nil && lastCfi != nil {
+            Task { @MainActor in await progressFlusher.flushNow() }
         }
     }
 }
