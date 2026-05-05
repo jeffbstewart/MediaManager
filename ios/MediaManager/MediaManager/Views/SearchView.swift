@@ -20,92 +20,7 @@ struct SearchView: View {
                 ContentUnavailableView.search(text: query)
             } else {
                 ForEach(results) { result in
-                    switch result.resultType {
-                    case "movie", "series":
-                        if let titleId = result.titleId {
-                            NavigationLink(value: ApiTitle(
-                                id: titleId, name: result.name,
-                                mediaType: result.mediaType ?? .movie,
-                                year: result.year, description: nil,
-                                backdropUrl: nil,
-                                contentRating: result.contentRating,
-                                popularity: nil,
-                                quality: result.quality,
-                                playable: result.transcodeId != nil,
-                                transcodeId: result.transcodeId,
-                                tmdbId: nil, tmdbCollectionId: nil,
-                                tmdbCollectionName: nil, familyMembers: nil,
-                                forMobileAvailable: nil
-                            )) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        }
-                    case "actor":
-                        if let personId = result.tmdbPersonId {
-                            NavigationLink(value: ActorRoute(tmdbPersonId: personId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        } else {
-                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                        }
-                    case "collection":
-                        if let collId = result.tmdbCollectionId {
-                            NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        } else {
-                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                        }
-                    case "book":
-                        // Books route to BookDetailView via the same
-                        // ApiTitle navigation surface the catalog uses;
-                        // ContentView dispatches `isBook` titles to the
-                        // book detail page instead of TitleDetailView.
-                        if let titleId = result.titleId {
-                            NavigationLink(value: ApiTitle(
-                                id: titleId, name: result.name,
-                                mediaType: result.mediaType ?? .movie,
-                                year: result.year, description: nil,
-                                backdropUrl: nil,
-                                contentRating: result.contentRating,
-                                popularity: nil,
-                                quality: nil,
-                                playable: false,
-                                transcodeId: nil,
-                                tmdbId: nil, tmdbCollectionId: nil,
-                                tmdbCollectionName: nil, familyMembers: nil,
-                                forMobileAvailable: nil
-                            )) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        }
-                    case "author":
-                        if let authorId = result.authorId {
-                            NavigationLink(value: AuthorRoute(id: authorId, name: result.name)) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        } else {
-                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                        }
-                    case "tag":
-                        if let tagId = result.itemId {
-                            NavigationLink(value: TagRoute(id: TagID(rawValue: tagId), name: result.name)) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        } else {
-                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                        }
-                    case "genre":
-                        if let genreId = result.itemId {
-                            NavigationLink(value: GenreRoute(id: GenreID(rawValue: genreId), name: result.name)) {
-                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                            }
-                        } else {
-                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                        }
-                    default:
-                        SearchResultRow(result: result, apiClient: dataModel.apiClient)
-                    }
+                    resultRow(result)
                 }
             }
         }
@@ -123,9 +38,131 @@ struct SearchView: View {
         }
     }
 
+    /// Per-result row dispatch. Pulled out of the ForEach body
+    /// because SwiftUI's type-checker chokes on a single switch with
+    /// this many NavigationLink-bearing branches and emits misleading
+    /// "cannot assign to property" errors. Splitting each result kind
+    /// into its own helper keeps the per-closure body simple enough.
+    @ViewBuilder
+    private func resultRow(_ result: ApiSearchResult) -> some View {
+        switch result.resultType {
+        case "movie", "series": titleResultLink(result)
+        case "actor":           actorResultLink(result)
+        case "collection":      collectionResultLink(result)
+        case "book":            bookResultLink(result)
+        case "author":          authorResultLink(result)
+        case "tag":             tagResultLink(result)
+        case "genre":           genreResultLink(result)
+        default:                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    @ViewBuilder
+    private func titleResultLink(_ result: ApiSearchResult) -> some View {
+        if let titleId = result.titleId {
+            NavigationLink(value: ApiTitle(
+                id: titleId, name: result.name,
+                mediaType: result.mediaType ?? .movie,
+                year: result.year, description: nil,
+                backdropUrl: nil,
+                contentRating: result.contentRating,
+                popularity: nil,
+                quality: result.quality,
+                playable: result.transcodeId != nil,
+                transcodeId: result.transcodeId,
+                tmdbId: nil, tmdbCollectionId: nil,
+                tmdbCollectionName: nil, familyMembers: nil,
+                forMobileAvailable: nil
+            )) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actorResultLink(_ result: ApiSearchResult) -> some View {
+        if let personId = result.tmdbPersonId {
+            NavigationLink(value: ActorRoute(tmdbPersonId: personId, name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    @ViewBuilder
+    private func collectionResultLink(_ result: ApiSearchResult) -> some View {
+        if let collId = result.tmdbCollectionId {
+            NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    /// Books route via the ApiTitle navigation surface; ContentView
+    /// dispatches `isBook` titles to BookDetailView. The Swift-side
+    /// `MediaType` enum doesn't model BOOK, so the `ApiTitle`
+    /// convenience initializer would clamp the proto mediaType to
+    /// PERSONAL and BookDetailView would never be selected. We
+    /// build the MMTitle proto directly with the BOOK media type
+    /// preserved (assignments inside @ViewBuilder bodies aren't
+    /// allowed, hence the helper).
+    @ViewBuilder
+    private func bookResultLink(_ result: ApiSearchResult) -> some View {
+        if let titleId = result.titleId {
+            NavigationLink(value: ApiTitle(proto: makeBookTitleProto(titleId: titleId, result: result))) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        }
+    }
+
+    private func makeBookTitleProto(titleId: TitleID, result: ApiSearchResult) -> MMTitle {
+        var proto = MMTitle()
+        proto.id = titleId.protoValue
+        proto.name = result.name
+        proto.mediaType = .book
+        if let y = result.year { proto.year = Int32(y) }
+        return proto
+    }
+
+    @ViewBuilder
+    private func authorResultLink(_ result: ApiSearchResult) -> some View {
+        if let authorId = result.authorId {
+            NavigationLink(value: AuthorRoute(id: authorId, name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    @ViewBuilder
+    private func tagResultLink(_ result: ApiSearchResult) -> some View {
+        if let tagId = result.itemId {
+            NavigationLink(value: TagRoute(id: TagID(rawValue: tagId), name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    @ViewBuilder
+    private func genreResultLink(_ result: ApiSearchResult) -> some View {
+        if let genreId = result.itemId {
+            NavigationLink(value: GenreRoute(id: GenreID(rawValue: genreId), name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
     private static let typeOrder: [String: Int] = [
-        "movie": 0, "series": 0, "actor": 1,
-        "collection": 2, "tag": 3, "genre": 3
+        "movie": 0, "series": 0, "book": 1, "actor": 2,
+        "author": 3, "collection": 4, "tag": 5, "genre": 5
     ]
 
     private func performSearch(_ query: String) async {
