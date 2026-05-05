@@ -478,6 +478,7 @@ struct ApiSearchResult: Identifiable, Sendable {
     var headshotUrl: String? { proto.hasHeadshotURL ? proto.headshotURL : nil }
     var titleCount: Int? { proto.hasTitleCount ? Int(proto.titleCount) : nil }
     var itemId: Int? { proto.hasItemID ? Int(proto.itemID) : nil }
+    var authorId: AuthorID? { proto.hasAuthorID ? AuthorID(rawValue: Int(proto.authorID)) : nil }
 }
 
 struct ApiSearchResponse: Sendable {

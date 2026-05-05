@@ -56,6 +56,37 @@ struct SearchView: View {
                         } else {
                             SearchResultRow(result: result, apiClient: dataModel.apiClient)
                         }
+                    case "book":
+                        // Books route to BookDetailView via the same
+                        // ApiTitle navigation surface the catalog uses;
+                        // ContentView dispatches `isBook` titles to the
+                        // book detail page instead of TitleDetailView.
+                        if let titleId = result.titleId {
+                            NavigationLink(value: ApiTitle(
+                                id: titleId, name: result.name,
+                                mediaType: result.mediaType ?? .movie,
+                                year: result.year, description: nil,
+                                backdropUrl: nil,
+                                contentRating: result.contentRating,
+                                popularity: nil,
+                                quality: nil,
+                                playable: false,
+                                transcodeId: nil,
+                                tmdbId: nil, tmdbCollectionId: nil,
+                                tmdbCollectionName: nil, familyMembers: nil,
+                                forMobileAvailable: nil
+                            )) {
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+                            }
+                        }
+                    case "author":
+                        if let authorId = result.authorId {
+                            NavigationLink(value: AuthorRoute(id: authorId, name: result.name)) {
+                                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+                            }
+                        } else {
+                            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+                        }
                     case "tag":
                         if let tagId = result.itemId {
                             NavigationLink(value: TagRoute(id: TagID(rawValue: tagId), name: result.name)) {
@@ -79,7 +110,7 @@ struct SearchView: View {
             }
         }
         .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Movies, TV, actors...")
+        .searchable(text: $query, prompt: "Movies, TV, books, actors, authors…")
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()
             hasSearched = false
