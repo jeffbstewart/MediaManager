@@ -236,6 +236,18 @@ final class OnlineDataModel: DataModel {
             seasonNumber: seasonNumber.map { Int32($0) })
     }
 
+    func addBookWish(olWorkId: String, title: String, author: String?) async throws {
+        if !isOnline { return try await offlineDelegate.addBookWish(
+            olWorkId: olWorkId, title: title, author: author) }
+        _ = try await grpcClient.addBookWish(
+            olWorkId: olWorkId, title: title, author: author)
+    }
+
+    func removeBookWish(olWorkId: String) async throws {
+        if !isOnline { return try await offlineDelegate.removeBookWish(olWorkId: olWorkId) }
+        try await grpcClient.removeBookWish(olWorkId: olWorkId)
+    }
+
     func deleteWish(id: WishID) async throws {
         try await grpcClient.deleteWish(id: id.protoValue)
     }

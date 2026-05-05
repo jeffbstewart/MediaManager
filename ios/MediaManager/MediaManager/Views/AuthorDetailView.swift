@@ -15,6 +15,11 @@ struct AuthorDetailView: View {
     @State private var detail: ApiAuthorDetail?
     @State private var loading = true
     @State private var togglingHidden = false
+    /// Set of OL work ids whose wish-toggle is currently in flight.
+    /// Drives a per-card disabled / spinner state so the user can't
+    /// double-tap and the heart icon appears to "flip" while the
+    /// server round-trip is happening.
+    @State private var togglingWish: Set<String> = []
 
     private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
 
@@ -176,38 +181,96 @@ struct AuthorDetailView: View {
     @ViewBuilder
     private func otherWorksSection(_ entries: [ApiBibliographyEntry]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Other Works")
-                .font(.headline)
+            HStack {
+                Text("Other Works")
+                    .font(.headline)
+                Spacer()
+                Text("Tap to wish")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 16) {
                 ForEach(entries) { entry in
-                    VStack(spacing: 4) {
-                        BookCoverView(
-                            ref: .openlibraryCover(workId: entry.openLibraryWorkId),
-                            seed: entry.name)
-                            .frame(width: 110, height: 165)
-                            .overlay(alignment: .topTrailing) {
-                                if entry.alreadyWished {
-                                    Image(systemName: "heart.fill")
-                                        .foregroundStyle(.red)
-                                        .padding(6)
-                                        .background(.black.opacity(0.5))
-                                        .clipShape(Circle())
-                                        .padding(4)
-                                }
-                            }
-                        Text(entry.name)
-                            .font(.caption)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 110)
-                        if let year = entry.year {
-                            Text(String(year))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    bibliographyCard(entry)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func bibliographyCard(_ entry: ApiBibliographyEntry) -> some View {
+        let inFlight = togglingWish.contains(entry.openLibraryWorkId)
+        Button {
+            Task { await toggleWish(entry) }
+        } label: {
+            VStack(spacing: 4) {
+                BookCoverView(
+                    ref: .openlibraryCover(workId: entry.openLibraryWorkId),
+                    seed: entry.name)
+                    .frame(width: 110, height: 165)
+                    .overlay(alignment: .topTrailing) {
+                        ZStack {
+                            if inFlight {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .padding(6)
+                                    .background(.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            } else if entry.alreadyWished {
+                                Image(systemName: "heart.fill")
+                                    .foregroundStyle(.red)
+                                    .padding(6)
+                                    .background(.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            } else {
+                                Image(systemName: "heart")
+                                    .foregroundStyle(.white)
+                                    .padding(6)
+                                    .background(.black.opacity(0.35))
+                                    .clipShape(Circle())
+                            }
+                        }
+                        .padding(4)
+                    }
+                Text(entry.name)
+                    .font(.caption)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 110)
+                if let year = entry.year {
+                    Text(String(year))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(inFlight)
+    }
+
+    /// Toggle the wishlist row for an OL bibliography entry. We don't
+    /// have the data-model layer drive optimistic updates because the
+    /// server canonicalises the OL id on insert (paperback / hardcover
+    /// / ebook editions of the same work all collapse to one row), so
+    /// we just refetch the detail after each mutation. ~150 ms in
+    /// practice; the inFlight spinner papers over the visible delay.
+    private func toggleWish(_ entry: ApiBibliographyEntry) async {
+        let workId = entry.openLibraryWorkId
+        guard !togglingWish.contains(workId) else { return }
+        togglingWish.insert(workId)
+        defer { togglingWish.remove(workId) }
+
+        do {
+            if entry.alreadyWished {
+                try await dataModel.removeBookWish(olWorkId: workId)
+            } else {
+                let authorName = detail?.author.name
+                try await dataModel.addBookWish(
+                    olWorkId: workId, title: entry.name, author: authorName)
+            }
+            await load()
+        } catch {
+            log.warning("toggleWish failed for \(workId): \(error.localizedDescription)")
         }
     }
 

@@ -186,6 +186,10 @@ final class OfflineDataModel: DataModel {
     func transcodeWishList() async throws -> ApiTranscodeWishListResponse { throw DataModelError.offline }
     func addWish(tmdbId: TmdbID, mediaType: MediaType, title: String, year: Int?,
                  seasonNumber: Int?) async throws { throw DataModelError.offline }
+    func addBookWish(olWorkId: String, title: String, author: String?) async throws {
+        throw DataModelError.offline
+    }
+    func removeBookWish(olWorkId: String) async throws { throw DataModelError.offline }
     func deleteWish(id: WishID) async throws { throw DataModelError.offline }
     func voteOnWish(id: WishID, vote: Bool) async throws { throw DataModelError.offline }
     func dismissWish(id: WishID) async throws { throw DataModelError.offline }

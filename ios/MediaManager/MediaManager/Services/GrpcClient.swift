@@ -528,6 +528,39 @@ actor GrpcClient {
         _ = try await wishListService.cancelWish(request, metadata: authMetadata())
     }
 
+    /// Adds a book wish keyed by Open Library work id. Used by the
+    /// AuthorDetailView "Other Works" tap-to-wish flow. The server
+    /// resolves the cover via [coverIsbn] when set, otherwise falls
+    /// back to the work-id endpoint.
+    func addBookWish(
+        olWorkId: String,
+        title: String,
+        author: String? = nil,
+        coverIsbn: String? = nil,
+        seriesId: Int64? = nil,
+        seriesNumber: String? = nil
+    ) async throws -> Int64 {
+        var request = MMAddBookWishRequest()
+        request.olWorkID = olWorkId
+        request.title = title
+        if let author { request.author = author }
+        if let coverIsbn { request.coverIsbn = coverIsbn }
+        if let seriesId { request.seriesID = seriesId }
+        if let seriesNumber { request.seriesNumber = seriesNumber }
+        let response = try await wishListService.addBookWish(request, metadata: authMetadata())
+        return response.id
+    }
+
+    /// Removes a previously-added book wish by its OL work id —
+    /// matches the server contract better than carrying the wish row
+    /// id around (the row id wouldn't be available from the bibliography
+    /// without an extra lookup).
+    func removeBookWish(olWorkId: String) async throws {
+        var request = MMRemoveBookWishRequest()
+        request.olWorkID = olWorkId
+        _ = try await wishListService.removeBookWish(request, metadata: authMetadata())
+    }
+
     func voteOnWish(id: Int64, vote: Bool) async throws {
         var request = MMVoteRequest()
         request.wishID = id
