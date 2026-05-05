@@ -31,7 +31,10 @@ import java.nio.file.Files
  *
  * Auth: any authenticated user. OWNERSHIP_PHOTO requires admin role (checked per-request).
  */
-class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
+class ImageGrpcService(
+    private val openLibrary: net.stewart.mediamanager.service.OpenLibraryService =
+        net.stewart.mediamanager.service.OpenLibraryHttpService(),
+) : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(ImageGrpcService::class.java)
 
@@ -366,11 +369,29 @@ class ImageGrpcService : ImageServiceGrpcKt.ImageServiceCoroutineImplBase() {
         val etag = "ol-work-$olWorkId"
         if (ifNoneMatch != null && ifNoneMatch == etag) return ImageResult.NotModified
 
-        val upstream = ImageProxyService.ProxiedUpstream(
-            provider = ImageProxyService.Provider.OPEN_LIBRARY,
-            path = "/b/olid/$olWorkId-L.jpg?default=false",
-            extension = "jpg"
-        )
+        // OL's covers endpoint only resolves EDITION OLIDs ("OL...M")
+        // via /b/olid/. Work OLIDs ("OL...W") return 404, so callers
+        // hitting an author's bibliography saw placeholders for every
+        // entry. For W-suffixed IDs, hop through openlibrary.org to
+        // resolve a representative cover_id from the work's `covers[]`
+        // array, then proxy /b/id/<cover_id>. The first lookup is one
+        // extra HTTP GET; subsequent loads of the same work hit the
+        // ImageProxyService file cache and don't repeat it.
+        val upstream = if (olWorkId.endsWith("M")) {
+            ImageProxyService.ProxiedUpstream(
+                provider = ImageProxyService.Provider.OPEN_LIBRARY,
+                path = "/b/olid/$olWorkId-L.jpg?default=false",
+                extension = "jpg"
+            )
+        } else {
+            val coverId = openLibrary.lookupWorkCoverId(olWorkId)
+                ?: return ImageResult.NotFound
+            ImageProxyService.ProxiedUpstream(
+                provider = ImageProxyService.Provider.OPEN_LIBRARY,
+                path = "/b/id/$coverId-L.jpg?default=false",
+                extension = "jpg"
+            )
+        }
         return when (val r = ImageProxyService.serve(upstream)) {
             is ImageProxyService.Result.Hit -> ImageResult.Found(Files.readAllBytes(r.file), r.contentType, etag)
             is ImageProxyService.Result.Failure -> ImageResult.NotFound

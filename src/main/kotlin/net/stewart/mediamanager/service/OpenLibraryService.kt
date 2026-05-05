@@ -130,6 +130,22 @@ interface OpenLibraryService {
      */
     fun searchWorks(query: String, limit: Int = 10): List<OpenLibrarySearchHit>
 
+    /**
+     * Resolves a Work OLID (e.g. "OL45804W") to a representative cover
+     * ID by hitting `/works/{id}.json` and reading the first entry of
+     * the `covers[]` array. Returns `null` when the work has no covers
+     * or the lookup fails.
+     *
+     * Why this exists: OL's `covers.openlibrary.org/b/olid/...` endpoint
+     * only resolves EDITION OLIDs (`OLxxxM`). Calling it with a Work
+     * OLID (`OLxxxW`) returns 404. The image-proxy code path uses this
+     * helper to bridge work IDs to a usable cover-by-id URL.
+     *
+     * Implementations are expected to be cheap-on-cache-miss but
+     * synchronous (one HTTP GET to openlibrary.org).
+     */
+    fun lookupWorkCoverId(openLibraryWorkId: String): Long?
+
     companion object {
         /**
          * Same-origin URL pointing at our Open Library image proxy for this
@@ -352,6 +368,28 @@ class OpenLibraryHttpService : OpenLibraryService {
 
         worksCache[openLibraryAuthorId] = WorksCacheEntry(works, System.currentTimeMillis())
         return works.take(limit)
+    }
+
+    override fun lookupWorkCoverId(openLibraryWorkId: String): Long? {
+        if (!openLibraryWorkId.matches(Regex("^OL\\d+W$"))) return null
+        val body = try {
+            fetch("$BASE/works/$openLibraryWorkId.json")
+        } catch (e: Exception) {
+            log.warn("lookupWorkCoverId fetch failed for {}: {}", openLibraryWorkId, e.message)
+            null
+        } ?: return null
+        return try {
+            val root = mapper.readTree(body)
+            val covers = root.path("covers")
+            if (!covers.isArray) return null
+            // Skip nulls / negatives — OL occasionally records `-1` for
+            // works that had a cover removed; the covers endpoint 404s
+            // on those just like a missing entry.
+            covers.firstOrNull { it.isNumber && it.asLong() > 0 }?.asLong()
+        } catch (e: Exception) {
+            log.warn("lookupWorkCoverId parse failed for {}: {}", openLibraryWorkId, e.message)
+            null
+        }
     }
 
     override fun searchWorks(query: String, limit: Int): List<OpenLibrarySearchHit> {
