@@ -155,6 +155,13 @@ final class OfflineDataModel: DataModel {
     func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail {
         throw DataModelError.offline
     }
+    // Audio (offline: nothing yet — audio download cache lands later).
+    func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse {
+        throw DataModelError.offline
+    }
+    func artistDetail(id: ArtistID) async throws -> ApiArtistDetail {
+        throw DataModelError.offline
+    }
 
     // MARK: - PlaybackDataModel (offline: local files + queued progress)
 
@@ -190,6 +197,10 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
     func removeBookWish(olWorkId: String) async throws { throw DataModelError.offline }
+    func addAlbumWish(releaseGroupId: String, title: String, primaryArtist: String?) async throws {
+        throw DataModelError.offline
+    }
+    func removeAlbumWish(releaseGroupId: String) async throws { throw DataModelError.offline }
     func wishlistSeriesGaps(seriesId: BookSeriesID) async throws -> (added: Int, alreadyWished: Int) {
         throw DataModelError.offline
     }

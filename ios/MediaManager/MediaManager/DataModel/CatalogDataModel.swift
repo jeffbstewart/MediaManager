@@ -24,4 +24,25 @@ import Foundation
     func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse
     func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail
     func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail
+
+    // Audio
+    func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse
+    func artistDetail(id: ArtistID) async throws -> ApiArtistDetail
+}
+
+/// Sort modes accepted by `ListArtists`. Values mirror the proto's
+/// stringly-typed sort field; the enum exists so views don't have
+/// to traffic in raw strings.
+enum ArtistSort: String, CaseIterable, Identifiable, Sendable {
+    case albums  // owned-album count desc — server default
+    case name    // sort_name asc
+    case recent  // created_at desc
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .albums: return "By Albums"
+        case .name: return "By Name"
+        case .recent: return "Recently Added"
+        }
+    }
 }

@@ -1256,6 +1256,99 @@ struct ApiAuthorListResponse: Sendable {
     var currentPage: Int { Int(proto.pagination.page) }
 }
 
+// MARK: - Artist (audio)
+
+/// Card cell for the artists grid. Mirrors `ApiAuthorListItem` for
+/// books — same hero-image-with-fallback pattern: real headshot when
+/// available, owned-album poster as fallback, synthesised colour
+/// swatch when neither exists.
+struct ApiArtistListItem: Identifiable, Sendable {
+    let proto: MMArtistListItem
+
+    var id: ArtistID { ArtistID(proto: proto.id) }
+    var name: String { proto.name }
+    var sortName: String? { proto.hasSortName ? proto.sortName : nil }
+    var artistType: MMArtistType { proto.artistType }
+    var ownedAlbumCount: Int { Int(proto.ownedAlbumCount) }
+    var hasHeadshot: Bool { proto.hasHeadshot_p }
+    /// Album titleId used as the artwork fallback when the artist
+    /// has no headshot. Hero rendering uses this with
+    /// `.posterThumbnail(titleId:)` — square 1:1 aspect since this
+    /// is an album cover, not a movie poster.
+    var fallbackAlbumTitleId: TitleID? {
+        proto.hasFallbackAlbumTitleID ? TitleID(proto: proto.fallbackAlbumTitleID) : nil
+    }
+}
+
+struct ApiArtistListResponse: Sendable {
+    let proto: MMArtistListResponse
+
+    var artists: [ApiArtistListItem] { proto.artists.map { ApiArtistListItem(proto: $0) } }
+    var totalPages: Int { Int(proto.pagination.totalPages) }
+    var currentPage: Int { Int(proto.pagination.page) }
+}
+
+/// Artist header info on ArtistDetailView. Headshot via
+/// `MMImageRef.artistHeadshot(artistId:)`; the bool prevents the UI
+/// from flashing a broken-image placeholder while the image loads.
+struct ApiArtist: Sendable {
+    let proto: MMArtist
+
+    var id: ArtistID { ArtistID(proto: proto.id) }
+    var name: String { proto.name }
+    var artistType: MMArtistType { proto.artistType }
+    var beginYear: Int? { proto.hasBeginYear ? Int(proto.beginYear) : nil }
+    var endYear: Int? { proto.hasEndYear ? Int(proto.endYear) : nil }
+    var hasHeadshot: Bool { proto.hasHeadshot_p }
+    var musicbrainzArtistId: String? {
+        proto.hasMusicbrainzArtistID ? proto.musicbrainzArtistID : nil
+    }
+}
+
+/// Artist detail = the artist itself, optional bio, owned albums on
+/// the shelf, "Other Works" discography from MusicBrainz for
+/// wishlisting, and (when GROUP) members / (when PERSON) memberOf.
+struct ApiArtistDetail: Sendable {
+    let proto: MMArtistDetail
+
+    var artist: ApiArtist { ApiArtist(proto: proto.artist) }
+    var biography: String? { proto.hasBiography ? proto.biography : nil }
+    var ownedAlbums: [ApiTitle] { proto.ownedAlbums.map { ApiTitle(proto: $0) } }
+    var otherWorks: [ApiDiscographyEntry] { proto.otherWorks.map { ApiDiscographyEntry(proto: $0) } }
+    /// Members of a group artist (populated when artistType == GROUP).
+    var members: [ApiArtistMember] { proto.members.map { ApiArtistMember(proto: $0) } }
+    /// Groups this person is a member of (populated when artistType == PERSON).
+    var memberOf: [ApiArtistMember] { proto.memberOf.map { ApiArtistMember(proto: $0) } }
+}
+
+/// Unowned discography entry. Cover via
+/// `MMImageRef.coverArtArchiveReleaseGroup(releaseGroupId:)`.
+struct ApiDiscographyEntry: Identifiable, Sendable {
+    let proto: MMDiscographyEntry
+
+    var id: String { proto.musicbrainzReleaseGroupID }
+    var releaseGroupId: String { proto.musicbrainzReleaseGroupID }
+    var name: String { proto.name }
+    var year: Int? { proto.hasYear ? Int(proto.year) : nil }
+    var releaseGroupType: MMReleaseGroupType { proto.releaseGroupType }
+    var isCompilation: Bool { proto.isCompilation }
+    var secondaryTypes: [String] { proto.secondaryTypes }
+    var alreadyWished: Bool { proto.alreadyWished }
+}
+
+/// Membership row — either members of a group, or groups a person is
+/// in. Tap routes back into ArtistDetailView for the linked artist.
+struct ApiArtistMember: Identifiable, Sendable {
+    let proto: MMArtistMemberEntry
+
+    var id: ArtistID { ArtistID(proto: proto.artistID) }
+    var name: String { proto.name }
+    var beginYear: Int? { proto.hasBeginYear ? Int(proto.beginYear) : nil }
+    var endYear: Int? { proto.hasEndYear ? Int(proto.endYear) : nil }
+    var artistType: MMArtistType { proto.artistType }
+    var instruments: String? { proto.hasInstruments ? proto.instruments : nil }
+}
+
 /// Author bio used on the author-detail header. Headshot via
 /// `MMImageRef.authorHeadshot(authorId:)`; the bool keeps the UI from
 /// flashing a broken-image placeholder while the stream warms up.

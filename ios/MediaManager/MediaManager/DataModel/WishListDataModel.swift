@@ -14,6 +14,13 @@ import Foundation
     /// the calling view actually has, since the bibliography only
     /// surfaces the work id, not a row id).
     func removeBookWish(olWorkId: String) async throws
+    /// Adds an album wish keyed by MusicBrainz release_group_id.
+    /// Used by ArtistDetailView's "Other Works" tap-to-wish.
+    func addAlbumWish(releaseGroupId: String, title: String, primaryArtist: String?) async throws
+    /// Removes an album wish by release_group_id (parallel to
+    /// removeBookWish — the discography surface only has the MBID,
+    /// not a row id).
+    func removeAlbumWish(releaseGroupId: String) async throws
     /// Bulk-add wishes for every missing volume in a book series.
     /// Used by BookSeriesDetailView's "Fill Gaps" button. Returns
     /// `(added, alreadyWished)` so the UI can show a summary.

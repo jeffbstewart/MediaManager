@@ -171,6 +171,20 @@ final class OnlineDataModel: DataModel {
         return ApiBookSeriesDetail(proto: response)
     }
 
+    func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.listArtists(
+            page: Int32(page), limit: 60, sort: sort.rawValue,
+            query: query, playableOnly: true)
+        return ApiArtistListResponse(proto: response)
+    }
+
+    func artistDetail(id: ArtistID) async throws -> ApiArtistDetail {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.getArtistDetail(id: id.protoValue)
+        return ApiArtistDetail(proto: response)
+    }
+
     // MARK: - PlaybackDataModel
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {
@@ -246,6 +260,18 @@ final class OnlineDataModel: DataModel {
     func removeBookWish(olWorkId: String) async throws {
         if !isOnline { return try await offlineDelegate.removeBookWish(olWorkId: olWorkId) }
         try await grpcClient.removeBookWish(olWorkId: olWorkId)
+    }
+
+    func addAlbumWish(releaseGroupId: String, title: String, primaryArtist: String?) async throws {
+        if !isOnline { return try await offlineDelegate.addAlbumWish(
+            releaseGroupId: releaseGroupId, title: title, primaryArtist: primaryArtist) }
+        _ = try await grpcClient.addAlbumWish(
+            releaseGroupId: releaseGroupId, title: title, primaryArtist: primaryArtist)
+    }
+
+    func removeAlbumWish(releaseGroupId: String) async throws {
+        if !isOnline { return try await offlineDelegate.removeAlbumWish(releaseGroupId: releaseGroupId) }
+        try await grpcClient.removeAlbumWish(releaseGroupId: releaseGroupId)
     }
 
     func wishlistSeriesGaps(seriesId: BookSeriesID) async throws -> (added: Int, alreadyWished: Int) {

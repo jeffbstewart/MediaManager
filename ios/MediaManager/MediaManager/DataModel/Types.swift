@@ -292,6 +292,22 @@ extension AuthorID {
     init(proto value: Int64) { self.init(rawValue: Int(value)) }
     var protoValue: Int64 { Int64(rawValue) }
 }
+
+struct ArtistID: Hashable, Codable, Sendable {
+    let rawValue: Int
+    init(rawValue: Int) { self.rawValue = rawValue }
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(Int.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
+    }
+}
+extension ArtistID {
+    init(proto value: Int64) { self.init(rawValue: Int(value)) }
+    var protoValue: Int64 { Int64(rawValue) }
+}
 extension BookSeriesID {
     init(proto value: Int64) { self.init(rawValue: Int(value)) }
     var protoValue: Int64 { Int64(rawValue) }

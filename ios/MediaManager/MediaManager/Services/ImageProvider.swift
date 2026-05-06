@@ -170,4 +170,25 @@ extension MMImageRef {
         ref.openlibraryWorkID = workId
         return ref
     }
+
+    /// Owned-artist headshot, keyed by artist_id. Used by the artists
+    /// grid card and ArtistDetailView's hero — falls back to the
+    /// first owned album's cover when the artist record has no real
+    /// headshot (parallel to authorHeadshot's fallback strategy).
+    static func artistHeadshot(artistId: Int64) -> MMImageRef {
+        var ref = MMImageRef()
+        ref.type = .artistHeadshot
+        ref.artistID = artistId
+        return ref
+    }
+
+    /// Cover Art Archive release-group cover, keyed by MBID. Used by
+    /// unowned discography entries on ArtistDetailView and album
+    /// wish rows. Square aspect (1:1) — album covers, not posters.
+    static func coverArtArchiveReleaseGroup(releaseGroupId: String) -> MMImageRef {
+        var ref = MMImageRef()
+        ref.type = .caaReleaseGroup
+        ref.musicbrainzReleaseGroupID = releaseGroupId
+        return ref
+    }
 }

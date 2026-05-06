@@ -561,6 +561,28 @@ actor GrpcClient {
         _ = try await wishListService.removeBookWish(request, metadata: authMetadata())
     }
 
+    /// Adds an album wish keyed by MusicBrainz release_group_id.
+    /// Used by ArtistDetailView's "Other Works" tap-to-wish flow.
+    func addAlbumWish(
+        releaseGroupId: String,
+        title: String,
+        primaryArtist: String? = nil
+    ) async throws -> Int64 {
+        var request = MMAddAlbumWishRequest()
+        request.releaseGroupID = releaseGroupId
+        request.title = title
+        if let primaryArtist { request.primaryArtist = primaryArtist }
+        let response = try await wishListService.addAlbumWish(request, metadata: authMetadata())
+        return response.id
+    }
+
+    /// Removes an album wish by release_group_id.
+    func removeAlbumWish(releaseGroupId: String) async throws {
+        var request = MMRemoveAlbumWishRequest()
+        request.releaseGroupID = releaseGroupId
+        _ = try await wishListService.removeAlbumWish(request, metadata: authMetadata())
+    }
+
     /// Bulk-fills missing volumes of a book series with new wishes.
     /// Returns the result so the calling view can surface the
     /// "added X, already wished Y" summary.
@@ -598,6 +620,24 @@ actor GrpcClient {
         request.query = query
         request.type = type
         return try await wishListService.searchTmdb(request, metadata: authMetadata())
+    }
+
+    // MARK: - Artist / Album RPCs
+
+    func listArtists(page: Int32, limit: Int32, sort: String?, query: String?, playableOnly: Bool = true) async throws -> MMArtistListResponse {
+        var request = MMListArtistsRequest()
+        request.page = page
+        request.limit = limit
+        if let sort { request.sort = sort }
+        if let query, !query.isEmpty { request.q = query }
+        request.playableOnly = playableOnly
+        return try await artistService.listArtists(request, metadata: authMetadata())
+    }
+
+    func getArtistDetail(id: Int64) async throws -> MMArtistDetail {
+        var request = MMArtistIdRequest()
+        request.artistID = id
+        return try await artistService.getArtistDetail(request, metadata: authMetadata())
     }
 
     // MARK: - Author / Book RPCs

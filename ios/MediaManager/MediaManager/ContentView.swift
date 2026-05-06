@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, books, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
+    case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
@@ -40,6 +40,8 @@ struct ContentView: View {
                             .tag(Tab.tvShows)
                         Label("Books", systemImage: "books.vertical")
                             .tag(Tab.books)
+                        Label("Music", systemImage: "music.note")
+                            .tag(Tab.music)
                         Label("Collections", systemImage: "square.stack")
                             .tag(Tab.collections)
                         Label("Tags", systemImage: "tag")
@@ -217,6 +219,8 @@ struct ContentView: View {
                         CatalogView(typeFilter: .tv, navigationTitle: "TV Shows")
                     case .books:
                         AuthorsView()
+                    case .music:
+                        ArtistsView()
                     case .collections:
                         CollectionsListView()
                     case .tags:
@@ -293,6 +297,9 @@ struct ContentView: View {
                 }
                 .navigationDestination(for: AuthorRoute.self) { route in
                     AuthorDetailView(route: route)
+                }
+                .navigationDestination(for: ArtistRoute.self) { route in
+                    ArtistDetailView(route: route)
                 }
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
