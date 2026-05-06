@@ -207,19 +207,30 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
     /// any), ships it to Binnacle as a single ERROR log entry, and
     /// removes the file. Runs BEFORE the new handlers are installed
     /// so we don't open a write-FD on the same path.
+    ///
+    /// `installSignalHandlers` opens the file with `O_CREAT | O_TRUNC`
+    /// at every launch, so a clean-shutdown previous run leaves a
+    /// 0-byte file behind. Drain has to treat empty files as
+    /// "no crash to report" — otherwise every launch ships a phantom
+    /// CrashReporter ERROR with an empty stack to Binnacle.
     private func drainPendingSignalLog() {
         guard FileManager.default.fileExists(atPath: signalLogPath.path) else { return }
-        let body = (try? String(contentsOf: signalLogPath, encoding: .utf8)) ?? "<unreadable>"
+        let body = (try? String(contentsOf: signalLogPath, encoding: .utf8)) ?? ""
+        try? FileManager.default.removeItem(at: signalLogPath)
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            // Clean shutdown — nothing meaningful written. Don't ship.
+            return
+        }
         // First line of the file is our `=== iOS signal N time S.U ===`
         // header, which makes a useful summary. Truncate to keep
         // log-search readable; full text rides along as an attribute.
-        let firstLine = body.split(
+        let firstLine = trimmed.split(
             separator: "\n", maxSplits: 1, omittingEmptySubsequences: true
         ).first.map(String.init) ?? "iOS signal crash"
         logger.error(
             "iOS crash (signal): \(firstLine)",
             attributes: ["crashKind": "signal", "signalLog": body])
-        try? FileManager.default.removeItem(at: signalLogPath)
     }
 
     // MARK: - MXMetricManagerSubscriber
