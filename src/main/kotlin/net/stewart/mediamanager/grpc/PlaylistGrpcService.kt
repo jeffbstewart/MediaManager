@@ -149,8 +149,35 @@ class PlaylistGrpcService : PlaylistServiceGrpcKt.PlaylistServiceCoroutineImplBa
         val user = currentUser()
         val limit = if (request.hasLimit() && request.limit > 0) request.limit else 200
         val tracks = PlaylistService.libraryShuffle(user, limit)
+        // Resolve the parent album's name + lead-artist credit per
+        // track so the iOS mini-player and Now Playing surfaces have
+        // a credit to show. Without this, shuffle-played tracks
+        // surface as "Track Name · " with nothing after the dot.
+        // O(n) lookup off in-memory maps, so the cost is dominated
+        // by the shuffle itself.
+        val titleNamesById: Map<Long, String> =
+            net.stewart.mediamanager.entity.Title.findAll()
+                .mapNotNull { t -> t.id?.let { id -> id to t.name } }
+                .toMap()
+        val artistOrderByTitle: Map<Long, List<net.stewart.mediamanager.entity.TitleArtist>> =
+            net.stewart.mediamanager.entity.TitleArtist.findAll()
+                .sortedBy { it.artist_order }
+                .groupBy { it.title_id }
+        val artistNamesById: Map<Long, String> =
+            net.stewart.mediamanager.entity.Artist.findAll()
+                .mapNotNull { a -> a.id?.let { id -> id to a.name } }
+                .toMap()
+
         return libraryShuffleResponse {
-            this.tracks.addAll(tracks.map { it.toProto() })
+            this.tracks.addAll(tracks.map { track ->
+                val albumName = titleNamesById[track.title_id]
+                val albumArtistName = artistOrderByTitle[track.title_id]
+                    ?.firstOrNull()
+                    ?.let { artistNamesById[it.artist_id] }
+                track.toProto(
+                    titleName = albumName,
+                    titleArtistName = albumArtistName)
+            })
         }
     }
 

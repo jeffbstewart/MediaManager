@@ -26,7 +26,13 @@ struct MiniPlayerBar: View {
                     Text(track.title)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
-                    Text(track.artistName)
+                    // Subtitle joins artist + album when both are
+                    // known; collapses to whichever is populated when
+                    // one is blank. Library-shuffle tracks carry both
+                    // (server populates them); album-detail-played
+                    // tracks carry the album name + the credit
+                    // AlbumDetailView captured at queue time.
+                    Text(subtitle(for: track))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -94,5 +100,12 @@ struct MiniPlayerBar: View {
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+
+    /// "Artist · Album" / "Artist" / "Album" depending on what's
+    /// populated. Avoids leaving a stranded "·" or an empty subtitle.
+    private func subtitle(for track: QueuedTrack) -> String {
+        let parts = [track.artistName, track.albumName].filter { !$0.isEmpty }
+        return parts.joined(separator: " · ")
     }
 }

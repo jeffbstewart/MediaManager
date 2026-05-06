@@ -843,6 +843,14 @@ message Track {
   // omitted on Track lists that ship alongside the Album / Title
   // they belong to, where the parent name is already addressable.
   optional string title_name = 14;
+  // Parent album's primary-artist credit. Same surfacing rule as
+  // title_name — populated when the track is standalone (library
+  // shuffle, tag-detail, smart playlists), omitted when the track
+  // ships inside an Album that already carries its artists list.
+  // The mini-player and Now Playing surfaces use this when a
+  // track has no per-track credit (track_artist_names empty),
+  // which is the common case for non-compilation albums.
+  optional string title_artist_name = 15;
 }
 
 message TrackArtistRef {

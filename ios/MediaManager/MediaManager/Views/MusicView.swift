@@ -259,18 +259,18 @@ struct MusicView: View {
         }
     }
 
-    /// Library-shuffle tracks come back without their parent album's
-    /// name pre-joined; we look that up via the existing artist/album
-    /// metadata that the AudioPlayerManager artwork path needs anyway.
-    /// Ok to leave albumName/artistName blank when unknown — the
-    /// mini-player handles missing fields gracefully.
+    /// Library-shuffle tracks carry their parent album's name and
+    /// lead-artist credit on the wire (server populates `title_name`
+    /// + `title_artist_name` for the standalone-track case). Pick
+    /// per-track credit when the album has multiple artists
+    /// (compilations); fall back to the album credit otherwise.
     private func makeQueuedTrack(_ t: ApiTrack) -> QueuedTrack {
         QueuedTrack(
             id: t.id,
             titleId: t.titleId,
             title: t.name,
-            albumName: "",
-            artistName: t.trackArtistNames.first ?? "",
+            albumName: t.albumName ?? "",
+            artistName: t.trackArtistNames.first ?? t.albumArtistName ?? "",
             trackNumber: t.trackNumber,
             discNumber: t.discNumber,
             durationSeconds: t.durationSeconds)

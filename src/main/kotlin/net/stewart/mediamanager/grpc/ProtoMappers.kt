@@ -708,7 +708,11 @@ fun AuthorEntity.toListItem(
     hidden = this@toListItem.hidden
 }
 
-fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = track {
+fun TrackEntity.toProto(
+    trackArtistNames: List<String> = emptyList(),
+    titleName: String? = null,
+    titleArtistName: String? = null,
+): Track = track {
     id = this@toProto.id!!
     titleId = this@toProto.title_id
     trackNumber = this@toProto.track_number
@@ -720,6 +724,8 @@ fun TrackEntity.toProto(trackArtistNames: List<String> = emptyList()): Track = t
     if (trackArtistNames.isNotEmpty()) this.trackArtistNames.addAll(trackArtistNames)
     this@toProto.bpm?.let { bpm = it }
     this@toProto.time_signature?.takeIf { it.isNotBlank() }?.let { timeSignature = it }
+    titleName?.takeIf { it.isNotBlank() }?.let { this.titleName = it }
+    titleArtistName?.takeIf { it.isNotBlank() }?.let { this.titleArtistName = it }
 }
 
 fun ListeningProgressEntity.toProto(): ListeningProgress = listeningProgress {

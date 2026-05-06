@@ -1390,6 +1390,20 @@ struct ApiTrack: Identifiable, Sendable {
     /// to render "feat. X" or compilation per-track artists in the
     /// tracklist row.
     var trackArtistNames: [String] { proto.trackArtistNames }
+    /// Parent album's name. Populated when the track is surfaced
+    /// standalone (library shuffle, smart playlists, tag-detail);
+    /// empty when the track ships inside an Album that already
+    /// carries its title.
+    var albumName: String? {
+        proto.hasTitleName ? proto.titleName : nil
+    }
+    /// Parent album's primary-artist credit. Populated alongside
+    /// `albumName` for standalone surfaces. Used by the mini-player
+    /// + Now Playing when `trackArtistNames` is empty (the common
+    /// non-compilation case).
+    var albumArtistName: String? {
+        proto.hasTitleArtistName ? proto.titleArtistName : nil
+    }
 }
 
 /// One row in the Music landing page's smart-playlist carousel.
