@@ -51,6 +51,16 @@ actor APIClient {
         return (url, ["Authorization": "Bearer \(token)"])
     }
 
+    /// Audio counterpart to [streamURL]. The server's
+    /// `AudioStreamHttpService` serves the file at `/audio/{trackId}`
+    /// with HTTP Range support — perfect for AVQueuePlayer.
+    func audioURL(for trackId: Int64) async -> (URL, [String: String])? {
+        guard let baseURL else { return nil }
+        let url = baseURL.appendingPathComponent("audio/\(trackId)")
+        guard let token = accessToken else { return nil }
+        return (url, ["Authorization": "Bearer \(token)"])
+    }
+
     /// Hit a path with JWT auth and wait for 200 (e.g. HLS relay warmup).
     func warmUpStream(_ path: String) async throws {
         guard let baseURL else { throw APIClientError.noServerURL }

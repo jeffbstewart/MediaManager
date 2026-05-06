@@ -347,6 +347,14 @@ struct ContentView: View {
                 episodeNumber: route.episodeNumber
             )
         }
+        // Mini-player pinned above the safe-area inset whenever audio
+        // is playing. `safeAreaInset` shrinks the underlying content
+        // by the bar's height so nothing's hidden behind it. Phase 1
+        // tap-to-expand is a stub; Phase 3 wires it to the
+        // full-screen Now Playing view.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MiniPlayerBar()
+        }
     }
 }
 

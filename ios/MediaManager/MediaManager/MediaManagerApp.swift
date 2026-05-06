@@ -24,6 +24,12 @@ struct MediaManagerApp: App {
     /// SwiftUI's @Observable environment), the flusher is the
     /// observable wrapper that views interact with for `flushNow()`.
     @State private var progressFlusher: ProgressFlusher
+    /// Single source of truth for audio playback. Drives the in-app
+    /// mini-player + future full-screen Now Playing view, the system
+    /// Now Playing surfaces (lock screen, Control Center, AirPods,
+    /// CarPlay), and the future Watch remote. Created at app scope
+    /// so audio survives navigation across tabs.
+    @State private var audioPlayer: AudioPlayerManager
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
 
@@ -37,10 +43,12 @@ struct MediaManagerApp: App {
         let dm = DownloadManager()
         let bc = BookCacheManager()
         let pf = ProgressFlusher(queue: ReadingProgressQueue.shared, downloads: dm)
+        let ap = AudioPlayerManager()
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
         _bookCache = State(initialValue: bc)
         _progressFlusher = State(initialValue: pf)
+        _audioPlayer = State(initialValue: ap)
         _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
         _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
     }
@@ -64,6 +72,7 @@ struct MediaManagerApp: App {
                 .environment(downloadManager)
                 .environment(bookCache)
                 .environment(progressFlusher)
+                .environment(audioPlayer)
                 .environment(dataModel)
                 .environment(imageProvider)
             } else {
@@ -72,12 +81,14 @@ struct MediaManagerApp: App {
                     .environment(downloadManager)
                     .environment(bookCache)
                     .environment(progressFlusher)
+                    .environment(audioPlayer)
                     .environment(dataModel)
                     .environment(imageProvider)
                     .onAppear {
                         downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
                         bookCache.configure(grpcClient: authManager.grpcClient)
                         progressFlusher.configure(grpcClient: authManager.grpcClient)
+                        audioPlayer.configure(apiClient: authManager.apiClient, imageProvider: imageProvider)
                     }
             }
         }
