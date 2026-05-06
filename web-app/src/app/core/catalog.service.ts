@@ -2725,7 +2725,11 @@ function adaptProtoAlbumWish(w: import('../proto-gen/wishlist_pb').AlbumWishItem
     title: w.title,
     primary_artist: w.primaryArtist ?? null,
     year: w.year ?? null,
-    cover_url: `/proxy/caa/release-group/${w.releaseGroupId}/large`,
+    // The CAA proxy route only accepts the size names defined by
+    // ImageProxyHttpService.CAA_SIZES (front-250 / -500 / -1200 /
+    // front). `large` returns 400 — every other adapter in this
+    // file uses `front-250`, this one was the outlier.
+    cover_url: `/proxy/caa/release-group/${w.releaseGroupId}/front-250`,
     is_compilation: w.isCompilation,
   };
 }
