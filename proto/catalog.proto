@@ -19,6 +19,7 @@ service CatalogService {
   rpc GetFeatures(Empty) returns (Features);
   rpc DismissContinueWatching(TitleIdRequest) returns (Empty);
   rpc DismissMissingSeason(DismissMissingSeasonRequest) returns (Empty);
+  rpc DismissHomeCarouselItem(DismissHomeCarouselItemRequest) returns (Empty);
 
   // --- Title Browsing ---
   rpc ListTitles(ListTitlesRequest) returns (TitlePageResponse);
@@ -134,6 +135,22 @@ message SetFlagRequest {
 message DismissMissingSeasonRequest {
   int64 title_id = 1;
   optional int32 season_number = 2; // omit to dismiss all seasons
+}
+
+// Which home-feed carousel a `DismissHomeCarouselItem` request
+// targets. Mirrors the H2 home_carousel_dismissal.carousel enum
+// exactly. Unknown / unrecognised values reject server-side; the
+// table's CHECK won't accept anything outside this list.
+enum HomeCarousel {
+  HOME_CAROUSEL_UNKNOWN = 0;
+  HOME_CAROUSEL_RECENTLY_ADDED_ALBUMS = 1;
+  HOME_CAROUSEL_RECENTLY_ADDED_BOOKS = 2;
+  HOME_CAROUSEL_RECENTLY_ADDED_MOVIES = 3;
+}
+
+message DismissHomeCarouselItemRequest {
+  int64 title_id = 1;
+  HomeCarousel carousel = 2;
 }
 
 // --- Responses ---

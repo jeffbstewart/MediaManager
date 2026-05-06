@@ -122,6 +122,12 @@ actor GrpcClient {
         get throws { MMObservabilityService.Client(wrapping: try requireClient()) }
     }
 
+    var playlistService: MMPlaylistService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMPlaylistService.Client(wrapping: try requireClient()) }
+    }
+    var radioService: MMRadioService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMRadioService.Client(wrapping: try requireClient()) }
+    }
     var artistService: MMArtistService.Client<HTTP2ClientTransport.Posix> {
         get throws { MMArtistService.Client(wrapping: try requireClient()) }
     }
@@ -296,6 +302,17 @@ actor GrpcClient {
         var request = MMTitleIdRequest()
         request.titleID = titleId
         _ = try await catalogService.dismissContinueWatching(request, metadata: authMetadata())
+    }
+
+    /// Dismisses a single title from a home-feed carousel for the
+    /// current user. Used by the iOS Music landing page's
+    /// per-card dismiss-X on Recently Added Albums; same RPC will
+    /// serve the future Books / Movies dismissals when those land.
+    func dismissHomeCarouselItem(titleId: Int64, carousel: MMHomeCarousel) async throws {
+        var request = MMDismissHomeCarouselItemRequest()
+        request.titleID = titleId
+        request.carousel = carousel
+        _ = try await catalogService.dismissHomeCarouselItem(request, metadata: authMetadata())
     }
 
     func dismissMissingSeason(titleId: Int64, seasonNumber: Int32?) async throws {
@@ -638,6 +655,30 @@ actor GrpcClient {
         var request = MMArtistIdRequest()
         request.artistID = id
         return try await artistService.getArtistDetail(request, metadata: authMetadata())
+    }
+
+    /// Random shuffle of every playable track in the user's library.
+    /// Server-side cap defaults to 200; pass a smaller `limit` to
+    /// keep the play queue lighter for the iOS UI.
+    func libraryShuffle(limit: Int32 = 200) async throws -> MMLibraryShuffleResponse {
+        var request = MMLibraryShuffleRequest()
+        request.limit = limit
+        return try await playlistService.libraryShuffle(request, metadata: authMetadata())
+    }
+
+    /// Reads server-defined smart playlists ("Recently Added",
+    /// "Most Played", etc.). Read-only — these are virtual, no
+    /// CRUD against them. Tap-through fetches the tracklist via
+    /// [getSmartPlaylist].
+    func listSmartPlaylists() async throws -> MMListSmartPlaylistsResponse {
+        return try await playlistService.listSmartPlaylists(
+            MMListSmartPlaylistsRequest(), metadata: authMetadata())
+    }
+
+    func getSmartPlaylist(key: String) async throws -> MMSmartPlaylistDetail {
+        var request = MMGetSmartPlaylistRequest()
+        request.key = key
+        return try await playlistService.getSmartPlaylist(request, metadata: authMetadata())
     }
 
     // MARK: - Author / Book RPCs

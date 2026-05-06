@@ -311,6 +311,13 @@ struct ApiHomeFeed: Sendable {
     var resumeReading: [ApiResumeReading] {
         proto.resumeReading.map { ApiResumeReading(proto: $0) }
     }
+    /// Newest-first audio albums. Powers the Music landing page's
+    /// "Recently Added" carousel. Server filters out per-user
+    /// dismissals so the row goes empty (and the section hides) when
+    /// the user has waved off everything.
+    var recentlyAddedAlbums: [ApiTitle] {
+        proto.recentlyAddedAlbums.map { ApiTitle(proto: $0) }
+    }
 }
 
 /// One row in the home page's "Continue Reading" carousel. Card art
@@ -1383,6 +1390,58 @@ struct ApiTrack: Identifiable, Sendable {
     /// to render "feat. X" or compilation per-track artists in the
     /// tracklist row.
     var trackArtistNames: [String] { proto.trackArtistNames }
+}
+
+/// One row in the Music landing page's smart-playlist carousel.
+/// Server-defined and read-only; the `key` is the stable handle
+/// (`recently-added`, `most-played`, etc.) used by `smartPlaylist`
+/// to fetch the tracklist.
+struct ApiSmartPlaylistSummary: Identifiable, Sendable {
+    let proto: MMSmartPlaylistSummary
+
+    var id: String { proto.key }
+    var key: String { proto.key }
+    var name: String { proto.name }
+    var description: String { proto.description_p }
+    var trackCount: Int { Int(proto.trackCount) }
+    /// Album titleId the server picked as a representative cover.
+    /// Square 1:1 like all album art elsewhere in the audio module.
+    var heroTitleId: TitleID? {
+        proto.hasHeroTitleID ? TitleID(proto: proto.heroTitleID) : nil
+    }
+}
+
+/// Full tracklist for a smart playlist. Used by the detail page.
+struct ApiSmartPlaylistDetail: Sendable {
+    let proto: MMSmartPlaylistDetail
+
+    var summary: ApiSmartPlaylistSummary { ApiSmartPlaylistSummary(proto: proto.summary) }
+    var tracks: [ApiPlaylistTrackEntry] { proto.tracks.map { ApiPlaylistTrackEntry(proto: $0) } }
+    var totalDurationSeconds: Int { Int(proto.totalDurationSeconds) }
+}
+
+/// One playlist row — a track with its position in the playlist.
+/// The proto carries the parent album's titleId + name as
+/// `title_id` / `title_name`; artist credit comes off the embedded
+/// `Track.track_artist_names` (the playlist row itself doesn't
+/// duplicate album-artist).
+struct ApiPlaylistTrackEntry: Identifiable, Sendable {
+    let proto: MMPlaylistTrackEntry
+
+    /// `playlist_track_id` is the stable handle for remove / reorder
+    /// (track_id can repeat in the same playlist). Uses it as the
+    /// SwiftUI list identity.
+    var id: Int64 { proto.playlistTrackID }
+    var position: Int { Int(proto.position) }
+    var track: ApiTrack { ApiTrack(proto: proto.track) }
+    /// Parent album's titleId — for posterThumbnail lookup.
+    var albumTitleId: Int64 { proto.titleID }
+    /// Album name (the proto's `title_name` for the parent album).
+    var albumName: String { proto.titleName }
+    /// First per-track artist credit, when populated. Empty when
+    /// the embedded Track has no per-track artists (use the album
+    /// artist from elsewhere on the page in that case).
+    var primaryArtistName: String { track.trackArtistNames.first ?? "" }
 }
 
 /// Membership row — either members of a group, or groups a person is

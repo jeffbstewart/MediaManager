@@ -185,6 +185,34 @@ final class OnlineDataModel: DataModel {
         return ApiArtistDetail(proto: response)
     }
 
+    func libraryShuffle(limit: Int) async throws -> [ApiTrack] {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.libraryShuffle(limit: Int32(limit))
+        return response.tracks.map { ApiTrack(proto: $0) }
+    }
+
+    func smartPlaylists() async throws -> [ApiSmartPlaylistSummary] {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.listSmartPlaylists()
+        return response.playlists.map { ApiSmartPlaylistSummary(proto: $0) }
+    }
+
+    func smartPlaylist(key: String) async throws -> ApiSmartPlaylistDetail {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.getSmartPlaylist(key: key)
+        return ApiSmartPlaylistDetail(proto: response)
+    }
+
+    func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws {
+        if !isOnline { throw DataModelError.offline }
+        let proto: MMHomeCarousel = switch carousel {
+        case .recentlyAddedAlbums: .recentlyAddedAlbums
+        case .recentlyAddedBooks: .recentlyAddedBooks
+        case .recentlyAddedMovies: .recentlyAddedMovies
+        }
+        try await grpcClient.dismissHomeCarouselItem(titleId: titleId.protoValue, carousel: proto)
+    }
+
     // MARK: - PlaybackDataModel
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {

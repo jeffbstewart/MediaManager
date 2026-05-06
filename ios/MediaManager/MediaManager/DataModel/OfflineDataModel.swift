@@ -162,6 +162,18 @@ final class OfflineDataModel: DataModel {
     func artistDetail(id: ArtistID) async throws -> ApiArtistDetail {
         throw DataModelError.offline
     }
+    func libraryShuffle(limit: Int) async throws -> [ApiTrack] {
+        throw DataModelError.offline
+    }
+    func smartPlaylists() async throws -> [ApiSmartPlaylistSummary] {
+        throw DataModelError.offline
+    }
+    func smartPlaylist(key: String) async throws -> ApiSmartPlaylistDetail {
+        throw DataModelError.offline
+    }
+    func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws {
+        throw DataModelError.offline
+    }
 
     // MARK: - PlaybackDataModel (offline: local files + queued progress)
 

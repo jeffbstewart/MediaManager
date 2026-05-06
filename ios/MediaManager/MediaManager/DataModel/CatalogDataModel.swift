@@ -28,6 +28,24 @@ import Foundation
     // Audio
     func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse
     func artistDetail(id: ArtistID) async throws -> ApiArtistDetail
+    /// Random shuffle of the user's library; returns up to `limit`
+    /// playable tracks for queueing into AudioPlayerManager.
+    func libraryShuffle(limit: Int) async throws -> [ApiTrack]
+    /// Server-defined virtual playlists for the Music landing page.
+    func smartPlaylists() async throws -> [ApiSmartPlaylistSummary]
+    func smartPlaylist(key: String) async throws -> ApiSmartPlaylistDetail
+    /// Per-user dismissal of a single title from a home-feed
+    /// carousel. Used by the iOS Music landing page's
+    /// per-card dismiss-X on Recently Added Albums.
+    func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws
+}
+
+/// Which home-feed carousel a `dismissHomeCarouselItem` call
+/// targets. Mirrors the `HomeCarousel` proto enum.
+enum HomeCarousel: Sendable {
+    case recentlyAddedAlbums
+    case recentlyAddedBooks
+    case recentlyAddedMovies
 }
 
 /// Sort modes accepted by `ListArtists`. Values mirror the proto's

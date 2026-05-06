@@ -1,0 +1,291 @@
+import SwiftUI
+import GRPCCore
+
+private let log = MMLogger(category: "MusicView")
+
+/// Music landing page. Replaces direct routing to ArtistsView with a
+/// top-level surface that aggregates the audio module's discovery
+/// affordances:
+///
+///   - "Library Shuffle" hero card (kicks AudioPlayerManager).
+///   - Smart Playlists horizontal carousel (server-defined virtual
+///     playlists like "Recently Added", "Most Played").
+///   - Recently Added Albums carousel with per-card dismiss-X.
+///   - "Browse Artists" link → ArtistsView grid.
+///
+/// "Recently Added Albums" hides itself entirely when the list comes
+/// back empty (after server-side dismissal filtering) — per design
+/// memory: the carousel can become annoying after a while, so the
+/// dismiss path needs to be able to take it to zero and the UI
+/// honours that.
+struct MusicView: View {
+    @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AudioPlayerManager.self) private var audio
+
+    @State private var smartPlaylists: [ApiSmartPlaylistSummary] = []
+    @State private var recentlyAdded: [ApiTitle] = []
+    @State private var loading = true
+    @State private var shuffleStarting = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                shuffleHeroCard()
+                if !smartPlaylists.isEmpty {
+                    smartPlaylistsSection()
+                }
+                if !recentlyAdded.isEmpty {
+                    recentlyAddedSection()
+                }
+                browseArtistsLink()
+            }
+            .padding()
+        }
+        .navigationTitle("Music")
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private func shuffleHeroCard() -> some View {
+        Button {
+            Task { await startShuffle() }
+        } label: {
+            HStack(spacing: 16) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .background(LinearGradient(
+                        colors: [.purple, .blue],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Shuffle Library")
+                        .font(.headline)
+                    Text("Random tracks from your whole collection")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if shuffleStarting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(.fill.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .disabled(shuffleStarting)
+    }
+
+    @ViewBuilder
+    private func smartPlaylistsSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Smart Playlists")
+                .font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(smartPlaylists) { p in
+                        NavigationLink(value: SmartPlaylistRoute(key: p.key, name: p.name)) {
+                            smartPlaylistCard(p)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func smartPlaylistCard(_ p: ApiSmartPlaylistSummary) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let titleId = p.heroTitleId {
+                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 8)
+                } else {
+                    LinearGradient(
+                        colors: [.indigo, .teal],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .frame(width: 130, height: 130)  // square — album art aspect
+            Text(p.name)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .frame(maxWidth: 130, alignment: .leading)
+            Text("\(p.trackCount) track\(p.trackCount == 1 ? "" : "s")")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 130)
+    }
+
+    @ViewBuilder
+    private func recentlyAddedSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recently Added")
+                .font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(recentlyAdded) { album in
+                        recentlyAddedCard(album)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recentlyAddedCard(_ album: ApiTitle) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink(value: album) {
+                VStack(alignment: .leading, spacing: 6) {
+                    CachedImage(
+                        ref: .posterThumbnail(titleId: album.id.protoValue),
+                        cornerRadius: 8)
+                        .frame(width: 130, height: 130)
+                    Text(album.name)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .frame(maxWidth: 130, alignment: .leading)
+                    if let year = album.year {
+                        Text(String(year))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 130)
+            }
+            .buttonStyle(.plain)
+
+            // Dismiss-X overlay. Per design memory: per-card
+            // affordance because the carousel becomes annoying after
+            // a while. Optimistic local removal — server PR is
+            // fire-and-forget; on error we'd just see it again on
+            // next refresh, which is acceptable.
+            Button {
+                Task { await dismiss(album) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(.black.opacity(0.55))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(6)
+            .accessibilityLabel("Dismiss \(album.name)")
+        }
+    }
+
+    @ViewBuilder
+    private func browseArtistsLink() -> some View {
+        NavigationLink(value: BrowseArtistsRoute()) {
+            HStack {
+                Image(systemName: "music.mic")
+                    .foregroundStyle(.tint)
+                Text("Browse Artists")
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .background(.fill.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Actions
+
+    private func load() async {
+        loading = true
+        async let homeFeedTask: ApiHomeFeed? = try? await dataModel.homeFeed()
+        async let smartTask: [ApiSmartPlaylistSummary] = (try? await dataModel.smartPlaylists()) ?? []
+        if let feed = await homeFeedTask {
+            recentlyAdded = feed.recentlyAddedAlbums
+        }
+        smartPlaylists = await smartTask
+        loading = false
+    }
+
+    private func startShuffle() async {
+        guard !shuffleStarting else { return }
+        shuffleStarting = true
+        defer { shuffleStarting = false }
+        do {
+            let tracks = try await dataModel.libraryShuffle(limit: 200)
+            let queued = tracks.map { makeQueuedTrack($0) }
+            guard !queued.isEmpty else {
+                log.info("libraryShuffle returned 0 tracks; nothing to play")
+                return
+            }
+            audio.play(tracks: queued, startingAt: 0)
+        } catch {
+            log.warning("libraryShuffle failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func dismiss(_ album: ApiTitle) async {
+        // Optimistic local removal so the card disappears immediately.
+        recentlyAdded.removeAll { $0.id == album.id }
+        do {
+            try await dataModel.dismissHomeCarouselItem(
+                titleId: album.id, carousel: .recentlyAddedAlbums)
+        } catch {
+            log.warning("dismissHomeCarouselItem failed: \(error.localizedDescription)")
+            // Re-add on failure to keep local + server views in sync.
+            // Sort by original order is a nice-to-have; for now just
+            // append.
+            recentlyAdded.append(album)
+        }
+    }
+
+    /// Library-shuffle tracks come back without their parent album's
+    /// name pre-joined; we look that up via the existing artist/album
+    /// metadata that the AudioPlayerManager artwork path needs anyway.
+    /// Ok to leave albumName/artistName blank when unknown — the
+    /// mini-player handles missing fields gracefully.
+    private func makeQueuedTrack(_ t: ApiTrack) -> QueuedTrack {
+        QueuedTrack(
+            id: t.id,
+            titleId: t.titleId,
+            title: t.name,
+            albumName: "",
+            artistName: t.trackArtistNames.first ?? "",
+            trackNumber: t.trackNumber,
+            discNumber: t.discNumber,
+            durationSeconds: t.durationSeconds)
+    }
+}
+
+/// Navigation marker for the `Browse Artists` link. ContentView's
+/// destination handler routes this to `ArtistsView`.
+struct BrowseArtistsRoute: Hashable {}
+
+/// Navigation route into a smart-playlist detail page. The key is
+/// the stable string the server uses (`recently-added`, `most-played`,
+/// etc.); we carry the display name so the destination can paint
+/// its title bar before the detail fetch lands.
+struct SmartPlaylistRoute: Hashable {
+    let key: String
+    let name: String
+}

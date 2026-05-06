@@ -5,6 +5,8 @@ import io.grpc.Status
 import io.grpc.StatusException
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.FamilyMember
+import net.stewart.mediamanager.entity.HomeCarouselDismissal
+import net.stewart.mediamanager.entity.HomeCarouselType
 import net.stewart.mediamanager.entity.MediaItem as MediaItemEntity
 import net.stewart.mediamanager.entity.MediaItemTitle
 import net.stewart.mediamanager.entity.PosterSize
@@ -431,6 +433,16 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             .sortedBy { it.artist_order }
             .groupBy { it.title_id }
         val artists = net.stewart.mediamanager.entity.Artist.findAll().associateBy { it.id }
+        // Per-user dismissals — exclude any album the user has
+        // explicitly waved off this carousel (per the iOS Music
+        // landing page's per-card dismiss affordance).
+        val dismissedTitleIds: Set<Long> = HomeCarouselDismissal.findAll()
+            .filter {
+                it.user_id == user.id &&
+                    it.carousel == HomeCarouselType.RECENTLY_ADDED_ALBUMS.name
+            }
+            .map { it.title_id }
+            .toSet()
 
         val seen = mutableSetOf<Long>()
         val rows = mutableListOf<Title>()
@@ -443,6 +455,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             val titleIds = links[item.id]?.map { it.title_id }.orEmpty()
             for (titleId in titleIds) {
                 if (titleId in seen) continue
+                if (titleId in dismissedTitleIds) continue
                 val title = allTitles[titleId] ?: continue
                 if (title.media_type != MediaTypeEnum.ALBUM.name) continue
                 if (title.hidden || !user.canSeeRating(title.content_rating)) continue
@@ -557,6 +570,31 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         ProgressEntity.findAll()
             .filter { it.user_id == user.id && it.transcode_id in transcodeIds }
             .forEach { it.delete() }
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun dismissHomeCarouselItem(request: DismissHomeCarouselItemRequest): Empty {
+        val user = currentUser()
+        val carouselType = when (request.carousel) {
+            HomeCarousel.HOME_CAROUSEL_RECENTLY_ADDED_ALBUMS -> HomeCarouselType.RECENTLY_ADDED_ALBUMS
+            HomeCarousel.HOME_CAROUSEL_RECENTLY_ADDED_BOOKS -> HomeCarouselType.RECENTLY_ADDED_BOOKS
+            HomeCarousel.HOME_CAROUSEL_RECENTLY_ADDED_MOVIES -> HomeCarouselType.RECENTLY_ADDED_MOVIES
+            HomeCarousel.HOME_CAROUSEL_UNKNOWN, HomeCarousel.UNRECOGNIZED ->
+                throw StatusException(Status.INVALID_ARGUMENT.withDescription("carousel must be set"))
+        }
+        // Idempotent — repeated dismissals of the same item do nothing.
+        val existing = HomeCarouselDismissal.findAll().firstOrNull {
+            it.user_id == user.id && it.title_id == request.titleId && it.carousel == carouselType.name
+        }
+        if (existing == null) {
+            val row = HomeCarouselDismissal(
+                user_id = user.id!!,
+                title_id = request.titleId,
+                carousel = carouselType.name,
+                dismissed_at = LocalDateTime.now(),
+            )
+            row.save()
+        }
         return Empty.getDefaultInstance()
     }
 

@@ -220,7 +220,7 @@ struct ContentView: View {
                     case .books:
                         AuthorsView()
                     case .music:
-                        ArtistsView()
+                        MusicView()
                     case .collections:
                         CollectionsListView()
                     case .tags:
@@ -302,6 +302,12 @@ struct ContentView: View {
                 }
                 .navigationDestination(for: ArtistRoute.self) { route in
                     ArtistDetailView(route: route)
+                }
+                .navigationDestination(for: BrowseArtistsRoute.self) { _ in
+                    ArtistsView()
+                }
+                .navigationDestination(for: SmartPlaylistRoute.self) { route in
+                    SmartPlaylistDetailView(route: route)
                 }
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
