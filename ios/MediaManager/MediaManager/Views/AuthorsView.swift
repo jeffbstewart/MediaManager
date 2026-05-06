@@ -1,4 +1,5 @@
 import SwiftUI
+import GRPCCore
 
 private let log = MMLogger(category: "AuthorsView")
 
@@ -124,7 +125,7 @@ struct AuthorsView: View {
         await loadPage()
     }
 
-    private func loadPage(retriesRemaining: Int = 1) async {
+    private func loadPage() async {
         // First-page fetches go to `.loading`; pagination from a
         // populated grid keeps `.loaded` so we don't dump the user
         // back to a spinner mid-scroll.
@@ -139,25 +140,31 @@ struct AuthorsView: View {
             totalPages = response.totalPages
             phase = authors.isEmpty ? .empty : .loaded
         } catch {
-            // First-call gRPC transport setup occasionally races with
-            // SwiftUI's task firing — a fresh post-auth navigation
-            // sometimes hits an UNAVAILABLE transport error before the
-            // connection's fully warm, and the *second* attempt
-            // succeeds within a fraction of a second. Suppress the
-            // user-visible failure for one quick retry; only commit
-            // to `.failed` if a second attempt also flunks. Pagination
-            // failures on later pages keep the populated grid visible.
-            if retriesRemaining > 0 && authors.isEmpty {
-                log.info("loadPage transient failure, retrying once: \(error.localizedDescription)")
-                try? await Task.sleep(for: .milliseconds(400))
-                await loadPage(retriesRemaining: retriesRemaining - 1)
-                return
-            }
+            // SwiftUI re-mounts the view around split-view column
+            // transitions and cancels in-flight `.task`s. The
+            // resulting CANCELLED gRPC error isn't a real failure —
+            // the successor mount fires its own task immediately and
+            // lands `.loaded`. Painting `.failed` here would just
+            // flash a fake error before the real result arrives, so
+            // keep the current phase and let the next task take over.
+            if Task.isCancelled || isCancellationError(error) { return }
             log.warning("loadPage failed: \(error.localizedDescription)")
             if authors.isEmpty {
                 phase = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// gRPC-Swift surfaces task-cancellation as `RPCError(code: .cancelled)`,
+    /// not Swift's `CancellationError`. Match either shape so we don't
+    /// paint a fake failure when the view is just being torn down.
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let rpcError = error as? RPCError, rpcError.code == .cancelled { return true }
+        // Some error wrappers stringify the gRPC code into the
+        // localizedDescription — match that as a last resort.
+        let s = error.localizedDescription.lowercased()
+        return s.contains("cancelled") || s.contains("canceled")
     }
 
     private func loadMore() async {
