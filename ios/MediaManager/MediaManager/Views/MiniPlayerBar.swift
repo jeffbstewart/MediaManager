@@ -37,6 +37,19 @@ struct MiniPlayerBar: View {
                 .onTapGesture { onTap() }
 
                 Button {
+                    audio.previous()
+                } label: {
+                    Image(systemName: "backward.fill")
+                        .font(.body)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Previous track")
+                // Always enabled — within the first 3 seconds of a
+                // track Previous restarts; from track 1 it's also a
+                // restart. AudioPlayerManager.previous() handles both.
+
+                Button {
                     audio.togglePlayPause()
                 } label: {
                     Image(systemName: audio.isPlaying ? "pause.fill" : "play.fill")

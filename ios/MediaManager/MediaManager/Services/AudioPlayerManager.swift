@@ -302,7 +302,14 @@ final class AudioPlayerManager {
         // don't want to clobber the new track's artwork with the old
         // one's bytes.
         guard currentTrack?.id == track.id else { return }
-        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        // The artwork request handler is invoked by MediaPlayer on
+        // its own dispatch queue, NOT MainActor. Without `@Sendable`
+        // Swift 6 inherits MainActor isolation from the enclosing
+        // method and traps with `swift_task_checkIsolated` /
+        // `dispatch_assert_queue_fail` (SIGTRAP) the moment the
+        // system tries to extract the JPEG. UIImage is Sendable, so
+        // capturing it through a non-isolated closure is safe.
+        let artwork = MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         info[MPMediaItemPropertyArtwork] = artwork
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info

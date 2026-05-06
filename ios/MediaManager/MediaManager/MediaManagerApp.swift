@@ -33,7 +33,19 @@ struct MediaManagerApp: App {
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
 
+    /// MetricKit subscriber that ships iOS crash diagnostics from
+    /// previous launches into Binnacle. Held onto for the app
+    /// lifetime so the subscription stays live; doesn't need to be
+    /// observable / injected.
+    private let crashReporter: CrashReporter
+
     init() {
+        // Crash reporter first — registers MetricKit subscription
+        // and drains any persisted crash from a previous launch
+        // before any other init-time code can re-crash and steal
+        // the attribution.
+        crashReporter = CrashReporter()
+
         // Configure audio session for media playback — plays through speakers
         // even when the silent switch is on, and continues in the background.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
