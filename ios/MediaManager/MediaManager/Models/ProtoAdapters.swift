@@ -225,6 +225,10 @@ struct ApiTitle: Identifiable, Hashable, Sendable {
     /// navigation to `BookDetailView` instead of the movie-centric
     /// `TitleDetailView`.
     var isBook: Bool { proto.mediaType == .book }
+    /// Audio counterpart to isBook — routes ApiTitle navigation to
+    /// AlbumDetailView (which has tracks, square cover, play buttons)
+    /// instead of the movie-shaped TitleDetailView.
+    var isAlbum: Bool { proto.mediaType == .album }
     var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     var description: String? { proto.hasDescription_p ? proto.description_p : nil }
     var backdropUrl: String? { proto.hasBackdropURL ? proto.backdropURL : nil }
@@ -445,6 +449,12 @@ struct ApiTitleDetail: Sendable {
     /// for non-book titles.
     var book: ApiBookDetail? {
         proto.hasBook ? ApiBookDetail(proto: proto.book) : nil
+    }
+
+    /// Populated only when `isAlbum` — tracks, album artists, label,
+    /// MusicBrainz IDs, personnel. Returns nil for non-album titles.
+    var album: ApiAlbum? {
+        proto.hasAlbum ? ApiAlbum(proto: proto.album) : nil
     }
 
     /// Single primary author name from the embedded Title row. Books
@@ -1334,6 +1344,45 @@ struct ApiDiscographyEntry: Identifiable, Sendable {
     var isCompilation: Bool { proto.isCompilation }
     var secondaryTypes: [String] { proto.secondaryTypes }
     var alreadyWished: Bool { proto.alreadyWished }
+}
+
+/// Album shape attached to ApiTitleDetail.album when the title is an
+/// audio album. Holds the tracklist plus album-level metadata that
+/// doesn't fit on the bare Title.
+struct ApiAlbum: Sendable {
+    let proto: MMAlbum
+
+    var tracks: [ApiTrack] { proto.tracks.map { ApiTrack(proto: $0) } }
+    var albumArtists: [ApiArtist] { proto.albumArtists.map { ApiArtist(proto: $0) } }
+    var trackCount: Int? { proto.hasTrackCount ? Int(proto.trackCount) : nil }
+    var totalDurationSeconds: Double? {
+        proto.hasTotalDuration ? proto.totalDuration.seconds : nil
+    }
+    var label: String? { proto.hasLabel ? proto.label : nil }
+    var releaseGroupId: String? {
+        proto.hasMusicbrainzReleaseGroupID ? proto.musicbrainzReleaseGroupID : nil
+    }
+}
+
+/// One track within an album. Wraps the proto for cheap pass-through;
+/// the AudioPlayerManager builds its `QueuedTrack` from these +
+/// album context (titleId / albumName / artistName).
+struct ApiTrack: Identifiable, Sendable {
+    let proto: MMTrack
+
+    var id: Int64 { proto.id }
+    var titleId: Int64 { proto.titleID }
+    var trackNumber: Int32 { proto.trackNumber }
+    var discNumber: Int32 { proto.discNumber }
+    var name: String { proto.name }
+    var durationSeconds: Double? {
+        proto.hasDuration ? proto.duration.seconds : nil
+    }
+    var playable: Bool { proto.playable }
+    /// Per-track artists (when different from the album credit). Used
+    /// to render "feat. X" or compilation per-track artists in the
+    /// tracklist row.
+    var trackArtistNames: [String] { proto.trackArtistNames }
 }
 
 /// Membership row — either members of a group, or groups a person is

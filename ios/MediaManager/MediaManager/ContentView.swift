@@ -291,6 +291,8 @@ struct ContentView: View {
                     // search, author detail, and series detail.
                     if title.isBook {
                         BookDetailView(titleId: title.id)
+                    } else if title.isAlbum {
+                        AlbumDetailView(titleId: title.id)
                     } else {
                         TitleDetailView(titleId: title.id)
                     }
