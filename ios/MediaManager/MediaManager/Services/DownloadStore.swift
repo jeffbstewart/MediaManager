@@ -256,6 +256,8 @@ actor DownloadStore {
     // MARK: - Database Loading
 
     private static func loadDatabase(dbPath: URL, backupPath: URL, downloadsDir: URL) -> MMDownloadDatabase {
+        let fm = FileManager.default
+
         // Try primary
         if let data = try? Data(contentsOf: dbPath),
            let db = try? MMDownloadDatabase(serializedBytes: data) {
@@ -269,22 +271,39 @@ actor DownloadStore {
             return db
         }
 
-        // Both failed — wipe directory
-        if FileManager.default.fileExists(atPath: downloadsDir.path) {
+        // Distinguish first-launch (neither file ever written) from
+        // genuinely corrupt (at least one file present, neither
+        // parses). Without this guard we'd shout "corrupt" on every
+        // cold start.
+        let hadDbFile = fm.fileExists(atPath: dbPath.path)
+            || fm.fileExists(atPath: backupPath.path)
+
+        if hadDbFile, fm.fileExists(atPath: downloadsDir.path) {
             logger.error("Download database corrupt — wiping downloads directory")
-            let contents = (try? FileManager.default.contentsOfDirectory(at: downloadsDir, includingPropertiesForKeys: nil)) ?? []
+            let contents = (try? fm.contentsOfDirectory(at: downloadsDir, includingPropertiesForKeys: nil)) ?? []
             for url in contents {
-                try? FileManager.default.removeItem(at: url)
+                try? fm.removeItem(at: url)
             }
-            // Recreate posters dir
-            try? FileManager.default.createDirectory(
-                at: downloadsDir.appendingPathComponent("posters", isDirectory: true),
-                withIntermediateDirectories: true
-            )
         }
+
+        // Always (re)create posters dir + persist a fresh empty DB
+        // so the *next* launch's primary read succeeds. Without
+        // writing the file, every subsequent launch would re-enter
+        // the corrupt-recovery path and re-log the error.
+        try? fm.createDirectory(
+            at: downloadsDir.appendingPathComponent("posters", isDirectory: true),
+            withIntermediateDirectories: true
+        )
 
         var db = MMDownloadDatabase()
         db.nextSequence = 1
+        if let data = try? db.serializedData() {
+            do {
+                try data.write(to: dbPath, options: .atomic)
+            } catch {
+                logger.error("Failed to seed fresh download database: \(error.localizedDescription)")
+            }
+        }
         return db
     }
 }
