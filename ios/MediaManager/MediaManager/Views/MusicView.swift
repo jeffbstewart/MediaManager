@@ -23,14 +23,17 @@ struct MusicView: View {
     @Environment(AudioPlayerManager.self) private var audio
 
     @State private var smartPlaylists: [ApiSmartPlaylistSummary] = []
+    @State private var userPlaylists: [ApiPlaylistSummary] = []
     @State private var recentlyAdded: [ApiTitle] = []
     @State private var loading = true
     @State private var shuffleStarting = false
+    @State private var showCreate = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 shuffleHeroCard()
+                yourPlaylistsSection()
                 if !smartPlaylists.isEmpty {
                     smartPlaylistsSection()
                 }
@@ -42,6 +45,11 @@ struct MusicView: View {
             .padding()
         }
         .navigationTitle("Music")
+        .sheet(isPresented: $showCreate) {
+            CreatePlaylistSheet { name, description in
+                await createPlaylist(name: name, description: description)
+            }
+        }
         .task { await load() }
         .refreshable { await load() }
     }
@@ -88,6 +96,95 @@ struct MusicView: View {
         }
         .buttonStyle(.plain)
         .disabled(shuffleStarting)
+    }
+
+    @ViewBuilder
+    private func yourPlaylistsSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Your Playlists").font(.headline)
+                Spacer()
+                NavigationLink(value: AllPlaylistsRoute()) {
+                    Text("See All").font(.subheadline)
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    // "+" card always first so creating a playlist is
+                    // discoverable from the landing surface, not buried
+                    // behind a See All tap.
+                    Button {
+                        showCreate = true
+                    } label: {
+                        VStack(spacing: 8) {
+                            ZStack {
+                                LinearGradient(
+                                    colors: [.gray.opacity(0.4), .gray.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing)
+                                Image(systemName: "plus")
+                                    .font(.system(size: 36, weight: .light))
+                                    .foregroundStyle(.tint)
+                            }
+                            .frame(width: 130, height: 130)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            Text("New Playlist")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.tint)
+                                .frame(maxWidth: 130, alignment: .leading)
+                            Text(" ").font(.caption2)  // spacer to match other card heights
+                        }
+                        .frame(width: 130)
+                    }
+                    .buttonStyle(.plain)
+
+                    ForEach(userPlaylists) { p in
+                        NavigationLink(value: PlaylistRoute(id: p.id, name: p.name)) {
+                            userPlaylistCard(p)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func userPlaylistCard(_ p: ApiPlaylistSummary) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let titleId = p.heroTitleId {
+                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 8)
+                } else {
+                    LinearGradient(
+                        colors: [.purple, .pink],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .frame(width: 130, height: 130)  // square — playlist hero aspect
+            HStack(spacing: 4) {
+                Text(p.name)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                if p.isPrivate {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: 130, alignment: .leading)
+            if let desc = p.description, !desc.isEmpty {
+                Text(desc)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(" ").font(.caption2)
+            }
+        }
+        .frame(width: 130)
     }
 
     @ViewBuilder
@@ -220,11 +317,22 @@ struct MusicView: View {
         loading = true
         async let homeFeedTask: ApiHomeFeed? = try? await dataModel.homeFeed()
         async let smartTask: [ApiSmartPlaylistSummary] = (try? await dataModel.smartPlaylists()) ?? []
+        async let userTask: [ApiPlaylistSummary] = (try? await dataModel.playlists(scope: .mine)) ?? []
         if let feed = await homeFeedTask {
             recentlyAdded = feed.recentlyAddedAlbums
         }
         smartPlaylists = await smartTask
+        userPlaylists = await userTask
         loading = false
+    }
+
+    private func createPlaylist(name: String, description: String?) async {
+        do {
+            let created = try await dataModel.createPlaylist(name: name, description: description)
+            userPlaylists.insert(created, at: 0)
+        } catch {
+            log.warning("createPlaylist failed: \(error.localizedDescription)")
+        }
     }
 
     private func startShuffle() async {
@@ -280,6 +388,10 @@ struct MusicView: View {
 /// Navigation marker for the `Browse Artists` link. ContentView's
 /// destination handler routes this to `ArtistsView`.
 struct BrowseArtistsRoute: Hashable {}
+
+/// Navigation marker for the `See All` link on the Your Playlists
+/// section. Routes to the dedicated `PlaylistsView`.
+struct AllPlaylistsRoute: Hashable {}
 
 /// Navigation route into a smart-playlist detail page. The key is
 /// the stable string the server uses (`recently-added`, `most-played`,

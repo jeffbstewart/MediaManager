@@ -681,6 +681,77 @@ actor GrpcClient {
         return try await playlistService.getSmartPlaylist(request, metadata: authMetadata())
     }
 
+    // MARK: - User playlists
+
+    func listPlaylists(scope: MMPlaylistScope = .mine) async throws -> MMListPlaylistsResponse {
+        var request = MMListPlaylistsRequest()
+        request.scope = scope
+        return try await playlistService.listPlaylists(request, metadata: authMetadata())
+    }
+
+    func getPlaylist(id: Int64) async throws -> MMPlaylistDetail {
+        var request = MMGetPlaylistRequest()
+        request.id = id
+        return try await playlistService.getPlaylist(request, metadata: authMetadata())
+    }
+
+    func createPlaylist(name: String, description: String? = nil) async throws -> MMPlaylistSummary {
+        var request = MMCreatePlaylistRequest()
+        request.name = name
+        if let description, !description.isEmpty { request.description_p = description }
+        return try await playlistService.createPlaylist(request, metadata: authMetadata())
+    }
+
+    func renamePlaylist(id: Int64, name: String, description: String? = nil) async throws {
+        var request = MMRenamePlaylistRequest()
+        request.id = id
+        request.name = name
+        if let description { request.description_p = description }
+        _ = try await playlistService.renamePlaylist(request, metadata: authMetadata())
+    }
+
+    func deletePlaylist(id: Int64) async throws {
+        var request = MMDeletePlaylistRequest()
+        request.id = id
+        _ = try await playlistService.deletePlaylist(request, metadata: authMetadata())
+    }
+
+    func addTracksToPlaylist(id: Int64, trackIds: [Int64]) async throws -> MMAddTracksToPlaylistResponse {
+        var request = MMAddTracksToPlaylistRequest()
+        request.id = id
+        request.trackIds = trackIds
+        return try await playlistService.addTracksToPlaylist(request, metadata: authMetadata())
+    }
+
+    func removeTrackFromPlaylist(id: Int64, playlistTrackId: Int64) async throws {
+        var request = MMRemoveTrackFromPlaylistRequest()
+        request.id = id
+        request.playlistTrackID = playlistTrackId
+        _ = try await playlistService.removeTrackFromPlaylist(request, metadata: authMetadata())
+    }
+
+    func reorderPlaylist(id: Int64, playlistTrackIdsInOrder: [Int64]) async throws {
+        var request = MMReorderPlaylistRequest()
+        request.id = id
+        request.playlistTrackIdsInOrder = playlistTrackIdsInOrder
+        _ = try await playlistService.reorderPlaylist(request, metadata: authMetadata())
+    }
+
+    func setPlaylistHero(id: Int64, trackId: Int64?) async throws {
+        var request = MMSetPlaylistHeroRequest()
+        request.id = id
+        // Server's track_id is optional — omit to clear the hero.
+        if let trackId { request.trackID = trackId }
+        _ = try await playlistService.setPlaylistHero(request, metadata: authMetadata())
+    }
+
+    func setPlaylistPrivacy(id: Int64, isPrivate: Bool) async throws {
+        var request = MMSetPlaylistPrivacyRequest()
+        request.id = id
+        request.isPrivate = isPrivate
+        _ = try await playlistService.setPlaylistPrivacy(request, metadata: authMetadata())
+    }
+
     // MARK: - Author / Book RPCs
 
     func listAuthors(page: Int32, limit: Int32, sort: MMAuthorSort, query: String?, playableOnly: Bool = true, hiddenOnly: Bool = false) async throws -> MMAuthorListResponse {

@@ -17,6 +17,14 @@ struct AlbumDetailView: View {
     /// matches the video-player resume prompt the user explicitly
     /// asked for.
     @State private var resumePrompt: ResumePrompt? = nil
+    /// Context-menu "Add to Playlist…" target. nil = sheet closed.
+    @State private var addingToPlaylist: AddToPlaylistContext? = nil
+
+    private struct AddToPlaylistContext: Identifiable {
+        let id = UUID()
+        let trackId: Int64
+        let trackName: String
+    }
 
     private struct ResumePrompt: Identifiable {
         let id = UUID()
@@ -48,6 +56,9 @@ struct AlbumDetailView: View {
         .navigationTitle(detail?.name ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        .sheet(item: $addingToPlaylist) { ctx in
+            AddToPlaylistSheet(trackIds: [ctx.trackId], trackHeaderName: ctx.trackName)
+        }
         .confirmationDialog(
             "Resume playback?",
             isPresented: Binding(
@@ -204,6 +215,13 @@ struct AlbumDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(!track.playable)
+        .contextMenu {
+            Button {
+                addingToPlaylist = AddToPlaylistContext(trackId: track.id, trackName: track.name)
+            } label: {
+                Label("Add to Playlist…", systemImage: "plus.rectangle.on.folder")
+            }
+        }
     }
 
     // MARK: - Playback wiring

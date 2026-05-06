@@ -38,6 +38,25 @@ import Foundation
     /// carousel. Used by the iOS Music landing page's
     /// per-card dismiss-X on Recently Added Albums.
     func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws
+
+    // User playlists
+    func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary]
+    func playlist(id: Int64) async throws -> ApiPlaylistDetail
+    func createPlaylist(name: String, description: String?) async throws -> ApiPlaylistSummary
+    func renamePlaylist(id: Int64, name: String, description: String?) async throws
+    func deletePlaylist(id: Int64) async throws
+    func addTracksToPlaylist(id: Int64, trackIds: [Int64]) async throws
+    func removeTrackFromPlaylist(id: Int64, playlistTrackId: Int64) async throws
+    func reorderPlaylist(id: Int64, playlistTrackIdsInOrder: [Int64]) async throws
+    func setPlaylistHero(id: Int64, trackId: Int64?) async throws
+    func setPlaylistPrivacy(id: Int64, isPrivate: Bool) async throws
+}
+
+/// Visibility filter for `playlists(scope:)`. Mirrors the proto
+/// `PlaylistScope` enum.
+enum PlaylistScope: Sendable {
+    case mine            // playlists the caller owns
+    case all             // all playlists visible to the caller (own + public)
 }
 
 /// Which home-feed carousel a `dismissHomeCarouselItem` call

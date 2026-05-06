@@ -1425,6 +1425,39 @@ struct ApiSmartPlaylistSummary: Identifiable, Sendable {
     }
 }
 
+/// User-owned (or peer-owned) playlist row. Lightweight — used in
+/// list grids. The detail RPC hands back the full tracklist on tap.
+struct ApiPlaylistSummary: Identifiable, Sendable {
+    let proto: MMPlaylistSummary
+
+    var id: Int64 { proto.id }
+    var name: String { proto.name }
+    var description: String? { proto.hasDescription_p ? proto.description_p : nil }
+    var ownerUsername: String { proto.ownerUsername }
+    var isOwner: Bool { proto.isOwner }
+    var isPrivate: Bool { proto.isPrivate }
+    /// Album titleId server picked as the hero cover (square art).
+    var heroTitleId: TitleID? {
+        proto.hasHeroTitleID ? TitleID(proto: proto.heroTitleID) : nil
+    }
+    /// User-pinned hero track, when set. Drives the per-row star
+    /// icon on the detail page.
+    var heroTrackId: Int64? {
+        proto.hasHeroTrackID ? proto.heroTrackID : nil
+    }
+}
+
+/// Full playlist detail — summary + tracks. Lifted out of the
+/// summary so the list grid doesn't pay tracklist serialisation
+/// cost on every render.
+struct ApiPlaylistDetail: Sendable {
+    let proto: MMPlaylistDetail
+
+    var summary: ApiPlaylistSummary { ApiPlaylistSummary(proto: proto.summary) }
+    var tracks: [ApiPlaylistTrackEntry] { proto.tracks.map { ApiPlaylistTrackEntry(proto: $0) } }
+    var totalDurationSeconds: Int { Int(proto.totalDurationSeconds) }
+}
+
 /// Full tracklist for a smart playlist. Used by the detail page.
 struct ApiSmartPlaylistDetail: Sendable {
     let proto: MMSmartPlaylistDetail

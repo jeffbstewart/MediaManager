@@ -213,6 +213,65 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.dismissHomeCarouselItem(titleId: titleId.protoValue, carousel: proto)
     }
 
+    // MARK: - User playlists
+
+    func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
+        if !isOnline { throw DataModelError.offline }
+        let protoScope: MMPlaylistScope = switch scope {
+        case .mine: .mine
+        case .all: .all
+        }
+        let response = try await grpcClient.listPlaylists(scope: protoScope)
+        return response.playlists.map { ApiPlaylistSummary(proto: $0) }
+    }
+
+    func playlist(id: Int64) async throws -> ApiPlaylistDetail {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.getPlaylist(id: id)
+        return ApiPlaylistDetail(proto: response)
+    }
+
+    func createPlaylist(name: String, description: String?) async throws -> ApiPlaylistSummary {
+        if !isOnline { throw DataModelError.offline }
+        let response = try await grpcClient.createPlaylist(name: name, description: description)
+        return ApiPlaylistSummary(proto: response)
+    }
+
+    func renamePlaylist(id: Int64, name: String, description: String?) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.renamePlaylist(id: id, name: name, description: description)
+    }
+
+    func deletePlaylist(id: Int64) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.deletePlaylist(id: id)
+    }
+
+    func addTracksToPlaylist(id: Int64, trackIds: [Int64]) async throws {
+        if !isOnline { throw DataModelError.offline }
+        _ = try await grpcClient.addTracksToPlaylist(id: id, trackIds: trackIds)
+    }
+
+    func removeTrackFromPlaylist(id: Int64, playlistTrackId: Int64) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.removeTrackFromPlaylist(id: id, playlistTrackId: playlistTrackId)
+    }
+
+    func reorderPlaylist(id: Int64, playlistTrackIdsInOrder: [Int64]) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.reorderPlaylist(id: id, playlistTrackIdsInOrder: playlistTrackIdsInOrder)
+    }
+
+    func setPlaylistHero(id: Int64, trackId: Int64?) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.setPlaylistHero(id: id, trackId: trackId)
+    }
+
+    func setPlaylistPrivacy(id: Int64, isPrivate: Bool) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.setPlaylistPrivacy(id: id, isPrivate: isPrivate)
+    }
+
     // MARK: - PlaybackDataModel
 
     func streamAsset(transcodeId: TranscodeID) async -> AVURLAsset? {

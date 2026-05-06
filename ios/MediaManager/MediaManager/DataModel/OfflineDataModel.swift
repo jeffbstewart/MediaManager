@@ -174,6 +174,34 @@ final class OfflineDataModel: DataModel {
     func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws {
         throw DataModelError.offline
     }
+    func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
+        throw DataModelError.offline
+    }
+    func playlist(id: Int64) async throws -> ApiPlaylistDetail {
+        throw DataModelError.offline
+    }
+    func createPlaylist(name: String, description: String?) async throws -> ApiPlaylistSummary {
+        throw DataModelError.offline
+    }
+    func renamePlaylist(id: Int64, name: String, description: String?) async throws {
+        throw DataModelError.offline
+    }
+    func deletePlaylist(id: Int64) async throws { throw DataModelError.offline }
+    func addTracksToPlaylist(id: Int64, trackIds: [Int64]) async throws {
+        throw DataModelError.offline
+    }
+    func removeTrackFromPlaylist(id: Int64, playlistTrackId: Int64) async throws {
+        throw DataModelError.offline
+    }
+    func reorderPlaylist(id: Int64, playlistTrackIdsInOrder: [Int64]) async throws {
+        throw DataModelError.offline
+    }
+    func setPlaylistHero(id: Int64, trackId: Int64?) async throws {
+        throw DataModelError.offline
+    }
+    func setPlaylistPrivacy(id: Int64, isPrivate: Bool) async throws {
+        throw DataModelError.offline
+    }
 
     // MARK: - PlaybackDataModel (offline: local files + queued progress)
 

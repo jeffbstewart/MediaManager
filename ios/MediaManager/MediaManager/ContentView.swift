@@ -309,6 +309,12 @@ struct ContentView: View {
                 .navigationDestination(for: SmartPlaylistRoute.self) { route in
                     SmartPlaylistDetailView(route: route)
                 }
+                .navigationDestination(for: PlaylistRoute.self) { route in
+                    PlaylistDetailView(route: route)
+                }
+                .navigationDestination(for: AllPlaylistsRoute.self) { _ in
+                    PlaylistsView()
+                }
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
                 }
