@@ -196,8 +196,8 @@ struct AlbumDetailView: View {
                     Text(track.name)
                         .lineLimit(1)
                         .foregroundStyle(track.playable ? .primary : .secondary)
-                    if !track.trackArtistNames.isEmpty {
-                        Text(track.trackArtistNames.joined(separator: ", "))
+                    if let subtitle = trackSubtitle(track) {
+                        Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -286,5 +286,19 @@ struct AlbumDetailView: View {
         let s = total % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
+    }
+
+    private func trackSubtitle(_ track: ApiTrack) -> String? {
+        var parts: [String] = []
+        if !track.trackArtistNames.isEmpty {
+            parts.append(track.trackArtistNames.joined(separator: ", "))
+        }
+        if let chip = TrackMetadataChip.formatted(
+            bpm: track.bpm,
+            timeSignature: track.timeSignature
+        ) {
+            parts.append(chip)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

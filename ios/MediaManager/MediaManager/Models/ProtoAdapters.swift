@@ -1390,6 +1390,16 @@ struct ApiTrack: Identifiable, Sendable {
     /// to render "feat. X" or compilation per-track artists in the
     /// tracklist row.
     var trackArtistNames: [String] { proto.trackArtistNames }
+    /// Beats-per-minute, extracted from the file's ID3/Vorbis tags
+    /// at ingest. nil for tracks the tagger never wrote one onto.
+    /// Useful for ballroom / DJ contexts ("dance bpm ∈ [78, 96]").
+    var bpm: Int? { proto.hasBpm ? Int(proto.bpm) : nil }
+    /// Raw time-signature string from the file's tags (e.g. "4/4",
+    /// "3/4", "6/8"). nil for files that don't carry it — common
+    /// for older rips. Displayed verbatim alongside BPM.
+    var timeSignature: String? {
+        proto.hasTimeSignature ? proto.timeSignature : nil
+    }
     /// Parent album's name. Populated when the track is surfaced
     /// standalone (library shuffle, smart playlists, tag-detail);
     /// empty when the track ships inside an Album that already

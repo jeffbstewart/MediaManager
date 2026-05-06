@@ -136,9 +136,7 @@ struct SmartPlaylistDetailView: View {
                     Text(track.name)
                         .lineLimit(1)
                         .foregroundStyle(track.playable ? .primary : .secondary)
-                    Text(entry.primaryArtistName.isEmpty
-                        ? entry.albumName
-                        : "\(entry.primaryArtistName) · \(entry.albumName)")
+                    Text(subtitle(for: entry))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -188,5 +186,22 @@ struct SmartPlaylistDetailView: View {
         let s = total % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
+    }
+
+    private func subtitle(for entry: ApiPlaylistTrackEntry) -> String {
+        var parts: [String] = []
+        if !entry.primaryArtistName.isEmpty {
+            parts.append(entry.primaryArtistName)
+        }
+        if !entry.albumName.isEmpty {
+            parts.append(entry.albumName)
+        }
+        if let chip = TrackMetadataChip.formatted(
+            bpm: entry.track.bpm,
+            timeSignature: entry.track.timeSignature
+        ) {
+            parts.append(chip)
+        }
+        return parts.joined(separator: " · ")
     }
 }
