@@ -174,6 +174,15 @@ final class OfflineDataModel: DataModel {
     func dismissHomeCarouselItem(titleId: TitleID, carousel: HomeCarousel) async throws {
         throw DataModelError.offline
     }
+    func startRadio(seedTrackId: Int64? = nil, seedAlbumId: Int64? = nil) async throws -> ApiStartRadioResponse {
+        throw DataModelError.offline
+    }
+    func nextRadioBatch(sessionId: String, history: [MMRadioTrackHistory]) async throws -> [ApiTrack] {
+        throw DataModelError.offline
+    }
+    func stopRadio(sessionId: String) async throws {
+        throw DataModelError.offline
+    }
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
         throw DataModelError.offline
     }

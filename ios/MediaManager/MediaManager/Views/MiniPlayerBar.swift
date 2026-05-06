@@ -23,9 +23,22 @@ struct MiniPlayerBar: View {
                     .frame(width: 40, height: 40)  // square — album art aspect ratio
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(track.title)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        // Radio chip — small SF Symbol next to the
+                        // title so the user can tell at a glance the
+                        // queue is auto-extending vs. a fixed album
+                        // playthrough. Matches Apple Music's "station"
+                        // affordance.
+                        if audio.isRadio {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel("Radio")
+                        }
+                        Text(track.title)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                    }
                     // Subtitle joins artist + album when both are
                     // known; collapses to whichever is populated when
                     // one is blank. Library-shuffle tracks carry both

@@ -68,6 +68,18 @@ final class AudioPlayerManager {
         return queue[i]
     }
 
+    // MARK: - Radio state
+
+    /// Opaque session id (server-assigned, 4h TTL). nil when not in a
+    /// radio session.
+    private(set) var radioSessionId: String? = nil
+    /// What seeded the current session — drives the chrome label
+    /// ("Station from <song>" vs "Station from <album>").
+    private(set) var radioSeed: ApiRadioSeed? = nil
+    /// True while a radio session is active. UI surfaces (mini-player,
+    /// now-playing screen) check this to render the station chip.
+    var isRadio: Bool { radioSessionId != nil }
+
     // MARK: - Private
 
     private let player = AVQueuePlayer()
@@ -80,6 +92,20 @@ final class AudioPlayerManager {
     /// without crossing through the data model on every call.
     private var apiClient: APIClient?
     private var imageProvider: ImageProvider?
+
+    /// Per-track skip / completion feedback accumulated since the
+    /// last NextRadioBatch RPC. Cleared after each successful fetch.
+    private var radioHistory: [MMRadioTrackHistory] = []
+    /// Debounce flag — keeps us from firing a second batch fetch
+    /// while one is in flight (would otherwise happen on every
+    /// next() call once the queue gets short).
+    private var radioFetchInFlight: Bool = false
+    /// Closures the caller hands us when starting radio. We hold
+    /// them for the lifetime of the session so the manager can pull
+    /// new batches and end the session without depending on the
+    /// data model directly.
+    private var radioBatchFetcher: (@Sendable (String, [MMRadioTrackHistory]) async throws -> [QueuedTrack])? = nil
+    private var radioSessionEnder: (@Sendable (String) async -> Void)? = nil
 
     init() {
         // Periodic time observer — drives the position scrubber. ~4×/s
@@ -112,8 +138,12 @@ final class AudioPlayerManager {
     // MARK: - Playback control
 
     /// Replace the queue and start playing from `startIndex`.
+    /// If a radio session is active, this is treated as the user
+    /// abandoning radio for explicit content and the session is torn
+    /// down. Radio entry comes through `startRadio(...)` instead.
     func play(tracks: [QueuedTrack], startingAt startIndex: Int = 0) {
         guard !tracks.isEmpty else { return }
+        endRadioSession()
         let safeIndex = max(0, min(startIndex, tracks.count - 1))
         queue = tracks
         currentIndex = safeIndex
@@ -157,8 +187,10 @@ final class AudioPlayerManager {
 
     func next() {
         guard let i = currentIndex, i + 1 < queue.count else { return }
+        recordRadioFeedback(skipped: true)
         currentIndex = i + 1
         Task { await loadAndPlayCurrent() }
+        maybeRequestRadioBatch()
     }
 
     func previous() {
@@ -171,6 +203,9 @@ final class AudioPlayerManager {
             seek(to: 0)
             return
         }
+        // Going *back* in radio still counts as a skip on the track
+        // we're leaving behind — the user didn't finish it.
+        recordRadioFeedback(skipped: true)
         currentIndex = i - 1
         Task { await loadAndPlayCurrent() }
     }
@@ -188,6 +223,7 @@ final class AudioPlayerManager {
     /// Stop playback, clear the queue, and tear down the Now Playing
     /// surface. Called by the mini-player's close button.
     func stop() {
+        endRadioSession()
         player.pause()
         player.removeAllItems()
         queue = []
@@ -197,6 +233,137 @@ final class AudioPlayerManager {
         isPlaying = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
+    }
+
+    // MARK: - Radio
+
+    /// Begin a radio session. The caller has already issued
+    /// StartRadio against the server and converted the initial batch
+    /// into QueuedTracks; we just wire up the session state and start
+    /// playback. The two closures are how the manager talks back to
+    /// the server during the session — pulling more tracks when the
+    /// queue runs low, and ending the session when the user moves on
+    /// or hits stop. Keeping them as closures (rather than baking in
+    /// a data-model dependency) keeps AudioPlayerManager testable in
+    /// isolation and side-steps actor-crossing constraints.
+    func startRadio(
+        seed: ApiRadioSeed,
+        sessionId: String,
+        initialTracks: [QueuedTrack],
+        fetchNextBatch: @escaping @Sendable (String, [MMRadioTrackHistory]) async throws -> [QueuedTrack],
+        endSession: @escaping @Sendable (String) async -> Void
+    ) {
+        guard !initialTracks.isEmpty else { return }
+        // If a prior radio session exists, end it server-side first
+        // (best-effort). We don't await — the new session is starting
+        // now regardless.
+        endRadioSession()
+
+        radioSessionId = sessionId
+        radioSeed = seed
+        radioHistory = []
+        radioFetchInFlight = false
+        radioBatchFetcher = fetchNextBatch
+        radioSessionEnder = endSession
+
+        queue = initialTracks
+        currentIndex = 0
+        Task { await loadAndPlayCurrent() }
+    }
+
+    /// Capture per-track feedback before swapping tracks. Called from
+    /// next() / previous() with `skipped: true` and from
+    /// handleEndOfTrack() with `skipped: false`. No-op outside a
+    /// radio session.
+    private func recordRadioFeedback(skipped: Bool) {
+        guard isRadio, let track = currentTrack else { return }
+        var entry = MMRadioTrackHistory()
+        entry.trackID = track.id
+        if skipped {
+            var offset = MMPlaybackOffset()
+            offset.seconds = max(0, position)
+            entry.skippedAt = offset
+        }
+        radioHistory.append(entry)
+    }
+
+    /// Pre-fetch the next batch when the queue is running low. Three
+    /// remaining tracks gives AVQueuePlayer enough runway to stay
+    /// gapless while the RPC is in flight, and the debounce flag
+    /// makes sure rapid-skipping doesn't fire stacked requests.
+    private func maybeRequestRadioBatch() {
+        guard isRadio,
+              let sessionId = radioSessionId,
+              let fetcher = radioBatchFetcher,
+              !radioFetchInFlight,
+              let i = currentIndex
+        else { return }
+        let remaining = queue.count - i  // includes the current track
+        guard remaining <= 3 else { return }
+
+        radioFetchInFlight = true
+        let history = radioHistory
+        Task { [weak self] in
+            do {
+                let nextTracks = try await fetcher(sessionId, history)
+                await MainActor.run { [weak self] in
+                    self?.handleRadioBatch(nextTracks, consumedHistory: history)
+                }
+            } catch {
+                logger.warning("nextRadioBatch failed: \(error.localizedDescription)")
+                await MainActor.run { [weak self] in
+                    // Don't tear down the session on a single failure;
+                    // surface state for retry on the next skip / track
+                    // end. Server expiry would manifest as a fresh
+                    // failure here too — we let the user reseed.
+                    self?.radioFetchInFlight = false
+                }
+            }
+        }
+    }
+
+    /// Splice newly-arrived radio tracks onto the live queue. Trims
+    /// the history we just sent so we don't double-report on the
+    /// next batch, and clears the in-flight flag.
+    private func handleRadioBatch(_ tracks: [QueuedTrack], consumedHistory: [MMRadioTrackHistory]) {
+        radioFetchInFlight = false
+        // Drop the prefix we sent. New entries can have accumulated
+        // mid-flight (user skipped while the RPC was in flight) and
+        // those need to ride on the *next* batch.
+        if radioHistory.count >= consumedHistory.count {
+            radioHistory.removeFirst(consumedHistory.count)
+        } else {
+            radioHistory.removeAll()
+        }
+        guard !tracks.isEmpty else {
+            logger.warning("nextRadioBatch returned 0 tracks; session likely starved")
+            return
+        }
+        let wasAtEnd = currentIndex.map { $0 >= queue.count - 1 } ?? false
+        queue.append(contentsOf: tracks)
+        // If we'd drained the queue to its last item and the player
+        // already paused at end-of-queue, advance into the new batch.
+        if wasAtEnd, !isPlaying, let i = currentIndex, i + 1 < queue.count {
+            currentIndex = i + 1
+            Task { await loadAndPlayCurrent() }
+        }
+    }
+
+    /// Tear down the active radio session in-app and best-effort
+    /// notify the server. Idempotent — safe to call from stop() /
+    /// play() / startRadio() without checking isRadio first.
+    private func endRadioSession() {
+        guard let id = radioSessionId else { return }
+        let ender = radioSessionEnder
+        radioSessionId = nil
+        radioSeed = nil
+        radioHistory.removeAll()
+        radioFetchInFlight = false
+        radioBatchFetcher = nil
+        radioSessionEnder = nil
+        if let ender {
+            Task.detached { await ender(id) }
+        }
     }
 
     // MARK: - Internal
@@ -231,9 +398,22 @@ final class AudioPlayerManager {
 
     private func handleEndOfTrack() {
         guard let i = currentIndex else { return }
+        recordRadioFeedback(skipped: false)
         if i + 1 < queue.count {
             currentIndex = i + 1
             Task { await loadAndPlayCurrent() }
+            maybeRequestRadioBatch()
+        } else if isRadio {
+            // Radio queue ran dry before the next batch arrived. If
+            // a fetch is already in flight, handleRadioBatch() will
+            // pick up advancement when it lands. If not, kick one
+            // now (history accumulator carries the just-finished
+            // track).
+            player.pause()
+            position = duration
+            refreshIsPlaying()
+            updateNowPlayingInfo()
+            maybeRequestRadioBatch()
         } else {
             // End of queue. Leave the last track loaded so the
             // mini-player still shows what just finished, but stop

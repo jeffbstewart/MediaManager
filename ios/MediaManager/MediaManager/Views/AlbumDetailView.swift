@@ -130,26 +130,38 @@ struct AlbumDetailView: View {
 
     @ViewBuilder
     private func actionRow(_ detail: ApiTitleDetail, album: ApiAlbum) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                onPlayTapped(album)
-            } label: {
-                Label("Play", systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(album.tracks.allSatisfy { !$0.playable })
+        let allUnplayable = album.tracks.allSatisfy { !$0.playable }
+        return VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button {
+                    onPlayTapped(album)
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(allUnplayable)
 
+                Button {
+                    shufflePlay(album)
+                } label: {
+                    Label("Shuffle", systemImage: "shuffle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(allUnplayable)
+            }
             Button {
-                shufflePlay(album)
+                startAlbumStation(detail, album: album)
             } label: {
-                Label("Shuffle", systemImage: "shuffle")
+                Label("Start Station", systemImage: "dot.radiowaves.left.and.right")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(album.tracks.allSatisfy { !$0.playable })
+            .controlSize(.regular)
+            .disabled(allUnplayable)
         }
     }
 
@@ -221,6 +233,12 @@ struct AlbumDetailView: View {
             } label: {
                 Label("Add to Playlist…", systemImage: "plus.rectangle.on.folder")
             }
+            Button {
+                startTrackStation(track)
+            } label: {
+                Label("Start Station from Song", systemImage: "dot.radiowaves.left.and.right")
+            }
+            .disabled(!track.playable)
         }
     }
 
@@ -274,6 +292,68 @@ struct AlbumDetailView: View {
             title: t.name,
             albumName: albumName,
             artistName: credit,
+            trackNumber: t.trackNumber,
+            discNumber: t.discNumber,
+            durationSeconds: t.durationSeconds)
+    }
+
+    // MARK: - Radio entry points
+
+    private func startAlbumStation(_ detail: ApiTitleDetail, album: ApiAlbum) {
+        let albumId = titleId.protoValue
+        startStation(seedTrackId: nil, seedAlbumId: albumId)
+    }
+
+    private func startTrackStation(_ track: ApiTrack) {
+        startStation(seedTrackId: track.id, seedAlbumId: nil)
+    }
+
+    /// Single shared path for both seed types. Issues StartRadio,
+    /// converts the initial batch via the standalone-track converter
+    /// (server populates title_name + title_artist_name on tracks
+    /// returned this way), and hands everything to AudioPlayerManager
+    /// along with the closures it needs to keep the session running.
+    private func startStation(seedTrackId: Int64?, seedAlbumId: Int64?) {
+        Task {
+            do {
+                let response = try await dataModel.startRadio(
+                    seedTrackId: seedTrackId,
+                    seedAlbumId: seedAlbumId)
+                let initial = response.initialBatch.map(Self.makeStationQueuedTrack)
+                guard !initial.isEmpty else {
+                    log.warning("startRadio returned empty initial batch")
+                    return
+                }
+                let model = dataModel
+                audio.startRadio(
+                    seed: response.seed,
+                    sessionId: response.sessionId,
+                    initialTracks: initial,
+                    fetchNextBatch: { [model] sessionId, history in
+                        let tracks = try await model.nextRadioBatch(
+                            sessionId: sessionId, history: history)
+                        return tracks.map(Self.makeStationQueuedTrack)
+                    },
+                    endSession: { [model] sessionId in
+                        try? await model.stopRadio(sessionId: sessionId)
+                    })
+            } catch {
+                log.warning("startRadio failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Build a QueuedTrack from a track returned by the radio service.
+    /// `nonisolated` so the @Sendable closure handed to
+    /// AudioPlayerManager can call it from any actor without dragging
+    /// the @MainActor-implicit view isolation across the boundary.
+    nonisolated static func makeStationQueuedTrack(_ t: ApiTrack) -> QueuedTrack {
+        QueuedTrack(
+            id: t.id,
+            titleId: t.titleId,
+            title: t.name,
+            albumName: t.albumName ?? "",
+            artistName: t.trackArtistNames.first ?? t.albumArtistName ?? "",
             trackNumber: t.trackNumber,
             discNumber: t.discNumber,
             durationSeconds: t.durationSeconds)

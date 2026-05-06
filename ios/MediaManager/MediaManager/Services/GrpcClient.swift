@@ -657,6 +657,51 @@ actor GrpcClient {
         return try await artistService.getArtistDetail(request, metadata: authMetadata())
     }
 
+    // MARK: - Radio
+
+    /// Begin a radio session seeded by either a single track or an
+    /// entire album. The server returns the session id (4h TTL) plus
+    /// the first batch of tracks. Caller is expected to play those,
+    /// accumulate per-track history (skip vs. completion), and call
+    /// nextRadioBatch when running low on queued tracks.
+    ///
+    /// Exactly one of `seedTrackId` / `seedAlbumId` must be non-nil.
+    /// Call sites enforce this; the precondition is here to catch
+    /// programming errors early rather than getting a server-side
+    /// INVALID_ARGUMENT round-trip.
+    func startRadio(seedTrackId: Int64? = nil, seedAlbumId: Int64? = nil) async throws -> ApiStartRadioResponse {
+        precondition(
+            (seedTrackId != nil) != (seedAlbumId != nil),
+            "startRadio requires exactly one of seedTrackId / seedAlbumId"
+        )
+        var request = MMStartRadioRequest()
+        if let id = seedTrackId { request.seedTrackID = id }
+        if let id = seedAlbumId { request.seedAlbumID = id }
+        let response = try await radioService.startRadio(request, metadata: authMetadata())
+        return ApiStartRadioResponse(proto: response)
+    }
+
+    /// Request the next batch of tracks for an active radio session.
+    /// `history` carries per-track skip / completion feedback since
+    /// the last call so the server can weight the next batch away
+    /// from skipped material.
+    func nextRadioBatch(sessionId: String, history: [MMRadioTrackHistory]) async throws -> [ApiTrack] {
+        var request = MMNextRadioBatchRequest()
+        request.radioSessionID = sessionId
+        request.history = history
+        let response = try await radioService.nextRadioBatch(request, metadata: authMetadata())
+        return response.tracks.map { ApiTrack(proto: $0) }
+    }
+
+    /// Tear down a radio session server-side. Best-effort — failure
+    /// is logged but not surfaced; the session times out on its own
+    /// (4h TTL) regardless.
+    func stopRadio(sessionId: String) async throws {
+        var request = MMStopRadioRequest()
+        request.radioSessionID = sessionId
+        _ = try await radioService.stopRadio(request, metadata: authMetadata())
+    }
+
     /// Random shuffle of every playable track in the user's library.
     /// Server-side cap defaults to 200; pass a smaller `limit` to
     /// keep the play queue lighter for the iOS UI.

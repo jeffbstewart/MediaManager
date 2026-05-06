@@ -213,6 +213,23 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.dismissHomeCarouselItem(titleId: titleId.protoValue, carousel: proto)
     }
 
+    // MARK: - Radio
+
+    func startRadio(seedTrackId: Int64? = nil, seedAlbumId: Int64? = nil) async throws -> ApiStartRadioResponse {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.startRadio(seedTrackId: seedTrackId, seedAlbumId: seedAlbumId)
+    }
+
+    func nextRadioBatch(sessionId: String, history: [MMRadioTrackHistory]) async throws -> [ApiTrack] {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.nextRadioBatch(sessionId: sessionId, history: history)
+    }
+
+    func stopRadio(sessionId: String) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.stopRadio(sessionId: sessionId)
+    }
+
     // MARK: - User playlists
 
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {

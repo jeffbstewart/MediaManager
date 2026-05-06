@@ -1681,3 +1681,33 @@ struct ApiBookSeriesRef: Sendable {
     var name: String { proto.name }
     var number: String? { proto.hasNumber ? proto.number : nil }
 }
+
+// MARK: - Radio
+
+/// Identity of what's seeding the current radio session — a track or
+/// an album. Surfaced in the mini-player / now-playing chrome so the
+/// user can tell "this is a station" vs "this is the album I picked".
+struct ApiRadioSeed: Sendable {
+    let proto: MMRadioSeed
+
+    var seedId: Int64 { proto.seedID }
+    /// True when seeded from a track (vs. an album). Drives label
+    /// copy: "Station from <song>" vs "Station from <album>".
+    var isTrackSeed: Bool { proto.seedType == .track }
+    var name: String { proto.seedName }
+    /// Empty for album-seeded stations (the album credit is the
+    /// album-artist; the seed name carries the album name). For
+    /// track-seeded stations, this is the track's primary artist.
+    var artistName: String { proto.seedArtistName }
+}
+
+/// Wraps StartRadioResponse so the AudioPlayerManager doesn't need to
+/// know proto field shapes. The session id is just a String — no
+/// adapter needed.
+struct ApiStartRadioResponse: Sendable {
+    let proto: MMStartRadioResponse
+
+    var sessionId: String { proto.radioSessionID }
+    var seed: ApiRadioSeed { ApiRadioSeed(proto: proto.seed) }
+    var initialBatch: [ApiTrack] { proto.initialBatch.map { ApiTrack(proto: $0) } }
+}
