@@ -25,6 +25,10 @@ struct MusicView: View {
     @State private var smartPlaylists: [ApiSmartPlaylistSummary] = []
     @State private var userPlaylists: [ApiPlaylistSummary] = []
     @State private var recentlyAdded: [ApiTitle] = []
+    /// Recommended artists from the similar-artist graph. Server
+    /// curates this in the background; the carousel hides itself
+    /// when the list is empty (matches the Recently Added pattern).
+    @State private var recommendedArtists: [ApiRecommendedArtist] = []
     @State private var loading = true
     @State private var shuffleStarting = false
     @State private var showCreate = false
@@ -36,6 +40,9 @@ struct MusicView: View {
                 yourPlaylistsSection()
                 if !smartPlaylists.isEmpty {
                     smartPlaylistsSection()
+                }
+                if !recommendedArtists.isEmpty {
+                    forYouSection()
                 }
                 if !recentlyAdded.isEmpty {
                     recentlyAddedSection()
@@ -291,6 +298,115 @@ struct MusicView: View {
     }
 
     @ViewBuilder
+    private func forYouSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("For You")
+                .font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(recommendedArtists) { rec in
+                        forYouCard(rec)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func forYouCard(_ rec: ApiRecommendedArtist) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if let artistId = rec.localArtistId {
+                    NavigationLink(value: ArtistRoute(
+                        id: ArtistID(proto: artistId),
+                        name: rec.name)
+                    ) {
+                        forYouCardBody(rec)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    // Server hasn't seeded a local Artist row for this
+                    // suggestion yet — most recommendations point at
+                    // unowned artists. Card is informational only;
+                    // dismiss-X is the only interactive affordance.
+                    forYouCardBody(rec)
+                }
+            }
+
+            // Dismiss-X overlay — same shape as Recently Added.
+            // Optimistic local removal so the card disappears
+            // immediately; server PR is fire-and-forget.
+            Button {
+                Task { await dismissRecommendation(rec) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(.black.opacity(0.55))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(6)
+            .accessibilityLabel("Dismiss \(rec.name)")
+        }
+    }
+
+    @ViewBuilder
+    private func forYouCardBody(_ rec: ApiRecommendedArtist) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let rgid = rec.representativeReleaseGroupMbid, !rgid.isEmpty {
+                    CachedImage(
+                        ref: .coverArtArchiveReleaseGroup(releaseGroupId: rgid),
+                        cornerRadius: 8)
+                } else {
+                    LinearGradient(
+                        colors: [.orange, .pink],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            Image(systemName: "music.mic")
+                                .font(.system(size: 36))
+                                .foregroundStyle(.white.opacity(0.8))
+                        }
+                }
+            }
+            .frame(width: 130, height: 130)  // square — album cover aspect
+            Text(rec.name)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .frame(maxWidth: 130, alignment: .leading)
+            // Voters teaser: "Liked by X & Y" / "Liked by X, Y +N"
+            // depending on count. Falls back to the representative
+            // release title when the server didn't ship voters.
+            Text(votersCaption(rec))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: 130, alignment: .leading)
+        }
+        .frame(width: 130)
+    }
+
+    private func votersCaption(_ rec: ApiRecommendedArtist) -> String {
+        let voters = rec.voterArtistNames
+        switch voters.count {
+        case 0:
+            // No voters surfaced — fall back to the representative
+            // album title so the caption isn't blank.
+            return rec.representativeReleaseTitle ?? " "
+        case 1:
+            return "Liked by \(voters[0])"
+        case 2:
+            return "Liked by \(voters[0]) & \(voters[1])"
+        default:
+            return "Liked by \(voters[0]), \(voters[1]) +\(voters.count - 2)"
+        }
+    }
+
+    @ViewBuilder
     private func browseArtistsLink() -> some View {
         NavigationLink(value: BrowseArtistsRoute()) {
             HStack {
@@ -318,11 +434,13 @@ struct MusicView: View {
         async let homeFeedTask: ApiHomeFeed? = try? await dataModel.homeFeed()
         async let smartTask: [ApiSmartPlaylistSummary] = (try? await dataModel.smartPlaylists()) ?? []
         async let userTask: [ApiPlaylistSummary] = (try? await dataModel.playlists(scope: .mine)) ?? []
+        async let recsTask: [ApiRecommendedArtist] = (try? await dataModel.recommendedArtists()) ?? []
         if let feed = await homeFeedTask {
             recentlyAdded = feed.recentlyAddedAlbums
         }
         smartPlaylists = await smartTask
         userPlaylists = await userTask
+        recommendedArtists = await recsTask
         loading = false
     }
 
@@ -349,6 +467,18 @@ struct MusicView: View {
             audio.play(tracks: queued, startingAt: 0)
         } catch {
             log.warning("libraryShuffle failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func dismissRecommendation(_ rec: ApiRecommendedArtist) async {
+        // Optimistic local removal — same UX as Recently Added.
+        recommendedArtists.removeAll { $0.mbid == rec.mbid }
+        do {
+            try await dataModel.dismissRecommendation(mbid: rec.mbid)
+        } catch {
+            log.warning("dismissRecommendation failed: \(error.localizedDescription)")
+            // Re-add on failure to keep local + server views in sync.
+            recommendedArtists.append(rec)
         }
     }
 

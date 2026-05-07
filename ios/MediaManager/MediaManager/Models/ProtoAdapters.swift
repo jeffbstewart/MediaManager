@@ -1711,3 +1711,43 @@ struct ApiStartRadioResponse: Sendable {
     var seed: ApiRadioSeed { ApiRadioSeed(proto: proto.seed) }
     var initialBatch: [ApiTrack] { proto.initialBatch.map { ApiTrack(proto: $0) } }
 }
+
+// MARK: - Recommendations
+
+/// "Artist you might like" suggestion. MBID is the authoritative id
+/// since most recommendations point at artists the user *doesn't*
+/// own — there is no local Artist row for them. When the server has
+/// already seeded one (via wishlist or sibling-artist lookups),
+/// `localArtistId` is non-nil and the card can navigate to
+/// ArtistDetailView; otherwise tap is a no-op (Phase 7 scope).
+struct ApiRecommendedArtist: Identifiable, Sendable {
+    let proto: MMRecommendedArtist
+
+    /// Stable id for ForEach. Each user has a unique MBID per
+    /// recommendation row (server enforces dedup), so the MBID is
+    /// safe as the SwiftUI identity.
+    var id: String { proto.suggestedArtistMbid }
+    var mbid: String { proto.suggestedArtistMbid }
+    var localArtistId: Int64? {
+        proto.hasSuggestedArtistID ? proto.suggestedArtistID : nil
+    }
+    var name: String { proto.suggestedArtistName }
+    var score: Double { proto.score }
+    /// Names of the user's own artists that "voted" for this
+    /// suggestion via the similar-artist graph. Drives the "Liked
+    /// by X & Y" caption on the discover card.
+    var voterArtistNames: [String] { proto.voterArtistNames }
+    /// MBID of the release group whose cover represents the artist.
+    /// Use with `MMImageRef.coverArtArchiveReleaseGroup(releaseGroupId:)`.
+    /// nil for artists with no usable cover (rare — server tries).
+    var representativeReleaseGroupMbid: String? {
+        proto.hasRepresentativeReleaseGroupMbid
+            ? proto.representativeReleaseGroupMbid
+            : nil
+    }
+    var representativeReleaseTitle: String? {
+        proto.hasRepresentativeReleaseTitle
+            ? proto.representativeReleaseTitle
+            : nil
+    }
+}

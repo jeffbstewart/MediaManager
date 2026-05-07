@@ -131,6 +131,9 @@ actor GrpcClient {
     var artistService: MMArtistService.Client<HTTP2ClientTransport.Posix> {
         get throws { MMArtistService.Client(wrapping: try requireClient()) }
     }
+    var recommendationService: MMRecommendationService.Client<HTTP2ClientTransport.Posix> {
+        get throws { MMRecommendationService.Client(wrapping: try requireClient()) }
+    }
 
     /// Open a long-lived StreamLogs client-streaming RPC. The producer
     /// closure is handed an `RPCWriter<MMLogRecord>` and runs until it
@@ -700,6 +703,28 @@ actor GrpcClient {
         var request = MMStopRadioRequest()
         request.radioSessionID = sessionId
         _ = try await radioService.stopRadio(request, metadata: authMetadata())
+    }
+
+    // MARK: - Recommendations
+
+    /// Passive "artists you might like" list — derived from the
+    /// owned-artist similar-artist graph. Server clamps `limit` to
+    /// [1, 100]; default 30 when omitted.
+    func listRecommendedArtists(limit: Int32 = 0) async throws -> [ApiRecommendedArtist] {
+        var request = MMListRecommendedArtistsRequest()
+        request.limit = limit
+        let response = try await recommendationService.listRecommendedArtists(
+            request, metadata: authMetadata())
+        return response.artists.map { ApiRecommendedArtist(proto: $0) }
+    }
+
+    /// Hide a recommendation from future listings. Keyed by MBID
+    /// because not every recommended artist has a local Artist row.
+    func dismissRecommendation(mbid: String) async throws {
+        var request = MMDismissRecommendationRequest()
+        request.suggestedArtistMbid = mbid
+        _ = try await recommendationService.dismissRecommendation(
+            request, metadata: authMetadata())
     }
 
     /// Random shuffle of every playable track in the user's library.

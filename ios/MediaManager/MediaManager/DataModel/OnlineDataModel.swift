@@ -230,6 +230,18 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.stopRadio(sessionId: sessionId)
     }
 
+    // MARK: - Recommendations
+
+    func recommendedArtists(limit: Int = 30) async throws -> [ApiRecommendedArtist] {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.listRecommendedArtists(limit: Int32(limit))
+    }
+
+    func dismissRecommendation(mbid: String) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.dismissRecommendation(mbid: mbid)
+    }
+
     // MARK: - User playlists
 
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {

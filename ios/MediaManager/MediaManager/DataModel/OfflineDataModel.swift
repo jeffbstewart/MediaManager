@@ -183,6 +183,12 @@ final class OfflineDataModel: DataModel {
     func stopRadio(sessionId: String) async throws {
         throw DataModelError.offline
     }
+    func recommendedArtists(limit: Int = 30) async throws -> [ApiRecommendedArtist] {
+        throw DataModelError.offline
+    }
+    func dismissRecommendation(mbid: String) async throws {
+        throw DataModelError.offline
+    }
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
         throw DataModelError.offline
     }
