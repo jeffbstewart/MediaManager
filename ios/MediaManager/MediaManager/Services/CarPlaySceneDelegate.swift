@@ -20,6 +20,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// `didDisconnectInterfaceController` when the user unplugs,
     /// switches apps, or kills CarPlay; we drop the reference there.
     private var interfaceController: CPInterfaceController?
+    private var browseController: CarPlayBrowseController?
 
     func templateApplicationScene(
         _ templateApplicationScene: CPTemplateApplicationScene,
@@ -28,7 +29,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         logger.info("CarPlay scene connected")
         self.interfaceController = interfaceController
         AppServices.shared.whenReady { [weak self] in
-            self?.installRootTemplate()
+            self?.installBrowseHierarchy()
         }
         // Show a loading placeholder right away so the head unit
         // doesn't sit on a blank screen during the cold-launch race
@@ -45,6 +46,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     ) {
         logger.info("CarPlay scene disconnected")
         self.interfaceController = nil
+        self.browseController = nil
     }
 
     // MARK: - Templates
@@ -55,15 +57,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         return CPListTemplate(title: "MediaManager", sections: [section])
     }
 
-    private func installRootTemplate() {
+    private func installBrowseHierarchy() {
         guard let interfaceController else { return }
-        // Phase 10 first cut: single placeholder template proves the
-        // wire is good. Real browse hierarchy lands next pass.
-        let placeholder = CPListItem(
-            text: "MediaManager is connected",
-            detailText: "Browse + playback hooks coming next")
-        let section = CPListSection(items: [placeholder])
-        let root = CPListTemplate(title: "MediaManager", sections: [section])
-        interfaceController.setRootTemplate(root, animated: true)
+        let controller = CarPlayBrowseController(interfaceController: interfaceController)
+        browseController = controller
+        controller.install()
     }
 }

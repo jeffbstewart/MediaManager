@@ -68,6 +68,18 @@ final class AudioPlayerManager {
         return queue[i]
     }
 
+    /// Source-of-truth for MPNowPlayingInfoCenter. Every writer
+    /// mutates this dict then publishes the whole thing in one
+    /// assignment so per-tick time updates can't race with the
+    /// async artwork load. Earlier code read MPNowPlayingInfoCenter
+    /// straight back at each call site, mutated, and wrote — which
+    /// races: artwork lands at t=0; handleTimeUpdate's t=−250ms
+    /// read holds a no-artwork snapshot, then writes at t=+50ms,
+    /// blowing away the artwork that just arrived. Symptom on
+    /// CarPlay was the cover never drawing even with a successful
+    /// "artwork loaded" log line.
+    private var nowPlayingInfo: [String: Any] = [:]
+
     // MARK: - Radio state
 
     /// Opaque session id (server-assigned, 4h TTL). nil when not in a
@@ -260,6 +272,7 @@ final class AudioPlayerManager {
         position = 0
         duration = 0
         isPlaying = false
+        nowPlayingInfo.removeAll()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
@@ -536,8 +549,20 @@ final class AudioPlayerManager {
         player.insert(item, after: nil)
         player.play()
         refreshIsPlaying()
-        await updateNowPlayingArtwork()
+        // Set the textual metadata BEFORE the async artwork fetch.
+        // CarPlay snapshots MPNowPlayingInfoCenter the moment play()
+        // hits — putting updateNowPlayingInfo after the await meant
+        // the head unit drew an empty title/artist and only caught
+        // up on the next track change. Order is now:
+        //   1. play() so audio starts.
+        //   2. updateNowPlayingInfo() — title / artist / album /
+        //      duration land in the info center synchronously.
+        //   3. updateNowPlayingArtwork() — async image fetch, fills
+        //      in MPMediaItemPropertyArtwork once it resolves.
+        //      handleTimeUpdate's per-tick refresh preserves the
+        //      artwork field via a read-modify-write merge.
         updateNowPlayingInfo()
+        await updateNowPlayingArtwork()
     }
 
     private func handleEndOfTrack() {
@@ -583,12 +608,14 @@ final class AudioPlayerManager {
             if d.isFinite { duration = d }
         }
         // Cheap nowPlayingInfo refresh — sets only the elapsed time
-        // so the lock-screen scrubber tracks accurately.
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
-        info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        // so the lock-screen scrubber tracks accurately. Mutates
+        // our local dict and republishes the whole thing so the
+        // async artwork update can't get clobbered by a between-
+        // ticks race (see `nowPlayingInfo` doc comment).
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
 
         // Enqueue listening progress every ~10 s while playing. The
         // queue coalesces same-track writes, so the throttle is
@@ -609,20 +636,33 @@ final class AudioPlayerManager {
 
     private func updateNowPlayingInfo() {
         guard let track = currentTrack else {
+            nowPlayingInfo.removeAll()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
         }
-        var info: [String: Any] = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPMediaItemPropertyTitle] = track.title
-        info[MPMediaItemPropertyArtist] = track.artistName
-        info[MPMediaItemPropertyAlbumTitle] = track.albumName
-        info[MPMediaItemPropertyAlbumTrackNumber] = NSNumber(value: track.trackNumber)
-        info[MPMediaItemPropertyDiscNumber] = NSNumber(value: track.discNumber)
-        info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        nowPlayingInfo[MPMediaItemPropertyTitle] = track.title
+        // Empty-string artist/album make CarPlay's Now Playing layout
+        // fight itself — the system reserves space for the field and
+        // empty strings sit on top of adjacent labels. Removing the
+        // key entirely lets CarPlay collapse the row cleanly. iOS
+        // lock screen behaves the same way.
+        if track.artistName.isEmpty {
+            nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtist)
+        } else {
+            nowPlayingInfo[MPMediaItemPropertyArtist] = track.artistName
+        }
+        if track.albumName.isEmpty {
+            nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyAlbumTitle)
+        } else {
+            nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = track.albumName
+        }
+        nowPlayingInfo[MPMediaItemPropertyAlbumTrackNumber] = NSNumber(value: track.trackNumber)
+        nowPlayingInfo[MPMediaItemPropertyDiscNumber] = NSNumber(value: track.discNumber)
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
     /// Async image fetch + MPMediaItemArtwork wrap. Album art is
@@ -632,12 +672,53 @@ final class AudioPlayerManager {
     private func updateNowPlayingArtwork() async {
         guard let track = currentTrack, let imageProvider else { return }
         let ref = MMImageRef.posterFull(titleId: track.titleId)
-        guard let image = await imageProvider.image(for: ref) else { return }
+        guard let image = await imageProvider.image(for: ref) else {
+            logger.warning("artwork fetch returned nil for trackId=\(track.id) titleId=\(track.titleId)")
+            return
+        }
         // Capture the track id at fetch time — by the time the image
         // arrives the user may have skipped to the next track and we
         // don't want to clobber the new track's artwork with the old
         // one's bytes.
         guard currentTrack?.id == track.id else { return }
+        logger.info("artwork loaded for trackId=\(track.id) size=\(Int(image.size.width))x\(Int(image.size.height))")
+        // Re-render into a square 1024×1024 canvas. Two reasons:
+        //
+        // - CarPlay (and many real head units) refuse to render
+        //   artwork that isn't square. Source covers occasionally
+        //   come in slightly off — e.g. 500×499 — because the
+        //   server's TMDB / CAA pipeline can produce JPEGs whose
+        //   dimensions are off by a pixel due to chroma-subsampling
+        //   rounding. CarPlay's response to such artwork is to
+        //   silently drop it, which manifests as the cover slot
+        //   staying empty and the text labels reflowing into the
+        //   space, producing the overlap the user sees.
+        // - 1024×1024 is the size CarPlay's largest layout uses;
+        //   smaller source images leave the slot blurry on real
+        //   head units. Upscaling once here is cheaper than letting
+        //   the system do it on every redraw.
+        //
+        // The image is letterboxed onto a black square so non-square
+        // sources don't get stretched (better than distorting an
+        // artist's cover art).
+        let squareSize = CGSize(width: 1024, height: 1024)
+        let renderer = UIGraphicsImageRenderer(size: squareSize)
+        let squareImage = renderer.image { ctx in
+            UIColor.black.setFill()
+            ctx.fill(CGRect(origin: .zero, size: squareSize))
+            let aspect = image.size.width / max(image.size.height, 1)
+            let drawRect: CGRect
+            if aspect >= 1 {
+                let h = squareSize.width / aspect
+                drawRect = CGRect(x: 0, y: (squareSize.height - h) / 2,
+                                  width: squareSize.width, height: h)
+            } else {
+                let w = squareSize.height * aspect
+                drawRect = CGRect(x: (squareSize.width - w) / 2, y: 0,
+                                  width: w, height: squareSize.height)
+            }
+            image.draw(in: drawRect)
+        }
         // The artwork request handler is invoked by MediaPlayer on
         // its own dispatch queue, NOT MainActor. Without `@Sendable`
         // Swift 6 inherits MainActor isolation from the enclosing
@@ -645,10 +726,19 @@ final class AudioPlayerManager {
         // `dispatch_assert_queue_fail` (SIGTRAP) the moment the
         // system tries to extract the JPEG. UIImage is Sendable, so
         // capturing it through a non-isolated closure is safe.
-        let artwork = MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPMediaItemPropertyArtwork] = artwork
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        // NSLog (not MMLogger) because the closure is @Sendable and
+        // can be called from any thread MediaPlayer chooses. NSLog
+        // is thread-safe; MMLogger's MainActor channel is not. The
+        // log line tells us whether CarPlay / Lock Screen ever
+        // *requests* the artwork — if it never logs, the system
+        // never asked for the bytes, which would point at a CarPlay
+        // simulator rendering bug rather than a setup error.
+        let artwork = MPMediaItemArtwork(boundsSize: squareSize) { @Sendable size in
+            NSLog("[MediaManager] artwork closure invoked at size=%.0fx%.0f", size.width, size.height)
+            return squareImage
+        }
+        nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
     // MARK: - Remote commands
