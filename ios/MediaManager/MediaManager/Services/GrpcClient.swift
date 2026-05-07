@@ -261,6 +261,31 @@ actor GrpcClient {
         return try await catalogService.search(request, metadata: authMetadata())
     }
 
+    /// Server-curated dance presets (Slow Waltz, Cha-Cha, etc).
+    /// Shared with the web app's advanced-search dialog so the
+    /// canonical BPM ranges stay in one place.
+    func listAdvancedSearchPresets() async throws -> [ApiAdvancedSearchPreset] {
+        let response = try await catalogService.listAdvancedSearchPresets(
+            MMEmpty(), metadata: authMetadata())
+        return response.presets.map { ApiAdvancedSearchPreset(proto: $0) }
+    }
+
+    /// Track-level filtered search: BPM range, time signature, free
+    /// text. All filters AND together; an all-empty filter set is
+    /// rejected client-side so we don't waste a round-trip on an
+    /// empty result. Server caps `limit` at 200.
+    func searchTracks(filters: AdvancedTrackSearchFilters, limit: Int32 = 0) async throws -> [ApiTrackSearchHit] {
+        var request = MMSearchTracksRequest()
+        if let q = filters.query, !q.isEmpty { request.query = q }
+        if let m = filters.bpmMin { request.bpmMin = Int32(m) }
+        if let m = filters.bpmMax { request.bpmMax = Int32(m) }
+        if let ts = filters.timeSignature, !ts.isEmpty { request.timeSignature = ts }
+        if limit > 0 { request.limit = limit }
+        let response = try await catalogService.searchTracks(
+            request, metadata: authMetadata())
+        return response.tracks.map { ApiTrackSearchHit(proto: $0) }
+    }
+
     func listSeasons(titleId: Int64) async throws -> MMSeasonsResponse {
         var request = MMTitleIdRequest()
         request.titleID = titleId

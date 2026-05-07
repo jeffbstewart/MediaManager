@@ -531,6 +531,68 @@ struct ApiSearchResponse: Sendable {
     var counts: [String: Int] { proto.counts.mapValues { Int($0) } }
 }
 
+// MARK: - Advanced (dance) search
+
+/// Server-curated dance preset — Slow Waltz, Cha-Cha, etc. Tapping a
+/// chip in the advanced-search sheet pre-fills the BPM range and
+/// time signature. Shared source of truth with the web app, so iOS
+/// and the SPA agree on what counts as "Salsa tempo".
+struct ApiAdvancedSearchPreset: Identifiable, Sendable, Hashable {
+    let proto: MMAdvancedSearchPreset
+
+    var id: String { proto.key }
+    var key: String { proto.key }
+    var name: String { proto.name }
+    /// Short blurb shown under the chip name as a subtitle.
+    var description: String { proto.description_p }
+    var bpmMin: Int? { proto.hasBpmMin ? Int(proto.bpmMin) : nil }
+    var bpmMax: Int? { proto.hasBpmMax ? Int(proto.bpmMax) : nil }
+    var timeSignature: String? {
+        proto.hasTimeSignature ? proto.timeSignature : nil
+    }
+}
+
+/// One row of advanced-search results — track-level hit, with bpm
+/// and time-signature surfaced so the user can verify the match.
+struct ApiTrackSearchHit: Identifiable, Sendable {
+    let proto: MMTrackSearchHit
+
+    var id: Int64 { proto.trackID }
+    var trackId: Int64 { proto.trackID }
+    /// Parent album's title id — drives artwork (square) and the
+    /// "tap a row → land on its album" navigation.
+    var titleId: Int64 { proto.titleID }
+    var name: String { proto.name }
+    var albumName: String { proto.albumName }
+    var artistName: String? {
+        proto.hasArtistName ? proto.artistName : nil
+    }
+    var bpm: Int? { proto.hasBpm ? Int(proto.bpm) : nil }
+    var timeSignature: String? {
+        proto.hasTimeSignature ? proto.timeSignature : nil
+    }
+    var durationSeconds: Int? {
+        proto.hasDurationSeconds ? Int(proto.durationSeconds) : nil
+    }
+    var playable: Bool { proto.playable }
+}
+
+/// Composed filter record passed from the AdvancedSearchSheet to
+/// the results surface. nil / empty fields mean "don't restrict".
+struct AdvancedTrackSearchFilters: Sendable, Hashable {
+    var query: String?
+    var bpmMin: Int?
+    var bpmMax: Int?
+    var timeSignature: String?
+
+    var isEmpty: Bool {
+        (query?.isEmpty ?? true)
+            && bpmMin == nil
+            && bpmMax == nil
+            && (timeSignature?.isEmpty ?? true)
+    }
+}
+
 // MARK: - List Endpoints
 
 struct ApiCollectionListItem: Identifiable, Sendable {

@@ -189,6 +189,12 @@ final class OfflineDataModel: DataModel {
     func dismissRecommendation(mbid: String) async throws {
         throw DataModelError.offline
     }
+    func advancedSearchPresets() async throws -> [ApiAdvancedSearchPreset] {
+        throw DataModelError.offline
+    }
+    func searchTracks(filters: AdvancedTrackSearchFilters) async throws -> [ApiTrackSearchHit] {
+        throw DataModelError.offline
+    }
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
         throw DataModelError.offline
     }

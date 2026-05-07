@@ -7,6 +7,13 @@ struct SearchView: View {
     @State private var searching = false
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
+    /// Drives the advanced-search modal. Bool rather than item-bound
+    /// so the sheet doesn't re-mount across submits.
+    @State private var showAdvanced = false
+    /// Set when the advanced-search submit closes — pushes the
+    /// TrackSearchResultsView destination once we land on the next
+    /// run loop turn (avoids fighting the sheet dismiss animation).
+    @State private var pendingTrackSearch: AdvancedTrackSearchFilters? = nil
 
     var body: some View {
         List {
@@ -26,6 +33,27 @@ struct SearchView: View {
         }
         .navigationTitle("Search")
         .searchable(text: $query, prompt: "Movies, TV, books, music, actors…")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAdvanced = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .accessibilityLabel("Advanced search")
+            }
+        }
+        .sheet(isPresented: $showAdvanced) {
+            AdvancedSearchSheet { filters in
+                // Stash on state — the .onChange below promotes it to
+                // a NavigationLink push once SwiftUI is back on the
+                // base run loop.
+                pendingTrackSearch = filters
+            }
+        }
+        .navigationDestination(item: $pendingTrackSearch) { filters in
+            TrackSearchResultsView(filters: filters)
+        }
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()
             hasSearched = false

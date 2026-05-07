@@ -242,6 +242,18 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.dismissRecommendation(mbid: mbid)
     }
 
+    // MARK: - Advanced (dance) search
+
+    func advancedSearchPresets() async throws -> [ApiAdvancedSearchPreset] {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.listAdvancedSearchPresets()
+    }
+
+    func searchTracks(filters: AdvancedTrackSearchFilters) async throws -> [ApiTrackSearchHit] {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.searchTracks(filters: filters)
+    }
+
     // MARK: - User playlists
 
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
