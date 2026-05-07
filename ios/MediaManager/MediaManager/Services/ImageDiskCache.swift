@@ -17,7 +17,13 @@ actor ImageDiskCache {
 
     /// In-memory manifest: cache_key → (etag, contentType, fileURL)
     private var manifest: [String: CacheEntry] = [:]
-    private var accessOrder: [String] = [] // most recent at end
+    /// LRU bookkeeping. Each touch bumps `accessClock` and stamps the
+    /// key with the new value, so `touchAccess` is O(1) instead of
+    /// the O(n) `Array.removeAll(where:)` scan we used before.
+    /// Eviction sorts by this map only when the cache is over the
+    /// `maxCount` cap — runs at most once per save burst.
+    private var lastAccess: [String: UInt64] = [:]
+    private var accessClock: UInt64 = 0
     private var pinnedKeys: Set<String> = [] // never evicted
 
     struct CacheEntry {
@@ -27,6 +33,24 @@ actor ImageDiskCache {
     }
 
     private var loaded = false
+
+    // MARK: - Manifest debounce
+    //
+    // Every `store()` used to call `saveManifest()` synchronously,
+    // which JSON-encoded all 500 entries and wrote them to disk on
+    // the actor. A burst of cache misses (e.g. the For You carousel
+    // populating 30 cards at once) serialized 30 disk writes
+    // through the actor and blocked every other cache op behind
+    // them — visibly tens of seconds in the simulator.
+    //
+    // We coalesce now: each mutation flips `manifestDirty` and
+    // schedules a single flush after a 500 ms quiet period. If
+    // another mutation lands while a flush is pending, the flag
+    // stays dirty and the same scheduled task picks it up. If
+    // mutations land while a flush is *running*, the flag is
+    // re-set and a new flush is scheduled by the *next* mutation.
+    private var manifestDirty: Bool = false
+    private var manifestFlushScheduled: Bool = false
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
@@ -61,7 +85,7 @@ actor ImageDiskCache {
               let image = UIImage(data: data) else {
             // Corrupt or missing file — remove from manifest
             manifest.removeValue(forKey: key)
-            accessOrder.removeAll { $0 == key }
+            lastAccess.removeValue(forKey: key)
             return nil
         }
 
@@ -96,7 +120,7 @@ actor ImageDiskCache {
         }
 
         evictIfNeeded()
-        saveManifest()
+        scheduleManifestSave()
     }
 
     /// Remove a specific entry.
@@ -105,9 +129,9 @@ actor ImageDiskCache {
         if let entry = manifest.removeValue(forKey: key) {
             try? FileManager.default.removeItem(at: entry.fileURL)
         }
-        accessOrder.removeAll { $0 == key }
+        lastAccess.removeValue(forKey: key)
         memoryCache.removeObject(forKey: key as NSString)
-        saveManifest()
+        scheduleManifestSave()
     }
 
     // MARK: - Pinning (prevents eviction for downloaded content)
@@ -151,20 +175,29 @@ actor ImageDiskCache {
 
     // MARK: - LRU
 
+    /// O(1) — bump the monotonic clock and stamp the key. Eviction
+    /// reads `lastAccess` later to pick the oldest.
     private func touchAccess(_ key: String) {
-        accessOrder.removeAll { $0 == key }
-        accessOrder.append(key)
+        accessClock &+= 1
+        lastAccess[key] = accessClock
     }
 
     private func evictIfNeeded() {
-        while manifest.count > maxCount {
-            // Find oldest non-pinned entry
-            guard let idx = accessOrder.firstIndex(where: { !pinnedKeys.contains($0) }) else { break }
-            let oldest = accessOrder.remove(at: idx)
-            if let entry = manifest.removeValue(forKey: oldest) {
+        guard manifest.count > maxCount else { return }
+        let overflow = manifest.count - maxCount
+        // Sort once, evict in order. O(n log n) on the cache size,
+        // and only triggers when we're actually over the cap.
+        let candidates = lastAccess
+            .filter { !pinnedKeys.contains($0.key) }
+            .sorted { $0.value < $1.value }
+        var evicted = 0
+        for (key, _) in candidates where evicted < overflow {
+            if let entry = manifest.removeValue(forKey: key) {
                 try? FileManager.default.removeItem(at: entry.fileURL)
-                memoryCache.removeObject(forKey: oldest as NSString)
+                memoryCache.removeObject(forKey: key as NSString)
             }
+            lastAccess.removeValue(forKey: key)
+            evicted += 1
         }
     }
 
@@ -172,18 +205,47 @@ actor ImageDiskCache {
 
     private var manifestURL: URL { cacheDir.appendingPathComponent("manifest.json") }
 
-    private func saveManifest() {
+    /// Mark the manifest dirty and ensure exactly one save task is
+    /// pending. Multiple stores in the same quiet period collapse
+    /// into a single disk write.
+    private func scheduleManifestSave() {
+        manifestDirty = true
+        guard !manifestFlushScheduled else { return }
+        manifestFlushScheduled = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            await self?.flushManifestIfDirty()
+        }
+    }
+
+    private func flushManifestIfDirty() {
+        manifestFlushScheduled = false
+        guard manifestDirty else { return }
+        manifestDirty = false
+        writeManifestNow()
+    }
+
+    private func writeManifestNow() {
         struct ManifestEntry: Codable {
             let key: String
             let etag: String
             let contentType: String
             let fileName: String
         }
-        let entries = accessOrder.compactMap { key -> ManifestEntry? in
-            guard let entry = manifest[key] else { return nil }
-            return ManifestEntry(key: key, etag: entry.etag, contentType: entry.contentType, fileName: entry.fileURL.lastPathComponent)
-        }
-        if let data = try? JSONEncoder().encode(entries) {
+        // Persist in access order (oldest first → newest last) so a
+        // future load can reconstruct relative recency without
+        // needing the raw clock value on disk.
+        let ordered = lastAccess
+            .sorted { $0.value < $1.value }
+            .compactMap { (key, _) -> ManifestEntry? in
+                guard let entry = manifest[key] else { return nil }
+                return ManifestEntry(
+                    key: key,
+                    etag: entry.etag,
+                    contentType: entry.contentType,
+                    fileName: entry.fileURL.lastPathComponent)
+            }
+        if let data = try? JSONEncoder().encode(ordered) {
             try? data.write(to: manifestURL)
         }
     }
@@ -203,7 +265,11 @@ actor ImageDiskCache {
             let fileURL = cacheDir.appendingPathComponent(entry.fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 manifest[entry.key] = CacheEntry(etag: entry.etag, contentType: entry.contentType, fileURL: fileURL)
-                accessOrder.append(entry.key)
+                // File ordering preserves relative recency; assign
+                // monotonic stamps in iteration order so newest-on-disk
+                // becomes newest-in-memory.
+                accessClock &+= 1
+                lastAccess[entry.key] = accessClock
             }
         }
         logger.info("Loaded \(self.manifest.count) cached images from disk")
