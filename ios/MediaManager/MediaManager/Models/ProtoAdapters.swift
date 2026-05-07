@@ -496,6 +496,31 @@ struct ApiSearchResult: Identifiable, Sendable {
     var titleCount: Int? { proto.hasTitleCount ? Int(proto.titleCount) : nil }
     var itemId: Int? { proto.hasItemID ? Int(proto.itemID) : nil }
     var authorId: AuthorID? { proto.hasAuthorID ? AuthorID(rawValue: Int(proto.authorID)) : nil }
+    /// Local Artist row id for ARTIST results. Always present on
+    /// owned-artist hits; tap routes to ArtistDetailView.
+    var artistId: ArtistID? {
+        proto.hasArtistID ? ArtistID(proto: proto.artistID) : nil
+    }
+    /// Track-level id for TRACK results. The parent album's title id
+    /// is on `albumTitleId` — the iOS row navigates to AlbumDetailView
+    /// keyed by that, since there's no per-track detail surface and
+    /// "tap a track in search results" matches Apple Music's behaviour
+    /// of opening the parent album.
+    var trackId: Int64? { proto.hasTrackID ? proto.trackID : nil }
+    var albumTitleId: TitleID? {
+        proto.hasAlbumTitleID ? TitleID(proto: proto.albumTitleID) : nil
+    }
+    /// Context line for ALBUM and TRACK results — the album-credit
+    /// artist (e.g. "Taylor Swift" under "Folklore"). Falls back to
+    /// per-track artist when the album-level credit is empty.
+    var artistName: String? {
+        proto.hasArtistName ? proto.artistName : nil
+    }
+    /// Context line for TRACK results — the parent album's name.
+    /// (ALBUM rows already carry the name in `name`.)
+    var albumName: String? {
+        proto.hasAlbumName ? proto.albumName : nil
+    }
 }
 
 struct ApiSearchResponse: Sendable {

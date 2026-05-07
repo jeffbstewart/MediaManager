@@ -252,13 +252,12 @@ actor GrpcClient {
     func search(query: String) async throws -> MMSearchResponse {
         var request = MMSearchRequest()
         request.query = query
-        // Server gates BOOK + AUTHOR results behind this opt-in so
+        // Server gates these result types behind opt-in flags so
         // legacy clients keep their video-only behaviour. SearchView
-        // now routes both, so let them through. Audio (ALBUM /
-        // ARTIST / TRACK) intentionally stays off until SearchView
-        // grows cases for those — enabling it now would just produce
-        // non-tappable rows.
+        // routes books and audio (ALBUM / ARTIST / TRACK) now, so
+        // both are enabled.
         request.includeBooks = true
+        request.includeAudio = true
         return try await catalogService.search(request, metadata: authMetadata())
     }
 

@@ -25,7 +25,7 @@ struct SearchView: View {
             }
         }
         .navigationTitle("Search")
-        .searchable(text: $query, prompt: "Movies, TV, books, actors, authors…")
+        .searchable(text: $query, prompt: "Movies, TV, books, music, actors…")
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()
             hasSearched = false
@@ -53,6 +53,9 @@ struct SearchView: View {
         case "author":          authorResultLink(result)
         case "tag":             tagResultLink(result)
         case "genre":           genreResultLink(result)
+        case "album":           albumResultLink(result)
+        case "artist":          artistResultLink(result)
+        case "track":           trackResultLink(result)
         default:                SearchResultRow(result: result, apiClient: dataModel.apiClient)
         }
     }
@@ -160,9 +163,73 @@ struct SearchView: View {
         }
     }
 
+    /// ALBUM hits route through the ApiTitle nav surface so
+    /// ContentView's destination handler can dispatch isAlbum titles
+    /// to AlbumDetailView. Built directly off the proto with the
+    /// MUSIC media type preserved (the Swift MediaType clamp
+    /// strategy used for Books — see bookResultLink).
+    @ViewBuilder
+    private func albumResultLink(_ result: ApiSearchResult) -> some View {
+        if let titleId = result.titleId {
+            NavigationLink(value: ApiTitle(proto: makeAlbumTitleProto(titleId: titleId, result: result))) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        }
+    }
+
+    private func makeAlbumTitleProto(titleId: TitleID, result: ApiSearchResult) -> MMTitle {
+        var proto = MMTitle()
+        proto.id = titleId.protoValue
+        proto.name = result.name
+        proto.mediaType = .album
+        if let y = result.year { proto.year = Int32(y) }
+        return proto
+    }
+
+    @ViewBuilder
+    private func artistResultLink(_ result: ApiSearchResult) -> some View {
+        if let artistId = result.artistId {
+            NavigationLink(value: ArtistRoute(id: artistId, name: result.name)) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    /// TRACK hits navigate to the parent album, matching the Apple
+    /// Music behaviour of "tap a song in search → land on its album".
+    /// The track-id is preserved on the row for future surfaces
+    /// (e.g. quick-play from a long-press) but isn't acted on yet.
+    /// The destination proto carries the album's name (from the
+    /// search result's `albumName` context line) so AlbumDetailView's
+    /// nav title is right while the album detail is still loading.
+    @ViewBuilder
+    private func trackResultLink(_ result: ApiSearchResult) -> some View {
+        if let albumTitleId = result.albumTitleId {
+            NavigationLink(value: ApiTitle(proto: makeTrackParentAlbumProto(
+                albumTitleId: albumTitleId,
+                result: result))) {
+                SearchResultRow(result: result, apiClient: dataModel.apiClient)
+            }
+        } else {
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    private func makeTrackParentAlbumProto(albumTitleId: TitleID, result: ApiSearchResult) -> MMTitle {
+        var proto = MMTitle()
+        proto.id = albumTitleId.protoValue
+        proto.name = result.albumName ?? result.name
+        proto.mediaType = .album
+        return proto
+    }
+
     private static let typeOrder: [String: Int] = [
-        "movie": 0, "series": 0, "book": 1, "actor": 2,
-        "author": 3, "collection": 4, "tag": 5, "genre": 5
+        "movie": 0, "series": 0, "book": 1,
+        "album": 2, "track": 2, "artist": 3,
+        "actor": 4, "author": 5, "collection": 6,
+        "tag": 7, "genre": 7
     ]
 
     private func performSearch(_ query: String) async {
@@ -190,14 +257,7 @@ struct SearchResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if result.resultType == "actor", let personId = result.tmdbPersonId {
-                CachedImage(ref: .headshot(tmdbPersonId: personId.protoValue), cornerRadius: 20)
-                    .frame(width: 40, height: 40)
-            } else if let titleId = result.titleId {
-                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
-                    .frame(width: 40, height: 60)
-            }
-
+            artwork
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.name)
                     .fontWeight(.medium)
@@ -205,6 +265,12 @@ struct SearchResultRow: View {
                 HStack(spacing: 6) {
                     Text(resultTypeLabel)
                         .foregroundStyle(.secondary)
+                    if let context = audioContextLabel {
+                        Text("·").foregroundStyle(.secondary)
+                        Text(context)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     if let year = result.year {
                         Text("(\(String(year)))")
                             .foregroundStyle(.secondary)
@@ -224,6 +290,57 @@ struct SearchResultRow: View {
         }
     }
 
+    /// Left-side thumbnail. Audio types render square (album-art
+    /// aspect) so albums and tracks don't get stretched into the
+    /// 40×60 poster aspect we use for video.
+    @ViewBuilder
+    private var artwork: some View {
+        switch result.resultType {
+        case "actor":
+            if let personId = result.tmdbPersonId {
+                CachedImage(ref: .headshot(tmdbPersonId: personId.protoValue), cornerRadius: 20)
+                    .frame(width: 40, height: 40)
+            }
+        case "artist":
+            if let artistId = result.artistId {
+                CachedImage(ref: .artistHeadshot(artistId: artistId.protoValue), cornerRadius: 20)
+                    .frame(width: 40, height: 40)
+            }
+        case "album":
+            if let titleId = result.titleId {
+                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 4)
+                    .frame(width: 40, height: 40)  // square
+            }
+        case "track":
+            if let albumTitleId = result.albumTitleId {
+                CachedImage(ref: .posterThumbnail(titleId: albumTitleId.protoValue), cornerRadius: 4)
+                    .frame(width: 40, height: 40)  // square
+            }
+        default:
+            if let titleId = result.titleId {
+                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
+                    .frame(width: 40, height: 60)
+            }
+        }
+    }
+
+    /// Tucked next to the type label: "Album · Taylor Swift" for an
+    /// album hit, "Song · Folklore" for a track hit. Returns nil for
+    /// non-audio rows so existing layout stays intact.
+    private var audioContextLabel: String? {
+        switch result.resultType {
+        case "album":
+            return result.artistName?.nonEmptyOrNil
+        case "track":
+            // Album name is the most useful context; fall back to
+            // artist name when the server didn't ship the album.
+            return result.albumName?.nonEmptyOrNil
+                ?? result.artistName?.nonEmptyOrNil
+        default:
+            return nil
+        }
+    }
+
     private var resultTypeLabel: String {
         switch result.resultType {
         case "movie": "Movie"
@@ -232,7 +349,16 @@ struct SearchResultRow: View {
         case "collection": "Collection"
         case "tag": "Tag"
         case "genre": "Genre"
+        case "album": "Album"
+        case "artist": "Artist"
+        case "track": "Song"
+        case "book": "Book"
+        case "author": "Author"
         default: result.resultType
         }
     }
+}
+
+private extension String {
+    var nonEmptyOrNil: String? { isEmpty ? nil : self }
 }
