@@ -49,10 +49,29 @@ struct MediaManagerApp: App {
         // the attribution.
         crashReporter = CrashReporter()
 
-        // Configure audio session for media playback — plays through speakers
-        // even when the silent switch is on, and continues in the background.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Configure audio session for media playback — plays through
+        // speakers regardless of the silent switch and continues in
+        // the background. Simulator is forgiving about both pieces of
+        // configuration; device is not, and `try?` was swallowing the
+        // error class that lets us tell setup failures from "audio
+        // works but isn't reaching the speaker."
+        //
+        // - `.default` mode (not `.moviePlayback`) is the right pick
+        //   for music streaming — `.moviePlayback` carries video-
+        //   playback assumptions (longer interruption tolerance,
+        //   route preferences) that can fight a music app on device.
+        // - `.longFormAudio` policy hints to the system that this is
+        //   a music app, enabling AirPlay 2 multi-room and the
+        //   appropriate interruption / pre-emption behaviour.
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setActive(true)
+        } catch {
+            // Use NSLog so this lands in the system log even before
+            // MMLogger / Binnacle wiring is up.
+            NSLog("[MediaManagerApp] AVAudioSession setup failed: \(error)")
+        }
 
         let am = AuthManager()
         let dm = DownloadManager()

@@ -470,6 +470,23 @@ final class AudioPlayerManager {
         // play to completion.
         enqueueOutgoingProgress()
         guard let track = currentTrack, let apiClient else { return }
+        // Re-assert the audio session before each play. The session
+        // can be deactivated between launch and the first play —
+        // an incoming call, Siri activation, or another audio app
+        // pre-empting us all leave the session in a state that
+        // silently no-ops AVPlayer.play() on device. Simulator is
+        // forgiving enough that we never noticed; real devices
+        // happily let the player render its UI without ever opening
+        // the speaker. Re-activating here is cheap (idempotent if
+        // already active) and turns the silent-failure mode into
+        // actual playback.
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setActive(true)
+        } catch {
+            logger.warning("AVAudioSession re-activation failed: \(error.localizedDescription)")
+        }
         // Prefer the downloaded file when present — silent local
         // playback regardless of network state. The streaming
         // endpoint is the fallback for non-downloaded tracks.
