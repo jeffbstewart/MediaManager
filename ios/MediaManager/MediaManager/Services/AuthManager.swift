@@ -100,10 +100,14 @@ final class AuthManager {
             logger.info("restoreSession: gRPC=\(grpcHost):\(grpcPort), HTTP=\(httpURLString)")
             await apiClient.configure(baseURL: httpURL)
             try? await grpcClient.configure(host: grpcHost, port: grpcPort, useTLS: url.scheme == "https")
-            // Refresh legal docs from server if not cached locally
-            if legalDocs == nil {
-                await refreshLegalDocs()
-            }
+            // Always re-run Discover. The legal-docs path is its
+            // historical reason to exist (only fires on first launch
+            // with no cache), but the same call now also refreshes
+            // the HTTP base URL — which has to run every launch so
+            // a moved server doesn't strand URLSession traffic
+            // pointing at a stale hostname forever. The legal-docs
+            // half is a no-op when already cached.
+            await refreshLegalDocs()
         }
 
         guard let tokenBase64 = KeychainService.load(key: .accessToken),
@@ -520,6 +524,28 @@ final class AuthManager {
                 legalDocs = protoDiscovery.legal
                 persistLegalDocs(legalDocs)
                 logger.info("restoreSession: refreshed legal docs from server")
+            }
+            // Also refresh the persisted HTTP base URL. The server's
+            // public hostname can change (Synology DDNS retired,
+            // domain renamed, HAProxy moved) without the user
+            // re-running connectToServer — until now, restoreSession
+            // happily kept loading the stale URL out of Keychain
+            // forever. Symptom: gRPC traffic worked (its host comes
+            // from the user-entered server URL) but every URLSession
+            // request — AVPlayer audio streaming, album downloads,
+            // image fetches — silently failed because they pointed
+            // at a hostname that no longer resolved.
+            let discovery = DiscoverResponse(proto: protoDiscovery)
+            if let secureUrl = discovery.secureUrl,
+               !secureUrl.isEmpty,
+               secureUrl.hasPrefix("https://"),
+               let url = URL(string: secureUrl) {
+                let stored = KeychainService.load(key: .httpBaseURL)
+                if stored != secureUrl {
+                    KeychainService.save(key: .httpBaseURL, value: secureUrl)
+                    await apiClient.configure(baseURL: url)
+                    logger.info("restoreSession: refreshed HTTP base URL — \(stored ?? "nil") → \(secureUrl)")
+                }
             }
         } catch {
             logger.warning("restoreSession: failed to refresh legal docs: \(error.localizedDescription)")
