@@ -6,6 +6,23 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     var downloadManager: DownloadManager?
 
     // Background URLSession no longer used — downloads go via gRPC streaming.
+
+    /// Route scene connection requests to the right delegate. The
+    /// SwiftUI App handles the default phone scene automatically;
+    /// the CarPlay scene needs an explicit configuration so iOS knows
+    /// to instantiate CarPlaySceneDelegate.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if connectingSceneSession.role == .carTemplateApplication {
+            let cfg = UISceneConfiguration(name: "CarPlay Configuration", sessionRole: connectingSceneSession.role)
+            cfg.delegateClass = CarPlaySceneDelegate.self
+            return cfg
+        }
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
 }
 
 @main
@@ -140,6 +157,15 @@ struct MediaManagerApp: App {
                         audioPlayer.configureProgressFlusher { [downloadManager] in
                             await downloadManager.flushPendingListeningProgress()
                         }
+                        // Make the managers reachable from secondary
+                        // scenes (CarPlay; eventually the watchOS
+                        // counterpart) — SwiftUI's @State / .environment
+                        // is scene-local and CarPlay can't see it.
+                        AppServices.shared.populate(
+                            audioPlayer: audioPlayer,
+                            dataModel: dataModel,
+                            audioCache: audioCache,
+                            imageProvider: imageProvider)
                     }
             }
         }

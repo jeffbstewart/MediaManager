@@ -18,6 +18,28 @@
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
+		<!--
+		  Per-role scene configuration. The default phone scene
+		  (UIWindowSceneSessionRoleApplication) is intentionally
+		  not declared here — SwiftUI's App protocol handles it
+		  automatically and adding an explicit entry would either
+		  override our SwiftUI scene or require a custom UIKit
+		  scene delegate. The CarPlay role MUST be declared so
+		  iOS knows to wire CarPlaySceneDelegate when a head
+		  unit (or the Xcode CarPlay simulator) connects.
+		-->
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>CarPlay Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>

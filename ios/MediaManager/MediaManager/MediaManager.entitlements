@@ -4,5 +4,16 @@
 <dict>
 	<key>com.apple.developer.networking.multicast</key>
 	<true/>
+	<!--
+	  CarPlay audio entitlement. Restricted-use; Apple gates this
+	  via a separate request (developer.apple.com/contact/carplay/).
+	  Simulator skips entitlement checks so development continues
+	  without the grant; a real-device install will fail with a
+	  signing error until Apple approves the request and the team's
+	  provisioning profile is regenerated. Once approved, no code
+	  change here — Xcode just lets the entitlement embed correctly.
+	-->
+	<key>com.apple.developer.carplay-audio</key>
+	<true/>
 </dict>
 </plist>
