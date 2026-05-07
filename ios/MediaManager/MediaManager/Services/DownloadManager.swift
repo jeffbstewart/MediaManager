@@ -206,6 +206,31 @@ final class DownloadManager {
                 }
             } catch { }
         }
+        await flushPendingListeningProgress()
+    }
+
+    /// Drain the audio listening-progress queue. Each successful
+    /// ReportListeningProgress RPC removes the corresponding entry;
+    /// failures stay queued for the next flush. Called on
+    /// network restore (alongside the video flush) and at startup
+    /// after configure().
+    func flushPendingListeningProgress() async {
+        guard let grpcClient else { return }
+        let pending = await ListeningProgressQueue.shared.pending()
+        for entry in pending {
+            do {
+                try await grpcClient.reportListeningProgress(
+                    trackId: entry.trackId,
+                    position: entry.position,
+                    duration: entry.duration)
+                await ListeningProgressQueue.shared.remove(trackId: entry.trackId)
+            } catch {
+                // Leave on the queue; the next flush picks it up.
+                // Don't break the loop — a one-track-not-found failure
+                // shouldn't block the rest.
+                continue
+            }
+        }
     }
 
     /// Pin images for a downloaded title so they survive cache eviction.

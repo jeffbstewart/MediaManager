@@ -93,6 +93,21 @@ final class AudioPlayerManager {
     private var apiClient: APIClient?
     private var imageProvider: ImageProvider?
 
+    /// Track id whose progress was most recently enqueued. Drives
+    /// the "report a final position when the track changes" hook —
+    /// when this differs from `currentTrack?.id` we know we just
+    /// swapped and need to emit one last position for the outgoing
+    /// track before advancing the marker.
+    private var lastReportedTrackId: Int64? = nil
+    /// Wall-clock of the most recent progress enqueue. The periodic
+    /// observer enqueues at a 10-second cadence; this throttle keeps
+    /// the queue from growing under the 4×/s time-observer firing.
+    private var lastReportedAt: Date = .distantPast
+    /// How often to enqueue progress while a track is playing.
+    /// Coalescing is in the queue (latest position per track wins),
+    /// but we still avoid waking the actor every 250 ms.
+    private static let progressReportInterval: TimeInterval = 10
+
     /// Per-track skip / completion feedback accumulated since the
     /// last NextRadioBatch RPC. Cleared after each successful fetch.
     private var radioHistory: [MMRadioTrackHistory] = []
@@ -183,6 +198,10 @@ final class AudioPlayerManager {
         player.pause()
         refreshIsPlaying()
         updateNowPlayingInfo()
+        // Pause is the natural moment to ship a fresh position —
+        // user might be backgrounding the app or putting the phone
+        // down, and we'd rather not wait for the next periodic tick.
+        enqueueCurrentProgress()
     }
 
     func next() {
@@ -223,6 +242,11 @@ final class AudioPlayerManager {
     /// Stop playback, clear the queue, and tear down the Now Playing
     /// surface. Called by the mini-player's close button.
     func stop() {
+        // Capture the final position before clearing state — same
+        // rationale as loadAndPlayCurrent's prologue, but here we
+        // know currentTrack is about to vanish so use the explicit
+        // outgoing path with the live trackId.
+        enqueueCurrentProgress()
         endRadioSession()
         player.pause()
         player.removeAllItems()
@@ -349,6 +373,72 @@ final class AudioPlayerManager {
         }
     }
 
+    // MARK: - Listening progress
+
+    /// Enqueue an outbound ReportListeningProgress write for the
+    /// current track. The queue coalesces by track id; flush is
+    /// driven by DownloadManager (online → fire RPC immediately on
+    /// flush; offline → entry waits for network restore).
+    private func enqueueCurrentProgress() {
+        guard let track = currentTrack else { return }
+        let pos = position
+        let dur = duration > 0 ? duration : nil
+        lastReportedTrackId = track.id
+        lastReportedAt = Date()
+        Task.detached {
+            await ListeningProgressQueue.shared.enqueue(
+                trackId: track.id,
+                position: pos,
+                duration: dur)
+        }
+        // Best-effort online flush so a working network gets the
+        // write right away instead of waiting for the next batch.
+        Task { [weak self] in
+            await self?.attemptImmediateFlush()
+        }
+    }
+
+    /// Capture a final position for whichever track was playing
+    /// before we swap to a new one. Called from next() / previous() /
+    /// handleEndOfTrack() / loadAndPlayCurrent's prologue. Skips when
+    /// the marker already matches the current track (no swap), or
+    /// when there's no current track yet (first play after stop).
+    private func enqueueOutgoingProgress() {
+        guard let lastId = lastReportedTrackId else { return }
+        if let current = currentTrack?.id, current == lastId { return }
+        // Only the prior track had a position; we don't have its
+        // duration handy any more (we've already swapped state). The
+        // server's resume logic uses position-only when duration is
+        // absent.
+        let pos = position
+        Task.detached {
+            await ListeningProgressQueue.shared.enqueue(
+                trackId: lastId,
+                position: pos,
+                duration: nil)
+        }
+        // Same best-effort online flush — a track change is exactly
+        // when the user expects "Recently Played" to update.
+        Task { [weak self] in
+            await self?.attemptImmediateFlush()
+        }
+        lastReportedTrackId = nil
+    }
+
+    /// The DownloadManager owns the network monitor and the
+    /// grpcClient handle, so let it drive the actual RPCs. We just
+    /// poke its flush method; if the network is gone the queue
+    /// entries stay put and the next pass picks them up.
+    private var progressFlusher: (@Sendable () async -> Void)? = nil
+
+    func configureProgressFlusher(_ flusher: @escaping @Sendable () async -> Void) {
+        progressFlusher = flusher
+    }
+
+    private func attemptImmediateFlush() async {
+        await progressFlusher?()
+    }
+
     /// Tear down the active radio session in-app and best-effort
     /// notify the server. Idempotent — safe to call from stop() /
     /// play() / startRadio() without checking isRadio first.
@@ -369,6 +459,11 @@ final class AudioPlayerManager {
     // MARK: - Internal
 
     private func loadAndPlayCurrent() async {
+        // Capture a final position for whatever was playing before
+        // we swap, so "Recently Played" reflects the user's actual
+        // listening trail rather than only the last track they let
+        // play to completion.
+        enqueueOutgoingProgress()
         guard let track = currentTrack, let apiClient else { return }
         guard let (url, headers) = await apiClient.audioURL(for: track.id) else {
             logger.warning("could not build audioURL for trackId=\(track.id)")
@@ -398,6 +493,10 @@ final class AudioPlayerManager {
 
     private func handleEndOfTrack() {
         guard let i = currentIndex else { return }
+        // Track-completion is a strong signal — explicitly enqueue
+        // the final position (== duration) so the resume-prompt
+        // doesn't reopen on a track the user finished.
+        enqueueCurrentProgress()
         recordRadioFeedback(skipped: false)
         if i + 1 < queue.count {
             currentIndex = i + 1
@@ -441,6 +540,14 @@ final class AudioPlayerManager {
         info[MPMediaItemPropertyPlaybackDuration] = duration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+
+        // Enqueue listening progress every ~10 s while playing. The
+        // queue coalesces same-track writes, so the throttle is
+        // mostly to keep us from poking the actor 4×/s.
+        if isPlaying,
+           Date().timeIntervalSince(lastReportedAt) >= Self.progressReportInterval {
+            enqueueCurrentProgress()
+        }
     }
 
     private func refreshIsPlaying() {

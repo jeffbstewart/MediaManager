@@ -101,6 +101,15 @@ struct MediaManagerApp: App {
                         bookCache.configure(grpcClient: authManager.grpcClient)
                         progressFlusher.configure(grpcClient: authManager.grpcClient)
                         audioPlayer.configure(apiClient: authManager.apiClient, imageProvider: imageProvider)
+                        // Hand AudioPlayerManager a back-channel to
+                        // DownloadManager's flush so a working
+                        // network gets listening-progress writes
+                        // immediately. When offline, the queue
+                        // entries simply wait for the next flush
+                        // (driven by the network monitor).
+                        audioPlayer.configureProgressFlusher { [downloadManager] in
+                            await downloadManager.flushPendingListeningProgress()
+                        }
                     }
             }
         }

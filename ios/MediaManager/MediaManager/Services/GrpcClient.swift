@@ -436,6 +436,20 @@ actor GrpcClient {
         _ = try await playbackService.reportProgress(request, metadata: authMetadata())
     }
 
+    /// Report audio listening progress for a music track. Server uses
+    /// this for resume-prompts and the "recently played" carousels.
+    /// Audiobook listening progress lives on `media_item_id` instead;
+    /// we only need the track-id path here.
+    func reportListeningProgress(trackId: Int64, position: Double, duration: Double?) async throws {
+        var request = MMReportListeningProgressRequest()
+        request.trackID = trackId
+        request.position = MMPlaybackOffset.with { $0.seconds = position }
+        if let dur = duration {
+            request.duration = MMPlaybackOffset.with { $0.seconds = dur }
+        }
+        _ = try await playbackService.reportListeningProgress(request, metadata: authMetadata())
+    }
+
     // MARK: - Profile RPCs
 
     func getProfile() async throws -> MMProfileResponse {
