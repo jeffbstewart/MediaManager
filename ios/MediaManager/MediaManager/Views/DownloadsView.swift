@@ -3,6 +3,7 @@ import SwiftUI
 struct DownloadsView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(AudioCacheManager.self) private var audioCache
     @State private var pendingBookRemoval: Int64? = nil
 
     private var isOffline: Bool { dataModel.downloads.isEffectivelyOffline }
@@ -115,19 +116,118 @@ struct DownloadsView: View {
                 }
             }
 
+            // ---- Audio (albums) ----
+
+            let activeAlbums = Array(audioCache.activeDownloads.values)
+                .sorted { $0.albumName < $1.albumName }
+            let downloadedAlbums = audioCache.downloads
+                .sorted { $0.name < $1.name }
+
+            if !activeAlbums.isEmpty && !isOffline {
+                Section("Active Albums") {
+                    ForEach(activeAlbums, id: \.titleId) { progress in
+                        activeAlbumRow(progress)
+                    }
+                }
+            }
+
+            if !downloadedAlbums.isEmpty {
+                Section("Albums") {
+                    ForEach(downloadedAlbums) { album in
+                        albumRow(album)
+                    }
+                }
+            }
+
             Section("Storage") {
                 storageRow(items: items)
             }
 
-            if active.isEmpty && completed.isEmpty && activeBooks.isEmpty && downloadedBooks.isEmpty {
+            if active.isEmpty && completed.isEmpty && activeBooks.isEmpty && downloadedBooks.isEmpty && activeAlbums.isEmpty && downloadedAlbums.isEmpty {
                 ContentUnavailableView(
                     "No Downloads",
                     systemImage: "arrow.down.circle",
-                    description: Text("Download movies or books from their detail pages to use them offline.")
+                    description: Text("Download movies, books, or albums from their detail pages to use them offline.")
                 )
             }
         }
         .navigationTitle("Downloads")
+    }
+
+    @ViewBuilder
+    private func activeAlbumRow(_ progress: AlbumDownloadProgress) -> some View {
+        HStack(spacing: 12) {
+            ProgressView(value: progress.fraction)
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(progress.albumName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text("\(progress.tracksCompleted) / \(progress.tracksTotal) tracks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                audioCache.cancelDownload(titleId: progress.titleId)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.red.opacity(0.7))
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel download")
+        }
+    }
+
+    @ViewBuilder
+    private func albumRow(_ album: DownloadedAlbum) -> some View {
+        // Tap navigates to AlbumDetailView; ApiTitle proto is built
+        // from the cached fields so ContentView's isAlbum branch
+        // routes correctly. Same trick SearchView's albumResultLink
+        // uses for nav.
+        NavigationLink(value: makeAlbumNavigationTitle(album)) {
+            HStack(spacing: 12) {
+                CachedImage(
+                    ref: .posterThumbnail(titleId: album.titleId),
+                    cornerRadius: 4)
+                    .frame(width: 44, height: 44)  // square
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(album.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        if !album.artistName.isEmpty {
+                            Text(album.artistName)
+                                .lineLimit(1)
+                        }
+                        Text("\(album.trackIds.count) tracks")
+                        Text(ByteCountFormatter.string(
+                            fromByteCount: album.sizeBytes,
+                            countStyle: .file))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                audioCache.deleteAlbum(titleId: album.titleId)
+            } label: {
+                Label("Remove", systemImage: "trash")
+            }
+        }
+    }
+
+    private func makeAlbumNavigationTitle(_ album: DownloadedAlbum) -> ApiTitle {
+        var proto = MMTitle()
+        proto.id = album.titleId
+        proto.name = album.name
+        proto.mediaType = .album
+        return ApiTitle(proto: proto)
     }
 
     @ViewBuilder

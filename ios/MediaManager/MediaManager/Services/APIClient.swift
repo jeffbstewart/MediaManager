@@ -78,6 +78,16 @@ actor APIClient {
 
     /// Fetch raw bytes (for images, streams) with JWT auth.
     func getRaw(_ path: String) async throws -> Data {
+        try await getRawWithContentType(path).0
+    }
+
+    /// Same as `getRaw` but also surfaces the response's
+    /// Content-Type. AudioCacheManager uses this so it can save
+    /// downloaded audio with a proper file extension — AVURLAsset
+    /// against extensionless local files falls back to magic-byte
+    /// sniffing, which doesn't reliably cover every format the
+    /// audio endpoint can serve (flac / opus particularly).
+    func getRawWithContentType(_ path: String) async throws -> (Data, String?) {
         guard let baseURL else { throw APIClientError.noServerURL }
         let url = baseURL.appendingPathComponent(path)
         var request = URLRequest(url: url)
@@ -86,7 +96,9 @@ actor APIClient {
         }
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return data
+        let contentType = (response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Type")
+        return (data, contentType)
     }
 
     /// Build the full download URL for a transcode (used by DownloadManager).

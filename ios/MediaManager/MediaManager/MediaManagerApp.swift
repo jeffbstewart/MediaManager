@@ -30,6 +30,9 @@ struct MediaManagerApp: App {
     /// CarPlay), and the future Watch remote. Created at app scope
     /// so audio survives navigation across tabs.
     @State private var audioPlayer: AudioPlayerManager
+    /// Owns offline album storage. Held at app scope so downloads
+    /// survive navigation, mirrors BookCacheManager's lifetime.
+    @State private var audioCache: AudioCacheManager
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
 
@@ -56,11 +59,13 @@ struct MediaManagerApp: App {
         let bc = BookCacheManager()
         let pf = ProgressFlusher(queue: ReadingProgressQueue.shared, downloads: dm)
         let ap = AudioPlayerManager()
+        let ac = AudioCacheManager()
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
         _bookCache = State(initialValue: bc)
         _progressFlusher = State(initialValue: pf)
         _audioPlayer = State(initialValue: ap)
+        _audioCache = State(initialValue: ac)
         _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
         _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
     }
@@ -85,6 +90,7 @@ struct MediaManagerApp: App {
                 .environment(bookCache)
                 .environment(progressFlusher)
                 .environment(audioPlayer)
+                .environment(audioCache)
                 .environment(dataModel)
                 .environment(imageProvider)
             } else {
@@ -94,13 +100,18 @@ struct MediaManagerApp: App {
                     .environment(bookCache)
                     .environment(progressFlusher)
                     .environment(audioPlayer)
+                    .environment(audioCache)
                     .environment(dataModel)
                     .environment(imageProvider)
                     .onAppear {
                         downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
                         bookCache.configure(grpcClient: authManager.grpcClient)
                         progressFlusher.configure(grpcClient: authManager.grpcClient)
-                        audioPlayer.configure(apiClient: authManager.apiClient, imageProvider: imageProvider)
+                        audioCache.configure(apiClient: authManager.apiClient)
+                        audioPlayer.configure(
+                            apiClient: authManager.apiClient,
+                            imageProvider: imageProvider,
+                            audioCache: audioCache)
                         // Hand AudioPlayerManager a back-channel to
                         // DownloadManager's flush so a working
                         // network gets listening-progress writes

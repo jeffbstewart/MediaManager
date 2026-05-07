@@ -8,6 +8,7 @@ private let log = MMLogger(category: "AlbumDetailView")
 struct AlbumDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
+    @Environment(AudioCacheManager.self) private var audioCache
     let titleId: TitleID
 
     @State private var detail: ApiTitleDetail?
@@ -87,6 +88,12 @@ struct AlbumDetailView: View {
             detail = try await dataModel.titleDetail(id: titleId)
         } catch {
             log.warning("titleDetail failed: \(error.localizedDescription)")
+            // Fall back to the cached detail (written at download
+            // time) so a downloaded album is still browsable when
+            // offline.
+            if let cached = audioCache.cachedAlbumDetail(titleId: titleId.protoValue) {
+                detail = cached
+            }
         }
         loading = false
     }
@@ -131,6 +138,9 @@ struct AlbumDetailView: View {
     @ViewBuilder
     private func actionRow(_ detail: ApiTitleDetail, album: ApiAlbum) -> some View {
         let allUnplayable = album.tracks.allSatisfy { !$0.playable }
+        let albumId = titleId.protoValue
+        let isDownloaded = audioCache.isDownloaded(titleId: albumId)
+        let progress = audioCache.activeDownloads[albumId]
         return VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button {
@@ -153,10 +163,69 @@ struct AlbumDetailView: View {
                 .controlSize(.large)
                 .disabled(allUnplayable)
             }
+            HStack(spacing: 8) {
+                Button {
+                    startAlbumStation(detail, album: album)
+                } label: {
+                    Label("Start Station", systemImage: "dot.radiowaves.left.and.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .disabled(allUnplayable)
+
+                downloadButton(
+                    detail: detail,
+                    album: album,
+                    isDownloaded: isDownloaded,
+                    progress: progress,
+                    allUnplayable: allUnplayable)
+            }
+        }
+    }
+
+    /// Three-state download affordance:
+    ///  - Idle: cloud-down icon, taps fire `downloadAlbum`
+    ///  - In flight: spinner with "{done}/{total}" track count, taps cancel
+    ///  - Downloaded: checkmark.circle.fill, taps remove
+    @ViewBuilder
+    private func downloadButton(
+        detail: ApiTitleDetail,
+        album: ApiAlbum,
+        isDownloaded: Bool,
+        progress: AlbumDownloadProgress?,
+        allUnplayable: Bool
+    ) -> some View {
+        if let progress {
             Button {
-                startAlbumStation(detail, album: album)
+                audioCache.cancelDownload(titleId: titleId.protoValue)
             } label: {
-                Label("Start Station", systemImage: "dot.radiowaves.left.and.right")
+                HStack(spacing: 6) {
+                    ProgressView(value: progress.fraction)
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+                    Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
+                        .font(.caption.monospacedDigit())
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+        } else if isDownloaded {
+            Button {
+                audioCache.deleteAlbum(titleId: titleId.protoValue)
+            } label: {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .tint(.green)
+        } else {
+            Button {
+                audioCache.downloadAlbum(detail: detail, album: album)
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -216,6 +285,16 @@ struct AlbumDetailView: View {
                     }
                 }
                 Spacer()
+                if audioCache.isTrackDownloaded(trackId: track.id) {
+                    // Subtle dot — the album-level Downloaded button
+                    // already conveys the bulk state; this is for
+                    // the offline-mode case where only some tracks
+                    // landed.
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Downloaded")
+                }
                 if let secs = track.durationSeconds {
                     Text(formatDuration(secs))
                         .font(.caption.monospacedDigit())

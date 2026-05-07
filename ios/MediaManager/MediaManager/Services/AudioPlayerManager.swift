@@ -92,6 +92,10 @@ final class AudioPlayerManager {
     /// without crossing through the data model on every call.
     private var apiClient: APIClient?
     private var imageProvider: ImageProvider?
+    /// Set at boot so loadAndPlayCurrent can prefer downloaded
+    /// audio files over the streaming endpoint. nil before configure
+    /// — playback gracefully falls through to streaming.
+    private var audioCache: AudioCacheManager?
 
     /// Track id whose progress was most recently enqueued. Drives
     /// the "report a final position when the track changes" hook —
@@ -145,9 +149,10 @@ final class AudioPlayerManager {
     // concurrency rejects @MainActor property access from a
     // non-isolated deinit anyway.
 
-    func configure(apiClient: APIClient, imageProvider: ImageProvider) {
+    func configure(apiClient: APIClient, imageProvider: ImageProvider, audioCache: AudioCacheManager? = nil) {
         self.apiClient = apiClient
         self.imageProvider = imageProvider
+        self.audioCache = audioCache
     }
 
     // MARK: - Playback control
@@ -465,11 +470,19 @@ final class AudioPlayerManager {
         // play to completion.
         enqueueOutgoingProgress()
         guard let track = currentTrack, let apiClient else { return }
-        guard let (url, headers) = await apiClient.audioURL(for: track.id) else {
-            logger.warning("could not build audioURL for trackId=\(track.id)")
-            return
+        // Prefer the downloaded file when present — silent local
+        // playback regardless of network state. The streaming
+        // endpoint is the fallback for non-downloaded tracks.
+        let asset: AVURLAsset
+        if let localURL = audioCache?.localTrackURL(trackId: track.id) {
+            asset = AVURLAsset(url: localURL)
+        } else {
+            guard let (url, headers) = await apiClient.audioURL(for: track.id) else {
+                logger.warning("could not build audioURL for trackId=\(track.id)")
+                return
+            }
+            asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         }
-        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         let item = AVPlayerItem(asset: asset)
         position = 0
         duration = track.durationSeconds ?? 0
@@ -481,6 +494,25 @@ final class AudioPlayerManager {
             object: item, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.handleEndOfTrack() }
+        }
+        // Surface decode / load failures. Without this, a bad
+        // local file or unreachable stream just sits in .paused
+        // state with no diagnostic. Captures the failed-to-play
+        // notification and AVPlayerItem.error in one place.
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item, queue: .main
+        ) { note in
+            let err = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            logger.warning("AVPlayerItem failed to play to end: \(String(describing: err))")
+        }
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemNewErrorLogEntry,
+            object: item, queue: .main
+        ) { _ in
+            if let entry = item.errorLog()?.events.last {
+                logger.warning("AVPlayerItem error log: domain=\(entry.errorDomain) code=\(entry.errorStatusCode) comment=\(entry.errorComment ?? "")")
+            }
         }
 
         player.removeAllItems()
