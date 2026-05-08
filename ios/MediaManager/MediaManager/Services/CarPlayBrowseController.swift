@@ -51,6 +51,18 @@ final class CarPlayBrowseController {
         let tabBar = CPTabBarTemplate(templates: [albumsTab, playlistsTab, smartTab])
         interfaceController?.setRootTemplate(tabBar, animated: true)
 
+        // Search wiring is deferred — both CPSearchTemplate as a
+        // pushed template (NSException from
+        // CPInterfaceController.pushTemplate) and as a tab in
+        // CPTabBarTemplate (NSException from
+        // CPTabBarTemplate.validateTemplates) crash the app on iOS
+        // 26 simulator. Without a real CarPlay device + the granted
+        // com.apple.developer.carplay-audio entitlement we can't
+        // tell whether this is a simulator-only restriction or a
+        // deeper API issue. The dispatch helpers (openArtist,
+        // playSingleTrack) and the CarPlaySearchDelegate stay in
+        // place ready for whenever the entitlement lands.
+
         Task { await loadAlbums() }
         Task { await loadPlaylists() }
         Task { await loadSmartPlaylists() }
@@ -84,6 +96,22 @@ final class CarPlayBrowseController {
             logger.warning("loadAlbums failed: \(error.localizedDescription)")
             albumsTab.updateSections([Self.errorSection(error: error)])
         }
+    }
+
+    fileprivate func openAlbum(titleId: TitleID, name: String) {
+        openAlbum(title: makeAlbumStub(titleId: titleId, name: name))
+    }
+
+    /// Build a minimal ApiTitle stub for openAlbum — search results
+    /// don't carry full ApiTitle metadata, just titleId + name. The
+    /// stub gets replaced by the full proto when titleDetail
+    /// resolves.
+    private func makeAlbumStub(titleId: TitleID, name: String) -> ApiTitle {
+        var proto = MMTitle()
+        proto.id = titleId.protoValue
+        proto.name = name
+        proto.mediaType = .album
+        return ApiTitle(proto: proto)
     }
 
     private func openAlbum(title: ApiTitle) {
@@ -156,7 +184,7 @@ final class CarPlayBrowseController {
         }
     }
 
-    private func openPlaylist(id: Int64, name: String) {
+    fileprivate func openPlaylist(id: Int64, name: String) {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
         interfaceController.pushTemplate(template, animated: true)
@@ -253,6 +281,58 @@ final class CarPlayBrowseController {
         }
     }
 
+    // MARK: - Artist + single track (search dispatch)
+
+    /// Push a list of the artist's owned albums; tap an album → the
+    /// existing openAlbum tracklist path. Used by search ARTIST hits.
+    fileprivate func openArtist(artistId: ArtistID, name: String) {
+        guard let interfaceController else { return }
+        let template = CPListTemplate(title: name, sections: [Self.loadingSection])
+        interfaceController.pushTemplate(template, animated: true)
+        Task {
+            guard let model = AppServices.shared.dataModel else { return }
+            do {
+                let detail = try await model.artistDetail(id: artistId)
+                let items = detail.ownedAlbums.map { (album: ApiTitle) -> CPListItem in
+                    let item = CPListItem(text: album.name, detailText: album.year.map(String.init))
+                    item.accessoryType = .disclosureIndicator
+                    item.handler = { [weak self] _, completion in
+                        self?.openAlbum(titleId: album.id, name: album.name)
+                        completion()
+                    }
+                    return item
+                }
+                if items.isEmpty {
+                    template.updateSections([Self.errorSection(message: "No albums for this artist yet.")])
+                } else {
+                    template.updateSections([CPListSection(items: items)])
+                }
+            } catch {
+                logger.warning("openArtist failed: \(error.localizedDescription)")
+                template.updateSections([Self.errorSection(error: error)])
+            }
+        }
+    }
+
+    /// Play a single track standalone — used when the user picks a
+    /// TRACK row from search. Builds a one-item queue with the track's
+    /// album context (server populates albumName + artistName on
+    /// SearchResult for TRACK hits).
+    fileprivate func playSingleTrack(trackId: Int64, titleId: Int64, name: String, albumName: String, artistName: String?) {
+        guard let audio = AppServices.shared.audioPlayer else { return }
+        let queued = QueuedTrack(
+            id: trackId,
+            titleId: titleId,
+            title: name,
+            albumName: albumName,
+            artistName: artistName ?? "",
+            trackNumber: 0,
+            discNumber: 0,
+            durationSeconds: nil)
+        audio.play(tracks: [queued], startingAt: 0)
+        presentNowPlaying()
+    }
+
     // MARK: - Helpers
 
     /// Subtitle for a playlist track row: artist · album.
@@ -307,5 +387,129 @@ final class CarPlayBrowseController {
     private static func errorSection(message: String) -> CPListSection {
         let item = CPListItem(text: "Couldn't load", detailText: message)
         return CPListSection(items: [item])
+    }
+}
+
+/// Bridges CPSearchTemplate's typed/voice input to the existing
+/// search RPC + the controller's dispatch methods. The audio_only
+/// flag on the request means the head unit never surfaces a movie
+/// or actor hit when the driver said "play X".
+///
+/// Selection routing carries the original ApiSearchResult through
+/// CPListItem.userInfo because CPSearchTemplateDelegate's selection
+/// callback hands back the picked CPListItem and we need to know
+/// what kind of media to dispatch to.
+@MainActor
+final class CarPlaySearchDelegate: NSObject, CPSearchTemplateDelegate {
+
+    private weak var controller: CarPlayBrowseController?
+    /// In-flight task so a fast-typing user doesn't pile up search
+    /// RPCs — each new keystroke cancels the previous query.
+    private var inflight: Task<Void, Never>?
+
+    init(controller: CarPlayBrowseController) {
+        self.controller = controller
+    }
+
+    func searchTemplate(
+        _ searchTemplate: CPSearchTemplate,
+        updatedSearchText searchText: String,
+        completionHandler: @escaping ([CPListItem]) -> Void
+    ) {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            completionHandler([])
+            return
+        }
+        inflight?.cancel()
+        inflight = Task { [weak self] in
+            // Tiny debounce — head-unit voice input typically
+            // streams partial transcriptions; throttling avoids
+            // hammering the server on every word.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            guard let model = AppServices.shared.dataModel else {
+                completionHandler([])
+                return
+            }
+            do {
+                let response = try await model.searchMusicOnly(query: trimmed)
+                if Task.isCancelled { return }
+                let items = response.results.compactMap { Self.makeRow(from: $0) }
+                completionHandler(items)
+            } catch {
+                logger.warning("CarPlay search failed: \(error.localizedDescription)")
+                completionHandler([])
+            }
+        }
+    }
+
+    func searchTemplate(
+        _ searchTemplate: CPSearchTemplate,
+        selectedResult item: CPListItem,
+        completionHandler: @escaping () -> Void
+    ) {
+        defer { completionHandler() }
+        guard let hit = item.userInfo as? ApiSearchResult else { return }
+        switch hit.resultType {
+        case "album":
+            if let titleId = hit.titleId {
+                controller?.openAlbum(titleId: titleId, name: hit.name)
+            }
+        case "artist":
+            if let artistId = hit.artistId {
+                controller?.openArtist(artistId: artistId, name: hit.name)
+            }
+        case "track":
+            if let trackId = hit.trackId, let albumTitleId = hit.albumTitleId {
+                controller?.playSingleTrack(
+                    trackId: trackId,
+                    titleId: albumTitleId.protoValue,
+                    name: hit.name,
+                    albumName: hit.albumName ?? "",
+                    artistName: hit.artistName)
+            }
+        case "playlist":
+            if let id = hit.playlistId {
+                controller?.openPlaylist(id: id, name: hit.name)
+            }
+        default:
+            // Server's audio_only filter shouldn't return non-audio
+            // types but be defensive.
+            break
+        }
+    }
+
+    /// Type-aware row builder. Stashes the original ApiSearchResult
+    /// in CPListItem.userInfo so the selection callback knows which
+    /// dispatch path to take.
+    private static func makeRow(from hit: ApiSearchResult) -> CPListItem? {
+        let item: CPListItem
+        switch hit.resultType {
+        case "album":
+            item = CPListItem(text: hit.name, detailText: hit.artistName)
+            item.accessoryType = .disclosureIndicator
+        case "artist":
+            // titleCount is owned-album count; surface as detail text.
+            let count = hit.titleCount ?? 0
+            let detail = count > 0 ? "\(count) album\(count == 1 ? "" : "s")" : nil
+            item = CPListItem(text: hit.name, detailText: detail)
+            item.accessoryType = .disclosureIndicator
+        case "track":
+            // Subtitle: "Album · Artist" when both present.
+            var parts: [String] = []
+            if let album = hit.albumName, !album.isEmpty { parts.append(album) }
+            if let artist = hit.artistName, !artist.isEmpty { parts.append(artist) }
+            item = CPListItem(text: hit.name, detailText: parts.isEmpty ? nil : parts.joined(separator: " · "))
+        case "playlist":
+            let count = hit.titleCount ?? 0
+            let detail = count > 0 ? "\(count) track\(count == 1 ? "" : "s")" : nil
+            item = CPListItem(text: hit.name, detailText: detail)
+            item.accessoryType = .disclosureIndicator
+        default:
+            return nil
+        }
+        item.userInfo = hit
+        return item
     }
 }

@@ -77,6 +77,11 @@ final class OnlineDataModel: DataModel {
         return response.episodes.map { ApiEpisode(proto: $0) }
     }
 
+    func searchMusicOnly(query: String) async throws -> ApiSearchResponse {
+        if !isOnline { throw DataModelError.offline }
+        return ApiSearchResponse(proto: try await grpcClient.searchMusicOnly(query: query))
+    }
+
     func search(query: String) async throws -> ApiSearchResponse {
         if !isOnline { throw DataModelError.offline }
         let response = try await grpcClient.search(query: query)

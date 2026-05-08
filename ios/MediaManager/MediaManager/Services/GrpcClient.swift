@@ -261,6 +261,20 @@ actor GrpcClient {
         return try await catalogService.search(request, metadata: authMetadata())
     }
 
+    /// Music-only search variant. Used by the CarPlay surface where
+    /// surfacing a movie / actor hit when the driver said "play X"
+    /// would be a UX failure. Returns ALBUM / ARTIST / TRACK /
+    /// PLAYLIST only — server's audio_only flag suppresses every
+    /// other type.
+    func searchMusicOnly(query: String) async throws -> MMSearchResponse {
+        var request = MMSearchRequest()
+        request.query = query
+        request.includeAudio = true
+        request.includePlaylists = true
+        request.audioOnly = true
+        return try await catalogService.search(request, metadata: authMetadata())
+    }
+
     /// Server-curated dance presets (Slow Waltz, Cha-Cha, etc).
     /// Shared with the web app's advanced-search dialog so the
     /// canonical BPM ranges stay in one place.

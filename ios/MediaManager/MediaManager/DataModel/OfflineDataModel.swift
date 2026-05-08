@@ -186,6 +186,9 @@ final class OfflineDataModel: DataModel {
     func recommendedArtists(limit: Int = 30) async throws -> [ApiRecommendedArtist] {
         throw DataModelError.offline
     }
+    func searchMusicOnly(query: String) async throws -> ApiSearchResponse {
+        throw DataModelError.offline
+    }
     func dismissRecommendation(mbid: String) async throws {
         throw DataModelError.offline
     }
