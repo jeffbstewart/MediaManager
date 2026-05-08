@@ -1,0 +1,48 @@
+# Book fixtures for the App Store demo server. Tab-separated. All
+# entries are unambiguously public-domain in the US and ship from
+# Standard Ebooks (standardebooks.org) — hand-typeset EPUBs with
+# cover art baked in and consistent metadata.
+#
+# Columns:
+#   se_id          Standard Ebooks book id (used in the EPUB URL —
+#                  https://standardebooks.org/ebooks/<author>/<book>/
+#                  downloads/<author>_<book>.epub).
+#   ol_work_id     OpenLibrary work id (e.g. OL66554W). Used by
+#                  link-fixtures.sh to pin the OL match. Leave blank
+#                  to let the BookScannerAgent's auto-match try, but
+#                  for demo determinism it's best to fill these in.
+#   target_file    filename inside <target>/books/. Default convention
+#                  is "<Title> - <Author>.epub" so the folder reads
+#                  alphabetically by title.
+#
+# Lines beginning with '#' or blank are ignored.
+#
+# Mix targets:
+#   - Austen multi-book single-author shelf
+#   - Conan Doyle multi-volume Sherlock Holmes series
+#   - Wells same-author no-series
+#   - Lovecraft short-story-collection shape
+#   - Verne translation-provenance edge cases
+#   - Twain / Wodehouse for genre breadth
+#
+se_id	ol_work_id	target_file
+jane-austen/pride-and-prejudice		Pride and Prejudice - Jane Austen.epub
+jane-austen/sense-and-sensibility		Sense and Sensibility - Jane Austen.epub
+jane-austen/emma		Emma - Jane Austen.epub
+arthur-conan-doyle/the-adventures-of-sherlock-holmes		The Adventures of Sherlock Holmes - Arthur Conan Doyle.epub
+arthur-conan-doyle/the-memoirs-of-sherlock-holmes		The Memoirs of Sherlock Holmes - Arthur Conan Doyle.epub
+arthur-conan-doyle/the-return-of-sherlock-holmes		The Return of Sherlock Holmes - Arthur Conan Doyle.epub
+arthur-conan-doyle/the-hound-of-the-baskervilles		The Hound of the Baskervilles - Arthur Conan Doyle.epub
+arthur-conan-doyle/a-study-in-scarlet		A Study in Scarlet - Arthur Conan Doyle.epub
+arthur-conan-doyle/the-sign-of-the-four		The Sign of the Four - Arthur Conan Doyle.epub
+h-g-wells/the-time-machine		The Time Machine - H. G. Wells.epub
+h-g-wells/the-war-of-the-worlds		The War of the Worlds - H. G. Wells.epub
+h-g-wells/the-invisible-man		The Invisible Man - H. G. Wells.epub
+h-p-lovecraft/the-call-of-cthulhu		The Call of Cthulhu - H. P. Lovecraft.epub
+h-p-lovecraft/at-the-mountains-of-madness		At the Mountains of Madness - H. P. Lovecraft.epub
+jules-verne/around-the-world-in-eighty-days		Around the World in Eighty Days - Jules Verne.epub
+jules-verne/twenty-thousand-leagues-under-the-seas		Twenty Thousand Leagues Under the Seas - Jules Verne.epub
+jules-verne/journey-to-the-centre-of-the-earth		Journey to the Centre of the Earth - Jules Verne.epub
+mark-twain/the-adventures-of-tom-sawyer		The Adventures of Tom Sawyer - Mark Twain.epub
+mark-twain/adventures-of-huckleberry-finn		Adventures of Huckleberry Finn - Mark Twain.epub
+p-g-wodehouse/right-ho-jeeves		Right Ho, Jeeves - P. G. Wodehouse.epub

@@ -50,6 +50,10 @@ secrets/*.agent_visible_env
 secrets/android-tv-keystore.jks
 secrets/android-tv-signing.properties
 
+# App Store demo setup — only example.env is checked in; the real
+# .env carries the wizard-created admin password.
+app_store_demo_setup/secrets/.env
+
 # Vaadin generated (src/main)
 src/main/bundles/
 src/main/frontend/

@@ -1,0 +1,28 @@
+# Test user accounts for the App Store demo server. Tab-separated.
+# Created by scripts/seed-users.sh after the first admin has been
+# bootstrapped via the /setup wizard.
+#
+# Columns:
+#   username         Bare username (NOT an email — the auth layer
+#                    accepts plain usernames intentionally).
+#   role             "admin" or "viewer".
+#   display_name     Shown in the profile / Now Playing surfaces.
+#   rating_ceiling   Ordinal level (0–6) per ContentRating.ceiling
+#                    Choices: 0=TV-Y, 1=TV-Y7, 2=G/TV-G, 3=PG/TV-PG,
+#                    4=PG-13/TV-14, 5=R/TV-MA, 6=NC-17.
+#                    Empty = unrestricted (sees everything).
+#   password_env     Name of the env var in secrets/.env that holds
+#                    this account's password. Keeps real-looking
+#                    credentials out of the repo.
+#
+# Lines beginning with '#' or blank are ignored.
+#
+# Note: the very first admin still has to come from the /setup
+# wizard — admin-create requires an existing admin to authenticate.
+# seed-users.sh logs in as that account (DEMO_ADMIN_USER /
+# DEMO_ADMIN_PASSWORD in secrets/.env) and creates the rest.
+#
+username	role	display_name	rating_ceiling	password_env
+viewer	viewer	Sample Viewer		DEMO_VIEWER_PASSWORD
+kid	viewer	Kid Account	4	DEMO_KID_PASSWORD
+empty	viewer	New User		DEMO_EMPTY_PASSWORD

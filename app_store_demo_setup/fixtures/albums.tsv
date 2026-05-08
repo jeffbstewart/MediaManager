@@ -1,0 +1,34 @@
+# Album fixtures for the App Store demo server. Tab-separated. Two
+# sources, two row shapes — `source` controls which downloader path
+# the fetch script takes.
+#
+# Columns:
+#   source         "musopen" or "archive_org_78"
+#   source_id      Musopen album slug (musopen) OR archive.org item id
+#                  (archive_org_78). Used to build the download URL.
+#   mb_release_id  MusicBrainz release MBID. Used by link-fixtures.sh
+#                  to pin the catalog match. Leave blank to fall back
+#                  to MusicBrainzScannerAgent's heuristic match.
+#   artist         Display artist (used as the artist subdir).
+#   album          Display album title (used as the album subdir).
+#
+# Lines beginning with '#' or blank are ignored.
+#
+# Mix targets BPM bands the dance-preset advanced-search uses:
+#   - Strauss waltzes  → Slow Waltz / Viennese Waltz presets
+#   - 1920s big-band   → Foxtrot tempo
+#   - 1920s tango      → Argentine Tango preset
+# Plus the classical-staples baseline so the music landing page has a
+# recognizable mix beyond dance-test material.
+#
+source	source_id	mb_release_id	artist	album
+musopen	bach-brandenburg-concertos		Johann Sebastian Bach	Brandenburg Concertos
+musopen	beethoven-symphony-no-9		Ludwig van Beethoven	Symphony No. 9
+musopen	chopin-nocturnes		Frédéric Chopin	Nocturnes
+musopen	bach-goldberg-variations		Johann Sebastian Bach	Goldberg Variations
+musopen	mozart-requiem		Wolfgang Amadeus Mozart	Requiem
+musopen	debussy-clair-de-lune		Claude Debussy	Suite Bergamasque
+musopen	strauss-blue-danube		Johann Strauss II	The Blue Danube
+musopen	strauss-tales-from-vienna-woods		Johann Strauss II	Tales from the Vienna Woods
+archive_org_78	78_west-end-blues_louis-armstrong-and-his-hot-five		Louis Armstrong and His Hot Five	Hot Five Recordings
+archive_org_78	78_la-cumparsita_carlos-gardel		Carlos Gardel	Argentine Tango Selections
