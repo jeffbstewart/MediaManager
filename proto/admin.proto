@@ -219,6 +219,13 @@ service AdminService {
       returns (LinkUnmatchedAudioAlbumResponse);
   rpc LinkUnmatchedAudioAlbumManual(LinkUnmatchedAudioAlbumManualRequest)
       returns (LinkUnmatchedAudioAlbumResponse);
+
+  // Generic MusicBrainz search by free-text query (and optional
+  // barcode) — used by the scan-detail page when a UPC scan misses
+  // the video metadata pipeline because the disc is a music CD.
+  // The picked release-group MBID gets attached via the existing
+  // AssignExternalIdentifier RPC (kind=MUSICBRAINZ_RELEASE_GROUP).
+  rpc SearchMusicBrainz(SearchMusicBrainzRequest) returns (SearchMusicBrainzResponse);
 }
 
 // --- ID Requests ---
@@ -1623,6 +1630,26 @@ message MusicBrainzReleaseCandidate {
 message LinkUnmatchedAudioAlbumToReleaseRequest {
   repeated int64 unmatched_audio_ids = 1;
   string release_mbid = 2;
+}
+
+message SearchMusicBrainzRequest {
+  // Free-text query. Server splits on " - " when present (treated
+  // as "Artist - Album"); otherwise treats the whole string as an
+  // album name. Empty when only barcode is set.
+  string query = 1;
+  // Optional EAN/UPC barcode lookup tried first when present —
+  // matches the user's original scan if MB knows it.
+  optional string barcode = 2;
+}
+
+message SearchMusicBrainzResponse {
+  // What the server actually searched for (for the UI to echo back).
+  string search_artist = 1;
+  string search_album = 2;
+  // Re-uses the existing candidate shape from the unmatched-audio
+  // admin flow. Fields like accommodates_files / recording_mbid_
+  // coverage aren't relevant here — server zeroes them.
+  repeated MusicBrainzReleaseCandidate candidates = 3;
 }
 
 message LinkUnmatchedAudioAlbumManualRequest {

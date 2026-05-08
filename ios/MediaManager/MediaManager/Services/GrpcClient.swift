@@ -694,6 +694,34 @@ actor GrpcClient {
         return try await wishListService.searchTmdb(request, metadata: authMetadata())
     }
 
+    /// MusicBrainz fallback for the scan-detail "no TMDB match"
+    /// surface — used when the scanned UPC turns out to be a music
+    /// CD. `query` is free-text; "Artist - Album" gets parsed
+    /// server-side. `barcode` is optional but recommended on the
+    /// first call so MB's barcode lookup short-circuits to the
+    /// canonical release when registered.
+    func searchMusicBrainz(query: String, barcode: String? = nil) async throws -> MMSearchMusicBrainzResponse {
+        var request = MMSearchMusicBrainzRequest()
+        request.query = query
+        if let barcode, !barcode.isEmpty { request.barcode = barcode }
+        return try await adminService.searchMusicBrainz(request, metadata: authMetadata())
+    }
+
+    /// Attach a MusicBrainz release MBID (specific pressing) to a
+    /// title via the generic AssignExternalIdentifier RPC. Server
+    /// looks the release up on MB and populates the title's name /
+    /// poster_path / tracks / artists / year / label in the same
+    /// call. Use MUSICBRAINZ_RELEASE rather than RELEASE_GROUP so
+    /// the server's lookup-and-attach path runs — RELEASE_GROUP
+    /// alone leaves the title an empty shell.
+    func assignMusicBrainzRelease(titleId: Int64, releaseMbid: String) async throws {
+        var request = MMAssignExternalIdentifierRequest()
+        request.titleID = titleId
+        request.kind = .musicbrainzRelease
+        request.value = releaseMbid
+        _ = try await adminService.assignExternalIdentifier(request, metadata: authMetadata())
+    }
+
     // MARK: - Artist / Album RPCs
 
     func listArtists(page: Int32, limit: Int32, sort: String?, query: String?, playableOnly: Bool = true) async throws -> MMArtistListResponse {

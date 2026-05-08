@@ -459,6 +459,8 @@ final class OfflineDataModel: DataModel {
     func monitorScanProgress(onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void) async throws { throw DataModelError.offline }
     func getScanDetail(scanId: Int64) async throws -> MMScanDetailResponse { throw DataModelError.offline }
     func assignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse { throw DataModelError.offline }
+    func searchMusicBrainz(query: String, barcode: String?) async throws -> MMSearchMusicBrainzResponse { throw DataModelError.offline }
+    func assignMusicBrainzRelease(titleId: Int64, releaseMbid: String) async throws { throw DataModelError.offline }
     func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws { throw DataModelError.offline }
     func uploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse { throw DataModelError.offline }
     func deleteOwnershipPhoto(photoId: String) async throws { throw DataModelError.offline }

@@ -62,6 +62,8 @@ import net.stewart.mediamanager.service.AudioTranscodeCache
 import net.stewart.mediamanager.service.FirstPartyImageMigrationVerifier
 import net.stewart.mediamanager.service.AuthorEnrichmentAgent
 import net.stewart.mediamanager.service.BookIngestionService
+import net.stewart.mediamanager.service.MusicBrainzReleaseLookup
+import net.stewart.mediamanager.service.MusicBrainzResult
 import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.OpenLibraryHttpService
 import net.stewart.mediamanager.service.OpenLibraryResult
@@ -1206,6 +1208,10 @@ class AdminGrpcService(
             SettingKey.SETTING_KEY_KEEPA_API_KEY
         )
         private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        // Same shape as MBID_RE but un-anchored — matches an MBID
+        // anywhere in a string. Used by extractMbid() to pull the
+        // UUID out of a pasted musicbrainz.org URL.
+        private val MBID_PATTERN = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
         private val OL_WORK_RE = Regex("^OL\\d+W$")
     }
 
@@ -2252,6 +2258,125 @@ class AdminGrpcService(
         }
     }
 
+    /**
+     * Generic MusicBrainz search by free-text query (and optional
+     * barcode). Used by the scan-detail page when a UPC scan misses
+     * the video metadata pipeline because the disc is a music CD.
+     *
+     * Strategy:
+     *   - Barcode tried first if provided. EAN-13 / UPC-A lookups
+     *     return a single canonical release in MB.
+     *   - Free-text query split on " - " — left side becomes
+     *     artist, right side becomes album. No dash means treat
+     *     the whole string as an album title.
+     *   - Top-N MBIDs from search are looked up individually to
+     *     fill in title / artist credit / year / track count for
+     *     the candidate cards. Capped at 10 to keep the round-trip
+     *     bounded — MB's rate limit (1 req/s anonymous, 50/s with
+     *     a User-Agent) makes the lookup chain the slow part.
+     *
+     * Picked candidates are attached to the title via the existing
+     * AssignExternalIdentifier RPC (kind=MUSICBRAINZ_RELEASE_GROUP).
+     */
+    override suspend fun searchMusicBrainz(
+        request: SearchMusicBrainzRequest
+    ): SearchMusicBrainzResponse {
+        val query = request.query.trim()
+        val barcode = request.barcode.takeIf { request.hasBarcode() && it.isNotBlank() }
+
+        // MBID short-circuit — user pastes a bare MBID or a
+        // musicbrainz.org URL like /release/<mbid>. Finding the
+        // exact release in MB's text search can be slow + fuzzy;
+        // when the user already navigated to the right page,
+        // honour their choice directly.
+        extractMbid(query)?.let { mbid ->
+            val direct = unmatchedAudioMb.lookupByReleaseMbid(mbid)
+            if (direct is MusicBrainzResult.Success) {
+                return searchMusicBrainzResponse {
+                    searchArtist = ""
+                    searchAlbum = ""
+                    candidates.add(scanCandidateProto(direct.release))
+                }
+            }
+        }
+
+        // Barcode hit short-circuits — single canonical release.
+        if (barcode != null) {
+            val barcodeResult = unmatchedAudioMb.lookupByBarcode(barcode)
+            if (barcodeResult is MusicBrainzResult.Success) {
+                return searchMusicBrainzResponse {
+                    searchArtist = ""
+                    searchAlbum = ""
+                    candidates.add(scanCandidateProto(barcodeResult.release))
+                }
+            }
+        }
+
+        // Parse "Artist - Album" or treat whole query as album.
+        val (artist, album) = run {
+            val dash = query.indexOf(" - ")
+            if (dash > 0) {
+                query.substring(0, dash).trim() to query.substring(dash + 3).trim()
+            } else {
+                "" to query
+            }
+        }
+
+        val mbids = if (album.isNotBlank()) {
+            unmatchedAudioMb.searchReleaseByArtistAndAlbum(artist, album)
+        } else {
+            emptyList()
+        }
+        val ordered = mbids.distinct().take(10)
+        val candidates = ordered.mapNotNull { mbid ->
+            (unmatchedAudioMb.lookupByReleaseMbid(mbid) as? MusicBrainzResult.Success)
+                ?.release?.let { scanCandidateProto(it) }
+        }
+
+        return searchMusicBrainzResponse {
+            searchArtist = artist
+            searchAlbum = album
+            this.candidates.addAll(candidates)
+        }
+    }
+
+    /**
+     * Build a [MusicBrainzReleaseCandidate] from a release lookup
+     * for the scan-detail flow. Drops the unmatched-audio-specific
+     * fields (`accommodates_files`, `recording_mbid_coverage`) since
+     * we don't have a row group to validate against — the user is
+     * picking a candidate for a brand-new title, not validating one
+     * against on-disk files.
+     */
+    /// Extract a MusicBrainz UUID from `input` if one is present.
+    /// Recognises:
+    ///   - bare 36-char canonical MBIDs (lowercased)
+    ///   - musicbrainz.org URLs of any /release/<mbid> shape
+    /// Returns the lowercased MBID, or null if nothing matches.
+    private fun extractMbid(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+        // The MBID pattern is canonical UUID v4 — a substring match
+        // catches both the bare form and any URL containing one.
+        return MBID_PATTERN.find(trimmed.lowercase())?.value
+    }
+
+    private fun scanCandidateProto(
+        lookup: MusicBrainzReleaseLookup
+    ): MusicBrainzReleaseCandidate = musicBrainzReleaseCandidate {
+        releaseMbid = lookup.musicBrainzReleaseId
+        releaseGroupMbid = lookup.musicBrainzReleaseGroupId
+        title = lookup.title
+        artistCredit = lookup.albumArtistCredits.joinToString(", ") { it.name }
+        lookup.releaseYear?.let { year = it }
+        lookup.label?.takeIf { it.isNotBlank() }?.let { label = it }
+        lookup.barcode?.takeIf { it.isNotBlank() }?.let { barcode = it }
+        trackCount = lookup.tracks.size
+        discCount = lookup.tracks.map { it.discNumber }.distinct().size
+        accommodatesFiles = false
+        recordingMbidCoverage = 0
+    }
+
     // -------------------------------------------------------------------
     // Shared helpers (mirror UnmatchedAudioHttpService — keeping the two
     // surfaces deliberately parallel so the iOS admin behaves identically
@@ -2693,6 +2818,12 @@ class AdminGrpcService(
                 if (!value.matches(MBID_RE)) {
                     throw StatusException(Status.INVALID_ARGUMENT.withDescription("not an MBID"))
                 }
+                // Caller should prefer MUSICBRAINZ_RELEASE — that
+                // path also fetches MB and populates name / cover /
+                // tracks so the user sees a real title immediately.
+                // RELEASE_GROUP alone leaves the title an empty
+                // shell since we have no way to list releases in
+                // the group without an additional MB API call.
                 title.musicbrainz_release_group_id = value
                 title.media_type = MediaTypeEnum.ALBUM.name
             }
@@ -2700,6 +2831,18 @@ class AdminGrpcService(
                 if (!value.matches(MBID_RE)) {
                     throw StatusException(Status.INVALID_ARGUMENT.withDescription("not an MBID"))
                 }
+                // Look up the release so we can populate the title
+                // with cover art / tracks / artists / year / label
+                // in one shot. Without this the title sits in
+                // "Enriching" forever — no background agent picks
+                // up music PENDING titles, so the data never lands.
+                val lookup = (unmatchedAudioMb.lookupByReleaseMbid(value) as? MusicBrainzResult.Success)?.release
+                if (lookup != null) {
+                    net.stewart.mediamanager.service.MusicIngestionService.attachLookupToTitle(title.id!!, lookup)
+                    return assignExternalIdentifierResponse { merged = false }
+                }
+                // MB lookup miss — fall back to the bare-field set
+                // so the title at least has the MBID stored.
                 title.musicbrainz_release_id = value
                 title.media_type = MediaTypeEnum.ALBUM.name
             }

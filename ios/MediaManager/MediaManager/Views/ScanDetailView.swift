@@ -4,10 +4,30 @@ struct ScanDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     let scanId: Int64
 
+    /// Which search sheet (if any) is currently presented. SwiftUI's
+    /// `.sheet(isPresented:)` modifier doesn't compose well when two
+    /// of them coexist on the same view — the second flip queues
+    /// behind the first, producing the "TMDB sheet appears first,
+    /// MusicBrainz appears after dismiss" symptom we hit before.
+    /// `.sheet(item:)` driven by an enum is the canonical pattern.
+    enum SearchSheet: Identifiable {
+        case tmdb
+        case musicBrainz
+        var id: Self { self }
+    }
+
     @State private var detail: MMScanDetailResponse?
     @State private var loading = true
-    @State private var showTmdbSearch = false
+    @State private var activeSearchSheet: SearchSheet?
     @State private var showCamera = false
+    /// Bumped after a TMDB / MusicBrainz assignment lands so the
+    /// hero CachedImage re-mounts. Without this the hero stays
+    /// stuck on whatever it loaded the first time the view appeared
+    /// (typically nil/placeholder for a fresh scan with no match) —
+    /// CachedImage's `.task(id:)` only re-runs when the ref's
+    /// identity changes, and the titleId is stable across an
+    /// assignment.
+    @State private var imageVersion = 0
     @State private var purchasePlace = ""
     @State private var purchaseDate: Date?
     @State private var purchasePrice = ""
@@ -26,8 +46,25 @@ struct ScanDetailView: View {
                     Section {
                         HStack(spacing: 16) {
                             if detail.hasTitleID {
+                                // Square 80×80 frame so album-shaped
+                                // covers (scanned music) don't blow
+                                // past the frame width into the
+                                // title text. The earlier 80×120
+                                // portrait frame, with .fill mode
+                                // and a square source, scaled the
+                                // image to 120×120 and the inner
+                                // clip didn't reliably contain it
+                                // under the caller-applied frame —
+                                // the cover bled behind the
+                                // adjacent text. Square works for
+                                // both aspects (movie posters
+                                // scale-and-crop minimally) and
+                                // matches Apple Music / iTunes
+                                // Store thumbnail conventions.
                                 CachedImage(ref: .posterFull(titleId: detail.titleID), cornerRadius: 8)
-                                    .frame(width: 80, height: 120)
+                                    .frame(width: 80, height: 80)
+                                    .clipped()
+                                    .id(imageVersion)
                             }
 
                             VStack(alignment: .leading, spacing: 6) {
@@ -54,17 +91,28 @@ struct ScanDetailView: View {
                         }
                     }
 
-                    // TMDB Match section (if action needed)
+                    // No-match section. TMDB and MusicBrainz both
+                    // offered when the catalog can't auto-match —
+                    // user picks the right source for the disc.
+                    // TMDB handles movies/TV; MusicBrainz handles
+                    // music CDs that the TMDB pipeline rightly
+                    // skips because they aren't video.
                     if detail.status.needsTmdbAction {
-                        Section("TMDB Match") {
+                        Section("No Match") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(detail.enrichmentStatus == .skipped ? "No TMDB match found" : "Enrichment failed")
                                     .foregroundStyle(.orange)
 
                                 Button {
-                                    showTmdbSearch = true
+                                    activeSearchSheet = .tmdb
                                 } label: {
-                                    Label("Search TMDB", systemImage: "magnifyingglass")
+                                    Label("Search TMDB (Movies / TV)", systemImage: "magnifyingglass")
+                                }
+
+                                Button {
+                                    activeSearchSheet = .musicBrainz
+                                } label: {
+                                    Label("Search MusicBrainz (Music)", systemImage: "music.note")
                                 }
                             }
                         }
@@ -139,13 +187,23 @@ struct ScanDetailView: View {
             monitorTask = nil
         }
         .refreshable { await loadDetail() }
-        .sheet(isPresented: $showTmdbSearch) {
-            TmdbSearchSheet(
-                initialQuery: detail?.hasTitleName == true ? detail!.titleName : (detail?.hasProductName == true ? detail!.productName : ""),
-                titleId: detail?.hasTitleID == true ? detail!.titleID : 0
-            ) {
-                // On TMDB assigned — reload detail
-                Task { await loadDetail() }
+        .sheet(item: $activeSearchSheet) { sheet in
+            switch sheet {
+            case .tmdb:
+                TmdbSearchSheet(
+                    initialQuery: detail?.hasTitleName == true ? detail!.titleName : (detail?.hasProductName == true ? detail!.productName : ""),
+                    titleId: detail?.hasTitleID == true ? detail!.titleID : 0
+                ) {
+                    Task { await refreshAfterAssign() }
+                }
+            case .musicBrainz:
+                MusicBrainzSearchSheet(
+                    initialQuery: detail?.hasTitleName == true ? detail!.titleName : (detail?.hasProductName == true ? detail!.productName : ""),
+                    initialBarcode: detail?.upc.isEmpty == false ? detail!.upc : nil,
+                    titleId: detail?.hasTitleID == true ? detail!.titleID : 0
+                ) {
+                    Task { await refreshAfterAssign() }
+                }
             }
         }
         .sheet(isPresented: $showCamera) {
@@ -198,6 +256,25 @@ struct ScanDetailView: View {
         } catch {
             loading = false
         }
+    }
+
+    /// Post-assignment refresh. Reloads the detail and forces the
+    /// hero CachedImage to re-mount so the new poster (TMDB or
+    /// MusicBrainz) lands immediately. Without this, the hero
+    /// stays stuck on whatever it loaded the first time the view
+    /// appeared — typically the placeholder for a fresh scan with
+    /// no match.
+    private func refreshAfterAssign() async {
+        // Drop any cached posters for this title's id BEFORE the
+        // .id() bump triggers a re-mount, so the new CachedImage
+        // task hits a cache miss and pulls fresh bytes from the
+        // server's caa/<mbid> proxy.
+        if let titleId = detail?.titleID {
+            await ImageDiskCache.shared.remove(for: .posterFull(titleId: titleId))
+            await ImageDiskCache.shared.remove(for: .posterThumbnail(titleId: titleId))
+        }
+        imageVersion &+= 1
+        await loadDetail()
     }
 
     // MARK: - Purchase Info

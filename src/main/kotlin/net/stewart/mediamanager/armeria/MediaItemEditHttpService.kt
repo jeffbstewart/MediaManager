@@ -18,6 +18,9 @@ import net.stewart.mediamanager.entity.MediaType as MMMediaType
 import net.stewart.mediamanager.service.AmazonImportService
 import net.stewart.mediamanager.service.MediaFormatSwitcher
 import net.stewart.mediamanager.service.MissingSeasonService
+import net.stewart.mediamanager.service.MusicBrainzHttpService
+import net.stewart.mediamanager.service.MusicBrainzResult
+import net.stewart.mediamanager.service.MusicBrainzService
 import net.stewart.mediamanager.service.OwnershipPhotoService
 import net.stewart.mediamanager.service.ScanDetailService
 import net.stewart.mediamanager.service.SearchIndexService
@@ -38,7 +41,12 @@ class MediaItemEditHttpService {
 
     private val gson = Gson()
     private val tmdbService = TmdbService()
+    private val musicBrainzService: MusicBrainzService = MusicBrainzHttpService()
     private val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val mbidRegex = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+    /// Un-anchored variant for substring matches — pulls an MBID
+    /// out of a pasted musicbrainz.org URL.
+    private val mbidPattern = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
     /** Get full detail for a media item. */
     @Get("/api/v2/admin/media-item/{itemId}")
@@ -242,6 +250,134 @@ class MediaItemEditHttpService {
             )
         }
         return jsonResponse(gson.toJson(mapOf("results" to items)))
+    }
+
+    /**
+     * Search MusicBrainz when a UPC scan turned out to be a music
+     * CD. Same shape as `/search-tmdb` — query string returns a
+     * list of release-group candidates the user can pick from to
+     * link to the title.
+     *
+     * `q` is parsed as "Artist - Album" when a " - " is present,
+     * otherwise treated as an album title only.
+     * `barcode` is optional — if set, MB's barcode lookup is tried
+     * first and short-circuits to a single canonical release on hit.
+     */
+    @Get("/api/v2/admin/media-item/search-musicbrainz")
+    fun searchMusicBrainz(
+        ctx: ServiceRequestContext,
+        @Param("q") @Default("") query: String,
+        @Param("barcode") @Default("") barcode: String
+    ): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        // MBID short-circuit — user pastes a bare MBID or a
+        // musicbrainz.org URL like /release/<mbid>. The text
+        // search can be slow and fuzzy; when the user already
+        // navigated to the right release, honour their pick.
+        val mbidHit = mbidPattern.find(query.lowercase())?.value
+        if (mbidHit != null) {
+            val result = musicBrainzService.lookupByReleaseMbid(mbidHit)
+            if (result is MusicBrainzResult.Success) {
+                return jsonResponse(gson.toJson(mapOf(
+                    "search_artist" to "",
+                    "search_album" to "",
+                    "candidates" to listOf(candidateMap(result.release))
+                )))
+            }
+        }
+
+        // Barcode short-circuit — one canonical release.
+        val trimmedBarcode = barcode.trim()
+        if (trimmedBarcode.isNotEmpty()) {
+            val result = musicBrainzService.lookupByBarcode(trimmedBarcode)
+            if (result is MusicBrainzResult.Success) {
+                return jsonResponse(gson.toJson(mapOf(
+                    "search_artist" to "",
+                    "search_album" to "",
+                    "candidates" to listOf(candidateMap(result.release))
+                )))
+            }
+        }
+
+        val q = query.trim()
+        val (artist, album) = run {
+            val dash = q.indexOf(" - ")
+            if (dash > 0) q.substring(0, dash).trim() to q.substring(dash + 3).trim()
+            else "" to q
+        }
+
+        val mbids = if (album.isNotBlank()) {
+            musicBrainzService.searchReleaseByArtistAndAlbum(artist, album)
+        } else emptyList()
+
+        val candidates = mbids.distinct().take(10).mapNotNull { mbid ->
+            (musicBrainzService.lookupByReleaseMbid(mbid) as? MusicBrainzResult.Success)
+                ?.release?.let { candidateMap(it) }
+        }
+
+        return jsonResponse(gson.toJson(mapOf(
+            "search_artist" to artist,
+            "search_album" to album,
+            "candidates" to candidates
+        )))
+    }
+
+    /**
+     * Assign a MusicBrainz release to the title backing this media
+     * item. Looks up the release on MB to get the full release-group
+     * data, then populates the title (name / poster_path / tracks /
+     * artists / year / label / duration) via
+     * [net.stewart.mediamanager.service.MusicIngestionService.attachLookupToTitle].
+     *
+     * Body: `{ "release_mbid": "<MB release MBID>" }`. Picking by
+     * release (not release-group) lets the user nail a specific
+     * pressing whose track list / cover art is the right one for
+     * their CD — release-groups hold multiple pressings with
+     * different bonus tracks.
+     */
+    @Post("/api/v2/admin/media-item/{itemId}/assign-musicbrainz")
+    fun assignMusicBrainz(ctx: ServiceRequestContext, @Param("itemId") itemId: Long): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+        if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
+
+        MediaItem.findById(itemId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+
+        val body = gson.fromJson(ctx.request().aggregate().join().contentUtf8(), Map::class.java)
+        val mbid = (body["release_mbid"] as? String)?.trim()?.lowercase()
+            ?: return badRequest("release_mbid required")
+        if (!mbid.matches(mbidRegex)) return badRequest("not an MBID")
+
+        val titleId = MediaItemTitle.findAll().firstOrNull { it.media_item_id == itemId }?.title_id
+            ?: return badRequest("No title linked")
+
+        val lookup = (musicBrainzService.lookupByReleaseMbid(mbid) as? MusicBrainzResult.Success)?.release
+            ?: return badRequest("MB release not found")
+
+        net.stewart.mediamanager.service.MusicIngestionService.attachLookupToTitle(titleId, lookup)
+
+        return jsonResponse(gson.toJson(mapOf(
+            "status" to "assigned",
+            "title_id" to titleId,
+            "title_name" to lookup.title
+        )))
+    }
+
+    /** Strip a release lookup down to the same JSON shape the
+     *  Angular client expects for MB candidates. */
+    private fun candidateMap(lookup: net.stewart.mediamanager.service.MusicBrainzReleaseLookup): Map<String, Any?> {
+        return mapOf(
+            "release_mbid" to lookup.musicBrainzReleaseId,
+            "release_group_mbid" to lookup.musicBrainzReleaseGroupId,
+            "title" to lookup.title,
+            "artist_credit" to lookup.albumArtistCredits.joinToString(", ") { it.name },
+            "year" to lookup.releaseYear,
+            "label" to lookup.label,
+            "barcode" to lookup.barcode,
+            "track_count" to lookup.tracks.size,
+            "disc_count" to lookup.tracks.map { it.discNumber }.distinct().size
+        )
     }
 
     /** Update purchase info on a media item. */

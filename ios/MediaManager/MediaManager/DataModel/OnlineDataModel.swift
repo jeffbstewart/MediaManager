@@ -532,6 +532,16 @@ final class OnlineDataModel: DataModel {
         try await grpcClient.adminAssignTmdb(titleId: titleId, tmdbId: tmdbId, mediaType: mediaType)
     }
 
+    func searchMusicBrainz(query: String, barcode: String?) async throws -> MMSearchMusicBrainzResponse {
+        if !isOnline { throw DataModelError.offline }
+        return try await grpcClient.searchMusicBrainz(query: query, barcode: barcode)
+    }
+
+    func assignMusicBrainzRelease(titleId: Int64, releaseMbid: String) async throws {
+        if !isOnline { throw DataModelError.offline }
+        try await grpcClient.assignMusicBrainzRelease(titleId: titleId, releaseMbid: releaseMbid)
+    }
+
     func updatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws {
         try await grpcClient.adminUpdatePurchaseInfo(scanId: scanId, place: place, date: date, price: price)
     }

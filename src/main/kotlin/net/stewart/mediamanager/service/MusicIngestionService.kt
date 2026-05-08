@@ -201,6 +201,78 @@ object MusicIngestionService {
      * listening progress / per-track personnel attached to them is
      * preserved). Returns the count of tracks added.
      */
+    /**
+     * Adapt an existing Title with the rest of the MB metadata after
+     * the user picked a release on the scan-detail "no match" page.
+     * Mirrors the new-title side of [ingest] but operates on an
+     * existing row — used when a UPC scan first ran through the
+     * video pipeline (creating a Title with TMDB-shaped emptiness),
+     * the user then chose "Search MusicBrainz" and picked a release.
+     *
+     * Sets:
+     *   - name, sort_name (canonical from MB)
+     *   - media_type = ALBUM
+     *   - musicbrainz_release_group_id, musicbrainz_release_id
+     *   - poster_path = "caa/{releaseMbid}" (Cover Art Archive proxy)
+     *   - release_year, label, track_count, total_duration_seconds
+     *   - enrichment_status = ENRICHED
+     *
+     * Creates album-artist + track + per-track-artist rows when the
+     * title has none yet. Existing tracks are preserved (mirrors
+     * [syncMissingTracks]) so a re-link doesn't blow away local
+     * file_path / listening progress.
+     */
+    fun attachLookupToTitle(
+        titleId: Long,
+        lookup: MusicBrainzReleaseLookup,
+        clock: Clock = SystemClock
+    ) {
+        val title = Title.findById(titleId)
+            ?: error("Title $titleId not found")
+        val now = clock.now()
+
+        title.name = lookup.title
+        title.sort_name = titleSortName(lookup.title)
+        title.media_type = MediaType.ALBUM.name
+        title.musicbrainz_release_group_id = lookup.musicBrainzReleaseGroupId
+        title.musicbrainz_release_id = lookup.musicBrainzReleaseId
+        title.poster_path = "caa/${lookup.musicBrainzReleaseId}"
+        title.release_year = lookup.releaseYear
+        title.label = lookup.label
+        title.track_count = lookup.tracks.size.takeIf { it > 0 }
+        title.total_duration_seconds = lookup.totalDurationSeconds
+        title.enrichment_status = EnrichmentStatus.ENRICHED.name
+        title.updated_at = now
+        title.save()
+
+        // Attach album artists if the title has none — fresh from-scan
+        // titles haven't seen any artist links yet.
+        val existingArtistLinks = TitleArtist.findAll().filter { it.title_id == titleId }
+        if (existingArtistLinks.isEmpty()) {
+            val albumArtists = lookup.albumArtistCredits.map { upsertArtist(it, now) }
+            albumArtists.forEachIndexed { index, artist ->
+                TitleArtist(
+                    title_id = titleId,
+                    artist_id = artist.id!!,
+                    artist_order = index
+                ).save()
+            }
+            // Tracks only when the title has no existing tracks
+            // (preserve any prior linkage; same rationale as
+            // syncMissingTracks).
+            val existingTracks = Track.findAll().filter { it.title_id == titleId }
+            if (existingTracks.isEmpty()) {
+                createTracks(titleId, albumArtists, lookup, now)
+            }
+        }
+
+        SearchIndexService.onTitleChanged(titleId)
+        log.info(
+            "Title {} populated from MB release {}: '{}' ({} tracks)",
+            titleId, lookup.musicBrainzReleaseId, lookup.title, lookup.tracks.size
+        )
+    }
+
     fun syncMissingTracks(
         titleId: Long,
         lookup: MusicBrainzReleaseLookup,

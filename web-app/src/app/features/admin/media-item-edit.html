@@ -111,6 +111,39 @@
       }
     }
 
+    <!-- MusicBrainz Match — surfaced on the same gate as the TMDB
+         section above, so a music CD that the TMDB pipeline can't
+         identify gets a proper match path without a separate flow.
+         Format the query as "Artist - Album" for best precision;
+         the server also tries the original UPC barcode first via
+         MB's barcode lookup. -->
+    @if (needsTmdbFix) {
+      <h3>MusicBrainz Match (for music CDs)</h3>
+      <div class="search-row">
+        <input class="field-input flex" type="text" [value]="mbQuery()" (input)="updateMbQuery($event)"
+               (keydown.enter)="searchMusicBrainz()" placeholder='Album or "Artist - Album"' aria-label="Search MusicBrainz" />
+        <button mat-flat-button color="primary" (click)="searchMusicBrainz()">Search</button>
+      </div>
+
+      @if (mbSearching()) { <mat-spinner diameter="24" /> }
+      @if (mbResults().length > 0) {
+        <div class="tmdb-results">
+          @for (c of mbResults(); track c.release_mbid) {
+            <div class="tmdb-row">
+              <div class="tmdb-info">
+                <span class="tmdb-title">{{ c.title }}</span>
+                <span class="tmdb-meta">{{ c.artist_credit }}{{ c.year ? ' · ' + c.year : '' }} · {{ c.track_count }} track{{ c.track_count === 1 ? '' : 's' }}{{ c.disc_count > 1 ? ' · ' + c.disc_count + ' discs' : '' }}</span>
+                @if (c.label) { <span class="tmdb-overview">{{ c.label }}</span> }
+              </div>
+              <button mat-flat-button color="primary" class="small-btn"
+                      [disabled]="!c.release_group_mbid"
+                      (click)="selectMusicBrainz(c)">Select</button>
+            </div>
+          }
+        </div>
+      }
+    }
+
     @if (isBook) {
       <!-- Book-specific summary from the ISBN scan. Author + series are
            linked to the new /author/:id and /series/:id browse screens. -->

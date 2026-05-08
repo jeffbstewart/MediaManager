@@ -39,6 +39,18 @@ interface TmdbResult {
   release_year: number | null; poster_path: string | null; overview: string | null;
 }
 
+interface MusicBrainzCandidate {
+  release_mbid: string;
+  release_group_mbid: string | null;
+  title: string;
+  artist_credit: string;
+  year: number | null;
+  label: string | null;
+  barcode: string | null;
+  track_count: number;
+  disc_count: number;
+}
+
 interface AmazonOrder {
   id: number; product_name: string; order_date: string | null; unit_price: number | null;
 }
@@ -68,6 +80,14 @@ export class MediaItemEditComponent implements OnInit, CanDeactivateComponent {
   readonly tmdbType = signal<'MOVIE' | 'TV'>('MOVIE');
   readonly tmdbResults = signal<TmdbResult[]>([]);
   readonly searching = signal(false);
+
+  // MusicBrainz search — surfaced alongside TMDB on the same
+  // "needs match" gate so a music CD that missed the video pipeline
+  // can be matched without a second flow. Query format matches the
+  // server: free text, or "Artist - Album" when the dash is present.
+  readonly mbQuery = signal('');
+  readonly mbResults = signal<MusicBrainzCandidate[]>([]);
+  readonly mbSearching = signal(false);
 
   // Amazon orders
   readonly amazonQuery = signal('');
@@ -119,11 +139,15 @@ export class MediaItemEditComponent implements OnInit, CanDeactivateComponent {
       this.storageLocation.set(location);
       this.pristine.set({ place, date, price, location });
 
-      // Init TMDB search with title name
+      // Init TMDB + MusicBrainz searches with title name. UPCitemdb
+      // sometimes surfaces the album+artist as "Artist - Album"; the
+      // server-side MB search treats that format specially, so a
+      // direct fill works for both video and music scans.
       const primary = data.titles[0];
       if (primary) {
         this.tmdbQuery.set(primary.title_name);
         this.tmdbType.set(primary.media_type === 'TV' ? 'TV' : 'MOVIE');
+        this.mbQuery.set(primary.title_name);
       }
 
       // Load Amazon orders
@@ -249,6 +273,45 @@ export class MediaItemEditComponent implements OnInit, CanDeactivateComponent {
         this.flash('TMDB match set — re-enrichment queued');
       }
       this.tmdbResults.set([]);
+      await this.refresh();
+    } catch (e: unknown) {
+      const msg = (e as { error?: { error?: string } })?.error?.error ?? 'Failed';
+      this.flash(msg, 'error');
+    }
+  }
+
+  // --- MusicBrainz Search ---
+  updateMbQuery(event: Event): void { this.mbQuery.set((event.target as HTMLInputElement).value); }
+
+  async searchMusicBrainz(): Promise<void> {
+    const q = this.mbQuery().trim();
+    const upc = this.item()?.upc?.trim() ?? '';
+    if (!q && !upc) return;
+    this.mbSearching.set(true);
+    try {
+      const params: Record<string, string> = { q };
+      // Pass the original UPC so MB's barcode lookup is tried first.
+      // Many CDs have their EAN/UPC registered with MB even when the
+      // free-text search misses.
+      if (upc) params['barcode'] = upc;
+      const d = await firstValueFrom(this.http.get<{ candidates: MusicBrainzCandidate[] }>(
+        '/api/v2/admin/media-item/search-musicbrainz', { params }));
+      this.mbResults.set(d.candidates);
+    } catch { /* ignore */ }
+    this.mbSearching.set(false);
+  }
+
+  async selectMusicBrainz(candidate: MusicBrainzCandidate): Promise<void> {
+    // Send the release MBID (specific pressing). Server looks it
+    // up to populate title name / poster / tracks / artists in
+    // the same call — picking by release-group alone leaves the
+    // title an empty shell with no cover or tracks.
+    try {
+      await firstValueFrom(this.http.post<{ status: string }>(
+        `/api/v2/admin/media-item/${this.itemId}/assign-musicbrainz`,
+        { release_mbid: candidate.release_mbid }));
+      this.flash('MusicBrainz match set — title populated');
+      this.mbResults.set([]);
       await this.refresh();
     } catch (e: unknown) {
       const msg = (e as { error?: { error?: string } })?.error?.error ?? 'Failed';
