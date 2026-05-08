@@ -52,6 +52,10 @@ struct MediaManagerApp: App {
     @State private var audioCache: AudioCacheManager
     @State private var dataModel: OnlineDataModel
     @State private var imageProvider: ImageProvider
+    /// First-launch gate. User must accept the app-level privacy
+    /// policy + ToS before any other view renders. Stored in
+    /// UserDefaults; never transmitted to any server.
+    @State private var appPolicy: AppPolicyAgreement
 
     /// MetricKit subscriber that ships iOS crash diagnostics from
     /// previous launches into Binnacle. Held onto for the app
@@ -104,6 +108,7 @@ struct MediaManagerApp: App {
         _audioCache = State(initialValue: ac)
         _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
         _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
+        _appPolicy = State(initialValue: AppPolicyAgreement())
     }
 
     var body: some Scene {
@@ -129,6 +134,16 @@ struct MediaManagerApp: App {
                 .environment(audioCache)
                 .environment(dataModel)
                 .environment(imageProvider)
+            } else if !appPolicy.hasAgreed {
+                // Hard gate: nothing else renders until the user
+                // accepts the app-level privacy policy + ToS. Per
+                // App Store guidelines + product requirements: the
+                // user must see ONLY this screen on first launch
+                // until they tap Agree. AppPolicyAgreement.accept()
+                // flips hasAgreed and the next render falls through
+                // to the normal RootView path.
+                AppPolicyAgreementView()
+                    .environment(appPolicy)
             } else {
                 RootView()
                     .environment(authManager)
