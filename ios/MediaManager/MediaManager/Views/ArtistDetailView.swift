@@ -8,6 +8,7 @@ private let log = MMLogger(category: "ArtistDetailView")
 /// discography from MusicBrainz with tap-to-wish hearts.
 struct ArtistDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AudioCacheManager.self) private var audioCache
     let route: ArtistRoute
 
     @State private var detail: ApiArtistDetail?
@@ -149,10 +150,28 @@ struct ArtistDetailView: View {
                         // will get a proper destination in Phase 3.
                         NavigationLink(value: album) {
                             VStack(alignment: .center, spacing: 6) {
-                                CachedImage(
-                                    ref: .posterThumbnail(titleId: album.id.protoValue),
-                                    cornerRadius: 8)
-                                    .frame(width: 130, height: 130)  // square
+                                ZStack(alignment: .bottomTrailing) {
+                                    CachedImage(
+                                        ref: .posterThumbnail(titleId: album.id.protoValue),
+                                        cornerRadius: 8)
+                                        .frame(width: 130, height: 130)  // square
+                                    if audioCache.isDownloaded(titleId: album.id.protoValue) {
+                                        // Bottom-right corner badge,
+                                        // small enough not to obscure
+                                        // the cover. Same icon family
+                                        // used on AlbumDetailView's
+                                        // per-track downloaded marker
+                                        // for visual consistency.
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.white)
+                                            .padding(4)
+                                            .background(.black.opacity(0.55))
+                                            .clipShape(Circle())
+                                            .padding(6)
+                                            .accessibilityLabel("Downloaded")
+                                    }
+                                }
                                 Text(album.name)
                                     .font(.caption)
                                     .lineLimit(2)

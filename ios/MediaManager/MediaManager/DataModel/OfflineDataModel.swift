@@ -163,7 +163,41 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
     func libraryShuffle(limit: Int) async throws -> [ApiTrack] {
-        throw DataModelError.offline
+        // Pull every track from every downloaded album, shuffle, take
+        // the first `limit`. AppServices.shared.audioCache holds the
+        // index; we walk its `downloads` list and read each album's
+        // cached MMTitleDetail proto for the track list. Tracks that
+        // didn't make it onto disk during a partial download (album
+        // entry exists but the track id isn't in trackIds) are
+        // skipped — playing them offline would just stall.
+        //
+        // Each track's MMTrack proto is enriched with title_name +
+        // title_artist_name so the mini-player and Now Playing
+        // surfaces show correct album / artist context. The server
+        // populates those fields when surfacing tracks standalone
+        // (library shuffle online); we mirror that for the offline
+        // path so the user-visible chrome is identical either way.
+        guard let audioCache = AppServices.shared.audioCache else {
+            throw DataModelError.offline
+        }
+        var pool: [ApiTrack] = []
+        for album in audioCache.downloads {
+            guard let detail = audioCache.cachedAlbumDetail(titleId: album.titleId),
+                  let apiAlbum = detail.album else { continue }
+            let onDisk = Set(album.trackIds)
+            let albumName = detail.name
+            let albumArtist = apiAlbum.albumArtists.first?.name ?? ""
+            for track in apiAlbum.tracks where onDisk.contains(track.id) {
+                var enrichedProto = track.proto
+                enrichedProto.titleName = albumName
+                if !albumArtist.isEmpty {
+                    enrichedProto.titleArtistName = albumArtist
+                }
+                pool.append(ApiTrack(proto: enrichedProto))
+            }
+        }
+        if pool.isEmpty { throw DataModelError.offline }
+        return Array(pool.shuffled().prefix(limit))
     }
     func smartPlaylists() async throws -> [ApiSmartPlaylistSummary] {
         throw DataModelError.offline

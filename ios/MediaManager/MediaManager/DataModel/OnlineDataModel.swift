@@ -191,7 +191,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func libraryShuffle(limit: Int) async throws -> [ApiTrack] {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.libraryShuffle(limit: limit) }
         let response = try await grpcClient.libraryShuffle(limit: Int32(limit))
         return response.tracks.map { ApiTrack(proto: $0) }
     }
