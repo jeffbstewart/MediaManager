@@ -607,30 +607,34 @@ final class AudioPlayerManager {
             let d = item.duration.seconds
             if d.isFinite { duration = d }
         }
-        // No MPNowPlayingInfoCenter writes here. iOS extrapolates
-        // the scrubber from (elapsedTime + playbackRate × wall-
-        // clock-delta) using the values set at the last "real"
-        // state change, so the per-tick writes were redundant.
-        // Worse, on iOS 26 the constant-churn updates appear to
-        // make the Live-Activity-style lock-screen card render
-        // a transport-less layout (controls present but invisible
-        // / no buttons drawn at all). State-change writers are:
-        //   - loadAndPlayCurrent (track swap)
-        //   - pause / resume
-        //   - seek
-        //   - updateNowPlayingArtwork
-        // Each of those calls publishNowPlayingInfo() with the
-        // current dict, which is enough for iOS to keep the
-        // scrubber / chrome correct.
+        // Push elapsed time to MPNowPlayingInfoCenter at 1/s. The
+        // theoretical "iOS extrapolates from elapsedTime +
+        // playbackRate × wall-clock-delta" works on paper but in
+        // practice the lock-screen scrubber stays frozen at the
+        // value set on the last real state change. Periodic
+        // updates are required. 1/s is a middle ground between
+        // the original 4/s (excessive churn, candidate suspect for
+        // the iOS 26 missing-transport-icons bug) and "never"
+        // (frozen scrubber). The SwiftUI mini-player still gets
+        // 4/s `position` ticks via @Observable for in-app smoothness.
+        if Date().timeIntervalSince(lastInfoCenterUpdate) >= 1.0 {
+            lastInfoCenterUpdate = Date()
+            publishNowPlayingInfo()
+        }
 
-        // Listening-progress reporting still ticks at 10 s — the
-        // queue coalesces same-track writes, so the throttle is
-        // just to keep us from poking the actor 4 ×/s.
+        // Listening-progress reporting at 10 s — the queue
+        // coalesces same-track writes, so the throttle is just to
+        // keep us from poking the actor 4 ×/s.
         if isPlaying,
            Date().timeIntervalSince(lastReportedAt) >= Self.progressReportInterval {
             enqueueCurrentProgress()
         }
     }
+
+    /// Throttle marker for handleTimeUpdate's MPNowPlayingInfoCenter
+    /// writes — see comment in handleTimeUpdate for the cadence
+    /// reasoning.
+    private var lastInfoCenterUpdate: Date = .distantPast
 
     /// Atomic publish of the current dict to MPNowPlayingInfoCenter.
     /// Always go through here so writers can't disagree about what
