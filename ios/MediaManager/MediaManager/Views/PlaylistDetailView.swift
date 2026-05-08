@@ -13,6 +13,7 @@ private let log = MMLogger(category: "PlaylistDetailView")
 struct PlaylistDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
+    @Environment(AudioCacheManager.self) private var audioCache
     @Environment(\.dismiss) private var dismiss
     let route: PlaylistRoute
 
@@ -121,6 +122,13 @@ struct PlaylistDetailView: View {
             detail = try await dataModel.playlist(id: route.id)
         } catch {
             log.warning("playlist failed: \(error.localizedDescription)")
+            // Fall back to the cached MMPlaylistDetail proto written
+            // at download time so a downloaded playlist is browsable
+            // while offline. Same pattern as AlbumDetailView's
+            // offline fallback.
+            if let cached = audioCache.cachedPlaylistDetail(playlistId: route.id) {
+                detail = cached
+            }
         }
         loading = false
     }
@@ -167,24 +175,83 @@ struct PlaylistDetailView: View {
 
     @ViewBuilder
     private func actionRow(_ detail: ApiPlaylistDetail) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                play(detail, startIndex: 0, shuffled: false)
-            } label: {
-                Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(detail.tracks.isEmpty)
+        let isEmpty = detail.tracks.isEmpty
+        let playlistId = detail.summary.id
+        let isDownloaded = audioCache.isPlaylistDownloaded(playlistId: playlistId)
+        let progress = audioCache.activePlaylistDownloads[playlistId]
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button {
+                    play(detail, startIndex: 0, shuffled: false)
+                } label: {
+                    Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isEmpty)
 
+                Button {
+                    play(detail, startIndex: 0, shuffled: true)
+                } label: {
+                    Label("Shuffle", systemImage: "shuffle").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isEmpty)
+            }
+            playlistDownloadButton(
+                detail: detail,
+                isEmpty: isEmpty,
+                isDownloaded: isDownloaded,
+                progress: progress)
+        }
+    }
+
+    /// Three-state download affordance, mirrors AlbumDetailView's
+    /// downloadButton: idle (cloud-down) / in-flight (ring + N/M) /
+    /// downloaded (green checkmark, taps remove).
+    @ViewBuilder
+    private func playlistDownloadButton(
+        detail: ApiPlaylistDetail,
+        isEmpty: Bool,
+        isDownloaded: Bool,
+        progress: PlaylistDownloadProgress?
+    ) -> some View {
+        if let progress {
             Button {
-                play(detail, startIndex: 0, shuffled: true)
+                audioCache.cancelPlaylistDownload(playlistId: detail.summary.id)
             } label: {
-                Label("Shuffle", systemImage: "shuffle").frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    ProgressView(value: progress.fraction)
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+                    Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
+                        .font(.caption.monospacedDigit())
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(detail.tracks.isEmpty)
+            .controlSize(.regular)
+        } else if isDownloaded {
+            Button {
+                audioCache.deletePlaylist(playlistId: detail.summary.id)
+            } label: {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .tint(.green)
+        } else {
+            Button {
+                audioCache.downloadPlaylist(detail: detail)
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .disabled(isEmpty)
         }
     }
 

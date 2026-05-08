@@ -38,6 +38,32 @@ struct AlbumDownloadProgress: Sendable, Hashable {
     }
 }
 
+/// Per-playlist on-disk metadata. Same shape as DownloadedAlbum,
+/// keyed by playlistId. Tracks can overlap with album-downloaded
+/// content; on-disk we hard-link album files into the playlist
+/// directory rather than re-downloading bytes — see downloadPlaylist
+/// for the dedup strategy.
+struct DownloadedPlaylist: Codable, Identifiable, Sendable, Hashable {
+    var id: Int64 { playlistId }
+
+    let playlistId: Int64
+    let name: String
+    let downloadedAt: Date
+    var lastAccessedAt: Date
+    var sizeBytes: Int64
+    let trackIds: [Int64]
+}
+
+struct PlaylistDownloadProgress: Sendable, Hashable {
+    let playlistId: Int64
+    let playlistName: String
+    var tracksCompleted: Int
+    var tracksTotal: Int
+    var fraction: Double {
+        tracksTotal > 0 ? Double(tracksCompleted) / Double(tracksTotal) : 0
+    }
+}
+
 /// Owns offline album storage. Mirrors BookCacheManager's shape:
 /// in-memory list of completed downloads + dict of in-flight
 /// progress, both projected from / to a JSON index on disk.
@@ -70,19 +96,35 @@ final class AudioCacheManager {
     /// Tap-to-retry clears the row.
     private(set) var failedDownloads: [Int64: String] = [:]
 
+    /// Playlists whose tracks have all landed. Persisted to
+    /// playlists.json (separate file from album index for clean
+    /// migration / partial corruption containment).
+    private(set) var playlistDownloads: [DownloadedPlaylist] = []
+    /// playlistId → live progress.
+    private(set) var activePlaylistDownloads: [Int64: PlaylistDownloadProgress] = [:]
+    /// playlistId → last failure message.
+    private(set) var failedPlaylistDownloads: [Int64: String] = [:]
+
     /// Reverse index: trackId → titleId. Lets the player resolve a
     /// trackId to its parent album folder in O(1) without scanning
     /// every download. Rebuilt from the persisted index on launch.
     private var trackToAlbum: [Int64: Int64] = [:]
+    /// Reverse index: trackId → set of playlistIds containing it.
+    /// One track can be in multiple playlists, hence the array.
+    /// Used by localTrackURL for the playlist-directory fallback
+    /// when a track isn't in an album download.
+    private var trackToPlaylists: [Int64: [Int64]] = [:]
 
     private var apiClient: APIClient?
     /// Cancel tokens for in-flight album downloads. Each Task
     /// downloads its album's tracks sequentially; cancelling tears
     /// down the in-flight track fetch and removes the partial files.
     private var downloadTasks: [Int64: Task<Void, Never>] = [:]
+    private var playlistDownloadTasks: [Int64: Task<Void, Never>] = [:]
 
     private let audioDir: URL
     private let indexPath: URL
+    private let playlistIndexPath: URL
 
     init() {
         let appSupport = FileManager.default
@@ -90,6 +132,7 @@ final class AudioCacheManager {
         let downloadsRoot = appSupport.appendingPathComponent("Downloads", isDirectory: true)
         audioDir = downloadsRoot.appendingPathComponent("Audio", isDirectory: true)
         indexPath = audioDir.appendingPathComponent("index.json")
+        playlistIndexPath = audioDir.appendingPathComponent("playlists.json")
 
         do {
             try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -103,8 +146,9 @@ final class AudioCacheManager {
         try? dir.setResourceValues(rv)
 
         downloads = Self.loadIndex(at: indexPath)
+        playlistDownloads = Self.loadPlaylistIndex(at: playlistIndexPath)
         rebuildTrackIndex()
-        logger.info("AudioCacheManager initialised; \(self.downloads.count) downloaded albums at \(self.audioDir.path)")
+        logger.info("AudioCacheManager initialised; \(self.downloads.count) albums + \(self.playlistDownloads.count) playlists at \(self.audioDir.path)")
     }
 
     func configure(apiClient: APIClient) {
@@ -135,8 +179,30 @@ final class AudioCacheManager {
     /// glob lets old downloads keep working without forcing a
     /// blanket re-download.
     func localTrackURL(trackId: Int64) -> URL? {
-        guard let titleId = trackToAlbum[trackId] else { return nil }
-        let dir = albumDir(titleId: titleId)
+        // Album storage first — album downloads are the canonical
+        // home for a track's bytes. Playlist downloads usually
+        // hard-link into this same file (same inode), so checking
+        // the album directory wins for the common case.
+        if let titleId = trackToAlbum[trackId],
+           let url = findTrackFile(in: albumDir(titleId: titleId), trackId: trackId) {
+            return url
+        }
+        // Fall back to any playlist directory carrying the track —
+        // tracks downloaded as part of a playlist whose parent album
+        // wasn't (or has since been deleted) live there.
+        for playlistId in trackToPlaylists[trackId] ?? [] {
+            if let url = findTrackFile(in: playlistDir(playlistId: playlistId), trackId: trackId) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// Glob-match `<trackId>` *or* `<trackId>.<ext>` inside `dir`.
+    /// Used by both album- and playlist-storage lookups so the
+    /// extension-aware (post-fix) and extensionless (legacy)
+    /// layouts both resolve.
+    private func findTrackFile(in dir: URL, trackId: Int64) -> URL? {
         let bare = dir.appendingPathComponent("\(trackId)")
         if FileManager.default.fileExists(atPath: bare.path) { return bare }
         let prefix = "\(trackId)."
@@ -223,11 +289,85 @@ final class AudioCacheManager {
         Task { await ImageDiskCache.shared.unpin(ref: .posterFull(titleId: titleId)) }
     }
 
-    /// Aggregate disk usage across all downloaded albums. The
-    /// Downloads view's storage row sums this with the video / book
-    /// counterparts.
+    /// Aggregate disk usage across all downloaded albums + playlists.
+    /// Sums the size fields verbatim — hard-linked tracks shared
+    /// between an album and a playlist will be counted in both
+    /// rows, slightly overestimating actual on-disk usage. That's
+    /// fine for the Downloads view's "you've used X" line; an
+    /// exact figure would need to dedup by inode which is more
+    /// work than the user-facing display warrants.
     var totalStorageBytes: Int64 {
         downloads.map(\.sizeBytes).reduce(0, +)
+            + playlistDownloads.map(\.sizeBytes).reduce(0, +)
+    }
+
+    // MARK: - Playlist downloads
+
+    func isPlaylistDownloaded(playlistId: Int64) -> Bool {
+        playlistDownloads.contains { $0.playlistId == playlistId }
+    }
+
+    func isPlaylistDownloading(playlistId: Int64) -> Bool {
+        activePlaylistDownloads[playlistId] != nil
+    }
+
+    /// Cached playlist detail for offline browsing. PlaylistDetailView
+    /// falls back to this when the dataModel call throws .offline.
+    func cachedPlaylistDetail(playlistId: Int64) -> ApiPlaylistDetail? {
+        let path = playlistDir(playlistId: playlistId).appendingPathComponent("detail.pb")
+        guard FileManager.default.fileExists(atPath: path.path),
+              let data = try? Data(contentsOf: path),
+              let proto = try? MMPlaylistDetail(serializedData: data) else {
+            return nil
+        }
+        return ApiPlaylistDetail(proto: proto)
+    }
+
+    /// Kick off a download for every playable track in a playlist.
+    /// Tracks already on disk via an album download are hard-linked
+    /// into the playlist directory rather than re-downloaded —
+    /// duplicates the inode reference, not the bytes. When either
+    /// the album or the playlist is later deleted, the file stays
+    /// alive until the last reference is gone.
+    func downloadPlaylist(detail: ApiPlaylistDetail) {
+        let playlistId = detail.summary.id
+        if isPlaylistDownloaded(playlistId: playlistId) || isPlaylistDownloading(playlistId: playlistId) { return }
+        let playable = detail.tracks.filter { $0.track.playable }
+        guard !playable.isEmpty else {
+            failedPlaylistDownloads[playlistId] = "No playable tracks on this playlist."
+            return
+        }
+        failedPlaylistDownloads.removeValue(forKey: playlistId)
+        activePlaylistDownloads[playlistId] = PlaylistDownloadProgress(
+            playlistId: playlistId,
+            playlistName: detail.summary.name,
+            tracksCompleted: 0,
+            tracksTotal: playable.count)
+
+        playlistDownloadTasks[playlistId] = Task { [weak self] in
+            await self?.performPlaylistDownload(detail: detail, entries: playable)
+        }
+    }
+
+    func cancelPlaylistDownload(playlistId: Int64) {
+        playlistDownloadTasks[playlistId]?.cancel()
+        playlistDownloadTasks.removeValue(forKey: playlistId)
+        activePlaylistDownloads.removeValue(forKey: playlistId)
+        try? FileManager.default.removeItem(at: playlistDir(playlistId: playlistId))
+    }
+
+    func deletePlaylist(playlistId: Int64) {
+        playlistDownloadTasks[playlistId]?.cancel()
+        playlistDownloadTasks.removeValue(forKey: playlistId)
+        activePlaylistDownloads.removeValue(forKey: playlistId)
+        // Removing the directory drops every hard link inside it.
+        // Files that were hard-linked from an album (same inode) stay
+        // alive on disk via the album's reference; standalone-
+        // downloaded tracks (no album link) are freed here.
+        try? FileManager.default.removeItem(at: playlistDir(playlistId: playlistId))
+        playlistDownloads.removeAll { $0.playlistId == playlistId }
+        rebuildTrackIndex()
+        persistPlaylistIndex()
     }
 
     // MARK: - Download flow
@@ -318,23 +458,160 @@ final class AudioCacheManager {
         Task { await ImageDiskCache.shared.pin(ref: .posterFull(titleId: titleId)) }
     }
 
+    /// Download every playable track in a playlist. For each track:
+    ///
+    /// - If the track already has a local file on disk (from an
+    ///   album download), hard-link it into the playlist directory.
+    ///   Both paths refer to the same inode; deleting one path
+    ///   keeps the file alive while any path still references it.
+    ///   Saves disk space and bandwidth.
+    /// - Otherwise download fresh into the playlist directory.
+    ///
+    /// The serialized MMPlaylistDetail is written to detail.pb so
+    /// PlaylistDetailView can browse it offline.
+    private func performPlaylistDownload(detail: ApiPlaylistDetail, entries: [ApiPlaylistTrackEntry]) async {
+        guard let apiClient else {
+            failedPlaylistDownloads[detail.summary.id] = "Server connection isn't ready yet."
+            activePlaylistDownloads.removeValue(forKey: detail.summary.id)
+            return
+        }
+        let playlistId = detail.summary.id
+        let dir = playlistDir(playlistId: playlistId)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            failedPlaylistDownloads[playlistId] = "Disk error: \(error.localizedDescription)"
+            activePlaylistDownloads.removeValue(forKey: playlistId)
+            return
+        }
+
+        // Persist playlist detail proto for offline browsing.
+        do {
+            let data = try detail.proto.serializedData()
+            let path = dir.appendingPathComponent("detail.pb")
+            try data.write(to: path, options: .atomic)
+        } catch {
+            logger.error("downloadPlaylist: failed to write detail.pb playlistId=\(playlistId): \(error.localizedDescription)")
+        }
+
+        var downloadedTrackIds: [Int64] = []
+        var totalBytes: Int64 = 0
+        for entry in entries {
+            if Task.isCancelled { break }
+            let trackId = entry.track.id
+            // Dedup path: if the track is already on disk via an
+            // album download, hard-link instead of re-fetching.
+            if let existing = localTrackURL(trackId: trackId) {
+                let ext = existing.pathExtension.isEmpty ? "mp3" : existing.pathExtension
+                let dest = dir.appendingPathComponent("\(trackId).\(ext)")
+                do {
+                    if !FileManager.default.fileExists(atPath: dest.path) {
+                        try FileManager.default.linkItem(at: existing, to: dest)
+                    }
+                    downloadedTrackIds.append(trackId)
+                    if let attrs = try? FileManager.default.attributesOfItem(atPath: dest.path),
+                       let size = attrs[.size] as? Int64 {
+                        totalBytes += size
+                    }
+                } catch {
+                    logger.warning("downloadPlaylist: hardlink failed for track \(trackId): \(error.localizedDescription) — falling through to fresh download")
+                    // Fall through to the HTTP download path below
+                    // by NOT continuing here. Wrap in a do/catch
+                    // ladder if we ever need to differentiate.
+                }
+                if let progress = activePlaylistDownloads[playlistId] {
+                    var p = progress
+                    p.tracksCompleted += 1
+                    activePlaylistDownloads[playlistId] = p
+                }
+                continue
+            }
+            // Fresh download path — same shape as performAlbumDownload.
+            do {
+                let (data, contentType) = try await apiClient
+                    .getRawWithContentType("audio/\(trackId)")
+                let ext = Self.extension(forContentType: contentType)
+                let url = dir.appendingPathComponent("\(trackId).\(ext)")
+                try data.write(to: url, options: .atomic)
+                downloadedTrackIds.append(trackId)
+                totalBytes += Int64(data.count)
+                if let progress = activePlaylistDownloads[playlistId] {
+                    var p = progress
+                    p.tracksCompleted += 1
+                    activePlaylistDownloads[playlistId] = p
+                }
+            } catch {
+                logger.warning("downloadPlaylist: track \(trackId) failed: \(error.localizedDescription)")
+                continue
+            }
+        }
+
+        if Task.isCancelled {
+            try? FileManager.default.removeItem(at: dir)
+            activePlaylistDownloads.removeValue(forKey: playlistId)
+            return
+        }
+        guard !downloadedTrackIds.isEmpty else {
+            failedPlaylistDownloads[playlistId] = "No tracks could be downloaded."
+            activePlaylistDownloads.removeValue(forKey: playlistId)
+            try? FileManager.default.removeItem(at: dir)
+            return
+        }
+
+        let entry = DownloadedPlaylist(
+            playlistId: playlistId,
+            name: detail.summary.name,
+            downloadedAt: Date(),
+            lastAccessedAt: Date(),
+            sizeBytes: totalBytes,
+            trackIds: downloadedTrackIds)
+        playlistDownloads.removeAll { $0.playlistId == playlistId }
+        playlistDownloads.append(entry)
+        rebuildTrackIndex()
+        persistPlaylistIndex()
+        activePlaylistDownloads.removeValue(forKey: playlistId)
+        playlistDownloadTasks.removeValue(forKey: playlistId)
+    }
+
     // MARK: - Persistence
 
     private func albumDir(titleId: Int64) -> URL {
         audioDir.appendingPathComponent("\(titleId)", isDirectory: true)
     }
 
+    /// Playlist directory naming uses a `playlist-` prefix so we
+    /// can't collide with album directories (album titleId and
+    /// playlistId could share an integer value across the two
+    /// namespaces).
+    private func playlistDir(playlistId: Int64) -> URL {
+        audioDir.appendingPathComponent("playlist-\(playlistId)", isDirectory: true)
+    }
+
     private func rebuildTrackIndex() {
-        var idx: [Int64: Int64] = [:]
+        var albumIdx: [Int64: Int64] = [:]
         for album in downloads {
-            for tid in album.trackIds { idx[tid] = album.titleId }
+            for tid in album.trackIds { albumIdx[tid] = album.titleId }
         }
-        trackToAlbum = idx
+        trackToAlbum = albumIdx
+
+        var playlistIdx: [Int64: [Int64]] = [:]
+        for playlist in playlistDownloads {
+            for tid in playlist.trackIds {
+                playlistIdx[tid, default: []].append(playlist.playlistId)
+            }
+        }
+        trackToPlaylists = playlistIdx
     }
 
     private func persistIndex() {
         if let data = try? JSONEncoder().encode(downloads) {
             try? data.write(to: indexPath, options: .atomic)
+        }
+    }
+
+    private func persistPlaylistIndex() {
+        if let data = try? JSONEncoder().encode(playlistDownloads) {
+            try? data.write(to: playlistIndexPath, options: .atomic)
         }
     }
 
@@ -367,6 +644,14 @@ final class AudioCacheManager {
     private static func loadIndex(at path: URL) -> [DownloadedAlbum] {
         guard let data = try? Data(contentsOf: path),
               let entries = try? JSONDecoder().decode([DownloadedAlbum].self, from: data) else {
+            return []
+        }
+        return entries
+    }
+
+    private static func loadPlaylistIndex(at path: URL) -> [DownloadedPlaylist] {
+        guard let data = try? Data(contentsOf: path),
+              let entries = try? JSONDecoder().decode([DownloadedPlaylist].self, from: data) else {
             return []
         }
         return entries

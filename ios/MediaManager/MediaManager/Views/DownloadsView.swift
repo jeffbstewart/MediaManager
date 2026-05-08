@@ -139,11 +139,34 @@ struct DownloadsView: View {
                 }
             }
 
+            // ---- Audio (playlists) ----
+
+            let activePlaylists = Array(audioCache.activePlaylistDownloads.values)
+                .sorted { $0.playlistName < $1.playlistName }
+            let downloadedPlaylists = audioCache.playlistDownloads
+                .sorted { $0.name < $1.name }
+
+            if !activePlaylists.isEmpty && !isOffline {
+                Section("Active Playlists") {
+                    ForEach(activePlaylists, id: \.playlistId) { progress in
+                        activePlaylistRow(progress)
+                    }
+                }
+            }
+
+            if !downloadedPlaylists.isEmpty {
+                Section("Playlists") {
+                    ForEach(downloadedPlaylists) { playlist in
+                        playlistRow(playlist)
+                    }
+                }
+            }
+
             Section("Storage") {
                 storageRow(items: items)
             }
 
-            if active.isEmpty && completed.isEmpty && activeBooks.isEmpty && downloadedBooks.isEmpty && activeAlbums.isEmpty && downloadedAlbums.isEmpty {
+            if active.isEmpty && completed.isEmpty && activeBooks.isEmpty && downloadedBooks.isEmpty && activeAlbums.isEmpty && downloadedAlbums.isEmpty && activePlaylists.isEmpty && downloadedPlaylists.isEmpty {
                 ContentUnavailableView(
                     "No Downloads",
                     systemImage: "arrow.down.circle",
@@ -228,6 +251,71 @@ struct DownloadsView: View {
         proto.name = album.name
         proto.mediaType = .album
         return ApiTitle(proto: proto)
+    }
+
+    @ViewBuilder
+    private func activePlaylistRow(_ progress: PlaylistDownloadProgress) -> some View {
+        HStack(spacing: 12) {
+            ProgressView(value: progress.fraction)
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(progress.playlistName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text("\(progress.tracksCompleted) / \(progress.tracksTotal) tracks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                audioCache.cancelPlaylistDownload(playlistId: progress.playlistId)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.red.opacity(0.7))
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel download")
+        }
+    }
+
+    @ViewBuilder
+    private func playlistRow(_ playlist: DownloadedPlaylist) -> some View {
+        // Tap navigates to PlaylistDetailView via the same
+        // PlaylistRoute the in-app playlist list uses; offline
+        // load() falls back to cachedPlaylistDetail.
+        NavigationLink(value: PlaylistRoute(id: playlist.playlistId, name: playlist.name)) {
+            HStack(spacing: 12) {
+                Image(systemName: "music.note.list")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 44, height: 44)
+                    .background(.fill.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(playlist.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text("\(playlist.trackIds.count) tracks")
+                        Text(ByteCountFormatter.string(
+                            fromByteCount: playlist.sizeBytes,
+                            countStyle: .file))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                audioCache.deletePlaylist(playlistId: playlist.playlistId)
+            } label: {
+                Label("Remove", systemImage: "trash")
+            }
+        }
     }
 
     @ViewBuilder
