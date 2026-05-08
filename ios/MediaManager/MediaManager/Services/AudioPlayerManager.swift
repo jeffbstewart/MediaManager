@@ -208,13 +208,13 @@ final class AudioPlayerManager {
             player.play()
         }
         refreshIsPlaying()
-        updateNowPlayingInfo()
+        publishNowPlayingInfo()
     }
 
     func pause() {
         player.pause()
         refreshIsPlaying()
-        updateNowPlayingInfo()
+        publishNowPlayingInfo()
         // Pause is the natural moment to ship a fresh position —
         // user might be backgrounding the app or putting the phone
         // down, and we'd rather not wait for the next periodic tick.
@@ -251,7 +251,7 @@ final class AudioPlayerManager {
         player.seek(to: target) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.position = seconds
-                self?.updateNowPlayingInfo()
+                self?.publishNowPlayingInfo()
             }
         }
     }
@@ -607,23 +607,39 @@ final class AudioPlayerManager {
             let d = item.duration.seconds
             if d.isFinite { duration = d }
         }
-        // Cheap nowPlayingInfo refresh — sets only the elapsed time
-        // so the lock-screen scrubber tracks accurately. Mutates
-        // our local dict and republishes the whole thing so the
-        // async artwork update can't get clobbered by a between-
-        // ticks race (see `nowPlayingInfo` doc comment).
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
-        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        // No MPNowPlayingInfoCenter writes here. iOS extrapolates
+        // the scrubber from (elapsedTime + playbackRate × wall-
+        // clock-delta) using the values set at the last "real"
+        // state change, so the per-tick writes were redundant.
+        // Worse, on iOS 26 the constant-churn updates appear to
+        // make the Live-Activity-style lock-screen card render
+        // a transport-less layout (controls present but invisible
+        // / no buttons drawn at all). State-change writers are:
+        //   - loadAndPlayCurrent (track swap)
+        //   - pause / resume
+        //   - seek
+        //   - updateNowPlayingArtwork
+        // Each of those calls publishNowPlayingInfo() with the
+        // current dict, which is enough for iOS to keep the
+        // scrubber / chrome correct.
 
-        // Enqueue listening progress every ~10 s while playing. The
+        // Listening-progress reporting still ticks at 10 s — the
         // queue coalesces same-track writes, so the throttle is
-        // mostly to keep us from poking the actor 4×/s.
+        // just to keep us from poking the actor 4 ×/s.
         if isPlaying,
            Date().timeIntervalSince(lastReportedAt) >= Self.progressReportInterval {
             enqueueCurrentProgress()
         }
+    }
+
+    /// Atomic publish of the current dict to MPNowPlayingInfoCenter.
+    /// Always go through here so writers can't disagree about what
+    /// the system sees.
+    private func publishNowPlayingInfo() {
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
     private func refreshIsPlaying() {
@@ -658,11 +674,8 @@ final class AudioPlayerManager {
         }
         nowPlayingInfo[MPMediaItemPropertyAlbumTrackNumber] = NSNumber(value: track.trackNumber)
         nowPlayingInfo[MPMediaItemPropertyDiscNumber] = NSNumber(value: track.discNumber)
-        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        publishNowPlayingInfo()
     }
 
     /// Async image fetch + MPMediaItemArtwork wrap. Album art is
@@ -682,25 +695,12 @@ final class AudioPlayerManager {
         // one's bytes.
         guard currentTrack?.id == track.id else { return }
         logger.info("artwork loaded for trackId=\(track.id) size=\(Int(image.size.width))x\(Int(image.size.height))")
-        // Re-render into a square 1024×1024 canvas. Two reasons:
-        //
-        // - CarPlay (and many real head units) refuse to render
-        //   artwork that isn't square. Source covers occasionally
-        //   come in slightly off — e.g. 500×499 — because the
-        //   server's TMDB / CAA pipeline can produce JPEGs whose
-        //   dimensions are off by a pixel due to chroma-subsampling
-        //   rounding. CarPlay's response to such artwork is to
-        //   silently drop it, which manifests as the cover slot
-        //   staying empty and the text labels reflowing into the
-        //   space, producing the overlap the user sees.
-        // - 1024×1024 is the size CarPlay's largest layout uses;
-        //   smaller source images leave the slot blurry on real
-        //   head units. Upscaling once here is cheaper than letting
-        //   the system do it on every redraw.
-        //
-        // The image is letterboxed onto a black square so non-square
-        // sources don't get stretched (better than distorting an
-        // artist's cover art).
+        // Pre-render into a square 1024×1024 canvas. Source covers
+        // occasionally come in slightly off-square (e.g. 500×499
+        // from CAA / TMDB chroma-rounding); CarPlay (and some real
+        // head units) silently reject non-square or sub-1024
+        // artwork. Letterboxes onto black so non-square sources
+        // don't get stretched.
         let squareSize = CGSize(width: 1024, height: 1024)
         let renderer = UIGraphicsImageRenderer(size: squareSize)
         let squareImage = renderer.image { ctx in
@@ -727,18 +727,13 @@ final class AudioPlayerManager {
         // system tries to extract the JPEG. UIImage is Sendable, so
         // capturing it through a non-isolated closure is safe.
         // NSLog (not MMLogger) because the closure is @Sendable and
-        // can be called from any thread MediaPlayer chooses. NSLog
-        // is thread-safe; MMLogger's MainActor channel is not. The
-        // log line tells us whether CarPlay / Lock Screen ever
-        // *requests* the artwork — if it never logs, the system
-        // never asked for the bytes, which would point at a CarPlay
-        // simulator rendering bug rather than a setup error.
+        // can be called from any thread MediaPlayer chooses.
         let artwork = MPMediaItemArtwork(boundsSize: squareSize) { @Sendable size in
             NSLog("[MediaManager] artwork closure invoked at size=%.0fx%.0f", size.width, size.height)
             return squareImage
         }
         nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        publishNowPlayingInfo()
     }
 
     // MARK: - Remote commands
@@ -746,31 +741,55 @@ final class AudioPlayerManager {
     private func wireRemoteCommands() {
         let cc = MPRemoteCommandCenter.shared()
 
+        // Each command needs both a target AND an explicit
+        // isEnabled = true. addTarget alone leaves the command in
+        // its default-enabled state — but iOS sometimes drops a
+        // command back to disabled when MPNowPlayingInfoCenter is
+        // cleared (which we do on stop()), and CarPlay then hides
+        // the corresponding button on the Now Playing screen even
+        // though the target is still wired. The skip-forward /
+        // skip-backward variants are mutually exclusive with
+        // next/previous on CarPlay's layout — disable skip so the
+        // head unit shows the track buttons users actually want for
+        // music (skip is for podcasts / audiobooks).
+
+        cc.playCommand.isEnabled = true
         cc.playCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in self?.resume() }
             return .success
         }
+        cc.pauseCommand.isEnabled = true
         cc.pauseCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in self?.pause() }
             return .success
         }
+        cc.togglePlayPauseCommand.isEnabled = true
         cc.togglePlayPauseCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in self?.togglePlayPause() }
             return .success
         }
+        cc.nextTrackCommand.isEnabled = true
         cc.nextTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in self?.next() }
             return .success
         }
+        cc.previousTrackCommand.isEnabled = true
         cc.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in self?.previous() }
             return .success
         }
+        cc.changePlaybackPositionCommand.isEnabled = true
         cc.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             Task { @MainActor [weak self] in self?.seek(to: event.positionTime) }
             return .success
         }
+        // Music UX expects next/previous buttons, not skip-forward /
+        // skip-backward. Leaving skip enabled tells CarPlay this is a
+        // long-form-content app (podcast / audiobook) and it swaps
+        // the buttons. Explicitly disable so next/prev are the
+        // transport controls that surface.
+        cc.skipForwardCommand.isEnabled = false
         cc.skipForwardCommand.preferredIntervals = [15]
         cc.skipForwardCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -779,6 +798,7 @@ final class AudioPlayerManager {
             }
             return .success
         }
+        cc.skipBackwardCommand.isEnabled = false
         cc.skipBackwardCommand.preferredIntervals = [15]
         cc.skipBackwardCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
