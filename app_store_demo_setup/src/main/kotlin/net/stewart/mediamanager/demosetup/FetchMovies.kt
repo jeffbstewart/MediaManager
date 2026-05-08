@@ -39,7 +39,7 @@ internal object FetchMovies {
 
     fun run(demoMedia: Path) {
         requireFfmpeg()
-        val fixtures = locateFixtures().resolve("movies.tsv")
+        val fixtures = Tsv.locateFixtures().resolve("movies.tsv")
         if (fixtures.notExists()) {
             error("missing fixtures file: $fixtures")
         }
@@ -172,28 +172,4 @@ internal object FetchMovies {
         if (exit != 0) error("ffmpeg exited $exit on $input")
     }
 
-    /**
-     * Locate the `fixtures/` directory. When run via gradle the cwd is
-     * the project root; when running the installed distribution it's
-     * wherever the user invoked it. Walk up from the working dir
-     * looking for `app_store_demo_setup/fixtures/`, falling back to
-     * the resource path on the JAR.
-     */
-    private fun locateFixtures(): Path {
-        // Probe a few likely locations relative to the working dir.
-        val candidates = listOf(
-            Path.of("app_store_demo_setup", "fixtures"),
-            Path.of("..", "app_store_demo_setup", "fixtures"),
-            Path.of("fixtures"),
-        )
-        for (rel in candidates) {
-            val abs = rel.toAbsolutePath().normalize()
-            if (abs.exists()) return abs
-        }
-        error(
-            "could not find app_store_demo_setup/fixtures/. Run from the " +
-            "repo root (./gradlew :app_store_demo_setup:run --args=\"...\") " +
-            "or set cwd to the directory containing fixtures/."
-        )
-    }
 }

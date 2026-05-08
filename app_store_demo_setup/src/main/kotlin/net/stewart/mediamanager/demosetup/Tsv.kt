@@ -2,6 +2,7 @@ package net.stewart.mediamanager.demosetup
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.exists
 
 /**
  * Minimal TSV reader for the curated fixture lists. Lines beginning
@@ -38,5 +39,30 @@ internal object Tsv {
             }
         }
         return rows
+    }
+
+    /**
+     * Locate `app_store_demo_setup/fixtures/`. When run via
+     * `./gradlew :app_store_demo_setup:run` the cwd is the repo
+     * root; via `installDist` the cwd is wherever the operator
+     * invoked from. Probe a few likely locations relative to cwd
+     * before giving up. Throws with an actionable message if
+     * neither location resolves.
+     */
+    fun locateFixtures(): Path {
+        val candidates = listOf(
+            Path.of("app_store_demo_setup", "fixtures"),
+            Path.of("..", "app_store_demo_setup", "fixtures"),
+            Path.of("fixtures"),
+        )
+        for (rel in candidates) {
+            val abs = rel.toAbsolutePath().normalize()
+            if (abs.exists()) return abs
+        }
+        error(
+            "could not find app_store_demo_setup/fixtures/. Run from the " +
+            "repo root (./gradlew :app_store_demo_setup:run --args=\"...\") " +
+            "or set cwd to the directory containing fixtures/."
+        )
     }
 }
