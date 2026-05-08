@@ -165,7 +165,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("Media Manager")
+            .navigationTitle("Household Disc Keeper")
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
                     VStack(spacing: 4) {

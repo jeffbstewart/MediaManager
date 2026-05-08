@@ -16,7 +16,7 @@ struct ServerSetupView: View {
                     .font(.system(size: 64))
                     .foregroundStyle(.tint)
 
-                Text("Media Manager")
+                Text("Household Disc Keeper")
                     .font(.largeTitle)
                     .fontWeight(.bold)
 

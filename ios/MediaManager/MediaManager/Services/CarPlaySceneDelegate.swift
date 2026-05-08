@@ -54,7 +54,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func loadingTemplate() -> CPListTemplate {
         let item = CPListItem(text: "Loading…", detailText: nil)
         let section = CPListSection(items: [item])
-        return CPListTemplate(title: "MediaManager", sections: [section])
+        return CPListTemplate(title: "Household Disc Keeper", sections: [section])
     }
 
     private func installBrowseHierarchy() {

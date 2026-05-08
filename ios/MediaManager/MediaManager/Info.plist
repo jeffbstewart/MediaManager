@@ -61,9 +61,9 @@
 <key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan barcodes on disc packaging.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Face ID is used to sign in to your Media Manager account.</string>
+	<string>Face ID is used to sign in to your Household Disc Keeper account.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Local network access is used to discover your Media Manager server automatically.</string>
+	<string>Local network access is used to discover your Household Disc Keeper server automatically.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

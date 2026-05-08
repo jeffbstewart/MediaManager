@@ -398,7 +398,7 @@ final class AuthManager {
     /// Authenticate with Face ID / Touch ID to unlock stored session tokens.
     func authenticateWithBiometric() async {
         let context = LAContext()
-        let reason = "Sign in to Media Manager"
+        let reason = "Sign in to Household Disc Keeper"
         do {
             let success = try await context.evaluatePolicy(
                 .deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
