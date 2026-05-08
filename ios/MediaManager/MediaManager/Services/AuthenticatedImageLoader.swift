@@ -64,9 +64,6 @@ struct AuthenticatedImage: View {
                     .overlay {
                         if loading {
                             ProgressView()
-                        } else {
-                            Image(systemName: "film")
-                                .foregroundStyle(.secondary)
                         }
                     }
             }
@@ -107,14 +104,18 @@ struct CachedImage: View {
             } else if transparentPlaceholder {
                 Color.clear
             } else {
+                // Empty placeholder: a flat tinted rectangle, no
+                // icon. Matches the web app's `.poster-placeholder`
+                // which is a plain coloured div — earlier the iOS
+                // version overlaid an SF "film" symbol that was
+                // misleading on non-video content (album / book
+                // posters got a film clapboard while their web
+                // counterpart was blank).
                 Rectangle()
                     .fill(.quaternary)
                     .overlay {
                         if loading {
                             ProgressView()
-                        } else {
-                            Image(systemName: "film")
-                                .foregroundStyle(.secondary)
                         }
                     }
             }
