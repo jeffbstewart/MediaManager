@@ -119,7 +119,9 @@ struct MusicView: View {
                 HStack(alignment: .top, spacing: 12) {
                     // "+" card always first so creating a playlist is
                     // discoverable from the landing surface, not buried
-                    // behind a See All tap.
+                    // behind a See All tap. Hidden offline because
+                    // playlist creation requires the server.
+                    if dataModel.isOnline {
                     Button {
                         showCreate = true
                     } label: {
@@ -144,6 +146,7 @@ struct MusicView: View {
                         .frame(width: 130)
                     }
                     .buttonStyle(.plain)
+                    }
 
                     ForEach(userPlaylists) { p in
                         NavigationLink(value: PlaylistRoute(id: p.id, name: p.name)) {

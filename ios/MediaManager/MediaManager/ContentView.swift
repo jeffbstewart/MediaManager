@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(AudioCacheManager.self) private var audioCache
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
     @State private var navigationPath = NavigationPath()
@@ -97,6 +98,18 @@ struct ContentView: View {
                             Label("Settings", systemImage: "gear")
                                 .tag(Tab.adminSettings)
                         }
+                    }
+                }
+
+                // Offline-mode music navigation. Surfaces the Music
+                // tab + its sub-views (Browse Artists / Playlist
+                // detail / Album detail) when the user has any audio
+                // downloaded. The data model fills these from the
+                // local cache; views show only what's on disk.
+                if isOffline && (!audioCache.downloads.isEmpty || !audioCache.playlistDownloads.isEmpty) {
+                    Section("Music") {
+                        Label("Music", systemImage: "music.note")
+                            .tag(Tab.music)
                     }
                 }
 

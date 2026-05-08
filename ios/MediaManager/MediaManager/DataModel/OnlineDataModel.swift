@@ -177,7 +177,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.artists(page: page, sort: sort, query: query) }
         let response = try await grpcClient.listArtists(
             page: Int32(page), limit: 60, sort: sort.rawValue,
             query: query, playableOnly: true)
@@ -185,7 +185,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func artistDetail(id: ArtistID) async throws -> ApiArtistDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.artistDetail(id: id) }
         let response = try await grpcClient.getArtistDetail(id: id.protoValue)
         return ApiArtistDetail(proto: response)
     }
@@ -197,7 +197,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func smartPlaylists() async throws -> [ApiSmartPlaylistSummary] {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.smartPlaylists() }
         let response = try await grpcClient.listSmartPlaylists()
         return response.playlists.map { ApiSmartPlaylistSummary(proto: $0) }
     }
@@ -262,7 +262,7 @@ final class OnlineDataModel: DataModel {
     // MARK: - User playlists
 
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.playlists(scope: scope) }
         let protoScope: MMPlaylistScope = switch scope {
         case .mine: .mine
         case .all: .all
@@ -272,7 +272,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func playlist(id: Int64) async throws -> ApiPlaylistDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.playlist(id: id) }
         let response = try await grpcClient.getPlaylist(id: id)
         return ApiPlaylistDetail(proto: response)
     }

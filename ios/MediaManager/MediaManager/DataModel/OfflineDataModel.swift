@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import Observation
 
+private let offlineLogger = MMLogger(category: "OfflineDataModel")
+
 /// Stub data model for offline mode. Serves downloaded/cached content only.
 /// All online-only operations throw DataModelError.offline.
 @Observable
@@ -38,8 +40,48 @@ final class OfflineDataModel: DataModel {
 
     // MARK: - CatalogDataModel (limited offline support)
 
+    // MARK: - Offline music helpers
+
+    /// Walk the audio cache once and return parsed (downloaded,
+    /// detail, album) triples for every downloaded album where the
+    /// cached MMTitleDetail proto deserialises and carries an album
+    /// sub-message. Used by the offline music browse implementations
+    /// below — homeFeed / artists / artistDetail / search.
+    private func cachedAudioAlbums() -> [(DownloadedAlbum, ApiTitleDetail, ApiAlbum)] {
+        guard let audioCache = AppServices.shared.audioCache else { return [] }
+        var out: [(DownloadedAlbum, ApiTitleDetail, ApiAlbum)] = []
+        for album in audioCache.downloads {
+            guard let detail = audioCache.cachedAlbumDetail(titleId: album.titleId),
+                  let apiAlbum = detail.album else { continue }
+            out.append((album, detail, apiAlbum))
+        }
+        return out
+    }
+
+    /// Same as cachedAudioAlbums but for playlists.
+    private func cachedAudioPlaylists() -> [(DownloadedPlaylist, ApiPlaylistDetail)] {
+        guard let audioCache = AppServices.shared.audioCache else { return [] }
+        var out: [(DownloadedPlaylist, ApiPlaylistDetail)] = []
+        for playlist in audioCache.playlistDownloads {
+            guard let detail = audioCache.cachedPlaylistDetail(playlistId: playlist.playlistId)
+            else { continue }
+            out.append((playlist, detail))
+        }
+        return out
+    }
+
     func homeFeed() async throws -> ApiHomeFeed {
-        throw DataModelError.offline
+        // Synthesize a minimal home feed for offline browsing.
+        // Music landing page reads `recentlyAddedAlbums`; everything
+        // else (movie carousels, resume reading, missing seasons)
+        // requires the server. We populate the audio carousel from
+        // downloaded albums sorted by downloadedAt descending; the
+        // sections that have no offline content render empty.
+        var proto = MMHomeFeedResponse()
+        let albums = cachedAudioAlbums()
+            .sorted { $0.0.downloadedAt > $1.0.downloadedAt }
+        proto.recentlyAddedAlbums = albums.map { $0.1.proto.title }
+        return ApiHomeFeed(proto: proto)
     }
 
     func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage {
@@ -157,10 +199,81 @@ final class OfflineDataModel: DataModel {
     }
     // Audio (offline: nothing yet — audio download cache lands later).
     func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse {
-        throw DataModelError.offline
+        // Aggregate downloaded albums by their lead album-artist.
+        // Sort + query happen client-side since the offline set is
+        // small; pagination is ignored (return everything in one
+        // page — drivers don't need server-style paging when the
+        // catalog is sub-1000 items).
+        var byArtistId: [Int64: (proto: MMArtist, count: Int, fallbackTitle: Int64)] = [:]
+        let cached = cachedAudioAlbums()
+        var withArtists = 0
+        var withoutArtists = 0
+        for (album, _, apiAlbum) in cached {
+            guard let lead = apiAlbum.albumArtists.first else {
+                withoutArtists += 1
+                continue
+            }
+            withArtists += 1
+            let artistId = lead.id.protoValue
+            if var existing = byArtistId[artistId] {
+                existing.count += 1
+                byArtistId[artistId] = existing
+            } else {
+                byArtistId[artistId] = (lead.proto, 1, album.titleId)
+            }
+        }
+        // Build MMArtistListItem entries from the aggregation.
+        var items: [MMArtistListItem] = byArtistId.values.map { entry in
+            var item = MMArtistListItem()
+            item.id = entry.proto.id
+            item.name = entry.proto.name
+            item.artistType = entry.proto.artistType
+            item.ownedAlbumCount = Int32(entry.count)
+            item.hasHeadshot_p = entry.proto.hasHeadshot_p
+            item.fallbackAlbumTitleID = entry.fallbackTitle
+            return item
+        }
+        // Optional query filter — case-insensitive substring on name.
+        if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty {
+            let needle = q.lowercased()
+            items = items.filter { $0.name.lowercased().contains(needle) }
+        }
+        // Sort. ArtistSort cases vary; default to name.
+        items.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        offlineLogger.info("offline artists: cached=\(cached.count) withArtists=\(withArtists) withoutArtists=\(withoutArtists) → \(items.count) items")
+
+        var proto = MMArtistListResponse()
+        proto.artists = items
+        return ApiArtistListResponse(proto: proto)
     }
+
     func artistDetail(id: ArtistID) async throws -> ApiArtistDetail {
-        throw DataModelError.offline
+        let artistId = id.protoValue
+        var proto = MMArtistDetail()
+        var owned: [MMTitle] = []
+        for (_, detail, apiAlbum) in cachedAudioAlbums()
+            where apiAlbum.albumArtists.contains(where: { $0.id.protoValue == artistId })
+        {
+            owned.append(detail.proto.title)
+            // Pick up the artist proto from the first matching album
+            // so the returned ApiArtistDetail.artist has the right
+            // name / mbid / type. We overwrite each pass so the last
+            // one wins; values should be identical across albums for
+            // the same artist.
+            if let lead = apiAlbum.albumArtists.first(where: { $0.id.protoValue == artistId }) {
+                proto.artist = lead.proto
+            }
+        }
+        if owned.isEmpty {
+            // Artist has no downloaded albums — surface offline error
+            // rather than an empty detail page.
+            throw DataModelError.offline
+        }
+        proto.ownedAlbums = owned
+        // otherWorks (unowned discography) requires the server; leave
+        // empty so ArtistDetailView renders just the owned section.
+        return ApiArtistDetail(proto: proto)
     }
     func libraryShuffle(limit: Int) async throws -> [ApiTrack] {
         // Pull every track from every downloaded album, shuffle, take
@@ -196,11 +309,16 @@ final class OfflineDataModel: DataModel {
                 pool.append(ApiTrack(proto: enrichedProto))
             }
         }
+        offlineLogger.info("offline libraryShuffle: pool=\(pool.count) audioCache.downloads=\(AppServices.shared.audioCache?.downloads.count ?? -1)")
         if pool.isEmpty { throw DataModelError.offline }
         return Array(pool.shuffled().prefix(limit))
     }
     func smartPlaylists() async throws -> [ApiSmartPlaylistSummary] {
-        throw DataModelError.offline
+        // Server-curated; no offline equivalent. Returning an empty
+        // list lets the Music landing page hide its Smart Playlists
+        // section gracefully (per the existing "if !empty" guard)
+        // instead of throwing and breaking the whole load.
+        return []
     }
     func smartPlaylist(key: String) async throws -> ApiSmartPlaylistDetail {
         throw DataModelError.offline
@@ -233,10 +351,18 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
     func playlists(scope: PlaylistScope) async throws -> [ApiPlaylistSummary] {
-        throw DataModelError.offline
+        // Return only downloaded playlists; the scope filter (mine
+        // vs all) is moot offline — every cached playlist is one
+        // the user explicitly chose to download.
+        return cachedAudioPlaylists().map { $0.1.summary }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     func playlist(id: Int64) async throws -> ApiPlaylistDetail {
-        throw DataModelError.offline
+        guard let audioCache = AppServices.shared.audioCache,
+              let detail = audioCache.cachedPlaylistDetail(playlistId: id) else {
+            throw DataModelError.offline
+        }
+        return detail
     }
     func createPlaylist(name: String, description: String?) async throws -> ApiPlaylistSummary {
         throw DataModelError.offline
