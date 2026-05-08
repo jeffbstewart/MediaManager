@@ -112,6 +112,18 @@ message SearchRequest {
   // Server caps results at this count after sorting. Server defaults
   // to 100 when omitted; values <=0 use the default.
   optional int32 limit = 4;
+  // Opt-in: include user playlists (PLAYLIST results). Matches against
+  // playlist name; restricted to playlists the requesting user can
+  // access (their own + public playlists owned by others).
+  bool include_playlists = 5;
+  // When true, suppresses non-audio result types (movies, series,
+  // books, actors, collections, tags, genres) regardless of the
+  // legacy include_books flag. The audio opt-ins (include_audio,
+  // include_playlists) still gate their respective sections — set
+  // them alongside this flag if you want their results.
+  // Used by the iOS CarPlay search surface where surfacing a movie
+  // hit when the user said "play X" would be a UX failure.
+  bool audio_only = 6;
 }
 
 message ListEpisodesRequest {

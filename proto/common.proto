@@ -122,6 +122,9 @@ enum SearchResultType {
   // Configured camera — reserved for when the search index starts
   // covering camera-by-name lookup. Not emitted by the server today.
   SEARCH_RESULT_TYPE_CAMERA = 14;
+  // User playlist hit. populated `playlist_id` plus `name`; clients
+  // route to playlist detail (tracklist).
+  SEARCH_RESULT_TYPE_PLAYLIST = 15;
 }
 
 // MusicBrainz artist-type taxonomy. Mirrors the Kotlin ArtistType enum.
@@ -528,6 +531,8 @@ message SearchResult {
   // SPA renders by-id href when present.
   optional int64 channel_id = 22;
   optional int64 camera_id = 23;
+  // PLAYLIST result identifier; client routes to playlist detail.
+  optional int64 playlist_id = 24;
 }
 
 // ============================================================================

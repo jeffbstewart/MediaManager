@@ -98,7 +98,7 @@ extension MMSearchResultType {
         // New result types from the Books / Audio / Live modules. The
         // iOS SearchResultType doesn't yet model them; surface as nil
         // until the corresponding feature work lands.
-        case .book, .album, .artist, .author, .track, .personal, .channel, .camera: return nil
+        case .book, .album, .artist, .author, .track, .personal, .channel, .camera, .playlist: return nil
         case .unknown, .UNRECOGNIZED: return nil
         }
     }
@@ -113,6 +113,7 @@ extension MMSearchResultType {
         case .genre: return "genre"
         case .book: return "book"
         case .album: return "album"
+        case .playlist: return "playlist"
         case .artist: return "artist"
         case .author: return "author"
         case .track: return "track"
@@ -520,6 +521,12 @@ struct ApiSearchResult: Identifiable, Sendable {
     /// (ALBUM rows already carry the name in `name`.)
     var albumName: String? {
         proto.hasAlbumName ? proto.albumName : nil
+    }
+    /// Server playlist row id for PLAYLIST results. Routes to the
+    /// playlist tracklist via dataModel.playlist(id:). Server only
+    /// populates this when SearchRequest.includePlaylists is set.
+    var playlistId: Int64? {
+        proto.hasPlaylistID ? proto.playlistID : nil
     }
 }
 

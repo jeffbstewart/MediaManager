@@ -9,6 +9,8 @@ import net.stewart.mediamanager.entity.HomeCarouselDismissal
 import net.stewart.mediamanager.entity.HomeCarouselType
 import net.stewart.mediamanager.entity.MediaItem as MediaItemEntity
 import net.stewart.mediamanager.entity.MediaItemTitle
+import net.stewart.mediamanager.entity.Playlist
+import net.stewart.mediamanager.entity.PlaylistTrack
 import net.stewart.mediamanager.entity.PosterSize
 import net.stewart.mediamanager.entity.TitleFamilyMember
 import net.stewart.mediamanager.entity.TitleSeason
@@ -1179,7 +1181,11 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
 
         // 1. Title search via SearchIndexService
         // Legacy clients get video-only (MOVIE + SERIES). Books and albums
-        // are unlocked via the opt-in request flags.
+        // are unlocked via the opt-in request flags. audio_only suppresses
+        // every non-audio type regardless of include_books — the iOS
+        // CarPlay search surface sets it because surfacing a movie hit
+        // when the driver asked for music would be a UX failure.
+        val audioOnly = request.audioOnly
         val matchingTitleIds = SearchIndexService.search(query)
         if (matchingTitleIds != null) {
             for (titleId in matchingTitleIds) {
@@ -1192,7 +1198,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                     mediaType == MediaTypeEnum.PERSONAL.name
 
                 when {
-                    isVideo -> {
+                    isVideo && !audioOnly -> {
                         if (titleId !in playableTitleIds) continue
                         val tc = catalog.playableByTitle[titleId]?.firstOrNull()
                         results.add(searchResult {
@@ -1211,7 +1217,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
                             this.mediaType = mediaType.toProtoMediaType()
                         } to (title.popularity ?: 0.0))
                     }
-                    isBook && request.includeBooks -> {
+                    isBook && request.includeBooks && !audioOnly -> {
                         results.add(searchResult {
                             resultType = SearchResultType.SEARCH_RESULT_TYPE_BOOK
                             name = title.name
@@ -1273,7 +1279,7 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
         }
 
         // 1d. Author search (when include_books)
-        if (request.includeBooks) {
+        if (request.includeBooks && !audioOnly) {
             val queryTokensBooks = query.lowercase().split(Regex("\\s+"))
             // Author search restricts to AUTHOR-role credits — searching
             // "Mel Foster" should never surface a narrator masquerading
@@ -1295,8 +1301,41 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             }
         }
 
-        // 2. Actor search
+        // 1e. Playlist search (when include_playlists)
+        // Matches against playlist name. Restricts to playlists the
+        // requesting user can access — owned by user OR public
+        // (is_private = false). The same filter ListPlaylists uses.
+        if (request.includePlaylists) {
+            val userId = user.id
+            val queryTokensPlaylists = query.lowercase().split(Regex("\\s+"))
+            val playlistTrackCounts = PlaylistTrack.findAll()
+                .groupingBy { it.playlist_id }
+                .eachCount()
+            for (playlist in Playlist.findAll()) {
+                val visible = playlist.owner_user_id == userId || !playlist.is_private
+                if (!visible) continue
+                if (!queryTokensPlaylists.all { playlist.name.lowercase().contains(it) }) continue
+                val trackCount = playlistTrackCounts[playlist.id] ?: 0
+                results.add(searchResult {
+                    resultType = SearchResultType.SEARCH_RESULT_TYPE_PLAYLIST
+                    name = playlist.name
+                    playlist.id?.let { playlistId = it }
+                    titleCount = trackCount
+                } to trackCount.toDouble())
+            }
+        }
+
+        // Below this point: non-audio result types. audio_only short-
+        // circuits the rest of the function so the response only
+        // contains album / artist / track / playlist (per the audio
+        // opt-ins set above) — same parts a "play music" voice
+        // intent should match against.
         val queryTokens = query.lowercase().split(Regex("\\s+"))
+        if (audioOnly) {
+            return finalizeSearchResponse(query, results, request)
+        }
+
+        // 2. Actor search
         val castMembers = CastMemberEntity.findAll()
         val actorsByPerson = castMembers.groupBy { it.tmdb_person_id }
         for ((personId, members) in actorsByPerson) {
@@ -1372,7 +1411,19 @@ class CatalogGrpcService : CatalogServiceGrpcKt.CatalogServiceCoroutineImplBase(
             } to popSum)
         }
 
-        // Sort by score descending and apply the request's limit.
+        return finalizeSearchResponse(query, results, request)
+    }
+
+    /// Sort scored results, apply the request's limit, log the
+    /// per-type counts, and build the response. Pulled out as a
+    /// helper so the audio_only short-circuit at the top of search()
+    /// can return without falling through the actor / collection /
+    /// tag / genre sections.
+    private fun finalizeSearchResponse(
+        query: String,
+        results: List<Pair<SearchResult, Double>>,
+        request: SearchRequest
+    ): SearchResponse {
         val limit = if (request.hasLimit() && request.limit > 0) request.limit else 100
         val sorted = results.sortedByDescending { it.second }
             .map { it.first }
