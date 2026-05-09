@@ -1,0 +1,38 @@
+# TV-series fixtures for the App Store demo server. Tab-separated.
+# Each row is one season of one series, mapped to a single archive.org
+# item that ships every episode of that season as separate MP4s.
+#
+# Columns:
+#   archive_id     archive.org item identifier holding the season
+#                  episodes as MP4s.
+#   tmdb_id        canonical TMDB id of the series (passed to
+#                  link-fixtures.sh).
+#   series_name    Display name. Drives the folder name and goes
+#                  into every episode filename (per the parser
+#                  TranscodeFileParser expects: "<Series> - SXXEXX
+#                  - <Episode Title>.mp4").
+#   year           Series air year. Drives folder naming "<Series>
+#                  (YYYY)".
+#   season         Season number (zero-padded two-digit string,
+#                  used in both the folder name "Season XX" and
+#                  the episode prefix SXX).
+#   ep_pattern     Regex with capture groups (ep_num, ep_title) that
+#                  pulls episode number + title out of each
+#                  archive.org filename. Different series upload
+#                  conventions need different patterns; per-row
+#                  override beats one-size-fits-all sniffing.
+#
+# Lines beginning with '#' or blank are ignored.
+#
+# Layout the fetcher writes:
+#   <demo_media>/movies/<series_name> (<year>)/Season <SS>/
+#       <series_name> - S<SS>E<EE> - <Episode Title>.mp4
+#
+# This sits alongside the movie folders under the same scan root —
+# NasScannerService classifies a top-level dir as TV when its files
+# are nested (depth >= 2) OR when the filename has SXXEXX, so the
+# Sherlock folder sorts cleanly into TV without disturbing the
+# flat movie folders next to it.
+#
+archive_id	tmdb_id	series_name	year	season	ep_pattern
+SherlockHolmes1954	12353	The Adventures of Sherlock Holmes	1954	01	^Sherlock Holmes (\d{2}) (.+?)\.mp4$

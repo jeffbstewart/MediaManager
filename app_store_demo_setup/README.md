@@ -32,11 +32,15 @@ directories mounted.
 
 ```
 $DEMO_MEDIA/
-├── movies/                                # → nas_root_path
+├── movies/                                # → nas_root_path (movies + TV)
 │   ├── Night of the Living Dead (1968)/
 │   │   └── night-of-the-living-dead.mp4
 │   ├── The General (1926)/
 │   │   └── the-general.mp4
+│   ├── The Adventures of Sherlock Holmes (1954)/
+│   │   └── Season 01/
+│   │       ├── The Adventures of Sherlock Holmes - S01E01 - The Case of the Cunningham Heritage.mp4
+│   │       └── ...
 │   └── ...
 ├── books/                                 # → books_root_path
 │   ├── Pride and Prejudice - Jane Austen.epub
@@ -45,10 +49,16 @@ $DEMO_MEDIA/
 └── music/                                 # → music_root_path
     ├── Johann Sebastian Bach/
     │   └── Brandenburg Concertos/
-    │       ├── 01 - Concerto No. 1 in F.flac
+    │       ├── 01 - Concerto No. 1 in F.mp3
     │       └── ...
     └── ...
 ```
+
+`movies/` holds both flat-layout movies and nested-layout TV
+series. NasScannerService classifies each top-level subdirectory
+independently — flat (depth-1 video files) → MOVIE, nested
+(depth-2 + `SXXEXX` filenames) → TV — so the two coexist under
+one scan root with no separate config key.
 
 Whatever the demo-server runtime uses for `app_config` (REST `/api/
 v2/admin/settings` or the gRPC `AdminService.UpdateSettings` RPC),
@@ -69,14 +79,18 @@ MEDIA/books`, `music_root_path` → `$DEMO_MEDIA/music`.
    independent and idempotent — re-running skips anything already
    present:
    ```sh
-   ./gradlew :app_store_demo_setup:run --args="fetch-movies $DEMO_MEDIA"
-   ./gradlew :app_store_demo_setup:run --args="fetch-books  $DEMO_MEDIA"
-   ./gradlew :app_store_demo_setup:run --args="fetch-albums $DEMO_MEDIA"
+   ./gradlew :app_store_demo_setup:run --args="fetch-movies    $DEMO_MEDIA"
+   ./gradlew :app_store_demo_setup:run --args="fetch-tv-series $DEMO_MEDIA"
+   ./gradlew :app_store_demo_setup:run --args="fetch-books     $DEMO_MEDIA"
+   ./gradlew :app_store_demo_setup:run --args="fetch-albums    $DEMO_MEDIA"
    ```
-   …or run all three in sequence:
+   …or run all four in sequence:
    ```sh
    ./gradlew :app_store_demo_setup:run --args="seed-all $DEMO_MEDIA"
    ```
+   Each fetcher accepts `--parallel=N` to override its default
+   worker count. Movies and TV fetchers default to 2 (libx264 is
+   CPU-bound); books and albums default to 6 (I/O-bound).
    **Prerequisite:** ffmpeg on PATH. The fetchers normalize fetched
    videos to H.264 + AAC + faststart so the transcode buddy doesn't
    have to re-encode them on first play.

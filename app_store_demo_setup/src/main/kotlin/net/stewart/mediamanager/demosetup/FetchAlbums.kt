@@ -6,6 +6,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.exists
 import kotlin.io.path.notExists
 
@@ -28,6 +29,16 @@ import kotlin.io.path.notExists
  * picks up id3 tags from each MP3 — so the directory layout is
  * really for human readability, not server correctness.
  *
+ * Parallelism: a single shared work pool of size `parallelism` runs
+ * **track downloads** in parallel — flattened across albums, not
+ * per-album. Bach Goldberg has 32 tracks; without flattening, one
+ * worker would chew through that album sequentially while the
+ * others starved on 1-track 78rpm items. Default 6.
+ *
+ * The metadata API calls (one per album) run in parallel up front
+ * to compute the flat track list before downloads start. Faster
+ * cold-start than a row-by-row loop that interleaves metadata + DL.
+ *
  * Idempotent — track files already on disk at non-zero size are
  * skipped. Re-running an item after a new track has been added on
  * the archive.org side picks up only the new file.
@@ -40,7 +51,9 @@ import kotlin.io.path.notExists
  */
 internal object FetchAlbums {
 
-    fun run(demoMedia: Path) {
+    const val DEFAULT_PARALLELISM = 6
+
+    fun run(demoMedia: Path, parallelism: Int = DEFAULT_PARALLELISM) {
         val fixtures = Tsv.locateFixtures().resolve("albums.tsv")
         if (fixtures.notExists()) {
             error("missing fixtures file: $fixtures")
@@ -48,55 +61,79 @@ internal object FetchAlbums {
         val rows = Tsv.read(fixtures)
         val destRoot = demoMedia.resolve("music").also { Files.createDirectories(it) }
 
-        var rowCount = 0
-        var fetched = 0
-        var skipped = 0
-        for (row in rows) {
+        // Phase 1: parallel metadata + flat track-job assembly.
+        println("Fetching ${rows.size} album metadata in parallel (parallelism=$parallelism)")
+        val jobs = mutableListOf<TrackJob>()
+        val jobsLock = Any()
+        Concurrency.parallel(rows, parallelism) { row ->
             val archiveId = row["archive_id"].orEmpty()
             val artist    = row["artist"].orEmpty()
             val album     = row["album"].orEmpty()
             require(archiveId.isNotEmpty() && artist.isNotEmpty() && album.isNotEmpty()) {
                 "incomplete albums.tsv row: $row"
             }
-            rowCount++
 
+            val tag = "$artist - $album"
             val albumDir = destRoot.resolve(sanitizePathSegment(artist))
                 .resolve(sanitizePathSegment(album))
             Files.createDirectories(albumDir)
 
-            println("FETCH  $artist - $album  [archive.org/$archiveId]")
             val tracks = listMp3Tracks(archiveId)
             if (tracks.isEmpty()) {
                 error("archive.org item '$archiveId' has no VBR MP3 files")
             }
-            println("         ${tracks.size} track(s)")
+            logTagged(tag, "${tracks.size} track(s) [archive.org/$archiveId]")
 
-            for ((idx, track) in tracks.withIndex()) {
+            val rowJobs = tracks.mapIndexed { idx, track ->
                 val trackNum = (track.trackNumber ?: (idx + 1)).coerceAtLeast(1)
                 val title = track.title?.takeIf { it.isNotBlank() }
                     ?: track.fileName.substringBeforeLast('.', track.fileName)
-                val cleanTitle = sanitizePathSegment(title)
-                val destName = "%02d-%s.mp3".format(trackNum, cleanTitle)
-                val dest = albumDir.resolve(destName)
-                if (dest.exists() && Files.size(dest) > 0L) {
-                    skipped++
-                    continue
-                }
-                val url = "https://archive.org/download/$archiveId/${urlEncodePathSegment(track.fileName)}"
-                println("         [$trackNum] $title")
-                Http.download(url, dest)
-                fetched++
+                val destName = "%02d-%s.mp3".format(trackNum, sanitizePathSegment(title))
+                TrackJob(
+                    tag = tag,
+                    archiveId = archiveId,
+                    fileName = track.fileName,
+                    trackNum = trackNum,
+                    title = title,
+                    dest = albumDir.resolve(destName),
+                )
             }
+            synchronized(jobsLock) { jobs.addAll(rowJobs) }
+        }
+
+        // Phase 2: parallel track downloads, flat across all albums.
+        println()
+        println("Downloading ${jobs.size} track(s) with parallelism=$parallelism")
+        val skipped = AtomicInteger(0)
+        val fetched = AtomicInteger(0)
+        Concurrency.parallel(jobs, parallelism) { job ->
+            if (job.dest.exists() && Files.size(job.dest) > 0L) {
+                skipped.incrementAndGet()
+                return@parallel
+            }
+            val url = "https://archive.org/download/${job.archiveId}/${urlEncodePathSegment(job.fileName)}"
+            logTagged(job.tag, "[${"%02d".format(job.trackNum)}] ${job.title}")
+            Http.download(url, job.dest)
+            fetched.incrementAndGet()
         }
 
         println()
-        println("Done — $rowCount album(s); $fetched track(s) downloaded, $skipped already present.")
+        println("Done — ${rows.size} album(s); ${fetched.get()} track(s) downloaded, ${skipped.get()} already present.")
     }
 
     private data class TrackFile(
         val fileName: String,
         val title: String?,
         val trackNumber: Int?,
+    )
+
+    private data class TrackJob(
+        val tag: String,
+        val archiveId: String,
+        val fileName: String,
+        val trackNum: Int,
+        val title: String,
+        val dest: Path,
     )
 
     /** Hit the archive.org metadata API and project files[] -> MP3 track records. */

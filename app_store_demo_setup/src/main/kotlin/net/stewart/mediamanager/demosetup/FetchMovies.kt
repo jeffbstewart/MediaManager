@@ -8,36 +8,46 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.exists
 import kotlin.io.path.notExists
 
 /**
  * Populates `<demoMedia>/movies/<Title (Year)>/<target_file>` from
- * the curated [fixtures/movies.tsv]. For each TSV row:
+ * the curated [fixtures/movies.tsv]. Each row is independent — the
+ * fetcher runs them through a bounded worker pool.
  *
- *   1. Fetch the archive.org metadata API for the item id.
- *   2. Walk the `files[]` array, picking the largest file whose
- *      `format` looks like an MP4 (originals like `MPEG4` first,
- *      derivatives like `512Kb MPEG4` / `h.264 IA` as a fallback)
- *      AND whose name ends in `.mp4`.
- *   3. Stream-download the picked file to a `.raw` sibling.
+ * Default parallelism is conservative (2): ffmpeg's libx264 preset
+ * `medium` is already multithreaded, so two parallel transcodes
+ * comfortably saturate a 4–8 core box without putting the host
+ * into thrash. Override with `--parallel=N` on the CLI when
+ * running on a beefier machine.
+ *
+ * Per-row pipeline:
+ *   1. Hit the archive.org metadata API for the item id.
+ *   2. Walk `files[]` for the largest MP4 candidate (originals
+ *      preferred over derivatives so we re-encode from a clean
+ *      source when one is offered).
+ *   3. Stream the picked file to a `.fetch.raw` sibling — atomic-
+ *      rename on success means an interrupted run never leaves
+ *      the final dest looking complete.
  *   4. Run ffmpeg with `-c:v libx264 -c:a aac -movflags +faststart`
  *      so the on-disk MP4 is ready for direct browser streaming.
  *      The transcode buddy doesn't have to re-encode these.
  *   5. Drop the `.raw` once ffmpeg succeeds.
  *
  * Idempotent — rows whose target already exists at non-zero size are
- * skipped. Re-run safe; if you edit the TSV, the next run picks up
- * additions without re-downloading anything.
- *
- * Loud failures: a dark item, missing MP4, ffmpeg non-zero exit, or
- * any non-2xx HTTP all throw and surface to the user. Skipping
- * silently would let a demo refresh think it succeeded with half a
- * library.
+ * skipped. Loud failures: a dark item, missing MP4, ffmpeg non-zero
+ * exit, or any non-2xx HTTP all throw and surface to the user.
+ * In-flight rows always run to completion when one fails (avoids
+ * corrupt outputs the next idempotent run treats as already-done).
  */
 internal object FetchMovies {
 
-    fun run(demoMedia: Path) {
+    /** Default parallelism. Conservative because libx264 is CPU-bound. */
+    const val DEFAULT_PARALLELISM = 2
+
+    fun run(demoMedia: Path, parallelism: Int = DEFAULT_PARALLELISM) {
         requireFfmpeg()
         val fixtures = Tsv.locateFixtures().resolve("movies.tsv")
         if (fixtures.notExists()) {
@@ -46,10 +56,12 @@ internal object FetchMovies {
         val rows = Tsv.read(fixtures)
         val destRoot = demoMedia.resolve("movies").also { Files.createDirectories(it) }
 
-        var processed = 0
-        var skipped = 0
-        var fetched = 0
-        for (row in rows) {
+        val skipped = AtomicInteger(0)
+        val fetched = AtomicInteger(0)
+
+        println("Fetching ${rows.size} movie(s) with parallelism=$parallelism")
+
+        Concurrency.parallel(rows, parallelism) { row ->
             val archiveId = row["archive_id"].orEmpty()
             val title     = row["title"].orEmpty()
             val year      = row["year"].orEmpty()
@@ -57,20 +69,20 @@ internal object FetchMovies {
             require(archiveId.isNotEmpty() && title.isNotEmpty() && year.isNotEmpty() && target.isNotEmpty()) {
                 "incomplete movies.tsv row: $row"
             }
-            processed++
 
-            val titleFolder = destRoot.resolve("$title ($year)")
+            val tag = "$title ($year)"
+            val titleFolder = destRoot.resolve(tag)
             val finalDest   = titleFolder.resolve(target)
 
             if (finalDest.exists() && Files.size(finalDest) > 0L) {
-                println("SKIP   $title ($year) — already at $finalDest")
-                skipped++
-                continue
+                logTagged(tag, "SKIP — already at $finalDest")
+                skipped.incrementAndGet()
+                return@parallel
             }
 
-            println("FETCH  $title ($year) [archive.org/$archiveId]")
+            logTagged(tag, "FETCH archive.org/$archiveId")
             val pick = pickBestMp4(archiveId)
-            println("         picked ${pick.name} (${pick.size} bytes)")
+            logTagged(tag, "picked ${pick.name} (${pick.size} bytes)")
 
             val raw = titleFolder.resolve(".fetch.raw")
             Files.createDirectories(titleFolder)
@@ -79,15 +91,15 @@ internal object FetchMovies {
             val downloadUrl = "https://archive.org/download/$archiveId/${urlEncodePathSegment(pick.name)}"
             Http.download(downloadUrl, raw)
 
-            println("         ffmpeg -> $target")
-            runFfmpeg(raw, finalDest)
+            logTagged(tag, "ffmpeg -> $target")
+            runFfmpeg(raw, finalDest, tag)
             Files.deleteIfExists(raw)
-            println("OK     $finalDest")
-            fetched++
+            logTagged(tag, "OK $finalDest")
+            fetched.incrementAndGet()
         }
 
         println()
-        println("Done — $processed row(s); $fetched downloaded, $skipped already present.")
+        println("Done — ${rows.size} row(s); ${fetched.get()} downloaded, ${skipped.get()} already present.")
     }
 
     private data class FilePick(val name: String, val size: Long)
@@ -108,10 +120,6 @@ internal object FetchMovies {
         val files = root.getAsJsonArray("files")
             ?: error("archive.org item '$archiveId' metadata has no files[] array")
 
-        // Score each entry. Originals (source=original) preferred over
-        // derivatives so we re-encode from the source whenever possible.
-        // Within originals, larger = better (proxy for the actual
-        // feature vs. trailers / clips).
         val candidates = files.mapNotNull { it.toCandidate() }
         if (candidates.isEmpty()) {
             error("archive.org item '$archiveId' has no MP4 files")
@@ -139,8 +147,6 @@ internal object FetchMovies {
 
     /** RFC 3986 path-segment encode (spaces, parens, etc.). */
     private fun urlEncodePathSegment(s: String): String {
-        // URLEncoder is form-encoder (% encodes + space → +). For a
-        // path segment we want spaces as %20.
         return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20")
     }
 
@@ -156,7 +162,7 @@ internal object FetchMovies {
         if (!ok) error("ffmpeg not found on PATH — needed to normalize fetched MP4s")
     }
 
-    private fun runFfmpeg(input: Path, output: Path) {
+    private fun runFfmpeg(input: Path, output: Path, tag: String) {
         val pb = ProcessBuilder(
             "ffmpeg", "-hide_banner", "-loglevel", "warning", "-y",
             "-i", input.toString(),
@@ -166,10 +172,11 @@ internal object FetchMovies {
             output.toString(),
         ).redirectErrorStream(true)
         val proc = pb.start()
-        // Stream stdout to ours so the user sees progress.
-        proc.inputStream.bufferedReader().lineSequence().forEach { println("         ffmpeg: $it") }
+        // Stream stdout to ours so progress is visible. Each line is
+        // tagged so when multiple ffmpeg processes run in parallel the
+        // operator can tell them apart.
+        proc.inputStream.bufferedReader().lineSequence().forEach { logTagged(tag, "ffmpeg: $it") }
         val exit = proc.waitFor()
-        if (exit != 0) error("ffmpeg exited $exit on $input")
+        if (exit != 0) error("ffmpeg exited $exit on $input ($tag)")
     }
-
 }
