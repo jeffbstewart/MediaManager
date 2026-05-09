@@ -166,6 +166,117 @@ On the Expand page, search TMDB for each individual title in the pack, link them
 
 ---
 
+## Library Layout & Supported Formats
+
+Three independent scanners walk three configurable directories.
+None overlap; each is configured via its own `app_config` key (set
+through Settings or environment variables) and accepts a fixed list
+of file extensions.
+
+| Library | Setting key | Setting → label | Accepted extensions | Layout style |
+|---|---|---|---|---|
+| Movies / TV | `nas_root_path` | Settings → NAS Path | `mkv` `mp4` `avi` `m4v` | Auto-classified per top-level subdirectory (see "NAS Directory Structure" below) |
+| Books | `books_root_path` | Settings → Books → EBook Directory | `epub` `pdf` | Flat or nested — scanner walks recursively |
+| Music | `music_root_path` | Settings → Music → Music Directory | `flac` `mp3` `m4a` `ogg` `oga` `opus` `wav` | `<Artist>/<Album>/NN-<Track>.<ext>` (de facto convention; scanner buckets by parent dir, not on path shape) |
+
+The three scanners share **no common parent** — you can point them
+at completely separate filesystems if you like. Files outside the
+configured roots are not seen.
+
+### Common rules across all three
+
+- **Idempotent.** A file already linked to the catalog is skipped.
+  Re-running a scan picks up new files; nothing on disk is renamed
+  or moved.
+- **Loud failure beats silent skip.** A file the scanner couldn't
+  match doesn't disappear — it parks in an *unmatched* admin queue
+  (Unmatched Audio for music, Unmatched Books for books, the
+  discovered-files surface for video) until you triage it.
+- **One extension per file.** Add a file with a recognized extension,
+  it gets discovered. Add a `.bak` or `.partial` and the scanner
+  ignores it. The fetcher tooling under `app_store_demo_setup/`
+  uses `.partial` siblings during in-progress downloads for exactly
+  this reason — interrupted fetches don't tempt the scanner with
+  half-files.
+- **Dropping a file is enough.** No sidecar metadata or rename ritual
+  is required. Tags inside the file (id3 / FLAC / OPF) drive matching
+  for books and music; filename + classification drives matching for
+  video.
+
+### Movies vs TV — file-naming conventions
+
+The NAS scanner classifies each top-level subdirectory under
+`nas_root_path` as **MOVIE** (flat layout) or **TV** (nested
+layout). It then parses each filename to extract title, year, season
+and episode metadata.
+
+**Movies** — flat under the title directory:
+
+```
+nas_root/
+├── The Matrix (1999)/
+│   └── matrix.mp4
+└── Inception (2010)/
+    └── inception.mkv
+```
+
+A `(YYYY)` between 1950 and 2050 in the filename is interpreted as
+the release year. Trailing articles get normalized: `Karate Kid The`
+becomes `The Karate Kid`. MakeMKV's `_t00` / `_t01` suffix is
+stripped automatically.
+
+**TV** — nested two levels deep:
+
+```
+nas_root/
+└── The Adventures of Sherlock Holmes (1954)/
+    └── Season 01/
+        ├── The Adventures of Sherlock Holmes - S01E01 - The Case of the Cunningham Heritage.mp4
+        └── The Adventures of Sherlock Holmes - S01E02 - The Case of Lady Beryl.mp4
+```
+
+The episode filename is required to match
+`<Show> - SXXEXX - <Episode Title>.<ext>` (case-insensitive on the
+`S` and `E`, two-digit numbers required). The "doubled" form some
+rippers emit — `<Show> - SXXEXX - <Show> - sXXeXX - <Title>.<ext>` —
+is also recognised.
+
+A directory containing `SXXEXX` filenames is classified as TV
+**regardless of whether the videos are nested in season folders**.
+That matches what naive bulk-download dumps look like.
+
+### Music tag-driven matching
+
+Layout is not what the music scanner matches on — it matches on
+*tags inside the file*. Files with no useful tags (the
+"unidentifiable shellac transfer" case) park in **Unmatched Audio**
+until an admin links them by hand.
+
+Tier ladder (first that hits wins, after track-list validation):
+
+1. `MUSICBRAINZ_ALBUMID` — direct release MBID.
+2. `UPC` / `BARCODE` — MusicBrainz barcode lookup.
+3. `CATALOGNUMBER` (+ optional `LABEL`) — MB catno search.
+4. Per-track `ISRC` — MB ISRC lookup.
+5. `ALBUMARTIST` + `ALBUM` — fuzzy MB search (lowest confidence).
+
+Common tag-only formats (FLAC, MP3 with id3v2, M4A) all expose
+these. dBpoweramp's default-tagged rips hit Tier 1 every time;
+archive.org `78rpm` MP3s usually carry only Tier 5 tags so they may
+land in Unmatched Audio depending on what MusicBrainz can fuzzy-
+match. Re-tag with an MBID-aware tool if you need deterministic
+ingestion.
+
+### Books
+
+Drop `.epub` or `.pdf` files anywhere under `books_root_path`. EPUBs
+with embedded ISBNs auto-catalogue via OpenLibrary. PDFs and EPUBs
+without ISBNs park in **Unmatched Books** for admin link-up. A PDF
+sitting next to an EPUB of the same name auto-links as a sibling
+edition once the EPUB resolves.
+
+---
+
 ## NAS Directory Structure
 
 Media Manager auto-discovers media files under the configured NAS root path. It classifies each top-level subdirectory as either **Movies** (flat — files directly in the folder) or **TV** (nested — files inside show/season subdirectories).
@@ -590,7 +701,7 @@ Music support is always on &mdash; no enablement flag. Albums can be catalogued 
 
 | Setting | Purpose |
 |---------|---------|
-| **Music Directory** | Absolute path (as visible inside the server container) to a directory holding .flac / .mp3 / .m4a / .ogg / .wav rips. Leave blank to disable the music scanner. |
+| **Music Directory** | Absolute path (as visible inside the server container) to a directory holding .flac / .mp3 / .m4a / .ogg / .oga / .opus / .wav rips. Leave blank to disable the music scanner. |
 | **Last.fm API Key** | Optional. Enables Start Radio and Library Recommendations. Apply for a free non-commercial key at [last.fm/api/account/create](https://www.last.fm/api/account/create). |
 
 The music scanner walks the directory once an hour and also immediately after a NAS scan finishes. A NAS scan classifies the directory as `MUSIC` and hands it off to the music scanner rather than trying to match video files there.
