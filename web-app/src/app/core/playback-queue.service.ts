@@ -86,7 +86,7 @@ interface RadioTrackDto {
  * through [reportPosition]. Every ~10 s of play the service POSTs to
  * /api/v2/audio/progress so "Continue Listening" has a resume point.
  *
- * Persistence across route changes is M5-deferred (see docs/MUSIC.md): the
+ * Persistence across route changes is M5-deferred: the
  * audio element lives inside the shell, so in-app navigation does keep it
  * alive, but a full-reload or tab close ends playback. The server-side
  * listening_progress row is the safety net — the Continue Listening

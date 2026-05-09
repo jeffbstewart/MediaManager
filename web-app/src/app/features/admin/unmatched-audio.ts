@@ -60,8 +60,7 @@ interface LinkResult {
 /**
  * Admin triage for the unmatched-audio queue. The previous flat per-row
  * link dialog couldn't help when a whole album was missing from the
- * catalog (no Track rows to search against) — see docs/MUSIC.md M4
- * follow-on. This view collapses files into albums via
+ * catalog (no Track rows to search against) * follow-on. This view collapses files into albums via
  * (album_artist, album), merges multi-disc sibling folders, and offers
  * three resolution paths per album:
  *   1. Find on MusicBrainz — search MB and pick a candidate release.

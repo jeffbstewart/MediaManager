@@ -14,6 +14,12 @@ data/
 # Playwright MCP logs
 .playwright-mcp/
 
+# Playwright per-test artifacts (created when running specs from the
+# repo root rather than under web-app/). Same content as
+# web-app/test-results/ but landing here when the working dir was
+# mistakenly the repo root.
+test-results/
+
 # Claude Code
 .claude/
 

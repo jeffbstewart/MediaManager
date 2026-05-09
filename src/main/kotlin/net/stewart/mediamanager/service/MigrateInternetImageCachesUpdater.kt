@@ -7,7 +7,7 @@ import java.nio.file.Paths
 
 /**
  * Phase-2 migration for the internet-image side of the cache migration
- * (see docs/IMAGE_CACHE_MIGRATION.md). Deletes the seven legacy
+ *. Deletes the seven legacy
  * per-service cache directories outright. The bytes they hold are
  * re-fetchable from upstream on the next request; the new
  * [InternetImageStore] layout takes over from there.

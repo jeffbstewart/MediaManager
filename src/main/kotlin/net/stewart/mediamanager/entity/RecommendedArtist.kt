@@ -10,7 +10,6 @@ import java.time.LocalDateTime
  * Populated by [net.stewart.mediamanager.service.RecommendationAgent]
  * on its daily pass. Uniqueness key: (user_id, suggested_artist_mbid).
  *
- * See docs/MUSIC.md §M8.
  */
 @Table("recommended_artist")
 data class RecommendedArtist(

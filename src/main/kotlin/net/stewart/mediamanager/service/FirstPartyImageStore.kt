@@ -9,7 +9,6 @@ import java.security.MessageDigest
 /**
  * Unified content-addressable store for first-party images — ownership
  * photos and local uploads / frame extracts. See
- * docs/IMAGE_CACHE_MIGRATION.md.
  *
  * Layout:
  *   data/first-party-images/{category}/{ab}/{cd}/{identifier}.{ext}

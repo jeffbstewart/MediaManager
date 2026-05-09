@@ -15,7 +15,7 @@ import kotlin.concurrent.withLock
 
 /**
  * Client for [MusicBrainz](https://musicbrainz.org/) — the open, API-key-free
- * metadata source for music. See docs/MUSIC.md.
+ * metadata source for music.
  *
  * MB asks for one request per second with a descriptive `User-Agent`. The
  * [RateLimiter] inside this class enforces the gap via a [ReentrantLock] so

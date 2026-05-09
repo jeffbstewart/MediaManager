@@ -278,6 +278,5 @@ The emulator maps keyboard keys to the remote:
 
 <p align="center">
   <a href="index.md">Documentation Home</a> &bull;
-  <a href="ROKU_GUIDE.md">Roku Guide</a> &bull;
-  <a href="ANDROID_TV_PLAN.md">Android TV Plan</a>
+  <a href="ROKU_GUIDE.md">Roku Guide</a>
 </p>

@@ -12,7 +12,6 @@ import java.time.Duration
 /**
  * Client for [openlibrary.org](https://openlibrary.org) — free, no API key,
  * used to resolve ISBNs to work + edition + author metadata for book ingestion.
- * See docs/BOOKS.md.
  *
  * Intentionally narrow in scope: only the lookups M1 needs. Richer browse
  * features (author "other works", series enrichment) arrive in M2.

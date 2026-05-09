@@ -8,7 +8,7 @@ import java.time.LocalDateTime
 /**
  * One song on one album. Parallel to [Episode] for TV — a sub-unit of a
  * [Title] whose playable file is referenced through [file_path] (for digital
- * rips) or through a [Transcode] row with `track_id` set. See docs/MUSIC.md.
+ * rips) or through a [Transcode] row with `track_id` set.
  */
 @Table("track")
 data class Track(

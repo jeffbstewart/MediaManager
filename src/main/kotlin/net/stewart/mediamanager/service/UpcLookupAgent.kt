@@ -121,7 +121,6 @@ class UpcLookupAgent(
         // back to UPCitemdb for DVDs/Blu-rays/consumer products. MB returns
         // nothing for non-music barcodes at negligible cost; a confident
         // match is structurally richer than UPCitemdb's flat product name.
-        // See docs/MUSIC.md.
         val musicResult = musicBrainzService.lookupByBarcode(scan.upc)
         if (musicResult is MusicBrainzResult.Success) {
             countLookup("found_music")

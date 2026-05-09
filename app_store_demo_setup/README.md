@@ -239,9 +239,8 @@ skipping.
 
 ## Why this lives in the main repo
 
-Earlier draft (see `docs/TEST_SERVER_FOR_APP_STORE_REVIEW.md`)
-proposed a separate `MediaManager-test-fixtures` repo. We collapsed
-that into this directory because:
+An earlier draft proposed a separate `MediaManager-test-fixtures`
+repo. We collapsed that into this directory because:
 
 - the data root for fetched media lives **outside** the source tree
   anyway (the path-arg scripts populate `$DEMO_MEDIA`), so the

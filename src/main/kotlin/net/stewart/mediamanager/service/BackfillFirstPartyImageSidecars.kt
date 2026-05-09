@@ -13,7 +13,6 @@ import java.nio.file.Path
 /**
  * Phase 1a backfill — writes the per-file `.meta.json` sidecar next to every
  * ownership photo and local image that doesn't already have one. See
- * docs/IMAGE_CACHE_MIGRATION.md.
  *
  * Everything written by this updater is reconstructable from the database.
  * If the DB is lost later, a future backfill can't recover what was here —

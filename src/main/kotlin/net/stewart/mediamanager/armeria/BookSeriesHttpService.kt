@@ -26,8 +26,7 @@ import net.stewart.mediamanager.service.parseSeriesLine
  * Book-series browse surface. A series has a poster (auto-filled from
  * volume 1 on first scan — see BookIngestionService), an author, and an
  * ordered list of volumes. The UI uses this to answer "which volumes of
- * Foundation do I own?" and, eventually, "let me fill the gaps." See
- * docs/BOOKS.md.
+ * Foundation do I own?" and, eventually, "let me fill the gaps."
  */
 @Blocking
 class BookSeriesHttpService(

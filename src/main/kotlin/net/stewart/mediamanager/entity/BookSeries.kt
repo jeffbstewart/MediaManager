@@ -7,7 +7,7 @@ import java.time.LocalDateTime
 
 /**
  * A book series (e.g. Foundation, The Wheel of Time). Titles join via
- * [Title.book_series_id] + [Title.series_number]. See docs/BOOKS.md.
+ * [Title.book_series_id] + [Title.series_number].
  *
  * [poster_source] is AUTO on creation and flips to MANUAL when an admin
  * sets a custom poster, at which point subsequent scans stop overwriting.

@@ -12,7 +12,7 @@ enum class UnmatchedBookStatus { UNMATCHED, LINKED, IGNORED }
  * An ebook file (.epub / .pdf) discovered on the NAS that couldn't be
  * auto-ingested — either because the file carried no ISBN, or because the
  * ISBN didn't resolve against Open Library. Admin resolves each row via
- * the Unmatched Books admin view. See docs/BOOKS.md.
+ * the Unmatched Books admin view.
  */
 @Table("unmatched_book")
 data class UnmatchedBook(

@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.seconds
  * reads tags via [AudioTagReader], and either links them to existing
  * [Track] rows, auto-catalogues new albums via [MusicBrainzService] +
  * [MusicIngestionService], or parks them in [UnmatchedAudio] for admin
- * triage. See docs/MUSIC.md (M4).
+ * triage.
  *
  * Mirrors [BookScannerAgent]: same daemon lifecycle, same 45 s startup
  * delay, same hourly cycle, same `scanNow()` public trigger for the

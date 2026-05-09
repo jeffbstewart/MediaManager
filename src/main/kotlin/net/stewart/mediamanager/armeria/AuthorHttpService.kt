@@ -22,7 +22,7 @@ import net.stewart.mediamanager.service.OpenLibraryService
 import net.stewart.mediamanager.service.WishListService
 
 /**
- * Author browse surface. See docs/BOOKS.md — mirrors the ActorHttpService
+ * Author browse surface — mirrors the ActorHttpService
  * shape but reads from the Open-Library-sourced `author` table and the
  * `title_author` link. "Other works" from Open Library is a later
  * enrichment (M2+); for now the screen shows bio, headshot, and the

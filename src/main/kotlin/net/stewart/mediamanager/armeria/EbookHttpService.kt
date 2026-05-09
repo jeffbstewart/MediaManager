@@ -29,7 +29,6 @@ import java.nio.file.Path
  *  - Picks a Content-Type from `media_item.media_format`.
  *  - Sets an aggressive cache header — books don't change under an ID.
  *
- * See docs/BOOKS.md (M5).
  */
 @Blocking
 class EbookHttpService {

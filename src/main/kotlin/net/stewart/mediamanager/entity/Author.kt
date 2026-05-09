@@ -9,7 +9,6 @@ import java.time.LocalDateTime
 /**
  * A book author. Browseable like actors on the movie side, but sourced from
  * Open Library instead of TMDB and unrelated to [CastMember] semantics.
- * See docs/BOOKS.md.
  */
 @Table("author")
 data class Author(

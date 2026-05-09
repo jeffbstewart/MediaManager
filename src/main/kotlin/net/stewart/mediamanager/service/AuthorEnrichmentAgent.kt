@@ -14,7 +14,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Background daemon that fills in author biographies and metadata from
- * Open Library. See docs/BOOKS.md.
+ * Open Library.
  *
  * Target rows: [Author]s with `biography IS NULL` and a set
  * `open_library_author_id`. On each cycle the agent picks up to

@@ -14,7 +14,6 @@ import java.time.LocalDateTime
  * title's poster as the playlist cover. When null, fall back to the
  * first track's title poster.
  *
- * See docs/MUSIC.md (Playlists) and V086.
  */
 @Table("playlist")
 data class Playlist(

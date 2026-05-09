@@ -15,7 +15,7 @@ import java.nio.file.Paths
  * Phase 1b backfill — writes `.meta.json` sidecars next to every cached
  * internet image (poster, backdrop, headshot, collection poster, artist /
  * author headshots, and the shared TMDB / OpenLibrary / Cover Art Archive
- * proxy cache). See docs/IMAGE_CACHE_MIGRATION.md.
+ * proxy cache).
  *
  * Unlike the first-party backfill, a missing sidecar here is cheap — the
  * image can always be refetched from upstream. But recording provenance

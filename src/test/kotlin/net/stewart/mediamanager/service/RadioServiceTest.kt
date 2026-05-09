@@ -36,7 +36,6 @@ import kotlin.test.assertTrue
  *   MBID; for other MBIDs it returns empty so the batch doesn't branch
  *   into recursive similarity.
  *
- * See docs/MUSIC.md §M7.
  */
 class RadioServiceTest {
 

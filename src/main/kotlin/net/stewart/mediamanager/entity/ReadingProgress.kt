@@ -6,8 +6,8 @@ import com.gitlab.mvysny.jdbiorm.Table
 import java.time.LocalDateTime
 
 /**
- * Per-user reading position within a digital edition (EPUB / PDF). See
- * docs/BOOKS.md (M5) — parallels [PlaybackProgress] on the video side.
+ * Per-user reading position within a digital edition (EPUB / PDF).
+ * Parallels [PlaybackProgress] on the video side.
  *
  * [cfi] is opaque text: an EPUB Canonical Fragment Identifier for
  * EBOOK_EPUB editions, or `"/page/N"` for EBOOK_PDF. The reader client

@@ -11,7 +11,7 @@ import java.time.LocalDateTime
 /**
  * Façade over `artist.lastfm_similar_json` that lazy-hydrates from
  * [LastFmService] on miss or staleness. Backing store for M7 (Start
- * Radio) and M8 (library recommendations). See docs/MUSIC.md.
+ * Radio) and M8 (library recommendations).
  *
  * Graceful-degrade policy — if Last.fm returns [LastFmResult.NoKey]
  * for a lookup that has no cached JSON yet, we return [emptyList] and

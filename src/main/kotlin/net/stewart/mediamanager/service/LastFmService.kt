@@ -16,7 +16,7 @@ import kotlin.concurrent.withLock
 /**
  * Client for the [Last.fm](https://www.last.fm/api) artist.getSimilar
  * endpoint — the similarity data source for Start Radio (M7) and the
- * library-recommendations surface (M8). See docs/MUSIC.md.
+ * library-recommendations surface (M8).
  *
  * The API key is optional; admin pastes it into `app_config.lastfm_api_key`
  * via the Settings page. When absent, this service returns [NoKey] from

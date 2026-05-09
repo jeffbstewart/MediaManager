@@ -443,7 +443,7 @@ class HomeFeedHttpService {
     /**
      * "Resume Reading" — most recent reading_progress rows, joined to the
      * title they're reading (via the media_item_id). Parallel to
-     * Continue Watching on the video side. See docs/BOOKS.md (M5).
+     * Continue Watching on the video side.
      */
     private fun resumeReading(
         user: net.stewart.mediamanager.entity.AppUser,

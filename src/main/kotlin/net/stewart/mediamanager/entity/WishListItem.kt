@@ -26,7 +26,7 @@ data class WishListItem(
     // MEDIA wish: optional season number (e.g., "I want season 5 of this show")
     var season_number: Int? = null,
 
-    // BOOK wish fields — see docs/BOOKS.md M3.
+    // BOOK wish fields.
     var open_library_work_id: String? = null,
     var book_title: String? = null,
     var book_author: String? = null,
@@ -34,7 +34,7 @@ data class WishListItem(
     var book_series_id: Long? = null,
     var book_series_number: java.math.BigDecimal? = null,
 
-    // ALBUM wish fields — see docs/MUSIC.md M3.
+    // ALBUM wish fields.
     var musicbrainz_release_group_id: String? = null,
     var album_title: String? = null,
     var album_primary_artist: String? = null,

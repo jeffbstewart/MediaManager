@@ -9,7 +9,7 @@ import java.time.LocalDateTime
 /**
  * A music artist — person, band, orchestra, or choir. Browseable like authors
  * and actors, but sourced from MusicBrainz and unrelated to [CastMember] or
- * [Author] in its schema or UX. See docs/MUSIC.md.
+ * [Author] in its schema or UX.
  */
 @Table("artist")
 data class Artist(

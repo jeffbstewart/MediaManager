@@ -32,7 +32,6 @@ import kotlin.test.assertTrue
  * [SearchHttpService.searchForUser] directly — bypassing the HTTP layer
  * since the request context plays no role in the logic being tested.
  *
- * See docs/MUSIC.md and docs/BOOKS.md for the entity shapes.
  */
 class SearchHttpServiceTest {
 

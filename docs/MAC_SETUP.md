@@ -277,6 +277,18 @@ ifconfig en7 | grep media
 
 ## Cross-Platform Notes
 
+### Mac vs Windows at a glance
+
+| Area | Windows | Mac |
+|------|---------|-----|
+| Shell | Git Bash (MSYS2) | zsh (native) |
+| Docker | Docker Desktop (native amd64) | Docker Desktop (cross-compile to amd64) |
+| Path separator | `\` (but Git Bash uses `/`) | `/` |
+| JDK install | Manual or Chocolatey | `brew install --cask corretto` |
+| Transcode buddy | Runs locally via `run-buddy.sh` | Same, but GPU transcoding requires NVIDIA (not available on Mac) |
+
+The server code, Gradle build, and lifecycle scripts all work identically on both platforms. The only Mac-specific concern is the `DOCKER_DEFAULT_PLATFORM=linux/amd64` setting for Docker builds (covered in "Docker" above).
+
 ### Line Endings
 
 The repository includes a `.gitattributes` file that normalizes line endings: LF in the repo, native on checkout. Shell scripts are forced to LF on all platforms (Git Bash on Windows requires LF). No manual configuration needed.

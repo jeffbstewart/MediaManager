@@ -2,11 +2,11 @@ package net.stewart.mediamanager.entity
 
 enum class MediaFormat {
     DVD, BLURAY, UHD_BLURAY, HD_DVD,
-    // Book formats — see docs/BOOKS.md.
+    // Book formats.
     MASS_MARKET_PAPERBACK, TRADE_PAPERBACK, HARDBACK,
     EBOOK_EPUB, EBOOK_PDF,
     AUDIOBOOK_CD, AUDIOBOOK_DIGITAL,
-    // Music formats — see docs/MUSIC.md.
+    // Music formats.
     CD, VINYL_LP,
     AUDIO_FLAC, AUDIO_MP3, AUDIO_AAC, AUDIO_OGG, AUDIO_WAV,
     UNKNOWN, OTHER;

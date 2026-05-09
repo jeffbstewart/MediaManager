@@ -39,8 +39,14 @@ testem.log
 /typings
 __screenshots__/
 
-# Playwright
+# Playwright + monocart coverage. Both directories rebuild on every
+# harness run and contain large captured artifacts (screenshots,
+# raw V8 coverage JSON, monocart's HTML report) that have no business
+# in git history. The presubmit hook stalls badly on the diff if any
+# of these get accidentally staged.
 /test-results/
+/tests/.last-run/
+/monocart-report/
 /playwright-report/
 /playwright/.cache/
 

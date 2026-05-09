@@ -15,7 +15,7 @@ import java.security.MessageDigest
  *
  * `{ab}/{cd}` are the first four hex characters of `sha256(cache_key)` so
  * fan-out stays 256×256 regardless of whether the provider keys by UUID,
- * MBID, sequential int, or URL hash. See docs/IMAGE_CACHE_MIGRATION.md.
+ * MBID, sequential int, or URL hash.
  *
  * Providers live under independent subtrees so phase-2 migration of one
  * cache can ship without touching the others. See the `Provider` pseudo-

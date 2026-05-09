@@ -12,7 +12,6 @@ enum class UnmatchedAudioStatus { UNMATCHED, LINKED, IGNORED }
  * An audio file (.flac / .mp3 / .m4a / .ogg / .wav) discovered under the
  * configured music_root_path that the scanner couldn't auto-link to a
  * [Track]. Admin resolves each row via the Unmatched Audio admin view.
- * See docs/MUSIC.md (M4).
  */
 @Table("unmatched_audio")
 data class UnmatchedAudio(

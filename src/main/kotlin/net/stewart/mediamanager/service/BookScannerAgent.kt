@@ -31,7 +31,6 @@ import kotlin.time.Duration.Companion.seconds
  * Idempotent by `file_path` — rescanning the same directory won't duplicate
  * entries.
  *
- * See docs/BOOKS.md (M4).
  */
 class BookScannerAgent(
     private val clock: Clock = SystemClock,
