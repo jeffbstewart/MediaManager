@@ -1,34 +1,40 @@
-# Album fixtures for the App Store demo server. Tab-separated. Two
-# sources, two row shapes — `source` controls which downloader path
-# the fetch script takes.
+# Album fixtures for the App Store demo server. Tab-separated. Single
+# source: archive.org. Each row corresponds to one archive.org item;
+# the fetcher pulls every VBR-MP3 file in that item and lays them out
+# under <demo_media>/music/<artist>/<album>/<NN-track>.mp3 so
+# MusicScannerAgent walks them naturally.
+#
+# Why archive.org-only: Musopen's catalog is now login-gated and
+# their public download URLs return auth errors for non-browser
+# clients. The Internet Archive's 78rpm + classical-recording
+# collections cover the same PD ground (early jazz / blues /
+# classical) and ship pre-derived VBR MP3s with id3 tags filled in.
 #
 # Columns:
-#   source         "musopen" or "archive_org_78"
-#   source_id      Musopen album slug (musopen) OR archive.org item id
-#                  (archive_org_78). Used to build the download URL.
-#   mb_release_id  MusicBrainz release MBID. Used by link-fixtures.sh
-#                  to pin the catalog match. Leave blank to fall back
-#                  to MusicBrainzScannerAgent's heuristic match.
-#   artist         Display artist (used as the artist subdir).
-#   album          Display album title (used as the album subdir).
+#   archive_id      archive.org item identifier
+#   mb_release_id   MusicBrainz release MBID. Blank lets the music
+#                   scanner's heuristic match try; for demo
+#                   determinism prefer to fill these in once you've
+#                   confirmed the right MBID.
+#   artist          Display artist (used as the artist subdir).
+#   album           Display album title (used as the album subdir).
 #
 # Lines beginning with '#' or blank are ignored.
 #
 # Mix targets BPM bands the dance-preset advanced-search uses:
 #   - Strauss waltzes  → Slow Waltz / Viennese Waltz presets
 #   - 1920s big-band   → Foxtrot tempo
-#   - 1920s tango      → Argentine Tango preset
+#   - tango            → Argentine Tango preset
 # Plus the classical-staples baseline so the music landing page has a
 # recognizable mix beyond dance-test material.
 #
-source	source_id	mb_release_id	artist	album
-musopen	bach-brandenburg-concertos		Johann Sebastian Bach	Brandenburg Concertos
-musopen	beethoven-symphony-no-9		Ludwig van Beethoven	Symphony No. 9
-musopen	chopin-nocturnes		Frédéric Chopin	Nocturnes
-musopen	bach-goldberg-variations		Johann Sebastian Bach	Goldberg Variations
-musopen	mozart-requiem		Wolfgang Amadeus Mozart	Requiem
-musopen	debussy-clair-de-lune		Claude Debussy	Suite Bergamasque
-musopen	strauss-blue-danube		Johann Strauss II	The Blue Danube
-musopen	strauss-tales-from-vienna-woods		Johann Strauss II	Tales from the Vienna Woods
-archive_org_78	78_west-end-blues_louis-armstrong-and-his-hot-five		Louis Armstrong and His Hot Five	Hot Five Recordings
-archive_org_78	78_la-cumparsita_carlos-gardel		Carlos Gardel	Argentine Tango Selections
+# Track count per row varies wildly — the Bach collection items have
+# 18+ tracks each; the single-78 items have 1 track. Total fetched
+# track count for this list is currently ~53.
+#
+archive_id	mb_release_id	artist	album
+J.S.BACHBrandenburgConcertos-NEWTRANSFER		Johann Sebastian Bach	Brandenburg Concertos
+J.S.BACHGoldbergVariations-NEWTRANSFER		Johann Sebastian Bach	Goldberg Variations
+78_the-blue-danube-waltz_johann-strauss_gbia0012882a		Johann Strauss II	The Blue Danube
+78_lolita-tango-di-lolita_romanella-sveva_gbia3015016b		Romanella Sveva	Tango Selections
+78_sunset-cafe-stomp_louis-armstrongs-hot-five-venable-louis-armstrong-johnny-dodds-k_gbia0093324b		Louis Armstrong and His Hot Five	Hot Five Recordings
