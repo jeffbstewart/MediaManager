@@ -19,9 +19,29 @@ Resize Playwright viewport to **1024 x 768** before taking any screenshots.
 `fullPage: true` to capture the entire page (hero, watch locations, cast, similar titles)
 in one screenshot. Resize back to 1024 x 768 afterward.
 
+## Embedding Screenshots in Markdown
+
+Use the link-wrapped image pattern so docs render a thumbnail and the user
+can click to open the full-resolution PNG in a new tab:
+
+```markdown
+<a href="images/screenshots/home.png" target="_blank">
+  <img src="images/screenshots/home.png" alt="Home screen with carousels" width="480">
+</a>
+```
+
+GitHub honors the `width` attribute, so the same PNG serves as both the
+inline thumbnail and the full-res target — no separate thumb file needed.
+
 ## Screenshot Sequence
 
 Start from a logged-out state. Navigate to the login page first.
+
+### 0. Setup Wizard (one-time only — requires a pristine server)
+
+| File | Route | Account | Notes |
+|------|-------|---------|-------|
+| `docs/images/screenshots/setup-wizard.png` | `/app/setup` | (none) | Empty Configure New Server form. **Special-cased** — the wizard route is only reachable when zero users exist, so this can only be captured before the first admin is bootstrapped. To re-capture, point a Playwright session at a fresh demo server (empty `demo_storage/`) before walking through `/setup`. Do not re-shoot from a populated server. |
 
 ### 1. Login Page
 
