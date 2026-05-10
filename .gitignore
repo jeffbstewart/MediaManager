@@ -74,4 +74,5 @@ web-app/src/app/proto-gen/
 
 # Transcode buddy local config
 transcode-buddy/buddy.properties
+transcode-buddy/buddy2.properties
 .DS_Store
