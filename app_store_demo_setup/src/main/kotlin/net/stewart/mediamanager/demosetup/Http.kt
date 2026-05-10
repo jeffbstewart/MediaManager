@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.demosetup
 
 import java.io.IOException
+import java.net.CookieManager
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -72,6 +73,44 @@ internal object Http {
             throw IOException("HTTP ${resp.statusCode()} from $url")
         }
     }
+
+    /**
+     * POST a JSON body and return the response body as a UTF-8 string.
+     * Status is returned alongside so callers can branch on it (the
+     * SPA's admin endpoints sometimes return 200 with `{"ok":false,
+     * "error":"..."}` instead of a 4xx, e.g. "Username already taken").
+     *
+     * For session-based endpoints, pass a [client] built via
+     * [newSessionClient] — it carries its own [CookieManager] so the
+     * mm_session cookie set by /api/v2/auth/login is sent on follow-up
+     * admin calls.
+     */
+    fun postJson(
+        client: HttpClient,
+        url: String,
+        body: String,
+        headers: Map<String, String> = emptyMap()
+    ): Pair<Int, String> {
+        val req = buildRequest(url, headers)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build()
+        return withRetry(url) {
+            val resp = client.send(req, HttpResponse.BodyHandlers.ofString())
+            resp.statusCode() to resp.body()
+        }
+    }
+
+    /**
+     * HttpClient with its own CookieManager. Use one per logical
+     * "logged-in session" — login sets cookies on this manager, and
+     * subsequent calls through the same client carry them.
+     */
+    fun newSessionClient(): HttpClient = HttpClient.newBuilder()
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .connectTimeout(Duration.ofSeconds(20))
+        .cookieHandler(CookieManager())
+        .build()
 
     private inline fun <T> withRetry(url: String, block: () -> T): T {
         var lastErr: Throwable? = null

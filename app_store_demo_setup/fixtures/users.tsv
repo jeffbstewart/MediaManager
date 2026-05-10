@@ -1,12 +1,16 @@
 # Test user accounts for the App Store demo server. Tab-separated.
-# Created by scripts/seed-users.sh after the first admin has been
-# bootstrapped via the /setup wizard.
+# Created by `seed-users` after the first admin has been bootstrapped
+# via the /setup wizard.
 #
 # Columns:
 #   username         Bare username (NOT an email — the auth layer
 #                    accepts plain usernames intentionally).
 #   role             "admin" or "viewer".
 #   display_name     Shown in the profile / Now Playing surfaces.
+#                    Currently unused by the user-create endpoint
+#                    (server stamps "TOBEREMOVED" until display_name
+#                    is removed from the schema entirely); kept here
+#                    for future use.
 #   rating_ceiling   Ordinal level (0–6) per ContentRating.ceiling
 #                    Choices: 0=TV-Y, 1=TV-Y7, 2=G/TV-G, 3=PG/TV-PG,
 #                    4=PG-13/TV-14, 5=R/TV-MA, 6=NC-17.
@@ -19,10 +23,23 @@
 #
 # Note: the very first admin still has to come from the /setup
 # wizard — admin-create requires an existing admin to authenticate.
-# seed-users.sh logs in as that account (DEMO_ADMIN_USER /
+# `seed-users` logs in as that account (DEMO_ADMIN_USER /
 # DEMO_ADMIN_PASSWORD in secrets/.env) and creates the rest.
+#
+# Reviewer accounts (reviewer-admin, reviewer, reviewer-kid) are
+# given to Apple App Review. They are never used by us — the
+# screenshot pipeline uses viewer/kid/empty so a reviewer-credential
+# rotation can't break our capture flow. reviewer-kid is set to TV-Y
+# (level 0, the strictest) to demonstrate the rating gate at full
+# restriction. Apple-shared accounts get force_change=false so the
+# reviewer doesn't hit a password-change gate on first login, but
+# their terms_of_use_accepted_at stays NULL so the ToS dialog still
+# appears.
 #
 username	role	display_name	rating_ceiling	password_env
 viewer	viewer	Sample Viewer		DEMO_VIEWER_PASSWORD
 kid	viewer	Kid Account	4	DEMO_KID_PASSWORD
 empty	viewer	New User		DEMO_EMPTY_PASSWORD
+reviewer-admin	admin	App Review Admin		DEMO_REVIEWER_ADMIN_PASSWORD
+reviewer	viewer	App Review Viewer		DEMO_REVIEWER_PASSWORD
+reviewer-kid	viewer	App Review Kid	0	DEMO_REVIEWER_KID_PASSWORD
