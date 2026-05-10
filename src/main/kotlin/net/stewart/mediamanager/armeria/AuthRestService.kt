@@ -135,6 +135,7 @@ class AuthRestService {
                     updated_at = now
                 )
                 u.save()
+                AuthService.invalidateHasUsersCache()
                 u
             }
         } catch (_: IllegalStateException) {

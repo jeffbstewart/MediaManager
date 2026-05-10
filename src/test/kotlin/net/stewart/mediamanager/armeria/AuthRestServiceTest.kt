@@ -160,6 +160,25 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
         assertTrue("web_terms_of_use_url" in configKeys)
     }
 
+    @Test
+    fun `setup invalidates the hasUsers cache so discover immediately reports setup_required false`() {
+        // Why: hasUsers() caches its DB lookup. If setup creates the first
+        // user but forgets to invalidate the cache, /discover keeps lying
+        // ("setup_required: true") and the SPA bounces back into the
+        // wizard, which then 409s — login can never happen and every
+        // authenticated endpoint 403s.
+        val pre = service.discover(ctxFor("/api/v2/auth/discover"))
+        assertEquals(true, readJsonObject(pre).get("setup_required").asBoolean)
+
+        val setupResp = service.setup(ctxFor("/api/v2/auth/setup",
+            method = HttpMethod.POST, extraHeaders = proxyHeaders(),
+            jsonBody = """{"username": "admin", "password": "Excellent1234!"}"""))
+        assertEquals(HttpStatus.OK, statusOf(setupResp))
+
+        val post = service.discover(ctxFor("/api/v2/auth/discover"))
+        assertEquals(false, readJsonObject(post).get("setup_required").asBoolean)
+    }
+
     // ---------------------- login ----------------------
 
     @Test
