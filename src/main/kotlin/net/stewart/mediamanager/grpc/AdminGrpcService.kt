@@ -485,7 +485,8 @@ class AdminGrpcService(
 
         val items = unmatchedFiles.map { df ->
             val suggestions = if (!df.parsed_title.isNullOrBlank()) {
-                FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles)
+                FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles,
+                    requiredMediaType = df.media_type)
             } else {
                 emptyList()
             }
@@ -517,7 +518,8 @@ class AdminGrpcService(
         }
 
         val allTitles = TitleEntity.findAll()
-        val suggestions = FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles)
+        val suggestions = FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles,
+            requiredMediaType = df.media_type)
         val best = suggestions.firstOrNull()
             ?: throw StatusException(Status.NOT_FOUND.withDescription("No matching title found"))
 

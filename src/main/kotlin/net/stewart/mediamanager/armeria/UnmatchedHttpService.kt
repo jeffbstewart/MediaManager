@@ -47,7 +47,8 @@ class UnmatchedHttpService {
 
         val items = unmatched.map { df ->
             val suggestions = if (!df.parsed_title.isNullOrBlank()) {
-                FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles, maxResults = 1)
+                FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles,
+                    maxResults = 1, requiredMediaType = df.media_type)
             } else emptyList()
             val best = suggestions.firstOrNull()
 
@@ -83,7 +84,8 @@ class UnmatchedHttpService {
         if (df.parsed_title.isNullOrBlank()) return jsonResponse("""{"ok":false,"reason":"No parsed title"}""")
 
         val allTitles = Title.findAll()
-        val suggestions = FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles)
+        val suggestions = FuzzyMatchService.findSuggestions(df.parsed_title!!, allTitles,
+            requiredMediaType = df.media_type)
         val best = suggestions.firstOrNull() ?: return jsonResponse("""{"ok":false,"reason":"No match found"}""")
 
         val count = DiscoveredFileLinkService.linkToTitle(df, best.title)

@@ -170,4 +170,46 @@ class FuzzyMatchServiceTest {
         val results = FuzzyMatchService.findSuggestions("Interstellar", titles)
         assertTrue(results.none { it.title.id == 2L }, "Hidden title should not appear in suggestions")
     }
+
+    @Test
+    fun `requiredMediaType filters cross-type matches`() {
+        // Why: on the demo server, the TV episode "The Adventures of
+        // Sherlock Holmes - S01E01.mp4" parsed-title-fuzzy-matched the
+        // ebook "The Return of Sherlock Holmes" because they share the
+        // "Sherlock Holmes" stem. The Accept-suggestion flow then linked
+        // 39 episodes to a book. The fix: callers pass df.media_type
+        // and findSuggestions filters titles to that media_type only.
+        val titles = listOf(
+            Title(id = 9, name = "The Return of Sherlock Holmes", media_type = "BOOK"),
+            Title(id = 17, name = "The Adventures of Sherlock Holmes", media_type = "TV")
+        )
+
+        // No filter — book wins because it scores higher (closer normalized form)
+        val unfiltered = FuzzyMatchService.findSuggestions(
+            "The Adventures of Sherlock Holmes", titles
+        )
+        assertTrue(unfiltered.any { it.title.id == 9L },
+            "Without filter, the book is reachable as a suggestion")
+
+        // With requiredMediaType=TV — book is gone, only the TV title considered
+        val tvOnly = FuzzyMatchService.findSuggestions(
+            "The Adventures of Sherlock Holmes", titles, requiredMediaType = "TV"
+        )
+        assertEquals(1, tvOnly.size)
+        assertEquals(17L, tvOnly.first().title.id)
+
+        // With requiredMediaType=BOOK — only the book is considered
+        val bookOnly = FuzzyMatchService.findSuggestions(
+            "The Return of Sherlock Holmes", titles, requiredMediaType = "BOOK"
+        )
+        assertEquals(1, bookOnly.size)
+        assertEquals(9L, bookOnly.first().title.id)
+
+        // Null requiredMediaType is the legacy behavior — both are candidates.
+        // (Low threshold so the assertion is about filtering, not similarity.)
+        val both = FuzzyMatchService.findSuggestions(
+            "Sherlock Holmes", titles, threshold = 0.1, requiredMediaType = null
+        )
+        assertEquals(2, both.size)
+    }
 }

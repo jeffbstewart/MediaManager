@@ -34,14 +34,25 @@ object FuzzyMatchService {
         return 1.0 - levenshtein(na, nb).toDouble() / maxLen
     }
 
+    /**
+     * @param requiredMediaType when non-null, restricts suggestions to titles
+     *   whose media_type matches exactly. Stops the cross-media-type misfires
+     *   we hit on the demo: a TV episode's parsed show name fuzzy-matched a
+     *   book with a similar title (e.g. "The Adventures of Sherlock Holmes"
+     *   the show vs "The Return of Sherlock Holmes" the ebook), and the
+     *   Accept-suggestion flow rolled every same-show-name file under that
+     *   wrong title id. Callers know the file's own media_type — pass it.
+     */
     fun findSuggestions(
         query: String,
         titles: List<Title>,
         maxResults: Int = 3,
-        threshold: Double = 0.60
+        threshold: Double = 0.60,
+        requiredMediaType: String? = null
     ): List<ScoredTitle> {
         return titles
             .filter { !it.hidden }
+            .filter { requiredMediaType == null || it.media_type == requiredMediaType }
             .map { title ->
                 val nameScore = similarity(query, title.name)
                 val sortScore = if (title.sort_name != null) similarity(query, title.sort_name!!) else 0.0
