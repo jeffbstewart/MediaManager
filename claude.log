@@ -5312,3 +5312,85 @@ recurring 15-books-and-reader:226 flake as prior runs).
   OnlineDataModel.swift, OfflineDataModel.swift,
   BookDetailView.swift, ContentView.swift.
 ===
+
+=== 2026-05-10 19:30 — App Store demo server bring-up + screenshot pipeline ===
+- Goal: stand up appstoredemo.15mcmahon.net:8443 as a deterministic
+  demo for the iOS App Review submission, plus refresh the web doc
+  screenshots from that demo.
+- Account roster decided: admin (our scripts), reviewer-admin /
+  reviewer / reviewer-kid (Apple — never logged into by us),
+  viewer / kid / empty (our screenshot capture). Seven .env vars in
+  app_store_demo_setup/secrets/.env. Seven-account separation keeps
+  Apple credential rotation independent from our screenshot pipeline.
+- Bugs fixed along the way:
+  - AuthRestService HTTP setup forgot to invalidate
+    AuthService.hasUsersCache after creating the first admin,
+    leaving /discover stuck on setup_required=true. gRPC equivalent
+    already had the call.
+  - TranscodeCommand.kt's ffmpeg invocations hard-mapped 0:a:0; The
+    General (1926) silent film failed with exit -22. Added the
+    optional-stream "?" suffix in both buildMobile and build.
+  - FuzzyMatchService.findSuggestions wasn't filtering by media_type,
+    letting a TV episode's parsed show name fuzzy-match the ebook
+    "The Return of Sherlock Holmes" and roll up 39 episodes under
+    a book title. Added requiredMediaType parameter; all four
+    callers pass df.media_type.
+  - addFromTmdb in UnmatchedHttpService hand-rolled a Transcode
+    without episode_id (ignoring df.parsed_season / parsed_episode)
+    so the 39 Sherlock episodes appeared but rendered as "OTHER".
+    Replaced with DiscoveredFileLinkService.linkToTitle delegation.
+  - TmdbPosterPathResolver matched WishListItem rows by tmdb_id
+    alone — cross-type collision with the wish-list TV/MOVIE
+    namespaces. Also picked stale CANCELLED rows over fresh ones.
+    Tightened the filter to media_type + non-null poster_path.
+- Demo plumbing built:
+  - app_store_demo_setup/secrets/example.env — 7-password template
+    with username comments above the reviewer rows.
+  - fixtures/users.tsv: added reviewer-admin / reviewer / reviewer-kid.
+  - SeedUsers.kt: logs in as admin, creates users, promotes,
+    sets rating ceilings. Idempotent.
+  - fixtures/wishes.tsv + SeedWishes.kt: pre-populates the viewer's
+    wish list with mixed-status fixtures so wishlist.png +
+    purchase-wishes.png render with realistic content. Looks up
+    TMDB poster_path via /api/v2/wishlist/search so hero tiles get
+    proper images.
+  - Http.kt: gained postJson + newSessionClient (CookieManager).
+  - Env.kt: shell-sourceable .env loader (KEY=VALUE).
+- Screenshot pipeline built:
+  - web-app/tests/scripts/capture-docs-screenshots.mjs + the
+    lifecycle/capture-web-screenshots.sh wrapper. Single browser
+    context per account to stay under the 10/min login rate
+    limiter. customAction hook for stateful shots (player +
+    wishlist image-load wait).
+  - 15 fresh screenshots committed under docs/images/screenshots/
+    (login, home, home-empty, catalog, catalog-tv, search,
+    title-detail-movie, title-detail-tv, player, wishlist, profile,
+    settings, users, transcode-status, purchase-wishes). setup-wizard
+    and roku-home unchanged.
+- Demo buddy plumbing:
+  - transcode-buddy/buddy2.properties (gitignored) for the demo
+    server.
+  - lifecycle/run-buddy-demo.sh + run-buddy.sh gained an optional
+    config-file arg and a process-list mutex so demo + prod
+    buddies can't run concurrently.
+- Docker:
+  - Added COPY app_store_demo_setup/ to the Dockerfile so the new
+    Gradle subproject doesn't break the production image build.
+- Docs:
+  - USER_GUIDE.md, ADMIN_GUIDE.md updated with link-wrapped
+    <a><img width=640></a> embeds (click-to-zoom) for all new
+    screenshots.
+  - SCREENSHOT_PROCEDURES.md fully rewritten — points at the
+    capture script as canonical, documents the tier-1 manifest,
+    seed-wishes prerequisite, and the customAction hook design.
+  - docs/IOS_SCREENSHOT_PIPELINE.md — new handoff doc for the
+    Mac-based session that will build the iOS / fastlane snapshot
+    pipeline. Captures the account-roster rule, demo state, ToS
+    dialog gotcha, suggested manifest, and conventions.
+- Tests added: AuthRestServiceTest cache-invalidation regression,
+  TranscodeCommandTest optional-audio-map regression,
+  FuzzyMatchServiceTest cross-media-type regression,
+  TmdbPosterPathResolverTest cross-type + stale-cancelled regressions.
+- All work pushed to origin/main; 12 commits across two PR-sized
+  sequences.
+===
