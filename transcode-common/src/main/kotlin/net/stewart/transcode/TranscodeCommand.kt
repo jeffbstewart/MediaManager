@@ -109,7 +109,7 @@ object TranscodeCommand {
             ffmpegPath,
             "-i", sourceFile.absolutePath,
             "-map", "0:v:0",
-            "-map", "0:a:0",
+            "-map", "0:a:0?",
             "-dn"
         ).apply {
             addAll(mobileEncoder.args)
@@ -157,7 +157,7 @@ object TranscodeCommand {
             ffmpegPath,
             "-i", sourceFile.absolutePath,
             "-map", "0:v:0",
-            "-map", "0:a:0",
+            "-map", "0:a:0?",
             "-dn"
         ).apply {
             addAll(decision.videoArgs)

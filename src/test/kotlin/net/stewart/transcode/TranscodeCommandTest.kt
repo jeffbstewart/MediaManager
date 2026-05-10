@@ -98,6 +98,24 @@ class TranscodeCommandTest {
         assertContainsPair(cmd, "-f", "mp4")
     }
 
+    @Test
+    fun `audio map is optional so silent sources transcode cleanly`() {
+        // Why: silent films (e.g. The General, 1926) have zero audio
+        // streams. ffmpeg's "-map 0:a:0" without the trailing "?"
+        // exits -22 ("Stream map matches no streams"). The "?" makes
+        // the map optional — present streams are mapped, absent
+        // ones are silently skipped.
+        for ((label, cmd) in listOf(
+            "buildMobile" to TranscodeCommand.buildMobile(ffmpeg, src, dst, dvdProbe(), EncoderProfile.NVENC).first,
+            "build"       to TranscodeCommand.build(ffmpeg, src, dst, dvdProbe(), EncoderProfile.NVENC).first
+        )) {
+            assertTrue(cmd.windowed(2).any { it == listOf("-map", "0:a:0?") },
+                "$label must emit '-map 0:a:0?' for silent-source tolerance; got: ${cmd.joinToString(" ")}")
+            assertFalse(cmd.windowed(2).any { it == listOf("-map", "0:a:0") },
+                "$label must not emit plain '-map 0:a:0'; got: ${cmd.joinToString(" ")}")
+        }
+    }
+
     // ---- Fixtures ----
 
     /** 720x480 NTSC DVD rip with anamorphic SAR 8:9. */
