@@ -1,0 +1,27 @@
+# Media wishes for the App Store demo server. Tab-separated.
+# Each row is a single media wish added by `viewer` and, optionally,
+# given an admin acquisition status. The mix of statuses is what
+# makes the wishlist + purchase-wishes screenshots visually rich
+# (Ordered / Rejected / Not Available / no-status all in one shot).
+#
+# Columns:
+#   tmdb_id        TMDB id of the title. Does NOT need to be in the
+#                  demo catalog — the wishlist supports wishes for
+#                  not-yet-owned media. Verify each id on themoviedb.org.
+#   media_type     "movie" or "tv" (case-insensitive — see MediaType.fromTmdbType).
+#   title          Display name. Stored on the wish row directly
+#                  alongside the TMDB id (the SPA shows it before
+#                  enrichment lands).
+#   release_year   Year — also stored on the wish row.
+#   admin_status   AcquisitionStatus enum value, or blank to leave
+#                  the wish ACTIVE / unreviewed. Options:
+#                  ORDERED, NOT_AVAILABLE, REJECTED, OWNED, NEEDS_ASSISTANCE.
+#
+# Lines beginning with '#' or blank are ignored.
+#
+tmdb_id	media_type	title	release_year	admin_status
+2493	movie	The Princess Bride	1987	ORDERED
+11	movie	Star Wars	1977
+289	movie	Casablanca	1942	REJECTED
+253	tv	Star Trek	1966	NOT_AVAILABLE
+60059	tv	Better Call Saul	2015

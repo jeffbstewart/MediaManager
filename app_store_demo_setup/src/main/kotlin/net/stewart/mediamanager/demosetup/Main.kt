@@ -56,6 +56,7 @@ fun main(args: Array<String>) {
                 FetchAlbums.run(p, parallelism ?: FetchAlbums.DEFAULT_PARALLELISM)
             }
             "seed-users"    -> SeedUsers.run(requirePath(positional, "demo_media"))
+            "seed-wishes"   -> SeedWishes.run(requirePath(positional, "demo_media"))
             "link-fixtures" -> LinkFixtures.run(requirePath(positional, "demo_media"))
             "reset"         -> Reset.run(requirePath(positional, "demo_storage"))
             "-h", "--help", "help" -> usage()
@@ -125,6 +126,7 @@ private fun usage() {
         |  fetch-albums     <demo_media>     archive.org 78rpm -> music/             (default --parallel=${FetchAlbums.DEFAULT_PARALLELISM})
         |  seed-all         <demo_media>     Run all four fetches in order
         |  seed-users       <demo_media>     Create test accounts via admin API
+        |  seed-wishes      <demo_media>     Populate viewer wish list w/ mixed-status fixture
         |  link-fixtures    <demo_media>     Pin TMDB / MB / OL ids per fixture
         |  reset            <demo_storage>   Confirm-then-nuke H2 + image cache
         |
