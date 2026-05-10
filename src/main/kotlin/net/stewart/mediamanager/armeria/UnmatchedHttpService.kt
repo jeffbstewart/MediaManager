@@ -181,14 +181,17 @@ class UnmatchedHttpService {
             SearchIndexService.onTitleChanged(title.id!!)
         }
 
-        val tc = Transcode(title_id = title.id!!, file_path = df.file_path, media_format = df.media_format)
-        tc.save()
+        // Delegate Transcode + Episode creation (and TV-show rollup of
+        // sibling DiscoveredFile rows with the same parsed show name) to
+        // DiscoveredFileLinkService.linkToTitle. Hand-rolling Transcode
+        // here was the bug behind the "OTHER" episodes — it skipped
+        // df.parsed_season / parsed_episode, so transcode.episode_id
+        // stayed NULL and the catalog hid the show under "playable".
+        val linked = DiscoveredFileLinkService.linkToTitle(df, title)
 
-        df.match_status = DiscoveredFileStatus.MATCHED.name
-        df.matched_title_id = title.id
-        df.save()
-
-        return jsonResponse(gson.toJson(mapOf("ok" to true, "title_id" to title.id, "title_name" to title.name)))
+        return jsonResponse(gson.toJson(mapOf(
+            "ok" to true, "title_id" to title.id, "title_name" to title.name, "linked" to linked
+        )))
     }
 
     /** Search catalog titles for manual linking. */
