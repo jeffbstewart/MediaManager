@@ -28,8 +28,19 @@ object TmdbPosterPathResolver {
         }
         if (title?.poster_path != null) return title.poster_path
 
-        val wish = WishListItem.findAll().firstOrNull { it.tmdb_id == tmdbId }
-        if (wish?.tmdb_poster_path != null) return wish.tmdb_poster_path
+        // TMDB id namespaces are separate for MOVIE and TV (movie 253 =
+        // Live and Let Die, TV 253 = Star Trek), so we must match on
+        // both tmdb_id and tmdb_media_type. We also skip rows whose
+        // tmdb_poster_path is null — otherwise a CANCELLED wish that
+        // pre-dates a later ACTIVE one (e.g. the seed-wishes fixture
+        // cancels stale rows before re-adding) would short-circuit the
+        // lookup and return null even though a valid poster exists.
+        val wish = WishListItem.findAll().firstOrNull {
+            it.tmdb_id == tmdbId &&
+                it.tmdb_media_type == mediaType &&
+                it.tmdb_poster_path != null
+        }
+        if (wish != null) return wish.tmdb_poster_path
 
         val collPart = TmdbCollectionPart.findAll()
             .firstOrNull { it.tmdb_movie_id == tmdbId }
