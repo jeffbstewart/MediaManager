@@ -112,9 +112,9 @@ For TV series, the same page lists every episode grouped by season with per-epis
 
 Click the green play button on any title or episode. The video player opens as a dialog overlay.
 
-<!-- TODO(tier-2 screenshots): re-capture player.png with the new
-     demo-server in mid-playback (interactive — needs Watch in Browser
-     click + first-frame wait). See lifecycle/capture-web-screenshots.sh -->
+<a href="images/screenshots/player.png" target="_blank">
+  <img src="images/screenshots/player.png" alt="In-browser video player playing a movie" width="640">
+</a>
 
 **Controls:**
 - Standard HTML5 video controls (play/pause, volume, fullscreen)
@@ -178,9 +178,9 @@ Passkeys let you sign in with Face ID, Touch ID, or a hardware security key inst
 
 Open **My Wish List** from the sidebar. Your wish list lets you request new media and track priority transcoding.
 
-<!-- TODO(tier-2 screenshots): re-capture wishlist.png with a mixed-
-     status fixture (Ordered + Won't be purchased + Ready to watch).
-     See lifecycle/capture-web-screenshots.sh manifest. -->
+<a href="images/screenshots/wishlist.png" target="_blank">
+  <img src="images/screenshots/wishlist.png" alt="My Wish List with a mix of Ordered, Won't order, Not feasible, and Wished for statuses" width="640">
+</a>
 
 
 ### Media Wishes

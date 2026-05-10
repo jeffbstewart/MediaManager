@@ -821,9 +821,9 @@ To enable passkey support, set the **WebAuthn RP ID** in Settings to match the d
 
 **Sidebar &rarr; User Wishes**
 
-<!-- TODO(tier-2 screenshots): re-capture purchase-wishes.png with a
-     mixed-status fixture (Ordered + Won't be purchased + Unreviewed).
-     See lifecycle/capture-web-screenshots.sh manifest. -->
+<a href="images/screenshots/purchase-wishes.png" target="_blank">
+  <img src="images/screenshots/purchase-wishes.png" alt="User Wishes aggregate view with vote counts and per-row status dropdowns" width="640">
+</a>
 
 This page aggregates media wish list requests from all users into a single view, sorted by vote count. When multiple users wish for the same title, their votes are combined so you can prioritize popular requests.
 

@@ -30,6 +30,12 @@ interactively via the Playwright MCP after fixturing the state.
   - `kid` &mdash; PG-13 rating-gate shots (tier 2)
   - `empty` &mdash; new-user empty-state shots
   - `<DEMO_ADMIN_USER>` &mdash; admin shots
+- The viewer's wish list pre-populated with a mixed-status fixture
+  for `wishlist.png` and `purchase-wishes.png`. Run
+  `./gradlew :app_store_demo_setup:run --args="seed-wishes <demo_media>"`
+  once after `seed-users`. The fixture data is in
+  `app_store_demo_setup/fixtures/wishes.tsv` &mdash; edit that to
+  change the titles or status mix.
 - The demo server reachable at `DEMO_BASE_URL`.
 - `web-app/` dependencies installed (`npm ci` if not already).
 
@@ -86,6 +92,8 @@ are relative to the SPA mount (`/app/`).
 | `search.png` | `/app/search?q=sherlock` | viewer | Mixed media-type results |
 | `title-detail-movie.png` | `/app/title/30` | viewer | The General. Tall viewport, fullPage |
 | `title-detail-tv.png` | `/app/title/33` | viewer | Sherlock Holmes + 39-episode list. Tall viewport, fullPage |
+| `player.png` | `/app/title/27` &rarr; click Watch | viewer | In-browser player on Night of the Living Dead, mouse moved to summon the native controls bar |
+| `wishlist.png` | `/app/wishlist` | viewer | Mixed-status fixture (Ordered + Won't order + Not feasible + Wished for). Requires `seed-wishes` |
 | `profile.png` | `/app/profile` | viewer | Username, passkey list, active sessions |
 
 ### 3. Admin
@@ -95,27 +103,19 @@ are relative to the SPA mount (`/app/`).
 | `settings.png` | `/app/admin/settings` | admin | Basic Configuration through Legal Documents. Tall viewport, fullPage |
 | `users.png` | `/app/admin/users` | admin | User grid with all 7 demo accounts |
 | `transcode-status.png` | `/app/admin/transcodes/status` | admin | Overall progress + Recent Activity |
+| `purchase-wishes.png` | `/app/admin/purchase-wishes` | admin | Aggregate view of viewer wishes with status badges. Requires `seed-wishes` |
 
-## Tier 2 manifest (stateful &mdash; interactive capture)
+### How stateful shots are made deterministic
 
-These shots require pre-populated user state (wishes, watch progress,
-mid-playback frame). The capture script flags them `interactive:
-true` and skips them; capture them via Playwright MCP after running
-the relevant fixture script (or by hand).
+`player.png` uses a Playwright `customAction` to click the play link
+on a known title, wait for the `<video>` element, then mouse-move so
+the native controls bar appears before the screenshot.
 
-| File | Account | Pre-state | Why it's stateful |
-|------|---------|-----------|-------------------|
-| `player.png` | viewer | A playable transcode exists for the title you open | Open title, click "Watch in Browser", wait for first frame, screenshot the dialog |
-| `wishlist.png` | viewer | A handful of wishes added with mixed statuses set by admin | Need both viewer-side ADD-WISH actions and admin-side STATUS-CHANGE actions before capturing |
-| `purchase-wishes.png` | admin | Same fixture as `wishlist.png` (viewer wishes with mixed admin-set statuses) | The admin view of the same data |
-
-Capture flow (per shot):
-
-1. Run the fixture (or perform the prerequisite clicks).
-2. Open Playwright MCP, log in as the right account at 1024 &times; 768.
-3. Navigate, wait for content, screenshot to `docs/images/screenshots/<file>`.
-4. Update the `<!-- TODO(tier-2 screenshots) -->` block in the
-   relevant doc with the link-wrapped embed.
+`wishlist.png` and `purchase-wishes.png` rely on the `seed-wishes`
+fixture (see Prerequisites). That subcommand seeds five wishes for
+the `viewer` account and assigns admin statuses (ORDERED, REJECTED,
+NOT_AVAILABLE) to three of them so the screenshots render a visually
+rich mix of badges.
 
 ## Roku screenshots (separate flow)
 
@@ -140,8 +140,8 @@ playable transcodes.
 
 ## Referenced In
 
-- `docs/USER_GUIDE.md` &mdash; home, home-empty, catalog, catalog-tv, search, title-detail-movie, title-detail-tv, profile (player, wishlist pending tier 2)
-- `docs/ADMIN_GUIDE.md` &mdash; settings, transcode-status, users (purchase-wishes pending tier 2)
+- `docs/USER_GUIDE.md` &mdash; home, home-empty, catalog, catalog-tv, search, title-detail-movie, title-detail-tv, player, wishlist, profile
+- `docs/ADMIN_GUIDE.md` &mdash; settings, transcode-status, users, purchase-wishes
 - `docs/ROKU_GUIDE.md` &mdash; roku-home
 
 ## Notes
