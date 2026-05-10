@@ -76,11 +76,55 @@ const manifest = [
                                      viewport: { width: 1024, height: 2000 }, fullPage: true },
   { file: 'title-detail-tv.png',     account: 'viewer', route: '/title/33',  // Sherlock Holmes
                                      viewport: { width: 1024, height: 2000 }, fullPage: true },
-  { file: 'wishlist.png',            account: 'viewer', route: '/wishlist',               interactive: true,
-    note: 'Needs mixed-status wishes prepopulated — capture via MCP after fixture.' },
+  { file: 'wishlist.png',            account: 'viewer', route: '/wishlist',
+                                     viewport: { width: 1024, height: 1400 }, fullPage: true,
+    customAction: async (page) => {
+      // The wish-list hero tiles fetch TMDB posters through the
+      // server's image proxy. networkidle fires while those are
+      // still in-flight for wishes that haven't yet been server-
+      // side enriched, leaving empty placeholders on the screenshot.
+      // Wait for every <img> on the page to complete (load or
+      // error) before letting the screenshot fire.
+      await page.evaluate(async () => {
+        const imgs = Array.from(document.querySelectorAll('img'));
+        await Promise.all(imgs.map(img =>
+          (img.complete && img.naturalWidth > 0)
+            ? Promise.resolve()
+            : new Promise(resolve => {
+                img.addEventListener('load', resolve, { once: true });
+                img.addEventListener('error', resolve, { once: true });
+                setTimeout(resolve, 5000); // failsafe
+              })
+        ));
+      });
+    },
+  },
   { file: 'profile.png',             account: 'viewer', route: '/profile' },
-  { file: 'player.png',              account: 'viewer', route: null,                       interactive: true,
-    note: 'Open a title, click Watch in Browser, capture mid-playback via MCP.' },
+  { file: 'player.png',              account: 'viewer', route: '/title/27',  // Night of the Living Dead
+    customAction: async (page) => {
+      // Click the first available "Watch" play link on the title's
+      // Watch section, then wait for the in-browser <video> element
+      // to be present in the player route.
+      const playLink = page.locator('a.tc-play-link').first();
+      await playLink.waitFor({ timeout: 10000 });
+      await playLink.click();
+      await page.waitForURL(/\/app\/play\//, { timeout: 10000 });
+      const video = page.locator('video').first();
+      await video.waitFor({ timeout: 15000 });
+      // Give the video a moment to load the first frame.
+      await page.waitForTimeout(2000);
+      // Move the mouse over the video so the browser-native controls
+      // bar (play/pause, scrubber, volume, fullscreen) fades in.
+      // Without this the screenshot is just a raw video frame.
+      const box = await video.boundingBox();
+      if (box) {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        // Small jiggle keeps the controls visible while networkidle
+        // and the post-action 750ms settle run.
+        await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2);
+      }
+    },
+  },
 
   // empty account
   { file: 'home-empty.png',          account: 'empty',  route: '/' },
@@ -90,8 +134,8 @@ const manifest = [
                                      viewport: { width: 1024, height: 2000 }, fullPage: true },
   { file: 'users.png',               account: 'admin',  route: '/admin/users' },
   { file: 'transcode-status.png',    account: 'admin',  route: '/admin/transcodes/status' },
-  { file: 'purchase-wishes.png',     account: 'admin',  route: '/admin/purchase-wishes',   interactive: true,
-    note: 'Needs viewer wishes prepopulated and statused — capture via MCP after fixture.' },
+  { file: 'purchase-wishes.png',     account: 'admin',  route: '/admin/purchase-wishes',
+                                     viewport: { width: 1024, height: 1400 }, fullPage: true },
 ];
 
 // ---------------------- helpers ----------------------
@@ -188,6 +232,9 @@ async function captureOne(page, shot) {
     }
     if (shot.waitFor) {
       await page.locator(shot.waitFor).first().waitFor({ timeout: 10000 }).catch(() => {});
+    }
+    if (typeof shot.customAction === 'function') {
+      await shot.customAction(page);
     }
     // Brief settle — SPA carousels and image lazy-loads finish after
     // networkidle in the demo's layout. 750ms covers it without being
