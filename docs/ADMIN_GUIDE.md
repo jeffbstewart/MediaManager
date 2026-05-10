@@ -316,7 +316,9 @@ The Transcodes section has four sub-pages:
 
 ### Status
 
-![Transcode status](images/screenshots/transcode-status.png)
+<a href="images/screenshots/transcode-status.png" target="_blank">
+  <img src="images/screenshots/transcode-status.png" alt="Transcode status dashboard with progress, throughput, and recent activity" width="640">
+</a>
 
 - **Scan NAS** &mdash; Discover new files on the NAS, auto-match to catalog titles, clean up deleted files
 - **Transcoder progress** &mdash; Shows the current file being transcoded, queue depth, and completion stats
@@ -617,6 +619,10 @@ Temporary stream files are written to `data/live-tv-streams/` inside the contain
 
 **Sidebar &rarr; Settings**
 
+<a href="images/screenshots/settings.png" target="_blank">
+  <img src="images/screenshots/settings.png" alt="Settings page showing Basic Configuration, Books, Music, Transcode Buddy, Price Lookup, and Legal Documents sections" width="640">
+</a>
+
 | Setting | Purpose |
 |---------|---------|
 | **NAS Root Path** | Root directory of your media files |
@@ -776,7 +782,9 @@ Reuses M7's similar-artist cache to surface a **Discover** page &mdash; for each
 
 **Sidebar &rarr; Users**
 
-![User management](images/screenshots/users.png)
+<a href="images/screenshots/users.png" target="_blank">
+  <img src="images/screenshots/users.png" alt="Users admin grid showing roles, rating ceilings, and creation dates" width="640">
+</a>
 
 ### Access Levels
 
@@ -813,7 +821,9 @@ To enable passkey support, set the **WebAuthn RP ID** in Settings to match the d
 
 **Sidebar &rarr; User Wishes**
 
-![User wishes](images/screenshots/purchase-wishes.png)
+<!-- TODO(tier-2 screenshots): re-capture purchase-wishes.png with a
+     mixed-status fixture (Ordered + Won't be purchased + Unreviewed).
+     See lifecycle/capture-web-screenshots.sh manifest. -->
 
 This page aggregates media wish list requests from all users into a single view, sorted by vote count. When multiple users wish for the same title, their votes are combined so you can prioritize popular requests.
 

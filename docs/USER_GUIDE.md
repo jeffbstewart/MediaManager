@@ -17,7 +17,15 @@ The home screen is your personalized dashboard. It shows:
 - **Recently Watched** &mdash; Titles you've finished recently.
 - **New Seasons Available** &mdash; TV shows in your collection where TMDB indicates newer seasons exist. Add them to your wish list or dismiss.
 
-![Home screen](images/screenshots/home.png)
+<a href="images/screenshots/home.png" target="_blank">
+  <img src="images/screenshots/home.png" alt="Home screen with Recently Added carousels" width="640">
+</a>
+
+On a brand-new account with no watch history, only the global "Recently Added" carousels appear &mdash; the "Continue Watching" and "Recently Watched" rows are hidden until you play something:
+
+<a href="images/screenshots/home-empty.png" target="_blank">
+  <img src="images/screenshots/home-empty.png" alt="Home screen — new-user empty state" width="640">
+</a>
 
 ---
 
@@ -25,7 +33,15 @@ The home screen is your personalized dashboard. It shows:
 
 Open **Catalog** from the sidebar to see your full collection. Every title shows its poster, release year, content rating badge, and media format icon.
 
-![Catalog view](images/screenshots/catalog.png)
+<a href="images/screenshots/catalog.png" target="_blank">
+  <img src="images/screenshots/catalog.png" alt="Movies catalog grid with filter chips and poster art" width="640">
+</a>
+
+The **TV Shows** page works the same way, showing one tile per series:
+
+<a href="images/screenshots/catalog-tv.png" target="_blank">
+  <img src="images/screenshots/catalog-tv.png" alt="TV Shows catalog" width="640">
+</a>
 
 ### Filtering
 
@@ -54,13 +70,25 @@ The search box in the top navigation bar and the catalog search field both suppo
 
 The navbar search also matches **actor names** &mdash; start typing an actor's name and select their result (shown with a headshot) to jump to their filmography page.
 
+<a href="images/screenshots/search.png" target="_blank">
+  <img src="images/screenshots/search.png" alt="Search results page showing mixed media-type matches" width="640">
+</a>
+
 ---
 
 ## Title Detail Page
 
 Click any title to open its detail page.
 
-![Title detail](images/screenshots/title-detail.png)
+<a href="images/screenshots/title-detail-movie.png" target="_blank">
+  <img src="images/screenshots/title-detail-movie.png" alt="Movie title detail page with hero, poster, cast row" width="640">
+</a>
+
+For TV series, the same page lists every episode grouped by season with per-episode play buttons:
+
+<a href="images/screenshots/title-detail-tv.png" target="_blank">
+  <img src="images/screenshots/title-detail-tv.png" alt="TV series title detail with full episode list" width="640">
+</a>
 
 ### What you'll see
 
@@ -84,7 +112,9 @@ Click any title to open its detail page.
 
 Click the green play button on any title or episode. The video player opens as a dialog overlay.
 
-![Video player](images/screenshots/player.png)
+<!-- TODO(tier-2 screenshots): re-capture player.png with the new
+     demo-server in mid-playback (interactive — needs Watch in Browser
+     click + first-frame wait). See lifecycle/capture-web-screenshots.sh -->
 
 **Controls:**
 - Standard HTML5 video controls (play/pause, volume, fullscreen)
@@ -132,6 +162,10 @@ Passkeys let you sign in with Face ID, Touch ID, or a hardware security key inst
 
 **Registering a passkey:** Open your **Profile** page and scroll to the **Passkeys** section. Click "Register new passkey" and follow the browser prompt. You can give each passkey a name (e.g., "iPhone" or "YubiKey") to tell them apart.
 
+<a href="images/screenshots/profile.png" target="_blank">
+  <img src="images/screenshots/profile.png" alt="Profile page with passkey registration and active session list" width="640">
+</a>
+
 **Signing in with a passkey:** On the login page, click "Sign in with passkey." Your browser will show a credential picker &mdash; select the passkey and authenticate with your device biometric or PIN.
 
 **Managing passkeys:** From your Profile page you can see all registered passkeys with their creation and last-used dates. Delete any passkey you no longer use.
@@ -144,7 +178,10 @@ Passkeys let you sign in with Face ID, Touch ID, or a hardware security key inst
 
 Open **My Wish List** from the sidebar. Your wish list lets you request new media and track priority transcoding.
 
-![Wish list](images/screenshots/wishlist.png)
+<!-- TODO(tier-2 screenshots): re-capture wishlist.png with a mixed-
+     status fixture (Ordered + Won't be purchased + Ready to watch).
+     See lifecycle/capture-web-screenshots.sh manifest. -->
+
 
 ### Media Wishes
 
