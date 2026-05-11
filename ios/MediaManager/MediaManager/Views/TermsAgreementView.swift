@@ -53,6 +53,7 @@ struct TermsAgreementView: View {
                                     .font(.title3)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("server-terms-privacy-checkbox")
 
                             HStack(spacing: 4) {
                                 Text("I have read and agree to the")
@@ -72,6 +73,7 @@ struct TermsAgreementView: View {
                                     .font(.title3)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("server-terms-terms-checkbox")
 
                             HStack(spacing: 4) {
                                 Text("I have read and agree to the")
@@ -96,6 +98,7 @@ struct TermsAgreementView: View {
                 .controlSize(.large)
                 .disabled(!allAgreed || isSubmitting)
                 .padding(.horizontal)
+                .accessibilityIdentifier("server-terms-continue")
 
                 if let error = authManager.error {
                     Text(error)

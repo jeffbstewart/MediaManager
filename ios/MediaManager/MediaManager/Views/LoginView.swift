@@ -19,9 +19,12 @@ struct LoginView: View {
                 Text("Sign In")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("login-title")
 
-                Text(serverURL.host() ?? serverURL.absoluteString)
-                    .foregroundStyle(.secondary)
+                if !SnapshotMode.isActive {
+                    Text(serverURL.host() ?? serverURL.absoluteString)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(spacing: 12) {
                     TextField("Username", text: $username)
@@ -29,11 +32,13 @@ struct LoginView: View {
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .accessibilityIdentifier("login-username")
 
                     SecureField("Password", text: $password)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.password)
                         .onSubmit { login() }
+                        .accessibilityIdentifier("login-password")
 
                     Button(action: login) {
                         if isLoggingIn {
@@ -47,6 +52,7 @@ struct LoginView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(username.isEmpty || password.isEmpty || isLoggingIn)
+                    .accessibilityIdentifier("login-submit")
 
                     if authManager.awaitingBiometric {
                         Button {

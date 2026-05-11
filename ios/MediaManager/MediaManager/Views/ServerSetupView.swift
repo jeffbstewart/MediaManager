@@ -60,6 +60,7 @@ struct ServerSetupView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .onSubmit { connectTo(serverURL) }
+                        .accessibilityIdentifier("server-url-field")
 
                     Button(action: { connectTo(serverURL) }) {
                         if isConnecting {
@@ -73,6 +74,7 @@ struct ServerSetupView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(serverURL.isEmpty || isConnecting)
+                    .accessibilityIdentifier("server-connect")
                 }
                 .padding(.horizontal)
 
@@ -98,8 +100,12 @@ struct ServerSetupView: View {
 
     private func discoverServer() async {
         isSearching = true
-        let ssdp = SsdpDiscovery()
-        discoveredURL = await ssdp.discover(timeout: 2.0)
+        // Skip SSDP in snapshot mode — a discovered "Server found" banner
+        // would render the real demo host in the captured PNG.
+        if !SnapshotMode.isActive {
+            let ssdp = SsdpDiscovery()
+            discoveredURL = await ssdp.discover(timeout: 2.0)
+        }
         isSearching = false
     }
 

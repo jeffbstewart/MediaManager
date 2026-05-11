@@ -183,6 +183,22 @@ Each family member needs to trust the developer certificate on first install (**
 
 **Updating:** Build a new archive and distribute the same way. The app updates in place &mdash; no data loss.
 
+### App Store Screenshot Pipeline
+
+The iOS App Store screenshot pipeline runs Mac-only — it drives
+XCUITest against fresh disposable simulators to capture PNGs on
+Apple's currently-required device classes (iPhone 6.9" + iPad 13").
+
+Driver: `lifecycle/capture-ios-screenshots.sh`. See
+[SCREENSHOT_PROCEDURES.md](SCREENSHOT_PROCEDURES.md#ios-app-store-screenshots-separate-flow)
+for the manifest, server-URL safety mechanism, and account roster.
+
+Prereqs beyond a working iOS dev setup:
+- `app_store_demo_setup/secrets/.env` populated (copy from
+  `example.env`, fill in the seven `DEMO_*` passwords).
+- The four screenshot accounts (`viewer` / `kid` / `empty` /
+  `admin`) exist on the demo server (`seed-users` creates them).
+
 ### SSDP Network Discovery (Multicast Entitlement)
 
 The app uses SSDP multicast to auto-discover the mediaManager server on the local network. On iOS, UDP multicast requires the `com.apple.developer.networking.multicast` entitlement from Apple.

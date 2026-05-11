@@ -47,6 +47,11 @@ DerivedData/
 # iOS generated protobuf/gRPC stubs
 ios/MediaManager/MediaManager/Generated/
 
+# iOS App Store screenshot pipeline output — regeneratable PNGs +
+# xcodebuild result bundles. See lifecycle/capture-ios-screenshots.sh.
+ios/MediaManager/fastlane/screenshots/
+ios/MediaManager/build/
+
 # Secrets
 secrets/.env
 secrets/roku-deploy.env

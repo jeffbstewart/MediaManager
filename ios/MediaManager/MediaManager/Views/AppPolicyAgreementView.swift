@@ -73,6 +73,7 @@ struct AppPolicyAgreementView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .padding(.horizontal, 24)
+                    .accessibilityIdentifier("app-policy-agree")
 
                     Text("By tapping I Agree, you acknowledge that you've reviewed both documents and accept their terms.")
                         .font(.caption2)

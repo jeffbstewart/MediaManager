@@ -117,6 +117,59 @@ the `viewer` account and assigns admin statuses (ORDERED, REJECTED,
 NOT_AVAILABLE) to three of them so the screenshots render a visually
 rich mix of badges.
 
+## iOS App Store screenshots (separate flow)
+
+App Store Connect requires functional iOS screenshots on the
+currently-required device classes:
+
+- iPhone 6.9" (iPhone 16 Pro Max)
+- iPad 13" (iPad Pro 13", latest M-series)
+
+Older 6.5" / 6.7" / 12.9" classes auto-derive in App Store Connect.
+
+**Driver:** `lifecycle/capture-ios-screenshots.sh`. Sources
+`app_store_demo_setup/secrets/.env`, then for each device class:
+
+1. Builds the XCUITest target once.
+2. Creates a fresh disposable simulator with a `MM-Snap-*` prefix —
+   never reuses an existing simulator (those may be paired with the
+   production NAS server).
+3. Runs `MediaManagerUITests/SnapshotTests/testViewerShots`, with
+   demo credentials propagated through `TEST_RUNNER_MM_SNAPSHOT_*`
+   env vars to the test runner, then through
+   `app.launchEnvironment` to the app.
+4. Extracts the captured `XCTAttachment` PNGs from the
+   `.xcresult` bundle via `xcrun xcresulttool export attachments`.
+5. Tears down the simulator on success; leaves it (and prints its
+   UDID) on failure for forensics.
+
+**Server-URL safety:** the demo URL must not appear in any
+submitted screenshot. The `-MMSnapshotMode` launch arg (see
+`MediaManager/Services/SnapshotMode.swift`) gates two view sites:
+`ServerSetupView` skips SSDP discovery (no "Server found" banner),
+and `LoginView` suppresses the `serverURL.host()` text. The
+`server-setup` shot is captured before any URL is typed.
+
+**Manifest** (`MediaManagerUITests/SnapshotTests.swift`):
+
+| File | Account | Screen |
+|------|---------|--------|
+| `01-server-setup.png`   | (none) | `ServerSetupView` empty state |
+| `02-app-policy.png`     | (none) | `AppPolicyAgreementView` |
+| `03-login.png`          | (none) | `LoginView` with `viewer` typed |
+| `04-home.png`           | viewer | Home with carousels |
+| `05-catalog-movies.png` | viewer | Movies catalog grid |
+| `06-title-detail-tv.png`| viewer | `TitleDetailView` for title 33 (Sherlock Holmes) |
+
+**Output:** `ios/MediaManager/fastlane/screenshots/en-US/<device>/`
+— `.gitignore`'d. Regenerate; do not commit.
+
+**Prereqs:** populate `app_store_demo_setup/secrets/.env` (see
+`example.env`), and ensure the four screenshot accounts
+(`viewer` / `kid` / `empty` / `admin`) exist on the demo server.
+The `reviewer-*` accounts are reserved for Apple App Review and
+must never be used by this pipeline.
+
 ## Roku screenshots (separate flow)
 
 Roku screenshots use an HDMI capture card + OBS Virtual Camera +

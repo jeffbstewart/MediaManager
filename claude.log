@@ -5394,3 +5394,54 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - All work pushed to origin/main; 12 commits across two PR-sized
   sequences.
 ===
+
+=== 2026-05-10 20:27 — iOS App Store screenshot pipeline ===
+- Implemented the iOS screenshot pipeline per docs/IOS_SCREENSHOT_PIPELINE.md.
+  Skipped fastlane (would have required brew install + Ruby 2.7+);
+  used xcodebuild + xcrun xcresulttool directly.
+- Constraint locked in by Jeff: server URL must not appear in any
+  screenshot. Two leak sites gated behind a -MMSnapshotMode launch
+  arg:
+  * ServerSetupView: SSDP discovery skipped (no "Server found"
+    banner), captured before any URL is typed.
+  * LoginView: serverURL.host() suppressed at line 23.
+  No incidental leaks elsewhere (HomeView/CatalogView/TitleDetail
+  audited).
+- New file: MediaManager/Services/SnapshotMode.swift (5 lines, a
+  single static bool from ProcessInfo.arguments).
+- Accessibility identifiers added to the views the test drives:
+  app-policy-agree, server-url-field, server-connect,
+  login-username/password/submit, server-terms-privacy-checkbox,
+  server-terms-terms-checkbox, server-terms-continue.
+- New file: MediaManagerUITests/SnapshotTests.swift. One test
+  (testViewerShots) runs the full sequence in a single login
+  session to respect the 10/min login rate limiter. Reads
+  MM_SNAPSHOT_SERVER_URL/USERNAME/PASSWORD from launchEnvironment.
+- New file: lifecycle/capture-ios-screenshots.sh. Sources
+  app_store_demo_setup/secrets/.env, picks the latest installed
+  iOS runtime, resolves device-type IDs dynamically (iPhone 16
+  Pro Max, iPad Pro 13" M5), creates fresh MM-Snap-* simulators,
+  runs the test, extracts attachments via xcresulttool, tears
+  down on success. Per Jeff's constraint: never reuses any
+  existing simulator (they may be paired with the production NAS).
+- 6-shot manifest, both devices: server-setup, app-policy, login,
+  home, catalog-movies, title-detail-tv (Sherlock Holmes / TMDB 33).
+- Fresh simulators ship with a "Ready for Apple Intelligence"
+  system banner that overlays content. Added a coordinate-based
+  swipe-up gesture before each capture to dismiss any banner.
+  (Initial identifier-based attempt failed — the springboard
+  identifier changes between iOS versions.)
+- Apple's currently-required device classes: 6.9" iPhone + 13"
+  iPad. Older 6.5"/6.7"/12.9" classes auto-derive in App Store
+  Connect — not captured.
+- .gitignore extended: ios/MediaManager/fastlane/screenshots/ and
+  ios/MediaManager/build/ (regeneratable, not committed).
+- Docs: docs/SCREENSHOT_PROCEDURES.md grew a new "iOS App Store
+  screenshots" section. docs/MAC_SETUP.md links to it.
+- All 12 PNGs (6 shots × 2 devices) captured cleanly with no
+  visible host string. Pipeline runs end-to-end in ~3 min.
+- Not pushed; awaiting user review of the captured PNGs and any
+  app-side polish (e.g. PosterCard's title text overlaps the
+  poster bottom edge on Sherlock — separate issue, not a
+  pipeline bug).
+===
