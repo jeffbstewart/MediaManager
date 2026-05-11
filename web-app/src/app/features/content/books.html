@@ -1,6 +1,12 @@
 <div class="content-page">
   <div class="filter-bar">
     <mat-chip-set>
+      <mat-chip [highlighted]="readableOnly()" (click)="toggleReadable()">Readable</mat-chip>
+    </mat-chip-set>
+
+    <span class="chip-separator">&middot;</span>
+
+    <mat-chip-set>
       @for (opt of sortOptions; track opt.value) {
         <mat-chip [highlighted]="sortMode() === opt.value" (click)="setSort(opt.value)">
           {{ opt.label }}

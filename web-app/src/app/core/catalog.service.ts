@@ -149,6 +149,14 @@ export type AuthorsSortMode = 'books' | 'name' | 'recent';
 export interface AuthorsListParams {
   sort?: AuthorsSortMode;
   q?: string;
+  /**
+   * Restrict to authors who have at least one book readable in the
+   * browser (EPUB or PDF media item present on disk). On by default
+   * — mirrors the "Playable" filter on the movies/TV grid. The wire
+   * field on the proto is `playable_only`; the SPA-facing name is
+   * `readableOnly` since "playable" reads oddly for books.
+   */
+  readableOnly?: boolean;
 }
 
 export interface AuthorsListItem {
@@ -1231,6 +1239,9 @@ export class CatalogService {
     const proto = await client.listAuthors({
       sort: authorSortToProto(params.sort),
       q: params.q ?? '',
+      // Default true — same on-by-default semantic as the Playable
+      // filter on title-grid. Caller passes false to see every author.
+      playableOnly: params.readableOnly !== false,
     });
     return {
       authors: proto.authors.map(adaptAuthorsListItem),

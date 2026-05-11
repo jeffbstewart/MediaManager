@@ -11,12 +11,12 @@ import { ReportReadingProgressRequestSchema } from '../../src/app/proto-gen/play
 const LIST_AUTHORS_URL = '/mediamanager.ArtistService/ListAuthors';
 const PB = '/mediamanager.PlaybackService';
 
-function decodeListAuthors(req: Request): { sort: AuthorSort; q: string } {
+function decodeListAuthors(req: Request): { sort: AuthorSort; q: string; playableOnly: boolean } {
   const decoded = fromBinary(
     ListAuthorsRequestSchema,
     unframeGrpcWebRequest(req.postDataBuffer()),
   );
-  return { sort: decoded.sort, q: decoded.q ?? '' };
+  return { sort: decoded.sort, q: decoded.q ?? '', playableOnly: decoded.playableOnly };
 }
 
 // Force serial within this file: the EPUB tests load real fixture
@@ -182,6 +182,38 @@ test.describe('books page', () => {
     const got = await cleared;
     expect(decodeListAuthors(got).q).toBe('');
     await expect(page.locator('app-books input.search-input')).toHaveValue('');
+  });
+
+  // -------- Readable chip --------
+
+  test('Readable chip is highlighted by default', async ({ page }) => {
+    const readable = page.locator('app-books mat-chip', { hasText: 'Readable' });
+    await expect(readable).toHaveClass(/mat-mdc-chip-highlighted/);
+  });
+
+  test('toggling Readable off fires a ListAuthors with playable_only=false', async ({ page }) => {
+    const reqPromise = page.waitForRequest(req =>
+      req.url().endsWith(LIST_AUTHORS_URL),
+      { timeout: 3_000 },
+    );
+    await page.locator('app-books mat-chip', { hasText: 'Readable' }).click();
+    const got = await reqPromise;
+    expect(decodeListAuthors(got).playableOnly).toBe(false);
+    await expect(page.locator('app-books mat-chip', { hasText: 'Readable' }))
+      .not.toHaveClass(/mat-mdc-chip-highlighted/);
+  });
+
+  test('toggling Readable back on fires a ListAuthors with playable_only=true', async ({ page }) => {
+    await page.locator('app-books mat-chip', { hasText: 'Readable' }).click(); // off
+    const reqPromise = page.waitForRequest(req =>
+      req.url().endsWith(LIST_AUTHORS_URL),
+      { timeout: 3_000 },
+    );
+    await page.locator('app-books mat-chip', { hasText: 'Readable' }).click(); // on
+    const got = await reqPromise;
+    expect(decodeListAuthors(got).playableOnly).toBe(true);
+    await expect(page.locator('app-books mat-chip', { hasText: 'Readable' }))
+      .toHaveClass(/mat-mdc-chip-highlighted/);
   });
 });
 

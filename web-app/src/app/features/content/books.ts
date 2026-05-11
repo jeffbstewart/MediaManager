@@ -36,6 +36,10 @@ export class BooksComponent implements OnInit {
 
   readonly sortMode = signal<AuthorsSortMode>('books');
   readonly query = signal('');
+  // On-by-default "Readable" filter — restricts to authors with at
+  // least one EPUB/PDF on disk that the browser reader can open.
+  // Analog of the Playable chip on the movies/TV catalog.
+  readonly readableOnly = signal(true);
 
   readonly sortOptions: { value: AuthorsSortMode; label: string }[] = [
     { value: 'books', label: 'Books' },
@@ -53,6 +57,11 @@ export class BooksComponent implements OnInit {
 
   async setSort(mode: AuthorsSortMode): Promise<void> {
     this.sortMode.set(mode);
+    await this.refresh();
+  }
+
+  async toggleReadable(): Promise<void> {
+    this.readableOnly.update(v => !v);
     await this.refresh();
   }
 
@@ -80,6 +89,7 @@ export class BooksComponent implements OnInit {
       const data = await this.catalog.listAuthors({
         sort: this.sortMode(),
         q: this.query().trim() || undefined,
+        readableOnly: this.readableOnly(),
       });
       this.authors.set(data.authors);
       this.total.set(data.total);
