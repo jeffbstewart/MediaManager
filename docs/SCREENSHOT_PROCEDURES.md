@@ -119,13 +119,15 @@ rich mix of badges.
 
 ## iOS App Store screenshots (separate flow)
 
-App Store Connect requires functional iOS screenshots on the
-currently-required device classes:
+App Store Connect requires functional iOS screenshots at one of
+its accepted pixel sizes per category:
 
-- iPhone 6.9" (iPhone 16 Pro Max)
-- iPad 13" (iPad Pro 13", latest M-series)
-
-Older 6.5" / 6.7" / 12.9" classes auto-derive in App Store Connect.
+- iPhone — `1242x2688` (6.5", iPhone 11 Pro Max) or `1284x2778`
+  (6.7", iPhone 12 / 13 Pro Max). Newer Pro Max sims (14 / 15 / 16
+  Pro Max) capture at 1290x2796 / 1320x2868 which ASC rejects;
+  this pipeline uses **iPhone 13 Pro Max** to land on 1284x2778
+  natively, and lets ASC auto-derive larger 6.9" sizes.
+- iPad — **iPad Pro 13"** latest M-series (2064x2752 native).
 
 **Driver:** `lifecycle/capture-ios-screenshots.sh`. Sources
 `app_store_demo_setup/secrets/.env`, then for each device class:

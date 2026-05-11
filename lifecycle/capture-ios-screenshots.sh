@@ -63,13 +63,17 @@ if [ -z "$RUNTIME_ID" ]; then
 fi
 echo "Using iOS runtime: $RUNTIME_ID"
 
-# Device matrix. Apple's CURRENTLY REQUIRED classes only:
-#   * 6.9" iPhone (iPhone 16 Pro Max)
-#   * 13"  iPad   (iPad Pro 13", latest M-series available)
-# Older 6.5"/6.7"/12.9" classes auto-derive in App Store Connect
-# and don't need separate capture.
+# Device matrix. App Store Connect's iPhone screenshot slot accepts
+# 1242x2688 (6.5" class, iPhone 11 Pro Max) or 1284x2778 (6.7"
+# class, iPhone 12/13 Pro Max). Newer Pro Max devices (14/15/16
+# Pro Max) capture at 1290x2796 / 1320x2868 which ASC rejects for
+# this app's current slot — so we capture on iPhone 13 Pro Max
+# (1284x2778 native) and let ASC auto-derive larger 6.9" sizes.
+#
+# iPad 13" Pro (M5 native 2064x2752) maps onto ASC's 13" iPad slot
+# without resize.
 DEVICES=(
-    "MM-Snap-iPhone-16-Pro-Max|iPhone 16 Pro Max"
+    "MM-Snap-iPhone-13-Pro-Max|iPhone 13 Pro Max"
     "MM-Snap-iPad-Pro-13|iPad Pro 13-inch"
 )
 
