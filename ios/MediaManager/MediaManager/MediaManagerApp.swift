@@ -188,6 +188,7 @@ struct MediaManagerApp: App {
                             audioPlayer: audioPlayer,
                             dataModel: dataModel,
                             audioCache: audioCache,
+                            bookCache: bookCache,
                             imageProvider: imageProvider)
                     }
             }

@@ -84,55 +84,109 @@ final class OfflineDataModel: DataModel {
         return ApiHomeFeed(proto: proto)
     }
 
+    // MARK: - Offline catalog helpers
+    //
+    // Walk each cache once and return parsed ApiTitleDetail per
+    // downloaded video/book title. Used by the offline catalog
+    // (`titles(type:)`) and the cross-reference detail methods
+    // below (collectionDetail, actorDetail, etc.). Each call
+    // re-walks the disk — cheap relative to the downloads count
+    // a single device carries.
+
+    private func cachedVideoTitles() -> [ApiTitleDetail] {
+        // One detail per unique titleID across the download entries.
+        // Dedup because TV shows have many entries (one per episode)
+        // all pointing at the same parent MMTitleDetail.
+        var seen = Set<Int64>()
+        var out: [ApiTitleDetail] = []
+        for entry in downloads.entries {
+            guard !seen.contains(entry.titleID) else { continue }
+            guard let detail = downloads.loadCachedTitleDetail(for: TitleID(rawValue: Int(entry.titleID)))
+            else { continue }
+            seen.insert(entry.titleID)
+            out.append(detail)
+        }
+        return out
+    }
+
+    private func cachedBookTitles() -> [ApiTitleDetail] {
+        guard let bookCache = AppServices.shared.bookCache else { return [] }
+        var seen = Set<Int64>()
+        var out: [ApiTitleDetail] = []
+        for book in bookCache.downloads {
+            guard !seen.contains(book.titleId) else { continue }
+            guard let detail = bookCache.loadCachedTitleDetail(titleId: book.titleId) else { continue }
+            seen.insert(book.titleId)
+            out.append(detail)
+        }
+        return out
+    }
+
     func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage {
-        throw DataModelError.offline
+        // Collect cached video titles for the requested media type
+        // (movie / tv / personal). Books aren't reached via this API
+        // — Books tab navigates through AuthorsView which has its
+        // own offline path. Pagination is meaningless offline (small
+        // dataset), so we return everything on page 1.
+        let candidates = cachedVideoTitles().filter { $0.mediaType == type }
+        var response = MMTitlePageResponse()
+        response.titles = candidates.map { $0.proto.title }
+        var pagination = MMPaginationInfo()
+        pagination.page = 1
+        pagination.limit = Int32(response.titles.count)
+        pagination.total = Int32(response.titles.count)
+        pagination.totalPages = 1
+        response.pagination = pagination
+        return ApiTitlePage(proto: response)
     }
 
     func titleDetail(id: TitleID) async throws -> ApiTitleDetail {
-        guard let detail = downloads.loadCachedTitleDetail(for: id) else {
-            throw DataModelError.offline
+        if let videoDetail = downloads.loadCachedTitleDetail(for: id) {
+            return videoDetail
         }
-        return detail
+        if let bookCache = AppServices.shared.bookCache,
+           let bookDetail = bookCache.loadCachedTitleDetail(titleId: id.protoValue) {
+            return bookDetail
+        }
+        throw DataModelError.offline
     }
 
     func seasons(titleId: TitleID) async throws -> [ApiSeason] {
-        // Derive seasons from downloaded episodes
-        let entries = downloads.entries.filter {
-            $0.titleID == titleId.protoValue && $0.state == .completed && $0.seasonNumber > 0
-        }
-        let seasonNumbers = Set(entries.map { Int($0.seasonNumber) }).sorted()
-        if seasonNumbers.isEmpty { throw DataModelError.offline }
-        return seasonNumbers.map { num in
-            var proto = MMSeason()
-            proto.seasonNumber = Int32(num)
-            proto.name = "Season \(num)"
-            proto.episodeCount = Int32(entries.filter { Int($0.seasonNumber) == num }.count)
-            return ApiSeason(proto: proto)
-        }
+        // Phase 1 persists the real MMSeason protos at download time;
+        // read those back. Filter to seasons the user has at least one
+        // completed episode of, so we never surface a season with
+        // nothing downloaded under it.
+        let cached = downloads.loadCachedSeasons(for: titleId)
+        let downloadedSeasons: Set<Int32> = Set(
+            downloads.entries
+                .filter { $0.titleID == titleId.protoValue && $0.state == .completed && $0.seasonNumber > 0 }
+                .map { $0.seasonNumber })
+        let visible = cached.filter { downloadedSeasons.contains(Int32($0.seasonNumber)) }
+        if visible.isEmpty { throw DataModelError.offline }
+        return visible
     }
 
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode] {
-        // Build episodes from downloaded entries for this season
-        let entries = downloads.entries.filter {
-            $0.titleID == titleId.protoValue && $0.state == .completed && Int($0.seasonNumber) == season
-        }.sorted { $0.episodeNumber < $1.episodeNumber }
-        if entries.isEmpty { throw DataModelError.offline }
-        return entries.map { entry in
-            var proto = MMEpisode()
-            proto.episodeID = entry.transcodeID  // use transcodeId as stand-in for episodeId
-            proto.transcodeID = entry.transcodeID
-            proto.seasonNumber = entry.seasonNumber
-            proto.episodeNumber = entry.episodeNumber
-            if !entry.episodeTitle.isEmpty { proto.name = entry.episodeTitle }
-            proto.playable = true
-            switch entry.quality {
-            case .fhd: proto.quality = .fhd
-            case .uhd: proto.quality = .uhd
-            case .sd: proto.quality = .sd
-            default: proto.quality = .unknown
-            }
-            return ApiEpisode(proto: proto)
+        // Cached MMEpisode protos for the season. We persist these
+        // for every episode the user has DOWNLOADED — but the cached
+        // protos for the season as a whole carry every episode the
+        // user navigated to. Filter to ones with a corresponding
+        // completed download so play handlers always have local bytes.
+        let cached = downloads.loadCachedEpisodes(for: titleId, season: season)
+        let downloadedTranscodes: Set<Int64> = Set(
+            downloads.entries
+                .filter {
+                    $0.titleID == titleId.protoValue
+                    && $0.state == .completed
+                    && Int($0.seasonNumber) == season
+                }
+                .map { $0.transcodeID })
+        let visible = cached.filter {
+            guard let tcId = $0.transcodeId else { return false }
+            return downloadedTranscodes.contains(tcId.protoValue)
         }
+        if visible.isEmpty { throw DataModelError.offline }
+        return visible
     }
 
     func search(query: String) async throws -> ApiSearchResponse {
@@ -140,7 +194,29 @@ final class OfflineDataModel: DataModel {
     }
 
     func actorDetail(id: TmdbPersonID) async throws -> ApiActorDetail {
-        throw DataModelError.offline
+        // Walk every cached video title, collect ones that include
+        // this actor, peel a character name from each. The actor's
+        // bio + headshot URL aren't persisted (only present on the
+        // server's actor profile) — leave those fields empty; the
+        // view falls back to a placeholder hero.
+        let pid = id.protoValue
+        var owned: [(MMTitle, String?)] = []
+        var actorName: String?
+        for detail in cachedVideoTitles() {
+            guard let member = detail.cast.first(where: { $0.tmdbPersonId.protoValue == pid }) else { continue }
+            owned.append((detail.proto.title, member.characterName))
+            if actorName == nil { actorName = member.name }
+        }
+        guard !owned.isEmpty, let name = actorName else { throw DataModelError.offline }
+        var proto = MMActorDetail()
+        proto.name = name
+        proto.ownedTitles = owned.map { (title, character) in
+            var credit = MMOwnedCredit()
+            credit.title = title
+            if let c = character { credit.characterName = c }
+            return credit
+        }
+        return ApiActorDetail(proto: proto)
     }
 
     func collections() async throws -> ApiCollectionListResponse {
@@ -148,7 +224,31 @@ final class OfflineDataModel: DataModel {
     }
 
     func collectionDetail(id: TmdbCollectionID) async throws -> ApiCollectionDetail {
-        throw DataModelError.offline
+        // Walk cached movie titles, find ones with this
+        // tmdbCollectionId, and build a CollectionDetail. The
+        // collection's "name" comes from any matching title's
+        // tmdbCollectionName.
+        let cid = id.protoValue
+        let matching = cachedVideoTitles().filter { $0.tmdbCollectionId?.protoValue == cid }
+        guard !matching.isEmpty else { throw DataModelError.offline }
+
+        var proto = MMCollectionDetail()
+        proto.name = matching.first?.tmdbCollectionName ?? "Collection"
+        proto.items = matching.map { detail in
+            var item = MMCollectionItem()
+            item.tmdbMovieID = detail.tmdbId?.protoValue ?? 0
+            item.name = detail.name
+            if let year = detail.year { item.year = Int32(year) }
+            item.owned = true        // by construction — cached means owned
+            item.playable = detail.playable
+            item.titleID = detail.id.protoValue
+            if let tcId = detail.transcodeId { item.transcodeID = tcId.protoValue }
+            // quality / contentRating live as enum protos — leave
+            // unset; offline UI doesn't strongly depend on them and
+            // populating would need a string->enum reverse lookup.
+            return item
+        }
+        return ApiCollectionDetail(proto: proto)
     }
 
     func tags() async throws -> ApiTagListResponse {
@@ -156,11 +256,37 @@ final class OfflineDataModel: DataModel {
     }
 
     func tagDetail(id: TagID) async throws -> ApiTagDetail {
-        throw DataModelError.offline
+        let tid = id.protoValue
+        var name: String?
+        var color: MMColor = MMColor()
+        var titles: [MMTitle] = []
+        for detail in cachedVideoTitles() {
+            guard let tag = detail.tags.first(where: { $0.id.protoValue == tid }) else { continue }
+            titles.append(detail.proto.title)
+            if name == nil { name = tag.name; color = tag.proto.color }
+        }
+        guard let n = name else { throw DataModelError.offline }
+        var proto = MMTagDetail()
+        proto.name = n
+        proto.color = color
+        proto.titles = titles
+        return ApiTagDetail(proto: proto)
     }
 
     func genreDetail(id: GenreID) async throws -> ApiGenreDetail {
-        throw DataModelError.offline
+        let gid = id.protoValue
+        var name: String?
+        var titles: [MMTitle] = []
+        for detail in cachedVideoTitles() {
+            guard let g = detail.genres.first(where: { $0.id.protoValue == gid }) else { continue }
+            titles.append(detail.proto.title)
+            if name == nil { name = g.name }
+        }
+        guard let n = name else { throw DataModelError.offline }
+        var proto = MMGenreDetail()
+        proto.name = n
+        proto.titles = titles
+        return ApiGenreDetail(proto: proto)
     }
 
     func setFavorite(titleId: TitleID, favorite: Bool) async throws {
@@ -187,15 +313,98 @@ final class OfflineDataModel: DataModel {
         throw DataModelError.offline
     }
 
-    // Books (offline: nothing yet — book download cache lands in a later phase)
+    // MARK: - Books offline (uses cached book detail.pb)
+
     func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse {
-        throw DataModelError.offline
+        // Aggregate downloaded books by their lead author.
+        // Mirrors `artists(...)` below structurally.
+        var byAuthorId: [Int64: (proto: MMAuthor, count: Int, fallbackTitleId: Int64)] = [:]
+        for detail in cachedBookTitles() {
+            guard let book = detail.book else { continue }
+            for author in book.authors {
+                let aid = author.id.protoValue
+                if var existing = byAuthorId[aid] {
+                    existing.count += 1
+                    byAuthorId[aid] = existing
+                } else {
+                    byAuthorId[aid] = (author.proto, 1, detail.id.protoValue)
+                }
+            }
+        }
+        var items: [MMAuthorListItem] = byAuthorId.map { _, value in
+            var item = MMAuthorListItem()
+            item.id = value.proto.id
+            item.name = value.proto.name
+            item.ownedBookCount = Int32(value.count)
+            item.hasHeadshot_p = value.proto.hasHeadshot_p
+            item.fallbackBookTitleID = value.fallbackTitleId
+            return item
+        }
+        if let q = query, !q.isEmpty {
+            items = items.filter { $0.name.localizedCaseInsensitiveContains(q) }
+        }
+        switch sort {
+        case .name: items.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
+        case .books: items.sort { $0.ownedBookCount > $1.ownedBookCount }
+        case .recent:
+            // No persisted download-timestamp at the author level —
+            // fall back to alphabetical so the order is at least stable.
+            items.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
+        }
+
+        var response = MMAuthorListResponse()
+        response.authors = items
+        var p = MMPaginationInfo()
+        p.page = 1; p.limit = Int32(items.count); p.total = Int32(items.count); p.totalPages = 1
+        response.pagination = p
+        return ApiAuthorListResponse(proto: response)
     }
+
     func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail {
-        throw DataModelError.offline
+        let aid = id.protoValue
+        var author: MMAuthor?
+        var ownedBooks: [MMTitle] = []
+        for detail in cachedBookTitles() {
+            guard let book = detail.book else { continue }
+            guard let match = book.authors.first(where: { $0.id.protoValue == aid }) else { continue }
+            if author == nil { author = match.proto }
+            ownedBooks.append(detail.proto.title)
+        }
+        guard let resolvedAuthor = author else { throw DataModelError.offline }
+        var proto = MMAuthorDetail()
+        proto.author = resolvedAuthor
+        proto.ownedBooks = ownedBooks
+        // otherWorks (OpenLibrary bibliography) is server-side only.
+        return ApiAuthorDetail(proto: proto)
     }
+
     func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail {
-        throw DataModelError.offline
+        let sid = id.protoValue
+        var seriesRef: MMBookSeriesRef?
+        var volumes: [MMBookSeriesVolume] = []
+        for detail in cachedBookTitles() {
+            guard let series = detail.book?.bookSeries, series.id.protoValue == sid else { continue }
+            if seriesRef == nil { seriesRef = series.proto }
+            var v = MMBookSeriesVolume()
+            v.titleID = detail.id.protoValue
+            v.titleName = detail.name
+            if let n = series.number { v.seriesNumber = n }
+            if let y = detail.year { v.firstPublicationYear = Int32(y) }
+            volumes.append(v)
+        }
+        guard let ref = seriesRef else { throw DataModelError.offline }
+        var proto = MMBookSeriesDetail()
+        proto.name = ref.name
+        // seriesNumber is a string ("0.5", "3", "12") — sort
+        // numerically when both sides parse, otherwise lexicographically.
+        proto.volumes = volumes.sorted { lhs, rhs in
+            if let l = Double(lhs.seriesNumber), let r = Double(rhs.seriesNumber) {
+                return l < r
+            }
+            return lhs.seriesNumber < rhs.seriesNumber
+        }
+        // missingVolumes is server-only (OpenLibrary lookup).
+        return ApiBookSeriesDetail(proto: proto)
     }
     // Audio (offline: nothing yet — audio download cache lands later).
     func artists(page: Int, sort: ArtistSort, query: String?) async throws -> ApiArtistListResponse {

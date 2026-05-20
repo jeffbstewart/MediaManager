@@ -19,6 +19,7 @@ final class AppServices {
     private(set) var audioPlayer: AudioPlayerManager?
     private(set) var dataModel: OnlineDataModel?
     private(set) var audioCache: AudioCacheManager?
+    private(set) var bookCache: BookCacheManager?
     private(set) var imageProvider: ImageProvider?
 
     /// Closures the secondary scenes register while waiting for the
@@ -37,11 +38,13 @@ final class AppServices {
         audioPlayer: AudioPlayerManager,
         dataModel: OnlineDataModel,
         audioCache: AudioCacheManager,
+        bookCache: BookCacheManager,
         imageProvider: ImageProvider
     ) {
         self.audioPlayer = audioPlayer
         self.dataModel = dataModel
         self.audioCache = audioCache
+        self.bookCache = bookCache
         self.imageProvider = imageProvider
         let pending = readyCallbacks
         readyCallbacks.removeAll()
