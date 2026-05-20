@@ -133,6 +133,13 @@ final class AuthManager {
             await grpcClient.setAccessToken(tokenData)
 
             await performTokenRefresh()
+            // performTokenRefresh may have called logout() when the refresh
+            // token was rejected (typical after a long absence). Honour
+            // that — don't force-transition back to authenticated and
+            // strand the user on empty screens with no valid token.
+            // Use the keychain as the source of truth: logout clears it,
+            // a successful refresh writes a fresh access token.
+            guard KeychainService.load(key: .accessToken) != nil else { return }
             await transitionAfterAuth(serverURL: url)
         }
     }
@@ -364,9 +371,17 @@ final class AuthManager {
                 logger.info("transitionAfterAuth: legal agreement required")
                 state = .needsLegalAgreement(serverURL: serverURL)
             }
+        } catch let rpcError as RPCError where rpcError.code == .unauthenticated {
+            // The access token was rejected (revoked server-side, expired
+            // beyond what performTokenRefresh could rescue, etc.). Don't
+            // proceed to .authenticated — the user would land on empty
+            // screens with no valid token. Force a clean logout.
+            logger.info("transitionAfterAuth: legal-status returned UNAUTHENTICATED, logging out")
+            await logout()
         } catch {
-            // If we can't check legal status, proceed to authenticated
-            // (the server's AuthInterceptor will enforce compliance on gated RPCs)
+            // Network / unreachable / other transient — proceed
+            // optimistically; the server's AuthInterceptor enforces
+            // compliance on gated RPCs when we do reach it.
             logger.warning("transitionAfterAuth: legal check failed, proceeding: \(error.localizedDescription)")
             state = .authenticated(serverURL: serverURL)
             await refreshServerInfo()
@@ -422,6 +437,10 @@ final class AuthManager {
 
         guard case .needsLogin(let url) = state else { return }
         await performTokenRefresh()
+        // Same hazard as restoreSession(): performTokenRefresh may have
+        // logged the user out. The state is still .needsLogin either
+        // way, so use the keychain as the source of truth instead.
+        guard KeychainService.load(key: .accessToken) != nil else { return }
         await transitionAfterAuth(serverURL: url)
     }
 
