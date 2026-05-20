@@ -169,50 +169,26 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
                     VStack(spacing: 4) {
-                        Button {
-                            dataModel.downloads.isOfflineMode.toggle()
-                            if dataModel.downloads.isOfflineMode {
-                                let onlineOnlyTabs: Set<Tab> = [
-                                    .home, .movies, .tvShows, .collections, .tags, .family,
-                                    .cameras, .liveTv, .search, .wishList, .profile,
-                                    .adminAddTitle, .adminAmazonImport, .adminExpand,
-                                    .adminValuation, .adminReport, .adminFamilyMembers,
-                                    .adminLiveTvSettings, .adminScan, .adminStatus, .adminCameras,
-                                    .adminUsers, .adminPurchaseWishes,
-                                    .adminDataQuality, .adminTags, .adminTranscodes,
-                                    .adminUnmatched, .adminSettings
-                                ]
-                                if let tab = selectedTab, onlineOnlyTabs.contains(tab) {
-                                    selectedTab = .downloads
-                                }
-                                navigationPath = NavigationPath()
-                            }
-                        } label: {
-                            Label(
-                                dataModel.downloads.isEffectivelyOffline ? "Go Online" : "Go Offline",
-                                systemImage: dataModel.downloads.isEffectivelyOffline
-                                    ? "wifi.slash" : "wifi"
-                            )
-                            .font(.callout)
-                            .foregroundStyle(dataModel.downloads.isEffectivelyOffline ? .orange : .primary)
-                        }
-
+                        // Status indicator: clear what's happening,
+                        // without occupying space the user could tap by
+                        // accident. The previous wifi-icon button got
+                        // mistaken for a Wi-Fi network toggle. The
+                        // actual "Browse offline copies only" preference
+                        // now lives in ProfileView; this row is read-only.
                         if isOffline && !dataModel.downloads.isOfflineMode {
-                            Text("No connection")
-                                .font(.caption2)
+                            Label("Server unreachable", systemImage: "exclamationmark.icloud")
+                                .font(.caption)
                                 .foregroundStyle(.orange)
-                        } else if isOffline {
-                            Text("Offline mode")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
+                        } else if dataModel.downloads.isOfflineMode {
+                            Label("Browsing downloads only", systemImage: "arrow.down.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
-                        HStack(spacing: 16) {
-                            Button("Sign Out") {
-                                showLogoutConfirmation = true
-                            }
-                            .font(.callout)
+                        Button("Sign Out") {
+                            showLogoutConfirmation = true
                         }
+                        .font(.callout)
 
                         Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                             .font(.caption2)
@@ -361,6 +337,28 @@ struct ContentView: View {
                     GenreDetailView(route: route)
                 }
             }
+        }
+        .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
+            // Tab-reset side effect when offline mode flips ON. Was
+            // inlined in the old Go Offline button; now that the
+            // toggle lives in ProfileView we react to the property
+            // change instead. Without this the user can leave a tab
+            // selected (e.g. Live TV) that has no offline data.
+            guard newValue else { return }
+            let onlineOnlyTabs: Set<Tab> = [
+                .home, .movies, .tvShows, .collections, .tags, .family,
+                .cameras, .liveTv, .search, .wishList, .profile,
+                .adminAddTitle, .adminAmazonImport, .adminExpand,
+                .adminValuation, .adminReport, .adminFamilyMembers,
+                .adminLiveTvSettings, .adminScan, .adminStatus, .adminCameras,
+                .adminUsers, .adminPurchaseWishes,
+                .adminDataQuality, .adminTags, .adminTranscodes,
+                .adminUnmatched, .adminSettings
+            ]
+            if let tab = selectedTab, onlineOnlyTabs.contains(tab) {
+                selectedTab = .downloads
+            }
+            navigationPath = NavigationPath()
         }
         .alert("Sign Out", isPresented: $showLogoutConfirmation) {
             Button("Sign Out", role: .destructive) {

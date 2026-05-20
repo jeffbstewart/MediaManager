@@ -41,6 +41,24 @@ struct ProfileView: View {
                     }
 
                     Section {
+                        Toggle(
+                            isOn: Binding(
+                                get: { dataModel.downloads.isOfflineMode },
+                                set: { dataModel.downloads.isOfflineMode = $0 }
+                            )
+                        ) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Browse downloads only")
+                                Text("Skip the server even when reachable. Useful for saving data on cellular.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("Offline")
+                    }
+
+                    Section {
                         Button("Change Password") {
                             showChangePassword = true
                         }

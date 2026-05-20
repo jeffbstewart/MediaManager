@@ -70,6 +70,14 @@ struct MediaManagerApp: App {
         // the attribution.
         crashReporter = CrashReporter()
 
+        // Run any pending on-disk migrations BEFORE the cache
+        // managers construct themselves, so they always see a
+        // coherent download tree. v2 wipes video + book downloads
+        // (audio is preserved) so the new offline-parity browse
+        // surfaces can rely on the richer metadata format we now
+        // persist at download time. See OfflineMigration.swift.
+        OfflineMigration.runIfNeeded()
+
         // Configure audio session for media playback — plays through
         // speakers regardless of the silent switch and continues in
         // the background. Simulator is forgiving about both pieces of
