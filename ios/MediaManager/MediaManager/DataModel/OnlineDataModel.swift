@@ -89,7 +89,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func actorDetail(id: TmdbPersonID) async throws -> ApiActorDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.actorDetail(id: id) }
         let response = try await grpcClient.getActorDetail(personId: id.protoValue)
         return ApiActorDetail(proto: response)
     }
@@ -101,7 +101,7 @@ final class OnlineDataModel: DataModel {
     }
 
     func collectionDetail(id: TmdbCollectionID) async throws -> ApiCollectionDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.collectionDetail(id: id) }
         let response = try await grpcClient.getCollectionDetail(id: id.protoValue)
         return ApiCollectionDetail(proto: response)
     }
@@ -113,13 +113,13 @@ final class OnlineDataModel: DataModel {
     }
 
     func tagDetail(id: TagID) async throws -> ApiTagDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.tagDetail(id: id) }
         let response = try await grpcClient.getTagDetail(id: id.protoValue)
         return ApiTagDetail(proto: response)
     }
 
     func genreDetail(id: GenreID) async throws -> ApiGenreDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.genreDetail(id: id) }
         let response = try await grpcClient.getGenreDetail(id: id.protoValue)
         return ApiGenreDetail(proto: response)
     }
@@ -157,7 +157,10 @@ final class OnlineDataModel: DataModel {
     // MARK: - Books
 
     func authors(page: Int, sort: AuthorSort, query: String?, hiddenOnly: Bool) async throws -> ApiAuthorListResponse {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline {
+            return try await offlineDelegate.authors(
+                page: page, sort: sort, query: query, hiddenOnly: hiddenOnly)
+        }
         let response = try await grpcClient.listAuthors(
             page: Int32(page), limit: 60, sort: sort.protoValue,
             query: query, hiddenOnly: hiddenOnly)
@@ -165,13 +168,13 @@ final class OnlineDataModel: DataModel {
     }
 
     func authorDetail(id: AuthorID) async throws -> ApiAuthorDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.authorDetail(id: id) }
         let response = try await grpcClient.getAuthorDetail(id: id.protoValue)
         return ApiAuthorDetail(proto: response)
     }
 
     func bookSeriesDetail(id: BookSeriesID) async throws -> ApiBookSeriesDetail {
-        if !isOnline { throw DataModelError.offline }
+        if !isOnline { return try await offlineDelegate.bookSeriesDetail(id: id) }
         let response = try await grpcClient.getBookSeriesDetail(id: id.protoValue)
         return ApiBookSeriesDetail(proto: response)
     }
