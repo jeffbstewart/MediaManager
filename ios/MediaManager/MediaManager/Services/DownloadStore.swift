@@ -134,13 +134,20 @@ actor DownloadStore {
         let fm = FileManager.default
         let knownFiles = buildKnownFileSet()
 
-        // Delete orphan files
+        // Delete orphan files. Top-level subdirectories we manage
+        // out-of-band are preserved by name: `posters/` (handled by
+        // DownloadStore itself), `tv/` (per-show season + episode
+        // metadata written by DownloadManager.cacheSeasonMetadata /
+        // cacheEpisodeMetadata), `Audio/` and `Books/` (separate
+        // cache managers own their own subtrees).
+        let protectedNames: Set<String> = [
+            "downloads.meta.db", "downloads.meta.db.backup",
+            "posters", "tv", "Audio", "Books"
+        ]
         if let contents = try? fm.contentsOfDirectory(at: downloadsDir, includingPropertiesForKeys: nil) {
             for fileURL in contents {
                 let name = fileURL.lastPathComponent
-                if name == "downloads.meta.db" || name == "downloads.meta.db.backup" || name == "posters" {
-                    continue
-                }
+                if protectedNames.contains(name) { continue }
                 if !knownFiles.contains(name) {
                     logger.info("Removing orphan file: \(name)")
                     try? fm.removeItem(at: fileURL)

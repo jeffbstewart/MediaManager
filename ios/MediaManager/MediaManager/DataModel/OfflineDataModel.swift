@@ -184,41 +184,82 @@ final class OfflineDataModel: DataModel {
     }
 
     func seasons(titleId: TitleID) async throws -> [ApiSeason] {
-        // Phase 1 persists the real MMSeason protos at download time;
-        // read those back. Filter to seasons the user has at least one
-        // completed episode of, so we never surface a season with
-        // nothing downloaded under it.
+        // Drive the visible list off completed downloads (the source
+        // of truth) and use cached MMSeason protos as ENRICHMENT
+        // when available. This makes the offline list resilient to
+        // gaps in the season-metadata cache — every season with at
+        // least one downloaded episode shows up, even if its
+        // MMSeason wasn't persisted at navigation time (e.g.
+        // downloaded individually from a pre-Phase-1 build).
+        //
+        // Season 0 (Specials) is included — the older
+        // `seasonNumber > 0` filter was a holdover from the original
+        // synthesizing logic and incorrectly hid Star Trek-style
+        // bonus content.
         let cached = downloads.loadCachedSeasons(for: titleId)
-        let downloadedSeasons: Set<Int32> = Set(
-            downloads.entries
-                .filter { $0.titleID == titleId.protoValue && $0.state == .completed && $0.seasonNumber > 0 }
-                .map { $0.seasonNumber })
-        let visible = cached.filter { downloadedSeasons.contains(Int32($0.seasonNumber)) }
-        if visible.isEmpty { throw DataModelError.offline }
-        return visible
+        let cachedByNumber = Dictionary(uniqueKeysWithValues:
+            cached.map { ($0.seasonNumber, $0) })
+
+        var entriesBySeason: [Int: Int] = [:]
+        for entry in downloads.entries
+            where entry.titleID == titleId.protoValue && entry.state == .completed {
+            entriesBySeason[Int(entry.seasonNumber), default: 0] += 1
+        }
+        if entriesBySeason.isEmpty { throw DataModelError.offline }
+
+        return entriesBySeason.keys.sorted().map { num in
+            if let real = cachedByNumber[num] {
+                return real
+            }
+            var proto = MMSeason()
+            proto.seasonNumber = Int32(num)
+            proto.name = num == 0 ? "Specials" : "Season \(num)"
+            proto.episodeCount = Int32(entriesBySeason[num] ?? 0)
+            return ApiSeason(proto: proto)
+        }
     }
 
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode] {
-        // Cached MMEpisode protos for the season. We persist these
-        // for every episode the user has DOWNLOADED — but the cached
-        // protos for the season as a whole carry every episode the
-        // user navigated to. Filter to ones with a corresponding
-        // completed download so play handlers always have local bytes.
+        // Same pattern as seasons(): drive the visible list off
+        // completed downloads, use cached MMEpisode protos as
+        // enrichment. An episode without a cached MMEpisode still
+        // surfaces, just with a minimal (synthesized) proto pulled
+        // from MMDownloadEntry — same shape as before Phase 1.
         let cached = downloads.loadCachedEpisodes(for: titleId, season: season)
-        let downloadedTranscodes: Set<Int64> = Set(
-            downloads.entries
-                .filter {
-                    $0.titleID == titleId.protoValue
-                    && $0.state == .completed
-                    && Int($0.seasonNumber) == season
-                }
-                .map { $0.transcodeID })
-        let visible = cached.filter {
-            guard let tcId = $0.transcodeId else { return false }
-            return downloadedTranscodes.contains(tcId.protoValue)
+        let cachedByTranscode: [Int64: ApiEpisode] = Dictionary(uniqueKeysWithValues:
+            cached.compactMap { ep -> (Int64, ApiEpisode)? in
+                guard let tcId = ep.transcodeId else { return nil }
+                return (tcId.protoValue, ep)
+            })
+
+        let entries = downloads.entries
+            .filter {
+                $0.titleID == titleId.protoValue
+                && $0.state == .completed
+                && Int($0.seasonNumber) == season
+            }
+            .sorted { $0.episodeNumber < $1.episodeNumber }
+        if entries.isEmpty { throw DataModelError.offline }
+
+        return entries.map { entry in
+            if let real = cachedByTranscode[entry.transcodeID] {
+                return real
+            }
+            var proto = MMEpisode()
+            proto.episodeID = entry.transcodeID
+            proto.transcodeID = entry.transcodeID
+            proto.seasonNumber = entry.seasonNumber
+            proto.episodeNumber = entry.episodeNumber
+            if !entry.episodeTitle.isEmpty { proto.name = entry.episodeTitle }
+            proto.playable = true
+            switch entry.quality {
+            case .fhd: proto.quality = .fhd
+            case .uhd: proto.quality = .uhd
+            case .sd: proto.quality = .sd
+            default: proto.quality = .unknown
+            }
+            return ApiEpisode(proto: proto)
         }
-        if visible.isEmpty { throw DataModelError.offline }
-        return visible
     }
 
     func search(query: String) async throws -> ApiSearchResponse {
