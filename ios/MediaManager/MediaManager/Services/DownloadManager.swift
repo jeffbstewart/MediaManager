@@ -500,6 +500,7 @@ final class DownloadManager {
         // Start gRPC streaming download
         guard let entry = await store.entry(for: transcodeId) else { return }
         let resumeOffset = entry.bytesDownloaded
+        let manifestSize = entry.fileSizeBytes
 
         await store.updateEntry(transcodeId: transcodeId) { e in
             e.state = .downloading
@@ -508,6 +509,17 @@ final class DownloadManager {
 
         let filePath = await store.videoPath(for: entry, downloading: true)
         logger.info("Starting gRPC download: offset=\(resumeOffset) -> \(filePath.lastPathComponent)")
+
+        // Short-circuit: we already have every byte the manifest
+        // promised. Opening a gRPC stream with offset == size makes
+        // the server send 0 bytes (or sit open waiting for them),
+        // which is exactly the "stuck at 100%" symptom seen with
+        // Wicked.mp4. Finalize directly and skip the stream.
+        if manifestSize > 0 && resumeOffset >= manifestSize {
+            await finalizeAlreadyDownloaded(
+                entry: entry, sequence: sequence, downloadingPath: filePath)
+            return
+        }
 
         let progress = DownloadProgress(initial: resumeOffset)
         do {
@@ -582,6 +594,67 @@ final class DownloadManager {
             await scheduleRetry(transcodeId: transcodeId,
                                 sequence: sequence,
                                 lastError: error.localizedDescription,
+                                isRetryable: true)
+        }
+    }
+
+    /// Recover a download whose bytes already match the manifest
+    /// size, without going through the gRPC stream. Hit when the
+    /// stream completed in a prior attempt but finalize / completion
+    /// metadata didn't land — most commonly because finalize threw
+    /// (e.g. .mp4 already exists from an even earlier attempt) and
+    /// the retry path re-entered performDownload with bytesDownloaded
+    /// at the manifest size.
+    ///
+    /// Reconciles the on-disk state:
+    ///   - .downloading only → rename to .mp4 (the normal finalize)
+    ///   - .mp4 only         → a previous finalize did succeed; just
+    ///                          update state metadata
+    ///   - both exist        → discard stale .downloading, keep .mp4
+    ///   - neither exists    → bytesDownloaded is lying; reset and
+    ///                          re-enter performDownload from offset 0
+    private func finalizeAlreadyDownloaded(
+        entry: MMDownloadEntry, sequence: Int32, downloadingPath: URL
+    ) async {
+        let transcodeId = entry.transcodeID
+        let finalPath = await store.videoPath(for: entry, downloading: false)
+        let fm = FileManager.default
+        let hasDownloading = fm.fileExists(atPath: downloadingPath.path)
+        let hasFinal = fm.fileExists(atPath: finalPath.path)
+        logger.info("finalizeAlreadyDownloaded tcId=\(transcodeId): hasDownloading=\(hasDownloading) hasFinal=\(hasFinal)")
+
+        do {
+            switch (hasDownloading, hasFinal) {
+            case (true, false):
+                try await store.finalizeVideo(for: entry)
+            case (false, true):
+                break // .mp4 already in place from a previous run
+            case (true, true):
+                logger.warning("finalizeAlreadyDownloaded tcId=\(transcodeId): both files present — discarding stale .downloading")
+                try? fm.removeItem(at: downloadingPath)
+            case (false, false):
+                logger.warning("finalizeAlreadyDownloaded tcId=\(transcodeId): bytesDownloaded=\(entry.bytesDownloaded) but no file on disk — restarting from offset 0")
+                await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = 0 }
+                await performDownload(transcodeId: transcodeId, sequence: sequence)
+                return
+            }
+
+            await store.updateEntry(transcodeId: transcodeId) { e in
+                e.state = .completed
+                e.bytesDownloaded = entry.fileSizeBytes
+                e.completedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
+                e.errorMessage = ""
+                e.retryCount = 0
+            }
+            await reloadEntries()
+            downloadTasks.removeValue(forKey: transcodeId)
+            logger.info("Download complete (no stream needed): tcId=\(transcodeId) \(entry.fileSizeBytes) bytes")
+            await pinImagesForTitle(entry.titleID)
+            startNextQueued()
+        } catch {
+            logger.error("finalizeAlreadyDownloaded tcId=\(transcodeId): \(String(describing: error))")
+            await scheduleRetry(transcodeId: transcodeId, sequence: sequence,
+                                lastError: "Finalize: \(error.localizedDescription)",
                                 isRetryable: true)
         }
     }
