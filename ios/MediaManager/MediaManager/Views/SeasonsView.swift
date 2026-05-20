@@ -36,6 +36,17 @@ struct SeasonsView: View {
 
     private var isOffline: Bool { !dataModel.isOnline }
 
+    private func isSeasonFullyDownloaded(_ season: ApiSeason) -> Bool {
+        dataModel.downloads.isSeasonFullyDownloaded(
+            titleId: route.titleId.protoValue,
+            season: Int32(season.seasonNumber),
+            expectedEpisodeCount: season.episodeCount)
+    }
+
+    private var isSeriesFullyOffline: Bool {
+        !seasons.isEmpty && seasons.allSatisfy(isSeasonFullyDownloaded)
+    }
+
     var body: some View {
         Group {
             if loading {
@@ -43,15 +54,32 @@ struct SeasonsView: View {
             } else if seasons.isEmpty {
                 ContentUnavailableView("No seasons", systemImage: "tv")
             } else {
-                List(seasons, id: \.seasonNumber) { season in
-                    NavigationLink(value: SeasonRoute(titleId: route.titleId, titleName: route.titleName, season: season)) {
-                        HStack {
-                            Text(season.name ?? "Season \(season.seasonNumber)")
-                                .fontWeight(.medium)
-                            Spacer()
-                            Text("\(season.episodeCount) episodes")
-                                .foregroundStyle(.secondary)
+                List {
+                    if isSeriesFullyOffline {
+                        Section {
+                            Label("Entire series available offline",
+                                  systemImage: "arrow.down.circle.fill")
+                                .foregroundStyle(.green)
                                 .font(.subheadline)
+                        }
+                    }
+                    Section {
+                        ForEach(seasons, id: \.seasonNumber) { season in
+                            NavigationLink(value: SeasonRoute(titleId: route.titleId, titleName: route.titleName, season: season)) {
+                                HStack {
+                                    Text(season.name ?? "Season \(season.seasonNumber)")
+                                        .fontWeight(.medium)
+                                    Spacer()
+                                    if isSeasonFullyDownloaded(season) {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .foregroundStyle(.green)
+                                            .accessibilityLabel("Available offline")
+                                    }
+                                    Text("\(season.episodeCount) episodes")
+                                        .foregroundStyle(.secondary)
+                                        .font(.subheadline)
+                                }
+                            }
                         }
                     }
                 }

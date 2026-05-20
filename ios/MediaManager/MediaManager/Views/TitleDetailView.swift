@@ -10,6 +10,12 @@ struct TitleDetailView: View {
     @State private var isHidden = false
     @State private var mobileRequested = false
     @State private var showEditTags = false
+    /// Fetched lazily for TV titles so we can show a series-level
+    /// "available offline" indicator next to the Seasons & Episodes
+    /// button when every episode of every season has a completed
+    /// download. Empty for movies / books / albums — the indicator
+    /// only renders for mediaType == .tv with a non-empty list.
+    @State private var seasons: [ApiSeason] = []
 
     private var isOffline: Bool { !dataModel.isOnline }
     private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
@@ -137,6 +143,18 @@ struct TitleDetailView: View {
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.large)
+
+                                // Surfaced when every episode of every
+                                // season has a completed download —
+                                // mirrors the per-season indicator in
+                                // SeasonsView so the same fact reads
+                                // the same in both places.
+                                if isSeriesFullyOffline {
+                                    Label("Available offline",
+                                          systemImage: "arrow.down.circle.fill")
+                                        .foregroundStyle(.green)
+                                        .font(.subheadline)
+                                }
                             }
 
                             // Action row: favorite, hide, re-transcode, download
@@ -321,7 +339,25 @@ struct TitleDetailView: View {
         isFavorite = detail?.isFavorite ?? false
         isHidden = detail?.isHidden ?? false
         mobileRequested = detail?.transcodes.contains(where: { $0.forMobileRequested == true }) ?? false
+        // Seasons aren't carried on TitleDetail — fetch them
+        // separately for TV titles so the "Available offline"
+        // indicator can render. Movies / books / albums skip this.
+        if detail?.mediaType == .tv {
+            seasons = (try? await dataModel.seasons(titleId: titleId)) ?? []
+        } else {
+            seasons = []
+        }
         loading = false
+    }
+
+    private var isSeriesFullyOffline: Bool {
+        guard !seasons.isEmpty else { return false }
+        return seasons.allSatisfy { season in
+            dataModel.downloads.isSeasonFullyDownloaded(
+                titleId: titleId.protoValue,
+                season: Int32(season.seasonNumber),
+                expectedEpisodeCount: season.episodeCount)
+        }
     }
 
     private func toggleFavorite(_ id: TitleID) async {

@@ -166,6 +166,25 @@ final class DownloadManager {
         Set(entries.filter { $0.state == .completed }.map { $0.titleID })
     }
 
+    /// True when there is at least one completed download for every
+    /// episode number 1..expectedEpisodeCount of the given season.
+    /// Compares the deduplicated set of completed episode numbers
+    /// against the expected count, so historical entries from a prior
+    /// catalog numbering won't false-positive on a season that has
+    /// since shrunk.
+    func isSeasonFullyDownloaded(
+        titleId: Int64, season: Int32, expectedEpisodeCount: Int
+    ) -> Bool {
+        guard expectedEpisodeCount > 0 else { return false }
+        let completed: Set<Int32> = Set(
+            entries
+                .filter { $0.state == .completed
+                    && $0.titleID == titleId
+                    && $0.seasonNumber == season }
+                .map { $0.episodeNumber })
+        return completed.count >= expectedEpisodeCount
+    }
+
     func localDir(for transcodeId: TranscodeID) -> URL? {
         guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
               entry.state == .completed else { return nil }
