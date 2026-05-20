@@ -57,6 +57,7 @@ struct RootView: View {
 struct ForcedPasswordChangeView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AuthManager.self) private var authManager
+    @State private var currentPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     @State private var error: String?
@@ -75,17 +76,21 @@ struct ForcedPasswordChangeView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text("Your administrator requires you to change your password before continuing.")
+                Text("Your administrator requires you to change your password before continuing. Enter the temporary password you were given, then pick a new one.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 VStack(spacing: 12) {
+                    SecureField("Current Password", text: $currentPassword)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.password)
+
                     SecureField("New Password", text: $newPassword)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
 
-                    SecureField("Confirm Password", text: $confirmPassword)
+                    SecureField("Confirm New Password", text: $confirmPassword)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
 
@@ -93,6 +98,7 @@ struct ForcedPasswordChangeView: View {
                         Text(error)
                             .foregroundStyle(.red)
                             .font(.callout)
+                            .multilineTextAlignment(.center)
                     }
 
                     Button(saving ? "Saving..." : "Change Password") {
@@ -100,7 +106,10 @@ struct ForcedPasswordChangeView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(newPassword.isEmpty || newPassword != confirmPassword || saving)
+                    .disabled(currentPassword.isEmpty
+                              || newPassword.isEmpty
+                              || newPassword != confirmPassword
+                              || saving)
                 }
                 .padding(.horizontal)
 
@@ -114,12 +123,18 @@ struct ForcedPasswordChangeView: View {
     private func changePassword() async {
         error = nil
         guard newPassword.count >= 8 else {
-            error = "Password must be at least 8 characters"
+            error = "New password must be at least 8 characters"
             return
         }
         saving = true
         do {
-            try await dataModel.changePassword(current: "", new: newPassword)
+            // ChangePassword always requires the current password,
+            // even on the forced-change path — the server treats it
+            // as a fresh credential proof so a borrowed unlocked
+            // phone can't rotate the password to lock the real owner
+            // out. Matches the web flow.
+            try await dataModel.changePassword(
+                current: currentPassword, new: newPassword)
             authManager.clearPasswordChangeRequired()
         } catch {
             self.error = error.localizedDescription
