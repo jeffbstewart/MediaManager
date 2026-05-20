@@ -64,6 +64,23 @@ struct CollectionDetailView: View {
                     .frame(width: 120, height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .opacity(item.owned ? 1.0 : 0.6)
+                    .overlay(alignment: .bottomTrailing) {
+                        // Same badge as ArtistDetailView's downloaded-
+                        // album marker. Bottom-right so it doesn't
+                        // collide with the top-right wish heart on
+                        // un-owned tiles.
+                        if item.owned, let titleId = item.titleId,
+                           dataModel.downloads.offlineTitleIds.contains(titleId.protoValue) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .padding(4)
+                                .background(.black.opacity(0.55))
+                                .clipShape(Circle())
+                                .padding(6)
+                                .accessibilityLabel("Downloaded")
+                        }
+                    }
 
                 if !item.owned {
                     Button {

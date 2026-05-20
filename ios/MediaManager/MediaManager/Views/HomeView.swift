@@ -261,6 +261,7 @@ struct CarouselView: View {
 }
 
 struct PosterCard: View {
+    @Environment(OnlineDataModel.self) private var dataModel
     let title: ApiTitle
 
     var body: some View {
@@ -270,6 +271,24 @@ struct PosterCard: View {
                     .frame(width: 120, height: 180)
                     .clipped()
                     .opacity(title.playable ? 1.0 : 0.5)
+                    .overlay(alignment: .bottomTrailing) {
+                        // Mirrors ArtistDetailView's CD badge and
+                        // CollectionDetailView's movie badge — same
+                        // icon / colour / accessibility label so a
+                        // downloaded item reads the same anywhere
+                        // PosterCard appears (catalog grids, Home
+                        // carousels, anywhere else this lands).
+                        if dataModel.downloads.offlineTitleIds.contains(title.id.protoValue) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .padding(4)
+                                .background(.black.opacity(0.55))
+                                .clipShape(Circle())
+                                .padding(6)
+                                .accessibilityLabel("Downloaded")
+                        }
+                    }
 
                 // Resume progress bar
                 if let progress = title.resumeProgress, progress > 0 {
