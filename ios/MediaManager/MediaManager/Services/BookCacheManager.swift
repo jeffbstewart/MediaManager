@@ -175,6 +175,16 @@ final class BookCacheManager {
         downloads.contains { $0.mediaItemId == mediaItemId }
     }
 
+    /// Set of catalog title IDs for which at least one media item
+    /// (EPUB / PDF) is cached locally. Lets list and grid views
+    /// answer "is this book on the device?" without iterating
+    /// `downloads` per row. Mirrors DownloadManager.offlineTitleIds
+    /// so list/grid code on the video side and book side reads the
+    /// same.
+    var offlineTitleIds: Set<Int64> {
+        Set(downloads.map { $0.titleId })
+    }
+
     /// Returns the on-disk URL for a downloaded book, or `nil` if
     /// the book isn't downloaded or the file went missing (e.g.
     /// user deleted via Files app).

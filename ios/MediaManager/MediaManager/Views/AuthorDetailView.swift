@@ -10,6 +10,7 @@ private let log = MMLogger(category: "AuthorDetailView")
 /// OpenLibrary bibliography entries the user doesn't yet own.
 struct AuthorDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
     let route: AuthorRoute
 
     @State private var detail: ApiAuthorDetail?
@@ -170,6 +171,18 @@ struct AuthorDetailView: View {
                                     ref: .posterThumbnail(titleId: book.id.protoValue),
                                     seed: book.name)
                                     .frame(width: 110, height: 165)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if bookCache.offlineTitleIds.contains(book.id.protoValue) {
+                                            Image(systemName: "arrow.down.circle.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(.white)
+                                                .padding(4)
+                                                .background(.black.opacity(0.55))
+                                                .clipShape(Circle())
+                                                .padding(6)
+                                                .accessibilityLabel("Downloaded")
+                                        }
+                                    }
                                 Text(book.name)
                                     .font(.caption)
                                     .lineLimit(2)

@@ -285,6 +285,16 @@ struct PlaylistDetailView: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                // A track's playback file lives with its album; if the
+                // album's cached, the track is available offline. Tiny
+                // green icon — same inline style as SearchView and
+                // SeasonsView's per-row indicator.
+                if audioCache.isDownloaded(titleId: entry.albumTitleId) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .accessibilityLabel("Downloaded")
+                }
                 if isCurrent {
                     Image(systemName: audio.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
                         .foregroundStyle(.tint)

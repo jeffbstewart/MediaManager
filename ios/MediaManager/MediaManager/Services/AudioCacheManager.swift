@@ -11,6 +11,13 @@ struct DownloadedAlbum: Codable, Identifiable, Sendable, Hashable {
     let titleId: Int64
     let name: String
     let artistName: String
+    /// Album-artist IDs captured at download time. Drives the
+    /// "any album by this artist is downloaded" indicator on the
+    /// Artists grid (`AudioCacheManager.offlineArtistIds`). Entries
+    /// persisted before this field existed deserialize as `[]` — the
+    /// indicator stays hidden for those until the album is re-downloaded,
+    /// which is acceptable degradation.
+    let artistIds: [Int64]
     let downloadedAt: Date
     var lastAccessedAt: Date
     /// Aggregate size of every track file on disk for this album.
@@ -20,6 +27,36 @@ struct DownloadedAlbum: Codable, Identifiable, Sendable, Hashable {
     /// Track ids that landed successfully. Drives the "downloaded?"
     /// dot in tracklist rows.
     let trackIds: [Int64]
+
+    init(
+        titleId: Int64, name: String, artistName: String,
+        artistIds: [Int64] = [],
+        downloadedAt: Date, lastAccessedAt: Date,
+        sizeBytes: Int64, trackIds: [Int64]
+    ) {
+        self.titleId = titleId
+        self.name = name
+        self.artistName = artistName
+        self.artistIds = artistIds
+        self.downloadedAt = downloadedAt
+        self.lastAccessedAt = lastAccessedAt
+        self.sizeBytes = sizeBytes
+        self.trackIds = trackIds
+    }
+
+    /// Decode with `artistIds` optional so the index keeps loading
+    /// after a TestFlight build with no such field on disk.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.titleId       = try c.decode(Int64.self, forKey: .titleId)
+        self.name          = try c.decode(String.self, forKey: .name)
+        self.artistName    = try c.decode(String.self, forKey: .artistName)
+        self.artistIds     = try c.decodeIfPresent([Int64].self, forKey: .artistIds) ?? []
+        self.downloadedAt  = try c.decode(Date.self, forKey: .downloadedAt)
+        self.lastAccessedAt = try c.decode(Date.self, forKey: .lastAccessedAt)
+        self.sizeBytes     = try c.decode(Int64.self, forKey: .sizeBytes)
+        self.trackIds      = try c.decode([Int64].self, forKey: .trackIds)
+    }
 }
 
 /// In-flight progress for a single album download. Aggregate over
@@ -161,6 +198,15 @@ final class AudioCacheManager {
     /// AlbumDetailView Download button's "Remove" affordance.
     func isDownloaded(titleId: Int64) -> Bool {
         downloads.contains { $0.titleId == titleId }
+    }
+
+    /// Set of album-artist IDs that have at least one album cached
+    /// locally. Drives the Artists grid's "any album by this artist
+    /// is offline" badge. Self-heals as albums are (re-)downloaded
+    /// — entries persisted before `artistIds` was tracked carry an
+    /// empty array and won't contribute until the album re-downloads.
+    var offlineArtistIds: Set<Int64> {
+        Set(downloads.flatMap { $0.artistIds })
     }
 
     /// True while a download is in flight for this album.
@@ -442,6 +488,7 @@ final class AudioCacheManager {
             titleId: titleId,
             name: detail.name,
             artistName: album.albumArtists.first?.name ?? "",
+            artistIds: album.albumArtists.map { $0.id.protoValue },
             downloadedAt: Date(),
             lastAccessedAt: Date(),
             sizeBytes: totalBytes,

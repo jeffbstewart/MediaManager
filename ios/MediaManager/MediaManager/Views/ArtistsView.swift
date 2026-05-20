@@ -137,6 +137,7 @@ struct ArtistsView: View {
 /// poster sits behind the headshot, so a missing headshot reveals
 /// the album, and a missing album reveals a synthesised swatch.
 private struct ArtistCard: View {
+    @Environment(AudioCacheManager.self) private var audioCache
     let artist: ApiArtistListItem
 
     var body: some View {
@@ -146,6 +147,22 @@ private struct ArtistCard: View {
                 // from the 2:3 movie/book poster aspect.
                 .frame(width: 130, height: 130)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(alignment: .bottomTrailing) {
+                    // "Any album by this artist is offline" — same
+                    // looser semantics the user accepted for TV
+                    // shows. Driven by the artistIds captured on
+                    // each DownloadedAlbum at cache-time.
+                    if audioCache.offlineArtistIds.contains(artist.id.protoValue) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(4)
+                            .background(.black.opacity(0.55))
+                            .clipShape(Circle())
+                            .padding(6)
+                            .accessibilityLabel("Downloaded")
+                    }
+                }
 
             Text(artist.name)
                 .font(.caption)

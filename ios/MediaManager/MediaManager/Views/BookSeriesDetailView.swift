@@ -9,6 +9,7 @@ private let log = MMLogger(category: "BookSeriesDetailView")
 /// wired into ImageService for ISBN lookups.
 struct BookSeriesDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(BookCacheManager.self) private var bookCache
     let route: BookSeriesRoute
 
     @State private var detail: ApiBookSeriesDetail?
@@ -130,6 +131,12 @@ struct BookSeriesDetailView: View {
                                     if let y = volume.firstPublicationYear {
                                         Text(String(y))
                                             .foregroundStyle(.secondary)
+                                    }
+                                    if bookCache.offlineTitleIds.contains(volume.titleId.protoValue) {
+                                        // Inline (list-row) variant.
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .foregroundStyle(.green)
+                                            .accessibilityLabel("Downloaded")
                                     }
                                 }
                                 .font(.caption)

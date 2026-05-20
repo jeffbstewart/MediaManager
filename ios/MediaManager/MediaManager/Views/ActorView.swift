@@ -120,6 +120,23 @@ struct ActorView: View {
         VStack(alignment: .center, spacing: 4) {
             CachedImage(ref: .posterThumbnail(titleId: owned.title.id.protoValue))
                 .frame(width: 120, height: 180)
+                .overlay(alignment: .bottomTrailing) {
+                    // Tile-variant corner badge (white-on-translucent
+                    // black). Same shape used by CollectionDetailView,
+                    // PosterCard, and ArtistDetailView so a downloaded
+                    // item reads the same anywhere it appears on a
+                    // poster tile.
+                    if dataModel.downloads.offlineTitleIds.contains(owned.title.id.protoValue) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(4)
+                            .background(.black.opacity(0.55))
+                            .clipShape(Circle())
+                            .padding(6)
+                            .accessibilityLabel("Downloaded")
+                    }
+                }
 
             Text(owned.title.name)
                 .font(.caption)

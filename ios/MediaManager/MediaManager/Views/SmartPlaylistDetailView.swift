@@ -10,6 +10,7 @@ private let log = MMLogger(category: "SmartPlaylistDetailView")
 struct SmartPlaylistDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
+    @Environment(AudioCacheManager.self) private var audioCache
     let route: SmartPlaylistRoute
 
     @State private var detail: ApiSmartPlaylistDetail?
@@ -142,6 +143,12 @@ struct SmartPlaylistDetailView: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                if audioCache.isDownloaded(titleId: entry.albumTitleId) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .accessibilityLabel("Downloaded")
+                }
                 if isCurrent {
                     Image(systemName: audio.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
                         .foregroundStyle(.tint)

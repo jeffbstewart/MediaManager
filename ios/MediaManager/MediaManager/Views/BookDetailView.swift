@@ -77,6 +77,22 @@ struct BookDetailView: View {
                 seed: detail.name,
                 cornerRadius: 8)
                 .frame(width: 130, height: 195)
+                .overlay(alignment: .bottomTrailing) {
+                    // Tile-variant badge — any cached edition (EPUB
+                    // or PDF) of this book counts as "available
+                    // offline". Per-edition status lives in
+                    // editionsBlock below for finer-grained control.
+                    if bookCache.offlineTitleIds.contains(detail.id.protoValue) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(4)
+                            .background(.black.opacity(0.55))
+                            .clipShape(Circle())
+                            .padding(6)
+                            .accessibilityLabel("Downloaded")
+                    }
+                }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(detail.name)

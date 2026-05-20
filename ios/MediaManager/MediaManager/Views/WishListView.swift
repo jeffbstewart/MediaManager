@@ -225,8 +225,14 @@ struct WishRow: View {
 }
 
 struct FulfilledWishRow: View {
+    @Environment(OnlineDataModel.self) private var dataModel
     let wish: ApiWish
     let onDismiss: () async -> Void
+
+    private var isDownloaded: Bool {
+        guard let titleId = wish.titleId else { return false }
+        return dataModel.downloads.offlineTitleIds.contains(titleId.protoValue)
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -253,10 +259,20 @@ struct FulfilledWishRow: View {
                 }
                 .font(.caption)
 
-                Text(wish.lifecycleStage?.displayLabel ?? "Ready to watch")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.green)
+                HStack(spacing: 6) {
+                    Text(wish.lifecycleStage?.displayLabel ?? "Ready to watch")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.green)
+                    if isDownloaded {
+                        // Inline (list-row) variant — same as SearchView
+                        // and SeasonsView's per-season indicator.
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                            .accessibilityLabel("Downloaded")
+                    }
+                }
             }
 
             Spacer()

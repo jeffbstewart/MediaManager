@@ -280,8 +280,21 @@ struct SearchView: View {
 }
 
 struct SearchResultRow: View {
+    @Environment(OnlineDataModel.self) private var dataModel
     let result: ApiSearchResult
     let apiClient: APIClient
+
+    /// True when this row points at a video/audio titleId that's
+    /// downloaded for offline. Tracks search to the row's albumTitleId
+    /// (the parent album is what's actually downloaded). Actor/artist
+    /// rows have no titleId — never downloaded.
+    private var isDownloaded: Bool {
+        let candidate: TitleID? = result.resultType == "track"
+            ? result.albumTitleId
+            : result.titleId
+        guard let id = candidate else { return false }
+        return dataModel.downloads.offlineTitleIds.contains(id.protoValue)
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -311,6 +324,16 @@ struct SearchResultRow: View {
                     if let count = result.titleCount {
                         Text("\(count) titles")
                             .foregroundStyle(.secondary)
+                    }
+                    if isDownloaded {
+                        // Inline (list-row) variant of the offline
+                        // indicator: green icon, no chrome — matches
+                        // the per-season indicator in SeasonsView.
+                        // The 40px row thumbnail is too small for the
+                        // corner-badge style used on poster tiles.
+                        Image(systemName: "arrow.down.circle.fill")
+                            .foregroundStyle(.green)
+                            .accessibilityLabel("Downloaded")
                     }
                 }
                 .font(.caption)
