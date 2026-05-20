@@ -100,6 +100,12 @@ struct BookSeriesDetailView: View {
         return nil
     }
 
+    private func volumeBulkStatus(_ volumes: [ApiBookSeriesVolume]) -> BulkDownloadStatus {
+        bookCache
+            .bulkStatus(forTitleIds: volumes.map { $0.titleId.protoValue })
+            .asBulkDownloadStatus
+    }
+
     @ViewBuilder
     private func volumesSection(_ volumes: [ApiBookSeriesVolume]) -> some View {
         if volumes.isEmpty {
@@ -108,6 +114,15 @@ struct BookSeriesDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Volumes on your shelf")
                     .font(.headline)
+
+                let status = volumeBulkStatus(volumes)
+                if status.completed < status.total {
+                    BulkDownloadActionRow(
+                        status: status,
+                        noun: "volume",
+                        action: { Task { await startBulkVolumeDownload(volumes) } })
+                }
+
                 ForEach(volumes) { volume in
                     NavigationLink(value: ApiTitle(
                         id: volume.titleId,
@@ -249,6 +264,50 @@ struct BookSeriesDetailView: View {
         } catch {
             log.warning("fillGaps failed: \(error.localizedDescription)")
             fillResult = "Couldn't fill gaps: \(error.localizedDescription)"
+        }
+    }
+
+    /// Bulk "Download all volumes" — same shape as AuthorDetailView's
+    /// bulk action. Fans out title-detail fetches, picks the first
+    /// downloadable EPUB per book, kicks off downloads. Concurrency
+    /// cap of 3.
+    private func startBulkVolumeDownload(_ volumes: [ApiBookSeriesVolume]) async {
+        let completed = bookCache.offlineTitleIds
+        let inFlight = Set(bookCache.activeDownloads.values.map { $0.titleId })
+        let needed = volumes.filter { v in
+            let id = v.titleId.protoValue
+            return !completed.contains(id) && !inFlight.contains(id)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            var iterator = needed.makeIterator()
+            for _ in 0..<3 {
+                guard let next = iterator.next() else { break }
+                group.addTask { await fetchAndStartVolume(next) }
+            }
+            for await _ in group {
+                if let next = iterator.next() {
+                    group.addTask { await fetchAndStartVolume(next) }
+                }
+            }
+        }
+    }
+
+    private func fetchAndStartVolume(_ volume: ApiBookSeriesVolume) async {
+        do {
+            let detail = try await dataModel.titleDetail(id: volume.titleId)
+            let editions = detail.book?.editions ?? []
+            guard let epub = editions.first(where: { $0.downloadable && $0.format == .ebookEpub }) else {
+                log.info("startBulkVolumeDownload: titleId=\(volume.titleId.protoValue) has no downloadable EPUB — skipped")
+                return
+            }
+            try bookCache.startDownload(
+                mediaItemId: epub.id,
+                titleId: volume.titleId.protoValue,
+                titleName: detail.name,
+                authorName: detail.authorName ?? "Unknown")
+        } catch {
+            log.warning("startBulkVolumeDownload: failed for titleId=\(volume.titleId.protoValue): \(error.localizedDescription)")
         }
     }
 }

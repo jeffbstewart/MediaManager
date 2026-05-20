@@ -166,6 +166,62 @@ final class DownloadManager {
         Set(entries.filter { $0.state == .completed }.map { $0.titleID })
     }
 
+    /// Aggregate progress across an explicit set of transcode IDs.
+    /// Used by container views (Collection grid, TV-series bulk
+    /// action) to render a single status row above the items list.
+    /// Pure-compute on `entries` — no extra state to keep coherent.
+    struct BulkStatus: Equatable {
+        let total: Int
+        let completed: Int
+        /// In-flight = queued + fetchingMetadata + downloading + paused.
+        /// Anything that's not terminal and not idle.
+        let inFlight: Int
+        let failed: Int
+        var pending: Int { max(0, total - completed - inFlight - failed) }
+        var fraction: Double {
+            total > 0 ? Double(completed) / Double(total) : 0
+        }
+        /// "Work remaining" — drives whether the action button shows.
+        var hasWork: Bool { pending > 0 || failed > 0 }
+    }
+
+    func bulkStatus(forTranscodes ids: [Int64]) -> BulkStatus {
+        guard !ids.isEmpty else {
+            return BulkStatus(total: 0, completed: 0, inFlight: 0, failed: 0)
+        }
+        var completed = 0, inFlight = 0, failed = 0
+        for id in ids {
+            switch state(for: id) {
+            case .completed: completed += 1
+            case .downloading, .fetchingMetadata, .queued, .paused: inFlight += 1
+            case .failed: failed += 1
+            default: break
+            }
+        }
+        return BulkStatus(total: ids.count, completed: completed,
+                          inFlight: inFlight, failed: failed)
+    }
+
+    /// TV-series variant: SeasonsView knows the expected episode
+    /// total (sum of season.episodeCount) but doesn't yet hold the
+    /// list of transcode IDs at first paint. Count by titleID so
+    /// the row's status reflects every download for the show even
+    /// if some episodes were started individually before the bulk
+    /// action fired.
+    func bulkStatus(forShowId showId: Int64, expectedTotal: Int) -> BulkStatus {
+        var c = 0, f = 0, x = 0
+        for entry in entries where entry.titleID == showId {
+            switch entry.state {
+            case .completed: c += 1
+            case .downloading, .fetchingMetadata, .queued, .paused: f += 1
+            case .failed: x += 1
+            default: break
+            }
+        }
+        return BulkStatus(total: expectedTotal, completed: c,
+                          inFlight: f, failed: x)
+    }
+
     /// True when there is at least one completed download for every
     /// episode number 1..expectedEpisodeCount of the given season.
     /// Compares the deduplicated set of completed episode numbers

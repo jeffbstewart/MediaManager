@@ -135,12 +135,30 @@ struct ArtistDetailView: View {
         }
     }
 
+    /// Status across every owned album for the bulk action row.
+    /// Recomputed on each render — AudioCacheManager's @Observable
+    /// state flips this automatically as downloads complete.
+    private func albumBulkStatus(_ albums: [ApiTitle]) -> BulkDownloadStatus {
+        audioCache
+            .bulkStatus(forAlbumTitleIds: albums.map { $0.id.protoValue })
+            .asBulkDownloadStatus
+    }
+
     @ViewBuilder
     private func ownedAlbumsSection(_ albums: [ApiTitle]) -> some View {
         if !albums.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Albums on your shelf")
                     .font(.headline)
+
+                let status = albumBulkStatus(albums)
+                if status.completed < status.total {
+                    BulkDownloadActionRow(
+                        status: status,
+                        noun: "album",
+                        action: { Task { await startBulkAlbumDownload(albums) } })
+                }
+
                 LazyVGrid(columns: albumColumns, spacing: 16) {
                     ForEach(albums) { album in
                         // Album navigation routes via ApiTitle (a future
@@ -324,6 +342,51 @@ struct ArtistDetailView: View {
         } catch {
             log.warning("toggleWish failed for \(mbid): \(error.localizedDescription)")
             wishOverrides[mbid] = currentlyWished
+        }
+    }
+
+    /// Fan out title-detail fetches for every owned album that
+    /// isn't already cached or downloading, then kick off the
+    /// per-album download. Concurrency-capped at 3 so a "Download
+    /// all albums" tap on an artist with a deep catalog doesn't
+    /// fire 40 parallel detail RPCs.
+    private func startBulkAlbumDownload(_ albums: [ApiTitle]) async {
+        let inFlight = Set(audioCache.activeDownloads.keys)
+        let completed = Set(audioCache.downloads.map { $0.titleId })
+        let needed = albums.filter { album in
+            let id = album.id.protoValue
+            return !completed.contains(id) && !inFlight.contains(id)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            var iterator = needed.makeIterator()
+            // Prime three workers, then refill as each finishes.
+            for _ in 0..<3 {
+                guard let next = iterator.next() else { break }
+                group.addTask { await fetchAndStartAlbum(next) }
+            }
+            for await _ in group {
+                if let next = iterator.next() {
+                    group.addTask { await fetchAndStartAlbum(next) }
+                }
+            }
+        }
+    }
+
+    /// Single-album worker: fetch detail, hand to AudioCacheManager.
+    /// Failures log + carry on; row's failed-state counter would
+    /// surface anything mid-download, but a detail-fetch miss here
+    /// just means that album doesn't show up in the bulk progress.
+    private func fetchAndStartAlbum(_ album: ApiTitle) async {
+        do {
+            let detail = try await dataModel.titleDetail(id: album.id)
+            guard let albumProto = detail.album else {
+                log.warning("startBulkAlbumDownload: titleId=\(album.id.protoValue) had no album payload — skipped")
+                return
+            }
+            audioCache.downloadAlbum(detail: detail, album: albumProto)
+        } catch {
+            log.warning("startBulkAlbumDownload: titleDetail failed for \(album.id.protoValue): \(error.localizedDescription)")
         }
     }
 }

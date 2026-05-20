@@ -36,6 +36,11 @@ struct DownloadedBook: Codable, Identifiable, Sendable, Hashable {
 /// matching `mediaItemId` is in `activeDownloads`.
 struct BookDownloadProgress: Sendable, Hashable {
     let mediaItemId: Int64
+    /// Book title the media item belongs to. Lets aggregate views
+    /// (Author / BookSeries "Download all books") answer
+    /// "is any download in flight for this title?" without an
+    /// external mediaItem → title map.
+    let titleId: Int64
     /// Bytes received so far. `totalBytes` is unknown until the manifest
     /// arrives, so the UI shows an indeterminate spinner during the
     /// brief window between download-start and the first manifest.
@@ -185,6 +190,59 @@ final class BookCacheManager {
         Set(downloads.map { $0.titleId })
     }
 
+    /// Aggregate progress across an explicit set of media-item IDs.
+    /// Used by container views (Author, BookSeries "Download all")
+    /// to drive a status row. Pure-compute on the existing state.
+    struct BulkBookStatus: Equatable {
+        let total: Int
+        let completed: Int
+        let inFlight: Int
+        let failed: Int
+        var pending: Int { max(0, total - completed - inFlight - failed) }
+        var fraction: Double {
+            total > 0 ? Double(completed) / Double(total) : 0
+        }
+        var hasWork: Bool { pending > 0 || failed > 0 }
+    }
+
+    /// Aggregate progress across a set of book *titles* (each may
+    /// carry multiple editions; the user typically downloads one).
+    /// A title counts as completed when any of its media items is
+    /// cached; in-flight when an active download exists for any of
+    /// its editions. Failures aren't reported here — per-edition
+    /// retry lives on BookDetailView and the bulk row's idle-state
+    /// label correctly says "Download remaining N books" the next
+    /// render.
+    func bulkStatus(forTitleIds ids: [Int64]) -> BulkBookStatus {
+        guard !ids.isEmpty else {
+            return BulkBookStatus(total: 0, completed: 0, inFlight: 0, failed: 0)
+        }
+        let completedSet = offlineTitleIds
+        let inFlightSet = Set(activeDownloads.values.map { $0.titleId })
+        var c = 0, f = 0
+        for id in ids {
+            if completedSet.contains(id) { c += 1 }
+            else if inFlightSet.contains(id) { f += 1 }
+        }
+        return BulkBookStatus(total: ids.count, completed: c, inFlight: f, failed: 0)
+    }
+
+    func bulkStatus(forMediaItems ids: [Int64]) -> BulkBookStatus {
+        guard !ids.isEmpty else {
+            return BulkBookStatus(total: 0, completed: 0, inFlight: 0, failed: 0)
+        }
+        let completedSet = Set(downloads.map { $0.mediaItemId })
+        let inFlightSet = Set(activeDownloads.keys)
+        let failedSet = Set(failedDownloads.keys)
+        var c = 0, f = 0, x = 0
+        for id in ids {
+            if completedSet.contains(id) { c += 1 }
+            else if inFlightSet.contains(id) { f += 1 }
+            else if failedSet.contains(id) { x += 1 }
+        }
+        return BulkBookStatus(total: ids.count, completed: c, inFlight: f, failed: x)
+    }
+
     /// Returns the on-disk URL for a downloaded book, or `nil` if
     /// the book isn't downloaded or the file went missing (e.g.
     /// user deleted via Files app).
@@ -246,7 +304,7 @@ final class BookCacheManager {
         }
 
         activeDownloads[mediaItemId] = BookDownloadProgress(
-            mediaItemId: mediaItemId, bytesReceived: 0, totalBytes: nil)
+            mediaItemId: mediaItemId, titleId: titleId, bytesReceived: 0, totalBytes: nil)
 
         let dest = booksDir.appendingPathComponent("\(mediaItemId).epub")
         // Wipe any leftover partial from a previous failed attempt so
@@ -354,8 +412,12 @@ final class BookCacheManager {
     private func recordProgress(
         mediaItemId: Int64, bytesReceived: Int64, totalBytes: Int64?
     ) {
+        // Preserve the original titleId from the active record set
+        // by startDownload — never overwrite it on a progress tick.
+        guard let existing = activeDownloads[mediaItemId] else { return }
         activeDownloads[mediaItemId] = BookDownloadProgress(
             mediaItemId: mediaItemId,
+            titleId: existing.titleId,
             bytesReceived: bytesReceived,
             totalBytes: totalBytes)
     }

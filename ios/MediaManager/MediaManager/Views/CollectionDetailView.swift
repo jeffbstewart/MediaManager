@@ -11,35 +11,69 @@ struct CollectionDetailView: View {
         GridItem(.adaptive(minimum: 110), spacing: 12)
     ]
 
+    /// Transcode IDs eligible for bulk download from this collection.
+    /// Owned + playable + has a transcodeId. ApiCollectionItem doesn't
+    /// carry the `forMobileAvailable` flag the per-title detail page
+    /// uses, so individual items with no mobile transcode may
+    /// fail-fast in DownloadManager — the row's failed-state surfaces
+    /// that.
+    private var bulkTranscodeIds: [Int64] {
+        guard let detail else { return [] }
+        return detail.items.compactMap { item in
+            guard item.owned, item.playable, let tcId = item.transcodeId
+            else { return nil }
+            return tcId.protoValue
+        }
+    }
+
+    private var showBulkDownload: Bool {
+        dataModel.capabilities.contains("downloads") && !bulkTranscodeIds.isEmpty
+    }
+
     var body: some View {
         Group {
             if loading {
                 ProgressView("Loading...")
             } else if let detail {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(detail.items) { item in
-                            if item.owned, let titleId = item.titleId {
-                                NavigationLink(value: ApiTitle(
-                                    id: titleId, name: item.name,
-                                    mediaType: .movie, year: item.year,
-                                    description: nil,
-                                    backdropUrl: nil, contentRating: item.contentRating,
-                                    popularity: nil, quality: item.quality,
-                                    playable: item.playable, transcodeId: item.transcodeId,
-                                    tmdbId: item.tmdbMovieId, tmdbCollectionId: nil,
-                                    tmdbCollectionName: nil, familyMembers: nil,
-                                    forMobileAvailable: nil
-                                )) {
+                    VStack(spacing: 16) {
+                        if showBulkDownload {
+                            BulkDownloadActionRow(
+                                status: dataModel.downloads
+                                    .bulkStatus(forTranscodes: bulkTranscodeIds)
+                                    .asBulkDownloadStatus,
+                                noun: "movie",
+                                pluralNoun: "movies",
+                                action: { startBulkDownload(detail) })
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+                        }
+
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(detail.items) { item in
+                                if item.owned, let titleId = item.titleId {
+                                    NavigationLink(value: ApiTitle(
+                                        id: titleId, name: item.name,
+                                        mediaType: .movie, year: item.year,
+                                        description: nil,
+                                        backdropUrl: nil, contentRating: item.contentRating,
+                                        popularity: nil, quality: item.quality,
+                                        playable: item.playable, transcodeId: item.transcodeId,
+                                        tmdbId: item.tmdbMovieId, tmdbCollectionId: nil,
+                                        tmdbCollectionName: nil, familyMembers: nil,
+                                        forMobileAvailable: nil
+                                    )) {
+                                        collectionItemCard(item)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
                                     collectionItemCard(item)
                                 }
-                                .buttonStyle(.plain)
-                            } else {
-                                collectionItemCard(item)
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding()
+                    .padding(.bottom)
                 }
             } else {
                 ContentUnavailableView("Collection not found", systemImage: "square.stack")
@@ -49,6 +83,27 @@ struct CollectionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadDetail()
+        }
+    }
+
+    private func startBulkDownload(_ detail: ApiCollectionDetail) {
+        for item in detail.items {
+            guard item.owned, item.playable,
+                  let tcId = item.transcodeId,
+                  let titleId = item.titleId
+            else { continue }
+            // Skip whatever's already downloaded / in-flight — same
+            // shape EpisodesView.downloadSeason uses.
+            guard dataModel.downloads.state(for: tcId.protoValue) == .unknown
+            else { continue }
+            dataModel.downloads.startDownload(
+                transcodeId: tcId.protoValue,
+                titleId: titleId.protoValue,
+                titleName: item.name,
+                quality: .unknown,
+                year: Int32(item.year ?? 0),
+                mediaType: .movie,
+                contentRating: .unknown)
         }
     }
 

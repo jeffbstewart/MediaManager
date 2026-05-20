@@ -209,6 +209,34 @@ final class AudioCacheManager {
         Set(downloads.flatMap { $0.artistIds })
     }
 
+    /// Aggregate progress across an explicit set of album title IDs.
+    /// Used by container views (ArtistDetail "Download all albums")
+    /// to drive a status row. Pure-compute on the existing state.
+    struct BulkAlbumStatus: Equatable {
+        let total: Int
+        let completed: Int
+        let inFlight: Int
+        var pending: Int { max(0, total - completed - inFlight) }
+        var fraction: Double {
+            total > 0 ? Double(completed) / Double(total) : 0
+        }
+        var hasWork: Bool { pending > 0 }
+    }
+
+    func bulkStatus(forAlbumTitleIds ids: [Int64]) -> BulkAlbumStatus {
+        guard !ids.isEmpty else {
+            return BulkAlbumStatus(total: 0, completed: 0, inFlight: 0)
+        }
+        let completedSet = Set(downloads.map { $0.titleId })
+        let inFlightSet = Set(activeDownloads.keys)
+        var c = 0, f = 0
+        for id in ids {
+            if completedSet.contains(id) { c += 1 }
+            else if inFlightSet.contains(id) { f += 1 }
+        }
+        return BulkAlbumStatus(total: ids.count, completed: c, inFlight: f)
+    }
+
     /// True while a download is in flight for this album.
     func isDownloading(titleId: Int64) -> Bool {
         activeDownloads[titleId] != nil
