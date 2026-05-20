@@ -71,16 +71,48 @@ final class OfflineDataModel: DataModel {
     }
 
     func homeFeed() async throws -> ApiHomeFeed {
-        // Synthesize a minimal home feed for offline browsing.
-        // Music landing page reads `recentlyAddedAlbums`; everything
-        // else (movie carousels, resume reading, missing seasons)
-        // requires the server. We populate the audio carousel from
-        // downloaded albums sorted by downloadedAt descending; the
-        // sections that have no offline content render empty.
+        // Mirror the online home feed against cached content.
+        // Three "Recently Downloaded" carousels (video / books /
+        // albums) plus a resume-watching list reconstructed from
+        // the video cache. Missing-seasons / resume-reading /
+        // resume-listening are server-side state we don't replicate
+        // offline — those sections render empty.
         var proto = MMHomeFeedResponse()
+
+        // Audio carousel — sort by the existing downloadedAt
+        // timestamp on DownloadedAlbum.
         let albums = cachedAudioAlbums()
             .sorted { $0.0.downloadedAt > $1.0.downloadedAt }
         proto.recentlyAddedAlbums = albums.map { $0.1.proto.title }
+
+        // Video carousel — use DownloadManager.entries' sequence
+        // (monotonic per download) as a recency proxy, then dedup
+        // by titleId so a 20-episode TV show shows up once at the
+        // most-recent episode's slot, not 20 times.
+        var seenVideoTitles = Set<Int64>()
+        var orderedVideoTitles: [Int64] = []
+        for entry in downloads.entries.sorted(by: { $0.sequence > $1.sequence }) {
+            guard entry.state == .completed else { continue }
+            if seenVideoTitles.insert(entry.titleID).inserted {
+                orderedVideoTitles.append(entry.titleID)
+            }
+        }
+        // Map back to MMTitle protos via the cached MMTitleDetail.
+        let videoByTitleId = Dictionary(uniqueKeysWithValues:
+            cachedVideoTitles().map { ($0.id.protoValue, $0.proto.title) })
+        proto.recentlyAdded = orderedVideoTitles
+            .compactMap { videoByTitleId[$0] }
+
+        // Books carousel — sort by DownloadedBook.downloadedAt.
+        if let bookCache = AppServices.shared.bookCache {
+            let books = bookCache.downloads.sorted { $0.downloadedAt > $1.downloadedAt }
+            var seenBooks = Set<Int64>()
+            proto.recentlyAddedBooks = books.compactMap { book -> MMTitle? in
+                guard seenBooks.insert(book.titleId).inserted else { return nil }
+                return bookCache.loadCachedTitleDetail(titleId: book.titleId)?.proto.title
+            }
+        }
+
         return ApiHomeFeed(proto: proto)
     }
 
