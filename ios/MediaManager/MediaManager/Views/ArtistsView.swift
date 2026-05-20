@@ -13,6 +13,11 @@ struct ArtistsView: View {
 
     @State private var artists: [ApiArtistListItem] = []
     @State private var page = 1
+    /// Re-entrancy guard. `.onAppear` on the trigger ProgressView
+    /// can fire multiple times if the user scrolls the trigger in
+    /// and out of the viewport, and we don't want two concurrent
+    /// `loadPage()` calls racing on the same page number.
+    @State private var isLoadingMore = false
     @State private var totalPages = 0
     /// Same explicit-phase model as AuthorsView — the (loading: Bool,
     /// items: []) pair used to flash the empty / failure states for
@@ -57,7 +62,22 @@ struct ArtistsView: View {
 
                         if page < totalPages {
                             ProgressView()
-                                .task { await loadMore() }
+                                // `.onAppear` instead of `.task`: the
+                                // trigger ProgressView keeps the same
+                                // SwiftUI identity at the end of the
+                                // grid across page loads, so `.task`
+                                // only ever fires on its very first
+                                // mount and subsequent pages never
+                                // auto-load. `.onAppear` fires every
+                                // time LazyVGrid materialises this
+                                // cell, including re-appearance after
+                                // a previous load brought new items
+                                // in. The isLoadingMore guard keeps
+                                // overlapping triggers from racing.
+                                .onAppear {
+                                    guard !isLoadingMore else { return }
+                                    Task { await loadMore() }
+                                }
                         }
                     }
                     .padding()
@@ -103,6 +123,7 @@ struct ArtistsView: View {
                 page: page,
                 sort: sort,
                 query: query.isEmpty ? nil : query)
+            log.info("loaded artists page=\(page) got=\(response.artists.count) totalPages=\(response.totalPages)")
             artists.append(contentsOf: response.artists)
             totalPages = response.totalPages
             phase = artists.isEmpty ? .empty : .loaded
@@ -127,6 +148,9 @@ struct ArtistsView: View {
     }
 
     private func loadMore() async {
+        guard !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
         page += 1
         await loadPage()
     }

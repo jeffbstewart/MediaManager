@@ -11,6 +11,9 @@ struct CatalogView: View {
     @State private var totalPages = 0
     @State private var loading = true
     @State private var sort = "popularity"
+    /// Re-entrancy guard for the infinite-scroll trigger — see
+    /// ArtistsView for the rationale.
+    @State private var isLoadingMore = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 110), spacing: 12)
@@ -32,8 +35,9 @@ struct CatalogView: View {
 
                         if page < totalPages {
                             ProgressView()
-                                .task {
-                                    await loadMore()
+                                .onAppear {
+                                    guard !isLoadingMore else { return }
+                                    Task { await loadMore() }
                                 }
                         }
                     }
@@ -84,6 +88,9 @@ struct CatalogView: View {
     }
 
     private func loadMore() async {
+        guard !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
         page += 1
         await loadPage()
     }

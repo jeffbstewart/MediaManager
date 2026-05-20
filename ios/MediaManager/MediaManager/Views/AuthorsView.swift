@@ -12,6 +12,9 @@ struct AuthorsView: View {
     @State private var authors: [ApiAuthorListItem] = []
     @State private var page = 1
     @State private var totalPages = 0
+    /// Re-entrancy guard for the infinite-scroll trigger — see
+    /// ArtistsView for the rationale.
+    @State private var isLoadingMore = false
     /// Three explicit phases — the previous (loading: Bool, authors: [])
     /// pair allowed a sliver where loading was momentarily false with an
     /// empty list and the body briefly painted the "No authors yet"
@@ -66,7 +69,10 @@ struct AuthorsView: View {
 
                         if page < totalPages {
                             ProgressView()
-                                .task { await loadMore() }
+                                .onAppear {
+                                    guard !isLoadingMore else { return }
+                                    Task { await loadMore() }
+                                }
                         }
                     }
                     .padding()
@@ -168,6 +174,9 @@ struct AuthorsView: View {
     }
 
     private func loadMore() async {
+        guard !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
         page += 1
         await loadPage()
     }
