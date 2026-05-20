@@ -32,9 +32,25 @@ actor LogStreamer {
     /// claims the singleton AsyncStream's only consumer iterator.
     private var iterator: IteratorBox?
 
+    /// Called when the server rejects the stream's Bearer token with
+    /// UNAUTHENTICATED. Wired by AuthManager to `performTokenRefresh()`
+    /// so a long-running app that's been suspended past its access-token
+    /// TTL self-heals without the user noticing. Throttled to one call
+    /// per 30 seconds; the retry-loop's exponential backoff handles the
+    /// rest.
+    private var onAuthFailed: (@Sendable () async -> Void)?
+    private var lastAuthRefreshAt: Date = .distantPast
+
     init(grpcClient: GrpcClient, identity: Identity) {
         self.grpcClient = grpcClient
         self.identity = identity
+    }
+
+    /// Register the callback that AuthManager uses to refresh the
+    /// access token when a stream connection is rejected with
+    /// UNAUTHENTICATED. Called once from AuthManager.init.
+    func setAuthFailedHandler(_ handler: @escaping @Sendable () async -> Void) {
+        self.onAuthFailed = handler
     }
 
     /// Start the drain loop. No-op if already running.
@@ -71,6 +87,19 @@ actor LogStreamer {
             } catch {
                 attempt = min(attempt + 1, 5)
                 log.warning("stream session failed (attempt #\(attempt)): \(error.localizedDescription)")
+                // If the server kicked us out for an expired / invalid
+                // token, nudge AuthManager to rotate before the next
+                // reconnect — without this the retry loop spins
+                // forever on UNAUTHENTICATED and Binnacle goes silent.
+                // Throttle to one nudge per 30s so a stuck refresh
+                // path doesn't get hammered.
+                if isUnauthenticatedError(error),
+                   let handler = onAuthFailed,
+                   Date().timeIntervalSince(lastAuthRefreshAt) > 30 {
+                    lastAuthRefreshAt = Date()
+                    log.warning("stream session rejected with UNAUTHENTICATED — requesting token refresh")
+                    Task { await handler() }
+                }
             }
             // Exponential backoff: 2s → 4s → 8s → 16s → 32s → 60s, with up
             // to 500ms of jitter so reconnect storms don't synchronise across
@@ -94,6 +123,15 @@ actor LogStreamer {
 
     private func nextRecord() async -> PendingLogRecord? {
         await iterator?.next()
+    }
+
+    /// Match swift-grpc's UNAUTHENTICATED across both the typed
+    /// `RPCError.code` and the localized-description fallback some
+    /// transport wrappers produce.
+    private func isUnauthenticatedError(_ error: Error) -> Bool {
+        if let rpc = error as? RPCError, rpc.code == .unauthenticated { return true }
+        let s = error.localizedDescription.lowercased()
+        return s.contains("unauthenticated")
     }
 
     private func buildRecord(_ pending: PendingLogRecord) -> MMLogRecord {

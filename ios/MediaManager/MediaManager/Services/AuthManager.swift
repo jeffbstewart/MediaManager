@@ -78,6 +78,16 @@ final class AuthManager {
         self.logStreamer = LogStreamer(grpcClient: grpcClient, identity: .current())
         restoreLegalDocs()
         restoreSession()
+        // Let LogStreamer ask us to rotate the access token when the
+        // server rejects its reconnect attempts with UNAUTHENTICATED.
+        // Long-suspended apps' tokens can expire past their schedule
+        // refresh; without this the log stream stays dead even though
+        // a refresh would heal it.
+        Task { [weak self] in
+            await self?.logStreamer.setAuthFailedHandler { [weak self] in
+                await self?.performTokenRefresh()
+            }
+        }
     }
 
     private func restoreSession() {
