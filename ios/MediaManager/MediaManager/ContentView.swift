@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, offlineLibrary, profile
+    case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
@@ -30,23 +30,30 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                if !isOffline {
-                    Label("Home", systemImage: "house")
-                        .tag(Tab.home)
+                // Home + the catalog tabs (Movies / TV / Books / Music /
+                // Collections / Tags) are visible online AND offline —
+                // OfflineDataModel surfaces just the downloaded subset
+                // when the server isn't reachable. Family / Cameras /
+                // Live TV stay online-only because they have no offline
+                // mode (personal videos rarely cached; cameras + Live
+                // TV are streaming-only).
+                Label("Home", systemImage: "house")
+                    .tag(Tab.home)
 
-                    Section("Content") {
-                        Label("Movies", systemImage: "film")
-                            .tag(Tab.movies)
-                        Label("TV Shows", systemImage: "tv")
-                            .tag(Tab.tvShows)
-                        Label("Books", systemImage: "books.vertical")
-                            .tag(Tab.books)
-                        Label("Music", systemImage: "music.note")
-                            .tag(Tab.music)
-                        Label("Collections", systemImage: "square.stack")
-                            .tag(Tab.collections)
-                        Label("Tags", systemImage: "tag")
-                            .tag(Tab.tags)
+                Section("Content") {
+                    Label("Movies", systemImage: "film")
+                        .tag(Tab.movies)
+                    Label("TV Shows", systemImage: "tv")
+                        .tag(Tab.tvShows)
+                    Label("Books", systemImage: "books.vertical")
+                        .tag(Tab.books)
+                    Label("Music", systemImage: "music.note")
+                        .tag(Tab.music)
+                    Label("Collections", systemImage: "square.stack")
+                        .tag(Tab.collections)
+                    Label("Tags", systemImage: "tag")
+                        .tag(Tab.tags)
+                    if !isOffline {
                         Label("Family", systemImage: "video")
                             .tag(Tab.family)
                         Label("Cameras", systemImage: "web.camera")
@@ -54,7 +61,9 @@ struct ContentView: View {
                         Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
                             .tag(Tab.liveTv)
                     }
+                }
 
+                if !isOffline {
                     if dataModel.userInfo?.isAdmin == true {
                         Section("Catalog") {
                             Label("Add Title", systemImage: "plus.rectangle")
@@ -101,18 +110,6 @@ struct ContentView: View {
                     }
                 }
 
-                // Offline-mode music navigation. Surfaces the Music
-                // tab + its sub-views (Browse Artists / Playlist
-                // detail / Album detail) when the user has any audio
-                // downloaded. The data model fills these from the
-                // local cache; views show only what's on disk.
-                if isOffline && (!audioCache.downloads.isEmpty || !audioCache.playlistDownloads.isEmpty) {
-                    Section("Music") {
-                        Label("Music", systemImage: "music.note")
-                            .tag(Tab.music)
-                    }
-                }
-
                 Section {
                     if !isOffline {
                         Label("Search", systemImage: "magnifyingglass")
@@ -134,12 +131,7 @@ struct ContentView: View {
                         .tag(Tab.wishList)
                     }
 
-                    if isOffline && (dataModel.downloads.hasCompletedDownloads || !bookCache.downloads.isEmpty) {
-                    Label("Library", systemImage: "books.vertical")
-                        .tag(Tab.offlineLibrary)
-                }
-
-                if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
+                    if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
                         HStack {
                             Label("Downloads", systemImage: "arrow.down.circle")
                             if dataModel.downloads.activeDownloadCount > 0 {
@@ -158,11 +150,9 @@ struct ContentView: View {
                     }
                 }
 
-                if !isOffline {
-                    Section {
-                        Label("Profile", systemImage: "person.circle")
-                            .tag(Tab.profile)
-                    }
+                Section {
+                    Label("Profile", systemImage: "person.circle")
+                        .tag(Tab.profile)
                 }
             }
             .navigationTitle("Household Disc Keeper")
@@ -262,14 +252,8 @@ struct ContentView: View {
                         WishListView()
                     case .downloads:
                         DownloadsView()
-                    case .offlineLibrary:
-                        OfflineLibraryView()
                     case nil:
-                        if isOffline && dataModel.downloads.hasCompletedDownloads {
-                            DownloadsView()
-                        } else {
-                            HomeView()
-                        }
+                        HomeView()
                     }
                 }
                 .navigationDestination(for: ApiTitle.self) { title in
@@ -339,15 +323,18 @@ struct ContentView: View {
             }
         }
         .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
-            // Tab-reset side effect when offline mode flips ON. Was
-            // inlined in the old Go Offline button; now that the
-            // toggle lives in ProfileView we react to the property
-            // change instead. Without this the user can leave a tab
-            // selected (e.g. Live TV) that has no offline data.
+            // Reset to Home when offline mode flips ON, but only if
+            // the user is on a tab that genuinely has no offline
+            // counterpart (Family, Cameras, Live TV, Search, Wish
+            // List, anything admin). Movies / TV / Books / Music /
+            // Collections / Tags / Profile all work offline so the
+            // user doesn't need to be evicted from them. Without
+            // this reset, picking Live TV while online and then
+            // flipping offline leaves the user staring at empty
+            // chrome.
             guard newValue else { return }
             let onlineOnlyTabs: Set<Tab> = [
-                .home, .movies, .tvShows, .collections, .tags, .family,
-                .cameras, .liveTv, .search, .wishList, .profile,
+                .family, .cameras, .liveTv, .search, .wishList,
                 .adminAddTitle, .adminAmazonImport, .adminExpand,
                 .adminValuation, .adminReport, .adminFamilyMembers,
                 .adminLiveTvSettings, .adminScan, .adminStatus, .adminCameras,
@@ -356,7 +343,7 @@ struct ContentView: View {
                 .adminUnmatched, .adminSettings
             ]
             if let tab = selectedTab, onlineOnlyTabs.contains(tab) {
-                selectedTab = .downloads
+                selectedTab = .home
             }
             navigationPath = NavigationPath()
         }
