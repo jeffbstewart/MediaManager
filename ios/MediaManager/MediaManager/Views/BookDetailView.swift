@@ -239,6 +239,12 @@ struct BookDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Button {
                     do {
+                        // Persist the parent ApiTitleDetail proto +
+                        // pin cover/author headshot so the book reads
+                        // offline. Idempotent — every retry / extra
+                        // download of this same title rewrites the
+                        // same .detail.pb.
+                        bookCache.cacheTitleDetail(detail)
                         try bookCache.startDownload(
                             mediaItemId: mediaItemId,
                             titleId: detail.id.protoValue,

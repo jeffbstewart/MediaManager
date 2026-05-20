@@ -337,6 +337,72 @@ final class DownloadManager {
         }
     }
 
+    // MARK: - TV metadata cache (offline browse parity)
+    //
+    // For each TV title the user touches, we persist the parent's
+    // MMTitleDetail (via .detail.pb above) plus per-season MMSeason
+    // and per-episode MMEpisode protos under tv/<titleId>/. That
+    // gives SeasonsView and EpisodesView the same data offline that
+    // they receive from grpcClient.seasons() / .episodes() online.
+    // Cached only for shows the user actually downloads from — we
+    // don't speculatively prefetch metadata for shows they're only
+    // browsing.
+
+    private func tvMetadataDir(for titleId: Int64) -> URL {
+        store.downloadsDir
+            .appendingPathComponent("tv", isDirectory: true)
+            .appendingPathComponent("\(titleId)", isDirectory: true)
+    }
+
+    /// Persist a season's metadata so SeasonsView can render it
+    /// offline. Called by SeasonsView before kicking off downloads
+    /// and by EpisodesView when starting any per-episode download.
+    func cacheSeasonMetadata(titleId: TitleID, season: ApiSeason) {
+        let dir = tvMetadataDir(for: titleId.protoValue)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent("season-\(season.seasonNumber).pb")
+        guard let data = try? season.proto.serializedData() else { return }
+        try? data.write(to: path)
+    }
+
+    /// Persist an episode's metadata. Called whenever an episode
+    /// download starts (single or bulk).
+    func cacheEpisodeMetadata(titleId: TitleID, episode: ApiEpisode) {
+        let dir = tvMetadataDir(for: titleId.protoValue)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent("episode-\(episode.seasonNumber)x\(episode.episodeNumber).pb")
+        guard let data = try? episode.proto.serializedData() else { return }
+        try? data.write(to: path)
+    }
+
+    /// All cached seasons for a TV title, sorted by season number.
+    /// Empty when the user has never downloaded anything from this
+    /// show — OfflineDataModel falls back to throwing in that case
+    /// so the user just doesn't see the show in the offline list.
+    func loadCachedSeasons(for titleId: TitleID) -> [ApiSeason] {
+        let dir = tvMetadataDir(for: titleId.protoValue)
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
+        return urls.compactMap { url -> ApiSeason? in
+            guard url.lastPathComponent.hasPrefix("season-") else { return nil }
+            guard let data = try? Data(contentsOf: url),
+                  let proto = try? MMSeason(serializedData: data) else { return nil }
+            return ApiSeason(proto: proto)
+        }.sorted { $0.seasonNumber < $1.seasonNumber }
+    }
+
+    /// Cached episodes for one season, sorted by episode number.
+    func loadCachedEpisodes(for titleId: TitleID, season: Int) -> [ApiEpisode] {
+        let dir = tvMetadataDir(for: titleId.protoValue)
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
+        let prefix = "episode-\(season)x"
+        return urls.compactMap { url -> ApiEpisode? in
+            guard url.lastPathComponent.hasPrefix(prefix) else { return nil }
+            guard let data = try? Data(contentsOf: url),
+                  let proto = try? MMEpisode(serializedData: data) else { return nil }
+            return ApiEpisode(proto: proto)
+        }.sorted { $0.episodeNumber < $1.episodeNumber }
+    }
+
     /// Load cached title detail protobuf for offline browse.
     func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
         // Find any download entry for this title that has a cached detail

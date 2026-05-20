@@ -86,8 +86,16 @@ struct EpisodesView: View {
     }
 
     private func downloadSeason() {
+        // Persist the season + episode protos so SeasonsView /
+        // EpisodesView can render this season's content offline
+        // (names, durations, watched %, etc.). Called once before
+        // the loop for the season; per-episode inside it.
+        dataModel.downloads.cacheSeasonMetadata(
+            titleId: route.titleId, season: route.season)
         for ep in downloadableEpisodes {
             guard let tcId = ep.transcodeId else { continue }
+            dataModel.downloads.cacheEpisodeMetadata(
+                titleId: route.titleId, episode: ep)
             dataModel.downloads.startDownload(
                 transcodeId: tcId.protoValue,
                 titleId: route.titleId.protoValue,
@@ -126,6 +134,17 @@ struct EpisodesView: View {
     private func loadEpisodes() async {
         loading = true
         episodes = (try? await dataModel.episodes(titleId: route.titleId, season: route.season.seasonNumber)) ?? []
+        // Cache the season's metadata at navigation time so any
+        // subsequent per-episode download (from EpisodeRow's button)
+        // produces a complete offline browse surface for this season,
+        // without EpisodeRow having to plumb the season proto through.
+        // OfflineDataModel.seasons() filters to seasons with at least
+        // one downloaded episode, so caching here doesn't surface
+        // seasons the user only browsed.
+        if !isOffline {
+            dataModel.downloads.cacheSeasonMetadata(
+                titleId: route.titleId, season: route.season)
+        }
         loading = false
     }
 }
@@ -236,6 +255,13 @@ struct EpisodeRow: View {
                 .font(.body)
         } else if episode.forMobileAvailable == true {
             Button {
+                // Cache the episode's metadata before kicking off the
+                // download so the offline browse surfaces have a full
+                // record (name, runtime, hasSubtitles, etc.) even
+                // before the bytes land. Season metadata is cached
+                // higher up in EpisodesView.loadEpisodes().
+                dataModel.downloads.cacheEpisodeMetadata(
+                    titleId: titleId, episode: episode)
                 dataModel.downloads.startDownload(
                     transcodeId: transcodeId.protoValue,
                     titleId: titleId.protoValue,

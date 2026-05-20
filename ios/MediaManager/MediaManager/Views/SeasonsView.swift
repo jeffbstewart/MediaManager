@@ -143,18 +143,26 @@ struct SeasonsView: View {
         preparingBulkDownload = true
         defer { preparingBulkDownload = false }
 
-        await withTaskGroup(of: [ApiEpisode].self) { group in
+        // Per-worker pair: the season we fanned out + the episode
+        // list we resolved for it. Carries the season proto across
+        // so we can persist season metadata alongside the episodes.
+        typealias Fetched = (season: ApiSeason, episodes: [ApiEpisode])
+
+        await withTaskGroup(of: Fetched.self) { group in
             var iterator = seasons.makeIterator()
-            // Worker that returns the season's episode list.
-            func worker(_ season: ApiSeason) async -> [ApiEpisode] {
-                (try? await dataModel.episodes(titleId: route.titleId, season: season.seasonNumber)) ?? []
+            let titleId = route.titleId
+            // Worker captures dataModel + titleId by value so the
+            // closure is Sendable across task isolation.
+            func worker(_ season: ApiSeason) async -> Fetched {
+                let eps = (try? await dataModel.episodes(titleId: titleId, season: season.seasonNumber)) ?? []
+                return (season, eps)
             }
             for _ in 0..<3 {
                 guard let next = iterator.next() else { break }
                 group.addTask { await worker(next) }
             }
-            for await episodes in group {
-                startDownloadsForEpisodes(episodes)
+            for await pair in group {
+                startDownloadsForEpisodes(pair.episodes, season: pair.season)
                 if let next = iterator.next() {
                     group.addTask { await worker(next) }
                 }
@@ -162,10 +170,14 @@ struct SeasonsView: View {
         }
     }
 
-    private func startDownloadsForEpisodes(_ episodes: [ApiEpisode]) {
+    private func startDownloadsForEpisodes(_ episodes: [ApiEpisode], season: ApiSeason) {
+        // Persist the season + episode metadata as we go so the
+        // offline browse surfaces match what the user saw online.
+        dataModel.downloads.cacheSeasonMetadata(titleId: route.titleId, season: season)
         for ep in episodes {
             guard ep.forMobileAvailable == true, let tcId = ep.transcodeId else { continue }
             guard dataModel.downloads.state(for: tcId.protoValue) == .unknown else { continue }
+            dataModel.downloads.cacheEpisodeMetadata(titleId: route.titleId, episode: ep)
             dataModel.downloads.startDownload(
                 transcodeId: tcId.protoValue,
                 titleId: route.titleId.protoValue,

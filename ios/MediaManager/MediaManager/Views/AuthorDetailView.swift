@@ -353,6 +353,10 @@ struct AuthorDetailView: View {
                 log.info("startBulkBookDownload: titleId=\(book.id.protoValue) has no downloadable EPUB — skipped")
                 return
             }
+            // Persist the title detail before kicking off so the
+            // bulk-downloaded book reads offline without a follow-up
+            // tap on BookDetailView (which would re-fetch online).
+            bookCache.cacheTitleDetail(detail)
             try bookCache.startDownload(
                 mediaItemId: epub.id,
                 titleId: book.id.protoValue,

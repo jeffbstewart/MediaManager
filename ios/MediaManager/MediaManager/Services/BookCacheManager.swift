@@ -180,6 +180,51 @@ final class BookCacheManager {
         downloads.contains { $0.mediaItemId == mediaItemId }
     }
 
+    // MARK: - Title-detail metadata cache (offline browse parity)
+    //
+    // Each downloaded book gets its parent ApiTitleDetail proto
+    // persisted at `<booksDir>/<titleId>.detail.pb`. BookDetailView,
+    // AuthorDetailView, and BookSeriesDetailView all answer from
+    // this cache when offline. Author headshots are pinned at the
+    // same moment so the hero art renders without network.
+
+    private func bookDetailPath(titleId: Int64) -> URL {
+        booksDir.appendingPathComponent("\(titleId).detail.pb")
+    }
+
+    /// Persist an ApiTitleDetail proto for offline browse. Callers
+    /// invoke this when a book download starts; the detail proto
+    /// is in hand at that moment in BookDetailView /
+    /// AuthorDetailView / BookSeriesDetailView. Idempotent — safe
+    /// to call repeatedly.
+    func cacheTitleDetail(_ detail: ApiTitleDetail) {
+        let path = bookDetailPath(titleId: detail.id.protoValue)
+        guard let data = try? detail.proto.serializedData() else { return }
+        try? data.write(to: path)
+
+        // Pin the cover (already used by every book surface) and
+        // author headshot so AuthorDetailView's hero loads offline.
+        Task { [titleId = detail.id.protoValue] in
+            let cache = ImageDiskCache.shared
+            await cache.pin(ref: .posterThumbnail(titleId: titleId))
+            await cache.pin(ref: .posterFull(titleId: titleId))
+            for author in detail.book?.authors ?? [] where author.hasHeadshot {
+                await cache.pin(ref: .authorHeadshot(authorId: author.id.protoValue))
+            }
+        }
+    }
+
+    /// Load a cached `ApiTitleDetail` for offline use. `nil` if
+    /// the book was never downloaded under this build (the v2
+    /// migration wiped pre-existing book caches, so all current
+    /// downloads carry a detail.pb).
+    func loadCachedTitleDetail(titleId: Int64) -> ApiTitleDetail? {
+        let path = bookDetailPath(titleId: titleId)
+        guard let data = try? Data(contentsOf: path),
+              let proto = try? MMTitleDetail(serializedData: data) else { return nil }
+        return ApiTitleDetail(proto: proto)
+    }
+
     /// Set of catalog title IDs for which at least one media item
     /// (EPUB / PDF) is cached locally. Lets list and grid views
     /// answer "is this book on the device?" without iterating
