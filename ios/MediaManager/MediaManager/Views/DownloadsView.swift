@@ -437,10 +437,24 @@ struct DownloadsView: View {
                         Text("Preparing...")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    case .downloading:
-                        Text(downloadProgressText(item))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    case .downloading, .fetchingMetadata:
+                        // Auto-retry in progress writes a "Retrying
+                        // in Ns — <last error>" message into
+                        // errorMessage while state stays .downloading
+                        // so the row doesn't flash between Retry and
+                        // running. Surface it here when present so
+                        // the user can see what's going on instead
+                        // of staring at a frozen progress bar.
+                        if let msg = item.errorMessage, !msg.isEmpty {
+                            Text(msg)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                                .lineLimit(2)
+                        } else {
+                            Text(downloadProgressText(item))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     case .paused:
                         Text("Paused")
                             .font(.caption)
@@ -449,6 +463,7 @@ struct DownloadsView: View {
                         Text(item.errorMessage ?? "Failed")
                             .font(.caption)
                             .foregroundStyle(.red)
+                            .lineLimit(3)
                     case .completed, .queued, .unknown, .UNRECOGNIZED:
                         EmptyView()
                     }

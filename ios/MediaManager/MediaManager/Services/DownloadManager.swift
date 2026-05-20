@@ -113,10 +113,18 @@ final class DownloadManager {
         guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
               entry.state == .paused || entry.state == .failed else { return }
 
+        logger.info("resumeDownload tcId=\(transcodeId): manual retry — resetting retryCount from \(entry.retryCount)")
         Task {
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.state = .downloading
                 e.errorMessage = ""
+                // Manual Retry is the user's "give it another fresh
+                // shot" signal — clear the auto-retry budget so we
+                // don't immediately hit the 8-attempt cap and fail
+                // again in <1s. Without this, a download that
+                // exhausted the auto-retry budget could never
+                // succeed without a delete-and-redownload cycle.
+                e.retryCount = 0
             }
             await reloadEntries()
         }
@@ -445,11 +453,14 @@ final class DownloadManager {
         await reloadEntries()
 
         guard let grpcClient else {
-            await markFailed(transcodeId: transcodeId, error: "Not configured")
+            logger.error("performDownload tcId=\(transcodeId): grpcClient is nil — not configured")
+            await markFailed(transcodeId: transcodeId,
+                             error: "Not configured — app didn't finish connecting to the server before download started")
             return
         }
 
-        // Fetch manifest
+        // Fetch manifest — transient failures (server hiccup, brief
+        // disconnect) auto-retry with backoff via scheduleRetry.
         do {
             let manifest = try await grpcClient.getManifest(transcodeId: transcodeId)
             await store.updateEntry(transcodeId: transcodeId) { e in
@@ -460,16 +471,23 @@ final class DownloadManager {
             }
             logger.info("Manifest fetched: \(manifest.fileSizeBytes) bytes")
         } catch {
-            await markFailed(transcodeId: transcodeId, error: "Manifest failed: \(error.localizedDescription)")
+            logger.error("performDownload tcId=\(transcodeId): manifest fetch failed: \(String(describing: error))")
+            await scheduleRetry(transcodeId: transcodeId,
+                                sequence: sequence,
+                                lastError: "Manifest: \(error.localizedDescription)",
+                                isRetryable: true)
             return
         }
 
-        // Check disk space
+        // Check disk space — not a transient failure; the user must
+        // intervene to free up storage. Don't auto-retry.
         if let entry = await store.entry(for: transcodeId) {
             let required = entry.fileSizeBytes + 500_000_000
             if let free = try? FileManager.default.attributesOfFileSystem(
                 forPath: NSHomeDirectory())[.systemFreeSize] as? Int64, free < required {
-                await markFailed(transcodeId: transcodeId, error: "Not enough space")
+                logger.error("performDownload tcId=\(transcodeId): not enough space (need \(required), have \(free))")
+                await markFailed(transcodeId: transcodeId,
+                                 error: "Not enough space — need \(required / 1_000_000) MB free")
                 return
             }
         }
@@ -557,30 +575,65 @@ final class DownloadManager {
             await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = saved }
         } catch {
             let saved = await progress.total
-            logger.info("Saving progress before retry: \(saved) bytes")
+            logger.error("performDownload tcId=\(transcodeId): in-stream/finalize error after \(saved) bytes: \(String(describing: error))")
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.bytesDownloaded = saved
-                e.retryCount += 1
             }
-
-            // Verify the save took
-            let entry = await store.entry(for: transcodeId)
-            let retries = entry?.retryCount ?? 0
-            logger.debug("Verified saved: bytesDownloaded=\(entry?.bytesDownloaded ?? -1) retries=\(retries)")
-
-            if retries > 50 {
-                // Too many retries — give up
-                logger.error("Download failed after \(retries) retries: \(error)")
-                await markFailed(transcodeId: transcodeId, error: "Failed after \(retries) retries")
-            } else {
-                // Auto-retry with backoff — connection drops are expected through HAProxy
-                logger.info("Download interrupted (retry \(retries)): \(String(describing: error))")
-                try? await Task.sleep(for: .seconds(2))
-                if !Task.isCancelled {
-                    await performDownload(transcodeId: transcodeId, sequence: sequence)
-                }
-            }
+            await scheduleRetry(transcodeId: transcodeId,
+                                sequence: sequence,
+                                lastError: error.localizedDescription,
+                                isRetryable: true)
         }
+    }
+
+    /// Unified retry orchestrator. Either schedules another
+    /// performDownload attempt with exponential backoff, or — when
+    /// the retry budget is exhausted (or the failure is explicitly
+    /// non-retryable) — calls markFailed so the user sees a
+    /// permanent "Retry" affordance.
+    ///
+    /// Backoff schedule: 2, 4, 8, 16, 32, 60, 60, 60 seconds (cap at
+    /// 60s). Eight total attempts including the initial — about ~3
+    /// minutes of wall-clock self-healing before the user is asked.
+    /// The HAProxy + server combo's transient hiccups consistently
+    /// resolve within 5–15 seconds in practice, so 8 attempts is
+    /// generous headroom.
+    private func scheduleRetry(
+        transcodeId: Int64, sequence: Int32, lastError: String, isRetryable: Bool
+    ) async {
+        // Persist + bump the attempt counter so a subsequent crash /
+        // app kill / manual Retry observes accurate state.
+        await store.updateEntry(transcodeId: transcodeId) { $0.retryCount += 1 }
+        await reloadEntries()
+        let attempt = (await store.entry(for: transcodeId))?.retryCount ?? 1
+
+        guard isRetryable, attempt < 8 else {
+            logger.error("scheduleRetry tcId=\(transcodeId): giving up after \(attempt) attempts. Last error: \(lastError)")
+            await markFailed(
+                transcodeId: transcodeId,
+                error: "Failed after \(attempt) attempt\(attempt == 1 ? "" : "s"): \(lastError)")
+            return
+        }
+
+        let delay = min(60.0, pow(2.0, Double(attempt)))
+        logger.warning("scheduleRetry tcId=\(transcodeId): attempt \(attempt + 1)/8 in \(Int(delay))s — last error: \(lastError)")
+        // Surface the retry state in the UI by writing it into
+        // errorMessage. State stays at .downloading / .fetchingMetadata
+        // so the row doesn't flicker to "Retry" between auto-attempts.
+        await store.updateEntry(transcodeId: transcodeId) { e in
+            e.errorMessage = "Retrying in \(Int(delay))s — \(lastError)"
+        }
+        await reloadEntries()
+
+        try? await Task.sleep(for: .seconds(delay))
+        if Task.isCancelled {
+            logger.info("scheduleRetry tcId=\(transcodeId): cancelled during backoff")
+            return
+        }
+
+        await store.updateEntry(transcodeId: transcodeId) { $0.errorMessage = "" }
+        await reloadEntries()
+        await performDownload(transcodeId: transcodeId, sequence: sequence)
     }
 
     private func downloadSupportingFiles(entry: MMDownloadEntry) async {
@@ -629,6 +682,11 @@ final class DownloadManager {
     // MARK: - Private: Helpers
 
     private func markFailed(transcodeId: Int64, error: String) async {
+        // Final-failure log so Binnacle has a record even when the
+        // auto-retry path didn't fire (e.g. permanent storage error,
+        // misconfiguration). scheduleRetry already logs each
+        // intermediate attempt with full underlying-error detail.
+        logger.error("markFailed tcId=\(transcodeId): \(error)")
         await store.updateEntry(transcodeId: transcodeId) { e in
             e.state = .failed
             e.errorMessage = error
