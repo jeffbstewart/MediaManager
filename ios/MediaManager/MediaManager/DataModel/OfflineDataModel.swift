@@ -113,6 +113,27 @@ final class OfflineDataModel: DataModel {
             }
         }
 
+        // HomeView renders from `feed.carousels` (the generic
+        // heterogeneous list). The online server populates BOTH
+        // typed fields above and a parallel carousels list — the
+        // offline path used to only fill the typed fields, so
+        // HomeView's `!feed.carousels.isEmpty` gate failed and the
+        // empty state painted even with content available. Build
+        // matching MMCarousel entries here so the view's existing
+        // rendering branch fires.
+        var carousels: [MMCarousel] = []
+        func addCarousel(_ name: String, items: [MMTitle]) {
+            guard !items.isEmpty else { return }
+            var c = MMCarousel()
+            c.name = name
+            c.items = items
+            carousels.append(c)
+        }
+        addCarousel("Recently Downloaded", items: proto.recentlyAdded)
+        addCarousel("Recently Downloaded Books", items: proto.recentlyAddedBooks)
+        addCarousel("Recently Downloaded Music", items: proto.recentlyAddedAlbums)
+        proto.carousels = carousels
+
         return ApiHomeFeed(proto: proto)
     }
 
