@@ -11,6 +11,7 @@ struct ProfileView: View {
     @State private var showSessions = false
     @State private var tvQuality: Int = 1
     @State private var loadTask: Task<Void, Never>?
+    @State private var showLogoutConfirmation = false
 
     var body: some View {
         Group {
@@ -140,13 +141,21 @@ struct ProfileView: View {
 
                     Section {
                         Button("Sign Out", role: .destructive) {
-                            Task { await authManager.logout() }
+                            showLogoutConfirmation = true
                         }
                     }
                 }
             }
         }
         .navigationTitle("Profile")
+        .alert("Sign Out", isPresented: $showLogoutConfirmation) {
+            Button("Sign Out", role: .destructive) {
+                Task { await authManager.logout() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to sign out?")
+        }
         .onAppear {
             guard profile == nil else { return }
             loadTask = Task { await loadProfile() }

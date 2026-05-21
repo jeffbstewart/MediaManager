@@ -17,7 +17,6 @@ struct ContentView: View {
     @State private var selectedTab: Tab? = .home
     @State private var playbackRoute: PlaybackRoute?
     @State private var navigationPath = NavigationPath()
-    @State private var showLogoutConfirmation = false
 
     /// Downloads capability is available if the server reports it OR we've seen it before (cached).
     private var hasDownloadsCapability: Bool {
@@ -37,6 +36,15 @@ struct ContentView: View {
                 // Live TV stay online-only because they have no offline
                 // mode (personal videos rarely cached; cameras + Live
                 // TV are streaming-only).
+                // Search at the top of the sidebar — it's the most
+                // frequent jump-anywhere entry point and was buried
+                // below the catalog tabs. Online-only; offline mode
+                // hides it entirely.
+                if !isOffline {
+                    Label("Search", systemImage: "magnifyingglass")
+                        .tag(Tab.search)
+                }
+
                 Label("Home", systemImage: "house")
                     .tag(Tab.home)
 
@@ -112,8 +120,6 @@ struct ContentView: View {
 
                 Section {
                     if !isOffline {
-                        Label("Search", systemImage: "magnifyingglass")
-                            .tag(Tab.search)
                         HStack {
                             Label("Wish List", systemImage: "heart")
                             if let count = dataModel.userInfo?.fulfilledWishCount, count > 0 {
@@ -175,11 +181,9 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Button("Sign Out") {
-                            showLogoutConfirmation = true
-                        }
-                        .font(.callout)
-
+                        // Sign Out lives in ProfileView now — duplicating
+                        // it here gave the user two affordances for the
+                        // same action.
                         Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
@@ -346,14 +350,6 @@ struct ContentView: View {
                 selectedTab = .home
             }
             navigationPath = NavigationPath()
-        }
-        .alert("Sign Out", isPresented: $showLogoutConfirmation) {
-            Button("Sign Out", role: .destructive) {
-                Task { await authManager.logout() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to sign out?")
         }
         .fullScreenCover(item: $playbackRoute) { route in
             CustomPlayerView(
