@@ -44,7 +44,11 @@ struct MusicView: View {
                 if !recommendedArtists.isEmpty {
                     forYouSection()
                 }
-                if !recentlyAdded.isEmpty {
+                // Recently Added is a server-driven carousel — the
+                // offline home feed doesn't carry it. Hide entirely
+                // offline rather than rendering a section that's
+                // either empty or showing stale post-restore content.
+                if dataModel.isOnline && !recentlyAdded.isEmpty {
                     recentlyAddedSection()
                 }
                 browseArtistsLink()

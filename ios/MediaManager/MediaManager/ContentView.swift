@@ -57,11 +57,18 @@ struct ContentView: View {
                         .tag(Tab.books)
                     Label("Music", systemImage: "music.note")
                         .tag(Tab.music)
-                    Label("Collections", systemImage: "square.stack")
-                        .tag(Tab.collections)
-                    Label("Tags", systemImage: "tag")
-                        .tag(Tab.tags)
                     if !isOffline {
+                        // Collections + Tags rely on the server-side
+                        // list endpoints (CollectionsListView /
+                        // TagsListView) which throw .offline in
+                        // OfflineDataModel. The per-id detail views
+                        // do work offline, but reaching them from
+                        // the sidebar would dead-end on the listing,
+                        // so the tabs hide entirely when offline.
+                        Label("Collections", systemImage: "square.stack")
+                            .tag(Tab.collections)
+                        Label("Tags", systemImage: "tag")
+                            .tag(Tab.tags)
                         Label("Family", systemImage: "video")
                             .tag(Tab.family)
                         Label("Cameras", systemImage: "web.camera")
@@ -338,6 +345,7 @@ struct ContentView: View {
             // chrome.
             guard newValue else { return }
             let onlineOnlyTabs: Set<Tab> = [
+                .collections, .tags,
                 .family, .cameras, .liveTv, .search, .wishList,
                 .adminAddTitle, .adminAmazonImport, .adminExpand,
                 .adminValuation, .adminReport, .adminFamilyMembers,
