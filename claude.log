@@ -5482,3 +5482,22 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Verified: `xcodebuild build` succeeds for the iOS simulator scheme.
 - Not pushed; awaiting user testing on device.
 ===
+
+=== 2026-05-30 19:53 — Mobile download flag flips on lease completion ===
+- Problem: After buddy completes MOBILE_TRANSCODE, iOS download button stays
+  hidden (shows "Request Transcode for Download" instead) until next server
+  restart. `Transcode.for_mobile_available` was only set by
+  `ForMobileService.reconcile()`, which Main.kt schedules once 3 minutes
+  after startup and never again.
+- Fix: Extend the MOBILE_TRANSCODE branch in `BuddyGrpcService.handleReportComplete`
+  to flip `for_mobile_available = true` alongside the existing
+  `mobile_encoder_version` update. Single Transcode.save() when either field
+  changes.
+- Test: New BuddyGrpcServiceTest case drives a full Connect → ReportComplete
+  cycle against an in-process gRPC server and asserts both fields update.
+  Lease must be inserted *after* Connect because Connect's orphan-cleanup
+  would otherwise release any pre-existing lease under that buddy_name.
+- Files: src/main/kotlin/net/stewart/mediamanager/grpc/BuddyGrpcService.kt,
+  src/test/kotlin/net/stewart/mediamanager/grpc/BuddyGrpcServiceTest.kt
+- ./gradlew --no-daemon build passes; 14/14 BuddyGrpcServiceTest cases green.
+===

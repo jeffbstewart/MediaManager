@@ -276,14 +276,26 @@ class BuddyGrpcService : BuddyServiceGrpc.BuddyServiceImplBase() {
             if (complete.hasProbe()) {
                 storeProbe(lease.transcode_id, lease.relative_path, complete.probe, encoder)
             }
-            // Mobile completions carry an encoder-preset version so the server
-            // can detect later when a preset change has orphaned this output
-            // and schedule a re-transcode at the lowest priority.
-            if (lease.lease_type == LeaseType.MOBILE_TRANSCODE.name && complete.mobileEncoderVersion > 0) {
+            // Mobile completions flip the for_mobile_available flag so the
+            // iOS download button becomes active without waiting for the
+            // next ForMobileService.reconcile() at server startup.
+            // The mobile-encoder version lets the server detect later when
+            // a preset change has orphaned this output and schedule a
+            // re-transcode at the lowest priority.
+            if (lease.lease_type == LeaseType.MOBILE_TRANSCODE.name) {
                 val tc = Transcode.findById(lease.transcode_id)
-                if (tc != null && tc.mobile_encoder_version != complete.mobileEncoderVersion) {
-                    tc.mobile_encoder_version = complete.mobileEncoderVersion
-                    tc.save()
+                if (tc != null) {
+                    var dirty = false
+                    if (!tc.for_mobile_available) {
+                        tc.for_mobile_available = true
+                        dirty = true
+                    }
+                    if (complete.mobileEncoderVersion > 0 &&
+                        tc.mobile_encoder_version != complete.mobileEncoderVersion) {
+                        tc.mobile_encoder_version = complete.mobileEncoderVersion
+                        dirty = true
+                    }
+                    if (dirty) tc.save()
                 }
             }
         }

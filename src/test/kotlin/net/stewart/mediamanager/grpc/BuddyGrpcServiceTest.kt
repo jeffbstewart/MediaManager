@@ -319,6 +319,63 @@ internal class BuddyGrpcServiceTest : GrpcTestBase() {
     }
 
     @Test
+    fun `ReportComplete on a MOBILE_TRANSCODE lease flips for_mobile_available true`() {
+        val rawKey = newBuddyKey()
+        val buddyName = "mobile-complete-buddy-${java.util.UUID.randomUUID()}"
+
+        val title = createTitle(name = "MobileMovie")
+        val tc = createTranscode(title.id!!, filePath = "/nas/mobile.mkv")
+        assertEquals(false, tc.for_mobile_available, "precondition: flag starts false")
+
+        val channel = InProcessChannelBuilder.forName("grpc-test-server")
+            .directExecutor().build()
+        val observer = CollectingObserver()
+        try {
+            val stub = BuddyServiceGrpc.newStub(channel)
+            val send = stub.workStream(observer)
+            send.onNext(BuddyMessage.newBuilder().setConnect(Connect.newBuilder()
+                .setApiKey(rawKey).setBuddyName(buddyName)).build())
+            observer.poll() ?: fail("no Connected")
+
+            // Insert the lease *after* Connect — Connect's orphan-cleanup
+            // would otherwise release any lease pre-existing under this
+            // buddy_name (see "Connect releases orphaned leases..." test).
+            val lease = TranscodeLease(
+                transcode_id = tc.id!!,
+                buddy_name = buddyName,
+                relative_path = "mobile.mkv",
+                file_size_bytes = 1_000_000,
+                claimed_at = LocalDateTime.now(),
+                expires_at = LocalDateTime.now().plusMinutes(5),
+                status = LeaseStatus.IN_PROGRESS.name,
+                lease_type = LeaseType.MOBILE_TRANSCODE.name,
+                progress_percent = 90,
+            ).apply { save() }
+
+            send.onNext(BuddyMessage.newBuilder().setReportComplete(
+                ReportComplete.newBuilder()
+                    .setLeaseId(lease.id!!)
+                    .setMobileEncoderVersion(7)
+            ).build())
+
+            // No error message should arrive — drain the queue briefly.
+            val maybeError = observer.poll(timeoutMs = 500)
+            if (maybeError != null && maybeError.hasError()) {
+                fail("unexpected error: ${maybeError.error.code} — ${maybeError.error.message}")
+            }
+
+            val refreshed = net.stewart.mediamanager.entity.Transcode.findById(tc.id!!)
+                ?: fail("transcode disappeared")
+            assertEquals(true, refreshed.for_mobile_available,
+                "MOBILE_TRANSCODE completion should flip the flag true")
+            assertEquals(7, refreshed.mobile_encoder_version)
+            send.onCompleted()
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    @Test
     fun `ReportComplete on an unknown lease id returns INVALID_LEASE error`() {
         val rawKey = newBuddyKey()
         val channel = InProcessChannelBuilder.forName("grpc-test-server")
