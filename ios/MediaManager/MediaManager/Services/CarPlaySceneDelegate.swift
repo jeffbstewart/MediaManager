@@ -26,16 +26,29 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ templateApplicationScene: CPTemplateApplicationScene,
         didConnect interfaceController: CPInterfaceController
     ) {
-        logger.info("CarPlay scene connected")
+        // Snapshot enough state at scene-connect to triage "Couldn't
+        // load" reports from the car. The two interesting axes are:
+        // (1) is AppServices populated yet — if not, we're racing the
+        // SwiftUI App's init and the user will see "App not ready"
+        // until populate() fires; (2) has KeychainService got an
+        // access token — if not, the gRPC calls will come back
+        // UNAUTHENTICATED and the user needs to open the app on the
+        // phone to re-auth.
+        let isReady = AppServices.shared.isReady
+        let hasToken = KeychainService.load(key: .accessToken) != nil
+        let hasRefresh = KeychainService.load(key: .refreshToken) != nil
+        logger.info("CarPlay scene connected: appServicesReady=\(isReady) hasAccessToken=\(hasToken) hasRefreshToken=\(hasRefresh)")
         self.interfaceController = interfaceController
         AppServices.shared.whenReady { [weak self] in
+            logger.info("CarPlay scene: AppServices ready, installing browse hierarchy")
             self?.installBrowseHierarchy()
         }
         // Show a loading placeholder right away so the head unit
         // doesn't sit on a blank screen during the cold-launch race
         // (CarPlay scene activates before SwiftUI App's init in
         // some scenarios — see AppServices.whenReady).
-        if !AppServices.shared.isReady {
+        if !isReady {
+            logger.info("CarPlay scene: AppServices not ready yet, showing loading template")
             interfaceController.setRootTemplate(loadingTemplate(), animated: false)
         }
     }
