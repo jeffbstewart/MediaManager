@@ -30,6 +30,7 @@ struct PlayerLayerView: UIViewRepresentable {
 /// scrub bar, AirPlay, and episode info display.
 struct CustomPlayerView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AudioPlayerManager.self) private var audio
     @Environment(\.dismiss) private var dismiss
 
     let transcodeId: TranscodeID
@@ -68,6 +69,11 @@ struct CustomPlayerView: View {
     @State private var timeObserver: Any?
     @State private var playbackSpeed: Float = 1.0
     @State private var ps = PlayerState()
+    /// Throttles MPNowPlayingInfoCenter elapsed-time writes to ~1 Hz —
+    /// the 2 Hz time observer drives the UI scrubber but the system
+    /// surfaces (lock screen, AirPods, CarPlay) only need a per-second
+    /// position to render their progress bars smoothly.
+    @State private var lastNowPlayingPublish: Date = .distantPast
 
     private let speeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
@@ -313,6 +319,7 @@ struct CustomPlayerView: View {
                         Button {
                             playbackSpeed = speed
                             player?.rate = speed
+                            if let player { publishNowPlayingInfo(player: player, force: true) }
                             resetHideTimer()
                         } label: {
                             Label(
@@ -349,13 +356,7 @@ struct CustomPlayerView: View {
 
             // Play/Pause
             Button {
-                if ps.isPlaying {
-                    player.pause()
-                } else {
-                    player.play()
-                    player.rate = playbackSpeed
-                }
-                ps.isPlaying.toggle()
+                togglePlayPause(player: player)
                 resetHideTimer()
             } label: {
                 Image(systemName: ps.isPlaying ? "pause.fill" : "play.fill")
@@ -521,6 +522,20 @@ struct CustomPlayerView: View {
         errorLogObserver = nil
         failedToEndObserver = nil
         stalledObserver = nil
+        // Hand the system Now Playing slot back. advanceToNextEpisode
+        // runs cleanup() between episodes, then loadStream() re-takes
+        // the slot — a brief flicker where neither side owns it, but
+        // a real dismiss is the only path that actually leaves audio
+        // back in control.
+        MPRemoteCommandCenter.shared().togglePlayPauseCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().playCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().pauseCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().skipForwardCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().skipBackwardCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().changePlaybackPositionCommand.removeTarget(nil)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        audio.wireRemoteCommands()
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -547,9 +562,21 @@ struct CustomPlayerView: View {
 
         avPlayer.allowsExternalPlayback = true
         avPlayer.usesExternalPlaybackWhileExternalScreenIsActive = true
+
+        // Take over the system Now Playing slot before the video
+        // starts. Pausing the audio player frees the audio session
+        // and prevents both managers from fighting over remote-
+        // command callbacks — AirPods would otherwise toggle audio
+        // playback rather than the video that's now on screen. The
+        // audio side is restored in cleanup().
+        if audio.isPlaying { audio.pause() }
+        audio.unwireRemoteCommands()
+        wireVideoRemoteCommands(player: avPlayer)
+
         self.player = avPlayer
         ps.isPlaying = true
         avPlayer.play()
+        publishNowPlayingInfo(player: avPlayer, force: true)
         startProgressReporting()
         startTimeObserver(player: avPlayer)
         resetHideTimer()
@@ -644,6 +671,11 @@ struct CustomPlayerView: View {
             let dur = player.currentItem?.duration.seconds ?? 0
             if dur.isFinite && dur > 0 { state.duration = dur }
             state.isPlaying = player.timeControlStatus == .playing
+            // Push elapsed time to MPNowPlayingInfoCenter at ~1 Hz so
+            // AirPods / lock-screen / CarPlay scrubbers track playback.
+            // Throttled because the 2 Hz UI cadence would generate
+            // more writes than the system needs.
+            publishNowPlayingInfo(player: player, force: false)
         }
     }
 
@@ -705,6 +737,138 @@ struct CustomPlayerView: View {
         let duration = (dur?.isFinite == true && dur! > 0) ? dur : nil
 
         await dataModel.reportProgress(transcodeId: activeTranscodeId, position: position, duration: duration)
+    }
+
+    // MARK: - Now Playing / Remote Commands
+
+    /// Toggles AVPlayer playback and keeps PlayerState + the system
+    /// Now Playing surfaces in sync. Reused by the on-screen button
+    /// and the remote-command handler so AirPods presses and screen
+    /// taps follow the same path — including the playbackSpeed
+    /// reapply, which would otherwise reset to 1.0× after a remote
+    /// pause / play cycle.
+    private func togglePlayPause(player: AVPlayer) {
+        if ps.isPlaying {
+            player.pause()
+        } else {
+            player.play()
+            player.rate = playbackSpeed
+        }
+        ps.isPlaying.toggle()
+        publishNowPlayingInfo(player: player, force: true)
+    }
+
+    /// Registers remote-command targets so AirPods / lock-screen /
+    /// CarPlay / Control Center transport drives this video session.
+    /// Skip-forward and skip-backward are wired with a 10 s interval
+    /// to match the on-screen ±10 buttons; next/previous track are
+    /// left disabled (they're an audio idiom and would surface the
+    /// wrong affordance on CarPlay).
+    private func wireVideoRemoteCommands(player: AVPlayer) {
+        let cc = MPRemoteCommandCenter.shared()
+        cc.playCommand.removeTarget(nil)
+        cc.pauseCommand.removeTarget(nil)
+        cc.togglePlayPauseCommand.removeTarget(nil)
+        cc.skipForwardCommand.removeTarget(nil)
+        cc.skipBackwardCommand.removeTarget(nil)
+        cc.changePlaybackPositionCommand.removeTarget(nil)
+        cc.nextTrackCommand.isEnabled = false
+        cc.previousTrackCommand.isEnabled = false
+
+        cc.playCommand.isEnabled = true
+        cc.playCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                if !ps.isPlaying { togglePlayPause(player: player) }
+            }
+            return .success
+        }
+        cc.pauseCommand.isEnabled = true
+        cc.pauseCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                if ps.isPlaying { togglePlayPause(player: player) }
+            }
+            return .success
+        }
+        cc.togglePlayPauseCommand.isEnabled = true
+        cc.togglePlayPauseCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                togglePlayPause(player: player)
+            }
+            return .success
+        }
+        cc.skipForwardCommand.isEnabled = true
+        cc.skipForwardCommand.preferredIntervals = [10]
+        cc.skipForwardCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                skip(player: player, seconds: 10)
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+        cc.skipBackwardCommand.isEnabled = true
+        cc.skipBackwardCommand.preferredIntervals = [10]
+        cc.skipBackwardCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                skip(player: player, seconds: -10)
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+        cc.changePlaybackPositionCommand.isEnabled = true
+        cc.changePlaybackPositionCommand.addTarget { [weak player] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            Task { @MainActor in
+                guard let player else { return }
+                await player.seek(to: CMTime(seconds: event.positionTime, preferredTimescale: 600))
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+    }
+
+    /// Publishes title / duration / elapsed / rate to the system. The
+    /// time-observer path calls this with `force: false` so the 2 Hz
+    /// cadence is throttled to ~1 Hz writes — anything that's a state
+    /// change (play, pause, seek, speed) calls with `force: true` so
+    /// the surfaces update immediately.
+    private func publishNowPlayingInfo(player: AVPlayer, force: Bool) {
+        if !force {
+            let now = Date()
+            if now.timeIntervalSince(lastNowPlayingPublish) < 1.0 { return }
+            lastNowPlayingPublish = now
+        } else {
+            lastNowPlayingPublish = Date()
+        }
+        var info: [String: Any] = [:]
+        info[MPMediaItemPropertyTitle] = titleName
+        // Episode label drives the "artist" line on the lock screen
+        // and CarPlay Now Playing card. "S2E5: A Study in Scarlet"
+        // tells the user at a glance what's playing without forcing
+        // them to look at the screen.
+        if let ep = currentEpisodeName ?? episodeName {
+            let prefix: String
+            if let s = seasonNumber, let e = episodeNumber {
+                prefix = "S\(s)E\(e): "
+            } else {
+                prefix = ""
+            }
+            info[MPMediaItemPropertyArtist] = prefix + ep
+        }
+        let position = player.currentTime().seconds
+        if position.isFinite { info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position }
+        let duration = player.currentItem?.duration.seconds ?? 0
+        if duration.isFinite && duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        info[MPNowPlayingInfoPropertyPlaybackRate] = ps.isPlaying ? playbackSpeed : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = ps.isPlaying ? .playing : .paused
     }
 }
 

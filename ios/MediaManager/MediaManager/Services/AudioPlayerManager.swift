@@ -742,8 +742,28 @@ final class AudioPlayerManager {
 
     // MARK: - Remote commands
 
-    private func wireRemoteCommands() {
+    /// (Re-)installs targets on the shared MPRemoteCommandCenter so
+    /// AirPods, lock-screen, Control Center, and CarPlay transport
+    /// drive this audio player. Idempotent — every command's targets
+    /// are wiped before the new ones are added so repeated calls
+    /// don't stack duplicate handlers. CustomPlayerView calls
+    /// `unwireRemoteCommands()` while a video is active and this
+    /// method to restore audio control on dismiss.
+    func wireRemoteCommands() {
         let cc = MPRemoteCommandCenter.shared()
+
+        // Strip any prior targets so re-wiring is idempotent. Without
+        // this a single AirPods press would invoke every accumulated
+        // target — duplicated state writes and visible UI thrash on
+        // CarPlay.
+        cc.playCommand.removeTarget(nil)
+        cc.pauseCommand.removeTarget(nil)
+        cc.togglePlayPauseCommand.removeTarget(nil)
+        cc.nextTrackCommand.removeTarget(nil)
+        cc.previousTrackCommand.removeTarget(nil)
+        cc.changePlaybackPositionCommand.removeTarget(nil)
+        cc.skipForwardCommand.removeTarget(nil)
+        cc.skipBackwardCommand.removeTarget(nil)
 
         // Each command needs both a target AND an explicit
         // isEnabled = true. addTarget alone leaves the command in
@@ -811,5 +831,23 @@ final class AudioPlayerManager {
             }
             return .success
         }
+    }
+
+    /// Strips this player's targets from the shared command center.
+    /// Used by CustomPlayerView while a video is active so AirPods /
+    /// lock-screen / CarPlay events route to the video player and
+    /// don't double-fire on this manager's handlers too. The video
+    /// player calls `wireRemoteCommands()` again on dismiss to
+    /// restore audio control.
+    func unwireRemoteCommands() {
+        let cc = MPRemoteCommandCenter.shared()
+        cc.playCommand.removeTarget(nil)
+        cc.pauseCommand.removeTarget(nil)
+        cc.togglePlayPauseCommand.removeTarget(nil)
+        cc.nextTrackCommand.removeTarget(nil)
+        cc.previousTrackCommand.removeTarget(nil)
+        cc.changePlaybackPositionCommand.removeTarget(nil)
+        cc.skipForwardCommand.removeTarget(nil)
+        cc.skipBackwardCommand.removeTarget(nil)
     }
 }
