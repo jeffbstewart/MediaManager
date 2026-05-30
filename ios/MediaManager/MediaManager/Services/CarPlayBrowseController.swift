@@ -84,6 +84,7 @@ final class CarPlayBrowseController {
             let items = titles.map { title -> CPListItem in
                 let item = CPListItem(text: title.name, detailText: title.year.map(String.init))
                 item.accessoryType = .disclosureIndicator
+                Self.attachThumbnail(item, titleId: title.id.protoValue)
                 item.handler = { [weak self] _, completion in
                     self?.openAlbum(title: title)
                     completion()
@@ -196,6 +197,7 @@ final class CarPlayBrowseController {
                     let item = CPListItem(
                         text: entry.track.name,
                         detailText: subtitle(for: entry))
+                    Self.attachThumbnail(item, titleId: entry.albumTitleId)
                     item.handler = { [weak self] _, completion in
                         self?.playPlaylist(entries: detail.tracks, startIndex: index)
                         completion()
@@ -267,6 +269,7 @@ final class CarPlayBrowseController {
                     let item = CPListItem(
                         text: entry.track.name,
                         detailText: subtitle(for: entry))
+                    Self.attachThumbnail(item, titleId: entry.albumTitleId)
                     item.handler = { [weak self] _, completion in
                         self?.playPlaylist(entries: detail.tracks, startIndex: index)
                         completion()
@@ -296,6 +299,7 @@ final class CarPlayBrowseController {
                 let items = detail.ownedAlbums.map { (album: ApiTitle) -> CPListItem in
                     let item = CPListItem(text: album.name, detailText: album.year.map(String.init))
                     item.accessoryType = .disclosureIndicator
+                    Self.attachThumbnail(item, titleId: album.id.protoValue)
                     item.handler = { [weak self] _, completion in
                         self?.openAlbum(titleId: album.id, name: album.name)
                         completion()
@@ -374,6 +378,24 @@ final class CarPlayBrowseController {
             trackNumber: entry.track.trackNumber,
             discNumber: entry.track.discNumber,
             durationSeconds: entry.track.durationSeconds)
+    }
+
+    /// Kick an async thumbnail fetch and apply it to the CPListItem
+    /// when the bytes arrive. CarPlay's row image slot wants
+    /// something small (~60 pt; ~180 px @3x), but we hand iOS the
+    /// full poster and let it scale — pre-rendering would just
+    /// duplicate the cache we already pay for. ImageProvider
+    /// short-circuits to memory/disk cache so already-browsed
+    /// albums render instantly; uncached rows pop in once the
+    /// gRPC fetch lands. Best-effort: failures are silent because
+    /// the row is still usable text-only.
+    static func attachThumbnail(_ item: CPListItem, titleId: Int64) {
+        Task { @MainActor in
+            guard let provider = AppServices.shared.imageProvider else { return }
+            let ref = MMImageRef.posterThumbnail(titleId: titleId)
+            guard let image = await provider.image(for: ref) else { return }
+            item.setImage(image)
+        }
     }
 
     private static var loadingSection: CPListSection {
@@ -489,6 +511,9 @@ final class CarPlaySearchDelegate: NSObject, CPSearchTemplateDelegate {
         case "album":
             item = CPListItem(text: hit.name, detailText: hit.artistName)
             item.accessoryType = .disclosureIndicator
+            if let titleId = hit.titleId?.protoValue {
+                CarPlayBrowseController.attachThumbnail(item, titleId: titleId)
+            }
         case "artist":
             // titleCount is owned-album count; surface as detail text.
             let count = hit.titleCount ?? 0
@@ -501,6 +526,9 @@ final class CarPlaySearchDelegate: NSObject, CPSearchTemplateDelegate {
             if let album = hit.albumName, !album.isEmpty { parts.append(album) }
             if let artist = hit.artistName, !artist.isEmpty { parts.append(artist) }
             item = CPListItem(text: hit.name, detailText: parts.isEmpty ? nil : parts.joined(separator: " · "))
+            if let albumTitleId = hit.albumTitleId?.protoValue {
+                CarPlayBrowseController.attachThumbnail(item, titleId: albumTitleId)
+            }
         case "playlist":
             let count = hit.titleCount ?? 0
             let detail = count > 0 ? "\(count) track\(count == 1 ? "" : "s")" : nil

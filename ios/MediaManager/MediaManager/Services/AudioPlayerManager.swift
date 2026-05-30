@@ -547,22 +547,19 @@ final class AudioPlayerManager {
 
         player.removeAllItems()
         player.insert(item, after: nil)
-        player.play()
-        refreshIsPlaying()
-        // Set the textual metadata BEFORE the async artwork fetch.
         // CarPlay snapshots MPNowPlayingInfoCenter the moment play()
-        // hits — putting updateNowPlayingInfo after the await meant
-        // the head unit drew an empty title/artist and only caught
-        // up on the next track change. Order is now:
-        //   1. play() so audio starts.
-        //   2. updateNowPlayingInfo() — title / artist / album /
-        //      duration land in the info center synchronously.
-        //   3. updateNowPlayingArtwork() — async image fetch, fills
-        //      in MPMediaItemPropertyArtwork once it resolves.
-        //      handleTimeUpdate's per-tick refresh preserves the
-        //      artwork field via a read-modify-write merge.
+        // hits — anything set after lands too late for the initial
+        // Now Playing render and only catches up on the next track
+        // change. So populate text AND artwork before play(). The
+        // typical case is a cache hit (ImageProvider short-circuits
+        // to memory/disk), so this is near-instant; a cold first
+        // listen pays one image fetch of latency before audio
+        // starts, which is preferable to a hero-less playback
+        // screen for the rest of the track.
         updateNowPlayingInfo()
         await updateNowPlayingArtwork()
+        player.play()
+        refreshIsPlaying()
     }
 
     private func handleEndOfTrack() {
@@ -723,19 +720,16 @@ final class AudioPlayerManager {
             }
             image.draw(in: drawRect)
         }
-        // The artwork request handler is invoked by MediaPlayer on
-        // its own dispatch queue, NOT MainActor. Without `@Sendable`
-        // Swift 6 inherits MainActor isolation from the enclosing
-        // method and traps with `swift_task_checkIsolated` /
-        // `dispatch_assert_queue_fail` (SIGTRAP) the moment the
-        // system tries to extract the JPEG. UIImage is Sendable, so
-        // capturing it through a non-isolated closure is safe.
-        // NSLog (not MMLogger) because the closure is @Sendable and
-        // can be called from any thread MediaPlayer chooses.
-        let artwork = MPMediaItemArtwork(boundsSize: squareSize) { @Sendable size in
-            NSLog("[MediaManager] artwork closure invoked at size=%.0fx%.0f", size.width, size.height)
-            return squareImage
-        }
+        // Use the eager `init(image:)` over the closure-based
+        // `init(boundsSize:requestHandler:)` — CarPlay simulator
+        // doesn't render the closure variant on iOS 26 (system
+        // accepts the bytes into MediaRemote per the log line, but
+        // CPNowPlayingTemplate's hero slot stays blank and the
+        // text fields collapse onto each other). The closure form
+        // is meant for very large multi-size assets; we already
+        // have a 1024² UIImage in memory, so no reason to add the
+        // lazy indirection.
+        let artwork = MPMediaItemArtwork(image: squareImage)
         nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         publishNowPlayingInfo()
     }
