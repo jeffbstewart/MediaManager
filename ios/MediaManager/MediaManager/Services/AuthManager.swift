@@ -142,6 +142,21 @@ final class AuthManager {
             await apiClient.setAccessToken(tokenString)
             await grpcClient.setAccessToken(tokenData)
 
+            // Offline-mode fast path: don't sit on the "Connecting…"
+            // spinner while a doomed network round-trip times out.
+            // The user has explicitly opted into offline browsing; we
+            // already have stored tokens; ContentView's offline UI
+            // handles cached-only rendering. Schedule a periodic
+            // refresh anyway — first attempts will fail without
+            // network, but they'll keep rescheduling so tokens
+            // refresh automatically once connectivity returns.
+            if UserDefaults.standard.bool(forKey: "offlineMode") {
+                logger.info("restoreSession: offline mode — skipping token refresh, going straight to authenticated")
+                state = .authenticated(serverURL: url)
+                scheduleTokenRefresh()
+                return
+            }
+
             await performTokenRefresh()
             // performTokenRefresh may have called logout() when the refresh
             // token was rejected (typical after a long absence). Honour
@@ -446,12 +461,32 @@ final class AuthManager {
         await grpcClient.setAccessToken(tokenData)
 
         guard case .needsLogin(let url) = state else { return }
+
+        // Mirror restoreSession's offline-mode fast path. Biometric
+        // gate has already been satisfied above; we just need to
+        // avoid the doomed network round-trip.
+        if UserDefaults.standard.bool(forKey: "offlineMode") {
+            logger.info("authenticateWithBiometric: offline mode — skipping token refresh")
+            state = .authenticated(serverURL: url)
+            scheduleTokenRefresh()
+            return
+        }
+
         await performTokenRefresh()
         // Same hazard as restoreSession(): performTokenRefresh may have
         // logged the user out. The state is still .needsLogin either
         // way, so use the keychain as the source of truth instead.
         guard KeychainService.load(key: .accessToken) != nil else { return }
         await transitionAfterAuth(serverURL: url)
+    }
+
+    /// Exposed for the offline-mode toggle path. When the user flips
+    /// offline mode OFF, ContentView calls this so we don't wait up
+    /// to 12 minutes for the scheduled refresh to fire — the next
+    /// gRPC call lands with a fresh access token instead of getting
+    /// kicked back as UNAUTHENTICATED.
+    func refreshTokenNow() async {
+        await performTokenRefresh()
     }
 
     private func scheduleTokenRefresh(expiresIn: Int = 900) {

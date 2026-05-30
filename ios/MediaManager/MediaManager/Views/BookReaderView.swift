@@ -59,6 +59,20 @@ struct BookReaderView: View {
     @State private var theme: ReaderTheme = .stored
     @State private var showTOC = false
     @State private var toc: [TocEntry] = []
+    /// Non-nil when we have a resume position to offer the user.
+    /// loadAndOpen stages the files and resolves position into this,
+    /// then waits for the confirmation dialog to either accept the
+    /// resume CFI or reset to the start before booting the reader.
+    /// Matches the audio player's prompt-to-resume pattern instead
+    /// of silently jumping to the last position.
+    @State private var pendingResume: ResumeOffer? = nil
+
+    private struct ResumeOffer {
+        let htmlURL: URL
+        let epubURL: URL
+        let cfi: String?
+        let fraction: Double
+    }
 
     enum Status: Equatable {
         case loading(String)
@@ -199,8 +213,40 @@ struct BookReaderView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .confirmationDialog(
+            "Resume reading?",
+            isPresented: Binding(
+                get: { pendingResume != nil },
+                // The dialog can be dismissed by tapping outside on
+                // iPad — treat that as Cancel so the user isn't
+                // trapped on a stuck "Where do you want to start?"
+                // overlay with no way out.
+                set: { if !$0 && pendingResume != nil { cancelResume() } }),
+            titleVisibility: .visible,
+            presenting: pendingResume
+        ) { offer in
+            Button("Resume at \(Int(offer.fraction * 100))%") {
+                beginBoot(htmlURL: offer.htmlURL, epubURL: offer.epubURL, resumeCfi: offer.cfi)
+                pendingResume = nil
+            }
+            Button("Start from beginning") {
+                lastCfi = nil
+                progressPct = 0
+                beginBoot(htmlURL: offer.htmlURL, epubURL: offer.epubURL, resumeCfi: nil)
+                pendingResume = nil
+            }
+            Button("Cancel", role: .cancel) { cancelResume() }
+        }
         .task { await loadAndOpen() }
         .onDisappear { cleanup() }
+    }
+
+    /// User chose Cancel (or swiped the dialog away on iPad). Dismiss
+    /// the reader entirely — the WebView never mounted, so there's
+    /// nothing to tear down beyond clearing the pending offer.
+    private func cancelResume() {
+        pendingResume = nil
+        dismiss()
     }
 
     // MARK: - TOC + theme
@@ -256,25 +302,40 @@ struct BookReaderView: View {
                 await resolveResumePosition()
             }
 
-            // Latch the boot args + message handler BEFORE the WebView
-            // mounts. The mount is triggered by setting
-            // `stagedReaderHtml` / `stagedEpubFile` below; the HTML
-            // loads in milliseconds (local file), so `didFinish`
-            // would otherwise fire while `bootArgs` is still nil and
-            // skip the boot call entirely.
-            bridge.onMessage = handleBridgeMessage(_:)
-            bridge.bootArgs = .init(
-                epubFileName: epubURL.lastPathComponent,
-                resumeCfi: lastCfi,
-                fontPct: fontPct)
-
-            status = .loading("Opening book…")
-            stagedReaderHtml = htmlURL
-            stagedEpubFile = epubURL
+            // If we have a saved position, hold the WebView mount and
+            // ask the user to pick Resume vs Start Over — matches the
+            // audio player's prompt-to-resume policy. Test mode and
+            // first-time opens (fraction == 0) boot straight through.
+            if route.testBundleEpub == nil && progressPct > 0 {
+                pendingResume = ResumeOffer(
+                    htmlURL: htmlURL,
+                    epubURL: epubURL,
+                    cfi: lastCfi,
+                    fraction: progressPct)
+                status = .loading("Where do you want to start?")
+            } else {
+                beginBoot(htmlURL: htmlURL, epubURL: epubURL, resumeCfi: lastCfi)
+            }
         } catch {
             log.error("loadAndOpen failed", error: error)
             status = .error("Couldn't open this book.")
         }
+    }
+
+    /// Latches boot args on the bridge and mounts the WebView. The
+    /// args must be set BEFORE `stagedReaderHtml` / `stagedEpubFile`
+    /// flip non-nil, since that's what triggers the WebView mount —
+    /// `didFinish` fires within milliseconds of the local file load
+    /// and skips the boot call if args are still nil at that point.
+    private func beginBoot(htmlURL: URL, epubURL: URL, resumeCfi: String?) {
+        bridge.onMessage = handleBridgeMessage(_:)
+        bridge.bootArgs = .init(
+            epubFileName: epubURL.lastPathComponent,
+            resumeCfi: resumeCfi,
+            fontPct: fontPct)
+        status = .loading("Opening book…")
+        stagedReaderHtml = htmlURL
+        stagedEpubFile = epubURL
     }
 
     /// Re-applies persisted preferences (theme + font) once the

@@ -5445,3 +5445,40 @@ recurring 15-books-and-reader:226 flake as prior runs).
   poster bottom edge on Sherlock — separate issue, not a
   pipeline bug).
 ===
+
+=== 2026-05-30 — Offline-mode QoL: skip login spinner, ebook resume prompt ===
+- User reported two iOS offline-mode papercuts after a trip:
+  (1) On launch with offline mode enabled, the app sat on the
+      "Connecting…" spinner while doomed network round-trips
+      timed out before falling through to authenticated state.
+  (2) Wanted an explicit resume prompt when reopening an ebook,
+      matching the audio prompt-to-resume pattern locked in earlier.
+- Changes in ios/MediaManager/MediaManager/Services/AuthManager.swift:
+  - `restoreSession()` now checks `UserDefaults.bool(forKey: "offlineMode")`
+    after token restore; when true, sets state straight to
+    `.authenticated` and calls `scheduleTokenRefresh()` so the periodic
+    refresh kicks in once connectivity returns.
+  - `authenticateWithBiometric()` mirrors the same offline fast path
+    (biometric gate still runs first).
+  - New public `refreshTokenNow()` (wraps the private
+    `performTokenRefresh`) so the toggle-off path can force an
+    immediate refresh without waiting ~12 min for the schedule.
+- Change in ios/MediaManager/MediaManager/ContentView.swift:
+  - The existing `.onChange(of: dataModel.downloads.isOfflineMode)`
+    now also handles the OFF transition by calling
+    `authManager.refreshTokenNow()` — avoids stale-token
+    UNAUTHENTICATED on the first gRPC call after going back online.
+- Changes in ios/MediaManager/MediaManager/Views/BookReaderView.swift:
+  - Progress recording into `ReadingProgressQueue` already worked
+    offline (no change needed; flusher gates on
+    `isEffectivelyOffline` and re-queues until reconnect).
+  - Added `ResumeOffer` state + `.confirmationDialog`. `loadAndOpen`
+    now stages files, resolves the resume position, and defers the
+    WebView mount via a new `beginBoot(...)` helper if `progressPct > 0`.
+    The dialog offers "Resume at N%" / "Start from beginning" /
+    "Cancel". Test-mode books (`testBundleEpub != nil`) skip the
+    prompt entirely. iPad popover dismissal is wired to Cancel so
+    the user isn't trapped on the loading overlay.
+- Verified: `xcodebuild build` succeeds for the iOS simulator scheme.
+- Not pushed; awaiting user testing on device.
+===

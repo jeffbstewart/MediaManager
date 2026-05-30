@@ -2,24 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>com.apple.developer.carplay-audio</key>
+	<true/>
 	<key>com.apple.developer.networking.multicast</key>
 	<true/>
-	<!--
-	  CarPlay audio entitlement. Restricted-use; Apple gates this
-	  via a separate request (developer.apple.com/contact/carplay/).
-	  Currently REMOVED from this file so distribution archives
-	  succeed before Apple grants it — declaring it in the
-	  entitlements file with no matching grant in the team's
-	  provisioning profile makes codesign reject the archive (and
-	  App Store Connect rejects the upload). The CarPlay scene
-	  delegate + browse-controller code is still compiled in and
-	  inert at runtime — head units won't trust an app without the
-	  entitlement, so the scene never connects.
-
-	  Restore this line once Apple's CarPlay request is approved:
-	  <key>com.apple.developer.carplay-audio</key>
-	  <true/>
-	-->
-	<!-- com.apple.developer.carplay-audio: see comment above -->
 </dict>
 </plist>

@@ -334,6 +334,16 @@ struct ContentView: View {
             }
         }
         .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
+            // Flipping OFF: force a token refresh now so the next
+            // gRPC call lands with a fresh access token instead of an
+            // expired one. The restoreSession() offline fast path
+            // schedules a 12-minute periodic refresh, which is too
+            // long to wait when the user explicitly says "I'm back
+            // online".
+            if !newValue {
+                Task { await authManager.refreshTokenNow() }
+                return
+            }
             // Reset to Home when offline mode flips ON, but only if
             // the user is on a tab that genuinely has no offline
             // counterpart (Family, Cameras, Live TV, Search, Wish
@@ -343,7 +353,6 @@ struct ContentView: View {
             // this reset, picking Live TV while online and then
             // flipping offline leaves the user staring at empty
             // chrome.
-            guard newValue else { return }
             let onlineOnlyTabs: Set<Tab> = [
                 .collections, .tags,
                 .family, .cameras, .liveTv, .search, .wishList,
