@@ -16,8 +16,82 @@ actor GrpcClient {
     private var accessToken: Data?
     private var configuredHost: String?
     private var configuredPort: Int?
+    /// Captured from `configure()` so `reconnect()` can rebuild the
+    /// channel with the same security settings without callers having
+    /// to re-pass them. Without this, reconnect would have to guess
+    /// TLS from the port number, which is fragile.
+    private var configuredUseTLS: Bool?
 
     // MARK: - Configuration
+
+    /// Detects the error shapes that mean the underlying HTTP/2
+    /// connection has been torn down out from under us — TCP RST, idle
+    /// timeout, NAT or HAProxy disconnect — and our gRPC client is
+    /// sitting on a corpse. iOS aggressively suspends backgrounded
+    /// apps, so by the time CarPlay (or the lock-screen mini-player,
+    /// or any UI that ran fine yesterday) reaches for an RPC, the
+    /// socket has often been TCP-reset without our process noticing.
+    /// UNAVAILABLE is the textbook signal; INTERNAL with a "stream"
+    /// or "connection" message catches the variants that leak through
+    /// from the HTTP/2 layer before gRPC normalises the status.
+    private func isStaleStreamError(_ error: Error) -> Bool {
+        guard let rpc = error as? RPCError else { return false }
+        switch rpc.code {
+        case .unavailable: return true
+        case .internalError:
+            let m = rpc.message.lowercased()
+            return m.contains("stream") || m.contains("connection")
+        default:
+            return false
+        }
+    }
+
+    /// Tear down the existing GRPCClient (if any) and rebuild it
+    /// against the same host/port/TLS the original `configure()`
+    /// supplied. The actor's serial isolation guarantees that
+    /// concurrent in-flight RPCs all see the same fresh client on
+    /// their next access — no partial-state window where some calls
+    /// hit the old corpse and others the new socket.
+    func reconnect() async throws {
+        guard let host = configuredHost,
+              let port = configuredPort,
+              let useTLS = configuredUseTLS else {
+            throw GrpcClientError.notConfigured
+        }
+        logger.warning("reconnect: rebuilding GRPCClient for \(host):\(port) tls=\(useTLS)")
+        try configure(host: host, port: port, useTLS: useTLS)
+    }
+
+    /// Wrap an RPC call so a stale HTTP/2 connection self-heals. On
+    /// `UNAVAILABLE: Stream unexpectedly closed` (the symptom that
+    /// surfaces every time CarPlay activates after the phone has been
+    /// idle, and the same one behind the "I have to log out and back
+    /// in" stuck-app reports), this catches the failure, rebuilds the
+    /// channel via `reconnect()`, and runs the block once more. A
+    /// second failure bubbles untouched.
+    ///
+    /// `#function` as default argument captures the calling method's
+    /// name for the log line so wrap-sites stay one-liners:
+    ///
+    ///     func homeFeed() async throws -> MMHomeFeedResponse {
+    ///         try await callRPC {
+    ///             try await self.catalogService.homeFeed(
+    ///                 MMEmpty(), metadata: self.authMetadata())
+    ///         }
+    ///     }
+    private func callRPC<T>(
+        _ name: String = #function,
+        _ block: () async throws -> T
+    ) async throws -> T {
+        do {
+            return try await block()
+        } catch let error where isStaleStreamError(error) {
+            let code = (error as? RPCError)?.code.description ?? "unknown"
+            logger.warning("\(name): stale stream (\(code)) — reconnecting + retrying once")
+            try await reconnect()
+            return try await block()
+        }
+    }
 
     /// Create the gRPC channel to the given server.
     func configure(host: String, port: Int, useTLS: Bool = false) throws {
@@ -44,6 +118,7 @@ actor GrpcClient {
         self.grpcClient = client
         self.configuredHost = host
         self.configuredPort = port
+        self.configuredUseTLS = useTLS
         logger.info("configure: client created and running for \(host):\(port)")
     }
 
@@ -159,14 +234,18 @@ actor GrpcClient {
         logger.info("discover: calling InfoService.Discover")
         var request = MMDiscoverRequest()
         request.platform = .ios
-        let result = try await infoService.discover(request)
+        let result = try await callRPC {
+            try await self.infoService.discover(request)
+        }
         logger.info("discover: success, fingerprint=\(result.serverFingerprint)")
         return result
     }
 
     func getInfo() async throws -> MMInfoResponse {
         logger.info("getInfo: calling InfoService.GetInfo")
-        return try await infoService.getInfo(MMEmpty(), metadata: authMetadata())
+        return try await callRPC {
+            try await self.infoService.getInfo(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func login(username: String, password: String, deviceName: String) async throws -> MMTokenResponse {
@@ -176,7 +255,9 @@ actor GrpcClient {
         request.password = password
         request.deviceName = deviceName
         request.platform = .ios
-        return try await authService.login(request)
+        return try await callRPC {
+            try await self.authService.login(request)
+        }
     }
 
     // MARK: - Legal RPCs (authenticated, gate-exempt)
@@ -185,7 +266,9 @@ actor GrpcClient {
         logger.info("getLegalStatus: calling AuthService.GetLegalStatus")
         var request = MMGetLegalStatusRequest()
         request.platform = .ios
-        return try await authService.getLegalStatus(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.authService.getLegalStatus(request, metadata: authMetadata())
+        }
     }
 
     func agreeToTerms(privacyPolicyVersion: Int32, termsOfUseVersion: Int32) async throws -> MMAgreeToTermsResponse {
@@ -194,26 +277,34 @@ actor GrpcClient {
         request.platform = .ios
         request.privacyPolicyVersion = privacyPolicyVersion
         request.termsOfUseVersion = termsOfUseVersion
-        return try await authService.agreeToTerms(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.authService.agreeToTerms(request, metadata: authMetadata())
+        }
     }
 
     func refresh(token: Data) async throws -> MMTokenResponse {
         var request = MMRefreshRequest()
         request.refreshToken = token
-        return try await authService.refresh(request)
+        return try await callRPC {
+            try await self.authService.refresh(request)
+        }
     }
 
     func revoke(token: Data) async throws {
         var request = MMRevokeRequest()
         request.refreshToken = token
-        _ = try await authService.revoke(request)
+        _ = try await callRPC {
+            try await self.authService.revoke(request)
+        }
     }
 
     func changePassword(current: String, new: String) async throws -> MMTokenResponse {
         var request = MMChangePasswordRequest()
         request.currentPassword = current
         request.newPassword = new
-        return try await authService.changePassword(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.authService.changePassword(request, metadata: authMetadata())
+        }
     }
 
     func createFirstUser(username: String, password: String, displayName: String, deviceName: String) async throws -> MMTokenResponse {
@@ -223,13 +314,17 @@ actor GrpcClient {
         request.password = password
         request.displayName = displayName
         request.deviceName = deviceName
-        return try await authService.createFirstUser(request)
+        return try await callRPC {
+            try await self.authService.createFirstUser(request)
+        }
     }
 
     // MARK: - Catalog RPCs
 
     func homeFeed() async throws -> MMHomeFeedResponse {
-        try await catalogService.homeFeed(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.catalogService.homeFeed(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func listTitles(type: MMMediaType, page: Int32, limit: Int32, sort: String?, query: String?, playableOnly: Bool) async throws -> MMTitlePageResponse {
@@ -240,13 +335,17 @@ actor GrpcClient {
         if let sort { request.sort = sort }
         if let query { request.q = query }
         request.playableOnly = playableOnly
-        return try await catalogService.listTitles(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.listTitles(request, metadata: authMetadata())
+        }
     }
 
     func getTitleDetail(id: Int64) async throws -> MMTitleDetail {
         var request = MMTitleIdRequest()
         request.titleID = id
-        return try await catalogService.getTitleDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getTitleDetail(request, metadata: authMetadata())
+        }
     }
 
     func search(query: String) async throws -> MMSearchResponse {
@@ -258,7 +357,9 @@ actor GrpcClient {
         // both are enabled.
         request.includeBooks = true
         request.includeAudio = true
-        return try await catalogService.search(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.search(request, metadata: authMetadata())
+        }
     }
 
     /// Music-only search variant. Used by the CarPlay surface where
@@ -272,15 +373,19 @@ actor GrpcClient {
         request.includeAudio = true
         request.includePlaylists = true
         request.audioOnly = true
-        return try await catalogService.search(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.search(request, metadata: authMetadata())
+        }
     }
 
     /// Server-curated dance presets (Slow Waltz, Cha-Cha, etc).
     /// Shared with the web app's advanced-search dialog so the
     /// canonical BPM ranges stay in one place.
     func listAdvancedSearchPresets() async throws -> [ApiAdvancedSearchPreset] {
-        let response = try await catalogService.listAdvancedSearchPresets(
-            MMEmpty(), metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.catalogService.listAdvancedSearchPresets(
+                MMEmpty(), metadata: self.authMetadata())
+        }
         return response.presets.map { ApiAdvancedSearchPreset(proto: $0) }
     }
 
@@ -295,54 +400,70 @@ actor GrpcClient {
         if let m = filters.bpmMax { request.bpmMax = Int32(m) }
         if let ts = filters.timeSignature, !ts.isEmpty { request.timeSignature = ts }
         if limit > 0 { request.limit = limit }
-        let response = try await catalogService.searchTracks(
-            request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.catalogService.searchTracks(
+                request, metadata: self.authMetadata())
+        }
         return response.tracks.map { ApiTrackSearchHit(proto: $0) }
     }
 
     func listSeasons(titleId: Int64) async throws -> MMSeasonsResponse {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        return try await catalogService.listSeasons(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.listSeasons(request, metadata: authMetadata())
+        }
     }
 
     func listEpisodes(titleId: Int64, season: Int32) async throws -> MMEpisodesResponse {
         var request = MMListEpisodesRequest()
         request.titleID = titleId
         request.seasonNumber = season
-        return try await catalogService.listEpisodes(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.listEpisodes(request, metadata: authMetadata())
+        }
     }
 
     func setFavorite(titleId: Int64, value: Bool) async throws {
         var request = MMSetFlagRequest()
         request.titleID = titleId
         request.value = value
-        _ = try await catalogService.setFavorite(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.setFavorite(request, metadata: authMetadata())
+        }
     }
 
     func setHidden(titleId: Int64, value: Bool) async throws {
         var request = MMSetFlagRequest()
         request.titleID = titleId
         request.value = value
-        _ = try await catalogService.setHidden(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.setHidden(request, metadata: authMetadata())
+        }
     }
 
     func requestRetranscode(titleId: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        _ = try await catalogService.requestRetranscode(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.requestRetranscode(request, metadata: authMetadata())
+        }
     }
 
     func requestLowStorageTranscode(titleId: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        _ = try await catalogService.requestLowStorageTranscode(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.requestLowStorageTranscode(request, metadata: authMetadata())
+        }
     }
 
     func dismissContinueWatching(titleId: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        _ = try await catalogService.dismissContinueWatching(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.dismissContinueWatching(request, metadata: authMetadata())
+        }
     }
 
     /// Dismisses a single title from a home-feed carousel for the
@@ -353,14 +474,18 @@ actor GrpcClient {
         var request = MMDismissHomeCarouselItemRequest()
         request.titleID = titleId
         request.carousel = carousel
-        _ = try await catalogService.dismissHomeCarouselItem(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.dismissHomeCarouselItem(request, metadata: authMetadata())
+        }
     }
 
     func dismissMissingSeason(titleId: Int64, seasonNumber: Int32?) async throws {
         var request = MMDismissMissingSeasonRequest()
         request.titleID = titleId
         if let sn = seasonNumber { request.seasonNumber = sn }
-        _ = try await catalogService.dismissMissingSeason(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.catalogService.dismissMissingSeason(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Browse RPCs
@@ -368,33 +493,45 @@ actor GrpcClient {
     func getActorDetail(personId: Int32) async throws -> MMActorDetail {
         var request = MMActorIdRequest()
         request.tmdbPersonID = personId
-        return try await catalogService.getActorDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getActorDetail(request, metadata: authMetadata())
+        }
     }
 
     func listCollections() async throws -> MMCollectionListResponse {
-        try await catalogService.listCollections(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.catalogService.listCollections(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func getCollectionDetail(id: Int32) async throws -> MMCollectionDetail {
         var request = MMCollectionIdRequest()
         request.tmdbCollectionID = id
-        return try await catalogService.getCollectionDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getCollectionDetail(request, metadata: authMetadata())
+        }
     }
 
     func listTags() async throws -> MMTagListResponse {
-        try await catalogService.listTags(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.catalogService.listTags(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func getTagDetail(id: Int64) async throws -> MMTagDetail {
         var request = MMTagIdRequest()
         request.tagID = id
-        return try await catalogService.getTagDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getTagDetail(request, metadata: authMetadata())
+        }
     }
 
     func getGenreDetail(id: Int64) async throws -> MMGenreDetail {
         var request = MMGenreIdRequest()
         request.genreID = id
-        return try await catalogService.getGenreDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getGenreDetail(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Playback RPCs
@@ -402,13 +539,17 @@ actor GrpcClient {
     func getProgress(transcodeId: Int64) async throws -> MMPlaybackProgress {
         var request = MMTranscodeIdRequest()
         request.transcodeID = transcodeId
-        return try await playbackService.getProgress(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playbackService.getProgress(request, metadata: authMetadata())
+        }
     }
 
     func getChapters(transcodeId: Int64) async throws -> MMChaptersResponse {
         var request = MMTranscodeIdRequest()
         request.transcodeID = transcodeId
-        return try await playbackService.getChapters(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playbackService.getChapters(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Reading-progress RPCs (ebook reader)
@@ -416,7 +557,9 @@ actor GrpcClient {
     func getReadingProgress(mediaItemId: Int64) async throws -> MMReadingProgress {
         var request = MMReadingProgressRequest()
         request.mediaItemID = mediaItemId
-        return try await playbackService.getReadingProgress(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playbackService.getReadingProgress(request, metadata: authMetadata())
+        }
     }
 
     func reportReadingProgress(
@@ -437,7 +580,9 @@ actor GrpcClient {
             ts.secondsSinceEpoch = Int64(clientRecordedAt.timeIntervalSince1970)
             request.clientRecordedAt = ts
         }
-        _ = try await playbackService.reportReadingProgress(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playbackService.reportReadingProgress(request, metadata: authMetadata())
+        }
     }
 
     func reportProgress(transcodeId: Int64, position: Double, duration: Double?) async throws {
@@ -447,7 +592,9 @@ actor GrpcClient {
         if let dur = duration {
             request.duration = MMPlaybackOffset.with { $0.seconds = dur }
         }
-        _ = try await playbackService.reportProgress(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playbackService.reportProgress(request, metadata: authMetadata())
+        }
     }
 
     /// Report audio listening progress for a music track. Server uses
@@ -461,68 +608,92 @@ actor GrpcClient {
         if let dur = duration {
             request.duration = MMPlaybackOffset.with { $0.seconds = dur }
         }
-        _ = try await playbackService.reportListeningProgress(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playbackService.reportListeningProgress(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Profile RPCs
 
     func getProfile() async throws -> MMProfileResponse {
-        try await profileService.getProfile(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.profileService.getProfile(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func updateTvQuality(_ quality: MMQuality) async throws {
         var request = MMUpdateTvQualityRequest()
         request.minQuality = quality
-        _ = try await profileService.updateTvQuality(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.profileService.updateTvQuality(request, metadata: authMetadata())
+        }
     }
 
     func listSessions() async throws -> MMSessionListResponse {
-        try await profileService.listSessions(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.profileService.listSessions(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func deleteSession(id: Int64, type: MMSessionType) async throws {
         var request = MMDeleteSessionRequest()
         request.sessionID = id
         request.type = type
-        _ = try await profileService.deleteSession(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.profileService.deleteSession(request, metadata: authMetadata())
+        }
     }
 
     func deleteOtherSessions() async throws {
-        _ = try await profileService.deleteOtherSessions(MMEmpty(), metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.profileService.deleteOtherSessions(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     // MARK: - Live RPCs
 
     func listCameras() async throws -> MMCameraListResponse {
-        try await liveService.listCameras(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.liveService.listCameras(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func listTvChannels() async throws -> MMTvChannelListResponse {
-        try await liveService.listTvChannels(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.liveService.listTvChannels(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func warmUpStream(path: String) async throws {
         var request = MMWarmUpStreamRequest()
         request.path = path
-        _ = try await liveService.warmUpStream(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.liveService.warmUpStream(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Download RPCs (metadata only; file downloads stay HTTP)
 
     func listDownloadsAvailable() async throws -> MMDownloadAvailableResponse {
-        try await downloadService.listAvailable(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.downloadService.listAvailable(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func getManifest(transcodeId: Int64) async throws -> MMDownloadManifest {
         var request = MMManifestRequest()
         request.transcodeID = transcodeId
-        return try await downloadService.getManifest(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.downloadService.getManifest(request, metadata: authMetadata())
+        }
     }
 
     func batchManifest(transcodeIds: [Int64]) async throws -> MMBatchManifestResponse {
         var request = MMBatchManifestRequest()
         request.transcodeIds = transcodeIds
-        return try await downloadService.batchManifest(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.downloadService.batchManifest(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Book downloads (ebook / PDF / digital audiobook)
@@ -530,7 +701,9 @@ actor GrpcClient {
     func getBookManifest(mediaItemId: Int64) async throws -> MMBookManifest {
         var request = MMBookManifestRequest()
         request.mediaItemID = mediaItemId
-        return try await downloadService.getBookManifest(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.downloadService.getBookManifest(request, metadata: authMetadata())
+        }
     }
 
     /// Server-streaming download of a book file (EPUB / PDF / audiobook).
@@ -577,7 +750,9 @@ actor GrpcClient {
     // MARK: - WishList RPCs
 
     func wishList() async throws -> MMWishListResponse {
-        try await wishListService.listWishes(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.wishListService.listWishes(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     /// Image artwork is intentionally not a parameter — server populates
@@ -590,14 +765,18 @@ actor GrpcClient {
         request.title = title
         if let ry = releaseYear { request.releaseYear = ry }
         if let sn = seasonNumber { request.seasonNumber = sn }
-        let response = try await wishListService.addWish(request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.wishListService.addWish(request, metadata: authMetadata())
+        }
         return response.id
     }
 
     func deleteWish(id: Int64) async throws {
         var request = MMWishIdRequest()
         request.wishID = id
-        _ = try await wishListService.cancelWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.cancelWish(request, metadata: authMetadata())
+        }
     }
 
     /// Adds a book wish keyed by Open Library work id. Used by the
@@ -619,7 +798,9 @@ actor GrpcClient {
         if let coverIsbn { request.coverIsbn = coverIsbn }
         if let seriesId { request.seriesID = seriesId }
         if let seriesNumber { request.seriesNumber = seriesNumber }
-        let response = try await wishListService.addBookWish(request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.wishListService.addBookWish(request, metadata: authMetadata())
+        }
         return response.id
     }
 
@@ -630,7 +811,9 @@ actor GrpcClient {
     func removeBookWish(olWorkId: String) async throws {
         var request = MMRemoveBookWishRequest()
         request.olWorkID = olWorkId
-        _ = try await wishListService.removeBookWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.removeBookWish(request, metadata: authMetadata())
+        }
     }
 
     /// Adds an album wish keyed by MusicBrainz release_group_id.
@@ -644,7 +827,9 @@ actor GrpcClient {
         request.releaseGroupID = releaseGroupId
         request.title = title
         if let primaryArtist { request.primaryArtist = primaryArtist }
-        let response = try await wishListService.addAlbumWish(request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.wishListService.addAlbumWish(request, metadata: authMetadata())
+        }
         return response.id
     }
 
@@ -652,7 +837,9 @@ actor GrpcClient {
     func removeAlbumWish(releaseGroupId: String) async throws {
         var request = MMRemoveAlbumWishRequest()
         request.releaseGroupID = releaseGroupId
-        _ = try await wishListService.removeAlbumWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.removeAlbumWish(request, metadata: authMetadata())
+        }
     }
 
     /// Bulk-fills missing volumes of a book series with new wishes.
@@ -661,37 +848,49 @@ actor GrpcClient {
     func wishlistSeriesGaps(seriesId: Int64) async throws -> MMWishlistSeriesGapsResponse {
         var request = MMWishlistSeriesGapsRequest()
         request.seriesID = seriesId
-        return try await wishListService.wishlistSeriesGaps(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.wishListService.wishlistSeriesGaps(request, metadata: authMetadata())
+        }
     }
 
     func voteOnWish(id: Int64, vote: Bool) async throws {
         var request = MMVoteRequest()
         request.wishID = id
         request.vote = vote
-        _ = try await wishListService.voteOnWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.voteOnWish(request, metadata: authMetadata())
+        }
     }
 
     func dismissWish(id: Int64) async throws {
         var request = MMWishIdRequest()
         request.wishID = id
-        _ = try await wishListService.dismissWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.dismissWish(request, metadata: authMetadata())
+        }
     }
 
     func transcodeWishList() async throws -> MMTranscodeWishListResponse {
-        try await wishListService.listTranscodeWishes(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.wishListService.listTranscodeWishes(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func deleteTranscodeWish(titleId: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        _ = try await wishListService.removeTranscodeWish(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.wishListService.removeTranscodeWish(request, metadata: authMetadata())
+        }
     }
 
     func searchTmdb(query: String, type: MMMediaType) async throws -> MMTmdbSearchResponse {
         var request = MMTmdbSearchRequest()
         request.query = query
         request.type = type
-        return try await wishListService.searchTmdb(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.wishListService.searchTmdb(request, metadata: authMetadata())
+        }
     }
 
     /// MusicBrainz fallback for the scan-detail "no TMDB match"
@@ -704,7 +903,9 @@ actor GrpcClient {
         var request = MMSearchMusicBrainzRequest()
         request.query = query
         if let barcode, !barcode.isEmpty { request.barcode = barcode }
-        return try await adminService.searchMusicBrainz(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.searchMusicBrainz(request, metadata: authMetadata())
+        }
     }
 
     /// Attach a MusicBrainz release MBID (specific pressing) to a
@@ -719,7 +920,9 @@ actor GrpcClient {
         request.titleID = titleId
         request.kind = .musicbrainzRelease
         request.value = releaseMbid
-        _ = try await adminService.assignExternalIdentifier(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.assignExternalIdentifier(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Artist / Album RPCs
@@ -731,13 +934,17 @@ actor GrpcClient {
         if let sort { request.sort = sort }
         if let query, !query.isEmpty { request.q = query }
         request.playableOnly = playableOnly
-        return try await artistService.listArtists(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.artistService.listArtists(request, metadata: authMetadata())
+        }
     }
 
     func getArtistDetail(id: Int64) async throws -> MMArtistDetail {
         var request = MMArtistIdRequest()
         request.artistID = id
-        return try await artistService.getArtistDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.artistService.getArtistDetail(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Radio
@@ -760,7 +967,9 @@ actor GrpcClient {
         var request = MMStartRadioRequest()
         if let id = seedTrackId { request.seedTrackID = id }
         if let id = seedAlbumId { request.seedAlbumID = id }
-        let response = try await radioService.startRadio(request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.radioService.startRadio(request, metadata: authMetadata())
+        }
         return ApiStartRadioResponse(proto: response)
     }
 
@@ -772,7 +981,9 @@ actor GrpcClient {
         var request = MMNextRadioBatchRequest()
         request.radioSessionID = sessionId
         request.history = history
-        let response = try await radioService.nextRadioBatch(request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.radioService.nextRadioBatch(request, metadata: authMetadata())
+        }
         return response.tracks.map { ApiTrack(proto: $0) }
     }
 
@@ -782,7 +993,9 @@ actor GrpcClient {
     func stopRadio(sessionId: String) async throws {
         var request = MMStopRadioRequest()
         request.radioSessionID = sessionId
-        _ = try await radioService.stopRadio(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.radioService.stopRadio(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Recommendations
@@ -793,8 +1006,10 @@ actor GrpcClient {
     func listRecommendedArtists(limit: Int32 = 0) async throws -> [ApiRecommendedArtist] {
         var request = MMListRecommendedArtistsRequest()
         request.limit = limit
-        let response = try await recommendationService.listRecommendedArtists(
-            request, metadata: authMetadata())
+        let response = try await callRPC {
+            try await self.recommendationService.listRecommendedArtists(
+                request, metadata: self.authMetadata())
+        }
         return response.artists.map { ApiRecommendedArtist(proto: $0) }
     }
 
@@ -803,8 +1018,10 @@ actor GrpcClient {
     func dismissRecommendation(mbid: String) async throws {
         var request = MMDismissRecommendationRequest()
         request.suggestedArtistMbid = mbid
-        _ = try await recommendationService.dismissRecommendation(
-            request, metadata: authMetadata())
+        try await callRPC {
+            _ = try await self.recommendationService.dismissRecommendation(
+                request, metadata: self.authMetadata())
+        }
     }
 
     /// Random shuffle of every playable track in the user's library.
@@ -813,7 +1030,9 @@ actor GrpcClient {
     func libraryShuffle(limit: Int32 = 200) async throws -> MMLibraryShuffleResponse {
         var request = MMLibraryShuffleRequest()
         request.limit = limit
-        return try await playlistService.libraryShuffle(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.libraryShuffle(request, metadata: authMetadata())
+        }
     }
 
     /// Reads server-defined smart playlists ("Recently Added",
@@ -821,14 +1040,18 @@ actor GrpcClient {
     /// CRUD against them. Tap-through fetches the tracklist via
     /// [getSmartPlaylist].
     func listSmartPlaylists() async throws -> MMListSmartPlaylistsResponse {
-        return try await playlistService.listSmartPlaylists(
-            MMListSmartPlaylistsRequest(), metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.listSmartPlaylists(
+                MMListSmartPlaylistsRequest(), metadata: self.authMetadata())
+        }
     }
 
     func getSmartPlaylist(key: String) async throws -> MMSmartPlaylistDetail {
         var request = MMGetSmartPlaylistRequest()
         request.key = key
-        return try await playlistService.getSmartPlaylist(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.getSmartPlaylist(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - User playlists
@@ -836,20 +1059,26 @@ actor GrpcClient {
     func listPlaylists(scope: MMPlaylistScope = .mine) async throws -> MMListPlaylistsResponse {
         var request = MMListPlaylistsRequest()
         request.scope = scope
-        return try await playlistService.listPlaylists(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.listPlaylists(request, metadata: authMetadata())
+        }
     }
 
     func getPlaylist(id: Int64) async throws -> MMPlaylistDetail {
         var request = MMGetPlaylistRequest()
         request.id = id
-        return try await playlistService.getPlaylist(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.getPlaylist(request, metadata: authMetadata())
+        }
     }
 
     func createPlaylist(name: String, description: String? = nil) async throws -> MMPlaylistSummary {
         var request = MMCreatePlaylistRequest()
         request.name = name
         if let description, !description.isEmpty { request.description_p = description }
-        return try await playlistService.createPlaylist(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.createPlaylist(request, metadata: authMetadata())
+        }
     }
 
     func renamePlaylist(id: Int64, name: String, description: String? = nil) async throws {
@@ -857,34 +1086,44 @@ actor GrpcClient {
         request.id = id
         request.name = name
         if let description { request.description_p = description }
-        _ = try await playlistService.renamePlaylist(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.renamePlaylist(request, metadata: authMetadata())
+        }
     }
 
     func deletePlaylist(id: Int64) async throws {
         var request = MMDeletePlaylistRequest()
         request.id = id
-        _ = try await playlistService.deletePlaylist(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.deletePlaylist(request, metadata: authMetadata())
+        }
     }
 
     func addTracksToPlaylist(id: Int64, trackIds: [Int64]) async throws -> MMAddTracksToPlaylistResponse {
         var request = MMAddTracksToPlaylistRequest()
         request.id = id
         request.trackIds = trackIds
-        return try await playlistService.addTracksToPlaylist(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.playlistService.addTracksToPlaylist(request, metadata: authMetadata())
+        }
     }
 
     func removeTrackFromPlaylist(id: Int64, playlistTrackId: Int64) async throws {
         var request = MMRemoveTrackFromPlaylistRequest()
         request.id = id
         request.playlistTrackID = playlistTrackId
-        _ = try await playlistService.removeTrackFromPlaylist(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.removeTrackFromPlaylist(request, metadata: authMetadata())
+        }
     }
 
     func reorderPlaylist(id: Int64, playlistTrackIdsInOrder: [Int64]) async throws {
         var request = MMReorderPlaylistRequest()
         request.id = id
         request.playlistTrackIdsInOrder = playlistTrackIdsInOrder
-        _ = try await playlistService.reorderPlaylist(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.reorderPlaylist(request, metadata: authMetadata())
+        }
     }
 
     func setPlaylistHero(id: Int64, trackId: Int64?) async throws {
@@ -892,14 +1131,18 @@ actor GrpcClient {
         request.id = id
         // Server's track_id is optional — omit to clear the hero.
         if let trackId { request.trackID = trackId }
-        _ = try await playlistService.setPlaylistHero(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.setPlaylistHero(request, metadata: authMetadata())
+        }
     }
 
     func setPlaylistPrivacy(id: Int64, isPrivate: Bool) async throws {
         var request = MMSetPlaylistPrivacyRequest()
         request.id = id
         request.isPrivate = isPrivate
-        _ = try await playlistService.setPlaylistPrivacy(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.playlistService.setPlaylistPrivacy(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Author / Book RPCs
@@ -912,33 +1155,43 @@ actor GrpcClient {
         if let query, !query.isEmpty { request.q = query }
         request.playableOnly = playableOnly
         request.hiddenOnly = hiddenOnly
-        return try await artistService.listAuthors(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.artistService.listAuthors(request, metadata: authMetadata())
+        }
     }
 
     func adminSetAuthorHidden(authorId: Int64, hidden: Bool) async throws {
         var request = MMSetAuthorHiddenRequest()
         request.authorID = authorId
         request.hidden = hidden
-        _ = try await adminService.setAuthorHidden(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.setAuthorHidden(request, metadata: authMetadata())
+        }
     }
 
     func getAuthorDetail(id: Int64, playableOnly: Bool = true) async throws -> MMAuthorDetail {
         var request = MMAuthorIdRequest()
         request.authorID = id
         request.playableOnly = playableOnly
-        return try await artistService.getAuthorDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.artistService.getAuthorDetail(request, metadata: authMetadata())
+        }
     }
 
     func getBookSeriesDetail(id: Int64, playableOnly: Bool = true) async throws -> MMBookSeriesDetail {
         var request = MMBookSeriesIdRequest()
         request.seriesID = id
         request.playableOnly = playableOnly
-        return try await catalogService.getBookSeriesDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.catalogService.getBookSeriesDetail(request, metadata: authMetadata())
+        }
     }
     // MARK: - Admin RPCs
 
     func adminTranscodeStatus() async throws -> MMTranscodeStatusResponse {
-        try await adminService.getTranscodeStatus(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.getTranscodeStatus(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     /// Server-streaming: initial snapshot + live delta updates.
@@ -958,7 +1211,9 @@ actor GrpcClient {
     }
 
     func adminBuddyStatus() async throws -> MMBuddyStatusResponse {
-        try await adminService.getBuddyStatus(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.getBuddyStatus(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     // MARK: - Barcode Scanning RPCs
@@ -966,11 +1221,15 @@ actor GrpcClient {
     func adminSubmitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse {
         var request = MMSubmitBarcodeRequest()
         request.upc = upc
-        return try await adminService.submitBarcode(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.submitBarcode(request, metadata: authMetadata())
+        }
     }
 
     func adminListRecentScans() async throws -> MMRecentScansResponse {
-        try await adminService.listRecentScans(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listRecentScans(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminMonitorScanProgress(
@@ -992,7 +1251,9 @@ actor GrpcClient {
     func adminGetScanDetail(scanId: Int64) async throws -> MMScanDetailResponse {
         var request = MMScanIdRequest()
         request.scanID = scanId
-        return try await adminService.getScanDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.getScanDetail(request, metadata: authMetadata())
+        }
     }
 
     func adminAssignTmdb(titleId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAssignTmdbResponse {
@@ -1000,7 +1261,9 @@ actor GrpcClient {
         request.titleID = titleId
         request.tmdbID = tmdbId
         request.mediaType = mediaType
-        return try await adminService.assignTmdb(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.assignTmdb(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdatePurchaseInfo(scanId: Int64, place: String?, date: MMCalendarDate?, price: Double?) async throws {
@@ -1009,7 +1272,9 @@ actor GrpcClient {
         if let place { request.purchasePlace = place }
         if let date { request.purchaseDate = date }
         if let price { request.purchasePrice = price }
-        _ = try await adminService.updatePurchaseInfo(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updatePurchaseInfo(request, metadata: authMetadata())
+        }
     }
 
     func adminUploadOwnershipPhoto(scanId: Int64, photoData: Data, contentType: String) async throws -> MMUploadOwnershipPhotoResponse {
@@ -1017,13 +1282,17 @@ actor GrpcClient {
         request.scanID = scanId
         request.photoData = photoData
         request.contentType = contentType
-        return try await adminService.uploadOwnershipPhoto(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.uploadOwnershipPhoto(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteOwnershipPhoto(photoId: String) async throws {
         var request = MMDeleteOwnershipPhotoRequest()
         request.photoID = photoId
-        _ = try await adminService.deleteOwnershipPhoto(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteOwnershipPhoto(request, metadata: authMetadata())
+        }
     }
 
     func adminAddTitle(tmdbId: Int32, mediaType: MMMediaType, mediaFormat: MMMediaFormat, seasons: String? = nil) async throws -> MMAddTitleResponse {
@@ -1032,7 +1301,9 @@ actor GrpcClient {
         request.mediaType = mediaType
         request.mediaFormat = mediaFormat
         if let s = seasons { request.seasons = s }
-        return try await adminService.addTitle(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.addTitle(request, metadata: authMetadata())
+        }
     }
 
     /// Free-text search against Open Library, used by the AddTitleView's
@@ -1044,7 +1315,9 @@ actor GrpcClient {
         var request = MMSearchOpenLibraryRequest()
         request.query = query
         request.limit = limit
-        return try await adminService.searchOpenLibrary(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.searchOpenLibrary(request, metadata: authMetadata())
+        }
     }
 
     /// Updates the admin-editable fields on a media item (book
@@ -1068,13 +1341,17 @@ actor GrpcClient {
         if let v = replacementValue { request.replacementValue = v }
         if let v = overrideAsin { request.overrideAsin = v }
         if let v = storageLocation { request.storageLocation = v }
-        _ = try await adminService.updateMediaItem(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateMediaItem(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Camera Admin RPCs
 
     func adminListCameras() async throws -> MMAdminCameraListResponse {
-        try await adminService.listAdminCameras(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listAdminCameras(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminCreateCamera(name: String, rtspUrl: String, snapshotUrl: String, streamName: String?, enabled: Bool) async throws -> MMAdminCamera {
@@ -1084,7 +1361,9 @@ actor GrpcClient {
         request.snapshotURL = snapshotUrl
         if let streamName { request.streamName = streamName }
         request.enabled = enabled
-        return try await adminService.createCamera(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.createCamera(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateCamera(id: Int64, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Bool) async throws -> MMAdminCamera {
@@ -1095,31 +1374,43 @@ actor GrpcClient {
         request.snapshotURL = snapshotUrl
         request.streamName = streamName
         request.enabled = enabled
-        return try await adminService.updateCamera(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.updateCamera(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteCamera(id: Int64) async throws {
         var request = MMCameraIdRequest()
         request.cameraID = id
-        _ = try await adminService.deleteCamera(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteCamera(request, metadata: authMetadata())
+        }
     }
 
     func adminReorderCameras(ids: [Int64]) async throws {
         var request = MMReorderCamerasRequest()
         request.cameraIds = ids
-        _ = try await adminService.reorderCameras(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.reorderCameras(request, metadata: authMetadata())
+        }
     }
 
     func adminScanNas() async throws {
-        _ = try await adminService.scanNas(MMEmpty(), metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.scanNas(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminClearFailures() async throws {
-        _ = try await adminService.clearFailures(MMEmpty(), metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.clearFailures(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminGetSettings() async throws -> MMSettingsResponse {
-        try await adminService.getSettings(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.getSettings(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminUpdateSetting(key: String, value: String) async throws {
@@ -1127,31 +1418,41 @@ actor GrpcClient {
         // Map string config key to proto SettingKey enum
         request.key = MMSettingKey.fromConfigKey(key)
         request.value = value
-        _ = try await adminService.updateSetting(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateSetting(request, metadata: authMetadata())
+        }
     }
 
     func adminListLinkedTranscodes(page: Int32) async throws -> MMLinkedTranscodeResponse {
         var request = MMPaginationRequest()
         request.page = page
         request.limit = 50
-        return try await adminService.listLinkedTranscodes(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.listLinkedTranscodes(request, metadata: authMetadata())
+        }
     }
 
     func adminUnlinkTranscode(id: Int64) async throws {
         var request = MMTranscodeIdRequest()
         request.transcodeID = id
-        _ = try await adminService.unlinkTranscode(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.unlinkTranscode(request, metadata: authMetadata())
+        }
     }
 
     func adminListTags() async throws -> MMAdminTagListResponse {
-        try await adminService.listTags(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listTags(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminCreateTag(name: String, color: String) async throws {
         var request = MMCreateTagRequest()
         request.name = name
         request.color = MMColor.with { $0.hex = color }
-        _ = try await adminService.createTag(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.createTag(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateTag(id: Int64, name: String, color: String) async throws {
@@ -1159,50 +1460,66 @@ actor GrpcClient {
         request.tagID = id
         request.name = name
         request.color = MMColor.with { $0.hex = color }
-        _ = try await adminService.updateTag(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateTag(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteTag(id: Int64) async throws {
         var request = MMTagIdRequest()
         request.tagID = id
-        _ = try await adminService.deleteTag(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteTag(request, metadata: authMetadata())
+        }
     }
 
     func adminAddTagToTitle(tagId: Int64, titleId: Int64) async throws {
         var request = MMTagTitleRequest()
         request.tagID = tagId
         request.titleID = titleId
-        _ = try await adminService.addTagToTitle(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.addTagToTitle(request, metadata: authMetadata())
+        }
     }
 
     func adminRemoveTagFromTitle(tagId: Int64, titleId: Int64) async throws {
         var request = MMTagTitleRequest()
         request.tagID = tagId
         request.titleID = titleId
-        _ = try await adminService.removeTagFromTitle(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.removeTagFromTitle(request, metadata: authMetadata())
+        }
     }
 
     func adminListDataQuality(page: Int32) async throws -> MMDataQualityResponse {
         var request = MMDataQualityRequest()
         request.page = page
         request.limit = 50
-        return try await adminService.listDataQuality(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.listDataQuality(request, metadata: authMetadata())
+        }
     }
 
     func adminReEnrich(titleId: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = titleId
-        _ = try await adminService.reEnrich(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.reEnrich(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteTitle(id: Int64) async throws {
         var request = MMTitleIdRequest()
         request.titleID = id
-        _ = try await adminService.deleteTitle(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteTitle(request, metadata: authMetadata())
+        }
     }
 
     func adminListPurchaseWishes() async throws -> MMPurchaseWishListResponse {
-        try await adminService.listPurchaseWishes(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listPurchaseWishes(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminUpdatePurchaseWishStatus(tmdbId: Int32, mediaType: MediaType, seasonNumber: Int32?, status: AcquisitionStatus) async throws {
@@ -1215,11 +1532,15 @@ actor GrpcClient {
         }
         if let seasonNumber { request.seasonNumber = seasonNumber }
         request.status = status.protoValue
-        _ = try await adminService.updatePurchaseWishStatus(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updatePurchaseWishStatus(request, metadata: authMetadata())
+        }
     }
 
     func adminListUsers() async throws -> MMUserListResponse {
-        try await adminService.listUsers(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listUsers(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminCreateUser(username: String, password: String, displayName: String?) async throws {
@@ -1228,14 +1549,18 @@ actor GrpcClient {
         request.password = password
         if let dn = displayName { request.displayName = dn }
         request.forceChange = true
-        _ = try await adminService.createUser(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.createUser(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateUserRole(id: Int64, accessLevel: Int32) async throws {
         var request = MMUpdateUserRoleRequest()
         request.userID = id
         request.accessLevel = accessLevel == 2 ? .admin : .viewer
-        _ = try await adminService.updateUserRole(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateUserRole(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateUserRatingCeiling(id: Int64, ceiling: Int32?) async throws {
@@ -1244,19 +1569,25 @@ actor GrpcClient {
         if let c = ceiling {
             request.ceiling = MMRatingLevel(rawValue: Int(c)) ?? .unknown
         }
-        _ = try await adminService.updateUserRatingCeiling(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateUserRatingCeiling(request, metadata: authMetadata())
+        }
     }
 
     func adminUnlockUser(id: Int64) async throws {
         var request = MMUserIdRequest()
         request.userID = id
-        _ = try await adminService.unlockUser(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.unlockUser(request, metadata: authMetadata())
+        }
     }
 
     func adminForcePasswordChange(id: Int64) async throws {
         var request = MMUserIdRequest()
         request.userID = id
-        _ = try await adminService.forcePasswordChange(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.forcePasswordChange(request, metadata: authMetadata())
+        }
     }
 
     func adminResetPassword(id: Int64, newPassword: String) async throws {
@@ -1264,36 +1595,48 @@ actor GrpcClient {
         request.userID = id
         request.newPassword = newPassword
         request.forceChange = true
-        _ = try await adminService.resetPassword(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.resetPassword(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteUser(id: Int64) async throws {
         var request = MMUserIdRequest()
         request.userID = id
-        _ = try await adminService.deleteUser(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteUser(request, metadata: authMetadata())
+        }
     }
 
     func adminListUnmatchedFiles() async throws -> MMUnmatchedResponse {
-        try await adminService.listUnmatchedFiles(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listUnmatchedFiles(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminAcceptUnmatched(id: Int64) async throws {
         var request = MMUnmatchedIdRequest()
         request.unmatchedID = id
-        _ = try await adminService.acceptUnmatched(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.acceptUnmatched(request, metadata: authMetadata())
+        }
     }
 
     func adminIgnoreUnmatched(id: Int64) async throws {
         var request = MMUnmatchedIdRequest()
         request.unmatchedID = id
-        _ = try await adminService.ignoreUnmatched(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.ignoreUnmatched(request, metadata: authMetadata())
+        }
     }
 
     func adminLinkUnmatched(id: Int64, titleId: Int64) async throws {
         var request = MMLinkUnmatchedRequest()
         request.unmatchedID = id
         request.titleID = titleId
-        _ = try await adminService.linkUnmatched(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.linkUnmatched(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Amazon Import RPCs
@@ -1302,7 +1645,9 @@ actor GrpcClient {
         var request = MMImportAmazonOrdersRequest()
         request.csvData = csvData
         request.filename = filename
-        return try await adminService.importAmazonOrders(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.importAmazonOrders(request, metadata: authMetadata())
+        }
     }
 
     func adminSearchAmazonOrders(query: String = "", mediaOnly: Bool = true, unlinkedOnly: Bool = true, hideCancelled: Bool = true, limit: Int32 = 200) async throws -> MMSearchAmazonOrdersResponse {
@@ -1312,36 +1657,48 @@ actor GrpcClient {
         request.unlinkedOnly = unlinkedOnly
         request.hideCancelled = hideCancelled
         request.limit = limit
-        return try await adminService.searchAmazonOrders(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.searchAmazonOrders(request, metadata: authMetadata())
+        }
     }
 
     func adminLinkAmazonOrder(amazonOrderId: Int64, mediaItemId: Int64) async throws {
         var request = MMLinkAmazonOrderRequest()
         request.amazonOrderID = amazonOrderId
         request.mediaItemID = mediaItemId
-        _ = try await adminService.linkAmazonOrder(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.linkAmazonOrder(request, metadata: authMetadata())
+        }
     }
 
     func adminUnlinkAmazonOrder(amazonOrderId: Int64) async throws {
         var request = MMAmazonOrderIdRequest()
         request.amazonOrderID = amazonOrderId
-        _ = try await adminService.unlinkAmazonOrder(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.unlinkAmazonOrder(request, metadata: authMetadata())
+        }
     }
 
     func adminGetAmazonOrderSummary() async throws -> MMAmazonOrderSummaryResponse {
-        try await adminService.getAmazonOrderSummary(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.getAmazonOrderSummary(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     // MARK: - Expand Multi-Pack RPCs
 
     func adminListPendingExpansions() async throws -> MMPendingExpansionsResponse {
-        try await adminService.listPendingExpansions(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listPendingExpansions(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminGetExpansionDetail(mediaItemId: Int64) async throws -> MMExpansionDetailResponse {
         var request = MMMediaItemIdRequest()
         request.mediaItemID = mediaItemId
-        return try await adminService.getExpansionDetail(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.getExpansionDetail(request, metadata: authMetadata())
+        }
     }
 
     func adminAddTitleToExpansion(mediaItemId: Int64, tmdbId: Int32, mediaType: MMMediaType) async throws -> MMAddTitleToExpansionResponse {
@@ -1349,26 +1706,34 @@ actor GrpcClient {
         request.mediaItemID = mediaItemId
         request.tmdbID = tmdbId
         request.mediaType = mediaType
-        return try await adminService.addTitleToExpansion(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.addTitleToExpansion(request, metadata: authMetadata())
+        }
     }
 
     func adminRemoveTitleFromExpansion(mediaItemId: Int64, titleId: Int64) async throws {
         var request = MMRemoveTitleFromExpansionRequest()
         request.mediaItemID = mediaItemId
         request.titleID = titleId
-        _ = try await adminService.removeTitleFromExpansion(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.removeTitleFromExpansion(request, metadata: authMetadata())
+        }
     }
 
     func adminMarkExpanded(mediaItemId: Int64) async throws {
         var request = MMMediaItemIdRequest()
         request.mediaItemID = mediaItemId
-        _ = try await adminService.markExpanded(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.markExpanded(request, metadata: authMetadata())
+        }
     }
 
     func adminMarkNotMultiPack(mediaItemId: Int64) async throws {
         var request = MMMediaItemIdRequest()
         request.mediaItemID = mediaItemId
-        _ = try await adminService.markNotMultiPack(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.markNotMultiPack(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Valuation RPCs
@@ -1379,7 +1744,9 @@ actor GrpcClient {
         request.pageSize = pageSize
         if !query.isEmpty { request.query = query }
         request.unpricedOnly = unpricedOnly
-        return try await adminService.listValuations(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.listValuations(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateMediaItem(id: Int64, place: String?, date: String?, price: Double?, replacementValue: Double?, asin: String?) async throws {
@@ -1390,20 +1757,26 @@ actor GrpcClient {
         if let p = price { request.purchasePrice = p }
         if let r = replacementValue { request.replacementValue = r }
         if let a = asin { request.overrideAsin = a }
-        _ = try await adminService.updateMediaItem(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateMediaItem(request, metadata: authMetadata())
+        }
     }
 
     func adminListUndocumentedItems(page: Int32 = 1, limit: Int32 = 50) async throws -> MMUndocumentedItemsResponse {
         var request = MMPaginationRequest()
         request.page = page
         request.limit = limit
-        return try await adminService.listUndocumentedItems(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.listUndocumentedItems(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Family Member RPCs
 
     func adminListFamilyMembers() async throws -> MMFamilyMemberListResponse {
-        try await adminService.listFamilyMembers(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listFamilyMembers(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminCreateFamilyMember(name: String, birthDate: String?, notes: String?) async throws -> MMFamilyMemberResponse {
@@ -1411,7 +1784,9 @@ actor GrpcClient {
         request.name = name
         if let b = birthDate { request.birthDate = b }
         if let n = notes { request.notes = n }
-        return try await adminService.createFamilyMember(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.createFamilyMember(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateFamilyMember(id: Int64, name: String, birthDate: String?, notes: String?) async throws {
@@ -1420,19 +1795,25 @@ actor GrpcClient {
         request.name = name
         if let b = birthDate { request.birthDate = b }
         if let n = notes { request.notes = n }
-        _ = try await adminService.updateFamilyMember(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateFamilyMember(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteFamilyMember(id: Int64) async throws {
         var request = MMFamilyMemberIdRequest()
         request.familyMemberID = id
-        _ = try await adminService.deleteFamilyMember(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteFamilyMember(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Live TV Settings RPCs
 
     func adminGetLiveTvSettings() async throws -> MMLiveTvSettingsResponse {
-        try await adminService.getLiveTvSettings(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.getLiveTvSettings(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminUpdateLiveTvSettings(minRating: String?, maxStreams: Int32, idleTimeout: Int32) async throws {
@@ -1440,18 +1821,24 @@ actor GrpcClient {
         if let r = minRating { request.minContentRating = r }
         request.maxStreams = maxStreams
         request.idleTimeoutSeconds = idleTimeout
-        _ = try await adminService.updateLiveTvSettings(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateLiveTvSettings(request, metadata: authMetadata())
+        }
     }
 
     func adminListTuners() async throws -> MMTunerListResponse {
-        try await adminService.listTuners(MMEmpty(), metadata: authMetadata())
+        try await callRPC {
+            try await self.adminService.listTuners(MMEmpty(), metadata: authMetadata())
+        }
     }
 
     func adminAddTuner(ipAddress: String, name: String?) async throws -> MMTunerResponse {
         var request = MMAddTunerRequest()
         request.ipAddress = ipAddress
         if let n = name { request.name = n }
-        return try await adminService.addTuner(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.addTuner(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateTuner(id: Int64, name: String, enabled: Bool) async throws {
@@ -1459,25 +1846,33 @@ actor GrpcClient {
         request.tunerID = id
         request.name = name
         request.enabled = enabled
-        _ = try await adminService.updateTuner(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateTuner(request, metadata: authMetadata())
+        }
     }
 
     func adminDeleteTuner(id: Int64) async throws {
         var request = MMTunerIdRequest()
         request.tunerID = id
-        _ = try await adminService.deleteTuner(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.deleteTuner(request, metadata: authMetadata())
+        }
     }
 
     func adminRefreshTunerChannels(tunerId: Int64) async throws -> MMRefreshChannelsResponse {
         var request = MMTunerIdRequest()
         request.tunerID = tunerId
-        return try await adminService.refreshTunerChannels(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.refreshTunerChannels(request, metadata: authMetadata())
+        }
     }
 
     func adminListAdminChannels(tunerId: Int64) async throws -> MMAdminChannelListResponse {
         var request = MMTunerIdRequest()
         request.tunerID = tunerId
-        return try await adminService.listAdminChannels(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.listAdminChannels(request, metadata: authMetadata())
+        }
     }
 
     func adminUpdateChannel(id: Int64, networkAffiliation: String?, quality: Int32, enabled: Bool) async throws {
@@ -1486,7 +1881,9 @@ actor GrpcClient {
         if let n = networkAffiliation { request.networkAffiliation = n }
         request.receptionQuality = quality
         request.enabled = enabled
-        _ = try await adminService.updateChannel(request, metadata: authMetadata())
+        _ = try await callRPC {
+            try await self.adminService.updateChannel(request, metadata: authMetadata())
+        }
     }
 
     // MARK: - Inventory Report RPCs
@@ -1494,7 +1891,9 @@ actor GrpcClient {
     func adminGenerateInventoryReport(includePhotos: Bool = false) async throws -> MMInventoryReportResponse {
         var request = MMInventoryReportRequest()
         request.includePhotos = includePhotos
-        return try await adminService.generateInventoryReport(request, metadata: authMetadata())
+        return try await callRPC {
+            try await self.adminService.generateInventoryReport(request, metadata: authMetadata())
+        }
     }
 }
 
