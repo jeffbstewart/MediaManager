@@ -16,6 +16,7 @@
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;
   <a href="ROKU_GUIDE.md">Roku Setup</a> &bull;
   <a href="ANDROID_TV_GUIDE.md">Android TV Setup</a> &bull;
+  <a href="CARPLAY_GUIDE.md">CarPlay Guide</a> &bull;
   <a href="TRANSCODE_BUDDY.md">Transcode Buddy</a> &bull;
   <a href="COMPETITIVE_ANALYSIS.md">Competitive Analysis</a>
 </p>
@@ -45,6 +46,7 @@ Media Manager is a self-hosted web application for people who own physical media
 | [Admin Guide](ADMIN_GUIDE.md) | Administrators | Catalog management, transcoding, user management |
 | [Roku Setup](ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
 | [Android TV Setup](ANDROID_TV_GUIDE.md) | Google TV / Android TV users | Building, installing, multi-account, playback |
+| [CarPlay Guide](CARPLAY_GUIDE.md) | iPhone + car users | Browsing, Shuffle Library, AirPods controls |
 | [Transcode Buddy](TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Mac Development Setup](MAC_SETUP.md) | Contributors | macOS prerequisites, building, deploying, iOS development |

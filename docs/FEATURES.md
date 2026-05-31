@@ -77,6 +77,7 @@ see git history for full specifications.
 | Live Camera Streaming | RTSP camera relay via go2rtc, browser MJPEG grid, Roku HLS playback, credential redaction, admin CRUD with blind credential updates |
 | Passkey Authentication | WebAuthn/passkey support for Face ID, Touch ID, and hardware security key re-login; standalone terms agreement page; admin passkey management |
 | Legal Terms Separation | Decoupled terms acceptance from login flow into dedicated /terms page with server-side 451 enforcement |
+| iOS CarPlay | Audio-only CarPlay surface with Albums / Playlists / Smart Playlists tabs, list-row thumbnails, Shuffle Library row, Now Playing hero, MPRemoteCommandCenter wiring for AirPods + lock screen + Control Center, auto-reconnect on stale HTTP/2 streams |
 
 ---
 

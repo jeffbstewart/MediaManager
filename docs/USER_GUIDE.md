@@ -481,8 +481,19 @@ Flip the offline toggle back to **Online**, or simply restore network connectivi
 
 ---
 
+## In the Car (CarPlay)
+
+When the iPhone is connected to a CarPlay-equipped vehicle, the Household Disc Keeper icon appears on the CarPlay home screen alongside Apple Music, Spotify, and other audio apps. Tapping the icon brings up an audio browse surface with three tabs: **Albums**, **Playlists**, and **Smart Playlists**.
+
+The Smart Playlists tab has a pinned **Shuffle Library** row at the top &mdash; one tap to start playing a random selection of up to 200 tracks from your collection without picking an album first. AirPods single-press toggles play/pause, and the standard CarPlay Now Playing screen shows album art, title, artist, and a scrubber.
+
+Setup is automatic &mdash; sign in once on the phone, and CarPlay activates the moment the iPhone connects to the car. See the [CarPlay Guide](CARPLAY_GUIDE.md) for the full feature tour, prerequisites, and troubleshooting.
+
+---
+
 <p align="center">
   <a href="index.md">Documentation Home</a> &bull;
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;
-  <a href="ROKU_GUIDE.md">Roku Setup</a>
+  <a href="ROKU_GUIDE.md">Roku Setup</a> &bull;
+  <a href="CARPLAY_GUIDE.md">CarPlay Guide</a>
 </p>

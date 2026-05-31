@@ -286,7 +286,9 @@ final class CarPlayBrowseController {
         logger.info("loadSmartPlaylists: calling smartPlaylists")
         do {
             let summaries = try await model.smartPlaylists()
-            let items = summaries.map { summary -> CPListItem in
+            var items: [CPListItem] = []
+            items.append(makeShuffleLibraryItem())
+            items.append(contentsOf: summaries.map { summary -> CPListItem in
                 let item = CPListItem(text: summary.name, detailText: nil)
                 item.accessoryType = .disclosureIndicator
                 item.handler = { [weak self] _, completion in
@@ -294,12 +296,59 @@ final class CarPlayBrowseController {
                     completion()
                 }
                 return item
-            }
+            })
             smartTab.updateSections([CPListSection(items: items)])
-            logger.info("loadSmartPlaylists: returned \(summaries.count) entries")
+            logger.info("loadSmartPlaylists: returned \(summaries.count) entries (plus Shuffle Library)")
         } catch {
+            // Even when the smart-playlist RPC fails, the Shuffle
+            // Library row still works (different RPC), so render it
+            // alone rather than dropping the driver into a dead-end
+            // error screen. The error row sits below as context.
             logger.error("loadSmartPlaylists: smartPlaylists failed: \(describeError(error))")
-            smartTab.updateSections([Self.errorSection(rpc: "smartPlaylists", error: error)])
+            smartTab.updateSections([
+                CPListSection(items: [makeShuffleLibraryItem()]),
+                Self.errorSection(rpc: "smartPlaylists", error: error),
+            ])
+        }
+    }
+
+    /// Pinned row at the top of the Smart Playlists tab. Tap →
+    /// libraryShuffle RPC → AudioPlayerManager.play(...) →
+    /// CPNowPlayingTemplate. Driver's one-tap path from "I'm in the
+    /// car and want music" to playback without picking an album or
+    /// playlist first. Identical effect to the Music tab's Shuffle
+    /// Library button on the phone.
+    private func makeShuffleLibraryItem() -> CPListItem {
+        let item = CPListItem(text: "Shuffle Library", detailText: "Random tracks from your collection")
+        item.setImage(UIImage(systemName: "shuffle"))
+        item.handler = { [weak self] _, completion in
+            self?.shuffleLibrary()
+            completion()
+        }
+        return item
+    }
+
+    private func shuffleLibrary() {
+        guard let audio = AppServices.shared.audioPlayer,
+              let model = AppServices.shared.dataModel else {
+            logger.error("shuffleLibrary: services not ready")
+            return
+        }
+        Task {
+            logger.info("shuffleLibrary: calling libraryShuffle(limit: 200)")
+            do {
+                let tracks = try await model.libraryShuffle(limit: 200)
+                let queued = tracks.map { Self.makeQueuedTrack(fromShuffleHit: $0) }
+                guard !queued.isEmpty else {
+                    logger.info("shuffleLibrary: empty result, nothing to play")
+                    return
+                }
+                audio.play(tracks: queued, startingAt: 0)
+                presentNowPlaying()
+                logger.info("shuffleLibrary: queued \(queued.count) tracks")
+            } catch {
+                logger.error("shuffleLibrary: libraryShuffle failed: \(describeError(error))")
+            }
         }
     }
 
@@ -416,6 +465,24 @@ final class CarPlayBrowseController {
             title: t.name,
             albumName: albumName,
             artistName: credit,
+            trackNumber: t.trackNumber,
+            discNumber: t.discNumber,
+            durationSeconds: t.durationSeconds)
+    }
+
+    /// Track conversion for library shuffle. The server populates
+    /// albumName + albumArtistName on standalone-surfaced tracks
+    /// (libraryShuffle, smart playlist tracks, tag detail, etc.) so
+    /// the per-track ApiTrack carries enough chrome metadata on its
+    /// own — no parent ApiAlbum required. Mirrors the same shape
+    /// MusicView's shuffle button builds.
+    static func makeQueuedTrack(fromShuffleHit t: ApiTrack) -> QueuedTrack {
+        QueuedTrack(
+            id: t.id,
+            titleId: t.titleId,
+            title: t.name,
+            albumName: t.albumName ?? "",
+            artistName: t.trackArtistNames.first ?? t.albumArtistName ?? "",
             trackNumber: t.trackNumber,
             discNumber: t.discNumber,
             durationSeconds: t.durationSeconds)

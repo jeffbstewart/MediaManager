@@ -32,6 +32,7 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 | [User Guide](docs/USER_GUIDE.md) | Everyone | Browsing, searching, watching, personalizing |
 | [Admin Guide](docs/ADMIN_GUIDE.md) | Administrators | Catalog management, transcoding, user management, env vars, CLI flags |
 | [Roku Setup](docs/ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
+| [CarPlay Guide](docs/CARPLAY_GUIDE.md) | iPhone + car users | Browsing, Shuffle Library, AirPods controls |
 | [Transcode Buddy](docs/TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](docs/GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Mac Development Setup](docs/MAC_SETUP.md) | Contributors | macOS prerequisites, building, deploying, iOS development |
