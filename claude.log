@@ -5501,3 +5501,45 @@ recurring 15-books-and-reader:226 flake as prior runs).
   src/test/kotlin/net/stewart/mediamanager/grpc/BuddyGrpcServiceTest.kt
 - ./gradlew --no-daemon build passes; 14/14 BuddyGrpcServiceTest cases green.
 ===
+
+=== 2026-05-31 — CarPlay search dead-end + Siri Path A failure ===
+- iOS CarPlay had been shipping at build 3 with browse-only (Albums /
+  Playlists / Smart Playlists tabs + pinned Shuffle Library row, the
+  reconnect-on-stale-stream wrapper from earlier).
+- Tried to add search via CPSearchTemplate. Build 4: CPSearchTemplate
+  inside CPTabBarTemplate.templates → SIGABRT/NSException on real
+  CarPlay hardware (cite Binnacle 2026-05-31T22:51Z). Build 5: push
+  CPSearchTemplate from a row in the Albums tab → NSException with
+  diagnostic "Allowed classes: {CPTabBarTemplate, CPListTemplate,
+  CPAlertTemplate, CPVoiceControlTemplate, CPGridTemplate,
+  CPActionSheetTemplate, CPNowPlayingTemplate}". CPSearchTemplate is
+  not accessible to com.apple.developer.carplay-audio apps; Apple
+  Music's search uses a private capability we can't reach.
+- Build 6: removed all CPSearchTemplate references and stripped the
+  dead CarPlaySearchDelegate class. Added a comment in
+  CarPlayBrowseController explaining the dead-end so the next
+  investigator doesn't re-walk it. THIS COMMIT lands on main.
+- Build 7-9: V1 of Siri INPlayMediaIntent via main-app-only
+  application(_:handlerFor:) — no Intents Extension. Build 7 hit
+  TestFlight; Siri responded "Sorry, Household Disc Keeper hasn't
+  added support for that with Siri" because there's no static
+  signal for Siri's matcher. Builds 8/9 attempted to add
+  INSupportedMediaCategories to the main-app Info.plist — Apple's
+  App Store validator rejected: "cannot be present unless the
+  INPlayMediaIntent intent is supported" + "unsupported category
+  values [general, music]". The key only legally lives in an
+  Intents Extension's plist alongside IntentsSupported.
+- Conclusion: Siri requires the full Intents Extension shape
+  (Path B) — a separate target with its own bundle ID, App Group
+  for shared Keychain, and a chunk of shared-framework refactor to
+  give the extension access to GrpcClient + models. Estimated ~5-6
+  hours. Deferred.
+- Build 7 INPlayMediaIntentHandling scaffold is preserved on the
+  `siri-v1-draft` branch (commit b89206f). Recovery path documented
+  in SIRI_PHASE_B_PLAN.md (untracked, project root).
+- Main now lands at build 9 with: dead-code removal in
+  CarPlayBrowseController.swift + comment block. Everything else
+  from tonight (Info.plist Siri keys, entitlement, AppDelegate
+  Siri routing, SiriIntentHandler.swift, docs updates promising
+  Siri voice search) discarded.
+===
