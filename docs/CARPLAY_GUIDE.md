@@ -17,6 +17,7 @@ When your iPhone is connected to a CarPlay-equipped vehicle (wired or wireless),
 - **Albums tab** — recently-added albums, each with cover art. Tap an album to see its tracks; tap any track to start there.
 - **Playlists tab** — your custom playlists. Tap one to see its tracks; tap any to start.
 - **Smart Playlists tab** — server-curated lists ("Most Played", "Recently Added Tracks", etc.) plus a pinned **Shuffle Library** row at the top for instant random playback.
+- **Voice search (Siri)** — "Hey Siri, play *X* on Household Disc Keeper" works for tracks, albums, artists, and playlists. Same phrasing works from the CarPlay voice button, AirPods, and the phone.
 - **Now Playing surface** — the system audio Now Playing screen renders the current track's album art, title, artist, and a progress scrubber. Transport (play, pause, skip ±10 s, seek) is driven by CarPlay's hardware buttons and on-screen controls.
 - **Lock-screen / AirPods integration** — single-press an AirPod or tap the lock-screen play/pause button to toggle playback. Skip forward/backward maps to ±10 seconds. The same audio session powers both the in-car display and the phone's Now Playing surfaces.
 
@@ -67,6 +68,32 @@ The third tab combines a one-tap shuffle with server-curated lists.
 
 **Smart playlists** (below the Shuffle Library row). These are server-defined virtual playlists like "Most Played" or "Recently Played Tracks". Tap one to see its tracks; tap a track to start playback.
 
+### Voice (Siri)
+
+There's no on-screen search field &mdash; CarPlay's `CPSearchTemplate` isn't accessible to audio apps under our entitlement. Voice search is the supported path:
+
+> "Hey Siri, play **Piano Man** on Household Disc Keeper"
+
+Phrasings Siri's parser understands:
+
+- "Play **&lt;track name&gt;** on Household Disc Keeper" &mdash; plays the matching track
+- "Play **&lt;album name&gt;** on Household Disc Keeper" &mdash; plays the album in order
+- "Play **&lt;artist name&gt;** on Household Disc Keeper" &mdash; shuffles that artist's tracks
+- "Play my **&lt;playlist name&gt;** on Household Disc Keeper" &mdash; plays the playlist
+
+The same phrasing works through the CarPlay voice button on the steering wheel, through "Hey Siri" with AirPods in, and through the iPhone's microphone. All three route the request via `INPlayMediaIntent` &mdash; the app searches the audio catalogue server-side, picks the top match, and starts playback.
+
+**Tips that improve recognition:**
+
+- Always include "on Household Disc Keeper" so Siri routes the request to us rather than to Apple Music.
+- For multi-word names, speak them naturally &mdash; "Piano Man", not "Pi-an-o Man".
+- If Siri picks the wrong match, ask again with more context: "Play Piano Man by Billy Joel on Household Disc Keeper".
+- The first Siri request after a cold launch can take a few seconds (the app launches in the background to handle the intent); subsequent requests are near-instant.
+
+**Audio-only scope.** Siri search is restricted to your music library: albums, artists, tracks, and playlists. Movies, TV shows, books, actors, and tags don't appear &mdash; only what you can play in the car.
+
+**Online only.** Search runs against your Household Disc Keeper server. If the phone has lost network, Siri will report "I couldn't find that" &mdash; reconnect and try again.
+
 ### Now Playing
 
 Once a track starts, CarPlay shows the standard system Now Playing surface: album art on the left, track title / artist / album stacked on the right, transport controls below. Tap the album art (or use the Now Playing tab in CarPlay's bottom row) to return to it from anywhere in the app.
@@ -97,7 +124,6 @@ When the phone briefly loses or reconnects to the network — for example, getti
 
 ## Known limitations
 
-- **Search isn't wired in CarPlay yet.** The phone supports voice and text search, but CarPlay's search surface is currently deferred. Use the Albums / Playlists / Smart Playlists tabs to navigate. Voice-driven "play X" via Siri is on the roadmap.
 - **Video playback isn't a CarPlay feature.** Apple's CarPlay framework only supports audio apps. Video stays on the phone.
 - **Album art on the Now Playing screen is loaded lazily** — first-listen on a brand-new track may show a blank hero for a moment while the server image fetch completes. Cached art (typical after browsing an album in the phone or CarPlay) appears instantly.
 

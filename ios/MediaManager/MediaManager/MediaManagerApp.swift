@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Intents
 
 @MainActor
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -22,6 +23,21 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             return cfg
         }
         return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
+
+    /// Siri / Shortcuts entry point. When the user says "Hey Siri, play
+    /// X on Household Disc Keeper" (or invokes the equivalent voice
+    /// query from CarPlay), iOS asks us for a handler for the parsed
+    /// `INPlayMediaIntent`. We hand back a `SiriIntentHandler` which
+    /// resolves the spoken query against the server and plays through
+    /// the same AudioPlayerManager that powers the in-app + CarPlay
+    /// surfaces. Other intent types fall through to nil (we don't
+    /// claim them).
+    func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
+        if intent is INPlayMediaIntent {
+            return SiriIntentHandler()
+        }
+        return nil
     }
 }
 
