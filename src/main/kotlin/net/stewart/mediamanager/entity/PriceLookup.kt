@@ -21,8 +21,7 @@ data class PriceLookup(
     var offer_count_used: Int? = null,
     var keepa_asin: String? = null,
     var selected_price: BigDecimal? = null,
-    var looked_up_at: LocalDateTime? = null,
-    var raw_json: String? = null
+    var looked_up_at: LocalDateTime? = null
 ) : KEntity<Long> {
     companion object : Dao<PriceLookup, Long>(PriceLookup::class.java)
 }

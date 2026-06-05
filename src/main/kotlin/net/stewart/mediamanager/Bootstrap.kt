@@ -49,6 +49,10 @@ import java.io.File
 object Bootstrap {
     private val log = LoggerFactory.getLogger(Bootstrap::class.java)
 
+    // app_config marker that records the one-time SHUTDOWN DEFRAG compaction
+    // performed after migration V100 dropped the 6 GiB price_lookup.raw_json column.
+    private const val COMPACT_MARKER = "db_compacted_drop_raw_json"
+
     fun init() {
         loadEnvFile()
         loadEnvironmentVariables()
@@ -124,6 +128,9 @@ object Bootstrap {
 
         log.info("Database migrations applied")
 
+        compactDatabaseOnce(ds, basePath)
+        reportTableSizes(ds, basePath)
+
         syncAppConfigFromEnv()
         rebaseFilePaths()
 
@@ -163,6 +170,175 @@ object Bootstrap {
         HiddenTitleCleaner.clean()
 
         SearchIndexService.rebuild()
+    }
+
+    /**
+     * One-time database compaction to reclaim disk space freed by dropping the
+     * ~6 GiB `price_lookup.raw_json` column (migration V100). H2's MVStore frees
+     * pages logically on DROP COLUMN but never returns them to the filesystem;
+     * only `SHUTDOWN DEFRAG` rewrites and shrinks the `.mv.db` file.
+     *
+     * Gated by an `app_config` marker so it runs exactly once. The marker is
+     * written only after a successful compaction, so a failure part-way through
+     * simply retries on the next startup (re-defragging an already-small database
+     * is cheap and harmless).
+     *
+     * Must run AFTER Flyway migrations (so the column is already gone). `SHUTDOWN`
+     * closes the database for ALL connections, so afterward we reopen the file and
+     * evict the now-stale pooled connections before normal startup continues.
+     * Failures are non-fatal — a slightly bloated file must never block startup.
+     */
+    private fun compactDatabaseOnce(ds: HikariDataSource, basePath: String) {
+        try {
+            if (AppConfig.findAll().any { it.config_key == COMPACT_MARKER }) return
+
+            val dbFile = File("${basePath}.mv.db")
+            val before = dbFile.length()
+            log.info("=== ONE-TIME DATABASE COMPACTION (SHUTDOWN DEFRAG) ===")
+            log.info("File before compaction: {}", humanBytes(before))
+            val t0 = System.currentTimeMillis()
+
+            // SHUTDOWN DEFRAG compacts and closes the database for every connection.
+            // Run it on a dedicated connection, never a pooled one.
+            try {
+                DriverManager.getConnection(ds.jdbcUrl, ds.username, ds.password).use { conn ->
+                    conn.createStatement().use { it.execute("SHUTDOWN DEFRAG") }
+                }
+            } catch (e: Exception) {
+                // SHUTDOWN drops the connection as it closes the DB — expected, not an error.
+                log.info("SHUTDOWN DEFRAG connection closed (expected): {}", e.message)
+            }
+
+            // Reopen the now-compacted file and discard stale pooled connections so
+            // the remainder of startup borrows fresh connections to the reopened DB.
+            DriverManager.getConnection(ds.jdbcUrl, ds.username, ds.password).use { conn ->
+                conn.createStatement().use { it.execute("SELECT 1") }
+            }
+            ds.hikariPoolMXBean?.softEvictConnections()
+
+            val after = dbFile.length()
+            log.info("File after compaction: {} (reclaimed {}) in {} ms",
+                humanBytes(after), humanBytes(before - after), System.currentTimeMillis() - t0)
+
+            // Record the marker only on success, so a failed run retries next startup.
+            AppConfig(config_key = COMPACT_MARKER, config_val = "done").save()
+            log.info("=== COMPACTION COMPLETE ===")
+        } catch (e: Exception) {
+            log.warn("One-time database compaction failed (non-fatal, will retry next startup): {}", e.message, e)
+        }
+    }
+
+    /**
+     * Logs a rough size breakdown of every base table at startup so database
+     * bloat can be traced to a specific table (or to LOB storage).
+     *
+     * For each table we report row count and H2's `DISK_SPACE_USED` — the
+     * approximate bytes occupied by that table's own MVStore map. Two caveats
+     * the output deliberately surfaces:
+     *
+     *  - `DISK_SPACE_USED` does NOT count BLOB/CLOB payloads, which H2 keeps in
+     *    a separate LOB area of the same file. So if the summed table sizes are
+     *    far smaller than the actual `.mv.db` file, the bloat is LOB data (or
+     *    free space awaiting compaction). We log that gap explicitly.
+     *  - To help pin down LOB bloat, we also list every LOB / large-varchar /
+     *    varbinary column as a suspect.
+     *
+     * Failures here are non-fatal — diagnostics must never block startup.
+     */
+    private fun reportTableSizes(ds: HikariDataSource, basePath: String) {
+        val t0 = System.currentTimeMillis()
+        try {
+            ds.connection.use { conn ->
+                data class TableInfo(val name: String, val rows: Long, val bytes: Long)
+
+                val tableNames = mutableListOf<String>()
+                conn.createStatement().use { st ->
+                    st.executeQuery(
+                        """
+                        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                        WHERE TABLE_SCHEMA = 'PUBLIC' AND TABLE_TYPE = 'BASE TABLE'
+                        ORDER BY TABLE_NAME
+                        """.trimIndent()
+                    ).use { rs ->
+                        while (rs.next()) tableNames.add(rs.getString(1))
+                    }
+                }
+
+                val infos = mutableListOf<TableInfo>()
+                for (name in tableNames) {
+                    val quoted = "\"" + name.replace("\"", "\"\"") + "\""
+                    val rows = conn.createStatement().use { st ->
+                        st.executeQuery("SELECT COUNT(*) FROM $quoted").use { rs ->
+                            if (rs.next()) rs.getLong(1) else 0L
+                        }
+                    }
+                    val bytes = try {
+                        conn.createStatement().use { st ->
+                            st.executeQuery("SELECT DISK_SPACE_USED('$name')").use { rs ->
+                                if (rs.next()) rs.getLong(1) else 0L
+                            }
+                        }
+                    } catch (e: Exception) {
+                        -1L  // DISK_SPACE_USED unavailable for this table
+                    }
+                    infos.add(TableInfo(name, rows, bytes))
+                }
+
+                infos.sortByDescending { it.bytes }
+                val accounted = infos.filter { it.bytes > 0 }.sumOf { it.bytes }
+                val fileBytes = File("${basePath}.mv.db").length()
+
+                log.info("=== DATABASE SIZE REPORT ===")
+                log.info("On-disk file: {} ({})", "${basePath}.mv.db", humanBytes(fileBytes))
+                log.info("Sum of table data (excl. LOB/free space): {}", humanBytes(accounted))
+                log.info("Unaccounted (LOB payloads + free space + indexes overhead): {}",
+                    humanBytes(fileBytes - accounted))
+                log.info(String.format("%14s  %12s  %s", "DISK_SPACE", "ROWS", "TABLE"))
+                for (info in infos) {
+                    val sizeStr = if (info.bytes < 0) "n/a" else humanBytes(info.bytes)
+                    log.info(String.format("%14s  %12d  %s", sizeStr, info.rows, info.name))
+                }
+
+                // Suspect columns for LOB bloat (the "unaccounted" gap above).
+                conn.createStatement().use { st ->
+                    st.executeQuery(
+                        """
+                        SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = 'PUBLIC'
+                          AND (DATA_TYPE IN ('CHARACTER LARGE OBJECT', 'BINARY LARGE OBJECT', 'CLOB', 'BLOB')
+                               OR CHARACTER_MAXIMUM_LENGTH >= 1000000)
+                        ORDER BY TABLE_NAME, COLUMN_NAME
+                        """.trimIndent()
+                    ).use { rs ->
+                        val suspects = mutableListOf<String>()
+                        while (rs.next()) {
+                            suspects.add("${rs.getString(1)}.${rs.getString(2)} (${rs.getString(3)})")
+                        }
+                        if (suspects.isNotEmpty()) {
+                            log.info("LOB / large columns (candidates for unaccounted bloat): {}",
+                                suspects.joinToString(", "))
+                        }
+                    }
+                }
+                log.info("=== END DATABASE SIZE REPORT ({} ms) ===", System.currentTimeMillis() - t0)
+            }
+        } catch (e: Exception) {
+            log.warn("Database size report failed (non-fatal): {}", e.message)
+        }
+    }
+
+    private fun humanBytes(bytes: Long): String {
+        if (bytes < 0) return "n/a"
+        if (bytes < 1024) return "$bytes B"
+        val units = listOf("KiB", "MiB", "GiB", "TiB")
+        var value = bytes.toDouble() / 1024
+        var unit = 0
+        while (value >= 1024 && unit < units.size - 1) {
+            value /= 1024
+            unit++
+        }
+        return String.format("%.1f %s", value, units[unit])
     }
 
     fun destroy() {

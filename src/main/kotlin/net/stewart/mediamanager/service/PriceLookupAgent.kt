@@ -266,8 +266,7 @@ class PriceLookupAgent(
             offer_count_used = result.offerCountUsed,
             keepa_asin = result.asin,
             selected_price = selectedPrice,
-            looked_up_at = now,
-            raw_json = result.rawJson
+            looked_up_at = now
         ).create()
 
         // Update media item replacement value if we got a price

@@ -5543,3 +5543,24 @@ recurring 15-books-and-reader:226 flake as prior runs).
   Siri routing, SiriIntentHandler.swift, docs updates promising
   Siri voice search) discarded.
 ===
+
+=== 2026-06-04 18:05 — Startup DB size diagnostics ===
+- Production H2 DB on NAS (\nas\docker\mediamanager\cache\mediamanager.mv.db) has grown to ~8 GiB; startup hung ~4 min reading it. DB is AES-encrypted (no key locally), so it can't be inspected offline.
+- Added Bootstrap.reportTableSizes() — runs right after flyway.migrate(). For every PUBLIC base table it logs row count + H2 DISK_SPACE_USED, sorted largest-first.
+- Surfaces the LOB blind spot: DISK_SPACE_USED excludes BLOB/CLOB payloads (stored in a separate MVStore area), so the report also logs the gap between summed table sizes and the actual .mv.db file size ("unaccounted = LOB + free space"), and lists all LOB/large-varchar/varbinary columns as suspects.
+- Non-fatal: any failure is caught and logged as a warning so it can't block startup.
+- Files: src/main/kotlin/net/stewart/mediamanager/Bootstrap.kt
+===
+
+=== 2026-06-04 20:55 — Bloat root cause + fix (price_lookup.raw_json, 6 GiB) ===
+- Deployed the startup DB size report to prod. Result: PRICE_LOOKUP = 6.0 GiB across only 1,151 rows (~5.3 MB/row); every other table combined < 25 MiB. File 7.5 GiB. The DISK_SPACE_USED scan itself took 157s on the bloated DB.
+- Root cause: price_lookup.raw_json (TEXT/VARCHAR) stored the full raw Keepa API response per lookup. Written once (PriceLookupAgent.kt:270), never read anywhere (InventoryReportGenerator selects only id/media_item_id/keepa_asin/looked_up_at). Pure write-only dead weight.
+- Fix (compiles, smoke-tested locally, NOT yet deployed):
+  - V100__drop_price_lookup_raw_json.sql — ALTER TABLE price_lookup DROP COLUMN raw_json
+  - entity/PriceLookup.kt — removed raw_json field
+  - service/PriceLookupAgent.kt — stopped writing raw_json
+  - Bootstrap.kt — compactDatabaseOnce(): one-time SHUTDOWN DEFRAG to reclaim the freed space (DROP COLUMN frees pages logically but H2 MVStore never shrinks the file). Runs after Flyway, gated by app_config marker 'db_compacted_drop_raw_json' (written only on success → retries on failure). Reopens the file + softEvictConnections() after SHUTDOWN so startup continues on fresh pooled connections.
+- Local smoke test (small DB): V100 dropped the column (RAW_JSON gone from LOB-suspect list), compaction 328 KiB→84 KiB in 57ms, DB reopened, full startup completed with no errors. Validates the SHUTDOWN-DEFRAG + pool-reopen path.
+- Pending: deploy. On prod the DEFRAG rewrites a 7.5 GiB store but writes only ~20 MiB of live data, so the file should drop to tens of MB and future startups become fast.
+- Left in place (out of scope): KeepaProductResult.rawJson is still computed in-memory (now unused) — possible follow-up cleanup.
+===
