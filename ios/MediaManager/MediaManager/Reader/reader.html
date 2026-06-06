@@ -199,7 +199,26 @@
           }
         },
         setFont: function(pct) {
-          if (rendition) rendition.themes.fontSize(pct + '%');
+          if (!rendition) return;
+          // Capture the start-of-current-spread CFI BEFORE the font
+          // change. epub.js reflows asynchronously after themes
+          // .fontSize() — without re-anchoring, the rendition's page
+          // index points into the OLD layout and the user jumps to
+          // a different spot in the chapter (issue #69). The
+          // `relocated` handler keeps `lastCfi` up to date with the
+          // first character visible on the current page, which is
+          // exactly the anchor we want to preserve.
+          var anchorCfi = lastCfi;
+          rendition.themes.fontSize(pct + '%');
+          if (anchorCfi) {
+            // Defer one task tick so the font-size CSS lands and
+            // the iframe has reflowed before we ask for a display.
+            // Without the defer, rendition.display() races the
+            // reflow and may still land on the wrong page.
+            setTimeout(function() {
+              rendition.display(anchorCfi);
+            }, 0);
+          }
         },
         setTheme: function(name) {
           applyTheme(name);
