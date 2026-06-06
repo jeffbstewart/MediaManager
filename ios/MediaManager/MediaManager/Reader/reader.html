@@ -160,6 +160,41 @@
             rendition.themes.fontSize((fontPct || 100) + '%');
             applyTheme('light');
 
+            // Internal-link navigation (issue #70). EPUB chapters
+            // render into a sandboxed iframe and epub.js doesn't wire
+            // <a href="..."> clicks to rendition.display() by default
+            // — so TOC entries, footnote anchors, and chapter cross-
+            // references just no-op (the iframe attempts to navigate
+            // and is blocked by file:// scheme restrictions). Hook
+            // each chapter as it lands and attach a click listener
+            // to every anchor: internal hrefs (relative paths /
+            // fragments) call rendition.display() and preventDefault;
+            // absolute http(s)/mailto hrefs fall through to default
+            // browser handling (which will currently do nothing
+            // inside the sandbox — refining external-link behaviour
+            // is a separate follow-up).
+            rendition.hooks.content.register(function(contents) {
+              try {
+                var doc = contents.document;
+                if (!doc) return;
+                var anchors = doc.querySelectorAll('a[href]');
+                anchors.forEach(function(a) {
+                  a.addEventListener('click', function(e) {
+                    var href = a.getAttribute('href') || '';
+                    if (!href) return;
+                    // Internal = no URL scheme. EPUB spec allows
+                    // relative paths and #fragment refs.
+                    if (!/^[a-z][a-z0-9+.\-]*:/i.test(href)) {
+                      e.preventDefault();
+                      rendition.display(href);
+                    }
+                  });
+                });
+              } catch (err) {
+                console.warn('link-handler hook failed', err);
+              }
+            });
+
             // Track CFI on every relocation. percent stays at the
             // resume value until the locations index finishes building
             // — `loc.start.percentage` is 0 without it.
