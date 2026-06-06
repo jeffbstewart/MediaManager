@@ -140,19 +140,31 @@ struct BookReaderView: View {
 
     var body: some View {
         ZStack {
+            // Theme-colored backdrop fills the whole screen including
+            // the safe-area strips. The WebView sits inside the safe
+            // area (see comment on its mount below) so this is what
+            // shows under the home-indicator zone and behind the
+            // mini-player bar — using `theme.background` keeps the
+            // dark / sepia themes from showing a system-coloured gap.
+            theme.background
+                .ignoresSafeArea()
+
             // The web view is always mounted once we have files staged
             // — switching it in/out of the hierarchy on state change
             // would tear down the JS bridge mid-load. The loading and
             // error overlays sit on top of it.
+            //
+            // No `.ignoresSafeArea` on the WebView: when audio is
+            // playing, ContentView's `safeAreaInset(.bottom)` reserves
+            // space for MiniPlayerBar. Letting the WebView respect
+            // that inset is what keeps the reader's text from being
+            // overlapped by the mini-player (issue #68).
             if let html = stagedReaderHtml, let epub = stagedEpubFile {
                 ReaderWebView(
                     htmlURL: html,
                     epubFileName: epub.lastPathComponent,
                     fontPct: fontPct,
                     bridge: bridge)
-                    .ignoresSafeArea(.container, edges: .bottom)
-            } else {
-                Color.white.ignoresSafeArea()
             }
 
             switch status {
