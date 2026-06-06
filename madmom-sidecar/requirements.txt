@@ -4,7 +4,7 @@
 # any of these without testing will almost certainly surface a new
 # deprecation-turned-removal at madmom import time.
 madmom==0.16.1
-numpy==1.19.5
+numpy==1.22.0
 scipy==1.5.4
 cython==0.29.36
 
