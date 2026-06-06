@@ -16,6 +16,11 @@ struct MiniPlayerBar: View {
     /// full-screen Now Playing view.
     var onTap: () -> Void = {}
 
+    /// Singleton — set by BookReaderView while it's on screen so
+    /// this bar tints itself to match the reader's theme (light /
+    /// sepia / dark). nil = no reader open, use default styling.
+    private let readerTheme = ReaderThemeBroadcaster.shared
+
     var body: some View {
         if let track = audio.currentTrack {
             HStack(spacing: 12) {
@@ -102,7 +107,20 @@ struct MiniPlayerBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(.regularMaterial)
+            // When the reader is on screen it publishes its colours
+            // via ReaderThemeBroadcaster; tint the bar to match so
+            // the dark / sepia modes don't end with a stark default-
+            // styled strip below the page. Outside the reader the
+            // broadcaster's `current` is nil and we fall back to
+            // the system-adaptive .regularMaterial.
+            .background {
+                if let colors = readerTheme.current {
+                    colors.background
+                } else {
+                    Rectangle().fill(.regularMaterial)
+                }
+            }
+            .foregroundStyle(readerTheme.current?.foreground ?? .primary)
             .overlay(alignment: .top) {
                 // Thin progress strip across the top — the lazy way
                 // to show position without consuming row height. Goes

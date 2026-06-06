@@ -3,6 +3,30 @@ import WebKit
 
 private let log = MMLogger(category: "BookReaderView")
 
+/// Subset of the reader theme that needs to leak outside the reader
+/// view — currently to the global mini-player bar so it follows the
+/// reader's appearance instead of the system default. Keeping it as
+/// a small value type avoids exposing the full ReaderTheme enum
+/// (and its UserDefaults persistence) across module boundaries.
+struct ReaderThemeColors: Equatable {
+    let background: Color
+    let foreground: Color
+    /// True when the theme implies a dark color scheme — used for
+    /// nav-bar/material chrome that needs its colour scheme flipped.
+    let isDark: Bool
+}
+
+/// Singleton broadcaster the reader writes to while it's on screen.
+/// Global chrome (MiniPlayerBar today) reads `current` to tint itself
+/// to match. `nil` means "no reader open — use default styling".
+@MainActor
+@Observable
+final class ReaderThemeBroadcaster {
+    static let shared = ReaderThemeBroadcaster()
+    private init() {}
+    var current: ReaderThemeColors?
+}
+
 /// Navigation route into the ebook reader. Carries the
 /// `media_item_id` that keys both the download
 /// (`DownloadService.DownloadBookFile`) and the reading-progress
@@ -153,6 +177,13 @@ struct BookReaderView: View {
         func persist() {
             UserDefaults.standard.set(rawValue, forKey: "readerTheme")
         }
+        /// Snapshot for the global theme broadcaster.
+        var colors: ReaderThemeColors {
+            ReaderThemeColors(
+                background: background,
+                foreground: foreground,
+                isDark: self == .dark)
+        }
     }
 
     struct TocEntry: Identifiable {
@@ -250,7 +281,7 @@ struct BookReaderView: View {
             }
         }
         .sheet(item: $tocSheetData) { data in
-            TOCSheet(entries: data.entries) { entry in
+            TOCSheet(entries: data.entries, theme: theme) { entry in
                 bridge.runJS("window.MMReader.gotoHref('\(entry.href.replacingOccurrences(of: "'", with: "\\'"))')")
                 tocSheetData = nil
             }
@@ -286,7 +317,20 @@ struct BookReaderView: View {
             Button("Cancel", role: .cancel) { cancelResume() }
         }
         .task { await loadAndOpen() }
-        .onDisappear { cleanup() }
+        .onDisappear {
+            cleanup()
+            // Stop tinting the mini-player to the reader's theme
+            // once the reader is dismissed.
+            ReaderThemeBroadcaster.shared.current = nil
+        }
+        // Publish the current theme so the mini-player (mounted at
+        // ContentView level via safeAreaInset and therefore not in
+        // our view tree) can tint itself to match. Fires on first
+        // appear and on every theme cycle.
+        .onAppear { ReaderThemeBroadcaster.shared.current = theme.colors }
+        .onChange(of: theme) { _, newTheme in
+            ReaderThemeBroadcaster.shared.current = newTheme.colors
+        }
     }
 
     /// User chose Cancel (or swiped the dialog away on iPad). Dismiss
@@ -777,6 +821,7 @@ struct TocRecord: Sendable {
 /// invalidation.
 private struct TOCSheet: View {
     let entries: [BookReaderView.TocEntry]
+    let theme: BookReaderView.ReaderTheme
     let onTap: (BookReaderView.TocEntry) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -786,6 +831,7 @@ private struct TOCSheet: View {
                 if entries.isEmpty {
                     ContentUnavailableView("No chapters", systemImage: "list.bullet",
                         description: Text("This book doesn't expose a table of contents."))
+                        .foregroundStyle(theme.foreground)
                 } else {
                     List(entries) { e in
                         Button {
@@ -798,15 +844,29 @@ private struct TOCSheet: View {
                                     Spacer().frame(width: CGFloat(e.depth) * 16)
                                 }
                                 Text(e.label.isEmpty ? "Untitled" : e.label)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(theme.foreground)
                                 Spacer()
                             }
                         }
+                        .listRowBackground(theme.background)
                     }
+                    // Hide the default List background so the
+                    // theme.background tint actually shows through.
+                    .scrollContentBackground(.hidden)
                 }
             }
+            // Fill behind the List / empty view so the area
+            // between rows (and the safe-area strips) picks up
+            // the reader theme.
+            .background(theme.background.ignoresSafeArea())
             .navigationTitle("Chapters")
             .navigationBarTitleDisplayMode(.inline)
+            // Tint the sheet's nav bar to match the reader's. Same
+            // pattern BookReaderView uses for its own toolbar.
+            .toolbarBackground(theme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(theme == .dark ? .dark : .light, for: .navigationBar)
+            .tint(theme.foreground)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
