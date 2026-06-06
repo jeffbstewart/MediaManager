@@ -235,14 +235,35 @@
         },
         setFont: function(pct) {
           if (!rendition) return;
-          // Capture the start-of-current-spread CFI BEFORE the font
-          // change. epub.js reflows asynchronously after themes
-          // .fontSize() — without re-anchoring, the rendition's page
-          // index points into the OLD layout and the user jumps to
-          // a different spot in the chapter (issue #69). The
-          // `relocated` handler keeps `lastCfi` up to date with the
-          // first character visible on the current page, which is
-          // exactly the anchor we want to preserve.
+          // Issue #69 anchor behaviour. `lastCfi` is updated by the
+          // `relocated` handler to `loc.start.cfi` — the EPUB CFI of
+          // the FIRST CHARACTER visible on the current spread. We
+          // capture that BEFORE changing the font and call
+          // rendition.display() AFTER the reflow so epub.js shows
+          // the page (CSS column) that contains the anchor.
+          //
+          // Important: the anchor character is NOT guaranteed to be
+          // at the TOP of the post-reflow page. epub.js paginated
+          // flow lays the chapter out as one continuous block and
+          // breaks it into fixed-width columns. After a resize the
+          // column boundaries land at different character offsets,
+          // so the column that CONTAINS the anchor typically starts
+          // a paragraph or two BEFORE it. The visible effect is the
+          // anchor sliding from "first line" to "mid-page" after a
+          // resize. That's a structural limit of paginated CFI
+          // anchoring — every paginated reader (Apple Books, Kindle,
+          // Kobo) has the same drift. Forcing top-of-page would
+          // require injecting a CSS column break at the anchor on
+          // each reflow, which interacts awkwardly with epub.js's
+          // own pagination and adds fragility we don't want.
+          //
+          // What we get vs. what was broken before the fix:
+          //   BEFORE: random jump — the rendition's page index
+          //           pointed into the pre-reflow layout, so the
+          //           user landed somewhere unrelated in the chapter.
+          //   AFTER:  the page containing the previously-first-
+          //           visible character. Off by at most one column's
+          //           worth of text.
           var anchorCfi = lastCfi;
           rendition.themes.fontSize(pct + '%');
           if (anchorCfi) {
