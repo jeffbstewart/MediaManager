@@ -50,7 +50,11 @@ struct BookReaderView: View {
     let route: BookReaderRoute
 
     @State private var status: Status = .loading("Preparing book…")
-    @State private var fontPct: Int = 100
+    /// Restored from UserDefaults so the reader keeps the user's font
+    /// preference across sessions (issue #67). Clamped to the same
+    /// 60-200 range increase/decreaseFont enforce, in case a stale
+    /// value from a future version of the app ends up out of bounds.
+    @State private var fontPct: Int = Self.storedFontPct
     @State private var progressPct: Double = 0
     @State private var lastCfi: String? = nil
     @State private var bridge = ReaderBridge()
@@ -487,12 +491,34 @@ struct BookReaderView: View {
 
     private func increaseFont() {
         fontPct = min(200, fontPct + 10)
+        Self.persistFontPct(fontPct)
         bridge.runJS("window.MMReader.setFont(\(fontPct))")
     }
 
     private func decreaseFont() {
         fontPct = max(60, fontPct - 10)
+        Self.persistFontPct(fontPct)
         bridge.runJS("window.MMReader.setFont(\(fontPct))")
+    }
+
+    // MARK: - Font-size persistence
+
+    /// UserDefaults key for the persisted reader font percentage.
+    /// Sibling to `readerTheme` — same pattern. Local-only, never
+    /// transmitted to the server.
+    private static let fontPctKey = "readerFontPct"
+
+    private static var storedFontPct: Int {
+        let raw = UserDefaults.standard.integer(forKey: fontPctKey)
+        // `integer(forKey:)` returns 0 for never-set keys; treat that
+        // (and any value outside our clamp range) as "no preference"
+        // and fall back to the 100 default.
+        guard raw >= 60, raw <= 200 else { return 100 }
+        return raw
+    }
+
+    private static func persistFontPct(_ pct: Int) {
+        UserDefaults.standard.set(pct, forKey: fontPctKey)
     }
 
     private func cleanup() {
