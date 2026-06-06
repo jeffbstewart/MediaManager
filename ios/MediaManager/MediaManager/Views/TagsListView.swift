@@ -45,8 +45,12 @@ struct TagsListView: View {
 
     private func loadTags() async {
         loading = tags.isEmpty
-        let response = try? await dataModel.tags()
-        tags = response?.tags ?? []
+        do {
+            let response = try await dataModel.tags()
+            tags = response.tags
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

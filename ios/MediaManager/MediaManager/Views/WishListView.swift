@@ -117,10 +117,18 @@ struct WishListView: View {
 
     private func loadWishes() async {
         loading = wishes.isEmpty
-        async let mediaResponse = try? dataModel.wishList()
-        async let transcodeResponse = try? dataModel.transcodeWishList()
-        wishes = await mediaResponse?.wishes ?? []
-        transcodeWishes = await transcodeResponse?.transcodeWishes ?? []
+        do {
+            async let mediaTask = dataModel.wishList()
+            async let transcodeTask = dataModel.transcodeWishList()
+            let (media, transcode) = try await (mediaTask, transcodeTask)
+            wishes = media.wishes
+            transcodeWishes = transcode.transcodeWishes
+        } catch {
+            // Rapid tab nav cancels and re-fires `.task`; if
+            // cancelled, don't touch state — the next firing's
+            // body keeps the spinner up.
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

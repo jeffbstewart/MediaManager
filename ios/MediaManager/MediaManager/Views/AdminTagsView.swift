@@ -83,8 +83,12 @@ struct AdminTagsView: View {
 
     private func loadTags() async {
         loading = tags.isEmpty
-        let response = try? await dataModel.adminTags()
-        tags = response?.tags ?? []
+        do {
+            let response = try await dataModel.adminTags()
+            tags = response.tags
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

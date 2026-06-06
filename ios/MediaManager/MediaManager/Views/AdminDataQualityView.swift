@@ -115,9 +115,13 @@ struct AdminDataQualityView: View {
 
     private func loadTitles() async {
         loading = titles.isEmpty
-        let response = try? await dataModel.dataQuality(page: page)
-        titles = response?.titles ?? []
-        totalPages = response?.totalPages ?? 0
+        do {
+            let response = try await dataModel.dataQuality(page: page)
+            titles = response.titles
+            totalPages = response.totalPages
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

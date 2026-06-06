@@ -34,26 +34,38 @@ struct MusicView: View {
     @State private var showCreate = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                shuffleHeroCard()
-                yourPlaylistsSection()
-                if !smartPlaylists.isEmpty {
-                    smartPlaylistsSection()
+        Group {
+            // Hold the entire page behind a spinner until the first
+            // load completes. Without this the static shuffle hero +
+            // Browse Artists link paint instantly while the RPC-
+            // driven sections (Your Playlists, Smart Playlists, For
+            // You, Recently Added) trickle in over the next few
+            // seconds — looks half-loaded.
+            if loading {
+                ProgressView("Loading…")
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        shuffleHeroCard()
+                        yourPlaylistsSection()
+                        if !smartPlaylists.isEmpty {
+                            smartPlaylistsSection()
+                        }
+                        if !recommendedArtists.isEmpty {
+                            forYouSection()
+                        }
+                        // Recently Added is a server-driven carousel — the
+                        // offline home feed doesn't carry it. Hide entirely
+                        // offline rather than rendering a section that's
+                        // either empty or showing stale post-restore content.
+                        if dataModel.isOnline && !recentlyAdded.isEmpty {
+                            recentlyAddedSection()
+                        }
+                        browseArtistsLink()
+                    }
+                    .padding()
                 }
-                if !recommendedArtists.isEmpty {
-                    forYouSection()
-                }
-                // Recently Added is a server-driven carousel — the
-                // offline home feed doesn't carry it. Hide entirely
-                // offline rather than rendering a section that's
-                // either empty or showing stale post-restore content.
-                if dataModel.isOnline && !recentlyAdded.isEmpty {
-                    recentlyAddedSection()
-                }
-                browseArtistsLink()
             }
-            .padding()
         }
         .navigationTitle("Music")
         .sheet(isPresented: $showCreate) {
@@ -448,6 +460,11 @@ struct MusicView: View {
         smartPlaylists = await smartTask
         userPlaylists = await userTask
         recommendedArtists = await recsTask
+        // Rapid tab nav cancels and re-fires `.task`; if cancelled
+        // we leave `loading=true` so the next firing's body still
+        // shows the spinner instead of momentarily rendering a
+        // half-populated page.
+        if Task.isCancelled { return }
         loading = false
     }
 

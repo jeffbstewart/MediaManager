@@ -91,13 +91,14 @@ struct AdminCamerasView: View {
     }
 
     private func loadCameras() async {
+        loading = cameras.isEmpty
         do {
             let response = try await dataModel.adminListCameras()
             cameras = response.cameras.sorted { $0.displayOrder < $1.displayOrder }
-            loading = false
         } catch {
-            loading = false
+            if Task.isCancelled || error is CancellationError { return }
         }
+        loading = false
     }
 
     private func saveOrder() {

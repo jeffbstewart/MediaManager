@@ -99,8 +99,12 @@ struct AdminUsersView: View {
 
     private func loadUsers() async {
         loading = users.isEmpty
-        let response = try? await dataModel.adminUsers()
-        users = response?.users ?? []
+        do {
+            let response = try await dataModel.adminUsers()
+            users = response.users
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

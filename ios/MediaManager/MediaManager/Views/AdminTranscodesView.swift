@@ -82,9 +82,13 @@ struct AdminTranscodesView: View {
 
     private func loadTranscodes() async {
         loading = transcodes.isEmpty
-        let response = try? await dataModel.linkedTranscodes(page: page)
-        transcodes = response?.transcodes ?? []
-        totalPages = response?.totalPages ?? 0
+        do {
+            let response = try await dataModel.linkedTranscodes(page: page)
+            transcodes = response.transcodes
+            totalPages = response.totalPages
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

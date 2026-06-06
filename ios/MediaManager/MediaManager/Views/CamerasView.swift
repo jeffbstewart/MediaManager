@@ -65,8 +65,12 @@ struct CamerasView: View {
 
     private func loadCameras() async {
         loading = cameras.isEmpty
-        let response = try? await dataModel.cameras()
-        cameras = response?.cameras ?? []
+        do {
+            let response = try await dataModel.cameras()
+            cameras = response.cameras
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

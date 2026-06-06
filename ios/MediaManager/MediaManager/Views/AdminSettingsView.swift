@@ -108,11 +108,13 @@ struct AdminSettingsView: View {
 
     private func loadSettings() async {
         loading = settings.isEmpty
-        let response = try? await dataModel.adminSettings()
-        if let s = response?.settings {
-            settings = s.compactMapValues { $0 }
+        do {
+            let response = try await dataModel.adminSettings()
+            settings = response.settings.compactMapValues { $0 }
+            buddyKeys = response.buddyKeys
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
         }
-        buddyKeys = response?.buddyKeys ?? []
         loading = false
     }
 

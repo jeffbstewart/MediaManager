@@ -100,8 +100,12 @@ struct AdminPurchaseWishesView: View {
 
     private func loadWishes() async {
         loading = wishes.isEmpty
-        let response = try? await dataModel.purchaseWishes()
-        wishes = response?.wishes ?? []
+        do {
+            let response = try await dataModel.purchaseWishes()
+            wishes = response.wishes
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

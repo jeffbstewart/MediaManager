@@ -47,8 +47,17 @@ struct CollectionsListView: View {
 
     private func loadCollections() async {
         loading = collections.isEmpty
-        let response = try? await dataModel.collections()
-        collections = response?.collections ?? []
+        do {
+            let response = try await dataModel.collections()
+            collections = response.collections
+        } catch {
+            // Rapid tab nav cancels and re-fires `.task`; the
+            // cancelled call would otherwise drop `loading=false`
+            // with `collections.isEmpty=true` and briefly flash
+            // the "No collections" empty state. Bail before
+            // touching state if we were cancelled.
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

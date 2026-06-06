@@ -74,8 +74,12 @@ struct LiveTvView: View {
 
     private func loadChannels() async {
         loading = channels.isEmpty
-        let response = try? await dataModel.tvChannels()
-        channels = response?.channels ?? []
+        do {
+            let response = try await dataModel.tvChannels()
+            channels = response.channels
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

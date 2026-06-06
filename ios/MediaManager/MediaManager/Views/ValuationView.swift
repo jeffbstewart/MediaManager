@@ -12,30 +12,42 @@ struct ValuationView: View {
     @State private var editingItem: MMValuationItem?
 
     var body: some View {
-        List {
-            Section {
-                LabeledContent("Total Items", value: "\(totalItems)")
-                LabeledContent("Purchase Value", value: String(format: "$%.2f", totalPurchase))
-                LabeledContent("Replacement Value", value: String(format: "$%.2f", totalReplacement))
-            }
-
-            Section {
-                TextField("Search", text: $searchQuery)
-                    .autocorrectionDisabled()
-                    .onSubmit { load() }
-                Toggle("Unpriced only", isOn: $unpricedOnly)
-                    .onChange(of: unpricedOnly) { _, _ in load() }
-            }
-
-            if loading {
-                Section { ProgressView("Loading...") }
+        Group {
+            // Hold the entire page behind a spinner until the first
+            // load lands — otherwise the summary section shows
+            // Total=0 / $0.00 / $0.00 before the real values are
+            // back, which reads as wrong data rather than "loading".
+            if loading && items.isEmpty {
+                ProgressView("Loading…")
             } else {
-                Section("Items (\(items.count))") {
-                    ForEach(items, id: \.mediaItemID) { item in
-                        Button {
-                            editingItem = item
-                        } label: {
-                            ValuationItemRow(item: item)
+                List {
+                    Section {
+                        LabeledContent("Total Items", value: "\(totalItems)")
+                        LabeledContent("Purchase Value", value: String(format: "$%.2f", totalPurchase))
+                        LabeledContent("Replacement Value", value: String(format: "$%.2f", totalReplacement))
+                    }
+
+                    Section {
+                        TextField("Search", text: $searchQuery)
+                            .autocorrectionDisabled()
+                            .onSubmit { load() }
+                        Toggle("Unpriced only", isOn: $unpricedOnly)
+                            .onChange(of: unpricedOnly) { _, _ in load() }
+                    }
+
+                    if loading {
+                        // Refresh / filter-driven reload — page is
+                        // visible, show a small spinner inline.
+                        Section { ProgressView("Loading…") }
+                    } else {
+                        Section("Items (\(items.count))") {
+                            ForEach(items, id: \.mediaItemID) { item in
+                                Button {
+                                    editingItem = item
+                                } label: {
+                                    ValuationItemRow(item: item)
+                                }
+                            }
                         }
                     }
                 }
@@ -59,7 +71,9 @@ struct ValuationView: View {
             totalPurchase = response.totalPurchaseValue
             totalReplacement = response.totalReplacementValue
             totalItems = Int(response.totalItems)
-        } catch {}
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

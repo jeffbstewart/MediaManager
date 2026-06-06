@@ -67,7 +67,9 @@ struct FamilyMembersView: View {
         do {
             let response = try await authManager.grpcClient.adminListFamilyMembers()
             members = response.members
-        } catch {}
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 }

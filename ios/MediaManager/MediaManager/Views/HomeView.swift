@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let log = MMLogger(category: "HomeView")
+
 struct HomeView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @State private var feed: ApiHomeFeed?
@@ -7,12 +9,15 @@ struct HomeView: View {
     @State private var loading = true
 
     var body: some View {
+        // Render priority: cached content first (so a slow / failed
+        // refresh doesn't replace the page with a spinner or error
+        // banner), then the loading affordance, then the error
+        // surface only when we have nothing else to show. The
+        // previous ordering (loading → error → feed) flashed the
+        // gRPC error screen during reloads with a stale `error`
+        // value and `loading=false`.
         Group {
-            if loading {
-                ProgressView("Loading...")
-            } else if let error {
-                ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
-            } else if let feed, !feed.carousels.isEmpty {
+            if let feed, !feed.carousels.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         // Missing seasons notifications
@@ -86,6 +91,10 @@ struct HomeView: View {
                     }
                     .padding(.vertical)
                 }
+            } else if loading {
+                ProgressView("Loading…")
+            } else if let error {
+                ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
             } else {
                 ContentUnavailableView("No content yet", systemImage: "film.stack",
                     description: Text("Add titles to your catalog to see them here."))
@@ -133,12 +142,37 @@ struct HomeView: View {
     }
 
     private func loadFeed() async {
+        // Only show the spinner when we have no cached feed yet —
+        // refreshes that already have content keep the page visible
+        // (the body shows cached `feed` and ignores `loading`).
         loading = feed == nil
+        // Clear any stale error from a previous (cancelled) task
+        // run before kicking off this attempt. Without this, the
+        // body's first render after a rapid tab-switch can flash
+        // the error from the old task while the new task is still
+        // waiting on its first await.
+        error = nil
         do {
             feed = try await dataModel.homeFeed()
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            // Rapid tab navigation causes SwiftUI to cancel + re-
+            // fire `.task` for the same HomeView instance multiple
+            // times. The cancelled call returns RPCError CANCELLED
+            // (or wraps CancellationError) and would otherwise
+            // surface as a flash of "GRPCCore.RPCError error 1"
+            // before the next .task firing's call completes. Drop
+            // those on the floor.
+            if Task.isCancelled || error is CancellationError {
+                log.info("loadFeed: dropping cancellation-induced error")
+                return
+            }
+            // Don't surface a transient error if we have cached
+            // content to fall back on. The page stays usable; the
+            // next pull-to-refresh / tab-revisit will retry.
+            if feed == nil {
+                self.error = error.localizedDescription
+            }
         }
         loading = false
     }

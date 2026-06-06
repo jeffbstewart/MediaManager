@@ -12,6 +12,30 @@ struct LiveTvSettingsView: View {
     @State private var statusMessage: String?
 
     var body: some View {
+        Group {
+            if loading && settings == nil && tuners.isEmpty {
+                ProgressView("Loading…")
+            } else {
+                listBody
+            }
+        }
+        .navigationTitle("Live TV Settings")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showAddTuner = true } label: { Image(systemName: "plus") }
+            }
+        }
+        .task { await load() }
+        .sheet(isPresented: $showAddTuner) {
+            AddTunerSheet { Task { await load() } }
+        }
+        .sheet(item: $selectedTuner) { tuner in
+            TunerDetailSheet(tuner: tuner) { Task { await load() } }
+        }
+    }
+
+    @ViewBuilder
+    private var listBody: some View {
         List {
             if let settings {
                 Section("Streaming Limits") {
@@ -64,19 +88,6 @@ struct LiveTvSettingsView: View {
                 Section { Text(statusMessage).font(.callout).foregroundStyle(.green) }
             }
         }
-        .navigationTitle("Live TV Settings")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { showAddTuner = true } label: { Image(systemName: "plus") }
-            }
-        }
-        .task { await load() }
-        .sheet(isPresented: $showAddTuner) {
-            AddTunerSheet { Task { await load() } }
-        }
-        .sheet(item: $selectedTuner) { tuner in
-            TunerDetailSheet(tuner: tuner) { Task { await load() } }
-        }
     }
 
     private func load() async {
@@ -87,7 +98,9 @@ struct LiveTvSettingsView: View {
             idleTimeout = settings?.idleTimeoutSeconds ?? 60
             let tunerResponse = try await authManager.grpcClient.adminListTuners()
             tuners = tunerResponse.tuners
-        } catch {}
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 
@@ -213,7 +226,9 @@ struct TunerDetailSheet: View {
         do {
             let response = try await authManager.grpcClient.adminListAdminChannels(tunerId: tuner.id)
             channels = response.channels
-        } catch {}
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

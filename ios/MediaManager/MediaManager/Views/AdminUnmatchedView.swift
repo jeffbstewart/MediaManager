@@ -103,8 +103,12 @@ struct AdminUnmatchedView: View {
 
     private func loadFiles() async {
         loading = files.isEmpty
-        let response = try? await dataModel.unmatchedFiles()
-        files = response?.unmatched ?? []
+        do {
+            let response = try await dataModel.unmatchedFiles()
+            files = response.unmatched
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+        }
         loading = false
     }
 

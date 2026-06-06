@@ -83,6 +83,10 @@ struct AmazonImportView: View {
 
     private func loadData() async {
         loading = true
+        // Clear any stale "Failed to load:" message from a prior
+        // attempt — without this, the banner persists even after
+        // a successful retry.
+        importMessage = nil
         do {
             summary = try await authManager.grpcClient.adminGetAmazonOrderSummary()
             let response = try await authManager.grpcClient.adminSearchAmazonOrders(
@@ -90,6 +94,7 @@ struct AmazonImportView: View {
                 unlinkedOnly: unlinkedOnly, hideCancelled: hideCancelled)
             orders = response.orders
         } catch {
+            if Task.isCancelled || error is CancellationError { return }
             importMessage = "Failed to load: \(error.localizedDescription)"
         }
         loading = false
