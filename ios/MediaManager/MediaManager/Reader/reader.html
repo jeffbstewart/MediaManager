@@ -318,6 +318,18 @@
             });
 
             await rendition.display(resumeCfi || undefined);
+            // Wait for the TOC manifest to finish loading before
+            // we say "ready". Without this the user could tap the
+            // chapter dropdown before book.navigation populates and
+            // see a "no chapters" empty list on the first open.
+            // book.loaded.navigation is a small fetch (just the
+            // toc.ncx / nav.xhtml manifest) so the wait is
+            // negligible.
+            try {
+              await book.loaded.navigation;
+            } catch (navErr) {
+              console.warn('navigation load failed', navErr);
+            }
             postNative({ type: 'ready' });
 
             // Build the locations index in the background — turning a

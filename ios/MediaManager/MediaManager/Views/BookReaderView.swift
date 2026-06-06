@@ -72,8 +72,21 @@ struct BookReaderView: View {
     @State private var stagedEpubFile: URL? = nil
     @State private var stagedReaderHtml: URL? = nil
     @State private var theme: ReaderTheme = .stored
-    @State private var showTOC = false
-    @State private var toc: [TocEntry] = []
+    /// Single piece of state that carries both the TOC entries AND
+    /// the sheet's visibility. Was previously two separate @State
+    /// (`showTOC: Bool` + `toc: [TocEntry]`), which raced on the
+    /// first open: setting `toc = [...]` then `showTOC = true` in
+    /// the same call let SwiftUI evaluate the sheet's content
+    /// closure with the OLD (empty) toc snapshot, so the user saw
+    /// "no chapters" on the first tap. Bundling into one Identifiable
+    /// state and presenting via `.sheet(item:)` makes the assignment
+    /// atomic — sheet appears with the entries already in place.
+    @State private var tocSheetData: TocSheetData?
+
+    private struct TocSheetData: Identifiable {
+        let id = UUID()
+        let entries: [TocEntry]
+    }
     /// Non-nil when we have a resume position to offer the user.
     /// loadAndOpen stages the files and resolves position into this,
     /// then waits for the confirmation dialog to either accept the
@@ -236,13 +249,18 @@ struct BookReaderView: View {
                 }
             }
         }
-        .sheet(isPresented: $showTOC) {
-            TOCSheet(entries: toc) { entry in
+        .sheet(item: $tocSheetData) { data in
+            TOCSheet(entries: data.entries) { entry in
                 bridge.runJS("window.MMReader.gotoHref('\(entry.href.replacingOccurrences(of: "'", with: "\\'"))')")
-                showTOC = false
+                tocSheetData = nil
             }
             .presentationDetents([.medium, .large])
         }
+        // NB: there's an unused `case "debug":` branch in the
+        // WKScriptMessage handler below — left in deliberately
+        // so future diagnostic sessions can postNative({type:
+        // 'debug', message: ...}) from reader.html without
+        // re-adding the Swift-side wiring each time.
         .confirmationDialog(
             "Resume reading?",
             isPresented: Binding(
@@ -294,12 +312,14 @@ struct BookReaderView: View {
         // Fetch the TOC each time the sheet opens. The list rarely
         // changes, but `getToc` is cheap (it walks an in-memory
         // structure inside epub.js) and avoids a stale snapshot if
-        // the book is replaced.
+        // the book is replaced. Single atomic assignment to
+        // `tocSheetData` — see its doc comment for the SwiftUI
+        // sheet-state race that this avoids.
         let entries = await bridge.evalToc("window.MMReader.getToc()")
-        toc = entries.enumerated().map { idx, e in
+        let mapped = entries.enumerated().map { idx, e in
             TocEntry(id: idx, label: e.label, href: e.href, depth: e.depth)
         }
-        showTOC = true
+        tocSheetData = TocSheetData(entries: mapped)
     }
 
     // MARK: - Lifecycle
@@ -674,6 +694,10 @@ private struct ReaderWebView: UIViewRepresentable {
                 let m = (body["message"] as? String) ?? "Unknown reader error"
                 log.warning("reader.html error: \(m)")
                 parsed = .error(m)
+            case "debug":
+                let m = (body["message"] as? String) ?? ""
+                log.info("reader.html debug: \(m)")
+                parsed = nil
             default:
                 parsed = nil
             }
