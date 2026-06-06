@@ -18,6 +18,7 @@ import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -232,6 +233,20 @@ class MetricsRegistryTest {
         assertEquals(0.0, gaugeValue("mm_auth_rate_limited_ips"))
         // go2rtc gauge resolves to 0 when no agent instance.
         assertEquals(0.0, gaugeValue("mm_go2rtc_running"))
+        // DB file-size gauge is registered (NaN means missing). The test DB is
+        // in-memory, so it resolves to 0.0 rather than a real file size.
+        assertEquals(0.0, gaugeValue("mm_database_file_bytes"))
+    }
+
+    @Test
+    fun `databaseFileFor resolves file urls and ignores non-file urls`() {
+        val f = MetricsRegistry.databaseFileFor("jdbc:h2:file:./data/mediamanager;CIPHER=AES")
+        assertNotNull(f)
+        assertTrue(f.path.replace('\\', '/').endsWith("data/mediamanager.mv.db"),
+            "unexpected resolved path: ${f.path}")
+        // In-memory and other non-file URLs resolve to null.
+        assertNull(MetricsRegistry.databaseFileFor("jdbc:h2:mem:metricstest;DB_CLOSE_DELAY=-1"))
+        assertNull(MetricsRegistry.databaseFileFor("jdbc:h2:file:"))
     }
 
     @Test

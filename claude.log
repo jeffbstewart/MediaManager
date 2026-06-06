@@ -5564,3 +5564,11 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Pending: deploy. On prod the DEFRAG rewrites a 7.5 GiB store but writes only ~20 MiB of live data, so the file should drop to tens of MB and future startups become fast.
 - Left in place (out of scope): KeepaProductResult.rawJson is still computed in-memory (now unused) — possible follow-up cleanup.
 ===
+
+=== 2026-06-05 — Exported DB size metric (mm_database_file_bytes) ===
+- Prod deploy of the raw_json fix succeeded: NAS DB file 8 GiB -> 15.3 MiB (SHUTDOWN DEFRAG reclaimed 7.5 GiB in 9.7s), startup size report now 1.4s (was 157s). Demo (app-store-review) instance compacted harmlessly 1.4 MiB -> 356 KiB.
+- Cost of size extraction: overall .mv.db file size = one stat() syscall (~free); per-table DISK_SPACE_USED scales with data (157s @ 7.5 GiB, 1.4s @ 15 MiB) — kept as startup-only diagnostic.
+- Added gauge mm_database_file_bytes in MetricsRegistry.registerEntityGauges(). Micrometer gauges evaluate lazily on each Prometheus scrape, so File.length() is re-read per scrape (fresh, no timer/background thread needed — better than the suggested 10-min cache). Path resolved per-instance from the Hikari jdbcUrl via pure helper databaseFileFor() (returns <base>.mv.db for jdbc:h2:file: urls, null for mem).
+- Tests: unit test for databaseFileFor (file vs mem vs empty), plus gauge-registration assertion in the registerEntityGauges test. MetricsRegistryTest green.
+- Files: service/MetricsRegistry.kt, test/.../MetricsRegistryTest.kt
+===

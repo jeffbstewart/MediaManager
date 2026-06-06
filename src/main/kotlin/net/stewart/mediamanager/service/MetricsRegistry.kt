@@ -1,6 +1,7 @@
 package net.stewart.mediamanager.service
 
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
+import com.zaxxer.hikari.HikariDataSource
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics
@@ -10,6 +11,7 @@ import io.micrometer.core.instrument.binder.system.ProcessorMetrics
 import io.micrometer.core.instrument.binder.system.UptimeMetrics
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
+import java.io.File
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -124,6 +126,19 @@ object MetricsRegistry {
     // Watchdog failure tracking
     fun countWatchdogFailure(): Unit { watchdogFailures.incrementAndGet().let {} }
 
+    /**
+     * Resolves the on-disk H2 store file (`<base>.mv.db`) for a file-mode JDBC
+     * URL, or null for in-memory / non-file URLs (e.g. `jdbc:h2:mem:...`).
+     * Pure and side-effect-free so the path parsing is directly unit-testable.
+     */
+    internal fun databaseFileFor(jdbcUrl: String): File? {
+        val marker = "jdbc:h2:file:"
+        if (!jdbcUrl.startsWith(marker)) return null
+        val base = jdbcUrl.substring(marker.length).substringBefore(';').trim()
+        if (base.isEmpty()) return null
+        return File("$base.mv.db")
+    }
+
     fun registerEntityGauges() {
         registry.gauge("mm_active_sessions", this) {
             try {
@@ -189,6 +204,17 @@ object MetricsRegistry {
                         .one()
                         .toDouble()
                 }
+            } catch (_: Exception) { 0.0 }
+        }
+
+        // Overall H2 database file size. Re-read on every Prometheus scrape — a
+        // single stat() syscall, effectively free. (The per-table DISK_SPACE_USED
+        // breakdown, by contrast, scales with data size — 150+ s on a bloated DB —
+        // so it stays a one-shot startup diagnostic, never a scrape-time metric.)
+        registry.gauge("mm_database_file_bytes", this) {
+            try {
+                val ds = JdbiOrm.getDataSource() as? HikariDataSource
+                ds?.let { databaseFileFor(it.jdbcUrl) }?.takeIf { it.exists() }?.length()?.toDouble() ?: 0.0
             } catch (_: Exception) { 0.0 }
         }
 
