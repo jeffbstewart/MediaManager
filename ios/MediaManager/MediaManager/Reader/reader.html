@@ -2,7 +2,15 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <!-- viewport-fit deliberately omitted (formerly `cover`). With
+       `cover`, WKWebView reports `100vh` as the LAYOUT viewport
+       (including safe-area extent) rather than the visible area,
+       so when the SwiftUI host adds a safeAreaInset for the music
+       mini-player the inner 100vh stays at the old larger value
+       and epub.js paginates columns that extend under the bar.
+       Default viewport-fit constrains 100vh to the visible area
+       (issue #68 follow-up). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>MM Reader</title>
   <style>
     /* Edge-to-edge container that fills the WKWebView. epub.js renders
@@ -89,6 +97,102 @@
         const m = (e && e.reason && (e.reason.message || e.reason)) || 'unknown rejection';
         postNative({ type: 'error', message: 'unhandledrejection: ' + m });
       });
+
+      // Container-resize re-pagination (issue #68 follow-up). Two
+      // distinct failure modes both produce "words missing on the
+      // next page turn" — the mini-player overlapping symptom:
+      //
+      //   1. Book opens WHILE music is already playing. WKWebView
+      //      mounts at a height that's been reduced by ContentView's
+      //      safeAreaInset. epub.js measures the container during
+      //      its initial boot — but inside WKWebView the visual
+      //      viewport / 100vh / element clientHeight readings can
+      //      lag the actual frame for a few layout passes after
+      //      mount. epub.js paginates against the lagged reading
+      //      and never re-measures because window.resize doesn't
+      //      fire (the frame hasn't changed from epub.js's view).
+      //
+      //   2. Audio starts AFTER the book is already open. The
+      //      WKWebView frame DOES change here, and SOME WKWebView
+      //      versions do fire window.resize — but reliability is
+      //      patchy and the timing relative to the SwiftUI safe-
+      //      area animation is hard to predict.
+      //
+      // ResizeObserver on the actual #epub container catches both:
+      // it fires on every observed size change, including the
+      // post-mount layout-settle in case 1. Debounced because
+      // observers can fire a flurry of events during SwiftUI
+      // animations.
+      //
+      // Anchoring: same lastCfi semantics as setFont — see the long
+      // comment on setFont below for why "page containing the
+      // anchor" is the best we can get with paginated CFIs.
+      let resizeTimer = null;
+      function repaginateNow() {
+        if (!rendition) return;
+        const anchorCfi = lastCfi;
+        try {
+          // rendition.resize() updates Layout's stored dimensions
+          // for FUTURE views, but doesn't re-flow chapters that
+          // are already rendered — those keep their boot-time
+          // column height. When the WebView shrinks (mini-player
+          // appears or book opens while music is already playing),
+          // the current chapter's columns extend past the visible
+          // area, the bar covers the bottom slice of text, and
+          // page turns skip those hidden words (issue #68).
+          //
+          // Forcing rendition.clear() drops the rendered view; the
+          // subsequent display(anchorCfi) re-loads the section
+          // with the new column height. More work than a pure
+          // resize, but only happens when the container size
+          // actually changes, which is rare in practice.
+          rendition.clear();
+          rendition.resize();
+        } catch (err) {
+          console.warn('rendition.resize failed', err);
+        }
+        if (anchorCfi) {
+          setTimeout(function() {
+            rendition.display(anchorCfi);
+          }, 0);
+        }
+      }
+      function scheduleRepaginate() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          resizeTimer = null;
+          repaginateNow();
+        }, 120);
+      }
+      // Observe the #epub div. ResizeObserver fires on initial
+      // layout AND on any subsequent change, which is what we want
+      // for both case 1 and case 2 above.
+      if (typeof ResizeObserver !== 'undefined') {
+        const epubEl = document.getElementById('epub');
+        if (epubEl) {
+          let lastH = 0;
+          let lastW = 0;
+          new ResizeObserver(function(entries) {
+            for (const entry of entries) {
+              const cr = entry.contentRect;
+              // Skip the very first observation if dimensions are
+              // genuinely the same — happens when the observer is
+              // attached before any layout has occurred and the
+              // initial entry reports 0x0 then immediately fires
+              // again with the real size.
+              if (cr.width !== lastW || cr.height !== lastH) {
+                lastW = cr.width;
+                lastH = cr.height;
+                scheduleRepaginate();
+              }
+            }
+          }).observe(epubEl);
+        }
+      }
+      // Belt-and-suspenders: also listen to window.resize. Cheap and
+      // covers any case where ResizeObserver doesn't fire (older
+      // WebKit versions, etc.).
+      window.addEventListener('resize', scheduleRepaginate);
 
       // Theme palette. `applyTheme` flips body background/colour via
       // epub.js's `themes.override`, which directly injects a body

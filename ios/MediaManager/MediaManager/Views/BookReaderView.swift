@@ -43,6 +43,17 @@ struct BookReaderView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
     @Environment(ProgressFlusher.self) private var progressFlusher
+    /// Observed so the reader can manually reserve space for the
+    /// mini-player when audio is playing. ContentView's
+    /// `.safeAreaInset(.bottom)` reserves that space at the
+    /// container level — but the reservation doesn't propagate to
+    /// NavigationStack destinations pushed from inside a
+    /// NavigationSplitView (verified empirically: WebView innerH
+    /// stayed at the full 724pt even with safeAreaInset active).
+    /// Observing AudioPlayerManager.currentTrack directly and
+    /// padding by hand is more reliable than chasing the
+    /// SwiftUI-internals reason for the missed propagation.
+    @Environment(AudioPlayerManager.self) private var audio
     /// Local progress queue is a process-wide actor singleton — see
     /// the type's class doc for why it isn't injected via @Environment.
     private let progressQueue = ReadingProgressQueue.shared
@@ -140,15 +151,6 @@ struct BookReaderView: View {
 
     var body: some View {
         ZStack {
-            // Theme-colored backdrop fills the whole screen including
-            // the safe-area strips. The WebView sits inside the safe
-            // area (see comment on its mount below) so this is what
-            // shows under the home-indicator zone and behind the
-            // mini-player bar — using `theme.background` keeps the
-            // dark / sepia themes from showing a system-coloured gap.
-            theme.background
-                .ignoresSafeArea()
-
             // The web view is always mounted once we have files staged
             // — switching it in/out of the hierarchy on state change
             // would tear down the JS bridge mid-load. The loading and
@@ -189,6 +191,18 @@ struct BookReaderView: View {
                 EmptyView()
             }
         }
+        // Manually reserve space for the mini-player when audio is
+        // playing — see comment on `audio` for why we can't rely on
+        // ContentView's safeAreaInset reaching this destination.
+        // 52pt matches the bar's content height (40pt artwork + 6pt
+        // vertical padding × 2). When no track is queued the bar
+        // isn't rendered and no padding is needed.
+        .padding(.bottom, audio.currentTrack != nil ? 52 : 0)
+        // Theme-coloured backdrop. As a `.background()` modifier (not
+        // a ZStack sibling), `ignoresSafeArea()` only extends THIS
+        // drawing into the safe-area zones — it doesn't grow the
+        // parent ZStack's frame and pull the WebView with it.
+        .background(theme.background.ignoresSafeArea())
         .navigationTitle(route.titleName)
         .navigationBarTitleDisplayMode(.inline)
         // Tint the navigation bar to match the reader theme so the
@@ -581,6 +595,16 @@ private struct ReaderWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
+        // Don't let WKWebView extend its rendering into the bottom
+        // safe-area inset the SwiftUI host reserves for the music
+        // mini-player. With the default `automatic` behaviour, the
+        // scrollView's contentInset grows by the inset height —
+        // visible effect: 100vh inside the page is still the
+        // original full height, so epub.js paginates columns that
+        // extend under the mini-player. `.never` keeps the
+        // WebView's drawing area aligned with its actual frame
+        // (issue #68 follow-up).
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         // Hand the bridge a way to call back into the live web view
         // (font changes, page flips). The reference is weak inside
         // ReaderBridge so a dismiss doesn't leak.
