@@ -50,8 +50,14 @@
 </head>
 <body>
   <div id="epub"></div>
-  <div class="nav nav-prev" onclick="window.MMReader.prev()"></div>
-  <div class="nav nav-next" onclick="window.MMReader.next()"></div>
+  <!-- Page-turn tap zones. Click handlers wired in JS (not inline)
+       so we can hit-test the iframe at the tap point — if there's
+       an `<a>` there, we route the click to the link rather than
+       turning the page. Without this, internal TOC links in the
+       leftmost or rightmost 25% of the page can't be tapped at
+       all because these overlays consume the click first (#70). -->
+  <div class="nav nav-prev" id="nav-prev"></div>
+  <div class="nav nav-next" id="nav-next"></div>
   <script>
     /**
      * Native ↔ JS bridge for the iOS book reader.
@@ -234,7 +240,19 @@
               width: '100%',
               height: '100%',
               flow: 'paginated',
-              allowScriptedContent: false,
+              // allowScriptedContent must be TRUE for in-iframe
+              // link clicks to reach our (and epub.js's own) JS
+              // event handlers. With `false`, epub.js sandboxes
+              // the iframe without `allow-scripts`, which
+              // suppresses the synthetic click pipeline — tap
+              // highlights still flash visually via WebKit's CSS
+              // `:active` handling but no JS events fire. The
+              // tradeoff is that EPUB `<script>` tags can now
+              // execute; that's acceptable for self-hosted books
+              // the user trusts. A content-hook script stripper
+              // would be a reasonable defence-in-depth follow-up
+              // (#70 closeout note).
+              allowScriptedContent: true,
             });
 
             // Font-size inheritance fix. Web commit 22add35:
@@ -264,40 +282,26 @@
             rendition.themes.fontSize((fontPct || 100) + '%');
             applyTheme('light');
 
-            // Internal-link navigation (issue #70). EPUB chapters
-            // render into a sandboxed iframe and epub.js doesn't wire
-            // <a href="..."> clicks to rendition.display() by default
-            // — so TOC entries, footnote anchors, and chapter cross-
-            // references just no-op (the iframe attempts to navigate
-            // and is blocked by file:// scheme restrictions). Hook
-            // each chapter as it lands and attach a click listener
-            // to every anchor: internal hrefs (relative paths /
-            // fragments) call rendition.display() and preventDefault;
-            // absolute http(s)/mailto hrefs fall through to default
-            // browser handling (which will currently do nothing
-            // inside the sandbox — refining external-link behaviour
-            // is a separate follow-up).
-            rendition.hooks.content.register(function(contents) {
-              try {
-                var doc = contents.document;
-                if (!doc) return;
-                var anchors = doc.querySelectorAll('a[href]');
-                anchors.forEach(function(a) {
-                  a.addEventListener('click', function(e) {
-                    var href = a.getAttribute('href') || '';
-                    if (!href) return;
-                    // Internal = no URL scheme. EPUB spec allows
-                    // relative paths and #fragment refs.
-                    if (!/^[a-z][a-z0-9+.\-]*:/i.test(href)) {
-                      e.preventDefault();
-                      rendition.display(href);
-                    }
-                  });
-                });
-              } catch (err) {
-                console.warn('link-handler hook failed', err);
-              }
-            });
+            // Internal-link navigation (#70).
+            //
+            // epub.js installs its own link interceptor inside each
+            // rendered chapter when `allowScriptedContent: true`
+            // (see renderTo options above) — it handles TOC,
+            // footnote, and cross-reference anchors by calling
+            // rendition.display() with a spine-canonicalised href.
+            // We don't need to duplicate that work for taps that
+            // land in the middle of the page (the iframe gets the
+            // click directly and epub.js takes it).
+            //
+            // For taps that land in the leftmost / rightmost 25%
+            // of the page, the .nav-prev / .nav-next overlays sit
+            // on z-index 10 and would consume the click before it
+            // reaches the iframe. makeNavTapHandler (below) hit-
+            // tests the iframe at the tap point: if there's an
+            // <a href> there, it synthesizes a click on the anchor
+            // so epub.js's handler picks it up via the same code
+            // path as middle-of-page taps. Otherwise it falls
+            // through to a normal rendition.next/prev page turn.
 
             // Track CFI on every relocation. percent stays at the
             // resume value until the locations index finishes building
@@ -410,6 +414,68 @@
         next: function() { if (rendition) rendition.next(); },
         prev: function() { if (rendition) rendition.prev(); },
       };
+
+      // Page-turn tap zones with link-aware hit-testing. Without
+      // the hit test, any TOC link (or footnote anchor) whose tap
+      // target falls in the leftmost or rightmost 25% of the page
+      // gets page-turned instead of followed, because these
+      // overlays sit on z-index 10 and consume the click before it
+      // reaches the iframe (#70).
+      function makeNavTapHandler(isNext) {
+        return function(e) {
+          // Hit-test the iframe at the tap point. If there's an
+          // <a href> at that spot inside the rendered chapter,
+          // route the click into the iframe so epub.js's own
+          // link handler can canonicalise + display it (the same
+          // path middle-of-page taps take). Otherwise fall
+          // through to a normal page turn.
+          var iframe = document.querySelector('#epub iframe');
+          if (iframe && iframe.contentDocument) {
+            var rect = iframe.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            var doc = iframe.contentDocument;
+            var hit = doc.elementFromPoint(x, y);
+            // The tap target may be a wrapping <span> or text node
+            // inside the link — walk up to the nearest <a href>.
+            var anchor = null;
+            var cursor = hit;
+            while (cursor && cursor !== doc.body) {
+              if (cursor.tagName === 'A' && cursor.getAttribute &&
+                  cursor.getAttribute('href')) {
+                anchor = cursor;
+                break;
+              }
+              cursor = cursor.parentElement;
+            }
+            if (anchor) {
+              var raw = anchor.getAttribute('href') || '';
+              // Skip external schemes (http, mailto, etc.) — let
+              // them fall through to page nav for now; routing
+              // them to Safari is a separate follow-up.
+              if (raw && !/^[a-z][a-z0-9+.\-]*:/i.test(raw)) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Synthesize a click on the in-iframe anchor.
+                // epub.js's installed link handler picks it up
+                // and calls display() with the spine-canonical
+                // href — we don't have to redo that work.
+                anchor.click();
+                return;
+              }
+            }
+          }
+          // No link at the tap point — fall through to page nav.
+          if (rendition) {
+            if (isNext) rendition.next();
+            else rendition.prev();
+          }
+        };
+      }
+      document.getElementById('nav-prev')
+        .addEventListener('click', makeNavTapHandler(false));
+      document.getElementById('nav-next')
+        .addEventListener('click', makeNavTapHandler(true));
     })();
   </script>
 </body>
