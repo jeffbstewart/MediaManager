@@ -92,8 +92,30 @@ struct LiveStreamView: View {
                 }
             }
         }
+        // Pin the body to fill the available area regardless of
+        // which branch (Connecting / video / error) is rendered.
+        // Same rationale as ContentView's destination-frame pin: a
+        // body whose outer size flips between tiny (the Connecting
+        // VStack) and full-screen (the video ZStack) makes the
+        // bottom safeAreaInset re-measure during the transition,
+        // briefly inflating MiniPlayerBar to ~half the screen.
+        // Constant outer size = stable inset = stable bar.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             await loadStream()
+        }
+        // fullScreenCover lives outside ContentView's NavigationStack,
+        // so the app-wide mini-player safeAreaInset doesn't reach
+        // here. Re-pin one when the stream isn't taking over the
+        // audio session — i.e., on cameras, where the user is
+        // glancing at the feed and probably wants to keep their
+        // music playable. Hidden on Live TV (`stopsAudio == true`)
+        // because tapping play there would put music on top of the
+        // broadcast audio.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !stopsAudio {
+                MiniPlayerBar()
+            }
         }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
