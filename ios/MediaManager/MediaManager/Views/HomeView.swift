@@ -298,13 +298,23 @@ struct PosterCard: View {
     @Environment(OnlineDataModel.self) private var dataModel
     let title: ApiTitle
 
+    /// `playable` is a video-only concept on the server (it
+    /// reflects whether a transcode exists). Books open in the
+    /// reader and albums route to the audio player from
+    /// AlbumDetailView, so for them the flag is effectively
+    /// meaningless and shouldn't gate dimming or "Not Playable"
+    /// chrome on the card.
+    private var showsPlayableState: Bool {
+        !title.isAlbum && !title.isBook
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .bottom) {
                 CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
                     .frame(width: 120, height: 180)
                     .clipped()
-                    .opacity(title.playable ? 1.0 : 0.5)
+                    .opacity(showsPlayableState && !title.playable ? 0.5 : 1.0)
                     .overlay(alignment: .bottomTrailing) {
                         // Mirrors ArtistDetailView's CD badge and
                         // CollectionDetailView's movie badge — same
@@ -365,7 +375,7 @@ struct PosterCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            if !title.playable {
+            if showsPlayableState && !title.playable {
                 Text("Not Playable")
                     .font(.caption2)
                     .foregroundStyle(.orange)
