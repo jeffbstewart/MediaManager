@@ -698,21 +698,32 @@ final class OfflineDataModel: DataModel {
     }
 
     func playbackProgress(transcodeId: TranscodeID) async -> ApiPlaybackProgress? {
-        // No server to ask — return nil, playback starts from beginning
-        nil
+        // Local shadow is the only source offline. Populated by
+        // OnlineDataModel.reportProgress on every report — including
+        // online sessions — so a movie watched online yesterday
+        // resumes at the right spot offline today.
+        await LocalProgressStore.shared.apiPlaybackProgress(transcodeId: transcodeId.protoValue)
     }
 
     func reportProgress(transcodeId: TranscodeID, position: Double, duration: Double?) async {
-        // Queue for later sync
+        await LocalProgressStore.shared.recordPlayback(
+            transcodeId: transcodeId.protoValue, position: position, duration: duration)
+        // Queue for server sync when connectivity returns.
         downloads.queueProgressUpdate(transcodeId: transcodeId.protoValue, position: position, duration: duration)
     }
 
-    // Reading progress (offline: the reader doesn't run offline yet —
-    // book download cache lands in a later phase, until then both
-    // calls are no-ops). Returning nil mirrors the no-progress case
-    // so the reader still opens at the start of the book.
-    func readingProgress(mediaItemId: Int64) async -> ApiReadingProgress? { nil }
-    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async { }
+    func readingProgress(mediaItemId: Int64) async -> ApiReadingProgress? {
+        await LocalProgressStore.shared.apiReadingProgress(mediaItemId: mediaItemId)
+    }
+    func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async {
+        await LocalProgressStore.shared.recordReading(
+            mediaItemId: mediaItemId, locator: locator, fraction: fraction)
+        // Reading progress doesn't share DownloadManager's queue
+        // (the schema differs — locator vs. seconds). The local
+        // entry stays put; when the user goes back online,
+        // OnlineDataModel.reportReadingProgress will push fresh
+        // updates from the reader once it resumes.
+    }
 
     // MARK: - WishListDataModel
 

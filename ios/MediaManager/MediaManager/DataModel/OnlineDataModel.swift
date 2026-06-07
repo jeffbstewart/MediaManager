@@ -335,15 +335,32 @@ final class OnlineDataModel: DataModel {
     }
 
     func playbackProgress(transcodeId: TranscodeID) async -> ApiPlaybackProgress? {
-        if !isOnline { return nil }
-        guard let response = try? await grpcClient.getProgress(transcodeId: transcodeId.protoValue) else {
-            return nil
+        // Offline: short-circuit to the local shadow. Online: prefer
+        // the server (canonical, cross-device), fall back to local
+        // when the server has no row yet — common when a download was
+        // played offline and is now being opened online for the first
+        // time before the queued update flushed.
+        if !isOnline {
+            return await LocalProgressStore.shared.apiPlaybackProgress(transcodeId: transcodeId.protoValue)
         }
-        return ApiPlaybackProgress(proto: response)
+        if let response = try? await grpcClient.getProgress(transcodeId: transcodeId.protoValue),
+           response.hasPosition {
+            return ApiPlaybackProgress(proto: response)
+        }
+        return await LocalProgressStore.shared.apiPlaybackProgress(transcodeId: transcodeId.protoValue)
     }
 
     func reportProgress(transcodeId: TranscodeID, position: Double, duration: Double?) async {
+        // Always write to the local shadow first — that's what makes
+        // the resume marker survive a switch to offline mode for any
+        // title the user has ever watched on this device, regardless
+        // of whether it's downloaded.
+        await LocalProgressStore.shared.recordPlayback(
+            transcodeId: transcodeId.protoValue, position: position, duration: duration)
         if !isOnline {
+            // Still funnel through DownloadManager's queue so the
+            // server gets a deferred update when connectivity comes
+            // back (covers the cross-device case).
             downloads.queueProgressUpdate(transcodeId: transcodeId.protoValue, position: position, duration: duration)
             return
         }
@@ -351,14 +368,19 @@ final class OnlineDataModel: DataModel {
     }
 
     func readingProgress(mediaItemId: Int64) async -> ApiReadingProgress? {
-        if !isOnline { return nil }
-        guard let response = try? await grpcClient.getReadingProgress(mediaItemId: mediaItemId) else {
-            return nil
+        if !isOnline {
+            return await LocalProgressStore.shared.apiReadingProgress(mediaItemId: mediaItemId)
         }
-        return ApiReadingProgress(proto: response)
+        if let response = try? await grpcClient.getReadingProgress(mediaItemId: mediaItemId),
+           !response.locator.isEmpty {
+            return ApiReadingProgress(proto: response)
+        }
+        return await LocalProgressStore.shared.apiReadingProgress(mediaItemId: mediaItemId)
     }
 
     func reportReadingProgress(mediaItemId: Int64, locator: String, fraction: Double?) async {
+        await LocalProgressStore.shared.recordReading(
+            mediaItemId: mediaItemId, locator: locator, fraction: fraction)
         if !isOnline { return }
         try? await grpcClient.reportReadingProgress(
             mediaItemId: mediaItemId, locator: locator, fraction: fraction)

@@ -44,7 +44,19 @@ struct BookDetailView: View {
     private func load() async {
         loading = true
         do {
-            detail = try await dataModel.titleDetail(id: titleId)
+            let fresh = try await dataModel.titleDetail(id: titleId)
+            detail = fresh
+            // If any edition of this title is already downloaded,
+            // mirror the fresh detail proto into BookCacheManager
+            // so the Books / Authors offline surfaces can find it.
+            // Older downloads (predating the cacheTitleDetail
+            // wiring in startDownload) wouldn't otherwise heal —
+            // the user's first online view of the book repopulates
+            // the cache for them.
+            let mediaItemIds = (fresh.book?.editions ?? []).map { $0.id }
+            if mediaItemIds.contains(where: { bookCache.isDownloaded($0) }) {
+                bookCache.cacheTitleDetail(fresh)
+            }
         } catch {
             log.warning("titleDetail failed: \(error.localizedDescription)")
         }
@@ -296,6 +308,16 @@ struct BookDetailView: View {
         } else {
             Button {
                 do {
+                    // Persist the parent ApiTitleDetail proto +
+                    // pin cover/author headshot so the book reads
+                    // offline AND so the Books/Authors offline
+                    // surfaces can find it. The Retry branch above
+                    // had this; the primary first-time-download
+                    // branch was missing it, so fresh downloads
+                    // landed an .epub but no .detail.pb and the
+                    // offline AuthorsView showed "No authors yet"
+                    // even with the book on disk.
+                    bookCache.cacheTitleDetail(detail)
                     try bookCache.startDownload(
                         mediaItemId: mediaItemId,
                         titleId: detail.id.protoValue,

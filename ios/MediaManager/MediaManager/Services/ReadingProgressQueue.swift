@@ -66,16 +66,30 @@ actor ReadingProgressQueue {
     /// keeping a sequence wastes disk for no benefit. Persists
     /// immediately so a crash before the next flush still preserves
     /// the user's place.
+    ///
+    /// Also mirrors the position into `LocalProgressStore` so the
+    /// resume marker survives the flush-and-delete cycle. The queue
+    /// itself gets `markFlushed` once a record is shipped to the
+    /// server, which clears its entry; without the mirror, a user
+    /// who read online would have no resume locator when they went
+    /// offline, because both the queue (flushed) and the server
+    /// (unreachable) would be unavailable. LocalProgressStore is
+    /// independent of the flush state, so it's always there.
     func record(
         mediaItemId: Int64, locator: String, fraction: Double, recordedAt: Date
-    ) {
+    ) async {
+        let clampedFraction = fraction.clamped(to: 0...1)
         let entry = ReadingProgressQueueEntry(
             mediaItemId: mediaItemId,
             locator: locator,
-            fraction: fraction.clamped(to: 0...1),
+            fraction: clampedFraction,
             recordedAt: recordedAt)
         entries[mediaItemId] = entry
         persist()
+        await LocalProgressStore.shared.recordReading(
+            mediaItemId: mediaItemId,
+            locator: locator,
+            fraction: clampedFraction)
     }
 
     /// Entry for a specific book, or nil. Used by the reader on
