@@ -108,15 +108,44 @@ struct MediaManagerApp: App {
         let pf = ProgressFlusher(queue: ReadingProgressQueue.shared, downloads: dm)
         let ap = AudioPlayerManager()
         let ac = AudioCacheManager()
+        let dataModel = OnlineDataModel(authManager: am, downloadManager: dm)
+        let ip = ImageProvider(grpcClient: am.grpcClient)
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
         _bookCache = State(initialValue: bc)
         _progressFlusher = State(initialValue: pf)
         _audioPlayer = State(initialValue: ap)
         _audioCache = State(initialValue: ac)
-        _dataModel = State(initialValue: OnlineDataModel(authManager: am, downloadManager: dm))
-        _imageProvider = State(initialValue: ImageProvider(grpcClient: am.grpcClient))
+        _dataModel = State(initialValue: dataModel)
+        _imageProvider = State(initialValue: ip)
         _appPolicy = State(initialValue: AppPolicyAgreement())
+
+        // Configure + publish AppServices in init() rather than the
+        // RootView.onAppear that used to run this block. CarPlay
+        // scenes activate independently of the phone's UI scene —
+        // if the population waits for onAppear, the head unit hangs
+        // on "Loading…" until the user opens the iOS app on the
+        // phone. Doing it here means a process cold-launch into
+        // CarPlay (the user plugs in the phone with the app not
+        // running) has AppServices ready by the time
+        // CarPlaySceneDelegate's `didConnect` fires, so the browse
+        // hierarchy installs immediately.
+        dm.configure(apiClient: am.apiClient, grpcClient: am.grpcClient)
+        bc.configure(grpcClient: am.grpcClient)
+        pf.configure(grpcClient: am.grpcClient)
+        ac.configure(apiClient: am.apiClient)
+        ap.configure(apiClient: am.apiClient, imageProvider: ip, audioCache: ac)
+        // Back-channel for AudioPlayerManager → DownloadManager.flushPendingListeningProgress.
+        // See the previous in-onAppear comment block for why.
+        ap.configureProgressFlusher { [dm] in
+            await dm.flushPendingListeningProgress()
+        }
+        AppServices.shared.populate(
+            audioPlayer: ap,
+            dataModel: dataModel,
+            audioCache: ac,
+            bookCache: bc,
+            imageProvider: ip)
     }
 
     var body: some Scene {
@@ -153,6 +182,9 @@ struct MediaManagerApp: App {
                 AppPolicyAgreementView()
                     .environment(appPolicy)
             } else {
+                // Manager configuration + AppServices.populate moved
+                // to init() — see the long comment there. RootView
+                // no longer needs onAppear for that.
                 RootView()
                     .environment(authManager)
                     .environment(downloadManager)
@@ -162,35 +194,6 @@ struct MediaManagerApp: App {
                     .environment(audioCache)
                     .environment(dataModel)
                     .environment(imageProvider)
-                    .onAppear {
-                        downloadManager.configure(apiClient: authManager.apiClient, grpcClient: authManager.grpcClient)
-                        bookCache.configure(grpcClient: authManager.grpcClient)
-                        progressFlusher.configure(grpcClient: authManager.grpcClient)
-                        audioCache.configure(apiClient: authManager.apiClient)
-                        audioPlayer.configure(
-                            apiClient: authManager.apiClient,
-                            imageProvider: imageProvider,
-                            audioCache: audioCache)
-                        // Hand AudioPlayerManager a back-channel to
-                        // DownloadManager's flush so a working
-                        // network gets listening-progress writes
-                        // immediately. When offline, the queue
-                        // entries simply wait for the next flush
-                        // (driven by the network monitor).
-                        audioPlayer.configureProgressFlusher { [downloadManager] in
-                            await downloadManager.flushPendingListeningProgress()
-                        }
-                        // Make the managers reachable from secondary
-                        // scenes (CarPlay; eventually the watchOS
-                        // counterpart) — SwiftUI's @State / .environment
-                        // is scene-local and CarPlay can't see it.
-                        AppServices.shared.populate(
-                            audioPlayer: audioPlayer,
-                            dataModel: dataModel,
-                            audioCache: audioCache,
-                            bookCache: bookCache,
-                            imageProvider: imageProvider)
-                    }
             }
         }
     }
