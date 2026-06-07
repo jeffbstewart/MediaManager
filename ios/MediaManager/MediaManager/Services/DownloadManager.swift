@@ -11,7 +11,10 @@ final class DownloadManager {
 
     private(set) var entries: [MMDownloadEntry] = []
     var isOfflineMode: Bool {
-        didSet { UserDefaults.standard.set(isOfflineMode, forKey: "offlineMode") }
+        didSet {
+            UserDefaults.standard.set(isOfflineMode, forKey: "offlineMode")
+            propagateOfflineState()
+        }
     }
     private(set) var hasNetworkConnectivity = true
 
@@ -41,11 +44,28 @@ final class DownloadManager {
     func configure(apiClient: APIClient, grpcClient: GrpcClient) {
         self.apiClient = apiClient
         self.grpcClient = grpcClient
+        // Push the current offline state to the freshly-wired gRPC
+        // client. The init-time UserDefaults seed inside GrpcClient
+        // covers the very-early restoreSession() RPCs; this push
+        // ensures the gate matches the live (post-init) state — e.g.
+        // network monitor already reporting `path.status != .satisfied`.
+        propagateOfflineState()
         if !isEffectivelyOffline {
             Task { await flushPendingProgress() }
         }
         // Resume any downloads that were in progress when the app was killed
         resumeInterruptedDownloads()
+    }
+
+    /// Push `isEffectivelyOffline` to GrpcClient so the gate at
+    /// `requireClient()` matches our combined state — the user-set
+    /// `isOfflineMode` flag OR `!hasNetworkConnectivity`. Called from
+    /// `configure()` (initial sync), `isOfflineMode.didSet` (toggle),
+    /// and the network monitor (connectivity changes).
+    private func propagateOfflineState() {
+        guard let client = grpcClient else { return }
+        let offline = isEffectivelyOffline
+        Task { await client.setOfflineGated(offline) }
     }
 
     /// Restart downloads that were active or queued before the app was killed.
@@ -797,6 +817,7 @@ final class DownloadManager {
                 guard let self else { return }
                 let wasOffline = self.isEffectivelyOffline
                 self.hasNetworkConnectivity = (path.status == .satisfied)
+                self.propagateOfflineState()
                 if wasOffline && !self.isEffectivelyOffline {
                     await self.flushPendingProgress()
                 }

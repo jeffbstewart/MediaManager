@@ -117,7 +117,12 @@ final class AuthManager {
             // a moved server doesn't strand URLSession traffic
             // pointing at a stale hostname forever. The legal-docs
             // half is a no-op when already cached.
-            await refreshLegalDocs()
+            // Skipped when offline mode is on — the RPC would be
+            // gated anyway, and the cached legal docs / HTTP base URL
+            // are good enough for an offline session.
+            if !UserDefaults.standard.bool(forKey: "offlineMode") {
+                await refreshLegalDocs()
+            }
         }
 
         guard let tokenBase64 = KeychainService.load(key: .accessToken),

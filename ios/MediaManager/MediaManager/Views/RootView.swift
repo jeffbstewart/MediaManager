@@ -5,7 +5,32 @@ struct RootView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @State private var showOfflineOffer = false
 
+    /// True only while the user is past every auth/legal gate.
+    /// Derived (not stored) so it tracks `authManager.state` without
+    /// needing AuthState to be Equatable.
+    private var isAuthed: Bool {
+        if case .authenticated = authManager.state { return true }
+        return false
+    }
+
     var body: some View {
+        content
+            .onChange(of: isAuthed, initial: true) { _, authed in
+                // When the user is not authenticated, the offline-mode
+                // gate would block the login / setup / discover RPCs
+                // they need to get back in. The toggle's reason to
+                // exist is "I'm browsing my downloads instead of the
+                // server" — meaningless when there's no session. Clear
+                // it so a previous session's offline preference doesn't
+                // strand them at the login screen.
+                if !authed && dataModel.downloads.isOfflineMode {
+                    dataModel.downloads.isOfflineMode = false
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch authManager.state {
         case .restoring:
             // Brief gap on every launch while AuthManager's async

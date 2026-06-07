@@ -21,6 +21,15 @@ actor GrpcClient {
     /// to re-pass them. Without this, reconnect would have to guess
     /// TLS from the port number, which is fragile.
     private var configuredUseTLS: Bool?
+    /// When true, every service-stub access (and therefore every RPC)
+    /// short-circuits with `DataModelError.offline` before reaching the
+    /// wire. Pushed in by DownloadManager whenever `isEffectivelyOffline`
+    /// flips — manual offline-mode toggle or the network monitor saying
+    /// no connectivity. Seeded from UserDefaults so RPCs fired during
+    /// `AuthManager.restoreSession()` (which runs before DownloadManager
+    /// has a chance to push state) are also gated when the user left
+    /// offline mode on across launches.
+    private var offlineGated: Bool = UserDefaults.standard.bool(forKey: "offlineMode")
 
     // MARK: - Configuration
 
@@ -128,6 +137,22 @@ actor GrpcClient {
         self.accessToken = token
     }
 
+    /// Push the effective offline state from DownloadManager into the
+    /// gRPC layer. When `on` is true, `requireClient()` throws
+    /// `DataModelError.offline` before any service stub is constructed,
+    /// so EVERY RPC entry — unary, server-streaming, client-streaming,
+    /// bidi — is short-circuited at the same chokepoint. Catches
+    /// direct `authManager.grpcClient.x()` calls from admin views,
+    /// background tasks (token refresh, log streamer, image stream,
+    /// progress flushers), and any other path that bypasses
+    /// OnlineDataModel's per-method `if !isOnline` guards.
+    func setOfflineGated(_ on: Bool) {
+        if offlineGated != on {
+            logger.info("setOfflineGated: \(on)")
+        }
+        offlineGated = on
+    }
+
     func close() {
         logger.info("close: shutting down")
         grpcClient?.beginGracefulShutdown()
@@ -146,6 +171,14 @@ actor GrpcClient {
     // MARK: - Service Clients
 
     private func requireClient() throws -> GRPCClient<HTTP2ClientTransport.Posix> {
+        // The offline gate lives at the single chokepoint every service
+        // stub passes through. Throwing here means a view that did
+        // `try await authManager.grpcClient.someAdminCall()` never gets
+        // a service stub to call .someAdminCall() on, so no network
+        // traffic leaks out while offline.
+        if offlineGated {
+            throw DataModelError.offline
+        }
         guard let client = grpcClient else {
             logger.error("requireClient: FAILED — grpcClient is nil (host=\(self.configuredHost ?? "never configured"), port=\(self.configuredPort ?? -1))")
             throw GrpcClientError.notConfigured
