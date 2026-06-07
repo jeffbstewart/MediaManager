@@ -113,11 +113,22 @@ struct MiniPlayerBar: View {
             // styled strip below the page. Outside the reader the
             // broadcaster's `current` is nil and we fall back to
             // the system-adaptive .regularMaterial.
+            //
+            // `ignoresSafeArea(edges: .bottom)` extends only the
+            // background fill down through the home-indicator
+            // strip — the HStack content stays above it (since the
+            // inset itself isn't ignored). Without this the bar
+            // ended at the safe-area boundary and the system
+            // background showed through below it on devices with a
+            // home indicator. The bar reads as a continuous slab
+            // from the controls to the screen edge.
             .background {
                 if let colors = readerTheme.current {
                     colors.background
+                        .ignoresSafeArea(edges: .bottom)
                 } else {
                     Rectangle().fill(.regularMaterial)
+                        .ignoresSafeArea(edges: .bottom)
                 }
             }
             .foregroundStyle(readerTheme.current?.foreground ?? .primary)
