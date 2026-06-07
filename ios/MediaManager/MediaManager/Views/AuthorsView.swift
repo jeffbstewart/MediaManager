@@ -46,15 +46,6 @@ struct AuthorsView: View {
     ]
 
     var body: some View {
-        // Pin the body to fill the available area regardless of
-        // phase. Without this, the body's outer size flips between
-        // tiny (ProgressView during .loading) and full-screen
-        // (ScrollView at .loaded). The `.searchable` system bar's
-        // bottom-floating placement re-measures during that
-        // switch, and the re-measure interaction with the column-
-        // level mini-player safeAreaInset was making the
-        // mini-player briefly grow to ~half the screen while the
-        // authors fetched. Constant outer size = stable insets.
         Group {
             switch phase {
             case .initial, .loading:
@@ -88,7 +79,6 @@ struct AuthorsView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(hiddenOnly ? "Hidden Authors" : "Authors")
         .toolbar {
             // Admin-only filter toggle: switch between visible authors

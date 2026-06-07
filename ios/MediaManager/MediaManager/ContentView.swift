@@ -284,6 +284,17 @@ struct ContentView: View {
                         HomeView()
                     }
                 }
+                // Pin the destination's outer size to fill the
+                // column regardless of which case is rendered.
+                // Tab views whose body switches between a tiny
+                // ProgressView (during initial load) and a full-
+                // screen ScrollView (once loaded) used to cause the
+                // mini-player's safeAreaInset to briefly inflate to
+                // ~half the screen during the body-size transition.
+                // A constant outer size keeps the column's insets
+                // stable. Same idea applied per-view in AuthorsView,
+                // generalized here so every tab gets it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationDestination(for: ApiTitle.self) { title in
                     // Books get a dedicated detail page; the movie-centric
                     // TitleDetailView (Play / Seasons & Episodes / transcode
