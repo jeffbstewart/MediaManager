@@ -58,7 +58,8 @@ struct CamerasView: View {
         .fullScreenCover(item: $selectedCamera) { camera in
             LiveStreamView(
                 streamPath: camera.hlsUrl,
-                title: camera.name
+                title: camera.name,
+                onClose: { selectedCamera = nil }
             )
         }
     }

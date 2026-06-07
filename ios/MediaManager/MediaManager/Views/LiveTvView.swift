@@ -72,7 +72,8 @@ struct LiveTvView: View {
                 // music queue while the user is tuned in, matching
                 // the way starting a movie hands the audio session
                 // off in CustomPlayerView.
-                stopsAudio: true
+                stopsAudio: true,
+                onClose: { selectedChannel = nil }
             )
         }
     }

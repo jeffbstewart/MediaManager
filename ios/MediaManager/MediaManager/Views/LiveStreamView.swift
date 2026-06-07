@@ -8,7 +8,6 @@ import Combine
 struct LiveStreamView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
-    @Environment(\.dismiss) private var dismiss
 
     let streamPath: String
     let title: String
@@ -19,18 +18,24 @@ struct LiveStreamView: View {
     /// cams are silent and the user is glancing, not watching —
     /// stopping their music there would be a hostile surprise.
     var stopsAudio: Bool = false
+    /// Explicit close handler. We don't use `@Environment(\.dismiss)`
+    /// here because dismiss() can be flaky on item-based
+    /// `fullScreenCover` presentations — observed: taps that did
+    /// nothing for several seconds. The parent sets its binding to
+    /// nil directly via this closure, which is reliable.
+    let onClose: () -> Void
 
     @State private var player: AVPlayer?
     @State private var error: String?
     @State private var buffering = true
-    @State private var statusObserver: AnyCancellable?
+    @State private var observers: Set<AnyCancellable> = []
 
     var body: some View {
         Group {
             if let error {
                 VStack(spacing: 16) {
                     ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
-                    Button("Close") { dismiss() }
+                    Button("Close") { closeTapped() }
                         .buttonStyle(.borderedProminent)
                 }
             } else if let player {
@@ -54,7 +59,7 @@ struct LiveStreamView: View {
                     VStack {
                         HStack {
                             Button {
-                                cleanupAndDismiss()
+                                closeTapped()
                             } label: {
                                 HStack(spacing: 8) {
                                     Image(systemName: "xmark.circle.fill")
@@ -67,7 +72,27 @@ struct LiveStreamView: View {
                                 .padding(.vertical, 8)
                                 .background(.black.opacity(0.6))
                                 .clipShape(Capsule())
+                                // Pin the hit-test region to the
+                                // visible capsule. Without this,
+                                // SwiftUI uses the label's rectangular
+                                // frame, but capsule corners outside
+                                // the rectangle still register taps —
+                                // and (per the bug report) the tap
+                                // box was reading as "off" near the X
+                                // icon. An explicit capsule shape
+                                // matches what the user sees.
+                                .contentShape(Capsule())
                             }
+                            // Custom button style instead of `.plain`
+                            // (which strips ALL press feedback) — the
+                            // user reported that close-button taps
+                            // felt unacknowledged because there was
+                            // no visual reaction. A subtle press
+                            // animation lands the moment the touch
+                            // does, so it's obvious the tap was
+                            // received even before the cover starts
+                            // dismissing.
+                            .buttonStyle(PressFeedbackButtonStyle())
 
                             Spacer()
 
@@ -138,14 +163,23 @@ struct LiveStreamView: View {
         }
     }
 
-    private func cleanupAndDismiss() {
-        cleanup()
-        dismiss()
+    /// Close-button action. Cancels the status observer FIRST so the
+    /// resulting pause() doesn't trip the sink one more time on its way
+    /// out, pauses the player so audio stops immediately, then asks
+    /// the parent to clear its binding. The deeper AVPlayer teardown
+    /// happens in `onDisappear → cleanup()` after dismiss starts.
+    private func closeTapped() {
+        // Haptic THUMP the moment the tap registers — no-op on the
+        // simulator, but lands on device. Confirms the action even
+        // if the press-feedback animation is hard to perceive.
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        observers.removeAll()
+        player?.pause()
+        onClose()
     }
 
     private func cleanup() {
-        statusObserver?.cancel()
-        statusObserver = nil
+        observers.removeAll()
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -208,58 +242,52 @@ struct LiveStreamView: View {
         let avPlayer = AVPlayer(playerItem: item)
         avPlayer.automaticallyWaitsToMinimizeStalling = false
 
-        // Log all player state changes for debugging HLS issues
-        statusObserver = item.publisher(for: \.status)
-            .combineLatest(
-                avPlayer.publisher(for: \.timeControlStatus),
-                avPlayer.publisher(for: \.reasonForWaitingToPlay)
-            )
+        // Two minimal, deduplicated observers instead of a 3-way
+        // `.combineLatest` that fired on every flicker of
+        // timeControlStatus / reasonForWaitingToPlay for the
+        // duration of the stream. The combo subscription was
+        // burning main-thread cycles for the whole session and
+        // squeezing out the close-button's press-feedback frames.
+        // Now: item.status fires once at .readyToPlay (or on
+        // failure), and timeControlStatus fires once when
+        // playback actually starts — no continuous wake-up.
+        item.publisher(for: \.status)
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { itemStatus, timeStatus, waitReason in
-                let statusStr = switch itemStatus {
-                    case .unknown: "unknown"
-                    case .readyToPlay: "readyToPlay"
-                    case .failed: "failed"
-                    @unknown default: "other"
-                }
-                let timeStr = switch timeStatus {
-                    case .paused: "paused"
-                    case .playing: "playing"
-                    case .waitingToPlayAtSpecifiedRate: "waiting"
-                    @unknown default: "other"
-                }
-                print("[MM-HLS] item.status=\(statusStr) timeControl=\(timeStr) waitReason=\(waitReason?.rawValue ?? "none")")
-
-                if let err = item.error {
-                    print("[MM-HLS] item.error: \(err.localizedDescription)")
-                    if let underlyingErr = (err as NSError).userInfo[NSUnderlyingErrorKey] as? NSError {
-                        print("[MM-HLS] underlying: \(underlyingErr)")
-                    }
-                }
-
-                if let log = item.errorLog() {
-                    for event in log.events {
-                        print("[MM-HLS] errorLog: \(event.errorStatusCode) \(event.errorDomain) \(event.errorComment ?? "") uri=\(event.uri ?? "")")
-                    }
-                }
-
-                if let log = item.accessLog() {
-                    for event in log.events {
-                        print("[MM-HLS] accessLog: \(event.uri ?? "") bytes=\(event.numberOfBytesTransferred)")
-                    }
-                }
-
+            .sink { itemStatus in
                 if itemStatus == .readyToPlay {
                     avPlayer.play()
-                    if timeStatus == .playing {
-                        withAnimation { buffering = false }
-                    }
                 } else if itemStatus == .failed {
                     error = item.error?.localizedDescription ?? "Stream failed"
                 }
             }
+            .store(in: &observers)
+
+        avPlayer.publisher(for: \.timeControlStatus)
+            .filter { $0 == .playing }
+            .first()
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                withAnimation { buffering = false }
+            }
+            .store(in: &observers)
 
         self.player = avPlayer
         avPlayer.play()
+    }
+}
+
+/// Press feedback — dim + shrink the moment the finger touches.
+/// Unlike `.plain` (which strips all feedback) and the system
+/// styles (which would add their own tint chrome), this just
+/// signals the tap was received. Numbers picked for visibility:
+/// 0.4 opacity + 0.88 scale is clearly noticeable in the brief
+/// window before the cover starts dismissing.
+private struct PressFeedbackButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.4 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
