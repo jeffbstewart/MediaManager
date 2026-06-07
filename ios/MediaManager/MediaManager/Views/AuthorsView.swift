@@ -116,8 +116,15 @@ struct AuthorsView: View {
         // AuthorsView fetched its initial data. The system
         // `.searchable` placement is stable; the column-level
         // mini-player inset (in ContentView) keeps it from being
-        // visually covered.
-        .searchable(text: $query, prompt: "Search authors")
+        // visually covered. Suppressed offline — the offline author
+        // list is small enough to scroll.
+        .searchableIfOnline(
+            text: $query,
+            isOnline: dataModel.isOnline,
+            prompt: "Search authors")
+        .onChange(of: dataModel.isOnline) { _, newValue in
+            if !newValue { query = "" }
+        }
         // Single load trigger keyed on (sort, query, hiddenOnly). Two
         // parallel .task(id:) modifiers used to race and cancel each
         // other — keeping it consolidated avoids the partial-load bug.

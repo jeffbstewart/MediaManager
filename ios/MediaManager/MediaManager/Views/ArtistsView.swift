@@ -98,7 +98,13 @@ struct ArtistsView: View {
                 }
             }
         }
-        .searchable(text: $query, prompt: "Search artists")
+        .searchableIfOnline(
+            text: $query,
+            isOnline: dataModel.isOnline,
+            prompt: "Search artists")
+        .onChange(of: dataModel.isOnline) { _, newValue in
+            if !newValue { query = "" }
+        }
         .task(id: LoadKey(sort: sort, query: query)) { await reload() }
         .refreshable { await reload() }
     }

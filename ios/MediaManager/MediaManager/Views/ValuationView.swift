@@ -28,9 +28,6 @@ struct ValuationView: View {
                     }
 
                     Section {
-                        TextField("Search", text: $searchQuery)
-                            .autocorrectionDisabled()
-                            .onSubmit { load() }
                         Toggle("Unpriced only", isOn: $unpricedOnly)
                             .onChange(of: unpricedOnly) { _, _ in load() }
                     }
@@ -54,6 +51,13 @@ struct ValuationView: View {
             }
         }
         .navigationTitle("Valuation")
+        // Standardize on `.searchable` instead of an inline TextField
+        // in the filter section — the system search bar floats above
+        // the mini-player on iOS 26 and matches Authors / Artists /
+        // SearchView / WishList. `onSubmit` re-runs the query; the
+        // server already handles substring filtering server-side.
+        .searchable(text: $searchQuery, prompt: "Search items")
+        .onSubmit(of: .search) { load() }
         .task { await loadData() }
         .sheet(item: $editingItem) { item in
             EditMediaItemSheet(item: item) { load() }

@@ -175,13 +175,16 @@ final class OfflineDataModel: DataModel {
         return out
     }
 
-    func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage {
+    func titles(type: MediaType, page: Int, sort: String?, query: String?) async throws -> ApiTitlePage {
         // Collect cached video titles for the requested media type
         // (movie / tv / personal). Books aren't reached via this API
         // — Books tab navigates through AuthorsView which has its
         // own offline path. Pagination is meaningless offline (small
         // dataset), so we return everything on page 1.
-        let candidates = cachedVideoTitles().filter { $0.mediaType == type }
+        var candidates = cachedVideoTitles().filter { $0.mediaType == type }
+        if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty {
+            candidates = candidates.filter { $0.name.localizedCaseInsensitiveContains(q) }
+        }
         var response = MMTitlePageResponse()
         response.titles = candidates.map { $0.proto.title }
         var pagination = MMPaginationInfo()

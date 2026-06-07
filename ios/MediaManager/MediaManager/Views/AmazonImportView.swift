@@ -42,9 +42,6 @@ struct AmazonImportView: View {
             }
 
             Section {
-                TextField("Search orders", text: $searchQuery)
-                    .autocorrectionDisabled()
-                    .onSubmit { search() }
                 Toggle("Media items only", isOn: $mediaOnly)
                     .onChange(of: mediaOnly) { _, _ in search() }
                 Toggle("Unlinked only", isOn: $unlinkedOnly)
@@ -71,6 +68,12 @@ struct AmazonImportView: View {
             }
         }
         .navigationTitle("Amazon Import")
+        // Standardize on `.searchable` (floats above the mini-player
+        // on iOS 26) instead of an inline TextField in the filter
+        // section. Matches every other tab destination with a
+        // filter-as-you-type pattern.
+        .searchable(text: $searchQuery, prompt: "Search orders")
+        .onSubmit(of: .search) { search() }
         .task { await loadData() }
         .fileImporter(
             isPresented: $showFilePicker,

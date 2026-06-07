@@ -47,15 +47,16 @@ final class OnlineDataModel: DataModel {
         return ApiHomeFeed(proto: response)
     }
 
-    func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage {
-        if !isOnline { return try await offlineDelegate.titles(type: type, page: page, sort: sort) }
+    func titles(type: MediaType, page: Int, sort: String?, query: String?) async throws -> ApiTitlePage {
+        if !isOnline { return try await offlineDelegate.titles(type: type, page: page, sort: sort, query: query) }
         let protoType: MMMediaType = switch type {
         case .movie: .movie
         case .tv: .tv
         case .personal: .personal
         }
         let response = try await grpcClient.listTitles(
-            type: protoType, page: Int32(page), limit: 25, sort: sort, query: nil, playableOnly: false)
+            type: protoType, page: Int32(page), limit: 25, sort: sort,
+            query: (query?.isEmpty ?? true) ? nil : query, playableOnly: false)
         return ApiTitlePage(proto: response)
     }
 

@@ -14,6 +14,7 @@ struct CatalogView: View {
     @State private var totalPages = 0
     @State private var loading = true
     @State private var sort = "popularity"
+    @State private var query = ""
     /// Re-entrancy guard for the infinite-scroll trigger — see
     /// ArtistsView for the rationale.
     @State private var isLoadingMore = false
@@ -63,7 +64,18 @@ struct CatalogView: View {
                 }
             }
         }
-        .task(id: sort) {
+        .searchableIfOnline(
+            text: $query,
+            isOnline: dataModel.isOnline,
+            prompt: "Search \(navigationTitle.lowercased())")
+        // Clear the bound query when the gate goes offline so the
+        // page doesn't stay filtered after the search box vanishes.
+        .onChange(of: dataModel.isOnline) { _, newValue in
+            if !newValue { query = "" }
+        }
+        // Reload whenever sort or query changes. The system search
+        // bar floats above the mini-player on iOS 26.
+        .task(id: LoadKey(sort: sort, query: query)) {
             titles = []
             page = 1
             await loadPage()
@@ -75,11 +87,19 @@ struct CatalogView: View {
         }
     }
 
+    private struct LoadKey: Hashable {
+        let sort: String
+        let query: String
+    }
+
     private func loadPage() async {
         loading = true
         if let typeFilter {
             do {
-                let result = try await dataModel.titles(type: typeFilter, page: page, sort: sort)
+                let q = query.trimmingCharacters(in: .whitespaces)
+                let result = try await dataModel.titles(
+                    type: typeFilter, page: page, sort: sort,
+                    query: q.isEmpty ? nil : q)
                 titles.append(contentsOf: result.titles)
                 total = result.total
                 totalPages = result.totalPages

@@ -32,6 +32,18 @@ struct MusicView: View {
     @State private var loading = true
     @State private var shuffleStarting = false
     @State private var showCreate = false
+    // Music-scoped search. Typing replaces the landing surface with
+    // album / artist / track hits (via `SearchService.SearchMusicOnly`);
+    // clearing the field restores the landing.
+    @State private var query = ""
+    @State private var searchResults: [ApiSearchResult] = []
+    @State private var searching = false
+    @State private var hasSearched = false
+    @State private var searchTask: Task<Void, Never>? = nil
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespaces)
+    }
 
     var body: some View {
         Group {
@@ -43,6 +55,8 @@ struct MusicView: View {
             // seconds — looks half-loaded.
             if loading {
                 ProgressView("Loading…")
+            } else if !trimmedQuery.isEmpty {
+                searchResultsList()
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -68,6 +82,38 @@ struct MusicView: View {
             }
         }
         .navigationTitle("Music")
+        // Music-scoped search bar. Floats above the mini-player on
+        // iOS 26 (same as every other tab destination's `.searchable`).
+        // Hits `searchMusicOnly` so results stay scoped to albums,
+        // artists, and tracks — Movies / TV / Books live in the
+        // global Search tab. Suppressed offline because the server's
+        // music index is the only useful target.
+        .searchableIfOnline(
+            text: $query,
+            isOnline: dataModel.isOnline,
+            prompt: "Search music")
+        .onChange(of: dataModel.isOnline) { _, newValue in
+            if !newValue { query = "" }
+        }
+        .onChange(of: query) { _, newValue in
+            searchTask?.cancel()
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                searching = false
+                hasSearched = false
+                searchResults = []
+                return
+            }
+            searching = true
+            // 300ms debounce — matches SearchView so a fast typist
+            // doesn't fire a dozen searches en route to the final
+            // query.
+            searchTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                await runSearch(trimmed)
+            }
+        }
         .sheet(isPresented: $showCreate) {
             CreatePlaylistSheet { name, description in
                 await createPlaylist(name: name, description: description)
@@ -75,6 +121,75 @@ struct MusicView: View {
         }
         .task { await load() }
         .refreshable { await load() }
+    }
+
+    @ViewBuilder
+    private func searchResultsList() -> some View {
+        List {
+            if searching {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+            } else if searchResults.isEmpty && hasSearched {
+                ContentUnavailableView.search(text: trimmedQuery)
+            } else {
+                ForEach(searchResults) { result in
+                    musicResultRow(result)
+                }
+            }
+        }
+    }
+
+    /// Music-only result-row dispatch. `searchMusicOnly` only returns
+    /// album / artist / track types, but we route by `resultType`
+    /// anyway so an unexpected kind doesn't fall through silently.
+    @ViewBuilder
+    private func musicResultRow(_ result: ApiSearchResult) -> some View {
+        switch result.resultType {
+        case "album":
+            if let titleId = result.titleId {
+                NavigationLink(value: ApiTitle(
+                    id: titleId, name: result.name,
+                    mediaType: result.mediaType ?? .personal,
+                    year: result.year, description: nil,
+                    backdropUrl: nil, contentRating: result.contentRating,
+                    popularity: nil, quality: result.quality,
+                    playable: true, transcodeId: nil,
+                    tmdbId: nil, tmdbCollectionId: nil,
+                    tmdbCollectionName: nil, familyMembers: nil,
+                    forMobileAvailable: nil
+                )) {
+                    SearchResultRow(result: result, apiClient: dataModel.apiClient)
+                }
+            }
+        case "artist":
+            if let artistId = result.artistId {
+                NavigationLink(value: ArtistRoute(id: artistId, name: result.name)) {
+                    SearchResultRow(result: result, apiClient: dataModel.apiClient)
+                }
+            }
+        default:
+            // Tracks + anything unexpected — non-navigable row; the
+            // user already sees the metadata, can tap into the album
+            // from the album hit if one's nearby.
+            SearchResultRow(result: result, apiClient: dataModel.apiClient)
+        }
+    }
+
+    private func runSearch(_ q: String) async {
+        do {
+            let response = try await dataModel.searchMusicOnly(query: q)
+            guard !Task.isCancelled else { return }
+            searchResults = response.results
+        } catch {
+            guard !Task.isCancelled else { return }
+            log.warning("searchMusicOnly failed: \(error.localizedDescription)")
+            searchResults = []
+        }
+        searching = false
+        hasSearched = true
     }
 
     // MARK: - Sections

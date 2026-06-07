@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor protocol CatalogDataModel {
     func homeFeed() async throws -> ApiHomeFeed
-    func titles(type: MediaType, page: Int, sort: String?) async throws -> ApiTitlePage
+    func titles(type: MediaType, page: Int, sort: String?, query: String?) async throws -> ApiTitlePage
     func titleDetail(id: TitleID) async throws -> ApiTitleDetail
     func seasons(titleId: TitleID) async throws -> [ApiSeason]
     func episodes(titleId: TitleID, season: Int) async throws -> [ApiEpisode]
