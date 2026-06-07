@@ -67,7 +67,12 @@ struct LiveTvView: View {
         .fullScreenCover(item: $selectedChannel) { channel in
             LiveStreamView(
                 streamPath: channel.hlsUrl,
-                title: "\(channel.guideNumber) \(channel.guideName)"
+                title: "\(channel.guideNumber) \(channel.guideName)",
+                // Live TV channels carry their own audio. Pause the
+                // music queue while the user is tuned in, matching
+                // the way starting a movie hands the audio session
+                // off in CustomPlayerView.
+                stopsAudio: true
             )
         }
     }

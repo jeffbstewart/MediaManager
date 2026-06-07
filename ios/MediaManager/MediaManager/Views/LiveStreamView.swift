@@ -7,10 +7,18 @@ import Combine
 /// all sub-requests (playlist refreshes, .ts segments).
 struct LiveStreamView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AudioPlayerManager.self) private var audio
     @Environment(\.dismiss) private var dismiss
 
     let streamPath: String
     let title: String
+    /// True when this stream is expected to carry audio of its own
+    /// (Live TV). Pauses the music queue + releases remote-command
+    /// claims before tuning in, mirroring CustomPlayerView's
+    /// hand-off for movies. Cameras default to false because most
+    /// cams are silent and the user is glancing, not watching —
+    /// stopping their music there would be a hostile surprise.
+    var stopsAudio: Bool = false
 
     @State private var player: AVPlayer?
     @State private var error: String?
@@ -89,10 +97,22 @@ struct LiveStreamView: View {
         }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
+            if stopsAudio {
+                // Pause whatever's in the queue + release remote-
+                // command targets so AirPods / lock-screen controls
+                // act on the stream, not the (now-silent) audio
+                // player. The queue stays — the user can resume from
+                // the mini-player when they close the stream.
+                if audio.isPlaying { audio.pause() }
+                audio.unwireRemoteCommands()
+            }
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             cleanup()
+            if stopsAudio {
+                audio.wireRemoteCommands()
+            }
         }
     }
 
