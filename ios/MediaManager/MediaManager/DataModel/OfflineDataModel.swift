@@ -111,6 +111,32 @@ final class OfflineDataModel: DataModel {
                 guard seenBooks.insert(book.titleId).inserted else { return nil }
                 return bookCache.loadCachedTitleDetail(titleId: book.titleId)?.proto.title
             }
+
+            // Continue Reading — LRU of downloaded books the user has
+            // actually opened. Sourced from LocalProgressStore (per
+            // mediaItem reader position); intersected with the
+            // downloaded-books index so a stale reading entry for a
+            // book that was since deleted doesn't appear. Recently
+            // Downloaded sits beside this for fresh downloads that
+            // haven't been opened yet — the two are complementary,
+            // not duplicates. (#71)
+            let downloadedByMediaItem = Dictionary(
+                uniqueKeysWithValues: bookCache.downloads.map { ($0.mediaItemId, $0) })
+            let readingByRecency = await LocalProgressStore.shared.readingEntriesByRecency()
+            proto.resumeReading = readingByRecency.compactMap { entry -> MMResumeReading? in
+                guard let book = downloadedByMediaItem[entry.mediaItemId] else { return nil }
+                let fraction = entry.fraction ?? 0
+                guard fraction > 0 || !entry.locator.isEmpty else { return nil }
+                var r = MMResumeReading()
+                r.mediaItemID = entry.mediaItemId
+                r.titleID = book.titleId
+                r.titleName = book.titleName
+                r.percent = fraction
+                r.updatedAt = MMTimestamp.with {
+                    $0.secondsSinceEpoch = Int64(entry.updatedAt.timeIntervalSince1970)
+                }
+                return r
+            }
         }
 
         // HomeView renders from `feed.carousels` (the generic

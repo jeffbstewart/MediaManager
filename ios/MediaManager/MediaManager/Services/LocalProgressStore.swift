@@ -131,6 +131,17 @@ actor LocalProgressStore {
         return reading[mediaItemId]
     }
 
+    /// All reading entries sorted by `updatedAt` descending — most-
+    /// recently-read first. Used by `OfflineDataModel.homeFeed` to
+    /// build the offline Continue Reading carousel as an LRU of
+    /// downloaded ebooks the user actually has progress in (rather
+    /// than the older "Recently Downloaded Books" carousel which
+    /// stalls once the user's downloaded a few dozen).
+    func readingEntriesByRecency() -> [ReadingEntry] {
+        loadIfNeeded()
+        return reading.values.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     // MARK: - Adapters
 
     /// Build an `ApiPlaybackProgress` from a local entry. Used by the
