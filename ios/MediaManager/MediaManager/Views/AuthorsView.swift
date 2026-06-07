@@ -109,7 +109,36 @@ struct AuthorsView: View {
                 }
             }
         }
-        .searchable(text: $query, prompt: "Search authors")
+        // Pin search at the bottom rather than using `.searchable`'s
+        // system placement: it was getting visually obscured by the
+        // mini-player and required scrolling-to-bottom to expose.
+        // The inner safeAreaInset composes cleanly with ContentView's
+        // mini-player inset — both bars stack, content above is
+        // shortened to clear them, and the search field stays in
+        // reach regardless of grid length.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search authors", text: $query)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.regularMaterial)
+        }
         // Single load trigger keyed on (sort, query, hiddenOnly). Two
         // parallel .task(id:) modifiers used to race and cancel each
         // other — keeping it consolidated avoids the partial-load bug.

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Tab: Hashable {
-    case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile
+    case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile, about
     // Admin tabs
     case adminScan, adminStatus, adminCameras, adminUsers, adminPurchaseWishes, adminDataQuality
     case adminTags, adminSettings, adminTranscodes, adminUnmatched, adminAddTitle
@@ -181,36 +181,36 @@ struct ContentView: View {
                 Section {
                     Label("Profile", systemImage: "person.circle")
                         .tag(Tab.profile)
+                    Label("About", systemImage: "info.circle")
+                        .tag(Tab.about)
                 }
             }
             .navigationTitle("Household Disc Keeper")
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    VStack(spacing: 4) {
-                        // Status indicator: clear what's happening,
-                        // without occupying space the user could tap by
-                        // accident. The previous wifi-icon button got
-                        // mistaken for a Wi-Fi network toggle — this
-                        // row is read-only; the actual toggle lives at
-                        // the top of the sidebar.
-                        if isOffline && !dataModel.downloads.isOfflineMode {
-                            Label("Server unreachable", systemImage: "exclamationmark.icloud")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        } else if dataModel.downloads.isOfflineMode {
-                            Label("Browsing downloads only", systemImage: "arrow.down.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Sign Out lives in ProfileView now — duplicating
-                        // it here gave the user two affordances for the
-                        // same action.
-                        Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                    // Status-only row. The build/version number
+                    // moved to AboutView — it didn't earn the
+                    // prominent footer slot. The toolbar item is
+                    // only present when there's a status to show
+                    // so SwiftUI doesn't reserve empty chrome.
+                    if isOffline && !dataModel.downloads.isOfflineMode {
+                        Label("Server unreachable", systemImage: "exclamationmark.icloud")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else if dataModel.downloads.isOfflineMode {
+                        Label("Browsing downloads only", systemImage: "arrow.down.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
+            }
+            // The bar lives inside the sidebar's List too — so on
+            // iPhone compact mode (where the sidebar is the visible
+            // column) the inset reaches the List that needs it.
+            // MiniPlayerBar's `.frame(height: 52)` locks the layout
+            // so the dual placement doesn't flex during transitions.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                MiniPlayerBar()
             }
         } detail: {
             NavigationStack(path: $navigationPath) {
@@ -238,6 +238,8 @@ struct ContentView: View {
                         LiveTvView()
                     case .profile:
                         ProfileView()
+                    case .about:
+                        AboutView()
                     case .adminAddTitle:
                         AddTitleView()
                     case .adminAmazonImport:
@@ -347,6 +349,18 @@ struct ContentView: View {
                     GenreDetailView(route: route)
                 }
             }
+            // Pin the mini-player inside the detail's NavigationStack
+            // so its safeAreaInset propagates into the destination
+            // view's ScrollView contentInsets. Outer-level placement
+            // on NavigationSplitView visually positioned the bar but
+            // didn't shorten the column's ScrollView, leaving tall
+            // pages (MusicView's Browse Artists row, AuthorsView's
+            // grid + search bar) with their last items covered by
+            // the bar. Stable bar height comes from MiniPlayerBar's
+            // explicit .frame(height: 52).
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                MiniPlayerBar()
+            }
         }
         .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
             // Flipping OFF: force a token refresh now so the next
@@ -394,14 +408,11 @@ struct ContentView: View {
                 episodeNumber: route.episodeNumber
             )
         }
-        // Mini-player pinned above the safe-area inset whenever audio
-        // is playing. `safeAreaInset` shrinks the underlying content
-        // by the bar's height so nothing's hidden behind it. Phase 1
-        // tap-to-expand is a stub; Phase 3 wires it to the
-        // full-screen Now Playing view.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            MiniPlayerBar()
-        }
+        // Mini-player is pinned inside each column (sidebar List +
+        // detail NavigationStack) — see the comments at each
+        // `.safeAreaInset` call for why pinning at the outer
+        // NavigationSplitView level didn't propagate the inset into
+        // the column's ScrollView.
     }
 }
 

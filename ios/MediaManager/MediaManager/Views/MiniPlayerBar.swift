@@ -107,6 +107,14 @@ struct MiniPlayerBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            // Lock the bar's layout height. Without this, the
+            // `.move(edge: .bottom)` transition combined with the
+            // dual-column safeAreaInset placement causes the bar's
+            // frame to temporarily overshoot during navigation
+            // transitions (observed: bar growing to roughly half
+            // the screen as pages load). An explicit fixed height
+            // pins the layout regardless of transition state.
+            .frame(height: 52)
             // When the reader is on screen it publishes its colours
             // via ReaderThemeBroadcaster; tint the bar to match so
             // the dark / sepia modes don't end with a stark default-
