@@ -107,14 +107,6 @@ struct MiniPlayerBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            // Lock the bar's layout height. Without this, the
-            // `.move(edge: .bottom)` transition combined with the
-            // dual-column safeAreaInset placement causes the bar's
-            // frame to temporarily overshoot during navigation
-            // transitions (observed: bar growing to roughly half
-            // the screen as pages load). An explicit fixed height
-            // pins the layout regardless of transition state.
-            .frame(height: 52)
             // When the reader is on screen it publishes its colours
             // via ReaderThemeBroadcaster; tint the bar to match so
             // the dark / sepia modes don't end with a stark default-
@@ -149,6 +141,16 @@ struct MiniPlayerBar: View {
                     .scaleEffect(x: 1, y: 0.5, anchor: .top)
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Hard cap the OUTERMOST measured height. Placing the
+            // frame here (after .background / .overlay / .transition)
+            // means none of those wrapping views can re-flow the
+            // bar's outer frame during navigation transitions or
+            // data-load re-layouts — observed without this cap: the
+            // bar growing to roughly half the screen while a
+            // destination view fetched its initial data. Using
+            // `maxHeight` rather than `height` lets the bar collapse
+            // to 0 cleanly when `currentTrack` flips to nil.
+            .frame(maxHeight: 52)
         }
     }
 

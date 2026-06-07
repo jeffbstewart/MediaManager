@@ -46,6 +46,15 @@ struct AuthorsView: View {
     ]
 
     var body: some View {
+        // Pin the body to fill the available area regardless of
+        // phase. Without this, the body's outer size flips between
+        // tiny (ProgressView during .loading) and full-screen
+        // (ScrollView at .loaded). The `.searchable` system bar's
+        // bottom-floating placement re-measures during that
+        // switch, and the re-measure interaction with the column-
+        // level mini-player safeAreaInset was making the
+        // mini-player briefly grow to ~half the screen while the
+        // authors fetched. Constant outer size = stable insets.
         Group {
             switch phase {
             case .initial, .loading:
@@ -79,6 +88,7 @@ struct AuthorsView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(hiddenOnly ? "Hidden Authors" : "Authors")
         .toolbar {
             // Admin-only filter toggle: switch between visible authors
@@ -109,36 +119,15 @@ struct AuthorsView: View {
                 }
             }
         }
-        // Pin search at the bottom rather than using `.searchable`'s
-        // system placement: it was getting visually obscured by the
-        // mini-player and required scrolling-to-bottom to expose.
-        // The inner safeAreaInset composes cleanly with ContentView's
-        // mini-player inset — both bars stack, content above is
-        // shortened to clear them, and the search field stays in
-        // reach regardless of grid length.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search authors", text: $query)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.regularMaterial)
-        }
+        // Tried pinning search via an inner `safeAreaInset(.bottom)`
+        // so it'd always be in reach, but that nested inset (search
+        // bar inside ContentView's mini-player inset) caused the
+        // mini-player to grow to roughly half the screen while
+        // AuthorsView fetched its initial data. The system
+        // `.searchable` placement is stable; the column-level
+        // mini-player inset (in ContentView) keeps it from being
+        // visually covered.
+        .searchable(text: $query, prompt: "Search authors")
         // Single load trigger keyed on (sort, query, hiddenOnly). Two
         // parallel .task(id:) modifiers used to race and cancel each
         // other — keeping it consolidated avoids the partial-load bug.
