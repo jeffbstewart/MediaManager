@@ -16,7 +16,9 @@
   <a href="ADMIN_GUIDE.md">Admin Guide</a> &bull;
   <a href="ROKU_GUIDE.md">Roku Setup</a> &bull;
   <a href="ANDROID_TV_GUIDE.md">Android TV Setup</a> &bull;
+  <a href="IOS_ARCHITECTURE.md">iOS Architecture</a> &bull;
   <a href="CARPLAY_GUIDE.md">CarPlay Guide</a> &bull;
+  <a href="OFFLINE_PLAYBACK.md">Offline Playback</a> &bull;
   <a href="TRANSCODE_BUDDY.md">Transcode Buddy</a> &bull;
   <a href="COMPETITIVE_ANALYSIS.md">Competitive Analysis</a>
 </p>
@@ -46,7 +48,9 @@ Media Manager is a self-hosted web application for people who own physical media
 | [Admin Guide](ADMIN_GUIDE.md) | Administrators | Catalog management, transcoding, user management |
 | [Roku Setup](ROKU_GUIDE.md) | Roku users | Channel installation, pairing, playback |
 | [Android TV Setup](ANDROID_TV_GUIDE.md) | Google TV / Android TV users | Building, installing, multi-account, playback |
+| [iOS Architecture](IOS_ARCHITECTURE.md) | iOS contributors | SwiftUI app structure, gRPC client, caches, offline-first layout |
 | [CarPlay Guide](CARPLAY_GUIDE.md) | iPhone + car users | Browsing, Shuffle Library, AirPods controls |
+| [Offline Playback](OFFLINE_PLAYBACK.md) | iOS users / contributors | Downloads, offline mode, cache layout |
 | [Transcode Buddy](TRANSCODE_BUDDY.md) | Server admin | Distributed transcoding with GPU acceleration |
 | [Generating Subtitles](GENERATING_SUBTITLES.md) | Server admin | Whisper AI subtitle generation setup |
 | [Mac Development Setup](MAC_SETUP.md) | Contributors | macOS prerequisites, building, deploying, iOS development |
@@ -59,7 +63,7 @@ Media Manager is a self-hosted web application for people who own physical media
 2. Set `H2_PASSWORD`, `H2_FILE_PASSWORD`, and `TMDB_API_KEY` ([free signup](https://www.themoviedb.org/settings/api))
 3. Update the volume paths to point at your cache directory and media files
 4. `docker compose up -d`
-5. Open **http://your-host:8080** and create your admin account
+5. Open **http://your-host:9090** and create your admin account
 
 See [Getting Started](GETTING_STARTED.md) for the full walkthrough.
 
@@ -68,18 +72,19 @@ See [Getting Started](GETTING_STARTED.md) for the full walkthrough.
 ```mermaid
 graph LR
     subgraph Clients
-        Browser
+        Browser[Angular SPA]
+        iOS[iOS App]
         Roku[Roku Channel]
         AndroidTV[Android TV App]
     end
 
-    subgraph NAS["Synology NAS"]
-        subgraph Proxy["Reverse Proxy"]
-            nginx["DSM Reverse Proxy (nginx)<br/>TLS terminate<br/>Let's Encrypt"]
-        end
+    subgraph Routing["pfSense / HAProxy"]
+        haproxy["HAProxy<br/>TLS terminate<br/>Let's Encrypt<br/>HTTP/2 + gRPC"]
+    end
 
+    subgraph NAS["Synology NAS"]
         subgraph Docker
-            subgraph App["mediaManager (Jetty :8080)"]
+            subgraph App["mediaManager (Armeria :9090)<br/>gRPC + HTTP + SPA on one port"]
                 direction TB
             end
             subgraph Internal["Internal Server (:8081 → :16002)"]
@@ -88,7 +93,6 @@ graph LR
         end
 
         Watchtower["Watchtower<br/>(auto-deploy)"]
-        Prometheus[":9090"]
 
         subgraph Volumes
             media["/media (NAS files)"]
@@ -96,16 +100,18 @@ graph LR
         end
     end
 
+    Prometheus["Prometheus<br/>(LAN scrape)"]
     Buddy["Transcode Buddy<br/>(GPU worker)"]
 
-    Browser -- HTTPS --> nginx
-    Roku -- HTTPS --> nginx
-    AndroidTV -- HTTPS/gRPC --> nginx
-    nginx -- HTTP --> App
+    Browser -- HTTPS / gRPC-Web --> haproxy
+    iOS -- HTTPS / gRPC --> haproxy
+    AndroidTV -- HTTPS / gRPC --> haproxy
+    Roku -- HTTPS --> haproxy
+    haproxy -- HTTP/2 --> App
     App --> media
     App --> cache
     Prometheus -- scrape --> Internal
-    App -- REST API --> Buddy
+    App <-- gRPC bidi --> Buddy
 ```
 
-The Synology NAS hosts everything: the DSM built-in reverse proxy terminates TLS with a Let's Encrypt certificate and forwards traffic to the mediaManager Docker container on port 8080. The server runs as a single Java process with an embedded Jetty web server. A separate internal Jetty server on port 8081 (mapped to LAN port 16002) serves `/health` and `/metrics` — these are not internet-accessible. Background agents handle barcode lookups, TMDB enrichment, NAS file scanning, and video transcoding. Watchtower monitors for new Docker images and auto-deploys updates. An optional Transcode Buddy worker offloads GPU-intensive transcoding to a separate machine.
+The Synology NAS hosts everything: a single Armeria-based Kotlin process binds port 9090 and multiplexes gRPC, HTTP/1.1, and the Angular SPA static bundle on the same port. HAProxy on pfSense terminates TLS with a Let's Encrypt wildcard certificate and forwards HTTP/2 traffic to port 9090. A separate internal Armeria server on port 8081 (mapped to LAN port 16002) serves `/health` and `/metrics` — these are not internet-accessible. Background agents handle barcode lookups, TMDB enrichment, NAS file scanning, video transcoding, and music / book / artist enrichment. Watchtower monitors for new Docker images and auto-deploys updates. An optional Transcode Buddy worker connects over a long-lived gRPC bidirectional stream to claim transcode, thumbnail, and subtitle work on a separate GPU-equipped machine.

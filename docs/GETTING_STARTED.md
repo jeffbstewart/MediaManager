@@ -70,7 +70,9 @@ Or click **Deploy the stack** in Portainer.
 
 ### 4. Create your admin account
 
-Open **http://your-host:8080**. On first launch, you're redirected to the setup page. Create your admin account (username, display name, password). This account has full access to all features.
+Open **http://your-host:9090**. On first launch, you're redirected to the setup page. Create your admin account (username, display name, password). This account has full access to all features.
+
+> **Networking note:** The server binds gRPC, HTTP, and the Angular SPA on a single port (default 9090) via Armeria. In production, terminate TLS at a reverse proxy that supports HTTP/2 end-to-end (HAProxy works well; the DSM built-in nginx proxy does **not** support gRPC). Port 8081 is an internal-only port that serves `/health` and `/metrics`; don't expose it on the internet.
 
 ### Auto-Updates with Watchtower (optional)
 
@@ -113,13 +115,14 @@ The iOS app communicates with the server via gRPC. Building the app requires pro
 ### Prerequisites
 
 ```bash
-brew install protobuf swift-protobuf protoc-gen-grpc-swift
+brew install protobuf swift-protobuf
 ```
 
 This installs:
 - `protoc` — Protocol Buffer compiler
 - `protoc-gen-swift` — Swift message code generator
-- `protoc-gen-grpc-swift-2` — Swift gRPC service stub generator (v2)
+
+`protoc-gen-grpc-swift-2` (the v2 service-stub generator) is not pulled in from Homebrew; it ships as a SwiftPM plugin via the `grpc-swift-2` package, and the iOS build script (`lifecycle/ios-build.sh`) invokes it from the Swift toolchain. No separate install is needed.
 
 ### Configuration
 
@@ -159,11 +162,9 @@ The Xcode project includes these Swift Package Manager dependencies (resolved au
 
 ### Network Setup for iOS
 
-The iOS app connects to two server endpoints:
-- **gRPC** (port 9090 default) — all data operations via HTTP/2
-- **HTTP** (port 8080 default) — images, video streaming, file downloads
+The iOS app connects to a single server endpoint — Armeria multiplexes gRPC (HTTP/2 + protobuf), HTTP/1.1 image and video servlets, and the Angular SPA on the same port (default 9090). The client picks the right framing per request; you don't need to map two ports.
 
-In production, HAProxy on pfSense terminates TLS (LetsEncrypt wildcard cert) and forwards to these ports. See the Network Architecture section in CLAUDE.md.
+In production, HAProxy on pfSense terminates TLS (LetsEncrypt wildcard cert) and forwards HTTP/2 (`proto h2`) to port 9090. See the Network Architecture section in CLAUDE.md.
 
 ---
 
@@ -200,12 +201,17 @@ H2_FILE_PASSWORD=your-file-encryption-password
 TMDB_API_KEY=your-tmdb-v3-api-key
 ```
 
-### 3. Build and run
+### 3. Build the Angular SPA + server
+
+The Angular front-end lives in `web-app/` and the Kotlin server in `src/`. The Docker build glues them together, but for a local run you build the SPA and then the server:
 
 ```bash
+cd web-app && npm ci && npm run build && cd ..
 ./gradlew build              # First build: ~1 minute
-./gradlew --no-daemon run    # Starts at http://localhost:8080
+./gradlew --no-daemon run    # Starts at http://localhost:9090
 ```
+
+The `web-app` build emits to `web-app/dist/media-manager/browser/`, which Armeria serves from `spa/` when running inside Docker. For local dev, point Armeria at the dist directory or use `web-app`'s dev server with the proxy config in `web-app/proxy.conf.js`.
 
 ### 4. Configure FFmpeg and Whisper paths
 
@@ -216,7 +222,7 @@ After creating your admin account, open **Settings** from the sidebar:
 
 ### 5. Create your admin account
 
-Open **http://localhost:8080** and complete the setup wizard.
+Open **http://localhost:9090** and complete the setup wizard.
 
 ---
 

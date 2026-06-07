@@ -52,10 +52,13 @@ on load.
   same-origin. No `<link rel="preconnect|dns-prefetch">` to anywhere.
   No external `<script src>`.
 - **CSS**: no `@import` from third-party hosts; no external `url(...)`
-  references. Material's icon font self-hosted.
+  references. Roboto + Material Icons fonts are vendored under
+  `web-app/public/vendor/fonts/` (see `THIRD_PARTY_LICENSES.md`) and
+  served same-origin.
 - **Reader scripts**: epub.js + JSZip vendored locally
   (`vendor/epub.min.js`, `vendor/jszip.min.js`) and loaded with SRI
-  via `loadScriptOnce()` (`reader.ts:140-141`).
+  via `loadScriptOnce()` (`reader.ts:140-141`). License texts ship
+  alongside as `*.LICENSE` files (see `THIRD_PARTY_LICENSES.md`).
 - **Iframes**: only the PDF reader (`reader.html:29`) and it sources
   `/ebook/{id}` same-origin.
 - **Audio / video / track**: every player URL is constructed from a

@@ -446,7 +446,7 @@ When the server has the **downloads** capability enabled, you can download movie
 
 Offline mode lets you use the app with only your downloaded content, without contacting the server. There are three ways to enter offline mode:
 
-1. **Manual toggle** &mdash; Flip the **Online/Offline** switch at the bottom of the sidebar. The app immediately switches to showing only downloaded content.
+1. **Manual toggle** &mdash; Flip the **Online/Offline** switch in the top row of the sidebar. The app immediately switches to showing only downloaded content. (The toggle used to live at the bottom of the sidebar; it was promoted to the top alongside the Search and Profile actions.)
 
 2. **Automatic detection** &mdash; If you lose network connectivity (airplane mode, poor signal), the app detects this and enters offline mode automatically. When connectivity returns, it switches back.
 
@@ -478,6 +478,16 @@ Flip the offline toggle back to **Online**, or simply restore network connectivi
 - Re-shows all sidebar tabs
 - Syncs any queued playback progress to the server
 - Resumes normal operation
+
+### About
+
+The **About** page (Profile &rarr; About) shows:
+
+- The app's build number and version (handy when reporting bugs)
+- The server URL the app is currently bound to
+- Links to the app's own privacy policy / terms of use
+- Links to the **server's** privacy policy / terms of use (configured by your admin under Settings &rarr; Legal Documents)
+- Third-party software credits
 
 ---
 

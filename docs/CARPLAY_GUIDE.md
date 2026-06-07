@@ -29,7 +29,7 @@ When your iPhone is connected to a CarPlay-equipped vehicle (wired or wireless),
 - You're **signed in** to Household Disc Keeper on the iPhone. CarPlay uses the same account and connects to the same server.
 - You've **downloaded or have network access to** your music library. Albums and tracks stream from your server over your phone's connection.
 
-> CarPlay is automatic. There's no separate sign-in or pairing — once the app is installed and you're signed in on the phone, the CarPlay surface activates the moment the iPhone connects to the car.
+> CarPlay is automatic. There's no separate sign-in or pairing — once the app is installed and you're signed in on the phone, the CarPlay surface activates the moment the iPhone connects to the car. The phone-side service container (`AppServices`) is populated at process launch rather than on first view appear, so the CarPlay scene delegate finds a fully populated browse hierarchy on the first connection — no "Loading…" spinner stuck on the in-car screen while the phone catches up.
 
 ---
 

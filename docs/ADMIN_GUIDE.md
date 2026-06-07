@@ -32,10 +32,12 @@ Pass via `./gradlew run --args="--flag"` or as Docker CMD arguments.
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `--developer_mode` | off | Enables H2 web console at the configured console port |
-| `--port N` | 8080 | HTTP listen port |
+| `--port N` | 9090 | Main listen port (gRPC + HTTP + SPA on one port via Armeria) |
+| `--internal_port N` | 8081 | Internal monitoring port (`/health` + `/metrics`, LAN-only) |
 | `--h2_console_port N` | 8082 | H2 web console port (developer mode only) |
 | `--listen_on_all_interfaces` | off | Bind to 0.0.0.0 instead of 127.0.0.1 |
 | `--max_transcode_deletes N` | 25 | Mass-deletion guard threshold for NAS cleanup |
+| `--disable_local_transcoding` | off | Stop the in-process TranscoderAgent. Remote buddies can still claim work. The Docker image ships with this on so transcoding is buddy-only by default. |
 
 ---
 
@@ -508,7 +510,7 @@ The camera settings page includes a **go2rtc Settings** card at the bottom:
 | **go2rtc Binary Path** | `/usr/local/bin/go2rtc` | Path to the go2rtc executable. Pre-installed in the Docker image. |
 | **go2rtc API Port** | `1984` | Port go2rtc binds to on 127.0.0.1 (not externally accessible) |
 
-go2rtc is bundled in the Docker image automatically. For non-Docker installs, download the binary from [go2rtc releases](https://github.com/AlexxIT/go2rtc/releases) and set the path.
+go2rtc is bundled in the Docker image automatically (downloaded during the image build into `/usr/local/bin/go2rtc`). For non-Docker installs, download the binary from [go2rtc releases](https://github.com/AlexxIT/go2rtc/releases) and set the path.
 
 ### Adding Cameras
 
@@ -550,7 +552,7 @@ Camera credentials (in RTSP and snapshot URLs) are handled with care:
 
 ### Docker Notes
 
-The go2rtc binary is included in the Docker image. go2rtc binds to `127.0.0.1:1984` inside the container &mdash; **do not** map port 1984 in your docker-compose file. All client access goes through MediaManager's authenticated proxy on port 8080.
+The go2rtc binary is included in the Docker image. go2rtc binds to `127.0.0.1:1984` inside the container &mdash; **do not** map port 1984 in your docker-compose file. All client access goes through MediaManager's authenticated proxy on the main port (default 9090).
 
 ---
 

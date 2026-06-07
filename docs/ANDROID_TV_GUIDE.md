@@ -32,9 +32,9 @@ Media Manager includes a native Android TV app built with Jetpack Compose for TV
 ## Prerequisites
 
 - A **Google TV** or **Android TV** device (or the Android TV emulator)
-- **Android SDK** with API 36+ platform and build tools
+- **Android SDK** with API 36 platform and build tools (`compileSdk = 36`, `targetSdk = 36`, `minSdk = 23`)
 - **JDK 21+** (Corretto 25 recommended, matching the server)
-- **Gradle 9.1+** (the project bundles 9.3.1 via the wrapper)
+- **Gradle 9.1+** (the project bundles 9.3.1 via the wrapper) and AGP 8.9
 - Your Media Manager server running and accessible from the TV's network
 
 ---
@@ -111,7 +111,7 @@ adb install -r android-tv/app/build/outputs/apk/release/app-release.apk
 
 ## First Launch
 
-1. **Server Setup** — enter your server hostname and port. TLS is enabled by default (port 8443). Toggle TLS off for direct LAN connections (gRPC 9090, HTTP 8080).
+1. **Server Setup** — enter your server hostname and port. TLS is enabled by default (port 8443 in the reference HAProxy deployment). Toggle TLS off for direct LAN connections — the server's Armeria port (default 9090) carries both gRPC and HTTP on the same address, so a single host:port entry covers everything.
 
 2. **Login** — enter your Media Manager username and password. The app stores tokens locally so you don't need to log in again.
 
@@ -216,7 +216,7 @@ android-tv/
 │       │   ├── live/                  # Cameras + live TV
 │       │   ├── profile/               # Profile + sessions
 │       │   └── ui/                    # Theme, PosterCard, TvOutlinedTextField, CachedImage
-│       ├── proto/                     # Symlinked from repo root proto/ (shared with server + iOS)
+│       ├── proto/                     # protobuf plugin sources from `../../proto` (shared with server + iOS)
 │       └── res/                       # Strings, themes, banner drawable
 ├── build.gradle.kts                   # Root build file
 ├── settings.gradle.kts

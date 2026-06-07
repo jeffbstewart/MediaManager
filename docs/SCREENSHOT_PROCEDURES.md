@@ -185,7 +185,7 @@ FFmpeg, not Playwright.
 4. Use `./lifecycle/roku-screenshot.sh <path>` to capture frames.
 
 **Reproducing:** Deploy the dev channel to the Roku first
-(`./lifecycle/roku-deploy.sh`). The channel must have data to show
+(`./lifecycle/roku-deploy-dev.sh`). The channel must have data to show
 &mdash; the server should be running with enriched titles and
 playable transcodes.
 

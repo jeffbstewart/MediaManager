@@ -78,6 +78,17 @@ see git history for full specifications.
 | Passkey Authentication | WebAuthn/passkey support for Face ID, Touch ID, and hardware security key re-login; standalone terms agreement page; admin passkey management |
 | Legal Terms Separation | Decoupled terms acceptance from login flow into dedicated /terms page with server-side 451 enforcement |
 | iOS CarPlay | Audio-only CarPlay surface with Albums / Playlists / Smart Playlists tabs, list-row thumbnails, Shuffle Library row, Now Playing hero, MPRemoteCommandCenter wiring for AirPods + lock screen + Control Center, auto-reconnect on stale HTTP/2 streams |
+| iOS ebook reader polish | Persist font size across sessions (#67), preserve scroll position across font-size changes (#69), WebView respects bottom safe area to avoid mini-player overlap (#68), TOC dropdown wired to internal link clicks (#70), repaginate on resize |
+| iOS offline mode promotion | Sidebar **Offline Mode** toggle moved to the top row (#73); every gRPC call gated at the client layer when offline so cached views stay quiet |
+| iOS About page | Build info, server URL, app and server legal links consolidated under Profile &rarr; About (#75) |
+| iOS local progress shadow | Resume positions work offline via a local progress store; reconciled to the server when reconnecting (#72) |
+| iOS mini-player stability | `safeAreaInset` pinning per NavigationSplitView column, height stays stable through tab loads, no flex on AuthorsView, no flex on LiveStreamView connect |
+| iOS poster-card chrome fix | "Not Playable" chrome no longer painted on albums and books (#76) |
+| iOS LiveStream close responsiveness | Instant close + press feedback by removing an unbounded HLS-log iteration (#77) |
+| iOS CarPlay boot-time population | `AppServices.populate` runs at process boot rather than per view-appear (#74), so the CarPlay scene delegate finds a populated browse hierarchy on first connect |
+| Offline-unsupported surfaces hidden | Collections, Tags, Recently Added hidden in iOS offline mode; HomeView populates feed.carousels in offline mode so it isn't blank |
+| iOS Downloads sub-pages | Per-category sub-pages and Delete-All with typed confirmation; Sign Out consolidated to Profile; Search promoted to top of sidebar |
+| iOS forced password change | ForcedPasswordChangeView asks for the current password before accepting the new one |
 
 ---
 

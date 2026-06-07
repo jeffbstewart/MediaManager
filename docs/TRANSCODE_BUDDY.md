@@ -23,24 +23,28 @@ All three tasks run through the same lease-based work queue, so the server coord
 ## How It Works
 
 ```
-Server (mediaManager)              Buddy (transcode-buddy)
-────────────────────               ───────────────────────
-  Lease Queue                        Poll for work
-  ┌──────────┐        claim          ┌──────────────┐
-  │ Transcode ├──────────────────────► FFmpeg NVENC  │
-  │ Thumbnails│        progress      │ FFmpeg thumbs │
-  │ Subtitles │◄──────────────────────┤ Whisper AI   │
-  └──────────┘        complete       └──────────────┘
-                                          │
-                                     Reads/writes NAS
-                                     via SMB mount
+Server (mediaManager)                       Buddy (transcode-buddy)
+────────────────────                        ───────────────────────
+  Lease Queue                                 Long-lived gRPC stream
+  ┌────────────────────────────┐  Connect ┌────────────────────┐
+  │ Transcode                  │◄────────►│ FFmpeg NVENC       │
+  │ Low-storage transcode      │          │ FFmpeg thumbnails  │
+  │ Thumbnails                 │  bidi    │ FFmpeg chapters    │
+  │ Subtitles                  │ messages │ Whisper AI         │
+  │ Chapters                   │          └────────────────────┘
+  └────────────────────────────┘                  │
+                                             Reads/writes NAS
+                                             via SMB mount
 ```
 
-1. The server maintains a queue of pending work (video transcodes, thumbnails, subtitles)
-2. The buddy polls `POST /buddy/claim` to grab the next job
-3. The buddy reads the source file from the NAS, transcodes it, and writes the output back to the NAS
-4. The buddy reports progress and completion back to the server via REST API
-5. The server updates its database and notifies connected UI clients
+1. The server maintains a queue of pending work (transcode, low-storage transcode, thumbnails, subtitles, chapters)
+2. The buddy opens a single long-lived `BuddyService.WorkStream` bidirectional gRPC stream (`proto/buddy.proto`) and sends `Connect` with its API key
+3. The server replies with `Connected` (config + any resumable leases) and assigns work via `WorkAssignment` messages
+4. The buddy reads the source file from the NAS, runs FFmpeg / Whisper, and writes the output back to the NAS
+5. The buddy reports `Progress`, `Complete`, or `Failure` back over the same stream; `Heartbeat` keeps the connection alive
+6. The server updates its database and notifies connected UI clients
+
+Auth is the buddy API key carried in the first `Connect` message (or the `x-buddy-key` gRPC metadata header for the unary `CheckPending` RPC). Generate keys in **Settings &rarr; Buddy Keys &rarr; New Key**.
 
 ---
 
@@ -69,7 +73,7 @@ The fat JAR is produced at `transcode-buddy/build/libs/transcode-buddy-all.jar`.
 Copy `transcode-buddy/example.buddy.properties` to `buddy.properties` (in the directory where you'll run the buddy) and fill in your values:
 
 ```properties
-server_url=http://your-server:8080
+server_url=https://your-server.example.com
 api_key=your-buddy-api-key-from-settings
 buddy_name=my-worker
 nas_root=\\NAS\PlexServedMedia\media
@@ -77,22 +81,25 @@ ffmpeg_path=C:\ProgramData\chocolatey\bin\ffmpeg.exe
 ffprobe_path=C:\ProgramData\chocolatey\bin\ffprobe.exe
 worker_count=1
 encoder_preference=nvenc,qsv,cpu
-poll_interval_seconds=30
-progress_interval_seconds=15
 ```
+
+`server_url` should point at whatever endpoint terminates TLS in front of the server's gRPC port (HAProxy, in the reference deployment). The buddy reuses Connect-Web framing rules; plain HTTP is fine on the LAN if you set `server_url=http://host:9090`.
 
 | Property | Required | Purpose |
 |----------|----------|---------|
-| `server_url` | Yes | URL of the Media Manager server |
+| `server_url` | Yes | URL of the Media Manager server (TLS-terminated reverse proxy or direct gRPC port) |
 | `api_key` | Yes | API key from Media Manager UI: **Settings &rarr; Buddy Keys &rarr; New Key** |
 | `buddy_name` | Yes | Name shown in the server UI for this worker |
 | `nas_root` | Yes | Path to the NAS media root (must be the same files the server sees) |
 | `ffmpeg_path` | No | Path to FFmpeg binary (default: system-dependent) |
 | `ffprobe_path` | No | Path to FFprobe binary (default: system-dependent) |
-| `worker_count` | No | Parallel workers (default 3). Usually 1 is enough &mdash; transcoding is GPU-bound |
+| `worker_count` | No | Parallel workers (clamped to [1, 16], default 1). Usually 1 is enough &mdash; transcoding is GPU-bound |
 | `encoder_preference` | No | Encoder priority list (default `nvenc,qsv,cpu`). See [Encoder Selection](#encoder-selection) |
-| `poll_interval_seconds` | No | How often to check for work (default 30) |
-| `progress_interval_seconds` | No | How often to report FFmpeg progress (default 15) |
+| `poll_interval_seconds` | No | How often the buddy asks for new work (default 30, minimum 5) |
+| `progress_interval_seconds` | No | How often FFmpeg progress is reported (default 15, minimum 5) |
+| `grpc_address` | No | Override gRPC host:port (defaults to the host+port parsed from `server_url`) |
+| `grpc_use_tls` | No | Override TLS use (defaults to true iff `server_url` is https) |
+| `status_port` | No | Port for the buddy's local status HTTP server (default 8090; `http://localhost:<port>/status`) |
 | `whisper_path` | No | Path to faster-whisper CLI binary (enables subtitle generation) |
 | `whisper_model` | No | Whisper model name (default `large-v3-turbo`). See [Whisper Models](#whisper-models) |
 | `whisper_model_dir` | No | Custom directory for cached Whisper models |
@@ -116,12 +123,13 @@ You should see:
 
 ```
 [main] INFO TranscodeBuddy - Config loaded:
-[main] INFO TranscodeBuddy -   Server:    http://your-server:8080
+[main] INFO TranscodeBuddy -   Server:    https://your-server.example.com
 [main] INFO TranscodeBuddy -   Buddy:     my-worker
 [main] INFO TranscodeBuddy -   NAS Root:  \\NAS\PlexServedMedia\media
 [main] INFO TranscodeBuddy -   Workers:   1
 [main] INFO TranscodeBuddy -   Encoders:  [nvenc, qsv, cpu]
 [main] INFO TranscodeBuddy - Selected encoder: nvenc (h264_nvenc)
+[main] INFO TranscodeBuddy - WorkStream connected (lease grace ...)
 ```
 
 In the Media Manager web UI, go to **Transcodes &rarr; Status**. The buddy panel shows the connected worker and its current activity.
@@ -221,7 +229,7 @@ Run this command in **cmd.exe** (not PowerShell or Git Bash) to avoid `$` and `%
 | Transcode fails with "Permission denied" | The buddy process needs read/write access to the NAS share. Check mount permissions. |
 | Buddy runs but no work appears | Check the server's Transcodes &rarr; Status page. The queue may be empty, or all files may already be transcoded. |
 | GPU out of memory | Reduce concurrent workers to 1. NVENC uses minimal VRAM but large files can spike. |
-| Many transcodes stuck as "failed" | Leases may have been poisoned by a misconfigured buddy. Use `POST /buddy/clear-failures?key={apiKey}` to reset all failed leases. |
+| Many transcodes stuck as "failed" | Leases may have been poisoned by a misconfigured buddy. Use the admin **Transcodes &rarr; Status** page to inspect and clear failed leases. |
 
 ---
 

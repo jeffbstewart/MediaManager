@@ -20,7 +20,7 @@ For iOS development you need the full Xcode from the App Store, which includes S
 
 After installing Xcode, install an iOS simulator runtime:
 
-- Open **Xcode &rarr; Settings &rarr; Platforms** and download **iOS 18.x**, or:
+- Open **Xcode &rarr; Settings &rarr; Platforms** and download the latest **iOS** runtime (the project currently targets iOS 26.0; check `IPHONEOS_DEPLOYMENT_TARGET` in `ios/MediaManager/MediaManager.xcodeproj/project.pbxproj` if in doubt), or:
 
 ```bash
 xcodebuild -downloadPlatform iOS
@@ -114,7 +114,7 @@ For changes that affect both the server and the transcode buddy:
 
 ## iOS Development
 
-The iOS app is a SwiftUI universal app (iPhone + iPad) in the `ios/` directory. Open the Xcode project:
+The iOS app is a SwiftUI universal app (iPhone + iPad) in the `ios/` directory. It also ships a CarPlay scene delegate (audio surface). Open the Xcode project:
 
 ```bash
 open ios/MediaManager/MediaManager.xcodeproj
@@ -126,7 +126,21 @@ Or build from the command line:
 xcodebuild -project ios/MediaManager/MediaManager.xcodeproj -scheme MediaManager -sdk iphonesimulator build
 ```
 
-The app communicates with the server via gRPC for app data and via HTTP for binary content such as images, video streaming, and downloads. Point it at your NAS during development — there's no need to run the server locally.
+The app communicates with the server over a single Armeria port (default 9090) which multiplexes gRPC and HTTP. Point it at your NAS during development — there's no need to run the server locally.
+
+### Swift Package Manager dependencies
+
+Resolved automatically the first time Xcode opens the project:
+
+- `apple/swift-protobuf` — protobuf runtime
+- `grpc/grpc-swift-2` — gRPC core (v2; HTTP/2 transport via grpc-swift-nio-transport)
+- `grpc/grpc-swift-protobuf` — gRPC/protobuf integration
+
+`protoc-gen-grpc-swift-2` (the v2 service-stub generator) is **not** distributed via Homebrew. The build script (`lifecycle/ios-build.sh`) invokes the SwiftPM plugin from `grpc-swift-2` during proto generation, so you only need `protoc` and `protoc-gen-swift` from Homebrew:
+
+```bash
+brew install protobuf swift-protobuf
+```
 
 ### Code Signing
 
