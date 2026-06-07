@@ -4,6 +4,17 @@ History of user-visible changes per platform. Server changes are released contin
 
 For developer-facing change history, use `git log`.
 
+## Release-cut convention
+
+Each iOS TestFlight / App Store build is git-tagged immediately after submission so the next build's diff can be derived without manual hash bookkeeping.
+
+- **Tag format:** `ios/<marketing>-<build>` — e.g. `ios/1.2-10` for `MARKETING_VERSION=1.2`, `CURRENT_PROJECT_VERSION=10`.
+- **Tag prefix:** `ios/` so these don't fire the server release workflow (which triggers on `v*` tags).
+- **How to tag:** run `lifecycle/tag-ios-build.sh` right after submitting to TestFlight. It reads the marketing + build versions from the pbxproj and pushes the tag.
+- **Deriving the next changelog:** `git log ios/<previous-tag>..HEAD -- ios/MediaManager/`.
+
+Server / Android TV / Roku get their own tag schemes (or none — the server is rolling).
+
 ---
 
 ## iOS 1.2 (build 10) — 2026-06-07
