@@ -29,6 +29,21 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
+                // Offline-mode toggle pinned to the top of the sidebar.
+                // Lives here (not in ProfileView) because reaching
+                // Profile fires gRPCs that fail when actually offline,
+                // making the toggle unreachable just when you need it
+                // most. No tag → tapping the row only flips the toggle,
+                // it does not change `selectedTab`.
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { dataModel.downloads.isOfflineMode },
+                        set: { dataModel.downloads.isOfflineMode = $0 }
+                    )) {
+                        Label("Offline Mode", systemImage: "airplane")
+                    }
+                }
+
                 // Home + the catalog tabs (Movies / TV / Books / Music /
                 // Collections / Tags) are visible online AND offline —
                 // OfflineDataModel surfaces just the downloaded subset
@@ -175,9 +190,9 @@ struct ContentView: View {
                         // Status indicator: clear what's happening,
                         // without occupying space the user could tap by
                         // accident. The previous wifi-icon button got
-                        // mistaken for a Wi-Fi network toggle. The
-                        // actual "Browse offline copies only" preference
-                        // now lives in ProfileView; this row is read-only.
+                        // mistaken for a Wi-Fi network toggle — this
+                        // row is read-only; the actual toggle lives at
+                        // the top of the sidebar.
                         if isOffline && !dataModel.downloads.isOfflineMode {
                             Label("Server unreachable", systemImage: "exclamationmark.icloud")
                                 .font(.caption)
