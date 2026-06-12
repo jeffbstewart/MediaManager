@@ -40,8 +40,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         logger.info("CarPlay scene connected: appServicesReady=\(isReady) hasAccessToken=\(hasToken) hasRefreshToken=\(hasRefresh)")
         self.interfaceController = interfaceController
         AppServices.shared.whenReady { [weak self] in
-            logger.info("CarPlay scene: AppServices ready, installing browse hierarchy")
-            self?.installBrowseHierarchy()
+            logger.info("CarPlay scene: AppServices ready, refreshing tokens before loading data")
+            self?.refreshTokensAndInstallBrowseHierarchy()
         }
         // Show a loading placeholder right away so the head unit
         // doesn't sit on a blank screen during the cold-launch race
@@ -68,6 +68,25 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let item = CPListItem(text: "Loading…", detailText: nil)
         let section = CPListSection(items: [item])
         return CPListTemplate(title: "Household Disc Keeper", sections: [section])
+    }
+
+    /// Refresh tokens (in case they expired while the app was suspended),
+    /// then install the browse hierarchy. Tokens may be stale when CarPlay
+    /// opens if the phone's been locked or the app suspended — the long-lived
+    /// refresh token can restore access without requiring re-auth.
+    private func refreshTokensAndInstallBrowseHierarchy() {
+        guard let authManager = AppServices.shared.authManager else {
+            logger.error("refreshTokensAndInstallBrowseHierarchy: authManager is nil")
+            installBrowseHierarchy()
+            return
+        }
+        Task { [weak self] in
+            logger.info("refreshTokensAndInstallBrowseHierarchy: refreshing tokens")
+            await authManager.refreshTokenNow()
+            await MainActor.run {
+                self?.installBrowseHierarchy()
+            }
+        }
     }
 
     private func installBrowseHierarchy() {

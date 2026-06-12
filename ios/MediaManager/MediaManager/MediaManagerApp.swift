@@ -141,6 +141,7 @@ struct MediaManagerApp: App {
             await dm.flushPendingListeningProgress()
         }
         AppServices.shared.populate(
+            authManager: am,
             audioPlayer: ap,
             dataModel: dataModel,
             audioCache: ac,

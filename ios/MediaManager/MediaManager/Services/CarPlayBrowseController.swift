@@ -4,16 +4,28 @@ import UIKit
 
 private let logger = MMLogger(category: "CarPlayBrowse")
 
-/// Turns a gRPC failure into a string that's actually useful in
-/// Binnacle and on the CarPlay error template. The default
-/// `localizedDescription` for an RPCError collapses everything to
-/// "The operation couldn't be completed. (GRPCCore.RPCError error
-/// 1.)", which is useless for triage — it tells you nothing about
-/// which RPC failed, what code came back, or what the server said.
-/// This pulls out `.code` and `.message` so a "couldn't load" in
-/// the car tells us "UNAUTHENTICATED: Missing or invalid credentials"
+/// Turns a gRPC failure into a user-friendly string for CarPlay display.
+/// Auth failures get a specific message telling the user to sign in on the phone;
+/// other errors are kept generic to avoid technical jargon.
+private func userFriendlyErrorMessage(_ error: Error) -> String {
+    if let rpc = error as? RPCError {
+        if rpc.code == .unauthenticated {
+            return "Please sign in on your phone to continue"
+        }
+        // Network / other transient errors — generic message
+        return "Couldn't connect. Check your phone's network connection."
+    }
+    return "Couldn't load. Please try again."
+}
+
+/// Turns a gRPC failure into a detailed string for Binnacle logging.
+/// The default `localizedDescription` for an RPCError collapses everything to
+/// "The operation couldn't be completed. (GRPCCore.RPCError error 1.)",
+/// which is useless for triage — it tells you nothing about which RPC failed,
+/// what code came back, or what the server said. This pulls out `.code` and
+/// `.message` so Binnacle shows "UNAUTHENTICATED: Missing or invalid credentials"
 /// (auth path) vs "UNAVAILABLE: dropped connection" (network path).
-private func describeError(_ error: Error) -> String {
+private func describeErrorForLogging(_ error: Error) -> String {
     if let rpc = error as? RPCError {
         let msg = rpc.message.isEmpty ? "(no message)" : rpc.message
         return "\(rpc.code): \(msg)"
@@ -91,7 +103,7 @@ final class CarPlayBrowseController {
     private func loadAlbums() async {
         guard let model = AppServices.shared.dataModel else {
             logger.error("loadAlbums: dataModel is nil — AppServices not populated yet?")
-            albumsTab.updateSections([Self.errorSection(rpc: "homeFeed", message: "App not ready")])
+            albumsTab.updateSections([Self.errorSection(message: "App not ready")])
             return
         }
         logger.info("loadAlbums: calling homeFeed")
@@ -117,8 +129,8 @@ final class CarPlayBrowseController {
             albumsTab.updateSections([CPListSection(items: items)])
             logger.info("loadAlbums: homeFeed returned \(titles.count) albums")
         } catch {
-            logger.error("loadAlbums: homeFeed failed: \(describeError(error))")
-            albumsTab.updateSections([Self.errorSection(rpc: "homeFeed", error: error)])
+            logger.error("loadAlbums: homeFeed failed: \(describeErrorForLogging(error))")
+            albumsTab.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
         }
     }
 
@@ -149,7 +161,7 @@ final class CarPlayBrowseController {
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openAlbum: dataModel is nil for titleId=\(title.id.protoValue)")
-                template.updateSections([Self.errorSection(rpc: "titleDetail", message: "App not ready")])
+                template.updateSections([Self.errorSection(message: "App not ready")])
                 return
             }
             logger.info("openAlbum: calling titleDetail for titleId=\(title.id.protoValue)")
@@ -171,8 +183,8 @@ final class CarPlayBrowseController {
                 }
                 template.updateSections([CPListSection(items: items)])
             } catch {
-                logger.error("openAlbum: titleDetail failed for titleId=\(title.id.protoValue): \(describeError(error))")
-                template.updateSections([Self.errorSection(rpc: "titleDetail", error: error)])
+                logger.error("openAlbum: titleDetail failed for titleId=\(title.id.protoValue): \(describeErrorForLogging(error))")
+                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
             }
         }
     }
@@ -191,7 +203,7 @@ final class CarPlayBrowseController {
     private func loadPlaylists() async {
         guard let model = AppServices.shared.dataModel else {
             logger.error("loadPlaylists: dataModel is nil")
-            playlistsTab.updateSections([Self.errorSection(rpc: "playlists", message: "App not ready")])
+            playlistsTab.updateSections([Self.errorSection(message: "App not ready")])
             return
         }
         logger.info("loadPlaylists: calling playlists(scope: .mine)")
@@ -214,8 +226,8 @@ final class CarPlayBrowseController {
             playlistsTab.updateSections([CPListSection(items: items)])
             logger.info("loadPlaylists: playlists returned \(summaries.count) entries")
         } catch {
-            logger.error("loadPlaylists: playlists failed: \(describeError(error))")
-            playlistsTab.updateSections([Self.errorSection(rpc: "playlists", error: error)])
+            logger.error("loadPlaylists: playlists failed: \(describeErrorForLogging(error))")
+            playlistsTab.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
         }
     }
 
@@ -226,7 +238,7 @@ final class CarPlayBrowseController {
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openPlaylist: dataModel is nil for id=\(id)")
-                template.updateSections([Self.errorSection(rpc: "playlist", message: "App not ready")])
+                template.updateSections([Self.errorSection(message: "App not ready")])
                 return
             }
             logger.info("openPlaylist: calling playlist for id=\(id)")
@@ -245,8 +257,8 @@ final class CarPlayBrowseController {
                 }
                 template.updateSections([CPListSection(items: items)])
             } catch {
-                logger.error("openPlaylist: playlist(id=\(id)) failed: \(describeError(error))")
-                template.updateSections([Self.errorSection(rpc: "playlist", error: error)])
+                logger.error("openPlaylist: playlist(id=\(id)) failed: \(describeErrorForLogging(error))")
+                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
             }
         }
     }
@@ -279,7 +291,7 @@ final class CarPlayBrowseController {
     private func loadSmartPlaylists() async {
         guard let model = AppServices.shared.dataModel else {
             logger.error("loadSmartPlaylists: dataModel is nil")
-            smartTab.updateSections([Self.errorSection(rpc: "smartPlaylists", message: "App not ready")])
+            smartTab.updateSections([Self.errorSection(message: "App not ready")])
             return
         }
         logger.info("loadSmartPlaylists: calling smartPlaylists")
@@ -303,10 +315,10 @@ final class CarPlayBrowseController {
             // Library row still works (different RPC), so render it
             // alone rather than dropping the driver into a dead-end
             // error screen. The error row sits below as context.
-            logger.error("loadSmartPlaylists: smartPlaylists failed: \(describeError(error))")
+            logger.error("loadSmartPlaylists: smartPlaylists failed: \(describeErrorForLogging(error))")
             smartTab.updateSections([
                 CPListSection(items: [makeShuffleLibraryItem()]),
-                Self.errorSection(rpc: "smartPlaylists", error: error),
+                Self.errorSection(message: userFriendlyErrorMessage(error)),
             ])
         }
     }
@@ -346,7 +358,7 @@ final class CarPlayBrowseController {
                 presentNowPlaying()
                 logger.info("shuffleLibrary: queued \(queued.count) tracks")
             } catch {
-                logger.error("shuffleLibrary: libraryShuffle failed: \(describeError(error))")
+                logger.error("shuffleLibrary: libraryShuffle failed: \(describeErrorForLogging(error))")
             }
         }
     }
@@ -358,7 +370,7 @@ final class CarPlayBrowseController {
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openSmartPlaylist: dataModel is nil for key=\(key)")
-                template.updateSections([Self.errorSection(rpc: "smartPlaylist", message: "App not ready")])
+                template.updateSections([Self.errorSection(message: "App not ready")])
                 return
             }
             logger.info("openSmartPlaylist: calling smartPlaylist for key=\(key)")
@@ -377,8 +389,8 @@ final class CarPlayBrowseController {
                 }
                 template.updateSections([CPListSection(items: items)])
             } catch {
-                logger.error("openSmartPlaylist: smartPlaylist(key=\(key)) failed: \(describeError(error))")
-                template.updateSections([Self.errorSection(rpc: "smartPlaylist", error: error)])
+                logger.error("openSmartPlaylist: smartPlaylist(key=\(key)) failed: \(describeErrorForLogging(error))")
+                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
             }
         }
     }
@@ -394,7 +406,7 @@ final class CarPlayBrowseController {
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openArtist: dataModel is nil for id=\(artistId.protoValue)")
-                template.updateSections([Self.errorSection(rpc: "artistDetail", message: "App not ready")])
+                template.updateSections([Self.errorSection(message: "App not ready")])
                 return
             }
             logger.info("openArtist: calling artistDetail for id=\(artistId.protoValue)")
@@ -416,8 +428,8 @@ final class CarPlayBrowseController {
                     template.updateSections([CPListSection(items: items)])
                 }
             } catch {
-                logger.error("openArtist: artistDetail(id=\(artistId.protoValue)) failed: \(describeError(error))")
-                template.updateSections([Self.errorSection(rpc: "artistDetail", error: error)])
+                logger.error("openArtist: artistDetail(id=\(artistId.protoValue)) failed: \(describeErrorForLogging(error))")
+                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
             }
         }
     }

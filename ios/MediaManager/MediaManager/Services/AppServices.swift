@@ -16,6 +16,7 @@ import Foundation
 final class AppServices {
     static let shared = AppServices()
 
+    private(set) var authManager: AuthManager?
     private(set) var audioPlayer: AudioPlayerManager?
     private(set) var dataModel: OnlineDataModel?
     private(set) var audioCache: AudioCacheManager?
@@ -35,12 +36,14 @@ final class AppServices {
     /// reconnection in some simulator edge cases) keeps the latest
     /// references.
     func populate(
+        authManager: AuthManager,
         audioPlayer: AudioPlayerManager,
         dataModel: OnlineDataModel,
         audioCache: AudioCacheManager,
         bookCache: BookCacheManager,
         imageProvider: ImageProvider
     ) {
+        self.authManager = authManager
         self.audioPlayer = audioPlayer
         self.dataModel = dataModel
         self.audioCache = audioCache
