@@ -542,7 +542,7 @@ final class CarPlayBrowseController {
     /// us straight to the failing RPC and the gRPC status code
     /// instead of "GRPCCore.RPCError error 1".
     private static func errorSection(rpc: String, error: Error) -> CPListSection {
-        errorSection(rpc: rpc, message: describeError(error))
+        errorSection(rpc: rpc, message: describeErrorForLogging(error))
     }
 
     private static func errorSection(rpc: String, message: String) -> CPListSection {
