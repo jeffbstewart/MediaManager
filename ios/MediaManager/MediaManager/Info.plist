@@ -14,6 +14,22 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>INIntentsSupported</key>
+	<array>
+		<string>INPlayMediaIntent</string>
+	</array>
+	<key>INSupportedMediaCategories</key>
+	<array>
+		<string>INMediaCategoryMusic</string>
+	</array>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>MediaManager plays music from your library through Siri voice commands.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>MediaManager uses Siri to play media from your library by voice.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INPlayMediaIntent</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
