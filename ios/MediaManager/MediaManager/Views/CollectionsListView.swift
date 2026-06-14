@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct CollectionRoute: Hashable {
     let tmdbCollectionId: TmdbCollectionID

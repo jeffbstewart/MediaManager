@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 private let log = MMLogger(category: "AddToPlaylistSheet")
 

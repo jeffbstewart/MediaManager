@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import MediaManagerCore
+import MediaManagerProtos
 
 private let logger = MMLogger(category: "AppPolicyAgreement")
 

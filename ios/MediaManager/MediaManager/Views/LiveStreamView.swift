@@ -1,6 +1,8 @@
 import SwiftUI
 import AVKit
 import Combine
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Full-screen live stream player for cameras and live TV.
 /// Sets a mm_jwt cookie so AVPlayer's native HLS stack authenticates

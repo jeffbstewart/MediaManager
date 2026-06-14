@@ -44,8 +44,11 @@ xcuserdata/
 DerivedData/
 *.ipa
 
-# iOS generated protobuf/gRPC stubs
-ios/MediaManager/MediaManager/Generated/
+# iOS generated protobuf/gRPC stubs — written by lifecycle/ios-gen-protos.sh
+ios/MediaManagerCore/Sources/MediaManagerProtos/*.swift
+ios/MediaManagerCore/.build/
+ios/MediaManagerCore/.swiftpm/
+ios/MediaManagerCore/Package.resolved
 
 # iOS App Store screenshot pipeline output — regeneratable PNGs +
 # xcodebuild result bundles. See lifecycle/capture-ios-screenshots.sh.

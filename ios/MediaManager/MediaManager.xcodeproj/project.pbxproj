@@ -113,7 +113,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA000060 /* Build configuration list for PBXNativeTarget "MediaManager" */;
 			buildPhases = (
-				CC000020 /* Generate Proto */,
 				AA000041 /* Sources */,
 				AA000020 /* Frameworks */,
 				AA000042 /* Resources */,
@@ -131,6 +130,8 @@
 				CC000011 /* GRPCCore */,
 				CC000012 /* GRPCNIOTransportHTTP2 */,
 				CC000013 /* GRPCProtobuf */,
+				CC000014 /* MediaManagerProtos */,
+				CC000015 /* MediaManagerCore */,
 			);
 			productName = MediaManager;
 			productReference = AA000001 /* MediaManager.app */;
@@ -186,6 +187,7 @@
 				CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */,
 				CC000003 /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */,
 				CC000004 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */,
+				CC000005 /* XCLocalSwiftPackageReference "../MediaManagerCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA000031 /* Products */;
@@ -214,24 +216,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		CC000020 /* Generate Proto */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Generate Proto";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "PROTO_DIR=\"${SRCROOT}/../../proto\"\nOUT_DIR=\"${SRCROOT}/MediaManager/Generated\"\nmkdir -p \"$OUT_DIR\"\n\nPROTOC=$(which protoc)\nif [ -z \"$PROTOC\" ]; then\n  echo \"warning: protoc not found, skipping proto generation\"\n  exit 0\nfi\n\n$PROTOC \\\n  --proto_path=\"$PROTO_DIR\" \\\n  --swift_out=\"$OUT_DIR\" \\\n  --grpc-swift-2_out=\"$OUT_DIR\" \\\n  \"$PROTO_DIR\"/*.proto\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA000041 /* Sources */ = {
@@ -549,6 +533,13 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		CC000005 /* XCLocalSwiftPackageReference "../MediaManagerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../MediaManagerCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		CC000010 /* SwiftProtobuf */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -569,6 +560,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CC000004 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */;
 			productName = GRPCProtobuf;
+		};
+		CC000014 /* MediaManagerProtos */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MediaManagerProtos;
+		};
+		CC000015 /* MediaManagerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MediaManagerCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

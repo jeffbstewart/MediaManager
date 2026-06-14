@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Houses build info plus app-and-server-side legal docs — the
 /// surfaces a user only occasionally needs but should always be

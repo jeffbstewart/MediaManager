@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct AdminTagsView: View {
     @Environment(OnlineDataModel.self) private var dataModel

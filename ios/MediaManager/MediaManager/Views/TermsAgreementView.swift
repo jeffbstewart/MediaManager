@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct TermsAgreementView: View {
     @Environment(AuthManager.self) private var authManager

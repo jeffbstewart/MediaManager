@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Sibling of TmdbSearchSheet for the scan-detail "no match" gate.
 /// Used when a UPC scan turned out to be a music CD and the TMDB

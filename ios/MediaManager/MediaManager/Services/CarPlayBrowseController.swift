@@ -1,6 +1,8 @@
 import CarPlay
 import GRPCCore
 import UIKit
+import MediaManagerCore
+import MediaManagerProtos
 
 private let logger = MMLogger(category: "CarPlayBrowse")
 

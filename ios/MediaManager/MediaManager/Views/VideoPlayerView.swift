@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import MediaManagerCore
+import MediaManagerProtos
 
 struct VideoPlayerView: View {
     @Environment(OnlineDataModel.self) private var dataModel

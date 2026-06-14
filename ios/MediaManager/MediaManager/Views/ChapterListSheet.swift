@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Shows a list of chapters with timestamps. Tapping a chapter seeks to it.
 struct ChapterListSheet: View {

@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Book cover with a synthesised fallback. The real cover (if any) loads
 /// on top of a hashed-hue colour swatch with the title's first letter,

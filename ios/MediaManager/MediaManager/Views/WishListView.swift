@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Hero image for a wish: prefer the linked title once fulfilled, otherwise
 /// the TMDB poster keyed by (tmdb_id, media_type). Returns nil for wishes

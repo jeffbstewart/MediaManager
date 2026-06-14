@@ -1,6 +1,8 @@
 import Foundation
 import MetricKit
 import Darwin
+import MediaManagerCore
+import MediaManagerProtos
 
 private let logger = MMLogger(category: "CrashReporter")
 

@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct LiveTvView: View {
     @Environment(OnlineDataModel.self) private var dataModel

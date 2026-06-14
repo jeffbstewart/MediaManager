@@ -1,5 +1,7 @@
 import SwiftUI
 import WebKit
+import MediaManagerCore
+import MediaManagerProtos
 
 private let log = MMLogger(category: "BookReaderView")
 

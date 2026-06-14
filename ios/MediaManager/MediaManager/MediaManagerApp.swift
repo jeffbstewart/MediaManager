@@ -1,5 +1,7 @@
 import SwiftUI
 import AVFoundation
+import MediaManagerCore
+import MediaManagerProtos
 
 @MainActor
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -102,8 +104,9 @@ struct MediaManagerApp: App {
             NSLog("[MediaManagerApp] AVAudioSession setup failed: \(error)")
         }
 
-        let am = AuthManager()
-        let dm = DownloadManager()
+        let core = CoreBootstrap.makeCoreServices()
+        let am = core.authManager
+        let dm = core.downloadManager
         let bc = BookCacheManager()
         let pf = ProgressFlusher(queue: ReadingProgressQueue.shared, downloads: dm)
         let ap = AudioPlayerManager()
@@ -130,7 +133,6 @@ struct MediaManagerApp: App {
         // running) has AppServices ready by the time
         // CarPlaySceneDelegate's `didConnect` fires, so the browse
         // hierarchy installs immediately.
-        dm.configure(apiClient: am.apiClient, grpcClient: am.grpcClient)
         bc.configure(grpcClient: am.grpcClient)
         pf.configure(grpcClient: am.grpcClient)
         ac.configure(apiClient: am.apiClient)

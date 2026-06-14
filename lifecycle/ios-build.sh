@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build the iOS app.
 #
-# Handles the two-pass build required for proto code generation:
-# Pass 1 generates .pb.swift and .grpc.swift files from proto/*.proto
-# Pass 2 compiles them alongside the rest of the app.
+# Proto stubs are generated up-front by lifecycle/ios-gen-protos.sh
+# (which writes into ios/MediaManagerCore/Sources/MediaManagerProtos/),
+# so xcodebuild compiles in a single pass.
 #
 # Usage:
 #   ./lifecycle/ios-build.sh                    # Build for generic iOS device
@@ -66,19 +66,11 @@ if grep -q 'YOUR_TEAM_ID_HERE' "$XCCONFIG"; then
     exit 1
 fi
 
-# Verify protoc is available
-if ! command -v protoc &>/dev/null; then
-    echo "ERROR: protoc not found. Install with: brew install protobuf"
-    exit 1
-fi
-if ! command -v protoc-gen-swift &>/dev/null; then
-    echo "ERROR: protoc-gen-swift not found. Install with: brew install swift-protobuf"
-    exit 1
-fi
-if ! command -v protoc-gen-grpc-swift-2 &>/dev/null; then
-    echo "ERROR: protoc-gen-grpc-swift-2 not found. Install with: brew install protoc-gen-grpc-swift"
-    exit 1
-fi
+# Generate proto stubs into the MediaManagerCore package. Must happen
+# BEFORE xcodebuild resolves the local SPM package, otherwise SPM sees
+# an empty MediaManagerProtos target.
+echo "=== Generating proto stubs ==="
+"$SCRIPT_DIR/ios-gen-protos.sh"
 
 BUILD_CMD=(
     xcodebuild
@@ -94,17 +86,7 @@ LOG_FILE="$PROJECT_ROOT/data/ios-build.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
 
-# Pass 1: Generate proto files. The build phase runs protoc to create
-# .pb.swift and .grpc.swift files. Compilation will fail because the
-# compiler hasn't indexed the newly-generated source yet — expected.
-echo "=== Pass 1: Generating proto stubs ==="
-echo "=== Pass 1 ===" >> "$LOG_FILE"
-"${BUILD_CMD[@]}" >> "$LOG_FILE" 2>&1 || true
-
-# Pass 2: Compile everything including the generated proto files.
-echo "=== Pass 2: Compiling ==="
-echo "" >> "$LOG_FILE"
-echo "=== Pass 2 ===" >> "$LOG_FILE"
+echo "=== Building ==="
 if ! "${BUILD_CMD[@]}" >> "$LOG_FILE" 2>&1; then
     tail -5 "$LOG_FILE"
     echo ""

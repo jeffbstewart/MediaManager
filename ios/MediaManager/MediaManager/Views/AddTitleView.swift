@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Admin "Add Title" surface. Routes to either TMDB (movies / TV) or
 /// Open Library (books) based on the segmented picker; OL hits go

@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import MediaManagerCore
+import MediaManagerProtos
 
 struct AmazonImportView: View {
     @Environment(AuthManager.self) private var authManager

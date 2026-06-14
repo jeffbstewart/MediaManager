@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct PlaybackRoute: Hashable, Identifiable {
     var id: TranscodeID { transcodeId }

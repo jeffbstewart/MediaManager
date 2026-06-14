@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 enum Tab: Hashable {
     case home, movies, tvShows, books, music, collections, tags, family, cameras, liveTv, search, wishList, downloads, profile, about

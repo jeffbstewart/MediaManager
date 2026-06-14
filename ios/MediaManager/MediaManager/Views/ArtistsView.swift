@@ -1,5 +1,7 @@
 import SwiftUI
 import GRPCCore
+import MediaManagerCore
+import MediaManagerProtos
 
 private let log = MMLogger(category: "ArtistsView")
 

@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Persistent now-playing bar pinned above the tab bar / sidebar
 /// whenever audio is in the queue. Renders square artwork + track

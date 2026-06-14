@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Loads images from server endpoints that require JWT authentication.
 /// Standard AsyncImage can't add Authorization headers, so this handles

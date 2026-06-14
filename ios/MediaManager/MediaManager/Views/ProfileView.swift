@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 // ProfileResponse is defined in ProtoAdapters.swift
 

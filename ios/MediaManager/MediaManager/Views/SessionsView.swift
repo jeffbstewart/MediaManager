@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 // ApiSession and ApiSessionListResponse defined in ProtoAdapters.swift
 

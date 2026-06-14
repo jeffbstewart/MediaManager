@@ -1,4 +1,6 @@
 import Foundation
+import MediaManagerCore
+import MediaManagerProtos
 
 private let migrationLogger = MMLogger(category: "OfflineMigration")
 

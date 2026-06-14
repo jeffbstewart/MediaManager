@@ -1,6 +1,8 @@
 import SwiftUI
 import AVKit
 import MediaPlayer
+import MediaManagerCore
+import MediaManagerProtos
 
 private let log = MMLogger(category: "CustomPlayerView")
 

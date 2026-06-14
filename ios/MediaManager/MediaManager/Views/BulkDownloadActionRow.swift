@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 /// Single row that drives "Download all X" affordances on container
 /// views (collections, artist albums, TV seasons, author books,

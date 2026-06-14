@@ -1,4 +1,6 @@
 import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
 
 struct ValuationView: View {
     @Environment(AuthManager.self) private var authManager

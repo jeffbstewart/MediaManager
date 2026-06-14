@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import MediaManagerCore
+import MediaManagerProtos
 
 struct CamerasView: View {
     @Environment(OnlineDataModel.self) private var dataModel
