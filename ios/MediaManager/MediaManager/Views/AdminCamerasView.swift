@@ -155,8 +155,6 @@ struct CameraAdminRow: View {
 
 // MARK: - Add/Edit Sheet
 
-extension MMAdminCamera: Identifiable {}
-
 enum CameraEditMode {
     case add
     case edit(MMAdminCamera)

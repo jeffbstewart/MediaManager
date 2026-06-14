@@ -299,7 +299,7 @@ struct DownloadsView: View {
                         Text("Preparing...")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    case .downloading, .fetchingMetadata:
+                    case .downloading:
                         // Auto-retry in progress writes a "Retrying
                         // in Ns — <last error>" message into
                         // errorMessage while state stays .downloading

@@ -84,10 +84,6 @@ struct ValuationView: View {
     }
 }
 
-extension MMValuationItem: Identifiable {
-    public var id: Int64 { mediaItemID }
-}
-
 struct ValuationItemRow: View {
     let item: MMValuationItem
 

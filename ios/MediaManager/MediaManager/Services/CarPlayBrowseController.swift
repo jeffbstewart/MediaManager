@@ -93,7 +93,7 @@ final class CarPlayBrowseController {
     /// one slow RPC doesn't block the other tabs.
     func install() {
         let tabBar = CPTabBarTemplate(templates: [albumsTab, playlistsTab, smartTab])
-        interfaceController?.setRootTemplate(tabBar, animated: true)
+        interfaceController?.setRootTemplate(tabBar, animated: true, completion: nil)
 
         Task { await loadAlbums() }
         Task { await loadPlaylists() }
@@ -158,7 +158,7 @@ final class CarPlayBrowseController {
         // doesn't sit on a dead tap. We mutate it in place once
         // titleDetail resolves.
         let template = CPListTemplate(title: title.name, sections: [Self.loadingSection])
-        interfaceController.pushTemplate(template, animated: true)
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
 
         Task {
             guard let model = AppServices.shared.dataModel else {
@@ -236,7 +236,7 @@ final class CarPlayBrowseController {
     fileprivate func openPlaylist(id: Int64, name: String) {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
-        interfaceController.pushTemplate(template, animated: true)
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openPlaylist: dataModel is nil for id=\(id)")
@@ -285,7 +285,7 @@ final class CarPlayBrowseController {
         // user is on the Now Playing screen, swipes back to a list,
         // taps a different track — we'd be re-pushing.
         if interfaceController.topTemplate is CPNowPlayingTemplate { return }
-        interfaceController.pushTemplate(CPNowPlayingTemplate.shared, animated: true)
+        interfaceController.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
     }
 
     // MARK: - Smart Playlists
@@ -368,7 +368,7 @@ final class CarPlayBrowseController {
     private func openSmartPlaylist(key: String, name: String) {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
-        interfaceController.pushTemplate(template, animated: true)
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openSmartPlaylist: dataModel is nil for key=\(key)")
@@ -404,7 +404,7 @@ final class CarPlayBrowseController {
     fileprivate func openArtist(artistId: ArtistID, name: String) {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
-        interfaceController.pushTemplate(template, animated: true)
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task {
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openArtist: dataModel is nil for id=\(artistId.protoValue)")

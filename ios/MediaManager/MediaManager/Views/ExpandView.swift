@@ -75,10 +75,6 @@ struct ExpandView: View {
     }
 }
 
-extension MMPendingExpansionItem: Identifiable {
-    public var id: Int64 { mediaItemID }
-}
-
 struct ExpandDetailSheet: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel

@@ -492,7 +492,6 @@ struct BookReaderView: View {
             case (.some, nil): return true
             case (nil, .some): return false
             case let (lts?, rts?): return lts > rts
-            default: return false
             }
         }()
 

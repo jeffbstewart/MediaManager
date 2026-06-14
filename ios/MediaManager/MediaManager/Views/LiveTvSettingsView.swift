@@ -115,8 +115,6 @@ struct LiveTvSettingsView: View {
     }
 }
 
-extension MMTunerResponse: Identifiable {}
-
 struct AddTunerSheet: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(\.dismiss) private var dismiss

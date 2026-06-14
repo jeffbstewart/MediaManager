@@ -76,8 +76,6 @@ struct FamilyMembersView: View {
     }
 }
 
-extension MMFamilyMemberResponse: Identifiable {}
-
 struct FamilyMemberEditSheet: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(\.dismiss) private var dismiss

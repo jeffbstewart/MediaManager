@@ -625,9 +625,10 @@ struct CustomPlayerView: View {
                 case .unknown:
                     log.info("AVPlayerItem.status: unknown (still loading)")
                 case .readyToPlay:
-                    let video = item.asset.tracks(withMediaType: .video).count
-                    let audio = item.asset.tracks(withMediaType: .audio).count
-                    log.info("AVPlayerItem.status: readyToPlay (video tracks=\(video), audio tracks=\(audio), duration=\(CMTimeGetSeconds(item.asset.duration))s)")
+                    let video = (try? await item.asset.loadTracks(withMediaType: .video).count) ?? 0
+                    let audio = (try? await item.asset.loadTracks(withMediaType: .audio).count) ?? 0
+                    let dur = (try? await item.asset.load(.duration)) ?? .zero
+                    log.info("AVPlayerItem.status: readyToPlay (video tracks=\(video), audio tracks=\(audio), duration=\(CMTimeGetSeconds(dur))s)")
                 case .failed:
                     let detail = describeNSError(item.error)
                     log.error("AVPlayerItem.status: failed — \(detail)")
@@ -668,16 +669,20 @@ struct CustomPlayerView: View {
         let state = ps
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            let t = time.seconds
-            if t.isFinite { state.currentTime = t }
-            let dur = player.currentItem?.duration.seconds ?? 0
-            if dur.isFinite && dur > 0 { state.duration = dur }
-            state.isPlaying = player.timeControlStatus == .playing
-            // Push elapsed time to MPNowPlayingInfoCenter at ~1 Hz so
-            // AirPods / lock-screen / CarPlay scrubbers track playback.
-            // Throttled because the 2 Hz UI cadence would generate
-            // more writes than the system needs.
-            publishNowPlayingInfo(player: player, force: false)
+            // The periodic observer's queue is `.main`, so we're already on the
+            // main actor — assumeIsolated tells the compiler what we know.
+            MainActor.assumeIsolated {
+                let t = time.seconds
+                if t.isFinite { state.currentTime = t }
+                let dur = player.currentItem?.duration.seconds ?? 0
+                if dur.isFinite && dur > 0 { state.duration = dur }
+                state.isPlaying = player.timeControlStatus == .playing
+                // Push elapsed time to MPNowPlayingInfoCenter at ~1 Hz so
+                // AirPods / lock-screen / CarPlay scrubbers track playback.
+                // Throttled because the 2 Hz UI cadence would generate
+                // more writes than the system needs.
+                publishNowPlayingInfo(player: player, force: false)
+            }
         }
     }
 
@@ -892,7 +897,6 @@ private func describeNSError(_ error: Error?) -> String {
     let interesting: [String] = [
         NSUnderlyingErrorKey,
         NSURLErrorFailingURLErrorKey,
-        NSURLErrorFailingURLStringErrorKey,
         "NSLocalizedFailureReason",
         "NSLocalizedRecoverySuggestion",
         "NSDebugDescription",

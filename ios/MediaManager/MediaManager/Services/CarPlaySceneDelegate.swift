@@ -51,7 +51,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // some scenarios — see AppServices.whenReady).
         if !isReady {
             logger.info("CarPlay scene: AppServices not ready yet, showing loading template")
-            interfaceController.setRootTemplate(loadingTemplate(), animated: false)
+            interfaceController.setRootTemplate(loadingTemplate(), animated: false, completion: nil)
         }
     }
 

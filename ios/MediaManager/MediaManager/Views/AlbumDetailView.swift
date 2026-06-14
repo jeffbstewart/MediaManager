@@ -143,7 +143,7 @@ struct AlbumDetailView: View {
         let albumId = titleId.protoValue
         let isDownloaded = audioCache.isDownloaded(titleId: albumId)
         let progress = audioCache.activeDownloads[albumId]
-        return VStack(spacing: 8) {
+        VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button {
                     onPlayTapped(album)

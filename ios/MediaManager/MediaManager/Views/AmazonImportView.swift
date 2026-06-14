@@ -82,7 +82,7 @@ struct AmazonImportView: View {
             allowedContentTypes: [.commaSeparatedText, .zip],
             allowsMultipleSelection: false
         ) { result in
-            Task { await handleFileImport(result) }
+            handleFileImport(result)
         }
     }
 
