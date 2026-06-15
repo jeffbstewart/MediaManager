@@ -41,6 +41,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let hasRefresh = KeychainService.load(key: .refreshToken) != nil
         logger.info("CarPlay scene connected: appServicesReady=\(isReady) hasAccessToken=\(hasToken) hasRefreshToken=\(hasRefresh)")
         self.interfaceController = interfaceController
+        AppServices.shared.isCarPlayConnected = true
         AppServices.shared.whenReady { [weak self] in
             logger.info("CarPlay scene: AppServices ready, refreshing tokens before loading data")
             self?.refreshTokensAndInstallBrowseHierarchy()
@@ -60,6 +61,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
         logger.info("CarPlay scene disconnected")
+        AppServices.shared.isCarPlayConnected = false
         self.interfaceController = nil
         self.browseController = nil
     }

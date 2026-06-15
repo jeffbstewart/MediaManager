@@ -421,6 +421,16 @@ struct ContentView: View {
                 episodeNumber: route.episodeNumber
             )
         }
+        // SiriIntentHandler hands video playback off to us by setting
+        // VideoPlaybackCoordinator.shared.pendingRoute from outside
+        // the view hierarchy. Mirror it into our local @State so
+        // .fullScreenCover fires.
+        .onChange(of: VideoPlaybackCoordinator.shared.pendingRoute) { _, newRoute in
+            if let newRoute {
+                playbackRoute = newRoute
+                VideoPlaybackCoordinator.shared.pendingRoute = nil
+            }
+        }
         // Mini-player is pinned inside each column (sidebar List +
         // detail NavigationStack) — see the comments at each
         // `.safeAreaInset` call for why pinning at the outer

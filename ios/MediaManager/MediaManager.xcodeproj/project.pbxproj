@@ -11,6 +11,8 @@
 		C731DE892F705F5000A84CB7 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000011 /* GRPCCore */; };
 		C731DE8A2F705F5000A84CB7 /* GRPCNIOTransportHTTP2 in Frameworks */ = {isa = PBXBuildFile; productRef = CC000012 /* GRPCNIOTransportHTTP2 */; };
 		C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000013 /* GRPCProtobuf */; };
+		C7AFC8892FDF782600602BDA /* MediaManagerProtos in Frameworks */ = {isa = PBXBuildFile; productRef = CC000014 /* MediaManagerProtos */; };
+		C7AFC88A2FDF782600602BDA /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000015 /* MediaManagerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +63,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C7AFC88A2FDF782600602BDA /* MediaManagerCore in Frameworks */,
+				C7AFC8892FDF782600602BDA /* MediaManagerProtos in Frameworks */,
 				C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */,
 				C731DE8A2F705F5000A84CB7 /* GRPCNIOTransportHTTP2 in Frameworks */,
 				C731DE892F705F5000A84CB7 /* GRPCCore in Frameworks */,
@@ -252,7 +256,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
@@ -285,7 +289,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
@@ -498,6 +502,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		CC000005 /* XCLocalSwiftPackageReference "../MediaManagerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../MediaManagerCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		CC000001 /* XCRemoteSwiftPackageReference "swift-protobuf" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -532,13 +543,6 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		CC000005 /* XCLocalSwiftPackageReference "../MediaManagerCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../MediaManagerCore;
-		};
-/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		CC000010 /* SwiftProtobuf */ = {

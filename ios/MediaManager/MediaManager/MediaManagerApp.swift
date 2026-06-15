@@ -36,7 +36,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         handlerFor intent: INIntent
     ) -> Any? {
+        // Vend the same handler for both INPlayMediaIntent and
+        // INSearchForMediaIntent. Declaring INSearchForMediaIntent is
+        // what unlocks Siri's NLP routing for the "Watch X" verb
+        // against catalog titles she doesn't know globally — without
+        // it she falls back to "I found this on the web" because
+        // there's no Apple-Music-equivalent global movie/TV catalog
+        // for her to anchor "Top Gun" to.
         if intent is INPlayMediaIntent {
+            return SiriIntentHandler()
+        }
+        if intent is INSearchForMediaIntent {
             return SiriIntentHandler()
         }
         return nil

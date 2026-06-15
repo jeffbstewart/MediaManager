@@ -17,9 +17,11 @@
 	<key>INIntentsSupported</key>
 	<array>
 		<string>INPlayMediaIntent</string>
+		<string>INSearchForMediaIntent</string>
 	</array>
 	<key>INSupportedMediaCategories</key>
 	<array>
+		<string>INMediaCategoryVideo</string>
 		<string>INMediaCategoryMusic</string>
 	</array>
 	<key>NSAppleMusicUsageDescription</key>

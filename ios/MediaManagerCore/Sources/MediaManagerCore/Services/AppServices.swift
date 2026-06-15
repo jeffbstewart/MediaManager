@@ -23,6 +23,14 @@ public final class AppServices {
     public private(set) var bookCache: BookCacheManager?
     public private(set) var imageProvider: ImageProvider?
 
+    /// True while a CarPlay head unit is paired and the
+    /// CPTemplateApplicationScene is connected. Set/cleared by
+    /// `CarPlaySceneDelegate`'s didConnect / didDisconnect. Read by
+    /// `SiriIntentHandler` (and anywhere else that needs to refuse
+    /// video on the head unit) via the helper that combines this with
+    /// the current audio route.
+    public var isCarPlayConnected: Bool = false
+
     /// Closures the secondary scenes register while waiting for the
     /// App to populate. Called once on the next `populate(...)` call,
     /// then cleared. Order is best-effort registration order.
