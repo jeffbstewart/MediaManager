@@ -47,7 +47,7 @@ private struct SiriCompletion<Arg>: @unchecked Sendable {
 /// and `AudioPlayerManager` are main-actor-isolated. The completion
 /// closures Siri hands us can be invoked from any thread.
 @objc(SiriIntentHandler)
-final class SiriIntentHandler: NSObject, INPlayMediaIntentHandling, INSearchForMediaIntentHandling {
+final class SiriIntentHandler: NSObject, INPlayMediaIntentHandling {
 
     override init() {
         super.init()
@@ -458,70 +458,6 @@ final class SiriIntentHandler: NSObject, INPlayMediaIntentHandling, INSearchForM
         // .onChange picks it up the moment we come to foreground.
         let activity = NSUserActivity(activityType: NSStringFromClass(INPlayMediaIntent.self))
         return INPlayMediaIntentResponse(code: .continueInApp, userActivity: activity)
-    }
-
-    // MARK: - INSearchForMediaIntentHandling
-
-    /// Siri calls this for "Watch X" (and some other media-search verbs)
-    /// when she can't identify X from a global catalog. We reuse the
-    /// same catalog search to return matching `INMediaItem`s; if a
-    /// hit lands, Siri then dispatches `INPlayMediaIntent` to actually
-    /// start playback — which our other handler covers. Declaration
-    /// alone is what unlocks "Watch" routing; the resolution returns
-    /// give Siri something to confirm verbally ("Found Top Gun. Play it?").
-    func resolveMediaItems(
-        for intent: INSearchForMediaIntent,
-        with completion: @escaping ([INMediaItemResolutionResult]) -> Void
-    ) {
-        let phrase = intent.mediaSearch?.mediaName ?? ""
-        os_log("search.resolveMediaItems: phrase=%{public}@",
-               log: log, type: .default, phrase)
-        guard !phrase.isEmpty else {
-            completion([])
-            return
-        }
-        let box = SiriCompletion(call: completion)
-        Task { @MainActor in
-            await Self.resolveSearch(phrase: phrase, completion: box.call)
-        }
-    }
-
-    @MainActor
-    private static func resolveSearch(
-        phrase: String,
-        completion: @escaping ([INMediaItemResolutionResult]) -> Void
-    ) async {
-        guard let dataModel = AppServices.shared.dataModel else {
-            os_log("search.resolve: dataModel not ready", log: log, type: .error)
-            completion([])
-            return
-        }
-        do {
-            let response = try await dataModel.search(query: phrase)
-            for result in response.results {
-                if let item = makeMediaItem(from: result) {
-                    completion([INMediaItemResolutionResult.success(with: item)])
-                    return
-                }
-            }
-            completion([])
-        } catch {
-            os_log("search.resolve: failed: %{public}@",
-                   log: log, type: .error, String(describing: error))
-            completion([])
-        }
-    }
-
-    /// `INSearchForMediaIntent.handle` is just a stub — the actual
-    /// playback dispatch happens via `INPlayMediaIntent` that Siri
-    /// fires after the search resolution lands. We return `.success`
-    /// so Siri considers the search satisfied.
-    func handle(
-        intent: INSearchForMediaIntent,
-        completion: @escaping (INSearchForMediaIntentResponse) -> Void
-    ) {
-        os_log("search.handle: returning .success", log: log, type: .default)
-        completion(INSearchForMediaIntentResponse(code: .success, userActivity: nil))
     }
 
     // MARK: - Car context detection

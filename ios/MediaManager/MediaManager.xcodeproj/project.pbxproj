@@ -256,7 +256,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
@@ -289,7 +289,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
