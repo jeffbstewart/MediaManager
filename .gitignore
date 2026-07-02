@@ -23,6 +23,9 @@ test-results/
 # Claude Code
 .claude/
 
+# QWEN
+.qwen/
+
 # Roku channel zip
 roku-channel.zip
 
