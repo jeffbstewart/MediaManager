@@ -1,0 +1,51 @@
+# Agent harness manifest (HARNESS.md §3) — MediaManager, Kotlin/Gradle.
+#
+# This file is the ENTIRE action menu the jailed coding agent can run via
+# the builder sidecar. run arrays are exec argv (no shell, no interpolation);
+# params are the only agent-suppliable inputs, validated against their
+# anchored patterns and appended as separate `flag value` argv elements.
+#
+# --offline is a fail-fast convention (the isolated network is the actual
+# enforcement); refresh the dependency cache deliberately via
+# update-gradle-deps.bat (the §7 airlock).
+
+harness: 1
+toolchain: jdk25-gradle
+
+actions:
+  build:
+    description: Compile all modules without running tests
+    run: ["./gradlew", "--offline", "--no-daemon", "build", "-x", "test"]
+    timeout: 15m
+    parser: gradle
+
+  test:
+    description: Run the JVM test suite (CI parity is `gradlew test`)
+    run: ["./gradlew", "--offline", "--no-daemon", "test"]
+    timeout: 30m
+    parser: gradle
+    params:
+      filter:
+        description: >-
+          Test class/method filter passed to Gradle --tests, e.g.
+          TranscodeMatcherServiceTest or
+          net.stewart.mediamanager.service.*
+        flag: "--tests"
+        pattern: "^[A-Za-z0-9_.*]+$"
+
+  coverage:
+    # coverageSummary is the repo's low-token plain-text coverage report
+    # (overall %s + worst classes), built for exactly this use; the giant
+    # JaCoCo HTML report stays on disk. Its -Plimit/-Ppackage tuning knobs
+    # are not exposed here: Gradle -P needs a single "-Pkey=value" argv
+    # element, which the flag+value param model deliberately cannot build.
+    description: Run tests with JaCoCo and print the plain-text coverage summary
+    run: ["./gradlew", "--offline", "--no-daemon", "jacocoTestReport", "coverageSummary"]
+    timeout: 30m
+    parser: gradle
+
+caches:
+  - volume: gradle
+    env: GRADLE_USER_HOME
+    path: /gradle-home
+    warmup: ["./gradlew", "--refresh-dependencies", "build"]
