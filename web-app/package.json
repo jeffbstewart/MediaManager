@@ -15,16 +15,22 @@
   },
   "private": true,
   "packageManager": "npm@11.7.0",
+  "overrides": {
+    "@babel/core": "^7.29.6",
+    "vite": {
+      "esbuild": "^0.28.1"
+    }
+  },
   "dependencies": {
-    "@angular/animations": "^21.2.6",
-    "@angular/cdk": "^21.2.4",
-    "@angular/common": "^22.0.2",
-    "@angular/compiler": "^21.2.17",
-    "@angular/core": "^21.2.0",
-    "@angular/forms": "^22.0.2",
-    "@angular/material": "^21.2.4",
-    "@angular/platform-browser": "^22.0.2",
-    "@angular/router": "^22.0.2",
+    "@angular/animations": "~22.0.5",
+    "@angular/cdk": "~22.0.3",
+    "@angular/common": "~22.0.5",
+    "@angular/compiler": "~22.0.5",
+    "@angular/core": "~22.0.5",
+    "@angular/forms": "~22.0.5",
+    "@angular/material": "~22.0.3",
+    "@angular/platform-browser": "~22.0.5",
+    "@angular/router": "~22.0.5",
     "@bufbuild/protobuf": "^2.12.0",
     "@connectrpc/connect": "^2.1.1",
     "@connectrpc/connect-web": "^2.1.1",
@@ -36,18 +42,18 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^22.0.3",
-    "@angular/cli": "^21.2.5",
-    "@angular/compiler-cli": "^21.2.0",
+    "@angular/build": "~22.0.5",
+    "@angular/cli": "~22.0.5",
+    "@angular/compiler-cli": "~22.0.5",
     "@axe-core/playwright": "^4.11.2",
     "@bufbuild/protoc-gen-es": "^2.12.0",
     "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.0",
     "jsdom": "^28.0.0",
-    "monocart-reporter": "^2.10.1",
+    "monocart-reporter": "^2.12.2",
     "prettier": "^3.8.1",
     "protoc": "^33.6.0",
-    "typescript": "~5.9.2",
+    "typescript": "~6.0.3",
     "vitest": "^4.0.8"
   }
 }

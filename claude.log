@@ -5572,3 +5572,21 @@ recurring 15-books-and-reader:226 flake as prior runs).
 - Tests: unit test for databaseFileFor (file vs mem vs empty), plus gauge-registration assertion in the registerEntityGauges test. MetricsRegistryTest green.
 - Files: service/MetricsRegistry.kt, test/.../MetricsRegistryTest.kt
 ===
+
+=== 2026-07-04 15:55 — Angular 22 upgrade clears all Dependabot alerts ===
+- Inspected 10 open Dependabot alerts via gh api (all npm, web-app/package-lock.json):
+  @angular/core XSS/hydration (high+2 medium), piscina RCE (high), nodemailer x4
+  (high+3 medium via monocart-reporter), esbuild + @babel/core (low).
+- Root cause of the pile-up: package.json had Angular split across majors 21/22
+  from per-package Dependabot merges; lockfile stuck at vulnerable 21.2.6.
+- Normalized to 21.2.17 LTS, then ng update to Angular 22.0.5 (current mainline),
+  TypeScript 6.0.3. Migrations touched app.config.ts (withXhr) and tsconfig.app.json.
+- monocart-reporter -> 2.12.2 (patched nodemailer 9.x); npm overrides force
+  @babel/core ^7.29.6 and nested esbuild ^0.28.1 (hard-pinned vulnerable in
+  @angular/build 22.0.5 — revisit when Angular bumps them).
+- Node upgraded 22.21.0 -> 22.23.1 via winget (Angular 22 CLI requires >=22.22.3).
+- npm audit: 0 vulnerabilities. Full Playwright harness: 651/651 passed (78 axe,
+  573 functional). Deployed to NAS via lifecycle/docker-build.sh for live testing.
+- Files: web-app/package.json, package-lock.json, src/app/app.config.ts,
+  tsconfig.app.json.
+===
