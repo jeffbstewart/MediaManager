@@ -221,7 +221,7 @@ class AdminGrpcServiceMediaItemAndArtistMembershipTest : GrpcTestBase() {
     }
 
     @Test
-    fun `setMediaItemFormat — book-title format change clears replacement_value`() = runBlocking {
+    fun `setMediaItemFormat - book-title format change clears replacement_value`() = runBlocking {
         val admin = createAdminUser(username = "mi-fmt-book")
         val book = createTitle(name = "Book", mediaType = MediaTypeEntity.BOOK.name)
         val item = seedItem("BookItem",
@@ -248,7 +248,7 @@ class AdminGrpcServiceMediaItemAndArtistMembershipTest : GrpcTestBase() {
     }
 
     @Test
-    fun `setMediaItemFormat — same format keeps replacement_value`() = runBlocking {
+    fun `setMediaItemFormat - same format keeps replacement_value`() = runBlocking {
         val admin = createAdminUser(username = "mi-fmt-noop")
         val movie = createTitle(name = "Movie",
             mediaType = MediaTypeEntity.MOVIE.name)
