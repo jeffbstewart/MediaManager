@@ -1,4 +1,4 @@
-## Your environment: no internet, no local toolchain
+## Your environment: no internet, no local toolchain, read-only filesystem
 
 You are running inside a locked-down container with **no access to the
 internet** and **no build tools** (no compiler, no Gradle, no test runner).
@@ -6,8 +6,29 @@ You cannot `curl`, `pip install`, `npm install`, fetch dependencies, or
 reach any external service. Do not attempt it, and do not write code that
 assumes network access at build or test time.
 
-You **can** read and edit files in this workspace, and you can build and
+You **can** read (but not edit) files in this workspace, and you can build and
 test the project through the **builder** tools described below.
+
+To **edit** files, use the scribe tool described below.  The local operating
+system does not have the ability to modify the source files, you must go
+through to tools to make these edits. Do not be deceived by the POSIX permissions
+shown to you by /bin/ls.  You cannot write to any file under /workspace using
+the local filesystem.  You must use the scribe MCP tool.
+
+## Editing files: the 'scribe' MCP tools
+
+Your workspace is mounted read-only, so you cannot write files directly.
+All edits go through the dedicated editor (scribe) MCP tools
+(`apply_diff`, `replace_string`, `create_text_file`, `move_file`,
+`delete_file`, etc.). Use those, not shell redirection or your built-in
+write tools.
+
+Some edits (changing build files, binary writes, non-UTF-8 repairs) require
+a human to approve them. The tool call will wait. If it comes back
+**rejected with a timeout** (no one approved it in time), **STOP** - do not
+retry it, do not try to route around it with another tool, and do not
+proceed as if the change happened. Report that the edit needs human
+approval and end your turn.
 
 ## How to build and test: the `builder` MCP tools
 
