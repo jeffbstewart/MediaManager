@@ -19,6 +19,12 @@ actions:
     timeout: 15m
     parser: gradle
 
+  clean:
+    description: Clear any gradle caches
+    run: [ "./gradlew", "--offline", "--no-daemon", "clean" ]
+    timeout: 15m
+    parser: gradle
+
   test:
     description: Run the JVM test suite (CI parity is `gradlew test`)
     run: ["./gradlew", "--offline", "--no-daemon", "test"]
