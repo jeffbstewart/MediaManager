@@ -4,8 +4,6 @@
 
 mediaManager is a Kotlin web application for managing physical media collections (DVD, Blu-ray, UHD, HD DVD). It catalogs titles via UPC barcode scanning, enriches them with TMDB metadata, discovers transcoded media files on a NAS, links them to catalog titles, and provides in-browser video playback via pre-transcoded ForBrowser cache. Built with Angular 22 (TypeScript) for the web UI, served by a Kotlin/Armeria backend, with an H2 embedded database.
 
-The history of the app's evolution is recorded in `claude.log` in the project root.
-
 ## Working Directory
 
 At the start of every session, `cd` to the project root (`/c/Programming/github/MediaManager`) as your **first Bash command** so all subsequent commands can use relative paths without repeating the `cd` prefix. Do this before any other shell operations on the mediaManager project.
@@ -301,7 +299,6 @@ Before each commit, consider whether the changes require documentation updates. 
 - **docs/** — Do the Admin Guide, Getting Started, Transcode Buddy, Roku Guide, User Guide, or architecture diagram (index.md) need updating?
 - **docs/FEATURES.md** — Should a feature request be marked done, or a new one added?
 - **docker-compose.yml** — Do port mappings, environment variables, or healthchecks need updating?
-- **claude.log** — Has this session's work been logged?
 
 If documentation updates are needed, include them in the same commit or a follow-up commit before moving on.
 
@@ -488,17 +485,3 @@ self-signed cert.
 
 The read path is unauthenticated by design — Binnacle assumes it's
 behind a trusted network. Ingest is API-key gated on a different port.
-
-## Conversation Transcript
-
-All Claude Code conversations for this project must be logged to `claude.log` in the project root. Log **every substantive exchange** — not just at session end, but as the conversation progresses. Each entry must include a date and timestamp. Format:
-
-```
-=== YYYY-MM-DD HH:MM — <brief topic> ===
-- What was discussed
-- What was decided
-- What was changed (files created/modified/deleted)
-===
-```
-
-This log serves as a persistent project history across sessions. Always append; never overwrite.
