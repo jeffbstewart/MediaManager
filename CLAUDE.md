@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-mediaManager is a Kotlin web application for managing physical media collections (DVD, Blu-ray, UHD, HD DVD). It catalogs titles via UPC barcode scanning, enriches them with TMDB metadata, discovers transcoded media files on a NAS, links them to catalog titles, and provides in-browser video playback via pre-transcoded ForBrowser cache. Built with Vaadin-on-Kotlin for server-side rendered UI (no JavaScript/npm toolchain) with an H2 embedded database.
+mediaManager is a Kotlin web application for managing physical media collections (DVD, Blu-ray, UHD, HD DVD). It catalogs titles via UPC barcode scanning, enriches them with TMDB metadata, discovers transcoded media files on a NAS, links them to catalog titles, and provides in-browser video playback via pre-transcoded ForBrowser cache. Built with Angular 22 (TypeScript) for the web UI, served by a Kotlin/Armeria backend, with an H2 embedded database.
 
 The history of the app's evolution is recorded in `claude.log` in the project root.
 
@@ -14,10 +14,9 @@ At the start of every session, `cd` to the project root (`/c/Programming/github/
 
 ```bash
 ./gradlew build          # Build the project (production mode)
-./gradlew --no-daemon run            # Run the server (localhost:8080, production mode)
+./gradlew --no-daemon run            # Run the server (localhost:9090, production mode)
 ./gradlew test           # Run tests
 ./gradlew clean build    # Clean and rebuild
-./gradlew --no-daemon run -Pvaadin.devMode   # Run with Vaadin dev mode (Vite dev server)
 ```
 
 **Important:** Always use `--no-daemon` when running the server to avoid Gradle daemon locking problems. Kill existing Java processes first (`taskkill //F //IM java.exe`) if needed.
@@ -43,17 +42,16 @@ For Watchtower config, health/metrics server, and Prometheus setup, see `docs/AD
 
 ## Architecture
 
-- **UI Framework:** Vaadin 25 via Vaadin-on-Kotlin (VoK) — server-side rendered, no JavaScript
-- **UI DSL:** Karibu-DSL for type-safe Kotlin Vaadin component building
-- **Server:** Embedded Jetty via vaadin-boot (started from `main()`, no app server deployment)
-- **gRPC:** Standalone Netty-based gRPC server on separate port (default 9090, `--grpc_port`). 10 services, ~130 RPCs. Proto definitions in `proto/`. iOS app communicates via gRPC; web UI uses Vaadin.
+- **Web UI:** Angular 22 (TypeScript) single-page app under `web-app/`, built with npm and served as static assets
+- **Server:** Armeria (Netty-based) HTTP/2 server started from `main()` — serves gRPC, HTTP endpoints, and the SPA (no app server deployment)
+- **gRPC:** Served by Armeria on the main port (default 9090, `--port`) alongside HTTP and the SPA. 10 services, ~130 RPCs. Proto definitions in `proto/`. iOS app and the Angular web UI communicate via gRPC.
 - **Database:** H2 in file mode (`./data/mediamanager.mv.db`)
 - **Connection Pool:** HikariCP
 - **Migrations:** Flyway — SQL files in `src/main/resources/db/migration/`, naming convention `V{NNN}__{description}.sql`
-- **ORM:** vok-framework-vokdb (jdbi-orm under the hood)
+- **ORM:** jdbi-orm (pulled in via the `vok-framework-vokdb` module, whose UI stack is excluded in `build.gradle.kts`)
 - **Logging:** SLF4J with custom BufferingServiceProvider (stderr + Binnacle export)
 - **Build:** Gradle 9.3.1 with Kotlin DSL, version catalog in `gradle/libs.versions.toml`
-- **JDK:** Corretto 25 (Java 21+ required by Vaadin 25.x)
+- **JDK:** Corretto 25 (Java 21+)
 - **Package:** net.stewart.mediamanager
 
 For the full file listing (views, entities, services, servlets), see `docs/index.md`.
@@ -91,7 +89,7 @@ Programmatic data updates that need Kotlin code (API calls, computation). Flyway
 
 ### CLI Flags
 
-See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N`, `--grpc_port N` (default 9090), `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N`.
+See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N` (main port serving gRPC + HTTP + SPA, default 9090), `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N` (health/metrics, default 8081).
 
 ### Network Architecture
 
@@ -103,7 +101,7 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 │  │           HAProxy                   │                    │
 │  │                                     │                    │
 │  │  https://grpc.domain:8443 ──────────┼──► NAS:9090 (gRPC) │
-│  │  https://mm.domain:8443 ────────────┼──► NAS:8080 (HTTP) │
+│  │  https://mm.domain:8443 ────────────┼──► NAS:9090 (HTTP) │
 │  │     (LetsEncrypt wildcard cert)     │                    │
 │  └─────────────────────────────────────┘                    │
 └─────────────────────────────────────────────────────────────┘
@@ -111,28 +109,27 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 ┌─────────────────────────────────────────┐
 │              NAS (Docker)               │
 │                                         │
-│  ┌───────────────┐  ┌───────────────┐   │
-│  │ Jetty :8080   │  │ gRPC :9090    │   │
-│  │ (Vaadin, HTTP │  │ (Netty, h2c)  │   │
-│  │  servlets)    │  │ 9 services    │   │
-│  └───────────────┘  └───────────────┘   │
+│  Armeria :9090 (HTTP/2)                 │
+│    gRPC + HTTP + SPA + streaming        │
+│    10 services                          │
 │                                         │
-│  Health: :8080/health (HAProxy checks)  │
+│  Health:  :8081/health (Docker/HAProxy) │
 │  Metrics: :8081/metrics (Prometheus)    │
 └─────────────────────────────────────────┘
 ```
 
-**HAProxy** terminates TLS (LetsEncrypt wildcard cert) and forwards to the NAS:
-- **gRPC endpoint:** HTTP/2 (`proto h2`) to port 9090. Health check via HTTP/1.1 GET `/health` on port 8080 (`check port 8080 check-proto h1`).
-- **HTTP endpoint:** HTTP/1.1 to port 8080 for Vaadin web UI, images, video streaming.
-- Both endpoints use `timeout tunnel 1h` for long-lived connections (streaming RPCs, WebSocket).
+**HAProxy** terminates TLS (LetsEncrypt wildcard cert) and forwards both hostnames to the NAS's main port 9090:
+- **gRPC endpoint** (`grpc.domain`): HTTP/2 (`proto h2`) to port 9090.
+- **HTTP endpoint** (`mm.domain`): HTTP/2 to port 9090 for the Angular web UI, images, and video streaming.
+- Health checks target `/health`, served on the internal monitoring port 8081.
+- Both endpoints use `timeout tunnel 1h` for long-lived connections (streaming RPCs).
 
 **iOS app** connects to the gRPC endpoint for all data operations, and to the HTTP endpoint for binary operations (images, video streaming, file downloads).
 
 ### Decisions Made
 
-- **Vaadin-on-Kotlin over Ktor+Angular/JS** — eliminates npm/node/webpack entirely. UI is rendered server-side; browser receives DOM diffs via WebSocket.
-- **H2 over SQLite** — native Java, no JNI/native wrappers, fully supported by VoK/Flyway/HikariCP ecosystem. File-mode gives same single-file-DB experience.
+- **Angular SPA over server-rendered UI** — the web UI is a standalone Angular (TypeScript) app under `web-app/`, talking to the server over gRPC; built with npm and served as static assets.
+- **H2 over SQLite** — native Java, no JNI/native wrappers, fully supported by the jdbi-orm/Flyway/HikariCP ecosystem. File-mode gives same single-file-DB experience.
 - **Flyway for migrations** — standard Java migration tool, auto-creates tracking table, checksums applied migrations.
 - **Gradle version catalog** (`libs.versions.toml`) — centralizes dependency versions.
 - **Gradle 9.3.1 over 8.12** — Java 25 support requires Gradle 9.1+; 8.x cannot parse version "25.0.2".
@@ -144,7 +141,7 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 - **Schema updater framework** — Flyway handles DDL only; SchemaUpdater interface + runner handles programmatic data updates (API calls, computation) with version tracking for re-runnability.
 - **Roku JSON feed over Direct Publisher** — Direct Publisher was sunset January 2024. Custom sideloaded BrightScript channel consumes `/roku/feed.json`. API key auth (UUID in `app_config`) for stateless device authentication.
 - **Sideloaded Roku channel over beta channel** — Beta channels expire after 120 days. Sideloading via Developer Mode has no expiration and requires no certification review.
-- **Standalone gRPC server over servlet-based** — `grpc-servlet-jakarta` inside Jetty had async support issues with servlet filters and couldn't handle HTTP/2 end-to-end through reverse proxies. Standalone Netty gRPC server on its own port avoids all servlet container constraints.
+- **Armeria (Netty) over servlet-based gRPC** — `grpc-servlet-jakarta` inside a servlet container had async support issues with servlet filters and couldn't handle HTTP/2 end-to-end through reverse proxies. Armeria serves gRPC, HTTP, and the SPA together on one Netty-based HTTP/2 port, avoiding all servlet-container constraints.
 - **HAProxy over Synology reverse proxy** — Synology's Nginx-based proxy doesn't support gRPC (no `grpc_pass`). HAProxy handles HTTP/2 natively with proper trailer framing for gRPC. LetsEncrypt wildcard certs on pfSense.
 - **gRPC over REST API** — Type-safe protobuf wire format, server-streaming RPCs for live updates, multi-platform code generation from `.proto` files. REST API (`/api/v1/*`) removed.
 
@@ -174,7 +171,7 @@ Two access levels enforce role-based access:
 | 1 | Viewer | Home, Catalog, Title Detail, Actor, Search, Playback |
 | 2 | Admin | Everything Viewer can + Scan, Purchases, Expand, Transcodes, Users |
 
-**Routes:** `SecurityServiceInitListener` enforces Vaadin route access. Public routes (`login`, `setup`) are always accessible. Admin routes (`scan`, `purchases`, `expand`, `transcodes`, `users`) require Level 2. All other routes require any authenticated user.
+**Routes:** Route access is enforced by role level. Public routes (`login`, `setup`) are always accessible. Admin routes (`scan`, `purchases`, `expand`, `transcodes`, `users`) require Level 2. All other routes require any authenticated user.
 
 **Servlets:** `AuthFilter` protects `/posters/*`, `/headshots/*`, `/stream/*` via cookie token validation against `session_token` table. Falls back to API key auth (`?key=` parameter validated against `roku_api_key` in `app_config`) for Roku device access. Returns 401 for unauthenticated requests. Allows all through when no users exist (pre-setup).
 
@@ -399,7 +396,7 @@ Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/
 ## MCP Tools
 
 The Playwright MCP server is available for browser automation and visual verification. Use it to:
-- Navigate to the running app (`http://localhost:8080/`)
+- Navigate to the running app (`http://localhost:9090/`)
 - Take snapshots (accessibility tree) and screenshots (visual)
 - Click elements, fill forms, and verify navigation
 - Run arbitrary Playwright code for complex interactions
