@@ -162,20 +162,53 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 
 ### User Authentication
 
-Two access levels enforce role-based access:
+Two roles, distinguished by `AppUser.isAdmin()`:
 
-| Level | Role | Can Access |
-|-------|------|------------|
-| 1 | Viewer | Home, Catalog, Title Detail, Actor, Search, Playback |
-| 2 | Admin | Everything Viewer can + Scan, Purchases, Expand, Transcodes, Users |
+| Role | Access |
+|------|--------|
+| Viewer | Catalog browsing, search, playback, own profile |
+| Admin | Everything a viewer can, plus scan/import, purchases, transcodes, settings, and user management (all `AdminService` RPCs + admin REST endpoints) |
 
-**Routes:** Route access is enforced by role level. Public routes (`login`, `setup`) are always accessible. Admin routes (`scan`, `purchases`, `expand`, `transcodes`, `users`) require Level 2. All other routes require any authenticated user.
+Enforcement is **server-side**; the Angular SPA's router guards are a
+convenience only.
 
-**Servlets:** `AuthFilter` protects `/posters/*`, `/headshots/*`, `/stream/*` via cookie token validation against `session_token` table. Falls back to API key auth (`?key=` parameter validated against `roku_api_key` in `app_config`) for Roku device access. Returns 401 for unauthenticated requests. Allows all through when no users exist (pre-setup).
+**gRPC (`grpc/AuthInterceptor`):** Every RPC except a small unauthenticated
+set (`AuthService/Login`, `Refresh`, `Revoke`, `CreateFirstUser`, the
+passkey-auth RPCs, `InfoService/Discover`) requires a caller identity,
+resolved in precedence order:
+1. `Authorization: Bearer <jwt>` — iOS, Android TV, Roku, and direct gRPC
+   clients (`JwtService.validateAccessToken`).
+2. HttpOnly `mm_session` cookie — the Angular SPA (can't read the token),
+   DB-validated via `AuthService`, gated by a CSRF check that requires the
+   `Origin` header (when present) to match the request authority.
 
-**First-user setup:** When no users exist in `app_user`, all navigations redirect to `/setup` where the first account (always admin) is created.
+All `AdminService` RPCs additionally require admin role. Two further gates
+block otherwise-authenticated calls (except gate-exempt RPCs such as
+`ChangePassword` and all of `ProfileService`): an unmet legal-terms
+agreement and a pending `must_change_password`.
 
-**Sessions:** 30-day persistent login via `mm_session` cookie mapped to `session_token` DB rows. Cookie set via client-side JS. Expired tokens cleaned on startup.
+**HTTP (`armeria/ArmeriaAuthDecorator`):** Wraps the image, streaming, and
+REST (`/api/v2/*`) services — posters/headshots/backdrops,
+video/camera/live-TV streams, and the catalog + admin REST endpoints. Same
+identity chain as gRPC, plus two extra fallbacks: the `mm_jwt` cookie (iOS
+HLS — AVPlayer can't set headers) and a `?key=` device token
+(`PairingService.validateDeviceToken`, for paired Roku/devices). Returns
+**401** when unauthenticated, **403** before first-user setup, and **451**
+when the user still owes a terms agreement. A few endpoints are deliberately
+unauthenticated (health check, CSP report sink, `AuthRestService`, and the
+Roku feed / pairing endpoints, which carry their own auth).
+
+**Tokens & sessions:** `JwtService` issues short-lived access tokens (with a
+`Refresh` RPC); `WebAuthnService` backs passkey login. Browser sessions use
+a server-set, HttpOnly, `SameSite=Lax` `mm_session` cookie (30-day
+`Max-Age`) mapped to hashed rows in the `session_token` table; validated
+tokens are cached ~60s to avoid a DB hit per request, and expired rows are
+purged on startup.
+
+**First-user setup:** When `app_user` is empty, `AuthService.hasUsers()` is
+false — the HTTP decorator returns 403 and only the unauthenticated
+`AuthService/CreateFirstUser` RPC is reachable, which the SPA's setup flow
+calls to create the first account (always admin).
 
 **Testing:** `secrets/test-credentials.agent_visible_env` (gitignored) contains test account credentials for automated UI and API testing. Claude may read this file. Copy from `secrets/example.test-credentials.env` and create the test accounts manually after first setup.
 
