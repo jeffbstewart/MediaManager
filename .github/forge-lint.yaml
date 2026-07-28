@@ -1,0 +1,14 @@
+# forge-lint configuration for this repository (cloister
+# docs/grange.md R1-R8).  Identities and expectations only — the
+# credential rides the FORGE_LINT_TOKEN env var, never this file.  It
+# lives under .github/ so the CODEOWNERS guard covers the pinned
+# identities themselves.  Every field is required.
+
+forge: github
+apiBase: https://api.github.com
+repo: jeffbstewart/MediaManager
+defaultBranch: main
+operator: jeffbstewart            # the human whose approval satisfies R2
+bot: jbstewart-agent              # write collaborator; must never be admin
+requiredChecks: [verify]          # the presubmit suite (R3)
+agentNamespace: agent/            # the bot's branch namespace (R8)
