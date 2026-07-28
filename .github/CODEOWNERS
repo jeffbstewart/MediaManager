@@ -1,0 +1,8 @@
+# Code owners (cloister docs/grange.md R2, R6).  With
+# require-code-owner-review on the main ruleset, ONLY an owner's approval
+# satisfies the review rule — the bot's approval is worthless by
+# construction.  The .github rule keeps workflow changes (agent-editable
+# CI) from merging without the operator.  forge-lint asserts both
+# patterns name exactly the operator.
+* @jeffbstewart
+/.github/ @jeffbstewart
