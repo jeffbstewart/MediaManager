@@ -14,7 +14,7 @@ class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
         setupRequired = !AuthService.hasUsers()
 
         val configs = AppConfig.findAll().associateBy { it.config_key }
-        configs["roku_base_url"]?.config_val?.takeIf { it.isNotBlank() }?.let { secureUrl = it }
+        AppConfig.publicBaseUrl()?.let { secureUrl = it }
 
         // Legal documents — privacy policy is shared, terms are platform-specific
         val ppUrl = configs["privacy_policy_url"]?.config_val?.takeIf { it.isNotBlank() }

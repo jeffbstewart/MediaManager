@@ -171,10 +171,7 @@ class LiveTvStreamHttpService {
     }
 
     private fun getBaseUrl(ctx: ServiceRequestContext): String {
-        val configured = AppConfig.findAll()
-            .firstOrNull { it.config_key == "roku_base_url" }
-            ?.config_val
-        if (!configured.isNullOrBlank()) return configured.trimEnd('/')
+        AppConfig.publicBaseUrl()?.let { return it }
         val headers = ctx.request().headers()
         val proto = headers.get("x-forwarded-proto") ?: ctx.sessionProtocol().uriText()
         val host = headers.get("x-forwarded-host") ?: headers.get("host") ?: "localhost"

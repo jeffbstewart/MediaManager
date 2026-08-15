@@ -39,10 +39,7 @@ class RokuFeedHttpService {
     private val mapper = ObjectMapper().apply { enable(SerializationFeature.INDENT_OUTPUT) }
 
     private fun getConfiguredBaseUrl(ctx: ServiceRequestContext): String {
-        val configured = AppConfig.findAll()
-            .firstOrNull { it.config_key == "roku_base_url" }
-            ?.config_val
-        if (!configured.isNullOrBlank()) return configured.trimEnd('/')
+        AppConfig.publicBaseUrl()?.let { return it }
         val host = ctx.request().headers().get("host") ?: "localhost"
         return "http://$host"
     }

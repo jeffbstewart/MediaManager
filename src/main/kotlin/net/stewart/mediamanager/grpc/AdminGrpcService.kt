@@ -1189,7 +1189,12 @@ class AdminGrpcService(
             // Iterate all known setting keys and emit only those that have a mapping
             for (settingKey in SettingKey.entries) {
                 val configKey = settingKey.toConfigKey() ?: continue
-                val rawVal = configByKey[configKey]?.config_val ?: ""
+                val rawVal = configByKey[configKey]?.config_val
+                    // Pre-rename databases hold the public base URL under
+                    // the legacy key; surface it as the current setting.
+                    ?: if (configKey == AppConfig.PUBLIC_BASE_URL) {
+                        configByKey[AppConfig.LEGACY_PUBLIC_BASE_URL]?.config_val ?: ""
+                    } else ""
                 // Mask sensitive values — show presence but not content
                 val configVal = if (settingKey in SENSITIVE_SETTINGS && rawVal.isNotBlank()) {
                     "••••••••"
@@ -1230,6 +1235,17 @@ class AdminGrpcService(
                 config_key = configKey,
                 config_val = request.value
             ).save()
+        }
+
+        // Any save of the public base URL retires the legacy row so the
+        // read-time fallback can't resurrect a stale value.
+        if (configKey == AppConfig.PUBLIC_BASE_URL) {
+            AppConfig.findAll()
+                .firstOrNull { it.config_key == AppConfig.LEGACY_PUBLIC_BASE_URL }
+                ?.let { legacy ->
+                    legacy.config_val = null
+                    legacy.save()
+                }
         }
 
         // Refresh legal requirements cache if a legal setting was changed

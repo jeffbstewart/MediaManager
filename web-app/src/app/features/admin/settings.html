@@ -40,8 +40,8 @@
         </div>
         <div class="field-group">
           <label class="field-label">Public Server URL</label>
-          <input class="field-input" type="text" [value]="settings()['roku_base_url']"
-                 (input)="updateSetting('roku_base_url', $event)"
+          <input class="field-input" type="text" [value]="settings()['public_base_url']"
+                 (input)="updateSetting('public_base_url', $event)"
                  placeholder="https://media.example.com"
                  aria-label="Public Server URL" />
           <span class="helper-text">Public address devices use to reach this server, shown in pairing links and QR codes. Leave blank to auto-detect.</span>
