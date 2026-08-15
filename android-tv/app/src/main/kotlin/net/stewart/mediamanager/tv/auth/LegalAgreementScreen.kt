@@ -24,6 +24,9 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
+import io.grpc.Status
+import io.grpc.StatusException
+import io.grpc.StatusRuntimeException
 import kotlinx.coroutines.launch
 import net.stewart.mediamanager.grpc.ClientPlatform
 import net.stewart.mediamanager.grpc.agreeToTermsRequest
@@ -43,12 +46,23 @@ import net.stewart.mediamanager.tv.ui.components.LegalWebViewDialog
  * Also entered on cold start after auto-selected login — a silent
  * server-side terms-version bump will re-prompt existing users here.
  */
+/** True when the failure means the stored session is no longer valid. */
+private fun isUnauthenticated(e: Exception): Boolean {
+    val status = when (e) {
+        is StatusException -> e.status
+        is StatusRuntimeException -> e.status
+        else -> null
+    }
+    return status?.code == Status.Code.UNAUTHENTICATED
+}
+
 @Composable
 fun LegalAgreementScreen(
     grpcClient: GrpcClient,
     onCompliant: () -> Unit,
     onSignOut: () -> Unit,
-    onChangeServer: () -> Unit
+    onChangeServer: () -> Unit,
+    onSessionExpired: () -> Unit
 ) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -79,6 +93,14 @@ fun LegalAgreementScreen(
             termsUrl = response.termsOfUseUrl.takeIf { response.hasTermsOfUseUrl() && it.isNotBlank() }
             loading = false
         } catch (e: Exception) {
+            if (isUnauthenticated(e)) {
+                // Access and refresh tokens are both dead (e.g. the app
+                // was offline past the refresh window). Not an error —
+                // the account just needs a fresh sign-in.
+                TvLog.info("auth", "session expired at legal gate, routing to sign-in")
+                onSessionExpired()
+                return@LaunchedEffect
+            }
             TvLog.error("legal", "getLegalStatus failed", e)
             error = "Couldn't check agreement status: ${e.message}"
             loading = false
@@ -170,6 +192,11 @@ fun LegalAgreementScreen(
                                     TvLog.info("auth", "terms agreed (pp=v$requiredPrivacy, tou=v$requiredTerms)")
                                     onCompliant()
                                 } catch (e: Exception) {
+                                    if (isUnauthenticated(e)) {
+                                        TvLog.info("auth", "session expired agreeing to terms, routing to sign-in")
+                                        onSessionExpired()
+                                        return@launch
+                                    }
                                     TvLog.error("legal", "agreeToTerms failed", e)
                                     error = "Couldn't record agreement: ${e.message}"
                                 } finally {

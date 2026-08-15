@@ -132,6 +132,11 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                     authManager.clearServer()
                     grpcClient.resetChannel()
                     navController.navigate("setup") { popUpTo(0) { inclusive = true } }
+                },
+                onSessionExpired = {
+                    // Keep the account row; a successful login overwrites
+                    // its tokens.
+                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 }
             )
         }
