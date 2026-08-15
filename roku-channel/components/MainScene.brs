@@ -93,6 +93,9 @@ sub init()
     ' Clean up V1 registry if needed
     cleanupV1Registry()
 
+    ' Drop profiles stored under an outdated server config version
+    checkServerConfigVersion()
+
     ' Load profiles and show picker
     profiles = loadProfiles()
     if profiles.count() = 0
@@ -134,6 +137,41 @@ sub cleanupV1Registry()
     bookmarksReg.Flush()
 
     print "[MM " ; mmts() ; "] MainScene: V1 registry cleanup complete"
+end sub
+
+' ---- Server Config Version Gate ----
+
+' Version stamped onto saved profiles. Bump when a server endpoint
+' migration must invalidate every stored profile: profiles saved under
+' an older version are wiped on startup, so the channel re-enters
+' pairing instead of connecting to a dead address.
+' v2 (2026-08): the household hosting endpoint moved.
+function requiredConfigVersion() as integer
+    return 2
+end function
+
+sub checkServerConfigVersion()
+    reg = CreateObject("roRegistrySection", "Profiles")
+    countStr = reg.Read("count")
+    if countStr = "" or countStr = invalid then return  ' nothing stored
+
+    versionStr = reg.Read("configVersion")
+    version = 0
+    if versionStr <> "" and versionStr <> invalid then version = val(versionStr)
+    if version >= requiredConfigVersion() then return
+
+    print "[MM " ; mmts() ; "] MainScene: stored profiles are config v" ; str(version).trim() ; ", need v" ; str(requiredConfigVersion()).trim() ; " — clearing stale profiles"
+
+    for i = 0 to 19
+        prefix = "p" + str(i).trim() + "_"
+        reg.Delete(prefix + "serverUrl")
+        reg.Delete(prefix + "apiKey")
+        reg.Delete(prefix + "username")
+        reg.Delete(prefix + "avatarColor")
+    end for
+    reg.Delete("count")
+    reg.Delete("lastUsed")
+    reg.Flush()
 end sub
 
 ' ---- Profile Management ----
@@ -180,8 +218,11 @@ sub saveProfiles(profiles as object)
         reg.Delete(prefix + "avatarColor")
     end for
 
-    ' Write current profiles
+    ' Write current profiles, stamped with the config version so a
+    ' future endpoint migration can invalidate them (see
+    ' checkServerConfigVersion).
     reg.Write("count", str(profiles.count()).trim())
+    reg.Write("configVersion", str(requiredConfigVersion()).trim())
 
     for i = 0 to profiles.count() - 1
         prefix = "p" + str(i).trim() + "_"

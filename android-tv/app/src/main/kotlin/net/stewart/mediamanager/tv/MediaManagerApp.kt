@@ -70,7 +70,15 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                 authManager = authManager,
                 grpcClient = grpcClient,
                 onServerConfigured = {
-                    navController.navigate("login") { popUpTo("setup") { inclusive = true } }
+                    // Accounts survive a server change (clearServer keeps
+                    // them), so route by what's actually stored instead of
+                    // forcing a re-login.
+                    val next = when (authManager.appState()) {
+                        AppState.NEEDS_SERVER, AppState.NEEDS_LOGIN -> "login"
+                        AppState.PICK_ACCOUNT -> "picker"
+                        AppState.AUTHENTICATED -> "legal"
+                    }
+                    navController.navigate(next) { popUpTo("setup") { inclusive = true } }
                 }
             )
         }
@@ -117,6 +125,13 @@ fun MediaManagerApp(authManager: AuthManager, grpcClient: GrpcClient) {
                     grpcClient.resetChannel()
                     val next = if (authManager.getAccountUsernames().isNotEmpty()) "picker" else "login"
                     navController.navigate(next) { popUpTo(0) { inclusive = true } }
+                },
+                onChangeServer = {
+                    // Works fully offline: drops only the stored endpoint,
+                    // keeping accounts for when the server is reachable again.
+                    authManager.clearServer()
+                    grpcClient.resetChannel()
+                    navController.navigate("setup") { popUpTo(0) { inclusive = true } }
                 }
             )
         }

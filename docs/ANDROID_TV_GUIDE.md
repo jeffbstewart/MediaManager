@@ -111,7 +111,7 @@ adb install -r android-tv/app/build/outputs/apk/release/app-release.apk
 
 ## First Launch
 
-1. **Server Setup** — enter your server hostname and port. TLS is enabled by default (port 8443 in the reference HAProxy deployment). Toggle TLS off for direct LAN connections — the server's Armeria port (default 9090) carries both gRPC and HTTP on the same address, so a single host:port entry covers everything.
+1. **Server Setup** — enter your server hostname and port. TLS is enabled by default (port 443). Toggle TLS off for direct LAN connections (default port 9090).
 
 2. **Login** — enter your Media Manager username and password. The app stores tokens locally so you don't need to log in again.
 

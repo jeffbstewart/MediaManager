@@ -47,10 +47,12 @@ import net.stewart.mediamanager.tv.ui.components.LegalWebViewDialog
 fun LegalAgreementScreen(
     grpcClient: GrpcClient,
     onCompliant: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onChangeServer: () -> Unit
 ) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf(0) }
     var privacyUrl by remember { mutableStateOf<String?>(null) }
     var termsUrl by remember { mutableStateOf<String?>(null) }
     var requiredPrivacy by remember { mutableStateOf(0) }
@@ -60,7 +62,7 @@ fun LegalAgreementScreen(
     var agreeing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(attempt) {
         try {
             val response = grpcClient.withAuth {
                 grpcClient.authService().getLegalStatus(getLegalStatusRequest {
@@ -96,8 +98,22 @@ fun LegalAgreementScreen(
             loading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             error != null -> Column(modifier = Modifier.align(Alignment.Center)) {
                 Text(error!!, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "To sign in to a different server, choose Change Server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(16.dp))
-                OutlinedButton(onClick = onSignOut) { Text("Sign Out") }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = {
+                        error = null
+                        loading = true
+                        attempt++
+                    }) { Text("Retry") }
+                    OutlinedButton(onClick = onChangeServer) { Text("Change Server") }
+                    OutlinedButton(onClick = onSignOut) { Text("Sign Out") }
+                }
             }
             else -> Column(
                 modifier = Modifier.fillMaxSize(),

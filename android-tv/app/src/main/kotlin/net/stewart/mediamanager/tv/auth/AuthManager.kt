@@ -2,6 +2,7 @@ package net.stewart.mediamanager.tv.auth
 
 import android.content.Context
 import android.util.Base64
+import net.stewart.mediamanager.tv.log.TvLog
 
 /**
  * Navigation state derived from stored server config and accounts.
@@ -23,57 +24,84 @@ enum class AppState {
 class AuthManager(context: Context) {
     private val prefs = context.getSharedPreferences("mm_auth", Context.MODE_PRIVATE)
 
+    companion object {
+        /**
+         * Version of the stored server configuration. Bump this when a
+         * server endpoint migration must invalidate every previously
+         * stored endpoint: [appState] discards any config stamped with an
+         * older version, returning the app to the server-setup screen as
+         * though no server had ever been configured.
+         *
+         * v2 (2026-08): the household hosting endpoint moved; v1 configs
+         * all point at a dead address.
+         */
+        const val SERVER_CONFIG_VERSION = 2
+        private const val KEY_CONFIG_VERSION = "server_config_version"
+    }
+
     // ── Server connection ────────────────────────────────────────────
+
+    // The server exposes gRPC, HTTP, and streaming on a single Armeria
+    // port, so one host + one port fully describes the endpoint. (Older
+    // builds stored split grpc/http host+port pairs; those keys are
+    // pre-v2 and get purged by the config-version gate in appState.)
 
     var useTls: Boolean
         get() = prefs.getBoolean("use_tls", true)
         private set(value) { prefs.edit().putBoolean("use_tls", value).apply() }
 
-    var grpcHost: String?
-        get() = prefs.getString("grpc_host", null)
-        private set(value) { prefs.edit().putString("grpc_host", value).apply() }
+    var host: String?
+        get() = prefs.getString("server_host", null)
+        private set(value) { prefs.edit().putString("server_host", value).apply() }
 
-    var grpcPort: Int
-        get() = prefs.getInt("grpc_port", if (useTls) 8443 else 9090)
-        private set(value) { prefs.edit().putInt("grpc_port", value).apply() }
-
-    var httpHost: String?
-        get() = prefs.getString("http_host", null)
-        private set(value) { prefs.edit().putString("http_host", value).apply() }
-
-    var httpPort: Int
-        get() = prefs.getInt("http_port", if (useTls) 8443 else 8080)
-        private set(value) { prefs.edit().putInt("http_port", value).apply() }
+    var port: Int
+        get() = prefs.getInt("server_port", if (useTls) 443 else 9090)
+        private set(value) { prefs.edit().putInt("server_port", value).apply() }
 
     /** Friendly label for the login screen. */
-    val serverHost: String? get() = grpcHost
+    val serverHost: String? get() = host
 
     /** HTTP base URL for images and video. */
     val httpBaseUrl: String?
         get() {
-            val host = httpHost ?: return null
+            val h = host ?: return null
             val scheme = if (useTls) "https" else "http"
-            return "$scheme://$host:$httpPort"
+            val defaultPort = if (useTls) 443 else 80
+            return if (port == defaultPort) "$scheme://$h" else "$scheme://$h:$port"
         }
 
-    fun configureTlsServer(host: String, port: Int = 8443) {
+    fun configureTlsServer(host: String, port: Int = 443) {
         this.useTls = true
-        this.grpcHost = host
-        this.httpHost = host
-        this.grpcPort = port
-        this.httpPort = port
+        this.host = host
+        this.port = port
+        prefs.edit().putInt(KEY_CONFIG_VERSION, SERVER_CONFIG_VERSION).apply()
     }
 
-    fun configurePlaintextServer(host: String, grpcPort: Int = 9090, httpPort: Int = 8080) {
+    fun configurePlaintextServer(host: String, port: Int = 9090) {
         this.useTls = false
-        this.grpcHost = host
-        this.httpHost = host
-        this.grpcPort = grpcPort
-        this.httpPort = httpPort
+        this.host = host
+        this.port = port
+        prefs.edit().putInt(KEY_CONFIG_VERSION, SERVER_CONFIG_VERSION).apply()
     }
 
+    /**
+     * Forget the server endpoint but keep stored accounts. Access and
+     * refresh tokens are issued by the server, not bound to its address,
+     * so if the same server is later configured at a new address the
+     * accounts sign straight back in.
+     */
     fun clearServer() {
-        prefs.edit().clear().apply()
+        prefs.edit()
+            .remove("use_tls")
+            .remove("server_host")
+            .remove("server_port")
+            // Legacy split-endpoint keys from pre-v2 builds.
+            .remove("grpc_host")
+            .remove("grpc_port")
+            .remove("http_host")
+            .remove("http_port")
+            .remove(KEY_CONFIG_VERSION)
+            .apply()
     }
 
     // ── Multi-account ────────────────────────────────────────────────
@@ -149,7 +177,17 @@ class AuthManager(context: Context) {
     // ── Derived navigation state ─────────────────────────────────────
 
     fun appState(): AppState {
-        if (grpcHost == null) return AppState.NEEDS_SERVER
+        if (host == null || prefs.getInt(KEY_CONFIG_VERSION, 1) < SERVER_CONFIG_VERSION) {
+            // No endpoint, or one stored before the current migration —
+            // pre-migration endpoints point at a dead address. Discard and
+            // re-run server setup; accounts survive and reconnect once the
+            // new endpoint is entered.
+            if (prefs.contains("server_host") || prefs.contains("grpc_host")) {
+                TvLog.info("auth", "stored server config predates v$SERVER_CONFIG_VERSION, discarding endpoint")
+                clearServer()
+            }
+            return AppState.NEEDS_SERVER
+        }
         val accounts = getAccountUsernames()
         if (accounts.isEmpty()) return AppState.NEEDS_LOGIN
         if (accounts.size == 1) {
