@@ -630,7 +630,7 @@ Temporary stream files are written to `data/live-tv-streams/` inside the contain
 |---------|---------|
 | **NAS Root Path** | Root directory of your media files |
 | **FFmpeg Path** | Path to FFmpeg binary (auto-detected in Docker) |
-| **Roku Base URL** | Base URL for Roku feed poster/stream URLs (auto-detected if blank) |
+| **Public Server URL** | The server's public base URL, used in pairing links, QR codes, device stream URLs, the Roku feed, and the address clients adopt from discovery (auto-detected if blank). Stored as `public_base_url`; pre-rename databases still holding `roku_base_url` are read through a fallback. |
 | **Buddy API Keys** | Named API keys for Transcode Buddy workers (bcrypt-hashed, shown once at creation). Supports multiple keys with per-key delete. |
 | **Lease Duration** | How long a buddy lease lasts before expiring |
 | **Keepa API Key** | API key from keepa.com for automated replacement value estimation |

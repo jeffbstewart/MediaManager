@@ -112,8 +112,17 @@ struct TermsAgreementView: View {
 
                 Spacer()
 
-                Button("Sign out") {
-                    Task { await authManager.logout() }
+                // Both are local-only, so this screen stays escapable
+                // when the server is unreachable — otherwise agreeing
+                // is the only way forward and agreeing needs the
+                // server.
+                HStack(spacing: 24) {
+                    Button("Use a different server") {
+                        authManager.changeServer()
+                    }
+                    Button("Sign out") {
+                        Task { await authManager.logout() }
+                    }
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)

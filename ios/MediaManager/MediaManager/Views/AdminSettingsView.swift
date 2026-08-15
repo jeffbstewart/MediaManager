@@ -18,7 +18,7 @@ struct AdminSettingsView: View {
                     Section("Paths") {
                         settingField("nas_root_path", label: "NAS Root Path")
                         settingField("ffmpeg_path", label: "FFmpeg Path")
-                        settingField("roku_base_url", label: "Roku Base URL")
+                        settingField("public_base_url", label: "Public Server URL")
                     }
 
                     Section("Personal Videos") {

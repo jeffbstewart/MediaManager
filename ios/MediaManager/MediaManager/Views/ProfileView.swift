@@ -19,37 +19,57 @@ struct ProfileView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
-            } else if let profile {
+            } else {
+                // The list renders whether or not the profile loaded.
+                // It used to render only on success, which hid Sign Out
+                // exactly when the server was unreachable — the one
+                // moment a user most wants to sign out or re-point the
+                // app at a new address.
                 List {
-                    Section("Account") {
-                        LabeledContent("Username", value: profile.username ?? "-")
-                        LabeledContent("Display Name", value: profile.displayName ?? "-")
-                        LabeledContent("Role", value: profile.roleDisplay)
-                        if let ceiling = profile.ratingCeilingLabel {
-                            LabeledContent("Rating Limit", value: ceiling)
-                        }
-                    }
-
-                    Section("Live TV Quality") {
-                        Picker("Minimum Quality", selection: $tvQuality) {
-                            ForEach(1...5, id: \.self) { q in
-                                Text(String(repeating: "\u{2605}", count: q) +
-                                     String(repeating: "\u{2606}", count: 5 - q))
-                                    .tag(q)
+                    if let profile {
+                        Section("Account") {
+                            LabeledContent("Username", value: profile.username ?? "-")
+                            LabeledContent("Display Name", value: profile.displayName ?? "-")
+                            LabeledContent("Role", value: profile.roleDisplay)
+                            if let ceiling = profile.ratingCeilingLabel {
+                                LabeledContent("Rating Limit", value: ceiling)
                             }
                         }
-                        .onChange(of: tvQuality) { _, newValue in
-                            Task { try? await dataModel.updateTvQuality(newValue) }
-                        }
-                    }
 
-                    Section {
-                        Button("Change Password") {
-                            showChangePassword = true
+                        Section("Live TV Quality") {
+                            Picker("Minimum Quality", selection: $tvQuality) {
+                                ForEach(1...5, id: \.self) { q in
+                                    Text(String(repeating: "\u{2605}", count: q) +
+                                         String(repeating: "\u{2606}", count: 5 - q))
+                                        .tag(q)
+                                }
+                            }
+                            .onChange(of: tvQuality) { _, newValue in
+                                Task { try? await dataModel.updateTvQuality(newValue) }
+                            }
                         }
 
-                        Button("Active Sessions") {
-                            showSessions = true
+                        Section {
+                            Button("Change Password") {
+                                showChangePassword = true
+                            }
+
+                            Button("Active Sessions") {
+                                showSessions = true
+                            }
+                        }
+                    } else {
+                        Section {
+                            Label("Can't reach the server", systemImage: "exclamationmark.icloud")
+                                .foregroundStyle(.orange)
+                            Button("Retry") {
+                                loadTask = Task {
+                                    await authManager.retryConnection()
+                                    await loadProfile()
+                                }
+                            }
+                        } footer: {
+                            Text("Your profile couldn't be loaded. If the server moved, choose Change Server below and enter its new address — you'll stay signed in.")
                         }
                     }
 
@@ -66,6 +86,12 @@ struct ProfileView: View {
                     }
 
                     Section {
+                        // Both are local-only, so they work with the
+                        // server down.
+                        Button("Change Server") {
+                            authManager.changeServer()
+                        }
+
                         Button("Sign Out", role: .destructive) {
                             showLogoutConfirmation = true
                         }
