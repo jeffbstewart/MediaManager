@@ -17,6 +17,35 @@ Server / Android TV / Roku get their own tag schemes (or none — the server is 
 
 ---
 
+## iOS 1.2 (build 12) — 2026-08-15
+
+**TestFlight release.** Recovery from the 2026-08 server endpoint migration (fixes #99), mirroring what PR #98 did for Roku and Android TV. Installs carrying the old address come up at server setup instead of wedged, and every escape hatch works with the server unreachable.
+
+### Server endpoint
+
+- Server config version (now 2) stamped into the Keychain with the endpoint; anything older is discarded on launch and the app starts at server setup
+- Uninstall + reinstall now clears the Keychain, so a reinstall genuinely forgets the server and account (previously both survived app deletion)
+- One stored endpoint instead of two — Armeria serves gRPC, HTTP, SPA, and streaming on a single port, so images and video no longer track a second address that could rot independently
+- The stored address is Discover's canonical `secure_url`, re-read every launch, so a server that moves is followed automatically while the old address still answers
+- Plaintext default port 9090 (was 8080); TLS default stays 443
+
+### Recovery UX
+
+- Server Unreachable prompt offers Retry / Go Offline / Change Server / Sign Out, all functional with no network
+- Change Server drops only the address and keeps the session — tokens are server-issued, not address-bound, so re-pointing resumes without re-entering credentials
+- Profile renders Change Server + Sign Out even when the profile fetch fails; previously the whole screen was blank, hiding Sign Out exactly when it was needed
+- Sign-out no longer waits on the revoke round-trip, so it's instant with the server dark
+- Terms gate gains "Use a different server"
+- Connection failures surface the gRPC status as readable text instead of "GRPCCore.RPCError error 1"
+
+### Admin + misc
+
+- Settings field follows the server's `public_base_url` rename, labelled "Public Server URL"
+- Removed a leftover `INSearchForMediaIntent` declaration that wasn't wired to anything (build 12)
+- Siri video playback (movies + TV resume) and car detection (build 11, never tagged)
+
+---
+
 ## iOS 1.2 (build 10) — 2026-06-07
 
 **TestFlight release.** First build that's fully usable offline for movies, TV episodes, and books on the same device; close-button responsiveness on Live TV / Camera streams is fixed; mini-player no longer flexes mid-navigation. CarPlay can cold-launch without unlocking the phone.
