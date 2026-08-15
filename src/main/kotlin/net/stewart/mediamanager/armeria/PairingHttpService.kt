@@ -96,12 +96,7 @@ class PairingHttpService {
             "code" to pairCode.code,
             "expires_in" to 300
         )
-        val baseUrl = AppConfig.findAll()
-            .firstOrNull { it.config_key == "roku_base_url" }
-            ?.config_val?.trimEnd('/')
-        if (!baseUrl.isNullOrBlank()) {
-            result["base_url"] = baseUrl
-        }
+        AppConfig.publicBaseUrl()?.let { result["base_url"] = it }
         return jsonResponse(HttpStatus.OK, result)
     }
 
@@ -129,12 +124,7 @@ class PairingHttpService {
         if (pairStatus.status == "paired") {
             result["token"] = pairStatus.token
             result["username"] = pairStatus.username
-            val baseUrl = AppConfig.findAll()
-                .firstOrNull { it.config_key == "roku_base_url" }
-                ?.config_val?.trimEnd('/')
-            if (!baseUrl.isNullOrBlank()) {
-                result["base_url"] = baseUrl
-            }
+            AppConfig.publicBaseUrl()?.let { result["base_url"] = it }
         }
         return jsonResponse(HttpStatus.OK, result)
     }
@@ -152,12 +142,7 @@ class PairingHttpService {
             return HttpResponse.of(HttpStatus.BAD_REQUEST)
         }
 
-        val configuredBase = AppConfig.findAll()
-            .firstOrNull { it.config_key == "roku_base_url" }
-            ?.config_val?.trimEnd('/')
-        val baseUrl = if (!configuredBase.isNullOrBlank()) {
-            configuredBase
-        } else {
+        val baseUrl = AppConfig.publicBaseUrl() ?: run {
             val host = ctx.request().headers().get("host") ?: "localhost"
             "http://$host"
         }

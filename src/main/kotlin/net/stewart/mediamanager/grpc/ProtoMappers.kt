@@ -515,7 +515,9 @@ private val SETTING_KEY_TO_CONFIG = mapOf(
     SettingKey.SETTING_KEY_NAS_ROOT_PATH to "nas_root_path",
     SettingKey.SETTING_KEY_FFMPEG_PATH to "ffmpeg_path",
     SettingKey.SETTING_KEY_GO2RTC_PATH to "go2rtc_path",
-    SettingKey.SETTING_KEY_ROKU_BASE_URL to "roku_base_url",
+    // Storage key renamed from "roku_base_url" (the value is the server's
+    // public base URL, not Roku-specific); reads fall back to the old row.
+    SettingKey.SETTING_KEY_PUBLIC_BASE_URL to "public_base_url",
     SettingKey.SETTING_KEY_GO2RTC_API_PORT to "go2rtc_api_port",
     SettingKey.SETTING_KEY_PERSONAL_VIDEO_ENABLED to "personal_video_enabled",
     SettingKey.SETTING_KEY_FOR_MOBILE_ENABLED to "for_mobile_enabled",

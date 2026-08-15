@@ -41,12 +41,14 @@ object CommandLineFlags {
     var h2ConsolePort: Int = 8082
     var maxTranscodeDeletes: Int = 25
     var disableLocalTranscoding: Boolean = false
+    var disableSsdp: Boolean = false
     var internalPort: Int = 8081
 
     fun parseFlags(args: Array<String>) {
         developerMode = args.contains("--developer_mode")
         listenOnAllInterfaces = args.contains("--listen_on_all_interfaces")
         disableLocalTranscoding = args.contains("--disable_local_transcoding")
+        disableSsdp = args.contains("--disable_ssdp")
         args.forEachIndexed { i, arg ->
             when (arg) {
                 "--port" -> args.getOrNull(i + 1)?.toIntOrNull()?.let { port = it }
@@ -208,10 +210,16 @@ fun main(args: Array<String>) {
     pacemaker.start()
     Runtime.getRuntime().addShutdownHook(Thread { pacemaker.stop() })
 
-    // SSDP responder for Roku device discovery
-    val ssdpResponder = SsdpResponder(CommandLineFlags.port)
-    ssdpResponder.start()
-    Runtime.getRuntime().addShutdownHook(Thread { ssdpResponder.shutdown() })
+    // SSDP responder for Roku device discovery. Disabled on secondary
+    // instances (e.g. the App Store demo backend) so devices on the LAN
+    // only ever discover the primary server.
+    if (CommandLineFlags.disableSsdp) {
+        log.info("SSDP responder DISABLED (--disable_ssdp).")
+    } else {
+        val ssdpResponder = SsdpResponder(CommandLineFlags.port)
+        ssdpResponder.start()
+        Runtime.getRuntime().addShutdownHook(Thread { ssdpResponder.shutdown() })
+    }
 
     if (CommandLineFlags.developerMode) {
         val h2Web = Server.createWebServer(

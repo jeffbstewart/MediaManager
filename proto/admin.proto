@@ -774,7 +774,11 @@ enum SettingKey {
   SETTING_KEY_GO2RTC_PATH = 3;
 
   // Networking
-  SETTING_KEY_ROKU_BASE_URL = 4;
+  // The server's public base URL ("Public Server URL" in Settings), used
+  // in pairing links, QR codes, and device stream URLs. Renamed from
+  // SETTING_KEY_ROKU_BASE_URL; the field number is unchanged so older
+  // clients stay wire-compatible.
+  SETTING_KEY_PUBLIC_BASE_URL = 4;
   SETTING_KEY_GO2RTC_API_PORT = 5;
 
   // Feature toggles

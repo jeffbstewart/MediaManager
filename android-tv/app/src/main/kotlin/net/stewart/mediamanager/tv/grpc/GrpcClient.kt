@@ -33,9 +33,9 @@ class GrpcClient(private val authManager: AuthManager) {
         val existing = channel
         if (existing != null && !existing.isShutdown) return existing
 
-        val host = authManager.grpcHost
+        val host = authManager.host
             ?: throw IllegalStateException("No server configured")
-        val port = authManager.grpcPort
+        val port = authManager.port
 
         val newChannel = buildChannel(host, port, authManager.useTls, AuthInterceptor(authManager))
         channel = newChannel

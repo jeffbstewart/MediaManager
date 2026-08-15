@@ -43,9 +43,9 @@ test.describe('admin settings — save', () => {
   test('Save button POSTs /settings with the form body', async ({ page }) => {
     await setup(page);
     // The fixture sets is_docker=true → NAS Root + FFmpeg inputs are
-    // readonly. Mutate the Roku Base URL input (always editable) so
+    // readonly. Mutate the Public Server URL input (always editable) so
     // the Save button enables.
-    await page.locator('app-settings input[aria-label="Roku Base URL"]').fill('https://example.com');
+    await page.locator('app-settings input[aria-label="Public Server URL"]').fill('https://example.com');
     const req = page.waitForRequest(r =>
       r.method() === 'POST' && r.url().endsWith('/api/v2/admin/settings'),
       { timeout: 3_000 },

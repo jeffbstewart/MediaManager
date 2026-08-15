@@ -39,12 +39,12 @@ fun ServerSetupScreen(
 
     // TLS mode: single host + port
     var tlsHost by remember { mutableStateOf("") }
-    var tlsPort by remember { mutableStateOf("8443") }
+    var tlsPort by remember { mutableStateOf("443") }
 
-    // Plaintext mode: single host, separate ports
+    // Plaintext mode: single host + port (Armeria serves gRPC, HTTP,
+    // and streaming on the same port)
     var localHost by remember { mutableStateOf("") }
-    var grpcPort by remember { mutableStateOf("9090") }
-    var httpPort by remember { mutableStateOf("8080") }
+    var localPort by remember { mutableStateOf("9090") }
 
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -123,7 +123,7 @@ fun ServerSetupScreen(
                             error = "Hostname is required"
                             return@ConnectOrLoading
                         }
-                        val port = tlsPort.toIntOrNull() ?: 8443
+                        val port = tlsPort.toIntOrNull() ?: 443
                         scope.launch {
                             loading = true; error = null
                             try {
@@ -146,39 +146,32 @@ fun ServerSetupScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     TvOutlinedTextField(
-                        value = grpcPort,
-                        onValueChange = { grpcPort = it },
-                        label = "gRPC port",
+                        value = localPort,
+                        onValueChange = { localPort = it },
+                        label = "Port",
                         modifier = Modifier.width(120.dp)
                     )
-                    TvOutlinedTextField(
-                        value = httpPort,
-                        onValueChange = { httpPort = it },
-                        label = "HTTP port",
-                        modifier = Modifier.width(120.dp)
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                ConnectOrLoading(loading) {
-                    if (localHost.isBlank()) {
-                        error = "Server address is required"
-                        return@ConnectOrLoading
-                    }
-                    val gp = grpcPort.toIntOrNull() ?: 9090
-                    val hp = httpPort.toIntOrNull() ?: 8080
-                    scope.launch {
-                        loading = true; error = null
-                        try {
-                            grpcClient.testDiscover(localHost.trim(), gp, false)
-                            authManager.configurePlaintextServer(localHost.trim(), gp, hp)
-                            grpcClient.resetChannel()
-                            onServerConfigured()
-                        } catch (e: Exception) {
-                            error = "Cannot reach server: ${e.message}"
-                        } finally { loading = false }
+                    ConnectOrLoading(loading) {
+                        if (localHost.isBlank()) {
+                            error = "Server address is required"
+                            return@ConnectOrLoading
+                        }
+                        val port = localPort.toIntOrNull() ?: 9090
+                        scope.launch {
+                            loading = true; error = null
+                            try {
+                                grpcClient.testDiscover(localHost.trim(), port, false)
+                                authManager.configurePlaintextServer(localHost.trim(), port)
+                                grpcClient.resetChannel()
+                                onServerConfigured()
+                            } catch (e: Exception) {
+                                error = "Cannot reach server: ${e.message}"
+                            } finally { loading = false }
+                        }
                     }
                 }
             }

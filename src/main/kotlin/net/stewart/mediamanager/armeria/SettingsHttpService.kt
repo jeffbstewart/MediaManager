@@ -31,7 +31,7 @@ class SettingsHttpService {
     private val isDocker = java.io.File("/.dockerenv").exists()
 
     private val configKeys = listOf(
-        "nas_root_path", "ffmpeg_path", "roku_base_url",
+        "nas_root_path", "ffmpeg_path", AppConfig.PUBLIC_BASE_URL,
         "personal_video_enabled", "personal_video_nas_dir",
         // Books — BookScannerAgent scans this directory every hour for
         // .epub / .pdf files. Empty = scanner idle.
@@ -60,7 +60,12 @@ class SettingsHttpService {
 
         val configs = AppConfig.findAll()
         val settings = configKeys.associateWith { key ->
-            configs.firstOrNull { it.config_key == key }?.config_val ?: ""
+            configs.firstOrNull { it.config_key == key }?.config_val
+                // Pre-rename databases hold the public base URL under the
+                // legacy key; surface it as the current setting.
+                ?: if (key == AppConfig.PUBLIC_BASE_URL) {
+                    configs.firstOrNull { it.config_key == AppConfig.LEGACY_PUBLIC_BASE_URL }?.config_val ?: ""
+                } else ""
         }
 
         val buddyKeys = BuddyKeyService.getAllKeys().map { key ->
@@ -98,6 +103,17 @@ class SettingsHttpService {
                 existing.save()
             } else if (trimmed.isNotBlank()) {
                 AppConfig(config_key = key, config_val = trimmed).save()
+            }
+
+            // Any save of the public base URL retires the legacy row so
+            // the read-time fallback can't resurrect a stale value.
+            if (key == AppConfig.PUBLIC_BASE_URL) {
+                AppConfig.findAll()
+                    .firstOrNull { it.config_key == AppConfig.LEGACY_PUBLIC_BASE_URL }
+                    ?.let { legacy ->
+                        legacy.config_val = null
+                        legacy.save()
+                    }
             }
         }
 

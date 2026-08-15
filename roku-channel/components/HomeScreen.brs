@@ -179,6 +179,35 @@ sub onFeedError()
     print "[MM " ; mmts() ; "] HomeScreen: feed error — " ; errorMsg
     m.loadingLabel.text = "Failed to load content"
     m.loadingLabel.visible = true
+    showFeedErrorDialog()
+end sub
+
+sub showFeedErrorDialog()
+    dialog = createObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Can't Reach Server"
+    dialog.message = [
+        "Could not load content from " + m.serverUrl + ".",
+        "To sign in to a different server, switch profiles and add a new profile. Press * on a profile to remove it."
+    ]
+    dialog.buttons = ["Retry", "Switch Profile"]
+    dialog.observeField("buttonSelected", "onFeedErrorDialogButton")
+    m.top.getScene().dialog = dialog
+end sub
+
+sub onFeedErrorDialogButton()
+    dialog = m.top.getScene().dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    m.top.getScene().dialog = invalid
+
+    if buttonIndex = 0
+        print "[MM " ; mmts() ; "] HomeScreen: feed error dialog — retry"
+        fetchHomeFeed()
+    else
+        print "[MM " ; mmts() ; "] HomeScreen: feed error dialog — switch profile"
+        m.top.switchProfileRequested = true
+    end if
 end sub
 
 sub buildCarouselsFromFeed(carousels as object)
