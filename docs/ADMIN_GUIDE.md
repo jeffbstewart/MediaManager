@@ -38,6 +38,7 @@ Pass via `./gradlew run --args="--flag"` or as Docker CMD arguments.
 | `--listen_on_all_interfaces` | off | Bind to 0.0.0.0 instead of 127.0.0.1 |
 | `--max_transcode_deletes N` | 25 | Mass-deletion guard threshold for NAS cleanup |
 | `--disable_local_transcoding` | off | Stop the in-process TranscoderAgent. Remote buddies can still claim work. The Docker image ships with this on so transcoding is buddy-only by default. |
+| `--disable_ssdp` | off | Don't answer SSDP discovery. Set on secondary instances (e.g. a demo backend) so devices on the LAN only discover the primary server. |
 
 ---
 
