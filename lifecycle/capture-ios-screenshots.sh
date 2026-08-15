@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Capture App Store screenshots of the iOS app against the public
-# demo server (https://appstoredemo.15mcmahon.net:8443).
+# demo server (DEMO_BASE_URL, e.g. https://demo.example.com).
 #
 # Sources app_store_demo_setup/secrets/.env, creates fresh
 # disposable simulators (never reuses existing ones — those may be

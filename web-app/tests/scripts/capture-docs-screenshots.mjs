@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Capture documentation screenshots against a real running server
-// (typically the App Store demo: appstoredemo.15mcmahon.net:8443).
+// (typically the App Store demo instance, DEMO_BASE_URL below).
 //
 // This is NOT part of the axe / functional Playwright suite — those
 // run against ng serve with mocked /api/** routes. This script
