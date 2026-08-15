@@ -39,12 +39,12 @@
           @if (isDocker()) { <span class="helper-text">Locked to container path</span> }
         </div>
         <div class="field-group">
-          <label class="field-label">Roku Base URL</label>
+          <label class="field-label">Public Server URL</label>
           <input class="field-input" type="text" [value]="settings()['roku_base_url']"
                  (input)="updateSetting('roku_base_url', $event)"
-                 placeholder="https://myserver.example.com:8080"
-                 aria-label="Roku Base URL" />
-          <span class="helper-text">Base URL for Roku feed. Leave blank to auto-detect.</span>
+                 placeholder="https://media.example.com"
+                 aria-label="Public Server URL" />
+          <span class="helper-text">Public address devices use to reach this server, shown in pairing links and QR codes. Leave blank to auto-detect.</span>
         </div>
 
         <!-- Personal / Home Videos -->
