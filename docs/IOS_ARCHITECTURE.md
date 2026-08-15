@@ -96,6 +96,33 @@ The SwiftUI app lives in `ios/MediaManager/MediaManager/`.
 - `Services/AuthManager.swift` — server discovery, login, token refresh, biometric gate, sign-out
 - `Services/KeychainService.swift` — credential storage
 
+**Server endpoint.** One address describes the whole server: Armeria
+serves gRPC, HTTP, the SPA, and streaming on a single port, so
+`AuthManager` stores one URL (Keychain `server_url`) and configures both
+`GrpcClient` and `APIClient` from it. The value stored is the canonical
+`secure_url` reported by `InfoService/Discover`, not whatever the user
+typed, and every launch re-reads it — so a server that moves is followed
+automatically as long as the old address still answers once.
+
+Two mechanisms handle the case where it doesn't:
+
+- **Config version gate** (`AuthManager.serverConfigVersion`, currently
+  2). The version is stamped into the Keychain alongside the URL. On
+  launch, an endpoint stamped below the current version is discarded and
+  the app starts at server setup, as though no server had been
+  configured. Bump it when an address migration must invalidate every
+  previously stored endpoint.
+- **Fresh-install purge.** Keychain items survive app deletion; the app
+  container doesn't. On first launch into a container with no prior
+  state, leftover Keychain rows are cleared, so reinstalling really does
+  forget the server.
+
+`changeServer()` drops the address but keeps the tokens (they're
+server-issued, not address-bound) so re-pointing resumes the session;
+`disconnectServer()` is the full reset. Sign-out never waits on the
+network — the revoke RPC is fired to the side — so both work with the
+server dark.
+
 **Data model layer:**
 
 - `DataModel/OnlineDataModel.swift` — primary, routes to the offline delegate when `isOnline == false`

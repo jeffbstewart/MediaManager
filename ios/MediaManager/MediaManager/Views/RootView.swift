@@ -15,6 +15,12 @@ struct RootView: View {
         return false
     }
 
+    private var unreachableMessage: String {
+        let base = "Can't reach the server. If its address changed, choose Change Server and enter the new one — you'll stay signed in."
+        guard dataModel.downloads.hasCompletedDownloads else { return base }
+        return base + "\n\nOr switch to offline mode to browse and play your downloaded content."
+    }
+
     var body: some View {
         content
             .onChange(of: isAuthed, initial: true) { _, authed in
@@ -63,15 +69,31 @@ struct RootView: View {
                     ForcedPasswordChangeView()
                 }
                 .alert("Server Unreachable", isPresented: $showOfflineOffer) {
-                    Button("Go Offline") {
-                        dataModel.downloads.isOfflineMode = true
+                    Button("Retry") {
+                        Task { await authManager.retryConnection() }
+                    }
+                    if dataModel.downloads.hasCompletedDownloads {
+                        Button("Go Offline") {
+                            dataModel.downloads.isOfflineMode = true
+                        }
+                    }
+                    // Both of these are local-only, so they work with
+                    // the server dark — which is the whole point. Change
+                    // Server keeps the session: tokens are issued by the
+                    // server, not tied to its address, so re-pointing at
+                    // the same server picks up where it left off.
+                    Button("Change Server") {
+                        authManager.changeServer()
+                    }
+                    Button("Sign Out", role: .destructive) {
+                        Task { await authManager.logout() }
                     }
                     Button("Keep Trying", role: .cancel) {}
                 } message: {
-                    Text("Can't reach the server. You can switch to offline mode to browse and play your downloaded content.")
+                    Text(unreachableMessage)
                 }
                 .onChange(of: authManager.serverUnreachable) { _, unreachable in
-                    if unreachable && dataModel.downloads.hasCompletedDownloads && !dataModel.downloads.isOfflineMode {
+                    if unreachable && !dataModel.downloads.isOfflineMode {
                         showOfflineOffer = true
                     }
                 }

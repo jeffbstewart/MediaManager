@@ -98,9 +98,8 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 │  ┌─────────────────────────────────────┐                    │
 │  │           HAProxy                   │                    │
 │  │                                     │                    │
-│  │  https://grpc.domain:8443 ──────────┼──► NAS:9090 (gRPC) │
-│  │  https://mm.domain:8443 ────────────┼──► NAS:9090 (HTTP) │
-│  │     (LetsEncrypt wildcard cert)     │                    │
+│  │  https://mm.domain:443 ─────────────┼──► NAS:9090        │
+│  │     (LetsEncrypt wildcard cert)     │    (everything)    │
 │  └─────────────────────────────────────┘                    │
 └─────────────────────────────────────────────────────────────┘
 
@@ -116,13 +115,22 @@ See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_m
 └─────────────────────────────────────────┘
 ```
 
-**HAProxy** terminates TLS (LetsEncrypt wildcard cert) and forwards both hostnames to the NAS's main port 9090:
-- **gRPC endpoint** (`grpc.domain`): HTTP/2 (`proto h2`) to port 9090.
-- **HTTP endpoint** (`mm.domain`): HTTP/2 to port 9090 for the Angular web UI, images, and video streaming.
-- Health checks target `/health`, served on the internal monitoring port 8081.
-- Both endpoints use `timeout tunnel 1h` for long-lived connections (streaming RPCs).
+**One hostname, one port, every protocol.** HAProxy terminates TLS
+(LetsEncrypt wildcard cert) on 443 and forwards HTTP/2 (`proto h2`) to
+the NAS's main port 9090, which Armeria serves gRPC, the Angular SPA,
+images, and video streaming from alike. There is no separate gRPC
+hostname or port — the `grpc.domain` / `mm.domain` split was a
+servlet-era artifact and is gone.
 
-**iOS app** connects to the gRPC endpoint for all data operations, and to the HTTP endpoint for binary operations (images, video streaming, file downloads).
+- Health checks target `/health`, served on the internal monitoring port 8081.
+- `timeout tunnel 1h` for long-lived connections (streaming RPCs).
+- The canonical public URL is stored server-side as the `public_base_url`
+  setting and handed to clients by `InfoService/Discover` (`secure_url`),
+  so a hostname change propagates to devices on their next discovery.
+
+**Clients** (iOS, Android TV, Roku, web) each store that single address
+and use it for both data operations and binary ones (images, video
+streaming, file downloads).
 
 ### Decisions Made
 

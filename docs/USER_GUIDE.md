@@ -413,7 +413,7 @@ Media Manager includes a custom Roku channel for TV playback. See the [Roku Setu
 
 ## iOS App
 
-Media Manager has a native iOS app for iPhone and iPad. The app connects to your server's gRPC and HTTP endpoints and provides the same browsing, searching, and playback experience as the browser, plus offline downloads for watching without a network connection.
+Media Manager has a native iOS app for iPhone and iPad. The app connects to your server's single address &mdash; one hostname and port carrying gRPC, images, and streaming alike &mdash; and provides the same browsing, searching, and playback experience as the browser, plus offline downloads for watching without a network connection.
 
 ### Getting Connected
 
@@ -422,6 +422,23 @@ Media Manager has a native iOS app for iPhone and iPad. The app connects to your
 3. Once authenticated, your full library appears in the sidebar
 
 The app uses the same accounts and permissions as the web UI &mdash; your playback progress, wish list votes, and favorites sync across all devices.
+
+Whatever address you type, the app stores the canonical public URL the server reports back, and re-checks it on every launch. If your admin moves the server to a new hostname, the app follows it automatically the next time it can reach the old one.
+
+### When the Server Can't Be Reached
+
+If the server has moved and the app can't reach it any more, a **Server Unreachable** prompt offers four ways out, all of which work with the server down:
+
+| Option | What it does |
+|--------|--------------|
+| **Retry** | Rebuilds the connection and tries again |
+| **Go Offline** | Switches to browsing downloaded content (shown when you have downloads) |
+| **Change Server** | Forgets the address only &mdash; you stay signed in, so entering the new address puts you straight back in your library |
+| **Sign Out** | Signs out locally, without needing the server |
+
+The same **Change Server** and **Sign Out** buttons live at the bottom of Profile, so they're reachable even when the profile itself can't load.
+
+Deleting and reinstalling the app now also clears the stored server and sign-in &mdash; previously those lived in the iOS Keychain, which survives app deletion, so a reinstall came back up remembering a server you may have been trying to get away from.
 
 ### Downloading for Offline Playback
 

@@ -1347,7 +1347,7 @@ public extension MMSettingKey {
         case .nasRootPath: "nas_root_path"
         case .ffmpegPath: "ffmpeg_path"
         case .go2RtcPath: "go2rtc_path"
-        case .rokuBaseURL: "roku_base_url"
+        case .publicBaseURL: "public_base_url"
         case .go2RtcApiPort: "go2rtc_api_port"
         case .personalVideoEnabled: "personal_video_enabled"
         case .forMobileEnabled: "for_mobile_enabled"
@@ -1385,7 +1385,7 @@ public extension MMSettingKey {
         case "nas_root_path": .nasRootPath
         case "ffmpeg_path": .ffmpegPath
         case "go2rtc_path": .go2RtcPath
-        case "roku_base_url": .rokuBaseURL
+        case "public_base_url": .publicBaseURL
         case "go2rtc_api_port": .go2RtcApiPort
         case "personal_video_enabled": .personalVideoEnabled
         case "for_mobile_enabled": .forMobileEnabled
