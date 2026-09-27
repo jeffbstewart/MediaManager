@@ -185,7 +185,6 @@
 				Base,
 			);
 			mainGroup = AA000030;
-			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CC000001 /* XCRemoteSwiftPackageReference "swift-protobuf" */,
 				CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */,
@@ -256,7 +255,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
@@ -289,7 +288,7 @@
 				CODE_SIGN_ENTITLEMENTS = MediaManager/MediaManager.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K5743FR4T8;
 				ENABLE_PREVIEWS = YES;
