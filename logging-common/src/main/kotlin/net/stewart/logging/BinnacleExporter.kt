@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  */
 object BinnacleExporter {
 
-    /** System property read from the environment. Base URL, e.g. http://172.16.4.12:4318. */
+    /** System property read from the environment. Base URL, e.g. http://binnacle-host:4318. */
     private const val PROP_ENDPOINT = "BINNACLE_ENDPOINT"
 
     /** System property read from the environment. Shared write-path API key. */
@@ -133,7 +133,7 @@ object BinnacleExporter {
             .build()
 
         // Normalize: prepend http:// if the user gave a bare host:port
-        // (e.g. "172.16.4.12:4318"), then append /v1/logs.
+        // (e.g. "binnacle-host:4318"), then append /v1/logs.
         val base = if (endpoint.startsWith("http://") || endpoint.startsWith("https://"))
             endpoint else "http://$endpoint"
         val fullEndpoint = base.trimEnd('/') + "/v1/logs"

@@ -13,9 +13,6 @@
 # Content hash for Vaadin Dialog chunk loading (MainLayout.kt)
 039da0aa3283c862d809052d1e05f80ce5922aa4f27e77f287ec5bdfeaba3abc
 
-# Docker registry example in docs (CLAUDE.md) — actual IP loaded from env
-172.16.4.12
-
 # Example IP in Roku PairScreen placeholder text
 192.168.1.100
 

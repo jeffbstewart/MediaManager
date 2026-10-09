@@ -446,8 +446,12 @@ Console logs are stored in `.playwright-mcp/` (gitignored).
 ## Querying Binnacle Logs
 
 All MediaManager server, iOS, and Android TV logs forward to Binnacle
-(`http://172.16.4.12:8088`) via the custom SLF4J exporter in
-`logging-common/`. Binnacle exposes a small JSON query API that's more
+(`https://<binnacle-host>:<port>`) via the custom SLF4J exporter in
+`logging-common/`. The real endpoint is not in the repo: it comes from the
+`BINNACLE_URL` environment variable or a `BINNACLE_URL=...` line in the
+gitignored `secrets/binnacle.agent_visible_env` (template:
+`secrets/example.binnacle.env`). The examples below assume `BINNACLE_URL`
+is exported. Binnacle exposes a small JSON query API that's more
 useful than scraping the HTML viewer for debugging. Source is at
 `/c/programming/github/Binnacle/` — check there when the shape of a
 parameter is unclear.
@@ -455,7 +459,7 @@ parameter is unclear.
 ### Endpoint
 
 ```
-GET http://172.16.4.12:8088/api/logs/query
+GET $BINNACLE_URL/api/logs/query
 ```
 
 Response is JSON `{ "records": [...], "count_returned": N }`. Records
@@ -480,15 +484,15 @@ grep on the response body:
 
 ```bash
 # Every WARN from the main server, filter locally for CSP reports:
-curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&severity=WARN&limit=1000' \
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&severity=WARN&limit=1000" \
   | jq -r '.records[] | select(.message | test("CSP violation")) | "\(.time) \(.message)"'
 
 # Recent errors across a specific time window:
-curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&severity=ERROR&since=2026-04-18T00:00:00Z&limit=500' \
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&severity=ERROR&since=2026-04-18T00:00:00Z&limit=500" \
   | jq '.records[] | {time, message, thread: .attrs["thread.name"]}'
 
 # Anything from a specific logger:
-curl -sS 'http://172.16.4.12:8088/api/logs/query?service=mediamanager-server&limit=1000' \
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&limit=1000" \
   | jq '.records[] | select(.logger == "net.stewart.mediamanager.armeria.CspReportHttpService")'
 ```
 
@@ -513,7 +517,9 @@ lifecycle/binnacle-tail.sh --since 2026-05-01T00:00:00Z
 lifecycle/binnacle-tail.sh --raw               # raw JSON instead of formatted lines
 ```
 
-Override the endpoint with `BINNACLE_URL=...` (default `https://172.16.4.12:8088`).
+The endpoint comes from `BINNACLE_URL` (env var, else
+`secrets/binnacle.agent_visible_env`); the script exits with an error if
+neither is set.
 The script uses `curl -k` because Binnacle terminates with an internal
 self-signed cert.
 
