@@ -85,10 +85,10 @@ class UriCredentialRedactorTest {
 
     @Test fun redactsPasswordWithSpecialChars() {
         // Hash (#), caret (^), and other special chars break java.net.URI parsing
-        val url = "rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
+        val url = "rtsp://camuser:Example#Pass^word@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
         val redacted = UriCredentialRedactor.redact(url)
         assertEquals("rtsp://***:***@192.168.1.100/cam/realmonitor?channel=1&subtype=0", redacted)
-        assertFalse(redacted.contains("ab3"))
+        assertFalse(redacted.contains("Example"))
         assertFalse(redacted.contains("camuser:"))
     }
 
@@ -100,10 +100,10 @@ class UriCredentialRedactorTest {
     }
 
     @Test fun restoreCredentialsWithSpecialChars() {
-        val source = "rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
+        val source = "rtsp://camuser:Example#Pass^word@192.168.1.100/cam/realmonitor?channel=1&subtype=0"
         val edited = "rtsp://***:***@192.168.1.100/cam/realmonitor?channel=1&subtype=1"
         val restored = UriCredentialRedactor.restoreCredentials(edited, source)
-        assertEquals("rtsp://camuser:ab3#Qz^w9@192.168.1.100/cam/realmonitor?channel=1&subtype=1", restored)
+        assertEquals("rtsp://camuser:Example#Pass^word@192.168.1.100/cam/realmonitor?channel=1&subtype=1", restored)
     }
 
     @Test fun restoreCredentialsBlocksDifferentHost() {
