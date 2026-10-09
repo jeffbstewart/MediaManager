@@ -35,6 +35,60 @@ object UriCredentialRedactor {
         return credentialPattern.replace(url) { match -> "${match.groupValues[1]}://***:***@" }
     }
 
+    /** Placeholder substituted for the value of a sensitive query parameter. */
+    const val REDACTED = "REDACTED"
+
+    /** Query parameter names whose values are always credentials. Compared lowercase. */
+    private val sensitiveParamNames = setOf(
+        "key", "code", "password", "passwd", "secret", "api_key", "apikey", "auth", "session", "sig", "signature"
+    )
+
+    /**
+     * True when a query parameter named [name] carries a credential: one of
+     * [sensitiveParamNames], or anything containing "token" (`token`,
+     * `access_token`, `refresh_token`, `device_token`, ...).
+     */
+    fun isSensitiveParamName(name: String): Boolean {
+        val lower = name.lowercase()
+        return lower in sensitiveParamNames || "token" in lower
+    }
+
+    /**
+     * Replace the value of every sensitive query parameter in a raw query
+     * string (no leading `?`) with [REDACTED]; e.g. `key=abc&x=1` becomes
+     * `key=REDACTED&x=1`. Non-sensitive parameters, ordering, and encoding
+     * are preserved verbatim. Intended for log output only.
+     */
+    fun redactQuery(query: String): String {
+        if (query.isEmpty()) return query
+        return query.split('&').joinToString("&") { part ->
+            val eq = part.indexOf('=')
+            if (eq < 0) return@joinToString part
+            val rawName = part.substring(0, eq)
+            val name = try {
+                java.net.URLDecoder.decode(rawName, Charsets.UTF_8)
+            } catch (_: IllegalArgumentException) {
+                rawName
+            }
+            if (isSensitiveParamName(name)) "$rawName=$REDACTED" else part
+        }
+    }
+
+    /**
+     * Log-safe form of a URL or request target: strips userinfo credentials
+     * (via [redact]) and redacts sensitive query parameter values (via
+     * [redactQuery]). Fragment, if any, is kept.
+     */
+    fun redactForLog(url: String): String {
+        val base = redact(url)
+        val q = base.indexOf('?')
+        if (q < 0) return base
+        val hash = base.indexOf('#', q + 1)
+        val query = if (hash < 0) base.substring(q + 1) else base.substring(q + 1, hash)
+        val fragment = if (hash < 0) "" else base.substring(hash)
+        return base.substring(0, q + 1) + redactQuery(query) + fragment
+    }
+
     /** Find and redact all credential-bearing URLs in a block of text. */
     fun redactAll(text: String): String {
         return urlPattern.replace(text) { match -> redact(match.value) }
