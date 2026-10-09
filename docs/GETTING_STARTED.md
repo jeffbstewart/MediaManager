@@ -18,7 +18,7 @@ Media Manager uses [TMDB](https://www.themoviedb.org/) for poster images, cast d
 
 ### Media Files (optional)
 
-If you have ripped media files on a NAS or local drive, Media Manager can discover and stream them. Any directory structure works &mdash; the scanner auto-classifies folders by structure:
+If you keep media files on a NAS or local drive, Media Manager can discover and stream them. Any directory structure works &mdash; the scanner auto-classifies folders by structure:
 
 - **Flat directories** (files directly inside) &rarr; treated as movies
 - **Nested directories** (files inside subdirectories) &rarr; treated as TV shows
@@ -53,7 +53,7 @@ Edit the environment variables and volume paths:
 | Mount | Purpose |
 |-------|---------|
 | Cache volume &rarr; `/cache` | Persistent storage for the H2 database, poster cache, and backups. Must survive container recreation. |
-| Media volume &rarr; `/media` | Your ripped media files. **Must be read/write** &mdash; the app writes browser-optimized and media-appliance-optimized transcoded copies into a `ForBrowser/` subdirectory alongside your source files. |
+| Media volume &rarr; `/media` | Your media files. **Must be read/write** &mdash; the app writes browser-optimized and media-appliance-optimized transcoded copies into a `ForBrowser/` subdirectory alongside your source files. |
 
 **Other settings to review:**
 

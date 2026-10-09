@@ -285,7 +285,7 @@ class WishListHttpService {
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
 
-    /** Add a transcode wish (request a title be ripped). */
+    /** Add a transcode wish (request a title be made available on the NAS). */
     @Post("/api/v2/wishlist/transcode/{titleId}")
     fun addTranscodeWish(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)

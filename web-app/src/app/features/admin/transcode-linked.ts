@@ -115,7 +115,7 @@ export class TranscodeLinkedComponent implements OnInit {
       `Request re-transcode for "${row.title_name}"?\n\n` +
       `This is only necessary if you notice quality problems in the video ` +
       `(artifacts, audio sync issues, etc.) that you believe are not present ` +
-      `in the original disc rip. The file will be re-transcoded from the ` +
+      `in the source file. The file will be re-transcoded from the ` +
       `source on the NAS, which may take some time.`
     );
     if (!confirmed) return;
