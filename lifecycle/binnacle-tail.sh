@@ -10,12 +10,13 @@
 #   lifecycle/binnacle-tail.sh --since 2026-05-01T00:00:00Z
 #   lifecycle/binnacle-tail.sh --raw               # emit raw JSON instead of formatted lines
 #
-# Override the endpoint with env BINNACLE_URL (default https://172.16.4.12:8088).
+# Endpoint: set env BINNACLE_URL (e.g. https://binnacle-host:8088), or put
+# a BINNACLE_URL=... line in secrets/binnacle.agent_visible_env (gitignored;
+# copy from secrets/example.binnacle.env). The env var wins if both are set.
 # Curl runs with -k because Binnacle uses an internal self-signed cert.
 
 set -euo pipefail
 
-BINNACLE_URL="${BINNACLE_URL:-https://172.16.4.12:8088}"
 SERVICE="mediamanager-ios"
 LIMIT=50
 SEVERITY=""
@@ -51,6 +52,20 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ -z "${BINNACLE_URL:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    BINNACLE_ENV="$SCRIPT_DIR/../secrets/binnacle.agent_visible_env"
+    if [ -f "$BINNACLE_ENV" ]; then
+        # Parse rather than source, so the file can only supply this value.
+        BINNACLE_URL="$(sed -n 's/^BINNACLE_URL=//p' "$BINNACLE_ENV" | tail -n 1 | tr -d '\r"'"'"'')"
+    fi
+fi
+if [ -z "${BINNACLE_URL:-}" ]; then
+    echo "BINNACLE_URL is not set. Export it, or add BINNACLE_URL=... to" >&2
+    echo "secrets/binnacle.agent_visible_env (see secrets/example.binnacle.env)." >&2
+    exit 2
+fi
 
 QUERY="service=${SERVICE}&limit=${LIMIT}"
 [ -n "$SEVERITY" ] && QUERY="${QUERY}&severity=${SEVERITY}"

@@ -26,7 +26,7 @@ data class BuddyConfig(
     val localTempDir: String? = null,
     /** Port for the local status page HTTP server. */
     val statusPort: Int = 8090,
-    /** OTLP/HTTP base URL for Binnacle log export (e.g. http://172.16.4.12:4318). Null disables. */
+    /** OTLP/HTTP base URL for Binnacle log export (e.g. http://binnacle-host:4318). Null disables. */
     val binnacleEndpoint: String? = null,
     /** Shared write-path API key for Binnacle. Null disables. */
     val binnacleApiKey: String? = null
