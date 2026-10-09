@@ -16,19 +16,33 @@ object CameraAdminService {
         return Camera.findAll().sortedBy { it.display_order }
     }
 
-    fun create(name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Boolean): Camera {
+    /**
+     * Create a camera. All fields that reach the go2rtc config are validated
+     * by [CameraSourceValidator]; failures throw [IllegalArgumentException].
+     */
+    fun create(
+        name: String,
+        rtspUrl: String,
+        snapshotUrl: String,
+        streamName: String,
+        enabled: Boolean,
+        clock: Clock = SystemClock
+    ): Camera {
         require(name.isNotBlank()) { "Name is required" }
-        require(rtspUrl.isNotBlank()) { "RTSP URL is required" }
-        require(rtspUrl.startsWith("rtsp://", ignoreCase = true)) { "RTSP URL must start with rtsp://" }
+        val validRtsp = CameraSourceValidator.requireValidRtspUrl(rtspUrl)
+        val validSnapshot = CameraSourceValidator.requireValidSnapshotUrl(snapshotUrl)
+        val validStream = CameraSourceValidator.requireValidStreamName(
+            streamName.trim().ifBlank { generateStreamName(name) })
 
         val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
         val camera = Camera(
             name = name.trim(),
-            rtsp_url = rtspUrl.trim(),
-            snapshot_url = snapshotUrl.trim(),
-            go2rtc_name = streamName.trim().ifBlank { generateStreamName(name) },
+            rtsp_url = validRtsp,
+            snapshot_url = validSnapshot,
+            go2rtc_name = validStream,
             enabled = enabled,
-            display_order = maxOrder + 1
+            display_order = maxOrder + 1,
+            created_at = clock.now()
         )
         camera.save()
         Go2rtcAgent.instance?.reconfigure()
@@ -43,30 +57,64 @@ object CameraAdminService {
     fun update(id: Long, name: String, rtspUrl: String, snapshotUrl: String, streamName: String, enabled: Boolean): Camera {
         val camera = Camera.findById(id) ?: throw IllegalArgumentException("Camera not found: $id")
         require(name.isNotBlank()) { "Name is required" }
-        require(rtspUrl.isNotBlank()) { "RTSP URL is required" }
-
-        // Restore credentials from the original URL if the edited URL has the redacted placeholder
-        val resolvedRtsp = UriCredentialRedactor.restoreCredentials(rtspUrl.trim(), camera.rtsp_url)
-        require(!resolvedRtsp.contains("***:***")) {
-            "Cannot restore credentials — host/port changed. Enter full URL with credentials."
-        }
-
-        val resolvedSnapshot = if (snapshotUrl.isNotBlank()) {
-            UriCredentialRedactor.restoreCredentials(snapshotUrl.trim(), camera.snapshot_url)
-        } else ""
-        require(!resolvedSnapshot.contains("***:***")) {
-            "Cannot restore snapshot credentials — host/port changed. Enter full URL with credentials."
-        }
 
         camera.name = name.trim()
-        camera.rtsp_url = resolvedRtsp
-        camera.snapshot_url = resolvedSnapshot
-        camera.go2rtc_name = streamName.trim()
+        camera.rtsp_url = resolveRtspUrl(rtspUrl, camera)
+        camera.snapshot_url = resolveSnapshotUrl(snapshotUrl, camera)
+        camera.go2rtc_name = CameraSourceValidator.requireValidStreamName(
+            streamName.trim().ifBlank { camera.go2rtc_name.ifBlank { generateStreamName(name) } })
         camera.enabled = enabled
         camera.save()
         Go2rtcAgent.instance?.reconfigure()
         log.info("Camera updated: '{}' (id={})", camera.name, camera.id)
         return camera
+    }
+
+    /**
+     * Partial update used by the REST endpoint: only non-null arguments are
+     * applied. The stream name is left unchanged. Validation matches [update].
+     */
+    fun patch(
+        id: Long,
+        name: String? = null,
+        rtspUrl: String? = null,
+        snapshotUrl: String? = null,
+        enabled: Boolean? = null
+    ): Camera {
+        val camera = Camera.findById(id) ?: throw IllegalArgumentException("Camera not found: $id")
+        if (name != null) {
+            require(name.isNotBlank()) { "Name is required" }
+            camera.name = name.trim()
+        }
+        if (rtspUrl != null) camera.rtsp_url = resolveRtspUrl(rtspUrl, camera)
+        if (snapshotUrl != null) camera.snapshot_url = resolveSnapshotUrl(snapshotUrl, camera)
+        if (enabled != null) camera.enabled = enabled
+        camera.save()
+        Go2rtcAgent.instance?.reconfigure()
+        log.info("Camera updated: '{}' (id={})", camera.name, camera.id)
+        return camera
+    }
+
+    /**
+     * Restore redacted credentials (`***:***`) from the stored URL when the
+     * host is unchanged, then validate the result.
+     */
+    private fun resolveRtspUrl(rtspUrl: String, camera: Camera): String {
+        require(rtspUrl.isNotBlank()) { "RTSP URL is required" }
+        val resolved = UriCredentialRedactor.restoreCredentials(rtspUrl.trim(), camera.rtsp_url)
+        require(!resolved.contains("***:***")) {
+            "Cannot restore credentials — host/port changed. Enter full URL with credentials."
+        }
+        return CameraSourceValidator.requireValidRtspUrl(resolved)
+    }
+
+    private fun resolveSnapshotUrl(snapshotUrl: String, camera: Camera): String {
+        if (snapshotUrl.isBlank()) return ""
+        val resolved = UriCredentialRedactor.restoreCredentials(snapshotUrl.trim(), camera.snapshot_url)
+        require(!resolved.contains("***:***")) {
+            "Cannot restore snapshot credentials — host/port changed. Enter full URL with credentials."
+        }
+        return CameraSourceValidator.requireValidSnapshotUrl(resolved)
     }
 
     fun delete(id: Long) {

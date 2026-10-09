@@ -1,6 +1,8 @@
 package net.stewart.mediamanager.armeria
 
+import com.github.vokorm.findAll
 import com.linecorp.armeria.common.HttpMethod
+import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.common.HttpStatus
 import com.zaxxer.hikari.HikariDataSource
 import net.stewart.mediamanager.entity.AppConfig
@@ -256,6 +258,70 @@ internal class CameraSettingsHttpServiceTest : ArmeriaTestBase() {
             ctxFor("/api/v2/admin/cameras",
                 user = getOrCreateUser("admin", level = 2)))
         assertEquals(HttpStatus.OK, statusOf(resp))
+    }
+
+    private fun postAsAdmin(path: String, json: String): HttpResponse {
+        val ctx = ctxFor(path, method = HttpMethod.POST,
+            user = getOrCreateUser("admin", level = 2), jsonBody = json)
+        return if (path == "/api/v2/admin/cameras") service.create(ctx)
+            else service.update(ctx, path.substringAfterLast('/').toLong())
+    }
+
+    @Test
+    fun `create accepts a valid rtsp URL with credentials`() {
+        val resp = postAsAdmin("/api/v2/admin/cameras",
+            """{"name":"Front Door","rtsp_url":"rtsp://user:p#ss@cam.example.invalid:554/s1","snapshot_url":""}""")
+        assertEquals(HttpStatus.OK, statusOf(resp))
+        val cam = Camera.findAll().single()
+        assertEquals("rtsp://user:p#ss@cam.example.invalid:554/s1", cam.rtsp_url)
+        assertEquals("front_door", cam.go2rtc_name)
+    }
+
+    @Test
+    fun `create rejects non-rtsp source schemes`() {
+        val resp = postAsAdmin("/api/v2/admin/cameras",
+            """{"name":"Cam","rtsp_url":"exec:/bin/sh -c id"}""")
+        assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
+        assertTrue(Camera.findAll().isEmpty())
+    }
+
+    @Test
+    fun `create rejects embedded newlines`() {
+        val resp = postAsAdmin("/api/v2/admin/cameras",
+            """{"name":"Cam","rtsp_url":"rtsp://cam.example.invalid/s\n    - exec:id"}""")
+        assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
+        assertTrue(Camera.findAll().isEmpty())
+    }
+
+    @Test
+    fun `update rejects an invalid source and leaves the row unchanged`() {
+        val cam = Camera(name = "Cam", rtsp_url = "rtsp://cam.example.invalid/a",
+            go2rtc_name = "cam").apply { save() }
+        val resp = postAsAdmin("/api/v2/admin/cameras/${cam.id}",
+            """{"rtsp_url":"echo:hello"}""")
+        assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
+        assertEquals("rtsp://cam.example.invalid/a", Camera.findById(cam.id!!)!!.rtsp_url)
+    }
+
+    @Test
+    fun `update applies a partial change`() {
+        val cam = Camera(name = "Cam", rtsp_url = "rtsp://cam.example.invalid/a",
+            go2rtc_name = "cam").apply { save() }
+        val resp = postAsAdmin("/api/v2/admin/cameras/${cam.id}", """{"enabled":false}""")
+        assertEquals(HttpStatus.OK, statusOf(resp))
+        val after = Camera.findById(cam.id!!)!!
+        assertEquals(false, after.enabled)
+        assertEquals("rtsp://cam.example.invalid/a", after.rtsp_url)
+    }
+
+    @Test
+    fun `update restores redacted credentials on the same host`() {
+        val cam = Camera(name = "Cam", rtsp_url = "rtsp://admin:secret@cam.example.invalid/a",
+            go2rtc_name = "cam").apply { save() }
+        val resp = postAsAdmin("/api/v2/admin/cameras/${cam.id}",
+            """{"rtsp_url":"rtsp://***:***@cam.example.invalid/b"}""")
+        assertEquals(HttpStatus.OK, statusOf(resp))
+        assertEquals("rtsp://admin:secret@cam.example.invalid/b", Camera.findById(cam.id!!)!!.rtsp_url)
     }
 }
 
