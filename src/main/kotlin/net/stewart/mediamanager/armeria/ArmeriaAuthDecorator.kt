@@ -14,6 +14,7 @@ import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.PairingService
+import org.slf4j.LoggerFactory
 
 /**
  * Armeria decorator that authenticates HTTP requests.
@@ -26,8 +27,14 @@ import net.stewart.mediamanager.service.PairingService
  *
  * On success, sets [USER_KEY] and [AUTH_METHOD_KEY] on the request context.
  * On failure, returns 401 (or 403 if no users exist yet).
+ *
+ * Cookie-authenticated (1, 3) state-changing requests must also pass
+ * [CookieCsrfGuard]: same-origin (403 otherwise) and a non-"simple"
+ * request body type (415 otherwise).
  */
 class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
+
+    private val log = LoggerFactory.getLogger(ArmeriaAuthDecorator::class.java)
 
     companion object {
         val USER_KEY: AttributeKey<AppUser> =
@@ -112,6 +119,28 @@ class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
             return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         }
 
+        // CSRF gate for ambient-cookie auth on state-changing requests.
+        // Bearer and ?key= device-token requests carry an explicit
+        // credential and are not CSRF-able.
+        var csrfVerdict = CookieCsrfGuard.Verdict.OK
+        if (authMethod == "cookie" || authMethod == "jwt_cookie") {
+            csrfVerdict = CookieCsrfGuard.evaluate(headers)
+            when (csrfVerdict) {
+                CookieCsrfGuard.Verdict.CROSS_ORIGIN -> {
+                    log.warn("Cookie-auth {} {} rejected: cross-origin (origin={}, sec-fetch-site={})",
+                        headers.method(), ctx.path(), headers.get("origin") ?: "(none)",
+                        headers.get("sec-fetch-site") ?: "(none)")
+                    return HttpResponse.of(HttpStatus.FORBIDDEN)
+                }
+                CookieCsrfGuard.Verdict.SIMPLE_BODY -> {
+                    log.warn("Cookie-auth {} {} rejected: content-type {} not accepted",
+                        headers.method(), ctx.path(), headers.contentType() ?: "(none)")
+                    return HttpResponse.of(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                }
+                else -> Unit
+            }
+        }
+
         ctx.setAttr(USER_KEY, user)
         ctx.setAttr(AUTH_METHOD_KEY, authMethod!!)
 
@@ -125,6 +154,23 @@ class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
                 LegalRequirements.isCompliant(user.id!!, user.isAdmin(), LegalRequirements.webTermsOfUseVersion)
             }
             if (!compliant) return termsRequiredResponse()
+        }
+
+        if (csrfVerdict == CookieCsrfGuard.Verdict.NEEDS_EMPTY_BODY) {
+            // No Content-Type and no Content-Length: accept only a truly
+            // empty body (e.g. a DELETE or a bodiless POST). The request is
+            // re-created from the aggregate so the handler can still read it.
+            return HttpResponse.of(req.aggregate().thenApply { agg ->
+                if (!agg.content().isEmpty) {
+                    log.warn("Cookie-auth {} {} rejected: untyped request body",
+                        headers.method(), ctx.path())
+                    HttpResponse.of(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                } else {
+                    val replay = agg.toHttpRequest()
+                    ctx.updateRequest(replay)
+                    delegate.serve(ctx, replay)
+                }
+            })
         }
 
         return delegate.serve(ctx, req)

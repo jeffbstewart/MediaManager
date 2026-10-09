@@ -274,8 +274,20 @@ class RokuFeedHttpService {
     @Blocking
     @Post("/roku/wishlist/add")
     fun wishlistAdd(ctx: ServiceRequestContext): HttpResponse {
-        val (_, user) = authenticateDevice(ctx, "wishlist-add")
+        val (deviceKey, user) = authenticateDevice(ctx, "wishlist-add")
             ?: return deviceAuthRejected(ctx)
+
+        // Cookie-session fallback (empty key) is ambient browser auth:
+        // apply the same CSRF gate as the main REST decorator. This
+        // endpoint requires a JSON body, so an untyped body is refused too.
+        if (deviceKey.isEmpty()) {
+            when (CookieCsrfGuard.evaluate(ctx.request().headers())) {
+                CookieCsrfGuard.Verdict.CROSS_ORIGIN -> return HttpResponse.of(HttpStatus.FORBIDDEN)
+                CookieCsrfGuard.Verdict.SIMPLE_BODY,
+                CookieCsrfGuard.Verdict.NEEDS_EMPTY_BODY -> return HttpResponse.of(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                CookieCsrfGuard.Verdict.OK -> Unit
+            }
+        }
 
         val body = try {
             val text = ctx.request().aggregate().join().contentUtf8()

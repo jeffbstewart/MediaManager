@@ -511,8 +511,22 @@ export class PlayerComponent implements OnInit, OnDestroy {
     // Always use sendBeacon — it's non-blocking and doesn't consume browser connections.
     // HTTP POST via HttpClient can stall on server timeouts (504) and starve the video
     // stream's range requests since browsers limit concurrent connections per host.
+    // Typed as JSON: the server refuses cookie-authenticated text/plain bodies
+    // (a string body would default to text/plain).
     const body = JSON.stringify({ position: video.currentTime, duration: video.duration });
-    navigator.sendBeacon(`/playback-progress/${this.transcodeId}`, body);
+    const url = `/playback-progress/${this.transcodeId}`;
+    try {
+      if (navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+    } catch {
+      /* fall through to fetch() */
+    }
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => { /* swallow */ });
   }
 
   private reportClear(): void {
