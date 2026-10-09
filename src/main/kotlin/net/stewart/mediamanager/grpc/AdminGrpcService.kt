@@ -1272,26 +1272,37 @@ class AdminGrpcService(
     override suspend fun createCamera(request: CreateCameraRequest): AdminCamera {
         val streamName = if (request.hasStreamName()) request.streamName
             else CameraAdminService.generateStreamName(request.name)
-        val camera = CameraAdminService.create(
-            name = request.name,
-            rtspUrl = request.rtspUrl,
-            snapshotUrl = request.snapshotUrl,
-            streamName = streamName,
-            enabled = request.enabled
-        )
+        val camera = cameraValidation {
+            CameraAdminService.create(
+                name = request.name,
+                rtspUrl = request.rtspUrl,
+                snapshotUrl = request.snapshotUrl,
+                streamName = streamName,
+                enabled = request.enabled
+            )
+        }
         return camera.toAdminProto()
     }
 
     override suspend fun updateCamera(request: UpdateCameraRequest): AdminCamera {
-        val camera = CameraAdminService.update(
-            id = request.cameraId,
-            name = request.name,
-            rtspUrl = request.rtspUrl,
-            snapshotUrl = request.snapshotUrl,
-            streamName = request.streamName,
-            enabled = request.enabled
-        )
+        val camera = cameraValidation {
+            CameraAdminService.update(
+                id = request.cameraId,
+                name = request.name,
+                rtspUrl = request.rtspUrl,
+                snapshotUrl = request.snapshotUrl,
+                streamName = request.streamName,
+                enabled = request.enabled
+            )
+        }
         return camera.toAdminProto()
+    }
+
+    /** Surface camera validation failures as INVALID_ARGUMENT with the validator's message. */
+    private inline fun <T> cameraValidation(block: () -> T): T = try {
+        block()
+    } catch (e: IllegalArgumentException) {
+        throw StatusException(Status.INVALID_ARGUMENT.withDescription(e.message))
     }
 
     override suspend fun deleteCamera(request: CameraIdRequest): Empty {
