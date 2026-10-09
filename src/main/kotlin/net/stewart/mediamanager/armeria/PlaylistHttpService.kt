@@ -250,8 +250,9 @@ class PlaylistHttpService {
 
     /**
      * Fork a playlist into one owned by the current user. Any user may
-     * call this on any playlist — that's the whole point of the
-     * affordance ("use this as a starting point").
+     * call this on any playlist they can see ("use this as a starting
+     * point"); someone else's private playlist returns 404, the same as
+     * a nonexistent one.
      */
     @Post("/api/v2/playlists/{id}/duplicate")
     fun duplicate(ctx: ServiceRequestContext, @Param("id") id: Long): HttpResponse {

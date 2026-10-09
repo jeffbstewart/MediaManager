@@ -462,6 +462,38 @@ class PlaylistGrpcServiceTest : GrpcTestBase() {
         }
     }
 
+    @Test
+    fun `duplicatePlaylist returns NOT_FOUND for another user's private playlist`() = runBlocking {
+        val owner = createViewerUser(username = "pl-dup-priv-owner")
+        val intruder = createViewerUser(username = "pl-dup-priv-intruder")
+
+        val ownerChannel = authenticatedChannel(owner)
+        val privId = try {
+            val stub = PlaylistServiceGrpcKt.PlaylistServiceCoroutineStub(ownerChannel)
+            val created = stub.createPlaylist(createPlaylistRequest { name = "Private" })
+            stub.setPlaylistPrivacy(setPlaylistPrivacyRequest {
+                id = created.id; isPrivate = true
+            })
+            created.id
+        } finally {
+            ownerChannel.shutdownNow()
+        }
+
+        val before = Playlist.findAll().size
+        val intruderChannel = authenticatedChannel(intruder)
+        try {
+            val stub = PlaylistServiceGrpcKt.PlaylistServiceCoroutineStub(intruderChannel)
+            val ex = assertFailsWith<StatusException> {
+                stub.duplicatePlaylist(duplicatePlaylistRequest { sourceId = privId })
+            }
+            assertEquals(Status.Code.NOT_FOUND, ex.status.code,
+                "private playlist must not leak existence to non-owners")
+            assertEquals(before, Playlist.findAll().size, "no fork created")
+        } finally {
+            intruderChannel.shutdownNow()
+        }
+    }
+
     // ---------------------- libraryShuffle ----------------------
 
     @Test

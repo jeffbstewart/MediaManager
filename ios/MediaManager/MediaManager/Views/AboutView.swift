@@ -27,6 +27,11 @@ struct AboutView: View {
                 LabeledContent("Build", value: buildNumber)
             }
 
+            Section("Credits") {
+                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                    .font(.footnote)
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Link(destination: AppPolicyAgreement.privacyPolicyURL) {

@@ -18,7 +18,7 @@ Media Manager uses [TMDB](https://www.themoviedb.org/) for poster images, cast d
 
 ### Media Files (optional)
 
-If you have ripped media files on a NAS or local drive, Media Manager can discover and stream them. Any directory structure works &mdash; the scanner auto-classifies folders by structure:
+If you keep media files on a NAS or local drive, Media Manager can discover and stream them. Any directory structure works &mdash; the scanner auto-classifies folders by structure:
 
 - **Flat directories** (files directly inside) &rarr; treated as movies
 - **Nested directories** (files inside subdirectories) &rarr; treated as TV shows
@@ -53,12 +53,12 @@ Edit the environment variables and volume paths:
 | Mount | Purpose |
 |-------|---------|
 | Cache volume &rarr; `/cache` | Persistent storage for the H2 database, poster cache, and backups. Must survive container recreation. |
-| Media volume &rarr; `/media` | Your ripped media files. **Must be read/write** &mdash; the app writes browser-optimized and media-appliance-optimized transcoded copies into a `ForBrowser/` subdirectory alongside your source files. |
+| Media volume &rarr; `/media` | Your media files. **Must be read/write** &mdash; the app writes browser-optimized and media-appliance-optimized transcoded copies into a `ForBrowser/` subdirectory alongside your source files. |
 
 **Other settings to review:**
 
 - **`user`** &mdash; Set to your UID:GID so the container can read/write volumes. Find yours with `id -u` and `id -g` via SSH on your NAS, or use `1000:1000` on a typical Linux system.
-- **`MM_BEHIND_PROXY`** &mdash; Set to `true` if behind a reverse proxy (nginx, traefik) so the app trusts `X-Forwarded-*` headers.
+- **`MM_TRUSTED_PROXIES`** &mdash; The address (or CIDR) your TLS-terminating reverse proxy (HAProxy, nginx, traefik) connects from. `X-Forwarded-*` headers are trusted only from these addresses, and sign-in through the proxy is refused until this is set. See the [Admin Guide](ADMIN_GUIDE.md#reverse-proxy-trust).
 
 ### 3. Launch
 

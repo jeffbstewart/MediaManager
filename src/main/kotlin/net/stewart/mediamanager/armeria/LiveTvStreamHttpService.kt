@@ -173,8 +173,8 @@ class LiveTvStreamHttpService {
     private fun getBaseUrl(ctx: ServiceRequestContext): String {
         AppConfig.publicBaseUrl()?.let { return it }
         val headers = ctx.request().headers()
-        val proto = headers.get("x-forwarded-proto") ?: ctx.sessionProtocol().uriText()
-        val host = headers.get("x-forwarded-host") ?: headers.get("host") ?: "localhost"
+        val proto = ctx.trustedForwardedHeader("x-forwarded-proto") ?: ctx.sessionProtocol().uriText()
+        val host = ctx.trustedForwardedHeader("x-forwarded-host") ?: headers.get("host") ?: "localhost"
         return "$proto://$host"
     }
 

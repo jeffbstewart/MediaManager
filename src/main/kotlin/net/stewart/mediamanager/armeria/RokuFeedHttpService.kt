@@ -17,7 +17,9 @@ import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.Camera
 import net.stewart.mediamanager.entity.LiveTvChannel
 import net.stewart.mediamanager.entity.LiveTvTuner
+import io.netty.util.AttributeKey
 import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.LegalRequirements
 // LiveTvStreamServlet removed — using LiveTvStreamHttpService.canAccessLiveTv()
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.PairingService
@@ -44,8 +46,30 @@ class RokuFeedHttpService {
         return "http://$host"
     }
 
+    /**
+     * Resolve the caller (device token first, cookie fallback) and apply the
+     * paired-device legal gate. Returns null on failure; [deviceAuthRejected]
+     * then produces the matching 401 or 451 response.
+     */
     private fun authenticateDevice(ctx: ServiceRequestContext, endpoint: String): Pair<String, AppUser>? {
-        // Device token auth
+        val identity = resolveDevice(ctx, endpoint)
+        if (identity == null) {
+            log.info("Roku {} auth failed (status 401)", endpoint)
+            MetricsRegistry.countHttpResponse("roku", 401)
+            return null
+        }
+        if (!LegalRequirements.isCompliantForDevice(identity.second)) {
+            log.info("Roku {} refused: user {} has not accepted the current privacy policy (status 451)",
+                endpoint, identity.second.username)
+            MetricsRegistry.countHttpResponse("roku", 451)
+            ctx.setAttr(TERMS_REQUIRED_KEY, true)
+            return null
+        }
+        return identity
+    }
+
+    private fun resolveDevice(ctx: ServiceRequestContext, endpoint: String): Pair<String, AppUser>? {
+        // Device token auth (rejects locked accounts)
         val apiKey = ctx.queryParams().get("key")
         if (apiKey != null) {
             val deviceUser = PairingService.validateDeviceToken(apiKey)
@@ -62,10 +86,15 @@ class RokuFeedHttpService {
                 return "" to cookieUser
             }
         }
-
-        log.info("Roku {} auth failed (status 401)", endpoint)
-        MetricsRegistry.countHttpResponse("roku", 401)
         return null
+    }
+
+    private fun deviceAuthRejected(ctx: ServiceRequestContext): HttpResponse =
+        if (ctx.attr(TERMS_REQUIRED_KEY) == true) termsRequiredResponse()
+        else HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+    private companion object {
+        val TERMS_REQUIRED_KEY: AttributeKey<Boolean> = AttributeKey.valueOf("roku.termsRequired")
     }
 
     private fun jsonResponse(body: String, cacheSeconds: Int = 60): HttpResponse {
@@ -81,7 +110,7 @@ class RokuFeedHttpService {
     @Get("/roku/feed.json")
     fun feed(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "feed")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val json = RokuFeedService.generateFeed(getConfiguredBaseUrl(ctx), apiKey, user)
         log.info("Roku feed served (status 200)")
         return jsonResponse(json, 300)
@@ -91,7 +120,7 @@ class RokuFeedHttpService {
     @Get("/roku/home.json")
     fun home(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "home")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val homeFeed = RokuHomeService.generateHomeFeed(getConfiguredBaseUrl(ctx), apiKey, user)
         val json = mapper.writeValueAsString(homeFeed)
         log.info("Roku home feed served (status 200, {} carousels)", homeFeed.carousels.size)
@@ -102,7 +131,7 @@ class RokuFeedHttpService {
     @Get("/roku/search.json")
     fun search(ctx: ServiceRequestContext, @Param("q") @Default("") q: String): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "search")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         if (q.isBlank()) {
             MetricsRegistry.countHttpResponse("roku", 400)
             return HttpResponse.of(HttpStatus.BAD_REQUEST)
@@ -115,7 +144,7 @@ class RokuFeedHttpService {
     @Get("regex:^/roku/title/(?<titleId>\\d+)\\.json$")
     fun titleDetail(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "title-detail")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val detail = RokuTitleService.getTitleDetail(titleId, getConfiguredBaseUrl(ctx), apiKey, user)
         if (detail == null) {
             MetricsRegistry.countHttpResponse("roku", 404)
@@ -129,7 +158,7 @@ class RokuFeedHttpService {
     @Get("regex:^/roku/collection/(?<collectionId>\\d+)\\.json$")
     fun collection(ctx: ServiceRequestContext, @Param("collectionId") collectionId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "collection")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val detail = RokuSearchService.getCollectionDetail(collectionId, getConfiguredBaseUrl(ctx), apiKey, user)
         if (detail == null) {
             MetricsRegistry.countHttpResponse("roku", 404)
@@ -143,7 +172,7 @@ class RokuFeedHttpService {
     @Get("regex:^/roku/tag/(?<tagId>\\d+)\\.json$")
     fun tag(ctx: ServiceRequestContext, @Param("tagId") tagId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "tag")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val detail = RokuSearchService.getTagDetail(tagId, getConfiguredBaseUrl(ctx), apiKey, user)
         if (detail == null) {
             MetricsRegistry.countHttpResponse("roku", 404)
@@ -157,7 +186,7 @@ class RokuFeedHttpService {
     @Get("regex:^/roku/genre/(?<genreId>\\d+)\\.json$")
     fun genre(ctx: ServiceRequestContext, @Param("genreId") genreId: Long): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "genre")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val detail = RokuSearchService.getGenreDetail(genreId, getConfiguredBaseUrl(ctx), apiKey, user)
         if (detail == null) {
             MetricsRegistry.countHttpResponse("roku", 404)
@@ -171,7 +200,7 @@ class RokuFeedHttpService {
     @Get("regex:^/roku/actor/(?<personId>\\d+)\\.json$")
     fun actor(ctx: ServiceRequestContext, @Param("personId") personId: Int): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "actor")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val detail = RokuSearchService.getActorDetail(personId, getConfiguredBaseUrl(ctx), apiKey, user)
         if (detail == null) {
             MetricsRegistry.countHttpResponse("roku", 404)
@@ -185,7 +214,7 @@ class RokuFeedHttpService {
     @Get("/roku/cameras.json")
     fun cameras(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, _) = authenticateDevice(ctx, "cameras")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val baseUrl = getConfiguredBaseUrl(ctx)
 
         val cameras = Camera.findAll()
@@ -209,7 +238,7 @@ class RokuFeedHttpService {
     @Get("/roku/livetv/channels.json")
     fun liveTvChannels(ctx: ServiceRequestContext): HttpResponse {
         val (apiKey, user) = authenticateDevice(ctx, "livetv-channels")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
         val baseUrl = getConfiguredBaseUrl(ctx)
 
         if (!LiveTvStreamHttpService.canAccessLiveTv(user)) {
@@ -246,7 +275,7 @@ class RokuFeedHttpService {
     @Post("/roku/wishlist/add")
     fun wishlistAdd(ctx: ServiceRequestContext): HttpResponse {
         val (deviceKey, user) = authenticateDevice(ctx, "wishlist-add")
-            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+            ?: return deviceAuthRejected(ctx)
 
         // Cookie-session fallback (empty key) is ambient browser auth:
         // apply the same CSRF gate as the main REST decorator. This

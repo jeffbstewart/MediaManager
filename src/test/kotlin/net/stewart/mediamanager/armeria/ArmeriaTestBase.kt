@@ -79,6 +79,8 @@ abstract class ArmeriaTestBase {
         jsonBody: String? = null,
         cookieHeader: String? = null,
         extraHeaders: Map<String, String> = emptyMap(),
+        /** TCP peer address; Armeria's builder defaults to a loopback peer when null. */
+        remoteAddress: java.net.InetSocketAddress? = null,
     ): ServiceRequestContext {
         val headersBuilder = RequestHeaders.builder(method, path)
         if (jsonBody != null) {
@@ -94,7 +96,9 @@ abstract class ArmeriaTestBase {
         } else {
             HttpRequest.of(headers)
         }
-        val ctx = ServiceRequestContext.builder(req).build()
+        val builder = ServiceRequestContext.builder(req)
+        if (remoteAddress != null) builder.remoteAddress(remoteAddress)
+        val ctx = builder.build()
         if (user != null) ctx.setAttr(ArmeriaAuthDecorator.USER_KEY, user)
         return ctx
     }

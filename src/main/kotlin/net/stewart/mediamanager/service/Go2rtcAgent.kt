@@ -39,6 +39,64 @@ class Go2rtcAgent(
 
         /** Singleton for access from servlets. */
         @Volatile var instance: Go2rtcAgent? = null
+
+        /**
+         * Render the go2rtc YAML config. Every scalar is emitted as a
+         * double-quoted YAML string via [yamlQuote], so no value can break
+         * out of its node. Cameras whose stored source or stream name fails
+         * [CameraSourceValidator] (e.g. rows saved before validation existed)
+         * are omitted and reported through [onSkip] — go2rtc dispatches on
+         * the source scheme, and some schemes run commands.
+         */
+        internal fun buildConfig(
+            apiPort: Int,
+            ffmpegPath: String?,
+            cameras: List<Camera>,
+            onSkip: (Camera, String) -> Unit = { _, _ -> }
+        ): String = buildString {
+            appendLine("api:")
+            appendLine("  listen: ${yamlQuote("127.0.0.1:$apiPort")}")
+            if (ffmpegPath != null) {
+                appendLine("ffmpeg:")
+                appendLine("  bin: ${yamlQuote(ffmpegPath)}")
+            }
+            appendLine("streams:")
+            for (cam in cameras) {
+                if (!CameraSourceValidator.isValidStreamName(cam.go2rtc_name)) {
+                    onSkip(cam, "invalid stream name")
+                    continue
+                }
+                if (!CameraSourceValidator.isValidRtspUrl(cam.rtsp_url)) {
+                    onSkip(cam, "source is not a valid rtsp:// or rtsps:// URL")
+                    continue
+                }
+                appendLine("  ${yamlQuote(cam.go2rtc_name)}:")
+                appendLine("    - ${yamlQuote(cam.rtsp_url.trim())}")
+                if (ffmpegPath != null) {
+                    // Add FFmpeg source to decode H.264→MJPEG for browser/snapshot use
+                    appendLine("    - ${yamlQuote("ffmpeg:${cam.go2rtc_name}#video=mjpeg")}")
+                }
+            }
+        }
+
+        /**
+         * YAML double-quoted scalar. Escapes backslash and double quote, and
+         * writes every character outside printable ASCII (control characters,
+         * line breaks, Unicode separators) as a `\uXXXX` escape, so the
+         * result is always a single-line, self-contained scalar.
+         */
+        internal fun yamlQuote(value: String): String = buildString {
+            append('"')
+            for (c in value) {
+                when {
+                    c == '\\' -> append("\\\\")
+                    c == '"' -> append("\\\"")
+                    c in ' '..'~' -> append(c)
+                    else -> append("\\u").append(String.format("%04x", c.code))
+                }
+            }
+            append('"')
+        }
     }
 
     fun start() {
@@ -117,22 +175,8 @@ class Go2rtcAgent(
         try {
             // Locate FFmpeg for H.264→MJPEG transcoding (required for MJPEG/snapshot endpoints)
             val ffmpegPath = findFfmpegPath()
-            configFile.writeText(buildString {
-                appendLine("api:")
-                appendLine("  listen: \"127.0.0.1:$apiPort\"")
-                if (ffmpegPath != null) {
-                    appendLine("ffmpeg:")
-                    appendLine("  bin: \"$ffmpegPath\"")
-                }
-                appendLine("streams:")
-                for (cam in cameras) {
-                    appendLine("  ${cam.go2rtc_name}:")
-                    appendLine("    - ${cam.rtsp_url}")
-                    if (ffmpegPath != null) {
-                        // Add FFmpeg source to decode H.264→MJPEG for browser/snapshot use
-                        appendLine("    - \"ffmpeg:${cam.go2rtc_name}#video=mjpeg\"")
-                    }
-                }
+            configFile.writeText(buildConfig(apiPort, ffmpegPath, cameras) { cam, reason ->
+                log.warn("Skipping camera id={} in go2rtc config: {}", cam.id, reason)
             })
             log.info("Wrote go2rtc config to {} ({} streams): {}", configFile.absolutePath, cameras.size,
                 UriCredentialRedactor.redactAll(configFile.readText().replace("\n", " | ")))

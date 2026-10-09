@@ -77,6 +77,16 @@ object LegalRequirements {
     }
 
     /**
+     * Compliance check for paired-device (device token) callers such as
+     * Roku. There is no device-specific terms-of-use document and no way to
+     * accept terms on the device, so only the platform-independent privacy
+     * policy is enforced; the user accepts it from any other client.
+     * Admins are exempt, as in [isCompliant].
+     */
+    fun isCompliantForDevice(user: AppUser): Boolean =
+        isCompliant(user.id!!, user.isAdmin(), requiredTou = 0)
+
+    /**
      * Returns the required TOU version for the given platform string.
      * Platform strings: "ios", "web", "android_tv". Unknown platforms fall back to the max.
      */

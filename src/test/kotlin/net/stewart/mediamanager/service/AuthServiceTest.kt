@@ -7,10 +7,14 @@ import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.LoginAttempt
 import net.stewart.mediamanager.entity.SessionToken
 import org.flywaydb.core.Flyway
+import org.junit.After
 import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
 import java.time.LocalDateTime
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -56,9 +60,16 @@ class AuthServiceTest {
     }
 
     private var userId: Long = 0
+    private val clock = TestClock(LocalDateTime.of(2026, 3, 1, 12, 0, 0))
+
+    @After
+    fun restoreClock() {
+        AuthService.clock = SystemClock
+    }
 
     @Before
     fun reset() {
+        AuthService.clock = clock
         SessionToken.deleteAll()
         LoginAttempt.deleteAll()
         AppUser.deleteAll()
@@ -183,35 +194,133 @@ class AuthServiceTest {
             "locked accounts must not be admitted even with correct password")
     }
 
+    // ---------------------- throttling ----------------------
+
+    private fun seedFailures(n: Int, username: String, ip: String, at: LocalDateTime = clock.now()) {
+        repeat(n) {
+            LoginAttempt(username = username, ip_address = ip, attempted_at = at, success = false).save()
+        }
+    }
+
+    private fun advanceSeconds(s: Long) = clock.set(clock.now().plusSeconds(s))
+
     @Test
     fun `login rate-limits after too many recent failures from the same IP`() {
-        // Five failed attempts within the rate-limit window — sixth gets the
-        // 30-second cooldown applied. The most recent attempt has to be within
-        // the cooldown horizon (30s for exponent=0), otherwise the cooldown
-        // expires and we'd let the request through.
+        // Five failures from this IP (against other usernames) — the sixth
+        // attempt from the IP waits out a 30-second cooldown.
         val ip = "203.0.113.99"
-        repeat(5) {
-            LoginAttempt(username = "alice", ip_address = ip,
-                attempted_at = LocalDateTime.now().minusSeconds(5), success = false).save()
-        }
+        seedFailures(5, "someone-else", ip, at = clock.now().minusSeconds(5))
         val result = AuthService.login("alice", PLAINTEXT, ip)
         assertTrue(result is LoginResult.RateLimited)
-        // Within the cooldown window — retryAfter is positive.
-        assertTrue(result.retryAfterSeconds > 0)
+        assertTrue(result.retryAfterSeconds in 1..30)
     }
 
     @Test
-    fun `login locks the account and rate-limits at LOCKOUT_THRESHOLD failures`() {
-        val ip = "203.0.113.100"
-        repeat(20) {
-            LoginAttempt(username = "alice", ip_address = ip,
-                attempted_at = LocalDateTime.now().minusMinutes(1), success = false).save()
-        }
-        val result = AuthService.login("alice", "wrong", ip)
+    fun `IP failures throttle that IP but do not lock out the account it targets`() {
+        val noisyIp = "203.0.113.99"
+        seedFailures(20, "random-guess", noisyIp)
+
+        assertTrue(AuthService.login("alice", PLAINTEXT, noisyIp) is LoginResult.RateLimited)
+        // The same account from a different IP is unaffected.
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.Success)
+        assertFalse(AppUser.findById(userId)!!.locked)
+    }
+
+    @Test
+    fun `username failures throttle the account from every IP`() {
+        seedFailures(5, "Alice", "203.0.113.100")
+        // Case-insensitive, and applies to a fresh IP.
+        val result = AuthService.login("alice", PLAINTEXT, "203.0.113.4")
         assertTrue(result is LoginResult.RateLimited)
-        // Account is now locked permanently.
-        assertTrue(AppUser.findById(userId)!!.locked,
-            "20+ failures in window should lock the account")
+    }
+
+    @Test
+    fun `many failures cool off temporarily and never set the locked flag`() {
+        val ip = "203.0.113.100"
+        seedFailures(40, "alice", ip)
+
+        val throttled = AuthService.login("alice", "wrong", ip)
+        assertTrue(throttled is LoginResult.RateLimited)
+        assertEquals(AuthService.RATE_LIMIT_MAX_COOLDOWN_SECONDS + 1, throttled.retryAfterSeconds)
+        assertFalse(AppUser.findById(userId)!!.locked,
+            "automatic throttling must not set the administrative locked flag")
+
+        // Once the failures age out of the window, the correct password works again.
+        clock.advance(16)
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.Success)
+    }
+
+    @Test
+    fun `cooldown grows exponentially with further failures`() {
+        val ip = "203.0.113.100"
+        seedFailures(5, "alice", ip)
+        assertEquals(31, (AuthService.login("alice", "wrong", ip) as LoginResult.RateLimited).retryAfterSeconds)
+
+        advanceSeconds(31)
+        assertTrue(AuthService.login("alice", "wrong", ip) is LoginResult.Failed, "cooldown expired")
+        // Six failures now: 60-second cooldown from the latest.
+        assertEquals(61, (AuthService.login("alice", "wrong", ip) as LoginResult.RateLimited).retryAfterSeconds)
+    }
+
+    @Test
+    fun `daily cap holds until failures age out of 24 hours`() {
+        // Spread so none fall in the 15-minute window, but 100 within 24h.
+        seedFailures(AuthService.DAILY_FAILURE_CAP, "alice", "203.0.113.100", at = clock.now().minusHours(2))
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.RateLimited)
+
+        clock.advanceHours(23)
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.Success)
+    }
+
+    @Test
+    fun `throttled attempts are not recorded`() {
+        seedFailures(5, "alice", "203.0.113.100")
+        AuthService.login("alice", "wrong", "203.0.113.100")
+        assertEquals(5, LoginAttempt.findAll().size)
+    }
+
+    @Test
+    fun `parallel bad attempts cannot exceed the threshold and the lockout expires`() {
+        // Many concurrent wrong-password logins for one account, each from
+        // its own IP so only the per-username limit is in play. Without an
+        // atomic check-and-reserve, every request would pass the check
+        // during the ~250ms password hash.
+        val parallelism = 25
+        val pool = Executors.newFixedThreadPool(parallelism)
+        val start = CountDownLatch(1)
+        try {
+            val futures = (1..parallelism).map { i ->
+                pool.submit<LoginResult> {
+                    start.await()
+                    AuthService.login("alice", "wrong-$i", "198.51.100.$i")
+                }
+            }
+            start.countDown()
+            val results = futures.map { it.get(60, TimeUnit.SECONDS) }
+
+            val failed = results.count { it is LoginResult.Failed }
+            val throttled = results.count { it is LoginResult.RateLimited }
+            assertEquals(AuthService.THROTTLE_THRESHOLD, failed,
+                "exactly the threshold may reach the password check")
+            assertEquals(parallelism - AuthService.THROTTLE_THRESHOLD, throttled)
+            assertEquals(AuthService.THROTTLE_THRESHOLD, LoginAttempt.findAll().size)
+        } finally {
+            pool.shutdownNow()
+        }
+
+        assertFalse(AppUser.findById(userId)!!.locked)
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.RateLimited)
+        // The 30-second cool-off expires; the real owner gets back in.
+        advanceSeconds(31)
+        assertTrue(AuthService.login("alice", PLAINTEXT, "203.0.113.4") is LoginResult.Success)
+    }
+
+    @Test
+    fun `successful login is recorded as a success`() {
+        AuthService.login("alice", PLAINTEXT, "203.0.113.4")
+        val attempt = LoginAttempt.findAll().single()
+        assertTrue(attempt.success)
+        assertEquals(clock.now(), attempt.attempted_at)
     }
 
     // ---------------------- session create / validate / revoke ----------------------

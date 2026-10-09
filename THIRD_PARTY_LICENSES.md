@@ -68,6 +68,21 @@ Located under `web-app/public/vendor/fonts/`. Loaded via
 
 ---
 
+## Data source attribution
+
+### TMDB
+
+- **Upstream:** https://www.themoviedb.org/
+- **Used for:** movie and TV metadata, posters, backdrops, and cast
+  headshots.
+- **Required notice:** This product uses the TMDB API but is not
+  endorsed or certified by TMDB.
+- **Shown in:** `README.md` (Credits), the web app's Help page
+  (Credits section), the iOS app's About screen, and the Android TV
+  app's Profile screen.
+
+---
+
 ## How to add an entry
 
 When vendoring a new library:

@@ -50,18 +50,23 @@ class CameraSettingsHttpService {
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
         val body = ctx.request().aggregate().join().contentUtf8()
-        val map = gson.fromJson(body, Map::class.java)
-        val name = (map["name"] as? String)?.trim() ?: return badRequest("name required")
-        val rtspUrl = (map["rtsp_url"] as? String)?.trim() ?: return badRequest("rtsp_url required")
-        val snapshotUrl = (map["snapshot_url"] as? String)?.trim() ?: ""
+        val map = gson.fromJson(body, Map::class.java) ?: return badRequest("body required")
+        val name = map["name"] as? String ?: return badRequest("name required")
+        val rtspUrl = map["rtsp_url"] as? String ?: return badRequest("rtsp_url required")
+        val snapshotUrl = map["snapshot_url"] as? String ?: ""
 
-        val go2rtcName = name.lowercase().replace(Regex("[^a-z0-9]+"), "_").trimEnd('_')
-        val maxOrder = Camera.findAll().maxOfOrNull { it.display_order } ?: -1
-
-        val camera = Camera(name = name, rtsp_url = rtspUrl, snapshot_url = snapshotUrl,
-            go2rtc_name = go2rtcName, display_order = maxOrder + 1, enabled = true, created_at = LocalDateTime.now())
-        camera.save()
-        Go2rtcAgent.instance?.reconfigure()
+        // Same validation as the gRPC AdminService path.
+        val camera = try {
+            CameraAdminService.create(
+                name = name,
+                rtspUrl = rtspUrl,
+                snapshotUrl = snapshotUrl,
+                streamName = CameraAdminService.generateStreamName(name),
+                enabled = true
+            )
+        } catch (e: IllegalArgumentException) {
+            return badRequest(e.message ?: "invalid camera")
+        }
 
         return jsonResponse(gson.toJson(mapOf("ok" to true, "id" to camera.id)))
     }
@@ -89,16 +94,26 @@ class CameraSettingsHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val camera = Camera.findById(cameraId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        if (Camera.findById(cameraId) == null) return HttpResponse.of(HttpStatus.NOT_FOUND)
         val body = ctx.request().aggregate().join().contentUtf8()
-        val map = gson.fromJson(body, Map::class.java)
+        val map = gson.fromJson(body, Map::class.java) ?: return badRequest("body required")
 
-        if (map.containsKey("name")) camera.name = (map["name"] as String).trim()
-        if (map.containsKey("rtsp_url")) camera.rtsp_url = (map["rtsp_url"] as String).trim()
-        if (map.containsKey("snapshot_url")) camera.snapshot_url = (map["snapshot_url"] as? String)?.trim() ?: ""
-        if (map.containsKey("enabled")) camera.enabled = map["enabled"] as Boolean
-        camera.save()
-        Go2rtcAgent.instance?.reconfigure()
+        val name = if (!map.containsKey("name")) null
+            else map["name"] as? String ?: return badRequest("name must be a string")
+        val rtspUrl = if (!map.containsKey("rtsp_url")) null
+            else map["rtsp_url"] as? String ?: return badRequest("rtsp_url must be a string")
+        val snapshotUrl = if (!map.containsKey("snapshot_url")) null
+            else map["snapshot_url"] as? String ?: ""
+        val enabled = if (!map.containsKey("enabled")) null
+            else map["enabled"] as? Boolean ?: return badRequest("enabled must be a boolean")
+
+        // Same validation as the gRPC AdminService path.
+        try {
+            CameraAdminService.patch(cameraId, name = name, rtspUrl = rtspUrl,
+                snapshotUrl = snapshotUrl, enabled = enabled)
+        } catch (e: IllegalArgumentException) {
+            return badRequest(e.message ?: "invalid camera")
+        }
 
         return jsonResponse("""{"ok":true}""")
     }

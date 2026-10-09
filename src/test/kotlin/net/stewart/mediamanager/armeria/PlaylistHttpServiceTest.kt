@@ -451,6 +451,41 @@ internal class PlaylistHttpServiceTest : ArmeriaTestBase() {
         assertEquals(forker.id, saved.owner_user_id)
     }
 
+    @Test
+    fun `duplicate returns 404 for another user's private playlist`() {
+        val originalOwner = getOrCreateUser("owner", level = 1)
+        val forker = getOrCreateUser("forker", level = 1)
+        val source = seedPlaylist(originalOwner.id!!, name = "Secret")
+        source.is_private = true
+        source.save()
+        val before = Playlist.findAll().size
+
+        val resp = service.duplicate(
+            ctxFor("/api/v2/playlists/${source.id}/duplicate",
+                method = HttpMethod.POST, user = forker,
+                jsonBody = """{"name": "Stolen"}"""),
+            id = source.id!!,
+        )
+        assertEquals(HttpStatus.NOT_FOUND, statusOf(resp))
+        assertEquals(before, Playlist.findAll().size, "no fork created")
+    }
+
+    @Test
+    fun `duplicate lets the owner fork their own private playlist`() {
+        val owner = getOrCreateUser("owner", level = 1)
+        val source = seedPlaylist(owner.id!!, name = "Secret")
+        source.is_private = true
+        source.save()
+
+        val resp = service.duplicate(
+            ctxFor("/api/v2/playlists/${source.id}/duplicate",
+                method = HttpMethod.POST, user = owner,
+                jsonBody = """{"name": "Secret 2"}"""),
+            id = source.id!!,
+        )
+        assertEquals(HttpStatus.OK, statusOf(resp))
+    }
+
     // ---------------------- progress + track-completed ----------------------
 
     @Test

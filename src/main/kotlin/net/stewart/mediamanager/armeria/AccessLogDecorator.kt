@@ -5,6 +5,7 @@ import com.linecorp.armeria.common.HttpResponse
 import com.linecorp.armeria.server.DecoratingHttpServiceFunction
 import com.linecorp.armeria.server.HttpService
 import com.linecorp.armeria.server.ServiceRequestContext
+import net.stewart.mediamanager.service.UriCredentialRedactor
 import org.slf4j.LoggerFactory
 import java.time.Duration
 
@@ -31,13 +32,12 @@ class AccessLogDecorator : DecoratingHttpServiceFunction {
         ctx.log().whenComplete().thenAccept { requestLog ->
             val method = ctx.method().name
             val path = ctx.path()
-            val query = ctx.query()
-            val uri = if (query != null) "$path?$query" else path
+            val uri = logSafeUri(path, ctx.query())
 
             val status = requestLog.responseHeaders().status().code()
             val elapsedMs = Duration.ofNanos(requestLog.responseDurationNanos()).toMillis()
             val responseSize = requestLog.responseLength()
-            val clientIp = ctx.clientAddress().hostAddress
+            val clientIp = ctx.bestEffortClientIp()
             val username = ArmeriaAuthDecorator.getUser(ctx)?.username ?: "-"
 
             // Skip gRPC — those are logged with proper granularity by
@@ -62,5 +62,31 @@ class AccessLogDecorator : DecoratingHttpServiceFunction {
         }
 
         return delegate.serve(ctx, req)
+    }
+
+    companion object {
+        /**
+         * Path prefixes whose final segment is a bearer credential (a
+         * signed token in the URL path rather than the query string).
+         */
+        private val tokenPathPrefixes = listOf("/public/album-art/")
+
+        /**
+         * Builds the request target for the access log with credentials
+         * removed: sensitive query parameter values (`?key=` device tokens,
+         * `token`, `code`, ...) and path-embedded tokens become `REDACTED`.
+         * Access logs are forwarded off-box, so they must never carry a
+         * replayable credential.
+         */
+        internal fun logSafeUri(path: String, query: String?): String {
+            var safePath = path
+            for (prefix in tokenPathPrefixes) {
+                if (path.startsWith(prefix) && path.length > prefix.length) {
+                    safePath = prefix + UriCredentialRedactor.REDACTED
+                    break
+                }
+            }
+            return if (query != null) "$safePath?${UriCredentialRedactor.redactQuery(query)}" else safePath
+        }
     }
 }

@@ -16,7 +16,7 @@ import net.stewart.mediamanager.entity.*
 import net.stewart.mediamanager.service.WishListService
 
 /**
- * REST endpoint for the transcode backlog (rip suggestions) admin page.
+ * REST endpoint for the transcode backlog admin page.
  */
 @Blocking
 class BacklogHttpService {

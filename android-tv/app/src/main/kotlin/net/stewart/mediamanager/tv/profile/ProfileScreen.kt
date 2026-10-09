@@ -138,6 +138,15 @@ fun ProfileScreen(
                             }
                         }
                     }
+
+                    item {
+                        Text(
+                            "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 24.dp)
+                        )
+                    }
                 }
             }
         }
