@@ -19,6 +19,7 @@ import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.LoginResult
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.RefreshResult
+import net.stewart.mediamanager.service.TrustedProxies
 import net.stewart.mediamanager.service.WebAuthnService
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import org.slf4j.LoggerFactory
@@ -32,9 +33,10 @@ import java.util.concurrent.ConcurrentLinkedDeque
  * - Access token: returned in JSON body, stored in memory by the SPA
  * - Refresh token: set as HttpOnly cookie (mm_refresh), never exposed to JS
  *
- * All endpoints require transit through the TLS-terminating reverse proxy
- * (verified via X-Forwarded-Proto and X-Forwarded-For headers). Direct
- * connections to the plaintext Armeria port are rejected.
+ * All endpoints require transit through a configured TLS-terminating
+ * reverse proxy (see [TrustedProxies]; X-Forwarded-* headers are honored
+ * only when the TCP peer is a trusted proxy) or a loopback caller. Direct
+ * network connections to the plaintext Armeria port are rejected.
  *
  * Rate limits are applied per-IP at the HTTP level (defense in depth —
  * [AuthService.login] also enforces per-IP and per-username limits internally).
@@ -448,35 +450,26 @@ class AuthRestService {
     private data class ProxyContext(val clientIp: String)
 
     /**
-     * Verifies the request transited the TLS-terminating reverse proxy by checking
-     * X-Forwarded-Proto and X-Forwarded-For headers. Returns null and logs if either
-     * is missing — credentials must never be issued over a plaintext direct connection.
+     * Verifies the request transited a configured TLS-terminating reverse
+     * proxy (or is a loopback caller). Forwarded headers are honored only
+     * from a trusted proxy peer; see [TrustedProxies]. Returns null and logs
+     * otherwise — credentials must never be issued over a plaintext direct
+     * network connection.
      */
     private fun requireProxy(ctx: ServiceRequestContext): ProxyContext? {
         val headers = ctx.request().headers()
-        val proto = headers.get("x-forwarded-proto")
-        val forwardedFor = headers.get("x-forwarded-for")
-
-        if (proto == null || forwardedFor == null) {
-            val remoteAddr = ctx.remoteAddress().address?.hostAddress ?: "unknown"
-            log.warn("Auth request rejected: missing proxy headers " +
-                "(x-forwarded-proto={}, x-forwarded-for={}, remote={})",
-                proto ?: "<absent>", forwardedFor ?: "<absent>", remoteAddr)
+        val peer = ctx.remoteAddress().address
+        val origin = TrustedProxies.resolve(
+            peer = peer,
+            forwardedProto = headers.get("x-forwarded-proto"),
+            forwardedFor = headers.getAll("x-forwarded-for"),
+        )
+        if (origin == null) {
+            log.warn("Auth request rejected: not via a trusted HTTPS proxy (peer={}, trusted_proxy={})",
+                peer?.hostAddress ?: "unknown", TrustedProxies.isTrusted(peer))
             return null
         }
-
-        if (!proto.equals("https", ignoreCase = true)) {
-            log.warn("Auth request rejected: x-forwarded-proto is '{}', expected 'https'", proto)
-            return null
-        }
-
-        val clientIp = forwardedFor.split(",").firstOrNull()?.trim()
-        if (clientIp.isNullOrBlank()) {
-            log.warn("Auth request rejected: x-forwarded-for is empty")
-            return null
-        }
-
-        return ProxyContext(clientIp)
+        return ProxyContext(origin.clientIp)
     }
 
     private fun proxyRequired(): HttpResponse =

@@ -6,7 +6,8 @@ import io.grpc.Context
 import io.grpc.Grpc
 import io.grpc.Metadata
 import io.grpc.ServerCall
-import java.net.InetAddress
+import net.stewart.mediamanager.service.IpNetwork
+import net.stewart.mediamanager.service.TrustedProxies
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 
@@ -30,23 +31,34 @@ internal object GrpcRequestContext {
         val authority: String?
     )
 
-    fun resolve(headers: Metadata, call: ServerCall<*, *>): TransportContext? {
+    /**
+     * Establish the caller's IP and whether the RPC arrived over a secure
+     * path. Returns null when it did not: a non-loopback peer that is not a
+     * configured trusted proxy, or a trusted proxy that didn't forward an
+     * HTTPS request. Forwarded headers are evaluated by [TrustedProxies].
+     */
+    fun resolve(
+        headers: Metadata,
+        call: ServerCall<*, *>,
+        trusted: List<IpNetwork> = TrustedProxies.configured(),
+    ): TransportContext? {
         val authority = resolveAuthority(call)
         val remoteAddr = call.attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)
-        if (isLocalTransport(remoteAddr)) {
-            return TransportContext(
-                clientIp = localClientIp(remoteAddr),
-                isLocal = true,
-                authority = authority,
-            )
+        if (isInProcess(remoteAddr)) {
+            return TransportContext(clientIp = "127.0.0.1", isLocal = true, authority = authority)
         }
-
-        val proto = headers.get(FORWARDED_PROTO_KEY)?.trim()
-        if (!proto.equals("https", ignoreCase = true)) return null
-
-        val forwardedFor = headers.get(FORWARDED_FOR_KEY)?.trim().orEmpty()
-        val clientIp = parseForwardedFor(forwardedFor) ?: return null
-        return TransportContext(clientIp = clientIp, isLocal = false, authority = authority)
+        val peer = (remoteAddr as? InetSocketAddress)?.address
+        val origin = TrustedProxies.resolve(
+            peer = peer,
+            forwardedProto = headers.get(FORWARDED_PROTO_KEY),
+            forwardedFor = headers.getAll(FORWARDED_FOR_KEY)?.toList().orEmpty(),
+            trusted = trusted,
+        ) ?: return null
+        return TransportContext(
+            clientIp = origin.clientIp,
+            isLocal = !origin.viaTrustedProxy,
+            authority = authority,
+        )
     }
 
     /**
@@ -68,28 +80,13 @@ internal object GrpcRequestContext {
         return call.authority
     }
 
-    internal fun parseForwardedFor(value: String): String? {
-        val first = value.split(',').firstOrNull()?.trim().orEmpty()
-        if (first.isEmpty()) return null
-        if (!first.contains('.') && !first.contains(':')) return null
-        if (!first.matches(Regex("^[0-9A-Fa-f:.]+$"))) return null
-        return try {
-            InetAddress.getByName(first).hostAddress
-        } catch (_: Exception) {
-            null
-        }
-    }
+    private fun isInProcess(remoteAddr: SocketAddress?): Boolean =
+        remoteAddr?.javaClass?.simpleName == "InProcessSocketAddress"
 
     internal fun isLocalTransport(remoteAddr: SocketAddress?): Boolean {
         if (remoteAddr == null) return false
-        if (remoteAddr.javaClass.simpleName == "InProcessSocketAddress") return true
+        if (isInProcess(remoteAddr)) return true
         val inet = remoteAddr as? InetSocketAddress ?: return false
         return inet.address?.isLoopbackAddress == true
-    }
-
-    private fun localClientIp(remoteAddr: SocketAddress?): String {
-        if (remoteAddr == null) return "127.0.0.1"
-        val inet = remoteAddr as? InetSocketAddress
-        return inet?.address?.hostAddress ?: "127.0.0.1"
     }
 }

@@ -210,6 +210,24 @@ class PairingServiceTest {
         assertNull(PairingService.validateDeviceToken("never-issued"))
     }
 
+    @Test
+    fun `validateDeviceToken rejects tokens belonging to a locked account`() {
+        val pc = PairingService.createPairCode("dev")
+        PairingService.confirmPairing(pc.code, AppUser.findById(userId)!!)
+        val rawToken = PairingService.checkStatus(pc.code)!!.token!!
+        assertNotNull(PairingService.validateDeviceToken(rawToken))
+
+        val user = AppUser.findById(userId)!!
+        user.locked = true
+        user.save()
+        assertNull(PairingService.validateDeviceToken(rawToken),
+            "a locked account must not authenticate via its paired devices")
+
+        user.locked = false
+        user.save()
+        assertNotNull(PairingService.validateDeviceToken(rawToken), "unlocking restores access")
+    }
+
     // Note: the `AppUser.findById(...) ?: return null` branch in
     // validateDeviceToken is defensive — the schema's FK from
     // device_token.user_id to app_user.id makes the orphan row state

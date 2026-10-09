@@ -10,9 +10,12 @@ import net.stewart.mediamanager.entity.SessionToken
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.service.TrustedProxies
+import org.junit.After
 import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
+import java.net.InetSocketAddress
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -51,7 +54,29 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
         // table wipe so the cache doesn't lie about the empty schema.
         AuthService.invalidateHasUsersCache()
         LegalRequirements.refresh()
+        TrustedProxies.configure(PROXY_PEER.address.hostAddress)
     }
+
+    @After
+    fun clearProxies() {
+        TrustedProxies.configure(null)
+    }
+
+    /** The configured TLS-terminating reverse proxy (RFC 5737 documentation range). */
+    private val PROXY_PEER = InetSocketAddress("192.0.2.10", 51000)
+    /** Some other LAN host talking to the server port directly. */
+    private val LAN_PEER = InetSocketAddress("198.51.100.20", 51000)
+
+    /** Auth-endpoint context; arrives from the trusted proxy unless [remote] says otherwise. */
+    private fun req(
+        path: String,
+        method: HttpMethod = HttpMethod.GET,
+        jsonBody: String? = null,
+        cookieHeader: String? = null,
+        extraHeaders: Map<String, String> = emptyMap(),
+        remote: InetSocketAddress = PROXY_PEER,
+    ) = ctxFor(path, method, jsonBody = jsonBody, cookieHeader = cookieHeader,
+        extraHeaders = extraHeaders, remoteAddress = remote)
 
     /**
      * Each test gets a unique fake IP so the per-IP rate limiter inside
@@ -62,6 +87,47 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
         "x-forwarded-proto" to "https",
         "x-forwarded-for" to "10.0.${ipCounter.incrementAndGet() % 256}.${ipCounter.get() % 256}",
     )
+
+    // ---------------------- trusted-proxy gate ----------------------
+
+    @Test
+    fun `spoofed forwarded headers from a non-proxy LAN peer are rejected`() {
+        val resp = service.logout(req("/api/v2/auth/logout",
+            method = HttpMethod.POST, extraHeaders = proxyHeaders(),
+            jsonBody = """{}""", remote = LAN_PEER))
+        assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
+    }
+
+    @Test
+    fun `direct LAN peer without proxy headers is rejected`() {
+        val resp = service.logout(req("/api/v2/auth/logout",
+            method = HttpMethod.POST, jsonBody = """{}""", remote = LAN_PEER))
+        assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
+    }
+
+    @Test
+    fun `loopback caller is accepted without proxy headers`() {
+        val resp = service.logout(req("/api/v2/auth/logout",
+            method = HttpMethod.POST, jsonBody = """{}""",
+            remote = InetSocketAddress("127.0.0.1", 51000)))
+        assertEquals(HttpStatus.OK, statusOf(resp))
+    }
+
+    @Test
+    fun `login rate limit keys on the proxy-appended client IP, not a client-supplied one`() {
+        // Each request claims a fresh fake origin on the left of XFF; the
+        // proxy-appended right-most entry is constant. If the left entry
+        // were trusted, the per-IP HTTP limit (10/min) would never trip.
+        val statuses = (1..12).map { i ->
+            statusOf(service.login(req("/api/v2/auth/login",
+                method = HttpMethod.POST,
+                extraHeaders = mapOf(
+                    "x-forwarded-proto" to "https",
+                    "x-forwarded-for" to "203.0.113.${100 + i}, 198.51.100.77"),
+                jsonBody = """{"username": "x"}""")))
+        }
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, statuses.last())
+    }
 
     // ---------------------- discover ----------------------
 
@@ -85,7 +151,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup returns 403 when proxy headers are absent`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST,
             jsonBody = """{"username": "admin", "password": "Excellent1234!"}"""))
         assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
@@ -93,7 +159,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup returns 403 when x-forwarded-proto is not https`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST,
             jsonBody = """{"username": "admin", "password": "Excellent1234!"}""",
             extraHeaders = mapOf(
@@ -107,7 +173,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup returns 400 when username is missing`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"password": "Excellent1234!"}"""))
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
@@ -115,7 +181,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup returns 400 when password violates policy (too short)`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "admin", "password": "x"}"""))
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
@@ -124,7 +190,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     @Test
     fun `setup returns 409 when users already exist`() {
         getOrCreateUser("existing", level = 2)
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "newadmin", "password": "Excellent1234!"}"""))
         assertEquals(HttpStatus.CONFLICT, statusOf(resp))
@@ -132,7 +198,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup returns 400 when legal URLs are not https or about-blank`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "admin",
                             "password": "Excellent1234!",
@@ -142,7 +208,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `setup creates the first admin and seeds default legal URLs on the happy path`() {
-        val resp = service.setup(ctxFor("/api/v2/auth/setup",
+        val resp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "admin", "password": "Excellent1234!"}"""))
         assertEquals(HttpStatus.OK, statusOf(resp))
@@ -170,7 +236,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
         val pre = service.discover(ctxFor("/api/v2/auth/discover"))
         assertEquals(true, readJsonObject(pre).get("setup_required").asBoolean)
 
-        val setupResp = service.setup(ctxFor("/api/v2/auth/setup",
+        val setupResp = service.setup(req("/api/v2/auth/setup",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "admin", "password": "Excellent1234!"}"""))
         assertEquals(HttpStatus.OK, statusOf(setupResp))
@@ -183,7 +249,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `login returns 403 with no proxy headers`() {
-        val resp = service.login(ctxFor("/api/v2/auth/login",
+        val resp = service.login(req("/api/v2/auth/login",
             method = HttpMethod.POST,
             jsonBody = """{"username": "x", "password": "y"}"""))
         assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
@@ -191,7 +257,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `login returns 400 when username or password is missing`() {
-        val resp = service.login(ctxFor("/api/v2/auth/login",
+        val resp = service.login(req("/api/v2/auth/login",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "x"}"""))
         assertEquals(HttpStatus.BAD_REQUEST, statusOf(resp))
@@ -199,7 +265,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `login returns 401 for an unknown user`() {
-        val resp = service.login(ctxFor("/api/v2/auth/login",
+        val resp = service.login(req("/api/v2/auth/login",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "nobody", "password": "Whatever1234!"}"""))
         assertEquals(HttpStatus.UNAUTHORIZED, statusOf(resp))
@@ -212,7 +278,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
             password_hash = PasswordService.hash("CorrectHorse1234!"),
             access_level = 1, created_at = now, updated_at = now).save()
 
-        val resp = service.login(ctxFor("/api/v2/auth/login",
+        val resp = service.login(req("/api/v2/auth/login",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "loginuser", "password": "WrongHorse1234!"}"""))
         assertEquals(HttpStatus.UNAUTHORIZED, statusOf(resp))
@@ -225,7 +291,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
             password_hash = PasswordService.hash("CorrectHorse1234!"),
             access_level = 1, created_at = now, updated_at = now).save()
 
-        val resp = service.login(ctxFor("/api/v2/auth/login",
+        val resp = service.login(req("/api/v2/auth/login",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{"username": "happyuser",
                             "password": "CorrectHorse1234!"}"""))
@@ -241,7 +307,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     fun `passkeyAuthenticationOptions returns 503 when WebAuthn is not configured`() {
         // No webauthn_rp_id set → IllegalStateException → 503.
         val resp = service.passkeyAuthenticationOptions(
-            ctxFor("/api/v2/auth/passkey/authentication-options",
+            req("/api/v2/auth/passkey/authentication-options",
                 method = HttpMethod.POST, extraHeaders = proxyHeaders())
         )
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, statusOf(resp))
@@ -250,7 +316,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     @Test
     fun `passkeyAuthenticate returns 400 when challenge is missing`() {
         val resp = service.passkeyAuthenticate(
-            ctxFor("/api/v2/auth/passkey/authenticate",
+            req("/api/v2/auth/passkey/authenticate",
                 method = HttpMethod.POST, extraHeaders = proxyHeaders(),
                 jsonBody = """{"credential": {}}""")
         )
@@ -260,7 +326,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     @Test
     fun `passkeyAuthenticate returns 400 when credential is missing`() {
         val resp = service.passkeyAuthenticate(
-            ctxFor("/api/v2/auth/passkey/authenticate",
+            req("/api/v2/auth/passkey/authenticate",
                 method = HttpMethod.POST, extraHeaders = proxyHeaders(),
                 jsonBody = """{"challenge": "abc"}""")
         )
@@ -271,14 +337,14 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `refresh returns 403 with no proxy headers`() {
-        val resp = service.refresh(ctxFor("/api/v2/auth/refresh",
+        val resp = service.refresh(req("/api/v2/auth/refresh",
             method = HttpMethod.POST, jsonBody = """{}"""))
         assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
     }
 
     @Test
     fun `refresh returns 401 when no refresh cookie is attached`() {
-        val resp = service.refresh(ctxFor("/api/v2/auth/refresh",
+        val resp = service.refresh(req("/api/v2/auth/refresh",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{}"""))
         assertEquals(HttpStatus.UNAUTHORIZED, statusOf(resp))
@@ -286,7 +352,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `refresh returns 401 with an invalid refresh token`() {
-        val resp = service.refresh(ctxFor("/api/v2/auth/refresh",
+        val resp = service.refresh(req("/api/v2/auth/refresh",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             cookieHeader = "mm_refresh=this-is-not-a-valid-token",
             jsonBody = """{}"""))
@@ -297,14 +363,14 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `logout returns 403 with no proxy headers`() {
-        val resp = service.logout(ctxFor("/api/v2/auth/logout",
+        val resp = service.logout(req("/api/v2/auth/logout",
             method = HttpMethod.POST, jsonBody = """{}"""))
         assertEquals(HttpStatus.FORBIDDEN, statusOf(resp))
     }
 
     @Test
     fun `logout returns 200 even when no cookies are attached`() {
-        val resp = service.logout(ctxFor("/api/v2/auth/logout",
+        val resp = service.logout(req("/api/v2/auth/logout",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             jsonBody = """{}"""))
         assertEquals(HttpStatus.OK, statusOf(resp))
@@ -313,7 +379,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
 
     @Test
     fun `logout clears the cookies on success and returns ok=true`() {
-        val resp = service.logout(ctxFor("/api/v2/auth/logout",
+        val resp = service.logout(req("/api/v2/auth/logout",
             method = HttpMethod.POST, extraHeaders = proxyHeaders(),
             cookieHeader = "mm_refresh=anything; mm_session=alsoanything",
             jsonBody = """{}"""))

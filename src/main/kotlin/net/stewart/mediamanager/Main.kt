@@ -28,6 +28,7 @@ import net.stewart.mediamanager.service.PopularityRefreshAgent
 import net.stewart.mediamanager.service.PriceLookupAgent
 import net.stewart.mediamanager.service.TmdbEnrichmentAgent
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.service.TrustedProxies
 import net.stewart.mediamanager.service.UpcLookupAgent
 import org.h2.tools.Server
 import org.slf4j.LoggerFactory
@@ -65,6 +66,7 @@ fun main(args: Array<String>) {
     CommandLineFlags.parseFlags(args)
 
     Bootstrap.init()
+    TrustedProxies.configureFromEnvironment()
     LegalRequirements.refresh()
     WebAuthnService.refreshConfig()
     MetricsRegistry.registerEntityGauges()
