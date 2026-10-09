@@ -14,7 +14,7 @@ import net.stewart.mediamanager.entity.TrackPlayCount
  * mutations (the auth check lives at the call site — every method that
  * mutates an existing playlist takes the acting user and throws
  * [PlaylistAccessDenied] when they don't own it). The [duplicate] call
- * is the one exception: any user may fork any playlist into one of
+ * is the one exception: any user may fork any playlist they can see into one of
  * their own.
  *
  * Playback / hero / shuffle are pure reads and don't enforce ownership.
@@ -311,8 +311,9 @@ object PlaylistService {
 
     /**
      * Fork [sourceId] into a new playlist owned by [actor]. The actor
-     * does **not** need to own the source — duplicate is the explicit
-     * "use this as a starting point" affordance. Copies name (with
+     * does **not** need to own a public source — duplicate is the explicit
+     * "use this as a starting point" affordance. A private source can
+     * only be duplicated by its owner; anyone else gets [PlaylistNotFound]. Copies name (with
      * " (copy)" suffix unless [newName] overrides), description,
      * hero_track_id, and the full track list with positions intact.
      */
@@ -323,6 +324,9 @@ object PlaylistService {
         clock: Clock = SystemClock
     ): Playlist {
         val source = Playlist.findById(sourceId) ?: throw PlaylistNotFound(sourceId)
+        // A private playlist is invisible to non-owners: report it exactly
+        // like a nonexistent one so its existence isn't revealed either.
+        if (source.is_private && source.owner_user_id != actor.id) throw PlaylistNotFound(sourceId)
         val now = clock.now()
 
         val copy = Playlist(
@@ -387,6 +391,10 @@ object PlaylistService {
 
     /** Latest resume cursor for [userId] on [playlistId], or null if absent. */
     fun getResume(userId: Long, playlistId: Long): ResumeInfo? {
+        // A cursor left over from when the playlist was public must not
+        // expose its contents after the owner made it private.
+        val pl = Playlist.findById(playlistId) ?: return null
+        if (pl.is_private && pl.owner_user_id != userId) return null
         val row = PlaylistProgress.findAll()
             .firstOrNull { it.user_id == userId && it.playlist_id == playlistId } ?: return null
         // Find the underlying playlist_track row to surface its track id.
