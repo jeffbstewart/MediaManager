@@ -2,9 +2,9 @@ package net.stewart.mediamanager.service
 
 import net.stewart.mediamanager.entity.MediaFormat
 import net.stewart.mediamanager.entity.Transcode
+import net.stewart.mediamanager.util.PathContainment
 import org.slf4j.LoggerFactory
 import java.io.File
-import net.stewart.mediamanager.util.PathContainment
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
