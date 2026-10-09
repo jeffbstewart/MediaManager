@@ -130,8 +130,10 @@ object PairingService {
     }
 
     /**
-     * Validates a device token and returns the associated user.
-     * Updates last_used_at on successful validation.
+     * Validates a device token and returns the associated user, or null if
+     * the token is unknown or the account is locked. Updates last_used_at
+     * on successful validation. Legal-terms compliance is the caller's
+     * gate (see [LegalRequirements.isCompliantForDevice]).
      */
     fun validateDeviceToken(rawToken: String): AppUser? {
         val hash = AuthService.hashToken(rawToken)
@@ -139,6 +141,10 @@ object PairingService {
             .firstOrNull { it.token_hash == hash } ?: return null
 
         val user = AppUser.findById(deviceToken.user_id) ?: return null
+        if (user.locked) {
+            log.info("AUDIT: Device token rejected — account '{}' is locked", user.username)
+            return null
+        }
 
         // Update last-used timestamp
         deviceToken.last_used_at = LocalDateTime.now()

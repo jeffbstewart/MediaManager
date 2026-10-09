@@ -43,8 +43,10 @@ services:
     #                   then go to https://www.themoviedb.org/settings/api
     #                   and copy "API Key (v3 auth)".
     # MM_NAS_ROOT:      Path to media inside the container (matches volume mount).
-    # MM_BEHIND_PROXY:  Set to true if behind a reverse proxy (nginx, traefik)
-    #                   so the app trusts X-Forwarded-* headers.
+    # MM_TRUSTED_PROXIES: Comma-separated IPs/CIDRs your TLS-terminating
+    #                   reverse proxy connects FROM (HAProxy, nginx, traefik).
+    #                   X-Forwarded-* headers are honored only from these
+    #                   addresses; without it, sign-in via the proxy is refused.
     # TZ:              IANA timezone for UI timestamp display (e.g., America/New_York,
     #                   America/Los_Angeles, Europe/London). Default: America/New_York.
     environment:
@@ -52,7 +54,7 @@ services:
       - H2_FILE_PASSWORD=change_me_to_another_strong_password
       - TMDB_API_KEY=your_tmdb_api_key_here
       - MM_NAS_ROOT=/media
-      - MM_BEHIND_PROXY=true
+      - MM_TRUSTED_PROXIES=192.0.2.10
       - TZ=America/New_York
 
     # ── Health Check ─────────────────────────────────────────────────

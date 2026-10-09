@@ -43,7 +43,7 @@ class PairingHttpService {
     }
 
     private fun getClientIp(ctx: ServiceRequestContext): String {
-        return ctx.remoteAddress().address?.hostAddress ?: "unknown"
+        return ctx.bestEffortClientIp()
     }
 
     private fun isRateLimited(

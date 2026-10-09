@@ -20,8 +20,33 @@ Set these in `secrets/.env` (local) or as Docker environment variables.
 | `TMDB_API_KEY` | Recommended | &mdash; | TMDB API key for title enrichment, posters, cast data |
 | `TMDB_API_READ_ACCESS_TOKEN` | No | &mdash; | TMDB read access token (alternative auth, not currently used) |
 | `MM_NAS_ROOT` | For media | &mdash; | Path to NAS media root (must match Docker volume mount) |
-| `MM_BEHIND_PROXY` | If proxied | `false` | Enables `X-Forwarded-*` header trust for reverse proxies |
+| `MM_TRUSTED_PROXIES` | If proxied | *(empty)* | Comma-separated IPs/CIDRs of the TLS-terminating reverse proxy. `X-Forwarded-*` headers are honored only from these peers. See [Reverse Proxy Trust](#reverse-proxy-trust). |
 | `MM_FFMPEG_PATH` | No | `/usr/bin/ffmpeg` | Override FFmpeg binary location |
+
+### Reverse Proxy Trust
+
+Sign-in, token refresh, and every gRPC call must arrive over HTTPS. When a reverse proxy terminates TLS and forwards to the main port, the server learns that (and the real client address) from the `X-Forwarded-Proto` and `X-Forwarded-For` headers. Those headers are trusted **only** when the TCP connection comes from an address listed in `MM_TRUSTED_PROXIES`:
+
+```
+MM_TRUSTED_PROXIES=192.0.2.10
+MM_TRUSTED_PROXIES=192.0.2.0/28, 2001:db8:ffff::/48
+```
+
+- List the address the proxy connects **from** (its source address on the server's network), not the public address clients use.
+- The client IP is the right-most `X-Forwarded-For` entry that is not itself a listed proxy. Entries the client supplied further left are ignored. With several proxies in a chain, list all of them.
+- Requests from any other non-loopback address are refused on sign-in endpoints and gRPC, even if they carry `X-Forwarded-*` headers. Loopback callers are accepted as local.
+- Configure the proxy to **append** to `X-Forwarded-For` (HAProxy: `option forwardfor`) and to set `X-Forwarded-Proto: https`.
+- An unparseable entry stops the server at startup.
+
+If this is unset or wrong while running behind a proxy, every sign-in is refused with "Direct access not permitted" and gRPC clients get `PERMISSION_DENIED`. The startup log prints the trusted list.
+
+`MM_BEHIND_PROXY` from earlier versions is no longer read; a warning is logged if it is set without `MM_TRUSTED_PROXIES`.
+
+### Sign-in Throttling
+
+Failed password sign-ins are throttled per username and, separately, per client IP. After 5 failures within 15 minutes, further attempts wait out a cool-off that doubles with each additional failure (30 seconds up to 15 minutes); 100 failures within 24 hours hold the username or IP at the maximum until they age out. Throttling is always temporary and never locks the account. An IP's failures only slow down that IP.
+
+The **locked** flag on a user is separate: it is never set automatically, and a locked account cannot sign in or use its paired devices until an admin unlocks it in **Users**.
 
 ---
 

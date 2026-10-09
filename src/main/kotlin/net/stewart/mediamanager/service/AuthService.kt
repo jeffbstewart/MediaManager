@@ -12,6 +12,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
 
 sealed class LoginResult {
     data class Success(val user: AppUser) : LoginResult()
@@ -42,11 +43,22 @@ object AuthService {
     const val COOKIE_NAME = "mm_session"
     const val SESSION_DAYS = 30L
     private const val RATE_LIMIT_WINDOW_MINUTES = 15L
-    private const val RATE_LIMIT_THRESHOLD = 5
+    /** Failures (per username, or per IP) in the window before cool-off starts. */
+    internal const val THROTTLE_THRESHOLD = 5
     private const val RATE_LIMIT_BASE_COOLDOWN_SECONDS = 30L
-    private const val RATE_LIMIT_MAX_COOLDOWN_SECONDS = 900L // 15 minutes
-    private const val LOCKOUT_THRESHOLD = 20
-    private const val DAILY_FAILURE_CAP = 100
+    internal const val RATE_LIMIT_MAX_COOLDOWN_SECONDS = 900L // 15 minutes
+    internal const val DAILY_FAILURE_CAP = 100
+    private const val LOCK_STRIPES = 64
+
+    /** Time source for login throttling. Tests substitute a controllable clock. */
+    @Volatile
+    internal var clock: Clock = SystemClock
+
+    // Striped locks serializing the throttle check + attempt reservation
+    // per username and per IP. Fixed-size so attacker-chosen usernames
+    // can't grow memory.
+    private val usernameLocks = Array(LOCK_STRIPES) { ReentrantLock() }
+    private val ipLocks = Array(LOCK_STRIPES) { ReentrantLock() }
 
     // --- In-memory auth token cache ---
     // Eliminates 4 DB round-trips per servlet request (image, video, progress, etc.)
@@ -103,12 +115,32 @@ object AuthService {
         return digest.digest(token.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Authenticate [username]/[password] for a caller at [ip].
+     *
+     * Throttling has two independent dimensions, both temporary:
+     * - **Per username** (account protection): after [THROTTLE_THRESHOLD]
+     *   failures in the window, further attempts for that username from any
+     *   IP wait out an exponential cool-off; [DAILY_FAILURE_CAP] failures in
+     *   24h hold it until they age out.
+     * - **Per IP** (rate limiting): the same rules keyed on the caller's IP.
+     *   An IP's failures throttle that IP only; they never count against
+     *   whichever account it tries next.
+     *
+     * Neither sets [AppUser.locked]; that flag is reserved for explicit
+     * administrative locking and is still honored here.
+     *
+     * The check and the recording of the attempt happen atomically (see
+     * [reserveAttempt]) before the slow password hash runs, so concurrent
+     * requests cannot all slip past the check.
+     */
     fun login(username: String, password: String, ip: String): LoginResult {
-        // Check rate limit (both per-IP and per-username)
-        val rateLimitResult = checkRateLimit(ip, username)
-        if (rateLimitResult != null) {
-            countLogin("rate_limited")
-            return rateLimitResult
+        val attemptId = when (val reservation = reserveAttempt(username, ip)) {
+            is Reservation.Throttled -> {
+                countLogin("rate_limited")
+                return reservation.result
+            }
+            is Reservation.Reserved -> reservation.attemptId
         }
 
         val userId = JdbiOrm.jdbi().withHandle<Long?, Exception> { handle ->
@@ -135,15 +167,14 @@ object AuthService {
             false
         }
 
-        // Record the attempt
-        LoginAttempt(
-            username = username,
-            ip_address = ip,
-            attempted_at = LocalDateTime.now(),
-            success = matched
-        ).save()
-
         return if (user != null && matched) {
+            // The reservation was recorded as a failure; flip it now that
+            // the password checked out.
+            JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
+                handle.createUpdate("UPDATE login_attempt SET success = TRUE WHERE id = :id")
+                    .bind("id", attemptId)
+                    .execute()
+            }
             log.info("AUDIT: Login success user='{}' ip='{}'", username, ip)
             countLogin("success")
             LoginResult.Success(user)
@@ -154,115 +185,113 @@ object AuthService {
         }
     }
 
+    private sealed interface Reservation {
+        data class Reserved(val attemptId: Long) : Reservation
+        data class Throttled(val result: LoginResult.RateLimited) : Reservation
+    }
+
     /**
-     * Checks both per-IP and per-username failure counts.
-     * Returns a RateLimited result with exponential backoff if either exceeds the threshold.
+     * Atomically check both throttle dimensions and, if allowed, record the
+     * attempt as a failure. The row is flipped to success by [login] once
+     * the password verifies. Holding per-IP and per-username stripe locks
+     * across check + insert means concurrent requests are admitted one at a
+     * time against an up-to-date failure count, so no more than the
+     * threshold can reach the password check before a cool-off starts.
+     *
+     * Lock order is always IP stripe, then username stripe (separate
+     * arrays), so two requests can't deadlock.
      */
-    private fun checkRateLimit(ip: String, username: String): LoginResult.RateLimited? {
-        val windowStart = LocalDateTime.now().minusMinutes(RATE_LIMIT_WINDOW_MINUTES)
-
-        val ipFailures = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-            handle.createQuery(
-                """SELECT COUNT(*) FROM login_attempt
-                   WHERE ip_address = :ip AND success = FALSE AND attempted_at > :window"""
-            )
-                .bind("ip", ip)
-                .bind("window", windowStart)
-                .mapTo(Int::class.java)
-                .one()
-        }
-
-        val userFailures = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-            handle.createQuery(
-                """SELECT COUNT(*) FROM login_attempt
-                   WHERE LOWER(username) = LOWER(:user) AND success = FALSE AND attempted_at > :window"""
-            )
-                .bind("user", username)
-                .bind("window", windowStart)
-                .mapTo(Int::class.java)
-                .one()
-        }
-
-        val maxFailures = maxOf(ipFailures, userFailures)
-
-        // Daily cap: hard limit on total failures per IP or username in 24 hours
-        if (maxFailures < RATE_LIMIT_THRESHOLD) {
-            val dayStart = LocalDateTime.now().minusHours(24)
-            val dailyIpFailures = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-                handle.createQuery(
-                    """SELECT COUNT(*) FROM login_attempt
-                       WHERE ip_address = :ip AND success = FALSE AND attempted_at > :window"""
+    private fun reserveAttempt(username: String, ip: String): Reservation {
+        val ipLock = stripe(ipLocks, ip)
+        val userLock = stripe(usernameLocks, username.lowercase())
+        ipLock.lock()
+        try {
+            userLock.lock()
+            try {
+                checkThrottle(ip, username)?.let { return Reservation.Throttled(it) }
+                val attempt = LoginAttempt(
+                    username = username,
+                    ip_address = ip,
+                    attempted_at = clock.now(),
+                    success = false
                 )
-                    .bind("ip", ip)
-                    .bind("window", dayStart)
-                    .mapTo(Int::class.java)
-                    .one()
+                attempt.save()
+                return Reservation.Reserved(attempt.id!!)
+            } finally {
+                userLock.unlock()
             }
-            val dailyUserFailures = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-                handle.createQuery(
-                    """SELECT COUNT(*) FROM login_attempt
-                       WHERE LOWER(username) = LOWER(:user) AND success = FALSE AND attempted_at > :window"""
-                )
-                    .bind("user", username)
-                    .bind("window", dayStart)
-                    .mapTo(Int::class.java)
-                    .one()
-            }
-            val maxDaily = maxOf(dailyIpFailures, dailyUserFailures)
-            if (maxDaily >= DAILY_FAILURE_CAP) {
-                log.info("AUDIT: Daily rate limit hit ip='{}' user='{}' ({} IP failures/24h, {} user failures/24h)",
-                    ip, maskUsername(username), dailyIpFailures, dailyUserFailures)
-                return LoginResult.RateLimited(RATE_LIMIT_MAX_COOLDOWN_SECONDS)
-            }
-            return null
+        } finally {
+            ipLock.unlock()
         }
+    }
 
-        // Permanent lockout after LOCKOUT_THRESHOLD failures — requires admin intervention
-        if (maxFailures >= LOCKOUT_THRESHOLD) {
-            val locked = JdbiOrm.jdbi().withHandle<Int, Exception> { handle ->
-                handle.createUpdate(
-                    "UPDATE app_user SET locked = TRUE, updated_at = :now WHERE LOWER(username) = LOWER(:u) AND locked = FALSE"
-                )
-                    .bind("now", LocalDateTime.now())
-                    .bind("u", username)
-                    .execute()
-            }
-            if (locked > 0) {
-                log.warn("AUDIT: Account '{}' locked after {} failed attempts from ip='{}'",
-                    maskUsername(username), maxFailures, ip)
-            }
-            return LoginResult.RateLimited(RATE_LIMIT_MAX_COOLDOWN_SECONDS)
-        }
+    private fun stripe(locks: Array<ReentrantLock>, key: String): ReentrantLock =
+        locks[Math.floorMod(key.hashCode(), locks.size)]
 
-        // Exponential backoff: 30s, 60s, 120s, 240s, 480s, 900s (cap)
-        val exponent = maxFailures - RATE_LIMIT_THRESHOLD
-        val cooldown = minOf(
-            RATE_LIMIT_BASE_COOLDOWN_SECONDS * (1L shl minOf(exponent, 10)),
-            RATE_LIMIT_MAX_COOLDOWN_SECONDS
+    private data class FailureStats(val inWindow: Int, val lastFailure: LocalDateTime?, val inDay: Int)
+
+    /**
+     * Failure counts for one dimension. [condition] is a fixed SQL fragment
+     * chosen by the caller (never user input); [value] is bound as `:v`.
+     */
+    private fun failureStats(
+        condition: String, value: String, windowStart: LocalDateTime, dayStart: LocalDateTime,
+    ): FailureStats = JdbiOrm.jdbi().withHandle<FailureStats, Exception> { handle ->
+        handle.createQuery(
+            """SELECT COALESCE(SUM(CASE WHEN attempted_at > :window THEN 1 ELSE 0 END), 0) AS in_window,
+                      MAX(attempted_at) AS last_failure,
+                      COUNT(*) AS in_day
+               FROM login_attempt
+               WHERE $condition AND success = FALSE AND attempted_at > :day"""
         )
+            .bind("v", value)
+            .bind("window", windowStart)
+            .bind("day", dayStart)
+            .map { rs, _ ->
+                FailureStats(
+                    inWindow = rs.getInt("in_window"),
+                    lastFailure = rs.getTimestamp("last_failure")?.toLocalDateTime(),
+                    inDay = rs.getInt("in_day"),
+                )
+            }
+            .one()
+    }
 
-        // Find the most recent failed attempt time for either dimension
-        val lastAttempt = JdbiOrm.jdbi().withHandle<LocalDateTime?, Exception> { handle ->
-            handle.createQuery(
-                """SELECT MAX(attempted_at) FROM login_attempt
-                   WHERE (ip_address = :ip OR LOWER(username) = LOWER(:user))
-                     AND success = FALSE AND attempted_at > :window"""
-            )
-                .bind("ip", ip)
-                .bind("user", username)
-                .bind("window", windowStart)
-                .mapTo(LocalDateTime::class.java)
-                .firstOrNull()
-        } ?: return null
+    /**
+     * Seconds the caller must wait for one dimension, or 0 when allowed.
+     * Exponential backoff from the most recent failure once the window
+     * count reaches the threshold: 30s, 60s, 120s ... capped at 15 minutes.
+     * The daily cap holds at the maximum until failures age out of 24h.
+     */
+    private fun cooldownRemaining(stats: FailureStats, now: LocalDateTime): Long {
+        if (stats.inDay >= DAILY_FAILURE_CAP) return RATE_LIMIT_MAX_COOLDOWN_SECONDS
+        if (stats.inWindow < THROTTLE_THRESHOLD) return 0
+        val last = stats.lastFailure ?: return 0
+        val exponent = minOf(stats.inWindow - THROTTLE_THRESHOLD, 10)
+        val cooldown = minOf(RATE_LIMIT_BASE_COOLDOWN_SECONDS * (1L shl exponent), RATE_LIMIT_MAX_COOLDOWN_SECONDS)
+        val retryAfter = java.time.Duration.between(now, last.plusSeconds(cooldown))
+        return if (retryAfter.isNegative || retryAfter.isZero) 0L else retryAfter.seconds + 1
+    }
 
-        val retryAfter = java.time.Duration.between(LocalDateTime.now(), lastAttempt.plusSeconds(cooldown))
-        val secondsRemaining = if (retryAfter.isNegative) 0L else retryAfter.seconds + 1
-        if (secondsRemaining > 0) {
-            log.info("AUDIT: Login rate-limited ip='{}' user='{}' ({} IP failures, {} user failures, {}s cooldown)",
-                ip, maskUsername(username), ipFailures, userFailures, cooldown)
-            return LoginResult.RateLimited(secondsRemaining)
-        }
-        return null
+    /** Returns a RateLimited result if either the username or the IP is cooling off. */
+    private fun checkThrottle(ip: String, username: String): LoginResult.RateLimited? {
+        val now = clock.now()
+        val windowStart = now.minusMinutes(RATE_LIMIT_WINDOW_MINUTES)
+        val dayStart = now.minusHours(24)
+
+        val userStats = failureStats("LOWER(username) = LOWER(:v)", username, windowStart, dayStart)
+        val ipStats = failureStats("ip_address = :v", ip, windowStart, dayStart)
+        val userWait = cooldownRemaining(userStats, now)
+        val ipWait = cooldownRemaining(ipStats, now)
+        val wait = maxOf(userWait, ipWait)
+        if (wait <= 0) return null
+
+        log.info("AUDIT: Login throttled ip='{}' user='{}' (user: {} recent/{} daily failures, wait {}s; " +
+            "ip: {} recent/{} daily failures, wait {}s)",
+            ip, maskUsername(username),
+            userStats.inWindow, userStats.inDay, userWait,
+            ipStats.inWindow, ipStats.inDay, ipWait)
+        return LoginResult.RateLimited(wait)
     }
 
     /**

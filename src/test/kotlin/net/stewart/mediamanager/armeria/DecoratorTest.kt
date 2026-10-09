@@ -376,37 +376,67 @@ internal class ArmeriaAuthDecoratorTest : ArmeriaTestBase() {
         assertEquals("device_token", ctx.attr(ArmeriaAuthDecorator.AUTH_METHOD_KEY))
     }
 
-    @Test
-    fun `device-token auth bypasses the legal compliance gate`() {
-        val viewer = getOrCreateUser("viewer", level = 1)
+    private fun pairDevice(user: AppUser): String {
         val rawToken = "device-${java.util.UUID.randomUUID()}"
         DeviceToken(
-            user_id = viewer.id!!,
+            user_id = user.id!!,
             token_hash = AuthService.hashToken(rawToken),
             device_name = "Roku",
             created_at = LocalDateTime.now(),
             last_used_at = LocalDateTime.now(),
         ).save()
-        // Configure a required terms-of-use version higher than the
-        // user has agreed to. Browser auth would fail here; device
-        // auth must still pass.
+        return rawToken
+    }
+
+    /** Require privacy policy v5 and web terms of use v5. */
+    private fun requireLegalVersion5() {
         // Both privacy + terms versions must be > 0 for the compliance
         // gate to engage (privacy_policy_version == 0 short-circuits the
         // check, treating everyone as compliant by default).
-        AppConfig(config_key = "privacy_policy_url",
-            config_val = "about:blank").save()
-        AppConfig(config_key = "privacy_policy_version",
-            config_val = "5").save()
-        AppConfig(config_key = "web_terms_of_use_url",
-            config_val = "about:blank").save()
-        AppConfig(config_key = "web_terms_of_use_version",
-            config_val = "5").save()
+        AppConfig(config_key = "privacy_policy_url", config_val = "about:blank").save()
+        AppConfig(config_key = "privacy_policy_version", config_val = "5").save()
+        AppConfig(config_key = "web_terms_of_use_url", config_val = "about:blank").save()
+        AppConfig(config_key = "web_terms_of_use_version", config_val = "5").save()
         LegalRequirements.refresh()
+    }
 
-        val ctx = ctxWithHeaders("/roku/feed.json", keyParam = rawToken)
+    @Test
+    fun `device-token auth requires the privacy policy but not the web terms of use`() {
+        val viewer = getOrCreateUser("viewer", level = 1)
+        viewer.privacy_policy_version = 5
+        viewer.save()
+        val rawToken = pairDevice(viewer)
+        requireLegalVersion5()
+
+        // Web TOU is not accepted; a browser session would get 451 here.
+        // Paired devices have no TOU of their own, so only privacy counts.
+        val ctx = ctxWithHeaders("/stream/1", keyParam = rawToken)
         val resp = decorator.serve(sentinelDelegate(), ctx, ctx.request())
-        assertEquals(HttpStatus.OK, statusOf(resp),
-            "device-token requests skip the legal gate")
+        assertEquals(HttpStatus.OK, statusOf(resp))
+    }
+
+    @Test
+    fun `device-token auth returns 451 when the privacy policy is not accepted`() {
+        val viewer = getOrCreateUser("viewer", level = 1)
+        val rawToken = pairDevice(viewer)
+        requireLegalVersion5()
+
+        val ctx = ctxWithHeaders("/stream/1", keyParam = rawToken)
+        val resp = decorator.serve(sentinelDelegate(), ctx, ctx.request())
+        assertEquals(451, statusOf(resp).code())
+        assertTrue("terms_required" in readBody(resp))
+    }
+
+    @Test
+    fun `device token for a locked account is rejected`() {
+        val viewer = getOrCreateUser("viewer", level = 1)
+        val rawToken = pairDevice(viewer)
+        viewer.locked = true
+        viewer.save()
+
+        val ctx = ctxWithHeaders("/stream/1", keyParam = rawToken)
+        val resp = decorator.serve(sentinelDelegate(), ctx, ctx.request())
+        assertEquals(HttpStatus.UNAUTHORIZED, statusOf(resp))
     }
 
     @Test

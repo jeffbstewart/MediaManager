@@ -115,21 +115,28 @@ class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
         ctx.setAttr(USER_KEY, user)
         ctx.setAttr(AUTH_METHOD_KEY, authMethod!!)
 
-        // Legal compliance check — skip for device tokens (Roku) and exempt paths
-        if (authMethod != "device_token" && !isLegalExempt(ctx.path())) {
-            val requiredTou = LegalRequirements.webTermsOfUseVersion
-            if (!LegalRequirements.isCompliant(user.id!!, user.isAdmin(), requiredTou)) {
-                val body = """{"error":"terms_required"}"""
-                val bytes = body.toByteArray(Charsets.UTF_8)
-                // HTTP 451 Unavailable For Legal Reasons
-                val responseHeaders = ResponseHeaders.builder(HttpStatus.valueOf(451))
-                    .contentType(MediaType.JSON_UTF_8)
-                    .contentLength(bytes.size.toLong())
-                    .build()
-                return HttpResponse.of(responseHeaders, HttpData.wrap(bytes))
+        // Legal compliance check (skipped on exempt paths). Paired devices
+        // have no terms-of-use document of their own, so they are held to
+        // the privacy policy only; every other identity to the web TOU too.
+        if (!isLegalExempt(ctx.path())) {
+            val compliant = if (authMethod == "device_token") {
+                LegalRequirements.isCompliantForDevice(user)
+            } else {
+                LegalRequirements.isCompliant(user.id!!, user.isAdmin(), LegalRequirements.webTermsOfUseVersion)
             }
+            if (!compliant) return termsRequiredResponse()
         }
 
         return delegate.serve(ctx, req)
     }
+}
+
+/** HTTP 451 Unavailable For Legal Reasons, with the `terms_required` marker the clients key off. */
+internal fun termsRequiredResponse(): HttpResponse {
+    val bytes = """{"error":"terms_required"}""".toByteArray(Charsets.UTF_8)
+    val responseHeaders = ResponseHeaders.builder(HttpStatus.valueOf(451))
+        .contentType(MediaType.JSON_UTF_8)
+        .contentLength(bytes.size.toLong())
+        .build()
+    return HttpResponse.of(responseHeaders, HttpData.wrap(bytes))
 }
