@@ -4,6 +4,7 @@ import net.stewart.mediamanager.entity.MediaFormat
 import net.stewart.mediamanager.entity.Transcode
 import org.slf4j.LoggerFactory
 import java.io.File
+import net.stewart.mediamanager.util.PathContainment
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
@@ -76,7 +77,7 @@ object ReclassifyService {
         }
 
         val targetFile = File(targetDir, sourceFile.name)
-        if (!targetFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+        if (!PathContainment.isWithin(targetFile, targetDir)) {
             throw IllegalArgumentException("Target path escapes target directory")
         }
         if (targetFile.exists()) {
