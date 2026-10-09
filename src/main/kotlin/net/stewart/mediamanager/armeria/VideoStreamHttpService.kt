@@ -19,6 +19,7 @@ import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.Transcode
 import net.stewart.mediamanager.service.MetricsRegistry
 import net.stewart.mediamanager.service.TranscoderAgent
+import net.stewart.mediamanager.util.PathContainment
 import net.stewart.transcode.BifGenerator
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -138,7 +139,7 @@ class VideoStreamHttpService {
             }
 
             // Path traversal guard
-            if (nasRoot != null && !sourceFile.canonicalPath.startsWith(File(nasRoot).canonicalPath)) {
+            if (nasRoot != null && !PathContainment.isWithin(sourceFile, File(nasRoot))) {
                 log.warn("Path traversal blocked: {} is outside NAS root", sourceFile.canonicalPath)
                 writer.write(ResponseHeaders.of(HttpStatus.FORBIDDEN))
                 MetricsRegistry.countHttpResponse("stream", 403)
@@ -165,7 +166,7 @@ class VideoStreamHttpService {
                         writer.close()
                         return
                     }
-                    if (!forBrowserFile.canonicalPath.startsWith(File(nasRoot).canonicalPath)) {
+                    if (!PathContainment.isWithin(forBrowserFile, File(nasRoot))) {
                         log.warn("Path traversal blocked: {} is outside NAS root", forBrowserFile.canonicalPath)
                         writer.write(ResponseHeaders.of(HttpStatus.FORBIDDEN))
                         MetricsRegistry.countHttpResponse("stream", 403)
@@ -325,7 +326,7 @@ class VideoStreamHttpService {
         }
 
         // Path traversal guard
-        if (nasRoot != null && !thumbFile.canonicalPath.startsWith(File(nasRoot).canonicalPath)) {
+        if (nasRoot != null && !PathContainment.isWithin(thumbFile, File(nasRoot))) {
             MetricsRegistry.countHttpResponse("stream", 403)
             return HttpResponse.of(HttpStatus.FORBIDDEN)
         }
@@ -396,7 +397,7 @@ class VideoStreamHttpService {
         }
 
         // Path traversal guard
-        if (nasRoot != null && !srtFile.canonicalPath.startsWith(File(nasRoot).canonicalPath)) {
+        if (nasRoot != null && !PathContainment.isWithin(srtFile, File(nasRoot))) {
             MetricsRegistry.countHttpResponse("stream", 403)
             return HttpResponse.of(HttpStatus.FORBIDDEN)
         }
