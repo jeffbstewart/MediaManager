@@ -7,6 +7,7 @@ import io.grpc.ServerCall
 import io.grpc.ServerCallHandler
 import io.grpc.ServerInterceptor
 import io.grpc.Status
+import net.stewart.mediamanager.armeria.CookieCsrfGuard
 import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
@@ -185,54 +186,11 @@ class AuthInterceptor : ServerInterceptor {
     }
 
     /**
-     * Compare an Origin header value against the request authority. Returns
-     * true when the request is safe to authenticate via cookie:
-     *   - Origin is absent (non-browser caller — can't be CSRF'd via fetch).
-     *   - Origin's hostname matches the authority's hostname.
-     *
-     * Returns false when Origin is present but points at a different host —
-     * this is the CSRF rejection path.
-     *
-     * Hostname-only comparison: HTTP/2 reverse proxies (HAProxy in our
-     * deploy) often rewrite the `:authority` pseudo-header, dropping or
-     * changing the port from the public-facing one the browser puts in
-     * Origin. Matching hosts and ignoring ports keeps the CSRF gate
-     * meaningful (an attacker can't trick the gate from a different
-     * hostname) while tolerating the proxy rewrite.
-     *
-     * If the authority can't be determined the check fails closed (false),
-     * since we can't prove same-origin without it.
+     * Origin-vs-authority CSRF comparison. Shared with the HTTP auth
+     * decorator; see [CookieCsrfGuard.originPermitted] for the rules.
      */
-    internal fun originPermitted(origin: String?, authority: String?): Boolean {
-        if (origin == null) return true
-        if (authority.isNullOrBlank()) return false
-        val originHost = parseOriginHost(origin) ?: return false
-        val authorityHost = stripPort(authority)
-        return originHost.equals(authorityHost, ignoreCase = true)
-    }
-
-    /** Pull just the hostname out of `scheme://host[:port]`. */
-    private fun parseOriginHost(origin: String): String? {
-        return try {
-            java.net.URI(origin).host
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * Strip the trailing `:port` from a `host[:port]` authority value.
-     * Handles bracketed IPv6 literals (`[::1]:8443` → `[::1]`).
-     */
-    private fun stripPort(hostPort: String): String {
-        if (hostPort.startsWith('[')) {
-            val close = hostPort.indexOf(']')
-            if (close >= 0) return hostPort.substring(0, close + 1)
-            return hostPort
-        }
-        val colon = hostPort.lastIndexOf(':')
-        return if (colon < 0) hostPort else hostPort.substring(0, colon)
-    }
+    internal fun originPermitted(origin: String?, authority: String?): Boolean =
+        CookieCsrfGuard.originPermitted(origin, authority)
 
     /**
      * Diagnostic single-line log when auth resolved nobody. Captures

@@ -202,7 +202,11 @@ identity chain as gRPC, plus two extra fallbacks: the `mm_jwt` cookie (iOS
 HLS — AVPlayer can't set headers) and a `?key=` device token
 (`PairingService.validateDeviceToken`, for paired Roku/devices). Returns
 **401** when unauthenticated, **403** before first-user setup, and **451**
-when the user still owes a terms agreement. A few endpoints are deliberately
+when the user still owes a terms agreement. Cookie-authenticated
+(`mm_session` / `mm_jwt`) state-changing requests must also pass
+`armeria/CookieCsrfGuard`: same Origin as gRPC (**403** otherwise) and a
+non-"simple" body type, i.e. not `text/plain`, form-encoded, multipart, or
+untyped (**415** otherwise). Bearer and `?key=` requests are exempt. A few endpoints are deliberately
 unauthenticated (health check, CSP report sink, `AuthRestService`, and the
 Roku feed / pairing endpoints, which carry their own auth).
 

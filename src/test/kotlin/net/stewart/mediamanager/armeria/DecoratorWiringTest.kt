@@ -46,6 +46,9 @@ class DecoratorWiringTest {
             })
             JdbiOrm.setDataSource(dataSource)
             Flyway.configure().dataSource(dataSource).load().migrate()
+            // hasUsers() is cached process-wide; a class that ran earlier in
+            // this JVM fork may have left it "true".
+            net.stewart.mediamanager.service.AuthService.invalidateHasUsersCache()
 
             val sb = Server.builder().http(0)
             // Same wiring production uses — if a decorator gets removed
