@@ -225,8 +225,8 @@ nas_root/
 
 A `(YYYY)` between 1950 and 2050 in the filename is interpreted as
 the release year. Trailing articles get normalized: `Karate Kid The`
-becomes `The Karate Kid`. MakeMKV's `_t00` / `_t01` suffix is
-stripped automatically.
+becomes `The Karate Kid`. A trailing `_t00` / `_t01` title-number suffix
+(the naming pattern MakeMKV uses) is stripped automatically.
 
 **TV** — nested two levels deep:
 
@@ -347,7 +347,7 @@ All files successfully matched to catalog titles. Shows the file path, format, c
 
 ### Backlog
 
-Catalog titles that have no transcoded files at all. This is your "rip these next" list, sorted by TMDB popularity so the most-wanted titles are at the top.
+Catalog titles that have no media file on the NAS. Sorted by request count, then TMDB popularity, so the most-wanted titles are at the top.
 
 ---
 

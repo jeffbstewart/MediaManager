@@ -31,7 +31,7 @@ Media Manager is a self-hosted web application for people who own physical media
 
 **Catalog** your collection by scanning UPC barcodes. Media Manager looks up the product, identifies the titles inside (even multi-packs), and enriches each title with poster art, descriptions, cast, genres, and content ratings from TMDB.
 
-**Discover** transcoded files on your NAS and automatically match them to catalog titles. The system understands MakeMKV naming conventions and handles movies, TV series with season/episode structure, and multi-disc sets.
+**Discover** the media files on your NAS and automatically match them to catalog titles. The matcher recognizes common filename conventions (including the `_t00` title suffix MakeMKV produces) and handles movies, TV series with season/episode structure, and multi-disc sets.
 
 **Watch** from any browser, Roku, or Google TV. The built-in video player streams MP4 files directly. MKV and AVI files are automatically transcoded to browser-compatible MP4 in the background, prioritized by popularity. Playback position syncs across devices.
 

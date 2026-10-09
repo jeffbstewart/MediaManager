@@ -5,9 +5,9 @@
 <h1 align="center">mediaManager</h1>
 
 <p align="center">
-  <strong>Your physical media collection, digitized and streamable.</strong><br>
+  <strong>A catalog and streaming server for the media you own.</strong><br>
   Catalog DVDs, Blu-rays, UHDs, ebooks, and audio CDs by barcode. Enrich with TMDB, Open Library, and MusicBrainz metadata.<br>
-  Watch, read, and listen from any browser, Roku, Android TV, iPhone (incl. CarPlay), or iPad — online or offline.
+  Discover the media files already on your NAS and play them from any browser, Roku, Android TV, iPhone (incl. CarPlay), or iPad — online or offline.
 </p>
 
 ---
@@ -63,6 +63,15 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 - **Android TV:** Jetpack Compose for TV, ExoPlayer, grpc-kotlin
 - **Roku:** BrightScript / SceneGraph
 - **Deployment:** Docker on Synology NAS with Watchtower auto-deploy
+
+## Credits
+
+Movie and TV metadata and images come from [TMDB](https://www.themoviedb.org/).
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+Book metadata comes from [Open Library](https://openlibrary.org/); music
+metadata from [MusicBrainz](https://musicbrainz.org/) and cover art from
+the [Cover Art Archive](https://coverartarchive.org/).
 
 ## License
 

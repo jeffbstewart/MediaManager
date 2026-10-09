@@ -816,7 +816,7 @@ class AdminGrpcService(
     }
 
     // ========================================================================
-    // Rip Backlog
+    // Transcode Backlog
     // ========================================================================
 
     override suspend fun listRipBacklog(request: PaginationRequest): RipBacklogResponse {

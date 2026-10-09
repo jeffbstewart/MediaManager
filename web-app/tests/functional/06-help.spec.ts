@@ -22,9 +22,9 @@ test.describe('help page', () => {
       .toContainText('streaming hub');
   });
 
-  test('table of contents lists all eight sections', async ({ page }) => {
+  test('table of contents lists all nine sections', async ({ page }) => {
     const tocLinks = page.locator('app-help nav.toc ul li a');
-    await expect(tocLinks).toHaveCount(8);
+    await expect(tocLinks).toHaveCount(9);
     await expect(tocLinks.nth(0)).toContainText('Home');
     await expect(tocLinks.nth(1)).toContainText('Browsing');
     await expect(tocLinks.nth(2)).toContainText('Watching');
@@ -33,10 +33,11 @@ test.describe('help page', () => {
     await expect(tocLinks.nth(5)).toContainText('Live TV');
     await expect(tocLinks.nth(6)).toContainText('Profile');
     await expect(tocLinks.nth(7)).toContainText('Keyboard Shortcuts');
+    await expect(tocLinks.nth(8)).toContainText('Credits');
   });
 
   test('every TOC anchor target exists as a section[id]', async ({ page }) => {
-    // Pull the eight expected fragment ids from the TOC, then verify
+    // Pull the expected fragment ids from the TOC, then verify
     // each one matches a <section> on the page. Catches any future
     // copy-paste drift between the TOC and the body anchors.
     const fragments = await page.locator('app-help nav.toc a').evaluateAll(
@@ -50,9 +51,10 @@ test.describe('help page', () => {
 
   test('section h2 headings render in document order', async ({ page }) => {
     const h2s = page.locator('app-help section > h2');
-    await expect(h2s).toHaveCount(8);
+    await expect(h2s).toHaveCount(9);
     await expect(h2s.nth(0)).toContainText('Home');
     await expect(h2s.nth(7)).toContainText('Keyboard Shortcuts');
+    await expect(h2s.nth(8)).toContainText('Credits');
   });
 
   test('keyboard shortcuts table renders with the documented rows', async ({ page }) => {
@@ -64,6 +66,11 @@ test.describe('help page', () => {
     await expect(rows.nth(2).locator('kbd')).toContainText('Escape');
     // Row 4 is Double-click — no kbd element.
     await expect(rows.nth(3)).toContainText('Double-click');
+  });
+
+  test('Credits section carries the TMDB attribution notice', async ({ page }) => {
+    await expect(page.locator('app-help section#credits .tmdb-notice')).toHaveText(
+      'This product uses the TMDB API but is not endorsed or certified by TMDB.');
   });
 
   test('Profile reference link points at the in-app /profile route', async ({ page }) => {
