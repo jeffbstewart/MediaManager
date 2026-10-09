@@ -133,7 +133,10 @@ class LastFmHttpService : LastFmService {
             200 -> response.body()
             404 -> null
             429, 503 -> throw RateLimitedException()
-            else -> throw RuntimeException("HTTP ${response.statusCode()} from $url")
+            // The URL carries api_key; never let it reach the exception
+            // message (which is logged and surfaced in the result).
+            else -> throw RuntimeException(
+                "HTTP ${response.statusCode()} from ${UriCredentialRedactor.redactForLog(url)}")
         }
     }
 

@@ -51,12 +51,12 @@ class JdkHttpFetcher(
             404 -> null
             429, 503 -> {
                 log.warn("Upstream rate limited ({}); skipping {}",
-                    response.statusCode(), url)
+                    response.statusCode(), UriCredentialRedactor.redactForLog(url))
                 null
             }
             else -> {
                 log.warn("Upstream returned HTTP {} for {}",
-                    response.statusCode(), url)
+                    response.statusCode(), UriCredentialRedactor.redactForLog(url))
                 null
             }
         }
