@@ -292,6 +292,35 @@ class PlaylistServiceTest {
     }
 
     @Test
+    fun `duplicate of a private playlist by a non-owner looks like not found`() {
+        val priv = PlaylistService.create(alice, "Secret", null)
+        PlaylistService.addTracks(priv.id!!, alice, trackIds)
+        PlaylistService.setPrivacy(priv.id!!, alice, true)
+        val before = Playlist.findAll().size
+
+        assertFailsWith<PlaylistService.PlaylistNotFound> {
+            PlaylistService.duplicate(priv.id!!, bob)
+        }
+        assertEquals(before, Playlist.findAll().size, "no fork created")
+
+        // The owner can still fork their own private playlist.
+        val fork = PlaylistService.duplicate(priv.id!!, alice)
+        assertEquals(alice.id, fork.owner_user_id)
+    }
+
+    @Test
+    fun `getResume hides a stale cursor once the playlist goes private`() {
+        val pl = PlaylistService.create(alice, "Was Public", null)
+        PlaylistService.addTracks(pl.id!!, alice, trackIds)
+        val ptId = PlaylistTrack.findAll().first { it.playlist_id == pl.id }.id!!
+        PlaylistService.reportProgress(bob.id!!, pl.id!!, ptId, 42)
+        assertNotEquals(null, PlaylistService.getResume(bob.id!!, pl.id!!))
+
+        PlaylistService.setPrivacy(pl.id!!, alice, true)
+        assertNull(PlaylistService.getResume(bob.id!!, pl.id!!))
+    }
+
+    @Test
     fun `setPrivacy is owner-only`() {
         val pl = PlaylistService.create(alice, "M", null)
         assertFailsWith<PlaylistService.PlaylistAccessDenied> {
