@@ -1,0 +1,314 @@
+package net.stewart.mediamanager.armeria
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
+import com.github.vokorm.findAll
+import com.linecorp.armeria.common.HttpResponse
+import com.linecorp.armeria.common.HttpStatus
+import com.linecorp.armeria.common.MediaType
+import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Default
+import com.linecorp.armeria.server.annotation.Get
+import com.linecorp.armeria.server.annotation.Param
+import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.AppConfig
+import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.entity.Camera
+import net.stewart.mediamanager.entity.LiveTvChannel
+import net.stewart.mediamanager.entity.LiveTvTuner
+import io.netty.util.AttributeKey
+import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.LegalRequirements
+// LiveTvStreamServlet removed — using LiveTvStreamHttpService.canAccessLiveTv()
+import net.stewart.mediamanager.service.MetricsRegistry
+import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.RokuFeedService
+import net.stewart.mediamanager.service.RokuHomeService
+import net.stewart.mediamanager.service.RokuSearchService
+import net.stewart.mediamanager.service.RokuTitleService
+import org.slf4j.LoggerFactory
+
+/**
+ * Armeria port of [net.stewart.mediamanager.RokuFeedServlet].
+ *
+ * Uses its own auth logic (device token first, cookie fallback) rather than
+ * [ArmeriaAuthDecorator], because Roku endpoints were never behind AuthFilter.
+ */
+class RokuFeedHttpService {
+
+    private val log = LoggerFactory.getLogger(RokuFeedHttpService::class.java)
+    private val mapper = ObjectMapper().apply { enable(SerializationFeature.INDENT_OUTPUT) }
+
+    private fun getConfiguredBaseUrl(ctx: ServiceRequestContext): String {
+        AppConfig.publicBaseUrl()?.let { return it }
+        val host = ctx.request().headers().get("host") ?: "localhost"
+        return "http://$host"
+    }
+
+    /**
+     * Resolve the caller (device token first, cookie fallback) and apply the
+     * paired-device legal gate. Returns null on failure; [deviceAuthRejected]
+     * then produces the matching 401 or 451 response.
+     */
+    private fun authenticateDevice(ctx: ServiceRequestContext, endpoint: String): Pair<String, AppUser>? {
+        val identity = resolveDevice(ctx, endpoint)
+        if (identity == null) {
+            log.info("Roku {} auth failed (status 401)", endpoint)
+            MetricsRegistry.countHttpResponse("roku", 401)
+            return null
+        }
+        if (!LegalRequirements.isCompliantForDevice(identity.second)) {
+            log.info("Roku {} refused: user {} has not accepted the current privacy policy (status 451)",
+                endpoint, identity.second.username)
+            MetricsRegistry.countHttpResponse("roku", 451)
+            ctx.setAttr(TERMS_REQUIRED_KEY, true)
+            return null
+        }
+        return identity
+    }
+
+    private fun resolveDevice(ctx: ServiceRequestContext, endpoint: String): Pair<String, AppUser>? {
+        // Device token auth (rejects locked accounts)
+        val apiKey = ctx.queryParams().get("key")
+        if (apiKey != null) {
+            val deviceUser = PairingService.validateDeviceToken(apiKey)
+            if (deviceUser != null) return apiKey to deviceUser
+        }
+
+        // Cookie session fallback
+        val cookies = ctx.request().headers().cookies()
+        val sessionCookie = cookies.firstOrNull { it.name() == AuthService.COOKIE_NAME }
+        if (sessionCookie != null) {
+            val cookieUser = AuthService.validateCookieToken(sessionCookie.value())
+            if (cookieUser != null) {
+                log.info("Roku {} served via cookie auth for user {}", endpoint, cookieUser.username)
+                return "" to cookieUser
+            }
+        }
+        return null
+    }
+
+    private fun deviceAuthRejected(ctx: ServiceRequestContext): HttpResponse =
+        if (ctx.attr(TERMS_REQUIRED_KEY) == true) termsRequiredResponse()
+        else HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+    private companion object {
+        val TERMS_REQUIRED_KEY: AttributeKey<Boolean> = AttributeKey.valueOf("roku.termsRequired")
+    }
+
+    private fun jsonResponse(body: String, cacheSeconds: Int = 60): HttpResponse {
+        MetricsRegistry.countHttpResponse("roku", 200)
+        return HttpResponse.builder()
+            .status(HttpStatus.OK)
+            .content(MediaType.JSON_UTF_8, body)
+            .header("Cache-Control", "private, max-age=$cacheSeconds")
+            .build()
+    }
+
+    @Blocking
+    @Get("/roku/feed.json")
+    fun feed(ctx: ServiceRequestContext): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "feed")
+            ?: return deviceAuthRejected(ctx)
+        val json = RokuFeedService.generateFeed(getConfiguredBaseUrl(ctx), apiKey, user)
+        log.info("Roku feed served (status 200)")
+        return jsonResponse(json, 300)
+    }
+
+    @Blocking
+    @Get("/roku/home.json")
+    fun home(ctx: ServiceRequestContext): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "home")
+            ?: return deviceAuthRejected(ctx)
+        val homeFeed = RokuHomeService.generateHomeFeed(getConfiguredBaseUrl(ctx), apiKey, user)
+        val json = mapper.writeValueAsString(homeFeed)
+        log.info("Roku home feed served (status 200, {} carousels)", homeFeed.carousels.size)
+        return jsonResponse(json)
+    }
+
+    @Blocking
+    @Get("/roku/search.json")
+    fun search(ctx: ServiceRequestContext, @Param("q") @Default("") q: String): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "search")
+            ?: return deviceAuthRejected(ctx)
+        if (q.isBlank()) {
+            MetricsRegistry.countHttpResponse("roku", 400)
+            return HttpResponse.of(HttpStatus.BAD_REQUEST)
+        }
+        val result = RokuSearchService.search(q, getConfiguredBaseUrl(ctx), apiKey, user)
+        return jsonResponse(mapper.writeValueAsString(result), 0)
+    }
+
+    @Blocking
+    @Get("regex:^/roku/title/(?<titleId>\\d+)\\.json$")
+    fun titleDetail(ctx: ServiceRequestContext, @Param("titleId") titleId: Long): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "title-detail")
+            ?: return deviceAuthRejected(ctx)
+        val detail = RokuTitleService.getTitleDetail(titleId, getConfiguredBaseUrl(ctx), apiKey, user)
+        if (detail == null) {
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
+        log.info("Roku title detail served for titleId={} (status 200)", titleId)
+        return jsonResponse(mapper.writeValueAsString(detail))
+    }
+
+    @Blocking
+    @Get("regex:^/roku/collection/(?<collectionId>\\d+)\\.json$")
+    fun collection(ctx: ServiceRequestContext, @Param("collectionId") collectionId: Int): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "collection")
+            ?: return deviceAuthRejected(ctx)
+        val detail = RokuSearchService.getCollectionDetail(collectionId, getConfiguredBaseUrl(ctx), apiKey, user)
+        if (detail == null) {
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
+        log.info("Roku collection detail served for collectionId={} (status 200)", collectionId)
+        return jsonResponse(mapper.writeValueAsString(detail))
+    }
+
+    @Blocking
+    @Get("regex:^/roku/tag/(?<tagId>\\d+)\\.json$")
+    fun tag(ctx: ServiceRequestContext, @Param("tagId") tagId: Long): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "tag")
+            ?: return deviceAuthRejected(ctx)
+        val detail = RokuSearchService.getTagDetail(tagId, getConfiguredBaseUrl(ctx), apiKey, user)
+        if (detail == null) {
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
+        log.info("Roku tag detail served for tagId={} (status 200)", tagId)
+        return jsonResponse(mapper.writeValueAsString(detail))
+    }
+
+    @Blocking
+    @Get("regex:^/roku/genre/(?<genreId>\\d+)\\.json$")
+    fun genre(ctx: ServiceRequestContext, @Param("genreId") genreId: Long): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "genre")
+            ?: return deviceAuthRejected(ctx)
+        val detail = RokuSearchService.getGenreDetail(genreId, getConfiguredBaseUrl(ctx), apiKey, user)
+        if (detail == null) {
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
+        log.info("Roku genre detail served for genreId={} (status 200)", genreId)
+        return jsonResponse(mapper.writeValueAsString(detail))
+    }
+
+    @Blocking
+    @Get("regex:^/roku/actor/(?<personId>\\d+)\\.json$")
+    fun actor(ctx: ServiceRequestContext, @Param("personId") personId: Int): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "actor")
+            ?: return deviceAuthRejected(ctx)
+        val detail = RokuSearchService.getActorDetail(personId, getConfiguredBaseUrl(ctx), apiKey, user)
+        if (detail == null) {
+            MetricsRegistry.countHttpResponse("roku", 404)
+            return HttpResponse.of(HttpStatus.NOT_FOUND)
+        }
+        log.info("Roku actor detail served for personId={} (status 200)", personId)
+        return jsonResponse(mapper.writeValueAsString(detail))
+    }
+
+    @Blocking
+    @Get("/roku/cameras.json")
+    fun cameras(ctx: ServiceRequestContext): HttpResponse {
+        val (apiKey, _) = authenticateDevice(ctx, "cameras")
+            ?: return deviceAuthRejected(ctx)
+        val baseUrl = getConfiguredBaseUrl(ctx)
+
+        val cameras = Camera.findAll()
+            .filter { it.enabled }
+            .sortedBy { it.display_order }
+            .map { cam ->
+                val keyParam = if (apiKey.isNotEmpty()) "?key=$apiKey" else ""
+                mapOf(
+                    "id" to cam.id,
+                    "name" to cam.name,
+                    "streamUrl" to "$baseUrl/cam/${cam.id}/stream.m3u8$keyParam",
+                    "snapshotUrl" to "$baseUrl/cam/${cam.id}/snapshot.jpg$keyParam"
+                )
+            }
+
+        log.info("Roku cameras served ({} cameras, status 200)", cameras.size)
+        return jsonResponse(mapper.writeValueAsString(mapOf("cameras" to cameras)))
+    }
+
+    @Blocking
+    @Get("/roku/livetv/channels.json")
+    fun liveTvChannels(ctx: ServiceRequestContext): HttpResponse {
+        val (apiKey, user) = authenticateDevice(ctx, "livetv-channels")
+            ?: return deviceAuthRejected(ctx)
+        val baseUrl = getConfiguredBaseUrl(ctx)
+
+        if (!LiveTvStreamHttpService.canAccessLiveTv(user)) {
+            MetricsRegistry.countHttpResponse("roku", 403)
+            return HttpResponse.of(HttpStatus.FORBIDDEN)
+        }
+
+        val minQuality = user.live_tv_min_quality
+        val channels = LiveTvChannel.findAll()
+            .filter { it.enabled }
+            .filter { ch ->
+                val tuner = LiveTvTuner.findById(ch.tuner_id)
+                tuner != null && tuner.enabled
+            }
+            .filter { it.reception_quality >= minQuality }
+            .sortedWith(compareBy({ it.display_order }, { it.guide_number.toDoubleOrNull() ?: 9999.0 }))
+            .map { ch ->
+                val keyParam = if (apiKey.isNotEmpty()) "?key=$apiKey" else ""
+                mapOf(
+                    "id" to ch.id,
+                    "guideNumber" to ch.guide_number,
+                    "guideName" to ch.guide_name,
+                    "networkAffiliation" to (ch.network_affiliation ?: ""),
+                    "receptionQuality" to ch.reception_quality,
+                    "streamUrl" to "$baseUrl/live-tv-stream/${ch.id}/stream.m3u8$keyParam"
+                )
+            }
+
+        log.info("Roku live TV channels served ({} channels, status 200)", channels.size)
+        return jsonResponse(mapper.writeValueAsString(mapOf("channels" to channels)))
+    }
+
+    @Blocking
+    @Post("/roku/wishlist/add")
+    fun wishlistAdd(ctx: ServiceRequestContext): HttpResponse {
+        val (deviceKey, user) = authenticateDevice(ctx, "wishlist-add")
+            ?: return deviceAuthRejected(ctx)
+
+        // Cookie-session fallback (empty key) is ambient browser auth:
+        // apply the same CSRF gate as the main REST decorator. This
+        // endpoint requires a JSON body, so an untyped body is refused too.
+        if (deviceKey.isEmpty()) {
+            when (CookieCsrfGuard.evaluate(ctx.request().headers())) {
+                CookieCsrfGuard.Verdict.CROSS_ORIGIN -> return HttpResponse.of(HttpStatus.FORBIDDEN)
+                CookieCsrfGuard.Verdict.SIMPLE_BODY,
+                CookieCsrfGuard.Verdict.NEEDS_EMPTY_BODY -> return HttpResponse.of(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                CookieCsrfGuard.Verdict.OK -> Unit
+            }
+        }
+
+        val body = try {
+            val text = ctx.request().aggregate().join().contentUtf8()
+            mapper.readTree(text)
+        } catch (e: Exception) {
+            MetricsRegistry.countHttpResponse("roku", 400)
+            return HttpResponse.of(HttpStatus.BAD_REQUEST)
+        }
+
+        val tmdbId = body.get("tmdb_id")?.asInt()
+        val mediaType = body.get("media_type")?.asText()
+        if (tmdbId == null || mediaType.isNullOrBlank()) {
+            MetricsRegistry.countHttpResponse("roku", 400)
+            return HttpResponse.of(HttpStatus.BAD_REQUEST)
+        }
+
+        val title = body.get("title")?.asText()
+        val posterPath = body.get("poster_path")?.asText()
+        val releaseYear = body.get("release_year")?.asInt()
+
+        val result = RokuSearchService.addWish(tmdbId, mediaType, title, posterPath, releaseYear, user)
+        return jsonResponse(mapper.writeValueAsString(result), 0)
+    }
+}

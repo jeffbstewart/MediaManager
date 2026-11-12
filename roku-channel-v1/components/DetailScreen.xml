@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DetailScreen" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onItemContentSet" />
+        <field id="playRequested" type="node" alwaysNotify="true" />
+        <field id="episodesRequested" type="boolean" alwaysNotify="true" />
+        <field id="videoContent" type="node" />
+    </interface>
+
+    <script type="text/brightscript" uri="DetailScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Poster (left side) -->
+        <Poster
+            id="poster"
+            translation="[80, 80]"
+            width="300"
+            height="450"
+            loadWidth="300"
+            loadHeight="450"
+            loadingBitmapUri="pkg:/images/placeholder-poster.png"
+            failedBitmapUri="pkg:/images/placeholder-poster.png"
+            loadDisplayMode="scaleToFit" />
+
+        <!-- Metadata (right of poster) -->
+        <LayoutGroup
+            translation="[420, 80]"
+            layoutDirection="vert"
+            itemSpacings="[12]">
+
+            <!-- Title -->
+            <Label
+                id="titleLabel"
+                width="1420"
+                font="font:LargeBoldSystemFont"
+                color="#ffffff"
+                maxLines="2" />
+
+            <!-- Year + Genres -->
+            <Label
+                id="metaLabel"
+                width="1420"
+                font="font:SmallSystemFont"
+                color="#a0a0a0"
+                maxLines="1" />
+
+            <!-- Cast -->
+            <Label
+                id="castLabel"
+                width="1420"
+                font="font:SmallSystemFont"
+                color="#c0c0c0"
+                maxLines="2" />
+
+            <!-- Description -->
+            <Label
+                id="descLabel"
+                width="1420"
+                font="font:SmallSystemFont"
+                color="#d0d0d0"
+                maxLines="8"
+                wrap="true" />
+        </LayoutGroup>
+
+        <!-- Action buttons -->
+        <ButtonGroup
+            id="buttonGroup"
+            translation="[420, 620]"
+            textColor="#e0e0e0"
+            focusedTextColor="#ffffff"
+            focusColor="#6366f1"
+            focusBitmapBlendColor="#6366f1" />
+    </children>
+</component>

@@ -1,0 +1,206 @@
+<!-- Primary navigation (spec section 2, `.side-nav`): plain links
+     styled as 40px pills. routerLinkActive sets aria-current="page"
+     on the active link, which is what the active style keys off. -->
+<nav class="nav-list" aria-label="Primary">
+  <!-- Main section -->
+  <a class="nav-item" [routerLink]="routes.home()" routerLinkActive="active" ariaCurrentWhenActive="page"
+     [routerLinkActiveOptions]="{ exact: true }">
+    <mat-icon aria-hidden="true">home</mat-icon>
+    <span class="nav-label">Home</span>
+  </a>
+
+  <!-- Non-admin nav sorted alphabetically after Home. Conditional
+       entries (Books, Cameras, Discover, Family, Live TV, Music)
+       drop out of the list when their feature flag is false. -->
+  @if (features.hasBooks()) {
+    <a class="nav-item" [routerLink]="routes.books()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">auto_stories</mat-icon>
+      <span class="nav-label">Books</span>
+    </a>
+  }
+  @if (features.hasCameras()) {
+    <a class="nav-item" [routerLink]="routes.cameras()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">videocam</mat-icon>
+      <span class="nav-label">Cameras</span>
+    </a>
+  }
+  <a class="nav-item" [routerLink]="routes.collections()" routerLinkActive="active" ariaCurrentWhenActive="page">
+    <mat-icon aria-hidden="true">collections_bookmark</mat-icon>
+    <span class="nav-label">Collections</span>
+  </a>
+  @if (features.hasMusicRadio()) {
+    <a class="nav-item" [routerLink]="routes.discover()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+      <span class="nav-label">Discover</span>
+    </a>
+  }
+  @if (features.hasPersonalVideos()) {
+    <a class="nav-item" [routerLink]="routes.personalVideos()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">family_restroom</mat-icon>
+      <span class="nav-label">Family</span>
+    </a>
+  }
+  @if (features.hasLiveTv()) {
+    <a class="nav-item" [routerLink]="routes.liveTv()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">live_tv</mat-icon>
+      <span class="nav-label">Live TV</span>
+    </a>
+  }
+  <a class="nav-item" [routerLink]="routes.movies()" routerLinkActive="active" ariaCurrentWhenActive="page">
+    <mat-icon aria-hidden="true">movie</mat-icon>
+    <span class="nav-label">Movies</span>
+  </a>
+  @if (features.hasMusic()) {
+    <a class="nav-item" [routerLink]="routes.music()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">album</mat-icon>
+      <span class="nav-label">Music</span>
+    </a>
+    <a class="nav-item" [routerLink]="routes.playlists()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">queue_music</mat-icon>
+      <span class="nav-label">Playlists</span>
+    </a>
+  }
+  <a class="nav-item" [routerLink]="routes.wishlist()" routerLinkActive="active" ariaCurrentWhenActive="page">
+    <mat-icon aria-hidden="true">favorite</mat-icon>
+    <span class="nav-label">My Wish List</span>
+    @if (features.wishReadyCount() > 0) {
+      <span class="badge wish-badge">{{ features.wishReadyCount() }}</span>
+    }
+  </a>
+  <a class="nav-item" [routerLink]="routes.tags()" routerLinkActive="active" ariaCurrentWhenActive="page">
+    <mat-icon aria-hidden="true">label</mat-icon>
+    <span class="nav-label">Tags</span>
+  </a>
+  <a class="nav-item" [routerLink]="routes.tvShows()" routerLinkActive="active" ariaCurrentWhenActive="page">
+    <mat-icon aria-hidden="true">tv</mat-icon>
+    <span class="nav-label">TV Shows</span>
+  </a>
+
+  <!-- Admin section. The group label is styled like the spec's
+       `.side-nav h3` but is not a heading: the brand is the page's
+       h1 and views start at h2, so an h3 here breaks heading order. -->
+  @if (features.isAdmin()) {
+    <div class="section-header">Manage</div>
+
+    <a class="nav-item" [routerLink]="routes.adminAdd()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">add</mat-icon>
+      <span class="nav-label">Add Item</span>
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminCameras()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">videocam</mat-icon>
+      <span class="nav-label">Cameras</span>
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminDataQuality()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">build</mat-icon>
+      <span class="nav-label">Data Quality</span>
+      @if (features.dataQualityCount() > 0) {
+        <span class="badge dq-badge">{{ features.dataQualityCount() }}</span>
+      }
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminFamilyMembers()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">family_restroom</mat-icon>
+      <span class="nav-label">Family Members</span>
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminReports()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">flag</mat-icon>
+      <span class="nav-label">Reports</span>
+      @if (features.openReportsCount() > 0) {
+        <span class="badge dq-badge">{{ features.openReportsCount() }}</span>
+      }
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminLiveTv()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">desktop_windows</mat-icon>
+      <span class="nav-label">Live TV</span>
+    </a>
+
+    <!-- Purchases collapsible group -->
+    <button type="button" class="nav-item nav-group-toggle" (click)="togglePurchases()"
+            [attr.aria-expanded]="purchasesOpen()" aria-controls="nav-group-purchases">
+      <mat-icon aria-hidden="true">shopping_cart</mat-icon>
+      <span class="nav-label">Purchases</span>
+      <mat-icon class="expand-icon" aria-hidden="true" [class.expanded]="purchasesOpen()">expand_more</mat-icon>
+    </button>
+    <div id="nav-group-purchases" class="nav-group">
+      @if (purchasesOpen()) {
+        <a class="nav-item nested-item" [routerLink]="routes.adminImport()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Amazon Order Import</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminDocumentOwnership()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Document Ownership</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminExpand()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Expand</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminInventory()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Report</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminPurchaseWishes()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">User Wishes</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminValuation()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Valuation</span>
+        </a>
+      }
+    </div>
+
+    <a class="nav-item" [routerLink]="routes.adminSettings()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">settings</mat-icon>
+      <span class="nav-label">Settings</span>
+    </a>
+    <a class="nav-item" [routerLink]="routes.adminTags()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">bookmark</mat-icon>
+      <span class="nav-label">Tags</span>
+    </a>
+
+    <!-- Transcodes collapsible group -->
+    <button type="button" class="nav-item nav-group-toggle" (click)="toggleTranscodes()"
+            [attr.aria-expanded]="transcodesOpen()" aria-controls="nav-group-transcodes">
+      <mat-icon aria-hidden="true">movie</mat-icon>
+      <span class="nav-label">Transcodes</span>
+      @if (!transcodesOpen() && features.unmatchedCount() > 0) {
+        <span class="badge unmatched-badge">{{ features.unmatchedCount() }}</span>
+      }
+      <mat-icon class="expand-icon" aria-hidden="true" [class.expanded]="transcodesOpen()">expand_more</mat-icon>
+    </button>
+    <div id="nav-group-transcodes" class="nav-group">
+      @if (transcodesOpen()) {
+        <a class="nav-item nested-item" [routerLink]="routes.adminTranscodeBacklog()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Backlog</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminTranscodeLinked()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Linked</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminTranscodeStatus()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Status</span>
+        </a>
+        <a class="nav-item nested-item" [routerLink]="routes.adminTranscodeUnmatched()" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-label">Unmatched</span>
+          @if (features.unmatchedCount() > 0) {
+            <span class="badge unmatched-badge">{{ features.unmatchedCount() }}</span>
+          }
+        </a>
+      }
+    </div>
+
+    <a class="nav-item" [routerLink]="routes.adminBooksUnmatched()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">menu_book</mat-icon>
+      <span class="nav-label">Unmatched Books</span>
+      @if (features.unmatchedBooksCount() > 0) {
+        <span class="badge red-badge">{{ features.unmatchedBooksCount() }}</span>
+      }
+    </a>
+
+    <a class="nav-item" [routerLink]="routes.adminAudioUnmatched()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">album</mat-icon>
+      <span class="nav-label">Unmatched Audio</span>
+      @if (features.unmatchedAudioCount() > 0) {
+        <span class="badge red-badge">{{ features.unmatchedAudioCount() }}</span>
+      }
+    </a>
+
+    <a class="nav-item" [routerLink]="routes.adminUsers()" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <mat-icon aria-hidden="true">people</mat-icon>
+      <span class="nav-label">Users</span>
+    </a>
+  }
+</nav>

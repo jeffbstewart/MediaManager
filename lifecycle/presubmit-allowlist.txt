@@ -1,0 +1,75 @@
+# Presubmit allowlist — one pattern per line.
+# Lines containing any of these substrings are excluded from violation reports.
+# Comments start with #, blank lines ignored.
+
+# Localhost / any-interface bind addresses (used in Main.kt, docs)
+127.0.0.1
+0.0.0.0
+
+# Broadcast / SSDP multicast (used in SsdpResponder.kt)
+239.255.255.250
+255.255.255.255
+
+# Content hash for Vaadin Dialog chunk loading (MainLayout.kt)
+039da0aa3283c862d809052d1e05f80ce5922aa4f27e77f287ec5bdfeaba3abc
+
+# Example IP in Roku PairScreen placeholder text
+192.168.1.100
+
+# MusicBrainz canonical "Various Artists" MBID (docs/MUSIC.md)
+89ad4ac3-39f7-470e-963a-56509c546377
+
+# Synthetic MBIDs used by RadioServiceTest fixtures (all-digit UUIDs
+# are not valid production MBIDs).
+11111111-1111-1111-1111-111111111111
+22222222-2222-2222-2222-222222222222
+33333333-3333-3333-3333-333333333333
+44444444-4444-4444-4444-444444444444
+55555555-5555-5555-5555-555555555555
+66666666-6666-6666-6666-666666666666
+99999999-9999-9999-9999-999999999999
+
+# Synthetic MBIDs used by RecommendationServiceTest fixtures
+# (all-hex-letter UUIDs, not valid MusicBrainz identifiers).
+aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+cccccccc-cccc-cccc-cccc-cccccccccccc
+dddddddd-dddd-dddd-dddd-dddddddddddd
+eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee
+ffffffff-ffff-ffff-ffff-ffffffffffff
+abcdefab-abcd-abcd-abcd-abcdefabcdef
+
+# AuthInterceptorTest: invalid-session-token probe to exercise the
+# "syntactically-valid UUID, never issued" rejection path. All zeros
+# is not generatable by java.util.UUID.randomUUID() in practice.
+00000000-0000-0000-0000-000000000000
+
+# Emby version numbers that look like IP addresses (competitive analysis)
+4.9.3.0
+4.10.0.5
+4.10.0.6
+4.10.0.8
+4.10.0.10
+
+# Third-party minified libraries (skip entire file)
+file:hls.min.js
+
+# Test fixture MBIDs (public identifiers from MusicBrainz, safe to commit)
+561d854a-6a28-4aa7-8c99-323e6ce46c2a
+c96c4a9b-9464-3e7c-9ed5-b8d7d9ca4cf4
+
+# Web-app a11y test fixture: HDHomeRun tuner IP in TEST-NET-3
+# (RFC 5737 documentation range, not routable, never a real network)
+203.0.113.50
+
+# AuthServiceTest fixtures: RFC 5737 documentation IPs (TEST-NET-3),
+# used to exercise per-IP rate limit, lockout, and login attempt rows.
+203.0.113.4
+203.0.113.99
+203.0.113.100
+
+# RFC 5737 documentation ranges (TEST-NET-1/2/3) -- never routable, used
+# as placeholders in trusted-proxy docs, docker-compose example, and tests.
+192.0.2.
+198.51.100.
+203.0.113.

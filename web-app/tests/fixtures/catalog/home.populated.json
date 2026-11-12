@@ -1,0 +1,96 @@
+{
+  "continue_watching": [
+    {
+      "transcode_id": 1,
+      "title_id": 100,
+      "title_name": "The Matrix",
+      "poster_url": "/posters/w185/100",
+      "position_seconds": 600,
+      "duration_seconds": 8160,
+      "progress_fraction": 0.073,
+      "time_remaining": "2h 5m left",
+      "is_episode": false,
+      "episode_label": null,
+      "season_number": null,
+      "episode_number": null
+    }
+  ],
+  "recently_added": [
+    { "title_id": 101, "title_name": "Inception", "poster_url": "/posters/w185/101", "release_year": 2010 },
+    { "title_id": 102, "title_name": "Interstellar", "poster_url": "/posters/w185/102", "release_year": 2014 }
+  ],
+  "recently_added_books": [
+    {
+      "title_id": 201,
+      "title_name": "Dune",
+      "poster_url": "/posters/w185/201",
+      "release_year": 1965,
+      "author_name": "Frank Herbert",
+      "series_name": null,
+      "series_number": null
+    }
+  ],
+  "recently_added_albums": [
+    {
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "release_year": 1959,
+      "artist_name": "Miles Davis",
+      "track_count": 5
+    }
+  ],
+  "resume_listening": [
+    {
+      "track_id": 4001,
+      "track_name": "So What",
+      "title_id": 301,
+      "title_name": "Kind of Blue",
+      "poster_url": "/posters/w185/301",
+      "artist_name": "Miles Davis",
+      "position_seconds": 60,
+      "duration_seconds": 565,
+      "percent": 0.106,
+      "updated_at": "2026-04-23T10:00:00Z"
+    }
+  ],
+  "resume_reading": [
+    {
+      "media_item_id": 5001,
+      "title_id": 201,
+      "title_name": "Dune",
+      "poster_url": "/posters/w185/201",
+      "percent": 0.34,
+      "media_format": "EBOOK_EPUB",
+      "updated_at": "2026-04-22T21:00:00Z"
+    }
+  ],
+  "recently_watched": [
+    { "title_id": 103, "title_name": "Blade Runner 2049", "poster_url": "/posters/w185/103", "release_year": 2017 }
+  ],
+  "missing_seasons": [
+    {
+      "title_id": 401,
+      "title_name": "Breaking Bad",
+      "poster_url": "/posters/w185/401",
+      "tmdb_id": 1396,
+      "tmdb_media_type": "tv",
+      "missing_seasons": [{ "season_number": 4 }]
+    }
+  ],
+  "features": {
+    "has_personal_videos": true,
+    "has_books": true,
+    "has_music": true,
+    "has_music_radio": true,
+    "has_cameras": true,
+    "has_live_tv": true,
+    "is_admin": false,
+    "wish_ready_count": 0,
+    "unmatched_count": 0,
+    "unmatched_books_count": 0,
+    "unmatched_audio_count": 0,
+    "data_quality_count": 0,
+    "open_reports_count": 0
+  }
+}

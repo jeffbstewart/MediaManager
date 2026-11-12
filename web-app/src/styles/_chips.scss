@@ -1,0 +1,63 @@
+// Filter and sort chips (docs/plans/marquee-reference/STYLE-SPEC.md 3.5,
+// styles.css `.chip`): 40px pills on --c-surface, 14/600, in one row
+// that scrolls sideways instead of wrapping. The chips are toggle
+// buttons; the selected one carries aria-pressed="true" and inverts.
+// Named filter-chip so it never meets a view's own `.chip` rules.
+
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 2px 2px 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-chip-group {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.filter-chip-divider {
+  flex: none;
+  width: 1px;
+  height: 24px;
+  margin: 0 8px;
+  background: var(--c-text-3, var(--mat-sys-outline-variant));
+}
+
+.filter-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill, 9999px);
+  background: var(--c-surface, var(--mat-sys-surface-container));
+  color: var(--c-text, var(--mat-sys-on-surface));
+  font: 600 14px/1 var(--f-body, inherit);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filter-chip:hover {
+  background: color-mix(in srgb, var(--c-text, #fff) 20%, transparent);
+}
+
+.filter-chip:focus-visible {
+  outline: 2px solid var(--c-accent, var(--mat-sys-primary));
+  outline-offset: 2px;
+}
+
+.filter-chip[aria-pressed='true'] {
+  background: var(--c-text, var(--mat-sys-on-surface));
+  color: var(--c-page, var(--mat-sys-surface));
+}

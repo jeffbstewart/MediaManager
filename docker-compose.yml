@@ -1,0 +1,146 @@
+services:
+  mediamanager:
+    image: ghcr.io/jeffbstewart/mediamanager:latest
+    container_name: mediamanager
+    restart: unless-stopped
+
+    # ── User ID ──────────────────────────────────────────────────────
+    # Run as a non-root user for security. The UID:GID must have
+    # read/write access to the cache and media volumes.
+    #   Synology: SSH in and run `id -u <username>` / `id -g <username>`
+    #   Linux:    same commands, or use 1000:1000 for a typical first user
+    user: "1046:100"
+
+    # ── Memory ───────────────────────────────────────────────────────
+    mem_limit: 4g
+    memswap_limit: 4g
+
+    # ── Networking ───────────────────────────────────────────────────
+    # Host networking is required for SSDP (Roku device discovery) which
+    # uses UDP multicast on 239.255.255.250:1900. Bridge networking
+    # blocks multicast. If you don't use Roku, you can switch to bridge
+    # mode and uncomment the ports section below instead.
+    network_mode: host
+    # ports:
+    #   - "9090:9090"        # Main app (gRPC + REST + SPA + streaming)
+    #   - "16002:8081"       # Internal health/metrics (LAN only)
+
+    # ── Volumes ──────────────────────────────────────────────────────
+    # cache: persistent storage for the H2 database, poster cache, and
+    #        backups. Must survive container recreation.
+    # media: your ripped media files. MUST BE READ/WRITE — the app writes
+    #        browser- and media-appliance-optimized transcodes into a
+    #        ForBrowser/ subdirectory alongside your source files.
+    volumes:
+      - /volume1/docker/mediamanager/cache:/cache
+      - /volume1/your-media-share:/media
+
+    # ── Environment ──────────────────────────────────────────────────
+    # H2_PASSWORD:      Required. Password for the embedded H2 database.
+    # H2_FILE_PASSWORD: Required. AES encryption key for the database file.
+    #                   Use a different password than H2_PASSWORD.
+    # TMDB_API_KEY:     Required. Sign up at https://www.themoviedb.org/signup
+    #                   then go to https://www.themoviedb.org/settings/api
+    #                   and copy "API Key (v3 auth)".
+    # MM_NAS_ROOT:      Path to media inside the container (matches volume mount).
+    # MM_TRUSTED_PROXIES: Comma-separated IPs/CIDRs your TLS-terminating
+    #                   reverse proxy connects FROM (HAProxy, nginx, traefik).
+    #                   X-Forwarded-* headers are honored only from these
+    #                   addresses; without it, sign-in via the proxy is refused.
+    # TZ:              IANA timezone for UI timestamp display (e.g., America/New_York,
+    #                   America/Los_Angeles, Europe/London). Default: America/New_York.
+    environment:
+      - H2_PASSWORD=change_me_to_a_strong_password
+      - H2_FILE_PASSWORD=change_me_to_another_strong_password
+      - TMDB_API_KEY=your_tmdb_api_key_here
+      - MM_NAS_ROOT=/media
+      - MM_TRUSTED_PROXIES=192.0.2.10
+      - TZ=America/New_York
+
+    # ── Health Check ─────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # ── Madmom sidecar (optional) ────────────────────────────────────
+  # Python subprocess that runs madmom's downbeat tracker for per-track
+  # time-signature detection (3/4 vs. 4/4 for ballroom filters, etc.).
+  # Kept out of the main image because madmom's Python deps don't
+  # cleanly install on musl/Alpine. If you don't want time-signature
+  # detection, delete this service and the TimeSignatureAgent on the
+  # MM side self-disables after one probe.
+  mediamanager-madmom:
+    image: ghcr.io/jeffbstewart/mediamanager-madmom:latest
+    container_name: mediamanager-madmom
+    restart: unless-stopped
+
+    # MM uses host networking for Roku SSDP; it therefore can't be on
+    # a bridge "internal" network with the sidecar. Instead the
+    # sidecar's gRPC port is bound to the NAS host's loopback only,
+    # so MM reaches it at `localhost:9091` but nothing on the LAN can.
+    # The `binnacle_ingest` external network is Binnacle's own bridge
+    # network — shared only so this sidecar's logs reach the Binnacle
+    # collector without being reachable anywhere else.
+    ports:
+      - "127.0.0.1:9091:9091"    # gRPC MadmomAnalysis (MM reads)
+      - "127.0.0.1:8090:8090"    # Prometheus /metrics (host scrape)
+    networks:
+      - binnacle_ingest
+
+    # Bind the same NAS music path used by MM, read-only — madmom only
+    # needs to read files, never writes. The path matches MM's
+    # container path exactly so `track.file_path` values round-trip.
+    volumes:
+      - /volume1/your-media-share:/media:ro
+
+    environment:
+      # Binnacle OTLP HTTP — the sidecar ships stdlib logs through
+      # OpenTelemetry. The endpoint uses the Docker service name
+      # `binnacle`, resolved via the shared binnacle_ingest network.
+      - BINNACLE_OTLP_ENDPOINT=http://binnacle:4318/v1/logs
+      - BINNACLE_API_KEY=${BINNACLE_API_KEY}
+      - SIDECAR_VERSION=dev
+      - TZ=America/New_York
+
+    # Model load + one track's activations peaks ~1 GB in practice;
+    # bumped to 4 GB so a big file (long classical, high-rate WAV)
+    # doesn't hit the limit mid-inference. Docker's default SIGKILL
+    # on OOM is exactly what a silent restart loop looks like.
+    mem_limit: 4g
+    memswap_limit: 4g
+
+    # TCP-level health check. The gRPC server binds :9091 as soon as
+    # the Python process is up, so a TCP connect proves "process alive"
+    # without queuing behind in-flight Analyze calls — a real gRPC
+    # Health RPC would block on the single-threaded executor that
+    # madmom needs, routinely failing the 10 s timeout during a 30 s
+    # inference.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 9091)); s.close()\""]
+      interval: 60s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # ── Watchtower (optional) ────────────────────────────────────────
+  # Automatically pulls new :latest images and restarts the container.
+  # Remove this service if you prefer manual updates.
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --interval 300 --cleanup mediamanager
+
+# ── Networks ────────────────────────────────────────────────────────
+networks:
+  binnacle_ingest:
+    # Pre-created by Binnacle's compose stack. Referenced here by name
+    # so our sidecar can reach the OTLP collector over an isolated
+    # bridge — no LAN exposure, no internet route for madmom-sidecar.
+    name: binnacle_ingest
+    external: true

@@ -1,0 +1,81 @@
+// Page search box (docs/plans/marquee-reference/STYLE-SPEC.md, styles.css
+// `.search-box`): a centered 40px pill, at most 600px wide, light on the
+// dark page. It takes the theme's text color as its fill and the page
+// color as its ink, so it stays inverted under either theme. The header
+// search (app-search-box) is a separate component and is not affected.
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 600px;
+  height: 40px;
+  margin: 0 auto;
+  padding: 0 8px 0 16px;
+  border-radius: var(--r-pill, 9999px);
+  background: var(--c-text, var(--mat-sys-on-surface));
+  color: var(--c-page, var(--mat-sys-surface));
+}
+
+.search-box:focus-within {
+  outline: 2px solid var(--c-accent, var(--mat-sys-primary));
+  outline-offset: 2px;
+}
+
+.search-box > mat-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: 400 16px/1 var(--f-body, inherit);
+}
+
+.search-box input::placeholder {
+  color: inherit;
+  opacity: 0.7;
+}
+
+// The browser's own cancel glyph would sit beside the clear button.
+.search-box input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.search-box button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.search-box button:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.search-box button:focus-visible {
+  outline: 2px solid var(--c-accent, var(--mat-sys-primary));
+  outline-offset: 0;
+}
+
+.search-box button mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}

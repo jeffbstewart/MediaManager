@@ -1,0 +1,62 @@
+<!-- Decorative gradient behind the header and the top of the page.
+     Its colors follow body[data-page] (styles/_page-glow.scss). -->
+<div class="page-glow" aria-hidden="true"></div>
+
+<header class="app-header" [class.is-scrolled]="scrolled()">
+  <div class="header-inner">
+    <!-- Shown below 1024px only (shell.scss); opens the nav sheet. -->
+    <button type="button" class="icon-btn nav-toggle" (click)="openNavSheet()"
+            aria-label="Open navigation" aria-haspopup="dialog" [attr.aria-expanded]="navSheetOpen()">
+      <mat-icon aria-hidden="true">menu</mat-icon>
+    </button>
+    <h1 class="brand">
+      <a [routerLink]="routes.home()" aria-label="Media Manager">
+        <span class="brand-word" aria-hidden="true">media<b>/</b>manager</span>
+      </a>
+    </h1>
+    <app-search-box />
+
+    <span class="header-spacer"></span>
+
+    <app-account-menu (reportProblem)="openReportDialog()" (signOut)="onLogout()" />
+  </div>
+</header>
+
+<!-- Fixed side nav at 1024px and up; hidden (display: none) below. -->
+<aside class="side-nav">
+  <app-nav-list />
+</aside>
+
+<!-- Below 1024px the same nav opens in a left sheet. Its contents
+     render only while it is open, so there is never a second
+     "Primary" nav landmark in the DOM. -->
+<dialog #navSheet class="sheet left nav-sheet" aria-label="Navigation"
+        (close)="onNavSheetClosed()" (click)="onNavSheetClick($event)">
+  <button type="button" class="icon-btn sheet-close" aria-label="Close" (click)="closeNavSheet()">
+    <mat-icon aria-hidden="true">close</mat-icon>
+  </button>
+  @if (navSheetOpen()) {
+    <app-nav-list />
+  }
+</dialog>
+
+<main class="app-main">
+  <router-outlet />
+</main>
+
+<!-- Bottom tab bar, below 1024px only (tab-bar.scss). -->
+<app-tab-bar [active]="section()" />
+
+<!-- Persistent audio player (M5): fixed to the bottom of the viewport,
+     above the tab bar where it shows. While the player shows, the shell
+     reserves its height (shell.scss). -->
+<app-audio-player />
+
+<app-report-problem-dialog
+  [open]="reportDialogOpen()"
+  [titleId]="reportTitleId()"
+  [titleName]="reportTitleName()"
+  [seasonNumber]="reportSeasonNumber()"
+  [episodeNumber]="reportEpisodeNumber()"
+  (closed)="onReportDialogClosed()"
+  (submitted)="onReportDialogSubmitted()" />

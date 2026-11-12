@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit deliberately omitted (formerly `cover`). With
+       `cover`, WKWebView reports `100vh` as the LAYOUT viewport
+       (including safe-area extent) rather than the visible area,
+       so when the SwiftUI host adds a safeAreaInset for the music
+       mini-player the inner 100vh stays at the old larger value
+       and epub.js paginates columns that extend under the bar.
+       Default viewport-fit constrains 100vh to the visible area
+       (retired-repo issue #68 follow-up). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>MM Reader</title>
+  <style>
+    /* Edge-to-edge container that fills the WKWebView. epub.js renders
+       its iframe into #epub. The native chrome (close, font, page
+       controls) lives in the SwiftUI parent — this page is just the
+       book pane. */
+    html, body, #epub {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #fff;
+    }
+    body {
+      -webkit-text-size-adjust: 100%;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+    /* Tap-zones for page navigation. Native could send next/prev via
+       evaluateJavaScript, but a tap on the rendered epub page is more
+       responsive than round-tripping a UITapGesture into the bridge.
+       The two halves overlay #epub at full transparency. */
+    .nav {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 25%;
+      z-index: 10;
+    }
+    .nav-prev { left: 0; }
+    .nav-next { right: 0; }
+  </style>
+  <script src="jszip.min.js"></script>
+  <script src="epub.min.js"></script>
+</head>
+<body>
+  <div id="epub"></div>
+  <!-- Page-turn tap zones. Click handlers wired in JS (not inline)
+       so we can hit-test the iframe at the tap point — if there's
+       an `<a>` there, we route the click to the link rather than
+       turning the page. Without this, internal TOC links in the
+       leftmost or rightmost 25% of the page can't be tapped at
+       all because these overlays consume the click first (retired-repo issue #70). -->
+  <div class="nav nav-prev" id="nav-prev"></div>
+  <div class="nav nav-next" id="nav-next"></div>
+  <script>
+    /**
+     * Native ↔ JS bridge for the iOS book reader.
+     *
+     * Native (Swift) calls into JS via WKWebView.evaluateJavaScript:
+     *
+     *   window.MMReader.boot(epubUrl, resumeCfi, fontPct)
+     *   window.MMReader.setFont(pct)
+     *   window.MMReader.next() / .prev()
+     *
+     * JS notifies native via window.webkit.messageHandlers.reader.postMessage(...):
+     *
+     *   { type: 'ready' }                              — book opened, first page rendered
+     *   { type: 'relocated', cfi, percent }            — every page change
+     *   { type: 'error', message }                     — fatal load / parse error
+     */
+    (function() {
+      let book = null;
+      let rendition = null;
+      let lastCfi = null;
+      let percent = 0;
+      let locationsReady = false;
+
+      function postNative(payload) {
+        try {
+          window.webkit.messageHandlers.reader.postMessage(payload);
+        } catch (e) {
+          // No-op outside the WKWebView host (e.g. during a manual
+          // open-in-browser of the bundled HTML). Real native runs go
+          // through the message-handler path.
+          console.warn('postNative failed', e);
+        }
+      }
+
+      // Surface uncaught errors from anywhere in the page (epub.js
+      // internals, async tasks not awaited by us, etc.) so the
+      // native side can show something better than a perpetual
+      // spinner.
+      window.addEventListener('error', function(e) {
+        postNative({ type: 'error', message: 'window.onerror: ' + (e.message || e) });
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        const m = (e && e.reason && (e.reason.message || e.reason)) || 'unknown rejection';
+        postNative({ type: 'error', message: 'unhandledrejection: ' + m });
+      });
+
+      // Container-resize re-pagination (retired-repo issue #68 follow-up). Two
+      // distinct failure modes both produce "words missing on the
+      // next page turn" — the mini-player overlapping symptom:
+      //
+      //   1. Book opens WHILE music is already playing. WKWebView
+      //      mounts at a height that's been reduced by ContentView's
+      //      safeAreaInset. epub.js measures the container during
+      //      its initial boot — but inside WKWebView the visual
+      //      viewport / 100vh / element clientHeight readings can
+      //      lag the actual frame for a few layout passes after
+      //      mount. epub.js paginates against the lagged reading
+      //      and never re-measures because window.resize doesn't
+      //      fire (the frame hasn't changed from epub.js's view).
+      //
+      //   2. Audio starts AFTER the book is already open. The
+      //      WKWebView frame DOES change here, and SOME WKWebView
+      //      versions do fire window.resize — but reliability is
+      //      patchy and the timing relative to the SwiftUI safe-
+      //      area animation is hard to predict.
+      //
+      // ResizeObserver on the actual #epub container catches both:
+      // it fires on every observed size change, including the
+      // post-mount layout-settle in case 1. Debounced because
+      // observers can fire a flurry of events during SwiftUI
+      // animations.
+      //
+      // Anchoring: same lastCfi semantics as setFont — see the long
+      // comment on setFont below for why "page containing the
+      // anchor" is the best we can get with paginated CFIs.
+      let resizeTimer = null;
+      function repaginateNow() {
+        if (!rendition) return;
+        const anchorCfi = lastCfi;
+        try {
+          // rendition.resize() updates Layout's stored dimensions
+          // for FUTURE views, but doesn't re-flow chapters that
+          // are already rendered — those keep their boot-time
+          // column height. When the WebView shrinks (mini-player
+          // appears or book opens while music is already playing),
+          // the current chapter's columns extend past the visible
+          // area, the bar covers the bottom slice of text, and
+          // page turns skip those hidden words (retired-repo issue #68).
+          //
+          // Forcing rendition.clear() drops the rendered view; the
+          // subsequent display(anchorCfi) re-loads the section
+          // with the new column height. More work than a pure
+          // resize, but only happens when the container size
+          // actually changes, which is rare in practice.
+          rendition.clear();
+          rendition.resize();
+        } catch (err) {
+          console.warn('rendition.resize failed', err);
+        }
+        if (anchorCfi) {
+          setTimeout(function() {
+            rendition.display(anchorCfi);
+          }, 0);
+        }
+      }
+      function scheduleRepaginate() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          resizeTimer = null;
+          repaginateNow();
+        }, 120);
+      }
+      // Observe the #epub div. ResizeObserver fires on initial
+      // layout AND on any subsequent change, which is what we want
+      // for both case 1 and case 2 above.
+      if (typeof ResizeObserver !== 'undefined') {
+        const epubEl = document.getElementById('epub');
+        if (epubEl) {
+          let lastH = 0;
+          let lastW = 0;
+          new ResizeObserver(function(entries) {
+            for (const entry of entries) {
+              const cr = entry.contentRect;
+              // Skip the very first observation if dimensions are
+              // genuinely the same — happens when the observer is
+              // attached before any layout has occurred and the
+              // initial entry reports 0x0 then immediately fires
+              // again with the real size.
+              if (cr.width !== lastW || cr.height !== lastH) {
+                lastW = cr.width;
+                lastH = cr.height;
+                scheduleRepaginate();
+              }
+            }
+          }).observe(epubEl);
+        }
+      }
+      // Belt-and-suspenders: also listen to window.resize. Cheap and
+      // covers any case where ResizeObserver doesn't fire (older
+      // WebKit versions, etc.).
+      window.addEventListener('resize', scheduleRepaginate);
+
+      // Theme palette. `applyTheme` flips body background/colour via
+      // epub.js's `themes.override`, which directly injects a body
+      // rule on the current page — `themes.select` reliably swaps
+      // a once-registered theme but doesn't re-render against
+      // already-painted content (that's the bug that left dark mode
+      // stuck). Override repaints in place, so cycling between
+      // light / sepia / dark works regardless of starting state.
+      const THEMES = {
+        light: { bg: '#ffffff', fg: '#1a1a1a' },
+        sepia: { bg: '#f4ecd8', fg: '#3d2f20' },
+        dark:  { bg: '#1a1a1a', fg: '#e6e6e6' },
+      };
+      function applyTheme(name) {
+        const t = THEMES[name] || THEMES.light;
+        if (!rendition) return;
+        rendition.themes.override('background-color', t.bg);
+        rendition.themes.override('color', t.fg);
+        rendition.themes.override('background', t.bg);
+        // Also paint the page-host background so flashing between
+        // chunks doesn't show through as the wrong colour.
+        document.body.style.background = t.bg;
+        document.documentElement.style.background = t.bg;
+      }
+
+      window.MMReader = {
+        async boot(epubUrl, resumeCfi, fontPct) {
+          try {
+            if (!window.ePub) throw new Error('epub.js missing');
+
+            // `openAs: 'epub'` forces the binary-archive parser. Default
+            // sniffing by extension fails for our staged file path
+            // (typically `book-{N}.epub` — sometimes without a real
+            // extension when we get the format wrong).
+            book = window.ePub(epubUrl, { openAs: 'epub' });
+
+            const el = document.getElementById('epub');
+            rendition = book.renderTo(el, {
+              width: '100%',
+              height: '100%',
+              flow: 'paginated',
+              // allowScriptedContent must be TRUE for in-iframe
+              // link clicks to reach our (and epub.js's own) JS
+              // event handlers. With `false`, epub.js sandboxes
+              // the iframe without `allow-scripts`, which
+              // suppresses the synthetic click pipeline — tap
+              // highlights still flash visually via WebKit's CSS
+              // `:active` handling but no JS events fire. The
+              // tradeoff is that EPUB `<script>` tags can now
+              // execute; that's acceptable for self-hosted books
+              // the user trusts. A content-hook script stripper
+              // would be a reasonable defence-in-depth follow-up
+              // (retired-repo issue #70 closeout note).
+              allowScriptedContent: true,
+            });
+
+            // Font-size inheritance fix. Web commit 22add35:
+            // EPUB stylesheets routinely pin `p { font-size: NNpx }` on
+            // inner text containers. themes.fontSize() only injects a
+            // body-level rule, so the inner text never resizes — but
+            // line-height (which is computed from body) keeps scaling.
+            // The visible bug: + / − buttons stretch the gaps between
+            // lines, not the letters. Forcing inheritance on common
+            // text containers makes the body-level rule actually flow
+            // down. Headings (h1–h6) are deliberately omitted so they
+            // keep their relative sizing.
+            //
+            // One registered theme — the inheritance rule that fixes
+            // the font-size bug from web commit 22add35. Background
+            // and foreground colours are layered on top via
+            // `themes.override` in `applyTheme()`; that path repaints
+            // the current page, where `themes.select` of a competing
+            // theme leaves an already-rendered chunk on the previous
+            // colours.
+            rendition.themes.register('mm-reader', {
+              'p, div, span, li, blockquote, dt, dd, td, th': {
+                'font-size': 'inherit !important',
+              },
+            });
+            rendition.themes.select('mm-reader');
+            rendition.themes.fontSize((fontPct || 100) + '%');
+            applyTheme('light');
+
+            // Internal-link navigation (retired-repo issue #70).
+            //
+            // epub.js installs its own link interceptor inside each
+            // rendered chapter when `allowScriptedContent: true`
+            // (see renderTo options above) — it handles TOC,
+            // footnote, and cross-reference anchors by calling
+            // rendition.display() with a spine-canonicalised href.
+            // We don't need to duplicate that work for taps that
+            // land in the middle of the page (the iframe gets the
+            // click directly and epub.js takes it).
+            //
+            // For taps that land in the leftmost / rightmost 25%
+            // of the page, the .nav-prev / .nav-next overlays sit
+            // on z-index 10 and would consume the click before it
+            // reaches the iframe. makeNavTapHandler (below) hit-
+            // tests the iframe at the tap point: if there's an
+            // <a href> there, it synthesizes a click on the anchor
+            // so epub.js's handler picks it up via the same code
+            // path as middle-of-page taps. Otherwise it falls
+            // through to a normal rendition.next/prev page turn.
+
+            // Track CFI on every relocation. percent stays at the
+            // resume value until the locations index finishes building
+            // — `loc.start.percentage` is 0 without it.
+            rendition.on('relocated', function(loc) {
+              lastCfi = loc.start.cfi;
+              if (locationsReady) {
+                const p = book.locations.percentageFromCfi(loc.start.cfi);
+                if (Number.isFinite(p)) {
+                  percent = p;
+                }
+              }
+              postNative({ type: 'relocated', cfi: lastCfi, percent: percent });
+            });
+
+            await rendition.display(resumeCfi || undefined);
+            // Wait for the TOC manifest to finish loading before
+            // we say "ready". Without this the user could tap the
+            // chapter dropdown before book.navigation populates and
+            // see a "no chapters" empty list on the first open.
+            // book.loaded.navigation is a small fetch (just the
+            // toc.ncx / nav.xhtml manifest) so the wait is
+            // negligible.
+            try {
+              await book.loaded.navigation;
+            } catch (navErr) {
+              console.warn('navigation load failed', navErr);
+            }
+            postNative({ type: 'ready' });
+
+            // Build the locations index in the background — turning a
+            // CFI into a fraction of the book costs a full chapter
+            // scan but only happens once. 1024 chars/page is the
+            // epub.js default.
+            book.ready
+              .then(function() { return book.locations.generate(1024); })
+              .then(function() {
+                locationsReady = true;
+                if (lastCfi) {
+                  const p = book.locations.percentageFromCfi(lastCfi);
+                  if (Number.isFinite(p) && p > 0) {
+                    percent = p;
+                    postNative({ type: 'relocated', cfi: lastCfi, percent: percent });
+                  }
+                }
+              })
+              .catch(function(e) { console.warn('locations index failed', e); });
+          } catch (e) {
+            postNative({ type: 'error', message: String(e && e.message || e) });
+          }
+        },
+        setFont: function(pct) {
+          if (!rendition) return;
+          // Retired-repo issue #69 anchor behaviour. `lastCfi` is updated by the
+          // `relocated` handler to `loc.start.cfi` — the EPUB CFI of
+          // the FIRST CHARACTER visible on the current spread. We
+          // capture that BEFORE changing the font and call
+          // rendition.display() AFTER the reflow so epub.js shows
+          // the page (CSS column) that contains the anchor.
+          //
+          // Important: the anchor character is NOT guaranteed to be
+          // at the TOP of the post-reflow page. epub.js paginated
+          // flow lays the chapter out as one continuous block and
+          // breaks it into fixed-width columns. After a resize the
+          // column boundaries land at different character offsets,
+          // so the column that CONTAINS the anchor typically starts
+          // a paragraph or two BEFORE it. The visible effect is the
+          // anchor sliding from "first line" to "mid-page" after a
+          // resize. That's a structural limit of paginated CFI
+          // anchoring — every paginated reader (Apple Books, Kindle,
+          // Kobo) has the same drift. Forcing top-of-page would
+          // require injecting a CSS column break at the anchor on
+          // each reflow, which interacts awkwardly with epub.js's
+          // own pagination and adds fragility we don't want.
+          //
+          // What we get vs. what was broken before the fix:
+          //   BEFORE: random jump — the rendition's page index
+          //           pointed into the pre-reflow layout, so the
+          //           user landed somewhere unrelated in the chapter.
+          //   AFTER:  the page containing the previously-first-
+          //           visible character. Off by at most one column's
+          //           worth of text.
+          var anchorCfi = lastCfi;
+          rendition.themes.fontSize(pct + '%');
+          if (anchorCfi) {
+            // Defer one task tick so the font-size CSS lands and
+            // the iframe has reflowed before we ask for a display.
+            // Without the defer, rendition.display() races the
+            // reflow and may still land on the wrong page.
+            setTimeout(function() {
+              rendition.display(anchorCfi);
+            }, 0);
+          }
+        },
+        setTheme: function(name) {
+          applyTheme(name);
+        },
+        /**
+         * Returns the EPUB table of contents. The native side calls
+         * this on demand (toolbar tap) and renders a SwiftUI sheet —
+         * navigating via gotoHref() takes the user to the chapter.
+         */
+        getToc: function() {
+          if (!book || !book.navigation) return [];
+          const flat = [];
+          const walk = function(items, depth) {
+            for (const it of items) {
+              flat.push({
+                label: (it.label || '').trim(),
+                href: it.href || '',
+                depth: depth,
+              });
+              if (it.subitems && it.subitems.length) walk(it.subitems, depth + 1);
+            }
+          };
+          walk(book.navigation.toc || [], 0);
+          return flat;
+        },
+        gotoHref: function(href) {
+          if (rendition && href) rendition.display(href);
+        },
+        next: function() { if (rendition) rendition.next(); },
+        prev: function() { if (rendition) rendition.prev(); },
+      };
+
+      // Page-turn tap zones with link-aware hit-testing. Without
+      // the hit test, any TOC link (or footnote anchor) whose tap
+      // target falls in the leftmost or rightmost 25% of the page
+      // gets page-turned instead of followed, because these
+      // overlays sit on z-index 10 and consume the click before it
+      // reaches the iframe (retired-repo issue #70).
+      function makeNavTapHandler(isNext) {
+        return function(e) {
+          // Hit-test the iframe at the tap point. If there's an
+          // <a href> at that spot inside the rendered chapter,
+          // route the click into the iframe so epub.js's own
+          // link handler can canonicalise + display it (the same
+          // path middle-of-page taps take). Otherwise fall
+          // through to a normal page turn.
+          var iframe = document.querySelector('#epub iframe');
+          if (iframe && iframe.contentDocument) {
+            var rect = iframe.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            var doc = iframe.contentDocument;
+            var hit = doc.elementFromPoint(x, y);
+            // The tap target may be a wrapping <span> or text node
+            // inside the link — walk up to the nearest <a href>.
+            var anchor = null;
+            var cursor = hit;
+            while (cursor && cursor !== doc.body) {
+              if (cursor.tagName === 'A' && cursor.getAttribute &&
+                  cursor.getAttribute('href')) {
+                anchor = cursor;
+                break;
+              }
+              cursor = cursor.parentElement;
+            }
+            if (anchor) {
+              var raw = anchor.getAttribute('href') || '';
+              // Skip external schemes (http, mailto, etc.) — let
+              // them fall through to page nav for now; routing
+              // them to Safari is a separate follow-up.
+              if (raw && !/^[a-z][a-z0-9+.\-]*:/i.test(raw)) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Synthesize a click on the in-iframe anchor.
+                // epub.js's installed link handler picks it up
+                // and calls display() with the spine-canonical
+                // href — we don't have to redo that work.
+                anchor.click();
+                return;
+              }
+            }
+          }
+          // No link at the tap point — fall through to page nav.
+          if (rendition) {
+            if (isNext) rendition.next();
+            else rendition.prev();
+          }
+        };
+      }
+      document.getElementById('nav-prev')
+        .addEventListener('click', makeNavTapHandler(false));
+      document.getElementById('nav-next')
+        .addEventListener('click', makeNavTapHandler(true));
+    })();
+  </script>
+</body>
+</html>

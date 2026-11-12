@@ -1,0 +1,185 @@
+<div class="add-page">
+  <h2>Add Item</h2>
+
+  <!-- Message banner -->
+  @if (scanMessage()) {
+    <div class="message-banner" [class.success]="scanSuccess()" [class.error]="!scanSuccess()">
+      {{ scanMessage() }}
+    </div>
+  }
+
+  <mat-tab-group>
+    <!-- Scan Barcode Tab -->
+    <mat-tab label="Scan Barcode">
+      <div class="tab-content">
+        <div class="upc-row">
+          <input class="upc-input" type="text" placeholder="Enter or scan UPC..."
+                 [value]="upcInput()" (input)="updateUpc($event)" (keydown)="onUpcKeydown($event)" autofocus />
+          <button mat-flat-button color="primary" (click)="submitUpc()" [disabled]="!upcInput().trim()">Lookup</button>
+        </div>
+
+        @if (!cameraActive()) {
+          <button mat-stroked-button class="camera-btn" (click)="startCamera()">
+            <mat-icon>photo_camera</mat-icon> Scan with Camera
+          </button>
+        } @else {
+          <div class="camera-container">
+            <video #videoEl autoplay playsinline muted class="camera-video"></video>
+            <div class="camera-overlay"><div class="scan-line"></div></div>
+            <button mat-stroked-button class="stop-btn" (click)="stopCamera()">Stop</button>
+          </div>
+        }
+
+        <span class="quota-label">UPC lookups today: {{ quotaUsed() }} / {{ quotaLimit() }}</span>
+      </div>
+    </mat-tab>
+
+    <!-- Search TMDB Tab -->
+    <mat-tab label="Search TMDB">
+      <div class="tab-content">
+        <div class="search-row">
+          <input class="field-input flex" type="text" placeholder="Search TMDB..."
+                 [value]="searchQuery()" (input)="searchTmdb($event)" (keydown.enter)="searchTmdb()" />
+          <mat-chip-set>
+            <mat-chip [highlighted]="searchType() === 'MOVIE'" (click)="searchType.set('MOVIE'); searchTmdb()">Movie</mat-chip>
+            <mat-chip [highlighted]="searchType() === 'TV'" (click)="searchType.set('TV'); searchTmdb()">TV</mat-chip>
+          </mat-chip-set>
+        </div>
+
+        <div class="format-row">
+          <label class="field-label">Format:</label>
+          <select class="field-select compact" (change)="addFormat.set($any($event.target).value)">
+            @for (f of formatOptions; track f.value) {
+              <option [value]="f.value" [selected]="f.value === addFormat()">{{ f.label }}</option>
+            }
+          </select>
+          @if (searchType() === 'TV') {
+            <label class="field-label">Seasons:</label>
+            <input class="field-input compact" type="text" placeholder="e.g., 1-3"
+                   [value]="addSeasons()" (input)="addSeasons.set($any($event.target).value)" />
+          }
+        </div>
+
+        @if (searching()) { <mat-spinner aria-label="Loading" diameter="24" /> }
+        @if (searchResults().length > 0) {
+          <div class="tmdb-results">
+            @for (r of searchResults(); track r.tmdb_id) {
+              <div class="tmdb-row">
+                @if (r.poster_path) { <img [src]="posterUrl(r.poster_path)" class="tmdb-poster" alt="" /> }
+                <div class="tmdb-info">
+                  <span class="tmdb-title">{{ r.title }}</span>
+                  <span class="tmdb-meta">{{ r.release_year ?? '' }} · {{ r.media_type === 'TV' ? 'TV' : 'Film' }}</span>
+                  @if (r.overview) { <span class="tmdb-overview">{{ r.overview }}</span> }
+                </div>
+                <button mat-flat-button color="primary" class="small-btn" (click)="addFromTmdb(r)">Add</button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </mat-tab>
+
+    <!-- Search Books Tab — Open Library by title/author. Use when the ISBN
+         scan fails or the physical book has no barcode. -->
+    <mat-tab label="Search Books">
+      <div class="tab-content">
+        <div class="search-row">
+          <input class="field-input flex" type="text" placeholder="Title or author..."
+                 [value]="bookQuery()" (input)="searchBooks($event)" (keydown.enter)="searchBooks()" />
+        </div>
+
+        @if (bookSearching()) { <mat-spinner aria-label="Loading" diameter="24" /> }
+        @if (bookResults().length > 0) {
+          <div class="tmdb-results">
+            @for (hit of bookResults(); track hit.work_id) {
+              <div class="tmdb-row">
+                @if (hit.cover_url) {
+                  <img [src]="hit.cover_url" class="tmdb-poster" alt="" loading="lazy" decoding="async" />
+                }
+                <div class="tmdb-info">
+                  <span class="tmdb-title">{{ hit.title }}</span>
+                  <span class="tmdb-meta">
+                    {{ hit.authors.join(', ') }}{{ hit.year ? ' · ' + hit.year : '' }}
+                    @if (!hit.isbn) { <em> · no ISBN</em> }
+                  </span>
+                </div>
+                <button mat-flat-button color="primary" class="small-btn"
+                        (click)="addFromOl(hit)"
+                        [disabled]="bookAdding() || !hit.isbn"
+                        [title]="hit.isbn ? '' : 'OL has no ISBN for this work'">Add</button>
+              </div>
+            }
+          </div>
+        } @else if (!bookSearching() && bookQuery().length >= 2) {
+          <span class="empty-text">No matching books in Open Library.</span>
+        }
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+
+  <!-- Recent Items Grid -->
+  <div class="recent-section">
+    <h3>Recent Items</h3>
+    <div class="filter-bar">
+      <mat-chip-set>
+        @for (f of filterOptions; track f.value) {
+          <mat-chip [highlighted]="itemFilter() === f.value" (click)="setFilter(f.value)">{{ f.label }}</mat-chip>
+        }
+      </mat-chip-set>
+    </div>
+
+    @if (items().length > 0) {
+      <table mat-table [dataSource]="items()" class="recent-table">
+        <ng-container matColumnDef="poster">
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Poster</span></th>
+          <td mat-cell *matCellDef="let r">
+            @if (r.poster_url) { <img [src]="r.poster_url" class="row-poster" alt="" /> }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>Title</th>
+          <td mat-cell *matCellDef="let r">{{ r.display_name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="format">
+          <th mat-header-cell *matHeaderCellDef>Format</th>
+          <td mat-cell *matCellDef="let r">{{ (r.format ?? '—').replace('_', ' ') }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let r">
+            <span [style.color]="statusColor(r.enrichment_status)">{{ statusLabel(r.enrichment_status) }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="source">
+          <th mat-header-cell *matHeaderCellDef>Source</th>
+          <td mat-cell *matCellDef="let r">{{ r.entry_source === 'UPC_SCAN' ? 'UPC' : 'Manual' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Actions</span></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button [matMenuTriggerFor]="rowMenu" aria-label="Actions">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #rowMenu="matMenu">
+              @if (r.title_id) {
+                <a mat-menu-item [routerLink]="['/title', r.title_id]">
+                  <mat-icon>open_in_new</mat-icon>
+                  <span>View Title</span>
+                </a>
+              }
+              <button mat-menu-item class="delete-action" (click)="deleteEntry(r)">
+                <mat-icon>delete</mat-icon>
+                <span>Delete</span>
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="recentColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: recentColumns;" class="clickable-row"
+            (click)="onRowClick(row)"></tr>
+      </table>
+    } @else {
+      <p class="empty-text">No recent items.</p>
+    }
+  </div>
+</div>

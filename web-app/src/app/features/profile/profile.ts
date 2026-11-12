@@ -1,0 +1,194 @@
+import { Component, computed, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { SlicePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { firstValueFrom } from 'rxjs';
+import { TimezoneService } from '../../core/timezone.service';
+import { WebAuthnService, Passkey } from '../../core/webauthn.service';
+import { ThemeService } from '../../core/theme.service';
+
+interface Profile {
+  id: number;
+  username: string;
+  display_name: string;
+  is_admin: boolean;
+  /** Raw ordinal level (0–6); see rating_ceiling_label for display. */
+  rating_ceiling: number | null;
+  /** Human-readable ceiling, e.g. "PG-13 / TV-14". Null when unrestricted. */
+  rating_ceiling_label: string | null;
+  live_tv_min_quality: number;
+  has_live_tv: boolean;
+  passkeys_enabled: boolean;
+  /** The pinned theme id, or null when the user follows the default. */
+  web_theme?: string | null;
+  /** The server's built-in default theme id. */
+  default_theme?: string;
+}
+
+interface Session {
+  id: number;
+  type: 'browser' | 'device';
+  user_agent?: string;
+  device_name?: string;
+  created_at: string | null;
+  last_used_at: string | null;
+  expires_at?: string | null;
+  is_current: boolean;
+}
+
+@Component({
+  selector: 'app-profile',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SlicePipe, RouterLink, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
+  templateUrl: './profile.html',
+  styleUrl: './profile.scss',
+})
+export class ProfileComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+  readonly tz = inject(TimezoneService);
+  private readonly webauthnService = inject(WebAuthnService);
+  // Still applied on load (applyFromServer): the server's default theme flows
+  // through even though the page no longer offers a choice (one theme today).
+  readonly theme = inject(ThemeService);
+
+  readonly loading = signal(true);
+  readonly profile = signal<Profile | null>(null);
+  readonly sessions = signal<Session[]>([]);
+  readonly passkeys = signal<Passkey[]>([]);
+  readonly webauthnSupported = signal(false);
+  readonly passkeyRegistering = signal(false);
+  readonly hiddenTitles = signal<{ title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[]>([]);
+
+  // Change password modal
+  readonly showPasswordDialog = signal(false);
+  readonly pwCurrent = signal('');
+  readonly pwNew = signal('');
+  readonly pwConfirm = signal('');
+  readonly pwError = signal('');
+  readonly pwSuccess = signal(false);
+  readonly pwSubmitting = signal(false);
+
+  async ngOnInit(): Promise<void> {
+    this.webauthnSupported.set(this.webauthnService.isSupported());
+
+    try {
+      const [profile, sessionData, hiddenData, passkeyData] = await Promise.all([
+        firstValueFrom(this.http.get<Profile>('/api/v2/profile')),
+        firstValueFrom(this.http.get<{ sessions: Session[] }>('/api/v2/profile/sessions')),
+        firstValueFrom(this.http.get<{ titles: { title_id: number; title_name: string; poster_url: string | null; release_year: number | null }[] }>('/api/v2/profile/hidden-titles')),
+        this.webauthnService.listPasskeys().catch(() => [] as Passkey[]),
+      ]);
+      this.profile.set(profile);
+      this.theme.applyFromServer(profile.web_theme, profile.default_theme);
+      this.sessions.set(sessionData.sessions);
+      this.hiddenTitles.set(hiddenData.titles);
+      this.passkeys.set(passkeyData);
+    } catch {
+      // handled by empty state
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async updateTvQuality(quality: number): Promise<void> {
+    await firstValueFrom(this.http.post('/api/v2/profile/tv-quality', { quality }));
+    this.profile.update(p => p ? { ...p, live_tv_min_quality: quality } : p);
+  }
+
+
+  async revokeSession(session: Session): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/profile/sessions/${session.id}`));
+    this.sessions.update(s => s.filter(x => x.id !== session.id || x.type !== session.type));
+  }
+
+  async revokeOtherSessions(): Promise<void> {
+    await firstValueFrom(this.http.post('/api/v2/profile/sessions/revoke-others', {}));
+    this.sessions.update(s => s.filter(x => x.is_current));
+  }
+
+  openPasswordDialog(): void {
+    this.pwCurrent.set('');
+    this.pwNew.set('');
+    this.pwConfirm.set('');
+    this.pwError.set('');
+    this.pwSuccess.set(false);
+    this.showPasswordDialog.set(true);
+  }
+
+  closePasswordDialog(): void {
+    this.showPasswordDialog.set(false);
+  }
+
+  updatePwField(field: 'current' | 'new' | 'confirm', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (field === 'current') this.pwCurrent.set(value);
+    else if (field === 'new') this.pwNew.set(value);
+    else this.pwConfirm.set(value);
+  }
+
+  pwValid(): boolean {
+    return this.pwCurrent().length > 0 && this.pwNew().length >= 8 &&
+      this.pwNew() === this.pwConfirm();
+  }
+
+  async submitPasswordChange(): Promise<void> {
+    this.pwError.set('');
+    this.pwSubmitting.set(true);
+    try {
+      const result = await firstValueFrom(this.http.post<{ ok: boolean; error?: string }>(
+        '/api/v2/profile/change-password',
+        { current_password: this.pwCurrent(), new_password: this.pwNew() }
+      ));
+      if (result.ok) {
+        this.pwSuccess.set(true);
+      } else {
+        this.pwError.set(result.error ?? 'Password change failed');
+      }
+    } catch {
+      this.pwError.set('Request failed');
+    } finally {
+      this.pwSubmitting.set(false);
+    }
+  }
+
+  formatDate(dateStr: string | null): string {
+    return this.tz.formatDateTime(dateStr);
+  }
+
+  // -- Passkey management --
+
+  readonly passkeyError = signal('');
+
+  async registerPasskey(): Promise<void> {
+    this.passkeyRegistering.set(true);
+    this.passkeyError.set('');
+    try {
+      const displayName = prompt('Name for this passkey (optional):') || 'Passkey';
+      await this.webauthnService.performRegistration(displayName);
+      this.passkeys.set(await this.webauthnService.listPasskeys());
+    } catch (e: unknown) {
+      // User cancelled the browser dialog — not an error
+      if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+      const httpErr = e as { error?: { error?: string } };
+      this.passkeyError.set(httpErr.error?.error ?? 'Passkey registration failed');
+    } finally {
+      this.passkeyRegistering.set(false);
+    }
+  }
+
+  async deletePasskey(passkey: Passkey): Promise<void> {
+    if (!confirm(`Delete passkey "${passkey.display_name}"?`)) return;
+    await this.webauthnService.deletePasskey(passkey.id);
+    this.passkeys.update(list => list.filter(p => p.id !== passkey.id));
+  }
+
+  qualityStars = [1, 2, 3, 4, 5];
+
+  async unhideTitle(titleId: number): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/v2/profile/hidden-titles/${titleId}`));
+    this.hiddenTitles.update(list => list.filter(t => t.title_id !== titleId));
+  }
+}

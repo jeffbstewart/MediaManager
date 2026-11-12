@@ -1,0 +1,51 @@
+<div class="content-page">
+  <div class="search-box" role="search">
+    <mat-icon aria-hidden="true">search</mat-icon>
+    <input type="search" class="search-input"
+           placeholder="Search artists" aria-label="Search artists"
+           [value]="query()"
+           (input)="onQueryInput($any($event.target).value)" />
+    @if (query()) {
+      <button class="search-clear" type="button" aria-label="Clear search" (click)="clearQuery()">
+        <mat-icon aria-hidden="true">close</mat-icon>
+      </button>
+    }
+  </div>
+
+  <div class="filter-chips">
+    <div class="filter-chip-group" role="group" aria-label="Availability">
+      <button type="button" class="filter-chip" [attr.aria-pressed]="playableOnly()"
+              (click)="togglePlayable()">Playable</button>
+    </div>
+
+    <span class="filter-chip-divider" aria-hidden="true"></span>
+    <div class="filter-chip-group" role="group" aria-label="Sort">
+      @for (opt of sortOptions; track opt.value) {
+        <button type="button" class="filter-chip" [attr.aria-pressed]="sortMode() === opt.value"
+                (click)="setSort(opt.value)">{{ opt.label }}</button>
+      }
+    </div>
+  </div>
+
+  @if (loading() && artists().length === 0) {
+    <div class="loading-container"><mat-spinner aria-label="Loading" diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else {
+    <span class="status-label">{{ total() }} {{ total() === 1 ? 'artist' : 'artists' }}</span>
+
+    <div class="grid people artist-grid">
+      @for (a of artists(); track a.id) {
+        <app-person-card class="artist-card"
+                         [name]="a.name" [link]="routes.artist(a.id)"
+                         [imageUrl]="cardImageUrl(a)"
+                         [lines]="[a.album_count + (a.album_count === 1 ? ' album' : ' albums')]"
+                         action="View artist" />
+      }
+    </div>
+
+    @if (artists().length === 0 && !loading()) {
+      <p class="empty">No artists match your filters.</p>
+    }
+  }
+</div>

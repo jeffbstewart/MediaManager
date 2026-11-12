@@ -1,0 +1,15 @@
+-- Per-link role on title_author. Until now every title_author row was
+-- treated as AUTHOR, but Open Library's edition.authors field for
+-- audiobook editions includes narrators, and our ingestion path was
+-- inserting them as authors — Mel Foster, Emily Durante etc. ended
+-- up in the iOS author grid as if they had written the books.
+--
+-- Going forward we tag each link with a role and the author-grid
+-- queries restrict to role='AUTHOR'. The existing data is rewritten
+-- by the WipeAndRefetchBookAuthorsUpdater SchemaUpdater (which also
+-- drops audiobook MediaItems entirely — we don't have an in-app
+-- audiobook reader and the data was the source of the contamination).
+--
+-- Allowed values: AUTHOR / TRANSLATOR / ILLUSTRATOR. (NARRATOR and
+-- EDITOR aren't ingested at all.)
+ALTER TABLE title_author ADD COLUMN role VARCHAR(32) NOT NULL DEFAULT 'AUTHOR';

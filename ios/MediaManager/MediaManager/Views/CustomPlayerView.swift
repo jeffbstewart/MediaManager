@@ -1,0 +1,939 @@
+import SwiftUI
+import AVKit
+import MediaPlayer
+import MediaManagerCore
+import MediaManagerProtos
+
+private let log = MMLogger(category: "CustomPlayerView")
+
+/// Raw AVPlayerLayer wrapped for SwiftUI — no native controls.
+struct PlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerUIView {
+        let view = PlayerUIView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = .resizeAspect
+        view.backgroundColor = .black
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.playerLayer.player = player
+    }
+
+    class PlayerUIView: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+}
+
+/// Fully custom video player with fading controls, subtitle overlay,
+/// scrub bar, AirPlay, and episode info display.
+struct CustomPlayerView: View {
+    @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AudioPlayerManager.self) private var audio
+    @Environment(\.dismiss) private var dismiss
+
+    let transcodeId: TranscodeID
+    let titleName: String
+    let episodeName: String?
+    var hasSubtitles: Bool = false
+    var nextEpisode: NextEpisode? = nil
+    var seasonNumber: Int? = nil
+    var episodeNumber: Int? = nil
+
+    @State private var player: AVPlayer?
+    @State private var error: String?
+    @State private var progressTimer: Timer?
+    @State private var endObserver: Any?
+    @State private var currentTranscodeId: TranscodeID?
+    @State private var currentEpisodeName: String?
+    @State private var currentNextEpisode: NextEpisode?
+    @State private var subtitles = SubtitleController()
+    @State private var thumbnails = ThumbnailScrubber()
+    @State private var scrubThumbnail: UIImage?
+    @State private var skipController = SkipSegmentController()
+
+    // Player diagnostics — attached in loadStream(), torn down in cleanup().
+    // KVO observation token for AVPlayerItem.status.
+    @State private var statusObservation: NSKeyValueObservation?
+    // Notification observers for AVPlayerItem error / stall events. Captured
+    // by reference so we can pass them back to NotificationCenter.removeObserver.
+    @State private var errorLogObserver: NSObjectProtocol?
+    @State private var failedToEndObserver: NSObjectProtocol?
+    @State private var stalledObserver: NSObjectProtocol?
+
+    // Controls state
+    @State private var showControls = true
+    @State private var showChapterList = false
+    @State private var hideTask: Task<Void, Never>?
+    @State private var timeObserver: Any?
+    @State private var playbackSpeed: Float = 1.0
+    @State private var ps = PlayerState()
+    /// Throttles MPNowPlayingInfoCenter elapsed-time writes to ~1 Hz —
+    /// the 2 Hz time observer drives the UI scrubber but the system
+    /// surfaces (lock screen, AirPods, CarPlay) only need a per-second
+    /// position to render their progress bars smoothly.
+    @State private var lastNowPlayingPublish: Date = .distantPast
+
+    private let speeds: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    var body: some View {
+        Group {
+            if let error {
+                VStack(spacing: 16) {
+                    ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
+                    Button("Close") { cleanupAndDismiss() }
+                        .buttonStyle(.borderedProminent)
+                }
+            } else if let player {
+                ZStack {
+                    // Video layer
+                    PlayerLayerView(player: player)
+                        .ignoresSafeArea()
+
+                    // Tap target for showing/hiding controls
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggleControls() }
+
+                    // Subtitle overlay (always visible when enabled, doesn't fade)
+                    if subtitles.enabled, let subtitle = subtitles.currentText {
+                        VStack {
+                            Spacer()
+                            Text(subtitle)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black, radius: 3, x: 0, y: 1)
+                                .shadow(color: .black, radius: 3, x: 0, y: -1)
+                                .shadow(color: .black, radius: 3, x: 1, y: 0)
+                                .shadow(color: .black, radius: 3, x: -1, y: 0)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 6)
+                                .background(.black.opacity(0.6))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .padding(.bottom, 80)
+                                .allowsHitTesting(false)
+                        }
+                    }
+
+                    // Skip Intro button
+                    if skipController.showSkipIntro {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button {
+                                    skipController.skipIntro(player: player)
+                                } label: {
+                                    Text("Skip Intro")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 12)
+                                        .background(.white.opacity(0.2))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(.white.opacity(0.6), lineWidth: 1)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .padding(.trailing, 24)
+                                .padding(.bottom, 100)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                    if skipController.showUpNext, let nextEp = currentNextEpisode ?? nextEpisode {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                VStack(spacing: 12) {
+                                    Text("Up Next")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+
+                                    Text(nextEp.episodeName)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white.opacity(0.8))
+
+                                    if skipController.upNextCountdown > 0 {
+                                        Text("Starting in \(skipController.upNextCountdown)s")
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.6))
+                                    }
+
+                                    HStack(spacing: 16) {
+                                        Button("Play Now") {
+                                            skipController.cancelUpNext()
+                                            Task { await advanceToNextEpisode(nextEp) }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+
+                                        Button("Cancel") {
+                                            skipController.cancelUpNext()
+                                        }
+                                        .foregroundStyle(.white)
+                                    }
+                                }
+                                .padding(20)
+                                .background(.black.opacity(0.8))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.trailing, 24)
+                                .padding(.bottom, 100)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                    // Controls overlay (fades in/out)
+                    if showControls {
+                        controlsOverlay(player: player)
+                            .transition(.opacity)
+                    }
+                }
+                .ignoresSafeArea()
+                .statusBarHidden(true)
+                .onChange(of: skipController.upNextCountdown) { _, newValue in
+                    if newValue == 0, skipController.showUpNext {
+                        let nextEp = currentNextEpisode ?? nextEpisode
+                        skipController.cancelUpNext()
+                        if let nextEp {
+                            Task { await advanceToNextEpisode(nextEp) }
+                        }
+                    }
+                }
+            } else {
+                ProgressView("Loading stream...")
+            }
+        }
+        .task {
+            await loadStream()
+        }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            cleanup()
+        }
+        .sheet(isPresented: $showChapterList) {
+            ChapterListSheet(chapters: skipController.chapters, currentPosition: ps.currentTime) { chapter in
+                skipController.seekToChapter(chapter, player: player)
+                showChapterList = false
+            }
+        }
+    }
+
+    // MARK: - Controls Overlay
+
+    @ViewBuilder
+    private func controlsOverlay(player: AVPlayer) -> some View {
+        ZStack {
+            // Dim background
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+            VStack {
+                // Top bar
+                topBar()
+
+                Spacer()
+
+                // Center controls
+                centerControls(player: player)
+
+                Spacer()
+
+                // Bottom bar with scrub
+                bottomBar(player: player)
+            }
+            .padding()
+        }
+    }
+
+    @ViewBuilder
+    private func topBar() -> some View {
+        HStack {
+            // Back button
+            Button { cleanupAndDismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+            }
+
+            // Title info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(titleName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if let epName = currentEpisodeName ?? episodeName {
+                    HStack(spacing: 4) {
+                        if let s = seasonNumber, let e = episodeNumber {
+                            Text("S\(s)E\(e)")
+                                .fontWeight(.medium)
+                        }
+                        Text(epName)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                }
+                if let chapterTitle = skipController.currentChapterTitle {
+                    Text(chapterTitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .layoutPriority(-1) // yield space to buttons
+
+            Spacer(minLength: 8)
+
+            // Player option buttons — compact row
+            HStack(spacing: 12) {
+                if subtitles.cueCount > 0 {
+                    Button { subtitles.enabled.toggle(); resetHideTimer() } label: {
+                        Image(systemName: subtitles.enabled ? "captions.bubble.fill" : "captions.bubble")
+                            .font(.system(size: 18))
+                            .foregroundStyle(subtitles.enabled ? .yellow : .white)
+                    }
+                }
+
+                if !skipController.chapters.isEmpty {
+                    Button { showChapterList = true; resetHideTimer() } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.white)
+                    }
+                }
+
+                // Playback speed
+                Menu {
+                    ForEach(speeds, id: \.self) { speed in
+                        Button {
+                            playbackSpeed = speed
+                            player?.rate = speed
+                            if let player { publishNowPlayingInfo(player: player, force: true) }
+                            resetHideTimer()
+                        } label: {
+                            Label(
+                                speed == 1.0 ? "Normal" : "\(speed, specifier: "%.2g")×",
+                                systemImage: speed == playbackSpeed ? "checkmark" : ""
+                            )
+                        }
+                    }
+                } label: {
+                    Text("\(playbackSpeed, specifier: "%.2g")×")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                // AirPlay
+                AirPlayButton()
+                    .frame(width: 24, height: 24)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func centerControls(player: AVPlayer) -> some View {
+        HStack(spacing: 48) {
+            // Back 10
+            Button {
+                skip(player: player, seconds: -10)
+                resetHideTimer()
+            } label: {
+                Image(systemName: "gobackward.10")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.white)
+            }
+
+            // Play/Pause
+            Button {
+                togglePlayPause(player: player)
+                resetHideTimer()
+            } label: {
+                Image(systemName: ps.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.white)
+            }
+
+            // Forward 10
+            Button {
+                skip(player: player, seconds: 10)
+                resetHideTimer()
+            } label: {
+                Image(systemName: "goforward.10")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bottomBar(player: AVPlayer) -> some View {
+        let displayTime = ps.isScrubbing ? ps.scrubTime : ps.currentTime
+
+        VStack(spacing: 8) {
+            // Thumbnail preview during scrubbing
+            if ps.isScrubbing, let thumb = ps.scrubThumbnail {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 90)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(.white.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(radius: 4)
+                    .transition(.opacity)
+            }
+
+            // Custom scrub bar using GeometryReader + DragGesture
+            // (SwiftUI Slider has re-entrancy bugs with editing callbacks)
+            GeometryReader { geo in
+                let width = geo.size.width
+                let progress = ps.duration > 0 ? displayTime / ps.duration : 0
+
+                ZStack(alignment: .leading) {
+                    // Track background
+                    Capsule()
+                        .fill(.white.opacity(0.3))
+                        .frame(height: 4)
+
+                    // Progress fill
+                    Capsule()
+                        .fill(.white)
+                        .frame(width: max(0, width * progress), height: 4)
+
+                    // Thumb
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 14, height: 14)
+                        .offset(x: max(0, min(width - 14, width * progress - 7)))
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let fraction = max(0, min(1, value.location.x / width))
+                            ps.scrubTime = fraction * ps.duration
+                            ps.isScrubbing = true
+                            ps.scrubThumbnail = thumbnails.thumbnail(at: ps.scrubTime)
+                            resetHideTimer()
+                        }
+                        .onEnded { _ in
+                            player.seek(to: CMTime(seconds: ps.scrubTime, preferredTimescale: 600))
+                            ps.isScrubbing = false
+                            ps.scrubThumbnail = nil
+                        }
+                )
+            }
+            .frame(height: 20)
+
+            // Time labels
+            HStack {
+                Text(formatTime(displayTime))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Text("-" + formatTime(max(0, ps.duration - displayTime)))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+    }
+
+    // MARK: - Controls Visibility
+
+    private func toggleControls() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showControls.toggle()
+        }
+        if showControls {
+            resetHideTimer()
+        }
+    }
+
+    private func resetHideTimer() {
+        hideTask?.cancel()
+        hideTask = Task {
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.5)) {
+                showControls = false
+            }
+        }
+    }
+
+    // MARK: - Playback
+
+    private func skip(player: AVPlayer, seconds: Double) {
+        let target = player.currentTime().seconds + seconds
+        player.seek(to: CMTime(seconds: max(0, target), preferredTimescale: 600))
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        let total = Int(seconds)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    // MARK: - Stream Loading
+
+    private func cleanupAndDismiss() {
+        saveProgressOnExit()
+        cleanup()
+        dismiss()
+    }
+
+    private func cleanup() {
+        stopProgressReporting()
+        hideTask?.cancel()
+        hideTask = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        endObserver = nil
+        if let timeObserver, let player {
+            player.removeTimeObserver(timeObserver)
+        }
+        timeObserver = nil
+        subtitles.stop(player: player)
+        skipController.stop(player: player)
+        statusObservation?.invalidate()
+        statusObservation = nil
+        for token in [errorLogObserver, failedToEndObserver, stalledObserver] {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+        errorLogObserver = nil
+        failedToEndObserver = nil
+        stalledObserver = nil
+        // Hand the system Now Playing slot back. advanceToNextEpisode
+        // runs cleanup() between episodes, then loadStream() re-takes
+        // the slot — a brief flicker where neither side owns it, but
+        // a real dismiss is the only path that actually leaves audio
+        // back in control.
+        MPRemoteCommandCenter.shared().togglePlayPauseCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().playCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().pauseCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().skipForwardCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().skipBackwardCommand.removeTarget(nil)
+        MPRemoteCommandCenter.shared().changePlaybackPositionCommand.removeTarget(nil)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        audio.wireRemoteCommands()
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+    }
+
+    private func loadStream() async {
+        let tcId = currentTranscodeId ?? transcodeId
+        let nextEp = currentNextEpisode ?? nextEpisode
+
+        let offlineDir = dataModel.downloads.localDir(for: tcId)
+
+        guard let asset = await dataModel.streamAsset(transcodeId: tcId) else {
+            log.error("loadStream: streamAsset returned nil for transcode \(tcId.rawValue)")
+            error = "Unable to build stream URL"
+            return
+        }
+
+        log.info("loadStream: transcode=\(tcId.rawValue) source=\(asset.url.scheme ?? "?"):\(asset.url.host ?? "?") path=\(asset.url.path)")
+
+        let item = AVPlayerItem(asset: asset)
+        let avPlayer = AVPlayer(playerItem: item)
+        item.preferredForwardBufferDuration = 30
+        attachDiagnostics(to: item)
+
+        avPlayer.allowsExternalPlayback = true
+        avPlayer.usesExternalPlaybackWhileExternalScreenIsActive = true
+
+        // Take over the system Now Playing slot before the video
+        // starts. Pausing the audio player frees the audio session
+        // and prevents both managers from fighting over remote-
+        // command callbacks — AirPods would otherwise toggle audio
+        // playback rather than the video that's now on screen. The
+        // audio side is restored in cleanup().
+        if audio.isPlaying { audio.pause() }
+        audio.unwireRemoteCommands()
+        wireVideoRemoteCommands(player: avPlayer)
+
+        self.player = avPlayer
+        ps.isPlaying = true
+        avPlayer.play()
+        publishNowPlayingInfo(player: avPlayer, force: true)
+        startProgressReporting()
+        startTimeObserver(player: avPlayer)
+        resetHideTimer()
+
+        // End of playback → auto-advance
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [nextEp] _ in
+            Task { @MainActor in
+                await advanceToNextEpisode(nextEp)
+            }
+        }
+
+        // Seek to saved position
+        Task {
+            let progress = await dataModel.playbackProgress(transcodeId: tcId)
+            if let position = progress?.positionSeconds, position > 0 {
+                await avPlayer.seek(to: CMTime(seconds: position, preferredTimescale: 1))
+            }
+        }
+
+        // Load subtitles, thumbnails, and skip segments in parallel
+        // Pass local directory for offline playback support
+        let localSubFile = dataModel.downloads.localSubtitleURL(for: tcId)
+        async let subLoad: () = subtitles.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir, localSubtitleFile: localSubFile)
+        async let thumbLoad: () = thumbnails.load(transcodeId: tcId.rawValue, apiClient: dataModel.apiClient, localDir: offlineDir)
+        let localChapFile = dataModel.downloads.localChaptersURL(for: tcId)
+        async let skipLoad: () = skipController.load(transcodeId: tcId.rawValue, grpcClient: dataModel.grpcClient, localDir: offlineDir, localChaptersFile: localChapFile)
+        _ = await (subLoad, thumbLoad, skipLoad)
+        subtitles.startObserving(player: avPlayer)
+        skipController.startObserving(player: avPlayer)
+    }
+
+    /// Attach observers that surface why the player isn't drawing video.
+    /// AVFoundation otherwise fails silently — the layer just stays black —
+    /// so we have to ask explicitly for status, error-log entries,
+    /// failed-to-play-to-end, and stall notifications.
+    private func attachDiagnostics(to item: AVPlayerItem) {
+        statusObservation = item.observe(\.status, options: [.new, .initial]) { item, _ in
+            Task { @MainActor in
+                switch item.status {
+                case .unknown:
+                    log.info("AVPlayerItem.status: unknown (still loading)")
+                case .readyToPlay:
+                    let video = (try? await item.asset.loadTracks(withMediaType: .video).count) ?? 0
+                    let audio = (try? await item.asset.loadTracks(withMediaType: .audio).count) ?? 0
+                    let dur = (try? await item.asset.load(.duration)) ?? .zero
+                    log.info("AVPlayerItem.status: readyToPlay (video tracks=\(video), audio tracks=\(audio), duration=\(CMTimeGetSeconds(dur))s)")
+                case .failed:
+                    let detail = describeNSError(item.error)
+                    log.error("AVPlayerItem.status: failed — \(detail)")
+                @unknown default:
+                    log.warning("AVPlayerItem.status: unknown raw value \(item.status.rawValue)")
+                }
+            }
+        }
+
+        errorLogObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.newErrorLogEntryNotification,
+            object: item,
+            queue: .main
+        ) { note in
+            guard let event = (note.object as? AVPlayerItem)?.errorLog()?.events.last else { return }
+            log.warning("AVPlayerItem error-log entry: status=\(event.errorStatusCode) domain=\(event.errorDomain) comment=\(event.errorComment ?? "(none)") uri=\(event.uri ?? "(none)") server=\(event.serverAddress ?? "(none)")")
+        }
+
+        failedToEndObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: item,
+            queue: .main
+        ) { note in
+            let err = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            log.error("AVPlayerItem failedToPlayToEndTime — \(describeNSError(err))")
+        }
+
+        stalledObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.playbackStalledNotification,
+            object: item,
+            queue: .main
+        ) { _ in
+            log.warning("AVPlayerItem playbackStalled")
+        }
+    }
+
+    private func startTimeObserver(player: AVPlayer) {
+        let state = ps
+        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            // The periodic observer's queue is `.main`, so we're already on the
+            // main actor — assumeIsolated tells the compiler what we know.
+            MainActor.assumeIsolated {
+                let t = time.seconds
+                if t.isFinite { state.currentTime = t }
+                let dur = player.currentItem?.duration.seconds ?? 0
+                if dur.isFinite && dur > 0 { state.duration = dur }
+                state.isPlaying = player.timeControlStatus == .playing
+                // Push elapsed time to MPNowPlayingInfoCenter at ~1 Hz so
+                // AirPods / lock-screen / CarPlay scrubbers track playback.
+                // Throttled because the 2 Hz UI cadence would generate
+                // more writes than the system needs.
+                publishNowPlayingInfo(player: player, force: false)
+            }
+        }
+    }
+
+    // MARK: - Episode Advance
+
+    @MainActor
+    private func advanceToNextEpisode(_ nextEp: NextEpisode?) async {
+        guard let nextEp else {
+            cleanupAndDismiss()
+            return
+        }
+        saveProgressOnExit()
+        cleanup()
+        currentTranscodeId = nextEp.transcodeId
+        currentEpisodeName = nextEp.episodeName
+        currentNextEpisode = nil
+        await loadStream()
+    }
+
+    // MARK: - Progress
+
+    private var activeTranscodeId: TranscodeID {
+        currentTranscodeId ?? transcodeId
+    }
+
+    @MainActor
+    private func startProgressReporting() {
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
+            Task { @MainActor in
+                await reportProgress()
+            }
+        }
+    }
+
+    private func stopProgressReporting() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+    }
+
+    private func saveProgressOnExit() {
+        guard let player else { return }
+        let position = player.currentTime().seconds
+        let dur = player.currentItem?.duration.seconds
+        guard position.isFinite && position > 0 else { return }
+        let tcId = activeTranscodeId
+        let duration = (dur?.isFinite == true && dur! > 0) ? dur : nil
+
+        Task {
+            await dataModel.reportProgress(transcodeId: tcId, position: position, duration: duration)
+        }
+    }
+
+    @MainActor
+    private func reportProgress() async {
+        guard let player else { return }
+        let position = player.currentTime().seconds
+        let dur = player.currentItem?.duration.seconds
+        guard position.isFinite && position > 0 else { return }
+        let duration = (dur?.isFinite == true && dur! > 0) ? dur : nil
+
+        await dataModel.reportProgress(transcodeId: activeTranscodeId, position: position, duration: duration)
+    }
+
+    // MARK: - Now Playing / Remote Commands
+
+    /// Toggles AVPlayer playback and keeps PlayerState + the system
+    /// Now Playing surfaces in sync. Reused by the on-screen button
+    /// and the remote-command handler so AirPods presses and screen
+    /// taps follow the same path — including the playbackSpeed
+    /// reapply, which would otherwise reset to 1.0× after a remote
+    /// pause / play cycle.
+    private func togglePlayPause(player: AVPlayer) {
+        if ps.isPlaying {
+            player.pause()
+        } else {
+            player.play()
+            player.rate = playbackSpeed
+        }
+        ps.isPlaying.toggle()
+        publishNowPlayingInfo(player: player, force: true)
+    }
+
+    /// Registers remote-command targets so AirPods / lock-screen /
+    /// CarPlay / Control Center transport drives this video session.
+    /// Skip-forward and skip-backward are wired with a 10 s interval
+    /// to match the on-screen ±10 buttons; next/previous track are
+    /// left disabled (they're an audio idiom and would surface the
+    /// wrong affordance on CarPlay).
+    private func wireVideoRemoteCommands(player: AVPlayer) {
+        let cc = MPRemoteCommandCenter.shared()
+        cc.playCommand.removeTarget(nil)
+        cc.pauseCommand.removeTarget(nil)
+        cc.togglePlayPauseCommand.removeTarget(nil)
+        cc.skipForwardCommand.removeTarget(nil)
+        cc.skipBackwardCommand.removeTarget(nil)
+        cc.changePlaybackPositionCommand.removeTarget(nil)
+        cc.nextTrackCommand.isEnabled = false
+        cc.previousTrackCommand.isEnabled = false
+
+        cc.playCommand.isEnabled = true
+        cc.playCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                if !ps.isPlaying { togglePlayPause(player: player) }
+            }
+            return .success
+        }
+        cc.pauseCommand.isEnabled = true
+        cc.pauseCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                if ps.isPlaying { togglePlayPause(player: player) }
+            }
+            return .success
+        }
+        cc.togglePlayPauseCommand.isEnabled = true
+        cc.togglePlayPauseCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                togglePlayPause(player: player)
+            }
+            return .success
+        }
+        cc.skipForwardCommand.isEnabled = true
+        cc.skipForwardCommand.preferredIntervals = [10]
+        cc.skipForwardCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                skip(player: player, seconds: 10)
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+        cc.skipBackwardCommand.isEnabled = true
+        cc.skipBackwardCommand.preferredIntervals = [10]
+        cc.skipBackwardCommand.addTarget { [weak player] _ in
+            Task { @MainActor in
+                guard let player else { return }
+                skip(player: player, seconds: -10)
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+        cc.changePlaybackPositionCommand.isEnabled = true
+        cc.changePlaybackPositionCommand.addTarget { [weak player] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            Task { @MainActor in
+                guard let player else { return }
+                await player.seek(to: CMTime(seconds: event.positionTime, preferredTimescale: 600))
+                publishNowPlayingInfo(player: player, force: true)
+            }
+            return .success
+        }
+    }
+
+    /// Publishes title / duration / elapsed / rate to the system. The
+    /// time-observer path calls this with `force: false` so the 2 Hz
+    /// cadence is throttled to ~1 Hz writes — anything that's a state
+    /// change (play, pause, seek, speed) calls with `force: true` so
+    /// the surfaces update immediately.
+    private func publishNowPlayingInfo(player: AVPlayer, force: Bool) {
+        if !force {
+            let now = Date()
+            if now.timeIntervalSince(lastNowPlayingPublish) < 1.0 { return }
+            lastNowPlayingPublish = now
+        } else {
+            lastNowPlayingPublish = Date()
+        }
+        var info: [String: Any] = [:]
+        info[MPMediaItemPropertyTitle] = titleName
+        // Episode label drives the "artist" line on the lock screen
+        // and CarPlay Now Playing card. "S2E5: A Study in Scarlet"
+        // tells the user at a glance what's playing without forcing
+        // them to look at the screen.
+        if let ep = currentEpisodeName ?? episodeName {
+            let prefix: String
+            if let s = seasonNumber, let e = episodeNumber {
+                prefix = "S\(s)E\(e): "
+            } else {
+                prefix = ""
+            }
+            info[MPMediaItemPropertyArtist] = prefix + ep
+        }
+        let position = player.currentTime().seconds
+        if position.isFinite { info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position }
+        let duration = player.currentItem?.duration.seconds ?? 0
+        if duration.isFinite && duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        info[MPNowPlayingInfoPropertyPlaybackRate] = ps.isPlaying ? playbackSpeed : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = ps.isPlaying ? .playing : .paused
+    }
+}
+
+// MARK: - AirPlay Button
+
+/// AVFoundation surfaces failures as plain NSError; `localizedDescription`
+/// alone is usually a generic "unknown error". Unpack domain, code, and the
+/// useful userInfo keys (including NSUnderlyingError, which is where the
+/// HTTP status / OSStatus / chained reason actually lives) so the log line
+/// is self-explanatory.
+private func describeNSError(_ error: Error?) -> String {
+    guard let error else { return "(no error attached)" }
+    let ns = error as NSError
+    var parts: [String] = [
+        "domain=\(ns.domain)",
+        "code=\(ns.code)",
+        "msg=\"\(ns.localizedDescription)\"",
+    ]
+    let interesting: [String] = [
+        NSUnderlyingErrorKey,
+        NSURLErrorFailingURLErrorKey,
+        "NSLocalizedFailureReason",
+        "NSLocalizedRecoverySuggestion",
+        "NSDebugDescription",
+    ]
+    for key in interesting {
+        if let value = ns.userInfo[key] {
+            if key == NSUnderlyingErrorKey, let nested = value as? Error {
+                parts.append("underlying={\(describeNSError(nested))}")
+            } else {
+                parts.append("\(key)=\(value)")
+            }
+        }
+    }
+    return parts.joined(separator: " ")
+}
+
+/// Reference-type wrapper so AVPlayer closures can read/write current state.
+/// @State on a struct creates copies in closures — this class avoids that.
+@Observable
+@MainActor
+final class PlayerState {
+    var isPlaying = false
+    var currentTime: Double = 0
+    var duration: Double = 0
+    var isScrubbing = false
+    var scrubTime: Double = 0
+    var scrubThumbnail: UIImage? = nil
+}
+
+struct AirPlayButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.tintColor = .white
+        picker.activeTintColor = .systemBlue
+        picker.prioritizesVideoDevices = true
+        return picker
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}

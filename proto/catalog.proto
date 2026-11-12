@@ -1,0 +1,379 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+import "artist.proto";
+
+service CatalogService {
+  // --- Home Feed ---
+  rpc HomeFeed(Empty) returns (HomeFeedResponse);
+  // Lightweight features-only endpoint. Same Features payload as the
+  // `features` field on HomeFeedResponse — used by the SPA's nav
+  // gating on every page transition without paying the carousel
+  // computation cost.
+  rpc GetFeatures(Empty) returns (Features);
+  rpc DismissContinueWatching(TitleIdRequest) returns (Empty);
+  rpc DismissMissingSeason(DismissMissingSeasonRequest) returns (Empty);
+  rpc DismissHomeCarouselItem(DismissHomeCarouselItemRequest) returns (Empty);
+
+  // --- Title Browsing ---
+  rpc ListTitles(ListTitlesRequest) returns (TitlePageResponse);
+  rpc GetTitleDetail(TitleIdRequest) returns (TitleDetail);
+  rpc Search(SearchRequest) returns (SearchResponse);
+
+  // --- TV ---
+  rpc ListSeasons(TitleIdRequest) returns (SeasonsResponse);
+  rpc ListEpisodes(ListEpisodesRequest) returns (EpisodesResponse);
+
+  // --- Browse Pages ---
+  rpc GetActorDetail(ActorIdRequest) returns (ActorDetail);
+  rpc ListCollections(Empty) returns (CollectionListResponse);
+  rpc GetCollectionDetail(CollectionIdRequest) returns (CollectionDetail);
+  rpc ListTags(Empty) returns (TagListResponse);
+  rpc GetTagDetail(TagIdRequest) returns (TagDetail);
+  rpc GetGenreDetail(GenreIdRequest) returns (GenreDetail);
+  rpc GetBookSeriesDetail(BookSeriesIdRequest) returns (BookSeriesDetail);
+  // Personal/family videos browse page. Heavier shape than ListTitles
+  // because each card carries event date + tagged family members +
+  // tags inline. Filters: family-member subset, playable-only.
+  rpc ListFamilyVideos(ListFamilyVideosRequest) returns (FamilyVideosResponse);
+
+  // --- Title Actions ---
+  rpc SetFavorite(SetFlagRequest) returns (Empty);
+  rpc SetHidden(SetFlagRequest) returns (Empty);
+  rpc RequestRetranscode(TitleIdRequest) returns (QueuedResponse);
+  rpc RequestLowStorageTranscode(TitleIdRequest) returns (QueuedResponse);
+
+  // --- Tag mutations (admin only; non-admins receive PERMISSION_DENIED).
+  // Create/delete of tags themselves lives on AdminService; these RPCs
+  // wire existing tags to specific titles / tracks. ---
+  rpc AddTagToTitle(TagTitleRequest) returns (Empty);
+  rpc RemoveTagFromTitle(TagTitleRequest) returns (Empty);
+  rpc SetTitleTags(SetTitleTagsRequest) returns (Empty);
+
+  // --- Track-level tags (Tags phase B). Same Tag rows apply; the
+  // link table is separate so tracks can be curated independently
+  // of their parent album. Mutations are admin only. ---
+  rpc AddTagToTrack(TagTrackRequest) returns (Empty);
+  rpc RemoveTagFromTrack(TagTrackRequest) returns (Empty);
+  rpc SetTrackTags(SetTrackTagsRequest) returns (Empty);
+  rpc ListTagsForTrack(TrackIdRequest) returns (TagListResponse);
+
+  // Admin-only manual override for a track's BPM and/or time signature.
+  // Time signature extraction from ID3 is unreliable (no standard
+  // frame); users with ballroom use cases ("can I waltz to this?")
+  // need to set 3/4 by hand on tracks their tagger didn't annotate.
+  rpc SetTrackMusicTags(SetTrackMusicTagsRequest) returns (Empty);
+
+  // Advanced search — structured filters + dance presets. Separate
+  // surface from the existing Search RPC so we can evolve the track
+  // filter shape without breaking the cross-type free-text search.
+  rpc ListAdvancedSearchPresets(Empty) returns (AdvancedSearchPresetsResponse);
+  rpc SearchTracks(SearchTracksRequest) returns (SearchTracksResponse);
+
+  // Mint a 12-hour signed token authorising an unauthenticated fetch
+  // of this title's poster via `/public/album-art/{token}`. The web
+  // audio player uses this for the OS lock-screen now-playing
+  // integration (the OS-level fetch doesn't share browser cookies).
+  // Server enforces content-rating visibility before minting.
+  rpc MintPublicArtToken(TitleIdRequest) returns (MintPublicArtTokenResponse);
+}
+
+// --- Requests ---
+
+message ListTitlesRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string sort = 3;         // "popularity", "name", "year", "recent"
+  MediaType type = 4;               // MEDIA_TYPE_UNKNOWN means no filter
+  optional string genre = 5;
+  optional string tag = 6;
+  optional string q = 7;            // free-text search filter
+  bool playable_only = 8;
+  // Filter to titles whose content_rating is in this set. Empty list
+  // means no rating filter (all visible ratings included). Strings are
+  // the short form ("G", "PG", "TV-14", …) — same shape the
+  // available_ratings response field uses.
+  repeated string ratings = 9;
+}
+
+message SearchRequest {
+  string query = 1;
+  // Opt-in: include books (BOOK + AUTHOR results). Default false.
+  // Legacy clients that never set this keep receiving video-only results.
+  bool include_books = 2;
+  // Opt-in: include audio (ALBUM + ARTIST + TRACK results). Default false.
+  bool include_audio = 3;
+  // Server caps results at this count after sorting. Server defaults
+  // to 100 when omitted; values <=0 use the default.
+  optional int32 limit = 4;
+  // Opt-in: include user playlists (PLAYLIST results). Matches against
+  // playlist name; restricted to playlists the requesting user can
+  // access (their own + public playlists owned by others).
+  bool include_playlists = 5;
+  // When true, suppresses non-audio result types (movies, series,
+  // books, actors, collections, tags, genres) regardless of the
+  // legacy include_books flag. The audio opt-ins (include_audio,
+  // include_playlists) still gate their respective sections — set
+  // them alongside this flag if you want their results.
+  // Used by the iOS CarPlay search surface where surfacing a movie
+  // hit when the user said "play X" would be a UX failure.
+  bool audio_only = 6;
+}
+
+message ListEpisodesRequest {
+  int64 title_id = 1;
+  int32 season_number = 2;
+}
+
+message ActorIdRequest {
+  int32 tmdb_person_id = 1;
+}
+
+message CollectionIdRequest {
+  int32 tmdb_collection_id = 1;
+}
+
+message SetFlagRequest {
+  int64 title_id = 1;
+  bool value = 2;                   // true = set, false = clear
+}
+
+message DismissMissingSeasonRequest {
+  int64 title_id = 1;
+  optional int32 season_number = 2; // omit to dismiss all seasons
+}
+
+// Which home-feed carousel a `DismissHomeCarouselItem` request
+// targets. Mirrors the H2 home_carousel_dismissal.carousel enum
+// exactly. Unknown / unrecognised values reject server-side; the
+// table's CHECK won't accept anything outside this list.
+enum HomeCarousel {
+  HOME_CAROUSEL_UNKNOWN = 0;
+  HOME_CAROUSEL_RECENTLY_ADDED_ALBUMS = 1;
+  HOME_CAROUSEL_RECENTLY_ADDED_BOOKS = 2;
+  HOME_CAROUSEL_RECENTLY_ADDED_MOVIES = 3;
+}
+
+message DismissHomeCarouselItemRequest {
+  int64 title_id = 1;
+  HomeCarousel carousel = 2;
+}
+
+// --- Responses ---
+
+message HomeFeedResponse {
+  // Generic carousel list — what iOS / Android TV consume. Server
+  // populates the same data here as in the typed fields below; the
+  // typed fields exist for the SPA, which renders heterogeneous
+  // carousels (track-level resume vs. title cards) that don't fit a
+  // uniform `repeated Title items` shape.
+  repeated Carousel carousels = 1;
+  repeated MissingSeason missing_seasons = 2;
+
+  // Typed carousel lists. Title-level lists reuse `Title` because
+  // each card needs the same fields (poster, year, artist/author).
+  // Resume-listening / resume-reading need track / edition context
+  // that doesn't fit on Title, hence the dedicated message types.
+  repeated Title continue_watching = 3;
+  repeated Title recently_added = 4;
+  repeated Title recently_added_books = 5;
+  repeated Title recently_added_albums = 6;
+  repeated ResumeTrack resume_listening = 7;
+  repeated ResumeReading resume_reading = 8;
+  repeated Title recently_watched = 9;
+
+  // Per-user feature flags. Drives the SPA's nav gating (cameras /
+  // live tv links shown only when configured) and admin badge counts.
+  // Bundled here because every home-page render needs both the
+  // carousels and the gating bits — separating them would double the
+  // request count.
+  Features features = 10;
+
+  // Home composition (docs/plans/web-theming.md decision 6). Recently
+  // added titles that have a cached backdrop (so backdrop_tint is set),
+  // newest first, at most 6: the featured hero carousel.
+  repeated Title featured = 11;
+  // One show from missing_seasons that has a backdrop, for the single
+  // spotlight hero. Absent when none qualifies.
+  optional Title spotlight = 12;
+  // Distinct artists behind recently_added_albums, in that order, at
+  // most 10, in the artist list shape (album count, headshot flag).
+  repeated ArtistListItem recent_artists = 13;
+}
+
+message Features {
+  bool has_personal_videos = 1;
+  bool has_books = 2;
+  bool has_music = 3;
+  bool has_music_radio = 4;
+  bool has_cameras = 5;
+  bool has_live_tv = 6;
+  bool is_admin = 7;
+  int32 wish_ready_count = 8;
+  int32 unmatched_count = 9;
+  int32 unmatched_books_count = 10;
+  int32 unmatched_audio_count = 11;
+  int32 data_quality_count = 12;
+  int32 open_reports_count = 13;
+}
+
+message TitlePageResponse {
+  repeated Title titles = 1;
+  PaginationInfo pagination = 2;
+  // Distinct content_rating values that appear in the unfiltered set
+  // for this media_type. Drives the rating-filter UI's checkbox list
+  // so it shows only buckets that actually exist (e.g. no "TV-MA"
+  // chip on the movies grid).
+  repeated string available_ratings = 3;
+}
+
+message SearchResponse {
+  string query = 1;
+  repeated SearchResult results = 2;
+  map<string, int32> counts = 3;    // result_type -> count
+}
+
+message SeasonsResponse {
+  repeated Season seasons = 1;
+}
+
+message EpisodesResponse {
+  repeated Episode episodes = 1;
+}
+
+message CollectionListResponse {
+  repeated CollectionListItem collections = 1;
+}
+
+message TagListResponse {
+  repeated TagListItem tags = 1;
+}
+
+message QueuedResponse {
+  bool queued = 1;
+  int32 count = 2;
+}
+
+// --- Advanced search / dance presets ---
+
+message AdvancedSearchPreset {
+  // Stable id, URL-safe; stays constant across name edits so
+  // bookmarks survive rewording.
+  string key = 1;
+  string name = 2;
+  string description = 3;
+  optional int32 bpm_min = 4;
+  optional int32 bpm_max = 5;
+  // "3/4" / "4/4" / "6/8" / other; clients show a dropdown populated
+  // from whatever values they care about, no reason for a proto enum.
+  optional string time_signature = 6;
+}
+
+message AdvancedSearchPresetsResponse {
+  repeated AdvancedSearchPreset presets = 1;
+}
+
+// All filters AND together. Omitted fields don't restrict. Calling
+// with every field empty returns no rows — use the browse grids for
+// unfiltered listing.
+message SearchTracksRequest {
+  optional string query = 1;
+  optional int32 bpm_min = 2;
+  optional int32 bpm_max = 3;
+  optional string time_signature = 4;
+  optional int32 limit = 5;  // server defaults / caps at 200
+}
+
+message SearchTracksResponse {
+  repeated TrackSearchHit tracks = 1;
+}
+
+enum FamilyVideoSort {
+  FAMILY_VIDEO_SORT_UNKNOWN = 0;
+  // Newest event_date first. Default for the family-videos page.
+  FAMILY_VIDEO_SORT_DATE_DESC = 1;
+  // Oldest event_date first.
+  FAMILY_VIDEO_SORT_DATE_ASC = 2;
+  // Title name, ascending. Tie-broken by sort_name.
+  FAMILY_VIDEO_SORT_NAME = 3;
+  // Recently added — title.created_at descending.
+  FAMILY_VIDEO_SORT_RECENT = 4;
+}
+
+message ListFamilyVideosRequest {
+  FamilyVideoSort sort = 1;
+  // Restrict to videos that include any of these family-member ids.
+  // Empty list means no filter.
+  repeated int64 members = 2;
+  // True keeps only videos whose ForBrowser transcode is on disk.
+  bool playable_only = 3;
+}
+
+message FamilyMemberRef {
+  int64 id = 1;
+  string name = 2;
+}
+
+// One row on the family-videos grid. Cover artwork:
+// IMAGE_TYPE_POSTER_THUMBNAIL + title_id (or
+// IMAGE_TYPE_POSTER_FULL + title_id for the hero size).
+message FamilyVideo {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional CalendarDate event_date = 3;
+  optional string description = 4;
+  // True when the ForBrowser transcode is on disk so the play
+  // button should be active.
+  bool playable = 5;
+  // Last playback position; absent when the user hasn't started.
+  // Clients render a progress bar by dividing position by duration.
+  optional PlaybackOffset playback_position = 6;
+  // Total runtime of the video. Sent alongside playback_position so
+  // clients can compute progress without a second round-trip.
+  optional PlaybackOffset playback_duration = 9;
+  repeated FamilyMemberRef family_members = 7;
+  repeated Tag tags = 8;
+  // UUID of the locally-uploaded hero image (LocalImage). Set for
+  // personal videos that have a hand-picked still; absent for
+  // TMDB-sourced videos. Clients fetch via ImageService with
+  // IMAGE_TYPE_LOCAL_IMAGE + uuid, or hit /local-images/{uuid}
+  // same-origin. When absent, fall back to
+  // IMAGE_TYPE_POSTER_THUMBNAIL + title_id.
+  optional string local_image_id = 10;
+}
+
+message FamilyVideosResponse {
+  repeated FamilyVideo videos = 1;
+  int32 total = 2;
+  // The full set of family members, used to populate the filter
+  // chip rail. Independent of the selected filter set.
+  repeated FamilyMemberRef family_members = 3;
+}
+
+message MintPublicArtTokenResponse {
+  // Opaque token; embed in /public/album-art/{token} URL.
+  string token = 1;
+  // How long the token is valid (12 hours today). Clients refresh
+  // shortly before this elapses.
+  Duration ttl = 2;
+}
+
+message TrackSearchHit {
+  int64 track_id = 1;
+  int64 title_id = 2;
+  string name = 3;
+  string album_name = 4;
+  optional string artist_name = 5;
+  optional int32 bpm = 6;
+  optional string time_signature = 7;
+  optional int32 duration_seconds = 8;
+  optional string poster_url = 9;
+  bool playable = 10;
+}

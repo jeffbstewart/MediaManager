@@ -1,0 +1,178 @@
+// The shell scrolls the document (spec section 2): the header is
+// sticky, the side nav and the audio player are fixed to the viewport.
+// `--player-h` reserves the audio player's height while it shows so
+// the end of the page and of the nav can scroll clear of it.
+:host {
+  display: block;
+  --player-h: 0px;
+  // Height of the bottom tab bar where it shows (below 1024px), so
+  // the end of the page and the audio player clear it.
+  --tabbar-off: 0px;
+}
+
+:host(.has-player) {
+  // The bar is 72px tall plus its 1px top border.
+  --player-h: 73px;
+}
+
+// Top bar (spec section 2): a 64px sticky header, transparent until the
+// page scrolls, then a frosted bar. The inner row is capped at 1536px
+// and centred so wide monitors don't stretch it edge to edge.
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  padding: 4px var(--pad-x);
+  color: var(--mat-sys-on-surface);
+
+  // The frosted bar lives on a pseudo-element so it can fade in
+  // without repainting the header's children.
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.2s;
+    background: color-mix(in srgb, var(--mat-sys-surface-container) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  &.is-scrolled::before {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::before { transition: none; }
+  }
+}
+
+.header-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 1536px;
+  margin: 0 auto;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: none;
+  color: var(--mat-sys-on-surface);
+  cursor: pointer;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+// The hamburger only exists where the side nav is hidden.
+.nav-toggle {
+  display: none;
+  margin-left: -8px;
+}
+
+// The brand stays the page's top-level heading: most views start at h2
+// and rely on it.
+.brand {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  margin: 0 16px 0 0;
+  flex: none;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    border-radius: 4px;
+  }
+}
+
+.brand-word {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+  white-space: nowrap;
+  color: var(--mat-sys-on-surface);
+
+  b {
+    color: var(--mat-sys-primary);
+    font-weight: inherit;
+  }
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+@media (max-width: 599px) {
+  .brand-word { font-size: 22px; }
+}
+
+// Side nav (spec `.side-nav`): fixed under the header at 1024px and
+// up, scrolling on its own when the list is taller than the viewport.
+// A translucent scrim with a blur, not an opaque panel, so the page
+// glow behind the header runs under the nav instead of ending at its
+// right edge.
+.side-nav {
+  position: fixed;
+  z-index: 2;
+  top: var(--header-h);
+  left: 0;
+  bottom: var(--player-h);
+  width: var(--nav-w);
+  overflow-y: auto;
+  scrollbar-width: none;
+  border-right: 1px solid #ffffff12;
+  background: var(--c-scrim);
+  backdrop-filter: blur(20px);
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+// No z-index, so page overlays can still stack above the header.
+.app-main {
+  display: block;
+  min-width: 0;
+  margin-left: var(--nav-w);
+  padding-bottom: calc(var(--player-h) + var(--tabbar-off));
+}
+
+.sheet-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+// The nav sheet's list carries its own padding; the sheet's close
+// button sits over its top-right corner, so drop the list a little.
+.nav-sheet app-nav-list {
+  margin: 32px -12px 0;
+}
+
+@media (max-width: 1023px) {
+  :host { --tabbar-off: var(--tabbar-h); }
+  .side-nav { display: none; }
+  .app-main { margin-left: 0; }
+  .nav-toggle { display: inline-grid; }
+  .brand { margin-right: 8px; }
+}
+
+// Phones: the folded search icon sits after the spacer, just before
+// the account button, as in the spec.
+@media (max-width: 599px) {
+  app-account-menu { order: 2; }
+}

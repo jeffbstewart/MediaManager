@@ -1,0 +1,184 @@
+.content-page { padding: 1.5rem; max-width: 800px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+
+h2 { margin: 0 0 1rem; }
+h3 { margin: 1.5rem 0 0.5rem; color: var(--mat-sys-on-surface); }
+
+.info-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.info-label { font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); min-width: 160px; }
+.info-value { font-size: 0.875rem; }
+
+.quality-row {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.star-row { display: flex; gap: 2px; }
+
+.star-btn {
+  background: none; border: none; cursor: pointer;
+  // Default is on-surface-variant so unfilled stars pass AA.
+  color: var(--mat-sys-on-surface-variant); padding: 2px;
+
+  &.active { color: #fbbf24; }
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+.action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface); padding: 8px 16px; border-radius: 4px;
+  cursor: pointer; font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent); }
+  &:disabled { opacity: 0.4; cursor: default; }
+
+  &.primary {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+    border-color: transparent;
+    &:hover { opacity: 0.9; }
+  }
+
+  &.danger {
+    color: var(--mat-sys-error);
+    border-color: color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
+  }
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+// Passkeys
+.passkeys-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.passkey-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
+  border-radius: 8px; gap: 1rem;
+}
+
+.passkey-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
+.passkey-name { font-size: 0.875rem; font-weight: 500; }
+
+// Sessions
+.sessions-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.session-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
+  border-radius: 8px; gap: 1rem;
+}
+
+.session-info { display: flex; flex-direction: column; gap: 0.125rem; overflow: hidden; }
+
+.session-type-row { display: flex; align-items: center; gap: 0.5rem; }
+
+// Status badges — explicit dark fills so the intentional white text
+// passes AA in both schemes.
+.session-badge {
+  font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
+  border-radius: 9999px; background: #0D47A1; color: white;
+
+  &.device { background: #4527A0; }
+}
+
+.current-badge {
+  font-size: 0.6875rem; font-weight: 600; padding: 1px 8px;
+  border-radius: 9999px; background: #1B5E20; color: white;
+}
+
+.session-detail {
+  font-size: 0.75rem; color: var(--mat-sys-on-surface-variant);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.session-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
+
+.revoke-btn {
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
+  color: var(--mat-sys-error); padding: 4px 12px; border-radius: 4px;
+  cursor: pointer; font-size: 0.75rem; flex-shrink: 0;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-error) 10%, transparent); }
+}
+
+// Modal
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal-content {
+  background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface);
+  border-radius: 12px;
+  padding: 1.5rem; width: 90vw; max-width: 400px;
+}
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+
+  h3 { margin: 0; }
+}
+
+.close-btn {
+  background: none; border: none; color: inherit; cursor: pointer;
+  padding: 4px; border-radius: 50%;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
+}
+
+.pw-form {
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+
+.pw-label { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.25rem; }
+
+.pw-input {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit;
+  padding: 8px 12px; font-size: 0.875rem; outline: none;
+
+  &:focus { border-color: var(--mat-sys-primary); }
+}
+
+.pw-hint { font-size: 0.75rem; color: #ffa500; }
+.pw-error { font-size: 0.75rem; color: var(--mat-sys-error); }
+
+.pw-success {
+  display: flex; align-items: center; gap: 0.5rem;
+  color: #4caf50; margin-bottom: 1rem;
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+.section-hint { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin: 0 0 0.5rem; }
+
+.hidden-titles-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.hidden-title-row {
+  display: flex; align-items: center; gap: 0.75rem; padding: 4px 0;
+}
+.hidden-poster { width: 30px; height: 45px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
+.hidden-title-link {
+  flex: 1; text-decoration: none; color: inherit; font-size: 0.875rem;
+  &:hover { text-decoration: underline; }
+}
+.hidden-year { color: var(--mat-sys-on-surface-variant); }
+.unhide-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }

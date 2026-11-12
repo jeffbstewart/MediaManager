@@ -1,0 +1,72 @@
+<ng-template #art>
+  <div class="art poster-wrapper" [class.has-progress]="percent() > 0">
+    @if (imageUrl(); as src) {
+      <img class="poster-img" [class.contain]="fit() === 'contain'" [src]="src" [alt]="name()"
+           [attr.loading]="lazy() ? 'lazy' : null" decoding="async" />
+    } @else {
+      <app-placeholder-art class="poster-placeholder" [name]="name()" [icon]="placeholderIcon()" />
+    }
+    <ng-content select="[cardArt]" />
+    @if (playable()) {
+      <div class="playable-badge" aria-hidden="true"><div class="play-triangle"></div></div>
+    }
+    @if (badge(); as b) {
+      <span class="badge" [class.accent]="badgeTone() === 'accent'">{{ b }}</span>
+    }
+    @if (percent() > 0) {
+      <div class="progress" role="progressbar" aria-label="Progress"
+           aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="rounded()">
+        <div class="progress-fill" [style.width.%]="percent()"></div>
+      </div>
+    }
+  </div>
+</ng-template>
+
+<ng-template #lines>
+  @if (subtitle(); as s) { <span class="m poster-subtitle">{{ s }}</span> }
+  @if (credit(); as c) { <span class="m poster-credit">{{ c }}</span> }
+  @if (meta(); as m) { <span class="m poster-meta" [class.accent]="metaAccent()">{{ m }}</span> }
+  <ng-content />
+</ng-template>
+
+@switch (mode()) {
+  @case ('link') {
+    <a class="card-link" [routerLink]="link()" [queryParams]="queryParams()">
+      <ng-container [ngTemplateOutlet]="art" />
+      <span class="caption">
+        <span class="t poster-title">{{ name() }}</span>
+        <ng-container [ngTemplateOutlet]="lines" />
+      </span>
+    </a>
+  }
+  @case ('split') {
+    <a class="card-link" [routerLink]="link()" [queryParams]="queryParams()">
+      <ng-container [ngTemplateOutlet]="art" />
+    </a>
+    <span class="caption">
+      <a class="t poster-title" [routerLink]="titleLink()">{{ name() }}</a>
+      <ng-container [ngTemplateOutlet]="lines" />
+    </span>
+  }
+  @case ('button') {
+    <button class="card-link" type="button" [attr.title]="hint()" (click)="activate.emit()">
+      <ng-container [ngTemplateOutlet]="art" />
+      <span class="caption">
+        <span class="t poster-title">{{ name() }}</span>
+        <ng-container [ngTemplateOutlet]="lines" />
+      </span>
+    </button>
+  }
+  @default {
+    <div class="card-link">
+      <ng-container [ngTemplateOutlet]="art" />
+      <span class="caption">
+        <span class="t poster-title">{{ name() }}</span>
+        <ng-container [ngTemplateOutlet]="lines" />
+      </span>
+    </div>
+  }
+}
+<div class="card-actions">
+  <ng-content select="[cardAction]" />
+</div>

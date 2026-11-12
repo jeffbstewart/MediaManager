@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MovieDetailScreen" extends="Group">
+    <interface>
+        <field id="titleData" type="assocarray" alwaysNotify="true" onChange="onTitleDataChanged" />
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
+        <field id="titleSelected" type="assocarray" alwaysNotify="true" />
+        <field id="actorSelected" type="assocarray" alwaysNotify="true" />
+        <field id="tagSelected" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="MovieDetailScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle width="1920" height="1080" color="#1a1a2e" />
+
+        <!-- Backdrop hero image (full width, dimmed) -->
+        <Poster
+            id="backdropImage"
+            translation="[0, 0]"
+            width="1920"
+            height="540"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+        <!-- Gradient overlay to fade backdrop into background -->
+        <Rectangle
+            id="backdropOverlay"
+            translation="[0, 0]"
+            width="1920"
+            height="540"
+            color="#1a1a2e"
+            opacity="0.6" />
+
+        <!-- Poster (overlays the backdrop) -->
+        <Poster
+            id="posterImage"
+            translation="[60, 60]"
+            width="210"
+            height="310"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+        <Rectangle
+            id="posterFallback"
+            translation="[60, 60]"
+            width="210"
+            height="310"
+            color="#333355" />
+
+        <!-- Title -->
+        <Label
+            id="titleLabel"
+            translation="[300, 60]"
+            width="1560"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            maxLines="2" />
+
+        <!-- Year / Rating / Quality -->
+        <Label
+            id="metaLabel"
+            translation="[300, 120]"
+            width="1560"
+            font="font:SmallSystemFont"
+            color="#999999"
+            maxLines="1" />
+
+        <!-- Tag pills (positioned inline with metaLabel) -->
+        <LayoutGroup
+            id="tagsArea"
+            translation="[300, 120]"
+            layoutDirection="horiz"
+            itemSpacings="[10]"
+            visible="false" />
+        <Label id="tagFontTemplate" visible="false" font="font:SmallestSystemFont" />
+
+        <!-- Description -->
+        <Label
+            id="descLabel"
+            translation="[300, 175]"
+            width="1560"
+            font="font:SmallSystemFont"
+            color="#bbbbbb"
+            maxLines="5"
+            wrap="true" />
+
+        <!-- Play button -->
+        <Group id="playButton" translation="[300, 370]">
+            <Rectangle
+                id="playBtnBg"
+                width="240"
+                height="56"
+                color="#2a2a4a" />
+            <Rectangle
+                id="playBtnFocus"
+                width="240"
+                height="56"
+                color="#6366f1"
+                visible="false" />
+            <Label
+                id="playBtnLabel"
+                translation="[16, 14]"
+                text="Play Movie"
+                font="font:SmallBoldSystemFont"
+                color="#e0e0e0"
+                width="208" />
+        </Group>
+
+        <!-- Cast section (custom virtual list) -->
+        <Label
+            id="castHeader"
+            translation="[60, 460]"
+            text="Cast"
+            font="font:MediumBoldSystemFont"
+            color="#cccccc"
+            visible="false" />
+
+        <Group id="castArea" translation="[60, 510]" visible="false">
+            <Rectangle id="castHighlight" width="800" height="44" color="#6366f1" visible="false" />
+            <Label id="castFontTemplate" visible="false" font="font:SmallSystemFont" />
+        </Group>
+
+        <!-- Similar titles section -->
+        <Label
+            id="similarHeader"
+            translation="[60, 740]"
+            text="Similar Titles"
+            font="font:MediumBoldSystemFont"
+            color="#cccccc"
+            visible="false" />
+
+        <RowList
+            id="similarRow"
+            translation="[60, 780]"
+            itemComponentName="CarouselItem"
+            numRows="1"
+            itemSize="[1800, 360]"
+            rowItemSize="[[210, 360]]"
+            rowItemSpacing="[[20, 0]]"
+            showRowLabel="[false]"
+            drawFocusFeedback="true"
+            rowFocusAnimationStyle="floatingFocus"
+            visible="false" />
+
+        <!-- Loading indicator -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Background task -->
+        <TitleDetailTask id="titleDetailTask" />
+    </children>
+</component>

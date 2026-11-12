@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "media_item_id": 1,
+      "scan_id": 10,
+      "display_name": "The Matrix",
+      "media_format": "BLU_RAY",
+      "upc": "888574293321",
+      "poster_url": "/posters/100.jpg",
+      "release_year": 1999,
+      "added_at": "2026-04-22T10:00:00Z"
+    },
+    {
+      "media_item_id": 2,
+      "scan_id": 11,
+      "display_name": "Inception",
+      "media_format": "UHD_BD",
+      "upc": "883929199854",
+      "poster_url": "/posters/200.jpg",
+      "release_year": 2010,
+      "added_at": "2026-04-22T11:00:00Z"
+    }
+  ]
+}

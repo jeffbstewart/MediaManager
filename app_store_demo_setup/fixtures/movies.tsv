@@ -1,0 +1,40 @@
+# Movie fixtures for the App Store demo server. Tab-separated. All
+# entries are unambiguously public-domain in the US and present on
+# TMDB so the enrichment pipeline runs end-to-end.
+#
+# Columns:
+#   archive_id     archive.org item identifier (used in the fetch
+#                  URL: https://archive.org/download/<id>/...).
+#   tmdb_id        canonical TMDB id (passed to link-fixtures.sh
+#                  to pin the catalog match).
+#   title          display name — also drives the destination folder.
+#   year           release year — also drives the destination folder.
+#   target_file    filename inside <target>/movies/<Title (Year)>/.
+#                  Always .mp4 (the fetch script normalizes to
+#                  H.264 + AAC + faststart).
+#
+# Lines beginning with '#' or blank are ignored.
+#
+# Identifier verification cycle: archive.org items occasionally get
+# darkened or re-uploaded under new ids. Run scripts/verify-
+# fixtures.sh before each demo refresh; it probes every row and
+# flags is_dark=true / 404 / no-MP4 entries so this list can be
+# resnapped.
+#
+archive_id	tmdb_id	title	year	target_file
+The_General_Buster_Keaton	974	The General	1926	the-general.mp4
+NosferatuLeVampire	653	Nosferatu	1922	nosferatu.mp4
+ThePhantomoftheOpera	39106	The Phantom of the Opera	1925	the-phantom-of-the-opera.mp4
+ATripToTheMoonGeorgeMelies	775	A Trip to the Moon	1902	a-trip-to-the-moon.mp4
+his_girl_friday	970	His Girl Friday	1940	his-girl-friday.mp4
+detour_202110	4513	Detour	1945	detour.mp4
+plan-9-from-outer-space_202009	33170	Plan 9 from Outer Space	1959	plan-9-from-outer-space.mp4
+night_of_the_living_dead_dvd	10331	Night of the Living Dead	1968	night-of-the-living-dead.mp4
+#
+# TODO — needs a verified archive.org id:
+#   Metropolis (1927, tmdb 19) — every archive.org copy I found
+#     was a derivative work (Moroder cut, colorized, remastered)
+#     with separate rights. The 1927 Lang original is PD in the
+#     US but a clean upload doesn't appear in the top hits.
+#   Charade (1963, tmdb 4808) — top hit `turner_video_341` is a
+#     3-minute trailer, not the full feature.

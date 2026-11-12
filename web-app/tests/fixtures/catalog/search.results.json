@@ -1,0 +1,14 @@
+{
+  "query": "test",
+  "results": [
+    { "type": "movie", "name": "The Matrix", "title_id": 100, "year": 1999, "poster_url": "/posters/w185/100" },
+    { "type": "tv", "name": "Breaking Bad", "title_id": 200, "year": 2008, "poster_url": "/posters/w185/200" },
+    { "type": "album", "name": "Kind of Blue", "title_id": 301, "year": 1959, "poster_url": "/posters/w185/301", "album_name": "Kind of Blue" },
+    { "type": "actor", "name": "Keanu Reeves", "person_id": 6384, "headshot_url": "/headshots/6384" },
+    { "type": "artist", "name": "Miles Davis", "artist_id": 1, "headshot_url": "/artist-headshots/1" },
+    { "type": "author", "name": "Frank Herbert", "author_id": 1, "headshot_url": "/author-headshots/1" },
+    { "type": "collection", "name": "The Matrix Collection", "collection_id": 2 },
+    { "type": "tag", "name": "Comfort Watch", "tag_id": 1, "bg_color": "#1B5E20", "text_color": "#ffffff", "title_count": 12 },
+    { "type": "book", "name": "Dune", "title_id": 300, "year": 1965, "poster_url": "/posters/w185/300" }
+  ]
+}

@@ -1,0 +1,64 @@
+# Content-Security-Policy for every HTTP response the server sends.
+#
+# One directive per line; blank lines and lines starting with # are
+# ignored; the reader joins the rest with "; ". Two readers share this
+# file, so a change here lands in both:
+#   - CspDecorator (server) builds the Content-Security-Policy header.
+#   - web-app/tests/helpers/test-fixture.ts (Playwright) serves every
+#     page in the suite with the same header and fails a test on any
+#     violation, which is how a third-party URL gets caught before it
+#     reaches production.
+#
+# Keep directives alphabetical after default-src so diffs stay readable.
+
+# Baseline deny for anything not listed below.
+default-src 'self'
+
+# A <base> tag cannot point the page at a third party.
+base-uri 'self'
+
+# XHR, fetch, and WebSocket to our origin only.
+connect-src 'self'
+
+# Inter, Figtree, and Material Icons are vendored locally.
+font-src 'self'
+
+# Form submissions cannot go off-origin.
+form-action 'self'
+
+# We cannot be iframed anywhere (replaces the older X-Frame-Options: DENY).
+frame-ancestors 'none'
+
+# The PDF reader iframes /ebook/{id}.
+frame-src 'self'
+
+# Our origin only; data: for the inline SVG icons Angular Material
+# emits; blob: for images built in the browser (book covers in the
+# reader, for example).
+img-src 'self' data: blob:
+
+# Live TV uses HLS.js and MediaSource Extensions, which wrap each
+# MPEG-TS segment in a Blob URL before feeding it to <video>. Without
+# blob: the player is silently blocked. 'self' covers the direct
+# /audio/* and /stream/* MP4s the rest of the app plays.
+media-src 'self' blob:
+
+# No plugins and no <object> escape hatch.
+object-src 'none'
+
+# No inline and no remote JS. epub.js and JSZip are vendored locally.
+script-src 'self'
+
+# Angular emits component-scoped styles inline at runtime; tightening to
+# nonces is a separate ngCspNonce refactor, and 'unsafe-inline' on styles
+# is the usual tradeoff for Angular apps. blob: is for the EPUB reader:
+# epub.js renders pages inside srcdoc iframes and attaches book
+# stylesheets as Blob URLs; without it the reader shows unstyled text.
+style-src 'self' 'unsafe-inline' blob:
+
+# Where browsers send violation reports: report-uri for every browser,
+# report-to for Chrome's Reporting API (the Reporting-Endpoints header
+# CspDecorator adds names the same path). CspReportHttpService logs each
+# report at ERROR under the csp.violation logger.
+report-uri /csp-report
+report-to csp-endpoint

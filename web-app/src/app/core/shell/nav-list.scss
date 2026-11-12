@@ -1,0 +1,134 @@
+// Primary nav (spec section 2, `.side-nav` and `.nav-item`): 40px
+// pills with a 20px icon and 14/600 label. The active link gets a
+// light outline and an accent icon. Colors come from `--mat-sys-*`
+// until the theme tokens arrive in Phase 1.
+:host {
+  display: block;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 24px;
+}
+
+// Group label, styled per the spec's `.side-nav h3`.
+.section-header {
+  padding: 16px 16px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  margin: 2px 0;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: none;
+  color: var(--mat-sys-on-surface-variant);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+
+  mat-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+    color: var(--mat-sys-on-surface);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+
+  &[aria-current="page"] {
+    color: var(--mat-sys-on-surface);
+    border-color: color-mix(in srgb, var(--mat-sys-on-surface) 70%, transparent);
+
+    mat-icon { color: var(--mat-sys-primary); }
+  }
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Children of a collapsible group line up with the parent's label.
+.nested-item {
+  padding-left: 48px;
+}
+
+.expand-icon {
+  margin-left: auto;
+  transition: transform 0.2s;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+// Count badges sit at the row's trailing edge (spec `.nav-count`).
+.badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+// A badge before the expand icon leaves the icon at the far end.
+.badge + .expand-icon {
+  margin-left: 0;
+}
+
+.unmatched-badge {
+  background-color: #f59e0b;
+  color: #1e1e1e;
+}
+
+.wish-badge {
+  background-color: #4caf50;
+  color: white;
+}
+
+.dq-badge {
+  background-color: #f44336;
+  color: white;
+}
+
+// Red pill for admin-action items that should grab attention
+// (e.g. unmatched ebooks awaiting resolution).
+.red-badge {
+  background-color: #ef4444;
+  color: white;
+}

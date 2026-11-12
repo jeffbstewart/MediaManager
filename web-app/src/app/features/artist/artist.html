@@ -1,0 +1,106 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner aria-label="Loading" diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (artist(); as a) {
+
+    <div class="hero">
+      @if (a.headshot_url) {
+        <img [src]="a.headshot_url" [alt]="a.name" class="profile-img" />
+      } @else if (heroFallbackUrl(); as fallback) {
+        <img [src]="fallback" [alt]="a.name" class="profile-img fallback" />
+      } @else {
+        <div class="profile-placeholder">
+          <mat-icon>{{ a.artist_type === 'PERSON' ? 'person' : 'groups' }}</mat-icon>
+        </div>
+      }
+      <div class="hero-info">
+        <h1>{{ a.name }}</h1>
+        @if (formatLifespan()) {
+          <span class="lifespan">{{ formatLifespan() }}</span>
+        }
+        @if (a.biography) {
+          <p class="biography">
+            {{ bioExpanded() || a.biography.length <= 500 ? a.biography : a.biography.substring(0, 500) + '...' }}
+          </p>
+          @if (a.biography.length > 500) {
+            <button class="bio-toggle" (click)="bioExpanded.set(!bioExpanded())">
+              {{ bioExpanded() ? 'Show less' : 'Show more' }}
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (a.owned_albums.length > 0) {
+      <h2>Albums in Your Collection</h2>
+      <div class="grid">
+        @for (album of a.owned_albums; track album.title_id) {
+          <app-poster-card [name]="album.title_name" [imageUrl]="album.poster_url"
+                           [link]="routes.title(album.title_id)" [square]="true" fit="contain"
+                           [meta]="albumMeta(album.release_year, album.track_count)" />
+        }
+      </div>
+    } @else {
+      <p class="empty-state">No albums in your collection by this artist yet.</p>
+    }
+
+    <!-- Band Members (M6) — for GROUP / ORCHESTRA / CHOIR artists. Shows
+         the people who've been in the band with tenure dates. Hidden when
+         PersonnelEnrichmentAgent hasn't populated memberships yet. -->
+    @if (a.band_members && a.band_members.length > 0) {
+      <h2>Band Members</h2>
+      <ul class="membership-list">
+        @for (m of a.band_members; track m.id) {
+          <li class="membership-entry">
+            <a [routerLink]="routes.artist(m.id)" class="membership-name">{{ m.name }}</a>
+            @if (formatTenure(m.begin_date, m.end_date); as tenure) {
+              <span class="membership-tenure">{{ tenure }}</span>
+            }
+            @if (m.instruments) {
+              <span class="membership-instruments">{{ m.instruments }}</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    <!-- Member Of (M6) — for PERSON artists. Shows bands they've been in. -->
+    @if (a.member_of && a.member_of.length > 0) {
+      <h2>Member Of</h2>
+      <ul class="membership-list">
+        @for (m of a.member_of; track m.id) {
+          <li class="membership-entry">
+            <a [routerLink]="routes.artist(m.id)" class="membership-name">{{ m.name }}</a>
+            @if (formatTenure(m.begin_date, m.end_date); as tenure) {
+              <span class="membership-tenure">{{ tenure }}</span>
+            }
+            @if (m.instruments) {
+              <span class="membership-instruments">{{ m.instruments }}</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    @if (a.other_works && a.other_works.length > 0) {
+      <h2>Other Works</h2>
+      <p class="muted">Albums by this artist from MusicBrainz that aren't in your collection. Tap the heart to wish-list.</p>
+      <div class="grid">
+        @for (work of a.other_works; track work.release_group_id) {
+          <app-poster-card [name]="work.title" [imageUrl]="work.cover_url" dim="card"
+                           [square]="true" fit="contain" placeholderIcon="album"
+                           [meta]="otherWorkMeta(work.is_compilation, work.year)">
+            <button cardAction class="wish-btn" [class.wished]="work.already_wished"
+                    type="button"
+                    [attr.aria-label]="work.already_wished ? 'Remove from wish list' : 'Add to wish list'"
+                    (click)="toggleWish(work)">
+              <mat-icon>{{ work.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+            </button>
+          </app-poster-card>
+        }
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!-- kotlin-css-jvm: false positive. The CVEs are about the Kotlin compiler/build
+         tooling (pre-1.3.30, 1.4.21, 1.6.0), not the Kotlin CSS wrapper library.
+         We use Kotlin 2.4.21 which has all fixes. -->
+    <suppress>
+        <notes>False positive: CVE is about Kotlin build tooling HTTP artifact resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10101</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Ktor IDE template HTTP resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10102</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about IntelliJ IDEA Kotlin template HTTP resolution, not kotlin-css</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin-wrappers/kotlin-css-jvm@.*$</packageUrl>
+        <cve>CVE-2019-10103</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Kotlin temp file permissions pre-1.4.21; we use 2.4.21</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin.*@.*$</packageUrl>
+        <cve>CVE-2020-29582</cve>
+    </suppress>
+    <suppress>
+        <notes>False positive: CVE is about Kotlin multiplatform dependency locking pre-1.6.0; we use 2.4.21</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin.*@.*$</packageUrl>
+        <cve>CVE-2022-24329</cve>
+    </suppress>
+
+    <!-- CVE-2026-53914 is unsafe deserialization of build cache metadata in
+         the Kotlin Gradle plugin, fixed in 2.4.20; we build with 2.4.21. NVD's
+         "jetbrains:kotlin" CPE also matches the old runtime and compiler
+         classpath jars other libraries pin: kotlin-stdlib-jdk7/jdk8 1.9.10
+         (okio, under the OpenTelemetry OkHttp sender), kotlin-reflect 1.6.10
+         (the embeddable compiler's own dependency, build time only), and
+         kotlin-css-jvm (karibu-dsl, under vok-framework). None of them is the
+         build cache code. -->
+    <suppress>
+        <notes>False positive: CVE is about the Kotlin Gradle plugin's build cache metadata, fixed in 2.4.20 and we build with 2.4.21; the flagged jars are old stdlib, reflect, and kotlin-css artifacts pinned by okio, the embeddable compiler, and karibu-dsl</notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin.*@.*$</packageUrl>
+        <cve>CVE-2026-53914</cve>
+    </suppress>
+
+    <!-- jackson-databind: vendor disputes this CVE as not externally exploitable
+         (attacker cannot construct cyclic data structures remotely) -->
+    <suppress>
+        <notes>Disputed by FasterXML: requires attacker to construct cyclic objects, not externally exploitable</notes>
+        <packageUrl regex="true">^pkg:maven/com\.fasterxml\.jackson\.core/jackson-databind@.*$</packageUrl>
+        <cve>CVE-2023-35116</cve>
+    </suppress>
+
+    <!-- grpc-kotlin-stub and protoc-gen-grpc-kotlin: CPE false positives. NVD's
+         "grpc:grpc" CPE matches by version string, so version 1.5.0 of the
+         Kotlin stub (released Sep 2025) gets flagged with CVEs that apply to
+         grpc-core 1.5.0 (released 2017). Different software, same version
+         number. protoc-gen-grpc-kotlin is additionally a build-time-only
+         artifact (protoc plugin) and never reaches the runtime classpath. -->
+    <suppress>
+        <notes>CPE mismatch: grpc-kotlin-stub 1.5.0 != grpc-core 1.5.0 (different software)</notes>
+        <packageUrl regex="true">^pkg:maven/io\.grpc/grpc-kotlin-stub@.*$</packageUrl>
+        <cve>CVE-2023-32732</cve>
+        <cve>CVE-2023-33953</cve>
+        <cve>CVE-2023-44487</cve>
+        <cve>CVE-2024-7246</cve>
+        <cve>CVE-2026-33186</cve>
+    </suppress>
+    <suppress>
+        <notes>CPE mismatch + build-time only: protoc-gen-grpc-kotlin is a protoc plugin, not runtime. Version 1.5.0 is Kotlin-specific, not grpc-core 1.5.0.</notes>
+        <packageUrl regex="true">^pkg:maven/io\.grpc/protoc-gen-grpc-kotlin@.*$</packageUrl>
+        <cve>CVE-2020-7768</cve>
+        <cve>CVE-2023-32732</cve>
+        <cve>CVE-2023-33953</cve>
+        <cve>CVE-2023-44487</cve>
+        <cve>CVE-2024-7246</cve>
+        <cve>CVE-2026-33186</cve>
+    </suppress>
+
+    <!-- opentelemetry: CVE-2026-54285 is in the JavaScript client
+         (@opentelemetry/core, W3CBaggagePropagator.extract() size limits,
+         fixed in opentelemetry-js 2.8.0). NVD's "opentelemetry:opentelemetry"
+         CPE does not distinguish the language SDKs, so the Java jars under
+         logging-common match too. -->
+    <suppress>
+        <notes>JavaScript-only: CVE affects @opentelemetry/core baggage header parsing, not the Java SDK</notes>
+        <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-.*@.*$</packageUrl>
+        <cve>CVE-2026-54285</cve>
+    </suppress>
+
+    <!-- protobuf: CVE-2026-0994 is a Python-only JSON recursion DoS in
+         google.protobuf.json_format.ParseDict(), a Python API that does not
+         exist in the Java/Kotlin bindings. NVD's "protobuf:protobuf" CPE
+         doesn't distinguish language bindings. -->
+    <suppress>
+        <notes>Python-only: CVE affects google.protobuf.json_format.ParseDict() (Python API), not Java/Kotlin</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-java@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+    <suppress>
+        <notes>Python-only: CVE affects Python ParseDict(), not Kotlin protobuf</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-kotlin@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+    <suppress>
+        <notes>Python-only: CVE affects Python ParseDict(), not Java protobuf-java-util</notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.protobuf/protobuf-java-util@.*$</packageUrl>
+        <cve>CVE-2026-0994</cve>
+    </suppress>
+
+</suppressions>

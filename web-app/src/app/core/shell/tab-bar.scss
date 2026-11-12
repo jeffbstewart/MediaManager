@@ -1,0 +1,54 @@
+// Bottom tab bar (spec `nav.tabbar`): only below 1024px. Sits above
+// page content and under the audio player, which the shell lifts by
+// `--tabbar-h` while the bar shows.
+:host {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  :host { display: block; }
+}
+
+.tabbar {
+  position: fixed;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  box-sizing: border-box;
+  height: var(--tabbar-h);
+  background: var(--mat-sys-surface-container-lowest);
+  border-top: 1px solid color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+
+  a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--mat-sys-on-surface-variant);
+    text-decoration: none;
+
+    &:hover { color: var(--mat-sys-on-surface); }
+
+    &[aria-current="page"] { color: var(--mat-sys-primary); }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -4px;
+      border-radius: 8px;
+    }
+  }
+
+  mat-icon {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
+}

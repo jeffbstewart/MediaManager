@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PosterItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged" />
+    </interface>
+
+    <script type="text/brightscript" uri="PosterItem.brs" />
+
+    <children>
+        <Poster
+            id="poster"
+            width="230"
+            height="290"
+            loadWidth="230"
+            loadHeight="290"
+            loadingBitmapUri="pkg:/images/placeholder-poster.png"
+            failedBitmapUri="pkg:/images/placeholder-poster.png"
+            loadDisplayMode="scaleToFit" />
+
+        <Label
+            id="titleLabel"
+            translation="[0, 295]"
+            width="230"
+            horizAlign="center"
+            maxLines="1"
+            font="font:SmallSystemFont"
+            color="#c0c0c0" />
+    </children>
+</component>

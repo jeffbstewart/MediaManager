@@ -1,0 +1,31 @@
+{
+  "rows": [
+    {
+      "id": 1, "display_name": "The Matrix",
+      "media_format": "BLU_RAY", "upc": "888574293321",
+      "purchase_place": "Best Buy", "purchase_date": "2023-04-12",
+      "purchase_price": 14.99, "replacement_value": 19.99,
+      "override_asin": null, "photo_count": 2
+    },
+    {
+      "id": 2, "display_name": "Inception",
+      "media_format": "UHD_BD", "upc": "883929199854",
+      "purchase_place": "Amazon", "purchase_date": "2024-01-05",
+      "purchase_price": 24.99, "replacement_value": 29.99,
+      "override_asin": "B08XQNMFM5", "photo_count": 0
+    },
+    {
+      "id": 3, "display_name": "Ratatouille",
+      "media_format": "DVD", "upc": null,
+      "purchase_place": null, "purchase_date": null,
+      "purchase_price": null, "replacement_value": null,
+      "override_asin": null, "photo_count": 1
+    }
+  ],
+  "total": 3,
+  "summary": {
+    "total_items": 3,
+    "total_purchase": 39.98,
+    "total_replacement": 49.98
+  }
+}

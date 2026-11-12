@@ -1,0 +1,7 @@
+// Copy this file to Branding.xcconfig and fill in your values.
+// Branding.xcconfig is gitignored — your branding stays local.
+
+// --- App Identity ---
+
+// Display name shown under the app icon and in the system.
+APP_DISPLAY_NAME = Media Manager

@@ -1,0 +1,68 @@
+.ltv-page { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+h2 { margin: 0 0 1rem; }
+h3 { margin: 1.5rem 0 0.75rem; }
+.empty-text { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; }
+
+.settings-card { margin-bottom: 1rem; max-width: 500px; }
+.status-row { font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.75rem; }
+
+.field-group { margin-bottom: 0.5rem; }
+.field-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-bottom: 0.125rem; }
+.field-input {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit; padding: 8px 12px; font-size: 0.875rem;
+  outline: none; box-sizing: border-box;
+  &:focus { border-color: var(--mat-sys-primary); }
+  &.short { width: 120px; }
+}
+.field-select {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit; padding: 8px 12px; font-size: 0.875rem;
+  outline: none; width: 100%; max-width: 300px;
+  &:focus { border-color: var(--mat-sys-primary); }
+  option { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); }
+}
+.helper-text { display: block; font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.125rem; }
+
+.star-row { display: flex; gap: 2px; &.compact { gap: 0; } }
+.star-btn {
+  background: none; border: none; cursor: pointer; color: var(--mat-sys-on-surface-variant); padding: 2px;
+  &.active { color: #fbbf24; }
+  &.small { padding: 0; mat-icon { font-size: 18px; width: 18px; height: 18px; } }
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+.save-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+.saved-label { display: flex; align-items: center; gap: 0.25rem; color: var(--mat-sys-on-surface); font-size: 0.875rem; mat-icon { font-size: 18px; width: 18px; height: 18px; color: #4caf50; } }
+
+.section-header { display: flex; align-items: center; justify-content: space-between; h3 { margin: 0; } }
+
+// Tables
+.tuner-table, .channel-table {
+  width: 100%; margin-bottom: 1rem;
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
+  .mat-mdc-cell { font-size: 0.8125rem; }
+}
+// Disabled rows used to dim via opacity, which dragged the cell text
+// below AA. Use a token colour + italic so contrast survives axe.
+.disabled-text { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+.disabled-row td { color: var(--mat-sys-on-surface-variant); font-style: italic; }
+.disabled-row .inline-input { color: var(--mat-sys-on-surface-variant); }
+.delete-btn { color: var(--mat-sys-on-surface-variant); &:hover { color: var(--mat-sys-error); } }
+
+.channel-check { accent-color: var(--mat-sys-primary); width: 16px; height: 16px; cursor: pointer; }
+.inline-input {
+  background: transparent; border: none; border-bottom: 1px solid var(--mat-sys-outline-variant);
+  color: inherit; font-size: 0.8125rem; padding: 2px 4px; outline: none; width: 100px;
+  &:focus { border-bottom-color: var(--mat-sys-primary); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
+}
+
+// Modal
+.modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; }
+.modal-content { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); border-radius: 12px; padding: 1.5rem; width: 90vw; max-width: 400px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; h3 { margin: 0; } }
+.close-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 4px; border-radius: 50%; &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); } }
+.field-error { color: var(--mat-sys-error); font-size: 0.75rem; display: block; margin-top: 0.25rem; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }

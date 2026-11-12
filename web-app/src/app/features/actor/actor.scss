@@ -1,0 +1,125 @@
+.content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+.error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
+
+// Hero
+.hero {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.profile-img {
+  width: 160px;
+  height: 240px;
+  object-fit: cover;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.profile-placeholder {
+  width: 160px;
+  height: 240px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  mat-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  h1 { margin: 0; font-size: 1.75rem; }
+}
+
+.known-for {
+  font-size: 0.875rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.lifespan, .birthplace {
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.biography {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-line;
+  color: var(--mat-sys-on-surface);
+}
+
+.bio-toggle {
+  background: none; border: none; color: var(--mat-sys-primary);
+  cursor: pointer; font-size: 0.8125rem; padding: 0; margin-top: 0.25rem;
+  &:hover { text-decoration: underline; }
+}
+
+// Section headers
+h2 {
+  font-size: 1.25rem;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+// Wish button — solid dark pill so white-icon contrast passes AA.
+.wish-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1a1b1f;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: white;
+  transition: color 0.15s;
+
+  &:hover {
+    color: white;
+  }
+
+  &.wished {
+    color: var(--mat-sys-error);
+    cursor: default;
+    mat-icon { color: var(--mat-sys-error); }
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: white; // Pin — Material's icon-button rules otherwise dull it below AA.
+  }
+}
+
+// Responsive: stack hero on mobile
+@media (max-width: 599px) {
+  .hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .biography {
+    text-align: left;
+  }
+}

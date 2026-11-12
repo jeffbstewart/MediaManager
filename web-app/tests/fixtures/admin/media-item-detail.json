@@ -1,0 +1,30 @@
+{
+  "media_item_id": 1,
+  "display_name": "The Matrix",
+  "upc": "888574293321",
+  "product_name": "The Matrix Blu-ray",
+  "media_format": "BLU_RAY",
+  "editable_formats": ["DVD", "BLU_RAY", "UHD_BD"],
+  "media_type": "MOVIE",
+  "storage_location": "Shelf A2",
+  "purchase_place": "Best Buy",
+  "purchase_date": "2023-04-12",
+  "purchase_price": 14.99,
+  "amazon_order_id": null,
+  "authors": [],
+  "book_series": null,
+  "titles": [
+    {
+      "join_id": 1,
+      "title_id": 100,
+      "title_name": "The Matrix",
+      "media_type": "MOVIE",
+      "tmdb_id": 603,
+      "enrichment_status": "COMPLETE",
+      "poster_url": "/posters/100.jpg",
+      "seasons": null
+    }
+  ],
+  "photo_count": 0,
+  "photos": []
+}

@@ -1,0 +1,103 @@
+// Marquee theme (docs/plans/web-theming.md, decision 1): the reference
+// spec's colors, type, shape and depth (docs/plans/marquee-reference/
+// STYLE-SPEC.md section 1) on the shared layout. Material components
+// take their colors from a palette generated from the Marquee seeds
+// (_marquee-palette.scss); a few system tokens are then pinned to the
+// spec's exact values. Layout tokens are not here: they are universal
+// (_layout.scss).
+@use '@angular/material' as mat;
+@use 'marquee-palette' as palette;
+
+html[data-theme="marquee"] {
+  @include mat.theme(
+    (
+      color: (
+        theme-type: dark,
+        primary: palette.$primary-palette,
+        tertiary: palette.$tertiary-palette,
+      ),
+      typography: (
+        plain-family: Inter,
+        brand-family: Figtree,
+      ),
+      density: 0,
+    )
+  );
+
+  // Color (spec tokens)
+  --c-page: #1e1e1e;
+  --c-text: #ffffff;
+  --c-text-2: #ffffffcc;
+  --c-text-3: #ffffff99;
+  --c-ink: #000000;
+  --c-accent: #e5a00d;
+  --c-surface: #ffffff1a;
+  --c-scrim: #0000004d;
+  --c-scrim-strong: #000000b2;
+  --c-footer: #00000099;
+  --c-live: #dc3004;
+  --c-blue: #1b90dc;
+  --c-pink: #f74366;
+  --c-plum: #823165;
+  --c-green: #45934b;
+  --c-orange: #f37b38;
+  --c-grey-1: #282a2d;
+  --c-grey-2: #3f4245;
+  --c-grey-3: #575b61;
+  --c-grey-4: #868c96;
+
+  // Spec-exact pins over the generated palette: page, the text tiers,
+  // the accent. The rest of the Material tokens come from the palette.
+  --mat-sys-surface: var(--c-page);
+  --mat-sys-background: var(--c-page);
+  --mat-sys-on-surface: var(--c-text);
+  --mat-sys-on-surface-variant: var(--c-text-2);
+  --mat-sys-primary: var(--c-accent);
+
+  // Page glow (_page-glow.scss reads these)
+  --g-top: linear-gradient(90deg, #6d0f4f 0%, #3a1f86 50%, #04289a 100%);
+  --g-discover: linear-gradient(90deg, #0b2a6e 0%, #0e3a96 60%, #0a3fae 100%);
+  --g-plain: linear-gradient(180deg, #2a2a2a 0%, var(--c-page) 100%);
+
+  // Type. Only the 800 face of Figtree ships, so display rules written
+  // at 700 render at 800, the weight the font bake-off chose.
+  --f-body: Inter, "Inter Fallback", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
+  --f-display: Figtree, Inter, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-h1: 32px;
+  --fs-h2: 21.008px;
+  --fs-h3: 16px;
+
+  // Shape and depth
+  --r-pill: 9999px;
+  --r-card: 8px;
+  --r-hero: 16px;
+  --r-badge: 4px;
+  --sh-card: rgba(0, 0, 0, 0.2) 0 4px 4px 0;
+  --sh-hero: rgba(0, 0, 0, 0.25) 6px 6px 15.008px 0;
+
+  @include mat.chips-overrides((
+    container-shape-radius: 9999px,
+  ));
+
+  // Page and section headings use the display face.
+  h1, h2 {
+    font-family: var(--f-display);
+  }
+}
+
+@media (max-width: 1023px) {
+  html[data-theme="marquee"] {
+    --fs-h1: 29px;
+    --fs-h2: 19px;
+  }
+}
+
+@media (max-width: 599px) {
+  html[data-theme="marquee"] {
+    --fs-h1: 28px;
+    --fs-h2: 18px;
+  }
+}

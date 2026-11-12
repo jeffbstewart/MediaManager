@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "ArtistServiceProto";  // avoids collision with Artist message in common.proto
+option swift_prefix = "MM";
+
+import "common.proto";
+
+// Browse services for music artists and book authors.
+//
+// Headshots are fetched separately via ImageService using:
+//   IMAGE_TYPE_ARTIST_HEADSHOT + artist_id
+//   IMAGE_TYPE_AUTHOR_HEADSHOT + author_id
+service ArtistService {
+  rpc ListArtists(ListArtistsRequest) returns (ArtistListResponse);
+  rpc GetArtistDetail(ArtistIdRequest) returns (ArtistDetail);
+
+  rpc ListAuthors(ListAuthorsRequest) returns (AuthorListResponse);
+  rpc GetAuthorDetail(AuthorIdRequest) returns (AuthorDetail);
+
+  // Artist recommendations (M8). Per-user "you might like" cards on
+  // /discover backed by the RecommendationAgent.
+  rpc ListArtistRecommendations(ListArtistRecommendationsRequest)
+      returns (ArtistRecommendationsResponse);
+  rpc DismissArtistRecommendation(DismissArtistRecommendationRequest)
+      returns (Empty);
+  // Fire-and-forget manual recompute. Returns immediately; the agent
+  // refreshes on a background thread and the next ListArtistRecommendations
+  // sees the new rows.
+  rpc RefreshArtistRecommendations(Empty) returns (Empty);
+}
+
+message ListArtistsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  // Sort modes: "albums" (owned-album count desc, default), "name"
+  // (sort_name asc), "recent" (created_at desc). "popularity" is
+  // accepted as an alias for "albums" for back-compat.
+  optional string sort = 3;
+  optional string q = 4;
+  // True keeps only artists with at least one playable album (a track
+  // with a populated file_path). The web audio landing page sets this;
+  // legacy clients that omit it get every artist regardless.
+  bool playable_only = 5;
+}
+
+message ArtistListResponse {
+  repeated ArtistListItem artists = 1;
+  PaginationInfo pagination = 2;
+}
+
+message ArtistListItem {
+  int64 id = 1;
+  string name = 2;
+  optional string sort_name = 3;
+  ArtistType artist_type = 4;
+  int32 owned_album_count = 5;
+  // Populated when the artist has at least one owned album. Cards use
+  // the album's poster as a hero fallback when no headshot is cached.
+  // Fetch via ImageService with IMAGE_TYPE_POSTER_THUMBNAIL + this id.
+  optional int64 fallback_album_title_id = 6;
+  // True when /artist-headshots/{id} (or ImageService with
+  // IMAGE_TYPE_ARTIST_HEADSHOT + id) will serve a real headshot.
+  // When false the card falls back to fallback_album_title_id's
+  // poster, then to a placeholder.
+  bool has_headshot = 7;
+}
+
+message ArtistIdRequest { int64 artist_id = 1; }
+
+// Sort modes for ListAuthors.
+enum AuthorSort {
+  AUTHOR_SORT_UNKNOWN = 0;
+  // Default. Author sort_name ascending (falls back to display name).
+  AUTHOR_SORT_NAME = 1;
+  // Owned-book count descending — most-collected authors first.
+  AUTHOR_SORT_BOOKS = 2;
+  // Most-recently-updated authors first.
+  AUTHOR_SORT_RECENT = 3;
+}
+
+message ListAuthorsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  AuthorSort sort = 3;
+  optional string q = 4;
+  // True keeps only authors with at least one downloadable ebook
+  // edition (EBOOK_EPUB or EBOOK_PDF MediaItem with a populated
+  // file_path). The iOS client always sets this — physical-only
+  // authors aren't useful on a phone where the only consumption
+  // path is the in-app reader. Mirrors `playable_only` on
+  // ListArtistsRequest.
+  bool playable_only = 5;
+  // Admin-only escape hatch. False (default) returns visible authors;
+  // true returns only authors with `hidden=true` so an admin can find
+  // them and unhide via SetAuthorHidden. Non-admin clients should leave
+  // this at the default — server-side filtering still hides the entries
+  // either way for non-admins, but the field is the iOS admin's switch
+  // for the Hidden-only view.
+  bool hidden_only = 6;
+}
+
+message AuthorListResponse {
+  repeated AuthorListItem authors = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AuthorListItem {
+  int64 id = 1;
+  string name = 2;
+  int32 owned_book_count = 3;
+  // True when /author-headshots/{id} can serve bytes (cached
+  // Wikimedia or OpenLibrary fallback). Same semantic as
+  // Author.has_headshot.
+  bool has_headshot = 4;
+  // Populated when the author has at least one owned book and
+  // hasHeadshot is false. Cards use that book's poster as a hero
+  // fallback so authors-without-a-Wikipedia-thumbnail still render
+  // a meaningful image instead of a person-icon placeholder. Fetch
+  // via ImageService with IMAGE_TYPE_POSTER_THUMBNAIL + this id, or
+  // /posters/w185/{id} same-origin. Mirrors fallback_album_title_id
+  // on ArtistListItem.
+  optional int64 fallback_book_title_id = 5;
+  // Admin-controlled hide flag. Mirrors Author.hidden — set when an
+  // admin has hidden this author. Drives the iOS admin "Hidden
+  // Authors" view, where the toggle button reads as Unhide.
+  bool hidden = 6;
+}
+
+message AuthorIdRequest {
+  int64 author_id = 1;
+  // True omits owned books that don't have a downloadable EPUB or PDF
+  // edition — i.e., books the iOS reader cannot open. iOS sets this to
+  // true so phone users only see books they can actually read on the
+  // device. Web leaves it false (default) and gets the full library.
+  bool playable_only = 2;
+}
+
+message ListArtistRecommendationsRequest {
+  // Server clamps to [1, 100]; default 30 when omitted.
+  int32 limit = 1;
+}
+
+message ArtistRecommendationsResponse {
+  repeated ArtistRecommendation artists = 1;
+}
+
+message ArtistRecommendation {
+  string suggested_artist_mbid = 1;
+  string suggested_artist_name = 2;
+  // Populated only when the suggested artist already lives in our
+  // local Artist table — usually null since recommendations surface
+  // unowned artists.
+  optional int64 artist_id = 3;
+  double score = 4;
+  repeated RecommendationVoter voters = 5;
+  // The release group whose cover the discover card renders. Clients
+  // hit /proxy/caa/release-group/{rgid}/front-250 same-origin to fetch
+  // bytes — never derived to a third-party URL on the wire.
+  optional string representative_release_group_id = 6;
+  optional string representative_release_title = 7;
+}
+
+message RecommendationVoter {
+  string mbid = 1;
+  string name = 2;
+  int32 album_count = 3;
+}
+
+message DismissArtistRecommendationRequest {
+  string suggested_artist_mbid = 1;
+}

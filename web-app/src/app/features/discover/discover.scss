@@ -1,0 +1,155 @@
+// Spec main padding and section rhythm (STYLE-SPEC.md 1, 3.1); rows
+// bleed into the right padding so the next card peeks out.
+.discover-page {
+  --row-bleed: var(--pad-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  min-width: 0;
+  padding: var(--pad-top) var(--pad-x) 64px;
+}
+
+.hero-section,
+.carousel-section,
+.artists-section {
+  min-width: 0;
+}
+
+// ------------------------------------------------------------- promo
+// styles.css `.promo`: a centered box with the page heading, one line
+// of copy and a white pill.
+.promo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px;
+  border-radius: var(--r-card, 8px);
+  background: #ffffff1a;
+  text-align: center;
+
+  h1 {
+    margin: 0;
+    font: 700 var(--fs-h1, 2rem)/1.2 var(--f-display, inherit);
+    color: #fff;
+  }
+
+  p {
+    max-width: 1200px;
+    margin: 0;
+    color: var(--c-text-2, var(--mat-sys-on-surface-variant));
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--r-pill, 9999px);
+  background: #fff;
+  color: #000;
+  font: 600 14px/1 var(--f-body, inherit);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover { background: #ffffffe6; }
+  &:focus-visible {
+    outline: 2px solid var(--c-accent, var(--mat-sys-primary));
+    outline-offset: 2px;
+  }
+}
+
+@media (max-width: 599px) {
+  .promo { padding: 24px 16px; }
+  .promo .btn { width: 100%; }
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+
+  h2 {
+    margin: 0;
+    font: 700 var(--fs-h2, 1.25rem)/27px var(--f-display, inherit);
+    color: var(--c-text, var(--mat-sys-on-surface));
+  }
+}
+.subtitle {
+  flex: 1 1 auto;
+  min-width: 240px;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.refresh-btn {
+  flex-shrink: 0;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error);
+  padding: 1rem;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 4rem 1rem;
+  gap: 0.5rem;
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--mat-sys-on-surface-variant);
+    margin-bottom: 0.5rem;
+  }
+
+  p { margin: 0; font-size: 0.9375rem; color: var(--mat-sys-on-surface); }
+  .hint { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); max-width: 560px; }
+}
+
+// Artist card controls (spec 3.6 ghost pill): projected into the
+// person card, so they are styled here.
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill, 9999px);
+  background: #ffffff1a;
+  color: var(--c-text, var(--mat-sys-on-surface));
+  font: 600 14px/1 var(--f-body, inherit);
+  white-space: nowrap;
+  cursor: pointer;
+
+  mat-icon { width: 18px; height: 18px; font-size: 18px; }
+
+  &:hover:not(:disabled) { background: #ffffff33; }
+  &:disabled { cursor: default; }
+  &:focus-visible {
+    outline: 2px solid var(--c-accent, var(--mat-sys-primary));
+    outline-offset: 2px;
+  }
+
+  &.icon {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+}

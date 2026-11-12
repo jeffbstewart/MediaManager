@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "id": 1,
+      "file_path": "/nas/Books/MysteryNovel.epub",
+      "file_name": "MysteryNovel.epub",
+      "file_size_bytes": 1500000,
+      "media_format": "EPUB",
+      "parsed_title": "Mystery Novel",
+      "parsed_author": "Jane Doe",
+      "parsed_isbn": "9780123456789",
+      "discovered_at": "2026-04-20T10:00:00Z"
+    },
+    {
+      "id": 2,
+      "file_path": "/nas/Books/UnknownThing.pdf",
+      "file_name": "UnknownThing.pdf",
+      "file_size_bytes": 3200000,
+      "media_format": "PDF",
+      "parsed_title": null,
+      "parsed_author": null,
+      "parsed_isbn": null,
+      "discovered_at": "2026-04-22T14:30:00Z"
+    }
+  ]
+}

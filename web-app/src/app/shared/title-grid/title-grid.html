@@ -1,0 +1,61 @@
+<div class="filter-chips">
+  <div class="filter-chip-group" role="group" aria-label="Availability">
+    <button type="button" class="filter-chip" [attr.aria-pressed]="playableOnly()"
+            (click)="togglePlayable()">Playable</button>
+  </div>
+
+  @if (availableRatings().length > 0) {
+    <span class="filter-chip-divider" aria-hidden="true"></span>
+    <div class="filter-chip-group" role="group" aria-label="Rating">
+      <button type="button" class="filter-chip" [attr.aria-pressed]="selectedRatings().size === 0"
+              (click)="clearRatings()">All Ratings</button>
+      @for (rating of availableRatings(); track rating) {
+        <button type="button" class="filter-chip" [attr.aria-pressed]="selectedRatings().has(rating)"
+                (click)="toggleRating(rating)">{{ rating }}</button>
+      }
+    </div>
+  }
+
+  <span class="filter-chip-divider" aria-hidden="true"></span>
+  <div class="filter-chip-group" role="group" aria-label="Sort">
+    @for (opt of sortOptions(); track opt.value) {
+      <button type="button" class="filter-chip" [attr.aria-pressed]="sortMode() === opt.value"
+              (click)="setSort(opt.value)">{{ opt.label }}</button>
+    }
+  </div>
+</div>
+
+@if (loading() && titles().length === 0) {
+  <div class="loading-container">
+    <mat-spinner aria-label="Loading" diameter="40" />
+  </div>
+} @else if (error()) {
+  <p class="error-message">{{ error() }}</p>
+} @else {
+  <span class="status-label">{{ total() }} {{ label() }}</span>
+
+  <div class="grid">
+    @for (title of titles(); track title.title_id) {
+      <app-poster-card [name]="title.title_name" [imageUrl]="title.poster_url"
+                       [link]="routes.title(title.title_id)"
+                       [square]="mediaType() === 'ALBUM'"
+                       [fit]="mediaType() === 'ALBUM' ? 'contain' : 'cover'"
+                       [playable]="!!title.playable" [progress]="title.progress_fraction"
+                       [credit]="title.artist_name || title.author_name"
+                       [meta]="title.release_year" />
+    }
+  </div>
+
+  <!-- Sentinel — when this scrolls into view, the IntersectionObserver
+       in title-grid.ts fires loadMore(). rootMargin on the observer
+       starts the next-page fetch ~400px before the sentinel hits the
+       viewport so the grid feels uninterrupted. -->
+  <div #sentinel class="scroll-sentinel" aria-hidden="true"></div>
+
+  @if (loadingMore()) {
+    <div class="loading-more" role="status" aria-live="polite">
+      <mat-spinner aria-label="Loading" diameter="28" />
+      <span class="visually-hidden">Loading more titles</span>
+    </div>
+  }
+}

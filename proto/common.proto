@@ -1,0 +1,1014 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "time.proto";
+
+// ============================================================================
+// Shared enums
+// ============================================================================
+
+enum MediaType {
+  MEDIA_TYPE_UNKNOWN = 0;
+  MEDIA_TYPE_MOVIE = 1;
+  MEDIA_TYPE_TV = 2;
+  MEDIA_TYPE_PERSONAL = 3;
+  MEDIA_TYPE_BOOK = 4;
+  MEDIA_TYPE_ALBUM = 5;
+}
+
+// Content ratings. TV and movie ratings occupy separate ranges so they
+// can be compared within their own system but never accidentally mixed.
+// For cross-system restrictiveness comparison, use RatingLevel instead.
+enum ContentRating {
+  CONTENT_RATING_UNKNOWN = 0;
+
+  // MPAA movie ratings (100–199)
+  CONTENT_RATING_G = 100;
+  CONTENT_RATING_PG = 101;
+  CONTENT_RATING_PG_13 = 102;
+  CONTENT_RATING_R = 103;
+  CONTENT_RATING_NC_17 = 104;
+
+  // US TV ratings (200–299)
+  CONTENT_RATING_TV_Y = 200;
+  CONTENT_RATING_TV_Y7 = 201;
+  CONTENT_RATING_TV_G = 202;
+  CONTENT_RATING_TV_PG = 203;
+  CONTENT_RATING_TV_14 = 204;
+  CONTENT_RATING_TV_MA = 205;
+
+  // Catch-all for ratings not in the above lists
+  CONTENT_RATING_NR = 300;
+}
+
+// Unified restrictiveness tier for cross-system comparison. The server maps
+// each ContentRating to a RatingLevel. Used for user rating ceilings —
+// comparison is simply: mapped_level <= user_ceiling.
+//
+// Mapping:
+//   CHILDREN → G, TV-Y, TV-Y7, TV-G
+//   GENERAL  → PG, TV-PG
+//   TEEN     → PG-13, TV-14
+//   MATURE   → R, TV-MA
+//   ADULT    → NC-17
+enum RatingLevel {
+  RATING_LEVEL_UNKNOWN = 0;
+  RATING_LEVEL_CHILDREN = 1;
+  RATING_LEVEL_GENERAL = 2;
+  RATING_LEVEL_TEEN = 3;
+  RATING_LEVEL_MATURE = 4;
+  RATING_LEVEL_ADULT = 5;
+}
+
+enum MediaFormat {
+  MEDIA_FORMAT_UNKNOWN = 0;
+  MEDIA_FORMAT_DVD = 1;
+  MEDIA_FORMAT_BLURAY = 2;
+  MEDIA_FORMAT_UHD_BLURAY = 3;
+  MEDIA_FORMAT_HD_DVD = 4;
+  // Book formats.
+  MEDIA_FORMAT_MASS_MARKET_PAPERBACK = 5;
+  MEDIA_FORMAT_TRADE_PAPERBACK = 6;
+  MEDIA_FORMAT_HARDBACK = 7;
+  MEDIA_FORMAT_EBOOK_EPUB = 8;
+  MEDIA_FORMAT_EBOOK_PDF = 9;
+  MEDIA_FORMAT_AUDIOBOOK_CD = 10;
+  MEDIA_FORMAT_AUDIOBOOK_DIGITAL = 11;
+  // Music formats.
+  MEDIA_FORMAT_CD = 12;
+  MEDIA_FORMAT_VINYL_LP = 13;
+  MEDIA_FORMAT_AUDIO_FLAC = 14;
+  MEDIA_FORMAT_AUDIO_MP3 = 15;
+  MEDIA_FORMAT_AUDIO_AAC = 16;
+  MEDIA_FORMAT_AUDIO_OGG = 17;
+  MEDIA_FORMAT_AUDIO_WAV = 18;
+  MEDIA_FORMAT_OTHER = 19;
+}
+
+// Video quality tier. Derived from MediaFormat on the server:
+// DVD → SD, BLURAY/HD_DVD → FHD, UHD_BLURAY → UHD.
+// Low-storage transcodes are always FHD (re-encoded to 1080p).
+enum Quality {
+  QUALITY_UNKNOWN = 0;
+  QUALITY_SD = 1;       // 480p (DVD source)
+  QUALITY_FHD = 2;      // 1080p (Blu-ray, HD DVD source)
+  QUALITY_UHD = 3;      // 2160p (UHD Blu-ray source)
+}
+
+enum SearchResultType {
+  SEARCH_RESULT_TYPE_UNKNOWN = 0;
+  SEARCH_RESULT_TYPE_MOVIE = 1;
+  SEARCH_RESULT_TYPE_SERIES = 2;
+  SEARCH_RESULT_TYPE_ACTOR = 3;
+  SEARCH_RESULT_TYPE_COLLECTION = 4;
+  SEARCH_RESULT_TYPE_TAG = 5;
+  SEARCH_RESULT_TYPE_GENRE = 6;
+  SEARCH_RESULT_TYPE_BOOK = 7;
+  SEARCH_RESULT_TYPE_ALBUM = 8;
+  SEARCH_RESULT_TYPE_ARTIST = 9;
+  SEARCH_RESULT_TYPE_AUTHOR = 10;
+  SEARCH_RESULT_TYPE_TRACK = 11;
+  // Personal home videos. Distinct from MOVIE so the SPA can render
+  // the family-restroom icon for unmatched entries.
+  SEARCH_RESULT_TYPE_PERSONAL = 12;
+  // Live TV channel — reserved for when the search index starts
+  // covering channel-by-name lookup. Not emitted by the server today.
+  SEARCH_RESULT_TYPE_CHANNEL = 13;
+  // Configured camera — reserved for when the search index starts
+  // covering camera-by-name lookup. Not emitted by the server today.
+  SEARCH_RESULT_TYPE_CAMERA = 14;
+  // User playlist hit. populated `playlist_id` plus `name`; clients
+  // route to playlist detail (tracklist).
+  SEARCH_RESULT_TYPE_PLAYLIST = 15;
+}
+
+// MusicBrainz artist-type taxonomy. Mirrors the Kotlin ArtistType enum.
+enum ArtistType {
+  ARTIST_TYPE_UNKNOWN = 0;
+  ARTIST_TYPE_PERSON = 1;
+  ARTIST_TYPE_GROUP = 2;
+  ARTIST_TYPE_ORCHESTRA = 3;
+  ARTIST_TYPE_CHOIR = 4;
+  ARTIST_TYPE_OTHER = 5;
+}
+
+// MusicBrainz release-group type for unowned discography entries.
+enum ReleaseGroupType {
+  RELEASE_GROUP_TYPE_UNKNOWN = 0;
+  RELEASE_GROUP_TYPE_ALBUM = 1;
+  RELEASE_GROUP_TYPE_EP = 2;
+  RELEASE_GROUP_TYPE_SINGLE = 3;
+  RELEASE_GROUP_TYPE_COMPILATION = 4;
+  RELEASE_GROUP_TYPE_SOUNDTRACK = 5;
+  RELEASE_GROUP_TYPE_LIVE = 6;
+  RELEASE_GROUP_TYPE_REMIX = 7;
+  RELEASE_GROUP_TYPE_OTHER = 8;
+}
+
+// Digital + physical book edition formats.
+enum BookEditionFormat {
+  BOOK_EDITION_FORMAT_UNKNOWN = 0;
+  BOOK_EDITION_FORMAT_EBOOK_EPUB = 1;
+  BOOK_EDITION_FORMAT_EBOOK_PDF = 2;
+  BOOK_EDITION_FORMAT_AUDIOBOOK_DIGITAL = 3;
+  BOOK_EDITION_FORMAT_PAPERBACK = 4;
+  BOOK_EDITION_FORMAT_HARDCOVER = 5;
+}
+
+// User access level / role.
+enum AccessLevel {
+  ACCESS_LEVEL_UNKNOWN = 0;
+  ACCESS_LEVEL_VIEWER = 1;   // Level 1: catalog, playback, search
+  ACCESS_LEVEL_ADMIN = 2;    // Level 2: full admin access
+}
+
+// Acquisition status for purchase wishes.
+enum AcquisitionStatus {
+  ACQUISITION_STATUS_UNKNOWN = 0;
+  ACQUISITION_STATUS_NOT_AVAILABLE = 1;
+  ACQUISITION_STATUS_REJECTED = 2;
+  ACQUISITION_STATUS_ORDERED = 3;
+  ACQUISITION_STATUS_OWNED = 4;
+  ACQUISITION_STATUS_NEEDS_ASSISTANCE = 5;
+}
+
+// User-facing lifecycle stage for a wishlist item. This is derived on the
+// server from acquisition decision + physical ownership + NAS link + desktop
+// playability, and is intentionally separate from admin acquisition status.
+enum WishLifecycleStage {
+  WISH_LIFECYCLE_STAGE_UNKNOWN = 0;
+  WISH_LIFECYCLE_STAGE_WISHED_FOR = 1;
+  WISH_LIFECYCLE_STAGE_NOT_FEASIBLE = 2;
+  WISH_LIFECYCLE_STAGE_WONT_ORDER = 3;
+  WISH_LIFECYCLE_STAGE_NEEDS_ASSISTANCE = 4;
+  WISH_LIFECYCLE_STAGE_ORDERED = 5;
+  WISH_LIFECYCLE_STAGE_IN_HOUSE_PENDING_NAS = 6;
+  WISH_LIFECYCLE_STAGE_ON_NAS_PENDING_DESKTOP = 7;
+  WISH_LIFECYCLE_STAGE_READY_TO_WATCH = 8;
+}
+
+// ============================================================================
+// Shared scalar types
+// ============================================================================
+
+message Empty {}
+
+// Shared ID wrapper requests — used by multiple services.
+message TitleIdRequest {
+  int64 title_id = 1;
+}
+
+message TranscodeIdRequest {
+  int64 transcode_id = 1;
+}
+
+message TagIdRequest {
+  int64 tag_id = 1;
+}
+
+message TagTitleRequest {
+  int64 tag_id = 1;
+  int64 title_id = 2;
+}
+
+message SetTitleTagsRequest {
+  int64 title_id = 1;
+  repeated int64 tag_ids = 2;
+}
+
+// Tags phase B — track-level tagging.
+message TagTrackRequest {
+  int64 tag_id = 1;
+  int64 track_id = 2;
+}
+
+message SetTrackTagsRequest {
+  int64 track_id = 1;
+  repeated int64 tag_ids = 2;
+}
+
+message TrackIdRequest {
+  int64 track_id = 1;
+}
+
+// V089 — admin override for ID3-derived music fields. Tri-state per
+// field via an explicit clear flag — beats sentinel values (0 / "")
+// because callers can't accidentally clear by passing a default-
+// constructed value.
+//   - clear flag set        → field is cleared (the value field is
+//                             ignored).
+//   - clear flag false +
+//     value field present   → field is set to that value.
+//   - clear flag false +
+//     value field absent    → field left alone.
+message SetTrackMusicTagsRequest {
+  int64 track_id = 1;
+  optional int32 bpm = 2;
+  optional string time_signature = 3;
+  bool clear_bpm = 4;
+  bool clear_time_signature = 5;
+}
+
+message GenreIdRequest {
+  int64 genre_id = 1;
+}
+
+message BookSeriesIdRequest {
+  int64 series_id = 1;
+  // True omits owned volumes that don't have a downloadable EPUB or
+  // PDF edition. Same rationale as AuthorIdRequest.playable_only.
+  bool playable_only = 2;
+}
+
+// CSS hex color. The string includes the leading '#' and uses uppercase hex,
+// e.g. "#FF5733", "#2196F3". Always exactly 7 characters (#RRGGBB).
+message Color {
+  string hex = 1;
+}
+
+// ============================================================================
+// Pagination
+// ============================================================================
+
+message PaginationRequest {
+  int32 page = 1;   // 1-based
+  int32 limit = 2;  // max items per page
+}
+
+message PaginationInfo {
+  int32 total = 1;
+  int32 page = 2;
+  int32 limit = 3;
+  int32 total_pages = 4;
+}
+
+// ============================================================================
+// Catalog types
+// ============================================================================
+
+message Title {
+  int64 id = 1;
+  string name = 2;
+  MediaType media_type = 3;
+  optional int32 year = 4;
+  optional string description = 5;
+  optional string poster_url = 6;
+  optional string backdrop_url = 7;
+  ContentRating content_rating = 8;
+  optional double popularity = 9;
+  Quality quality = 10;
+  bool playable = 11;
+  optional int64 transcode_id = 12;
+  optional int32 tmdb_id = 13;
+  optional int32 tmdb_collection_id = 14;
+  optional string tmdb_collection_name = 15;
+  repeated string family_members = 16;
+  bool high_quality_transcode_available = 17;
+  bool low_storage_transcode_available = 18;
+
+  // Populated only in "Resume Playing" carousel items
+  optional PlaybackOffset resume_position = 19;
+  optional PlaybackOffset resume_duration = 20;
+  optional int32 resume_season_number = 21;
+  optional int32 resume_episode_number = 22;
+  optional string resume_episode_name = 23;
+
+  // Primary-credit context for book + album list cards. Server
+  // populates only when the credit is relevant — artist_name for
+  // ALBUM titles, author_name for BOOK titles. Absent on MOVIE /
+  // TV / PERSONAL titles.
+  optional string artist_name = 24;
+  optional string author_name = 25;
+
+  // Series context for BOOK list cards (Foundation, Dune, …). Both
+  // populated together; the SPA renders "#{number} of {name}". Series
+  // number is a string because some series use "1.5" / "2a".
+  optional string series_name = 26;
+  optional string series_number = 27;
+
+  // Track count for ALBUM list cards. Avoids the SPA having to fetch
+  // album detail just to label the carousel card.
+  optional int32 track_count = 28;
+
+  // 0..1 fraction of the title's primary transcode that has been
+  // watched. Populated on list endpoints so grids can render the
+  // resume progress bar without a per-card RPC. Absent when the user
+  // has no saved progress on the title.
+  optional double progress_fraction = 29;
+
+  // Hero tint, `#rrggbb`: the backdrop's saturated average colour at
+  // about 20% lightness, computed once when the backdrop is cached
+  // (BackdropTint). Absent until then. Hero banners fill with it and
+  // fade it into the image.
+  optional string backdrop_tint = 30;
+}
+
+// Full title detail. Embeds Title to avoid field duplication, then adds
+// detail-only fields (cast, genres, tags, transcodes, user flags, etc.).
+message TitleDetail {
+  Title title = 1;
+  repeated CastMember cast = 2;
+  repeated Genre genres = 3;
+  repeated Tag tags = 4;
+  repeated Transcode transcodes = 5;
+  optional PlaybackProgress playback_progress = 6;
+  bool is_favorite = 7;
+  bool is_hidden = 8;
+  bool wished = 9;
+  // Populated only when title.media_type = MEDIA_TYPE_ALBUM.
+  optional Album album = 10;
+  // Populated only when title.media_type = MEDIA_TYPE_BOOK.
+  optional BookDetail book = 11;
+
+  // --- Web parity additions (V100 proto extension). ---
+  // Recommendation row shown under the hero. Empty for personal videos.
+  repeated SimilarTitle similar_titles = 12;
+  // Embedded TV seasons + episodes so the title detail page can render
+  // without a follow-up RPC. Empty for non-TV titles.
+  repeated Season seasons = 13;
+  repeated Episode episodes = 14;
+  // Personal-video tagged people (full objects, not the bare strings
+  // on Title.family_members). Empty for non-PERSONAL titles.
+  repeated FamilyMember family_members_full = 15;
+  // TMDB collection link (Marvel, Bond, …). Distinct from
+  // Title.tmdb_collection_id — this one points at our local
+  // tmdb_collection row id, which the /content/collection/:id route
+  // consumes.
+  optional Collection collection = 16;
+  // Display-ready labels for the format chip row ("Blu-ray", "4K UHD",
+  // "DVD", …). Server-rendered strings so the client doesn't have to
+  // localise a MediaFormat enum into a UI label.
+  repeated string display_formats = 17;
+  // Admin-only edit links for each physical/digital media item.
+  repeated AdminMediaItem admin_media_items = 18;
+  // Digital book editions with per-user reading progress. Empty for
+  // non-BOOK titles.
+  repeated ReadableEdition readable_editions = 19;
+}
+
+// Compact title reference used in the "Similar Titles" carousel. Lighter
+// than embedding full Title — the carousel only needs a name + a year.
+// Cover image: ImageService with IMAGE_TYPE_TITLE_POSTER + title_id.
+message SimilarTitle {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional int32 release_year = 3;
+  // True when a media item (a disc or a digital edition) links to the
+  // title. A row that only has a file on the NAS, or exists for a wish,
+  // is not owned.
+  bool owned = 4;
+  // True when a playable file exists for it.
+  bool playable = 5;
+}
+
+// Tagged person on a personal video.
+message FamilyMember {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Local tmdb_collection row — the row backing /content/collection/:id.
+// Distinct from TMDB's collection_id which lives on Title.
+message Collection {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Admin-only handle to a row in media_item. Lets the title page link
+// to /admin/item/:id for inline edits.
+message AdminMediaItem {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
+  optional string upc = 3;
+}
+
+// Digital book edition + the user's saved reading progress on it.
+message ReadableEdition {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
+  // Fraction read, 0.0–1.0. 0 when there's no saved progress.
+  double percent = 3;
+  // Per-format locator. Absent when there's no saved progress.
+  // EPUB carries a CFI string; PDF carries a 1-based page number.
+  // Future formats add their own arm rather than overloading either.
+  oneof locator {
+    string epub_cfi = 4;
+    int32 pdf_page = 5;
+  }
+  optional Timestamp updated_at = 6;
+}
+
+message Transcode {
+  int64 id = 1;
+  MediaFormat media_format = 2;
+  Quality quality = 3;
+  optional int64 episode_id = 4;
+  optional int32 season_number = 5;
+  optional int32 episode_number = 6;
+  optional string episode_name = 7;
+  bool playable = 8;
+  bool has_subtitles = 9;
+  bool low_storage_transcode_available = 10;
+  bool low_storage_transcode_requested = 11;
+}
+
+message CastMember {
+  int32 tmdb_person_id = 1;
+  string name = 2;
+  optional string character_name = 3;
+  optional string headshot_url = 4;
+  int32 order = 5;
+}
+
+message Genre {
+  int64 id = 1;
+  string name = 2;
+}
+
+message Tag {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+}
+
+message PlaybackProgress {
+  int64 transcode_id = 1;
+  PlaybackOffset position = 2;
+  optional PlaybackOffset duration = 3;
+  optional Timestamp updated_at = 4;
+}
+
+// ============================================================================
+// TV
+// ============================================================================
+
+message Season {
+  int32 season_number = 1;
+  optional string name = 2;
+  int32 episode_count = 3;
+  AcquisitionStatus acquisition_status = 4;
+}
+
+message Episode {
+  int64 episode_id = 1;
+  optional int64 transcode_id = 2;
+  int32 season_number = 3;
+  int32 episode_number = 4;
+  optional string name = 5;
+  Quality quality = 6;
+  bool playable = 7;
+  bool has_subtitles = 8;
+  PlaybackOffset resume_position = 9;
+  optional PlaybackOffset duration = 10;
+  bool low_storage_transcode_available = 11;
+  bool low_storage_transcode_requested = 12;
+}
+
+// ============================================================================
+// Search
+// ============================================================================
+
+message SearchResult {
+  SearchResultType result_type = 1;
+  string name = 2;
+  optional int64 title_id = 3;
+  optional string poster_url = 4;
+  optional int32 year = 5;
+  Quality quality = 6;
+  ContentRating content_rating = 7;
+  optional int64 transcode_id = 8;
+  MediaType media_type = 9;
+  optional int32 tmdb_collection_id = 10;
+  optional int32 tmdb_person_id = 11;
+  optional string headshot_url = 12;
+  optional int32 title_count = 13;
+  optional int64 item_id = 14;
+  // --- Book/audio additions. Clients fetch any images via ImageService
+  // using the identifiers on this message (see images.proto for the
+  // new IMAGE_TYPE_* values). No URLs are sent on these fields. ---
+  optional int64 author_id = 15;
+  optional int64 artist_id = 16;
+  optional int64 track_id = 17;
+  optional int64 album_title_id = 18;       // parent album for TRACK results
+  optional string artist_name = 19;         // context line for ALBUM/TRACK
+  optional string album_name = 20;          // context line for TRACK
+  optional int64 media_item_id = 21;        // BOOK edition identifier
+  // Reserved for CHANNEL / CAMERA result types. The server doesn't
+  // populate these today (those types aren't yet indexed), but the
+  // SPA renders by-id href when present.
+  optional int64 channel_id = 22;
+  optional int64 camera_id = 23;
+  // PLAYLIST result identifier; client routes to playlist detail.
+  optional int64 playlist_id = 24;
+}
+
+// ============================================================================
+// Browse / Landing Pages
+// ============================================================================
+
+message ActorDetail {
+  string name = 1;
+  optional string headshot_url = 2;
+  optional string biography = 3;
+  optional CalendarDate birthday = 4;
+  optional CalendarDate deathday = 5;
+  optional string place_of_birth = 6;
+  optional string known_for_department = 7;
+  repeated OwnedCredit owned_titles = 8;
+  repeated CreditEntry other_works = 9;
+}
+
+message OwnedCredit {
+  Title title = 1;
+  optional string character_name = 2;
+}
+
+message CreditEntry {
+  int32 tmdb_id = 1;
+  string title = 2;
+  MediaType media_type = 3;
+  optional string character_name = 4;
+  optional int32 release_year = 5;
+  optional string poster_url = 6;
+  double popularity = 7;
+  bool wished = 8;
+}
+
+message CollectionDetail {
+  string name = 1;
+  optional string poster_url = 2;
+  repeated CollectionItem items = 3;
+}
+
+message CollectionItem {
+  int32 tmdb_movie_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  optional int32 year = 4;
+  bool owned = 5;
+  bool playable = 6;
+  optional int64 title_id = 7;
+  Quality quality = 8;
+  ContentRating content_rating = 9;
+  optional int64 transcode_id = 10;
+  // Resume fraction 0..1 for owned items — collection page renders
+  // this as a thin progress bar under the poster. Absent for items
+  // not owned, or owned but never started.
+  optional double progress_fraction = 11;
+  // True when the user has the unowned title on their wish list. The
+  // collection page paints a heart on these so the user can see at a
+  // glance which gaps they've already flagged. Always false when
+  // `owned` is true (you don't wish for what you have).
+  bool wished = 12;
+}
+
+message TagDetail {
+  string name = 1;
+  Color color = 2;
+  repeated Title titles = 3;
+  // Tags phase B — individual tracks tagged with this tag. Empty
+  // for tags applied only to titles. Client typically renders these
+  // in a "Tagged tracks" section below the title grid.
+  repeated Track tracks = 4;
+}
+
+message GenreDetail {
+  string name = 1;
+  repeated Title titles = 2;
+}
+
+// Book-series detail page. Hero artwork is fetched via
+// IMAGE_TYPE_OPENLIBRARY_COVER + cover_isbn (when populated) or
+// IMAGE_TYPE_POSTER_THUMBNAIL + first volume's title_id as a
+// fallback. No URL strings on the wire.
+message BookSeriesDetail {
+  int64 id = 1;
+  string name = 2;
+  optional string description = 3;
+  // Set when the series row stores a representative ISBN — clients
+  // fetch the cover via /proxy/ol/isbn/{cover_isbn}/M (web) or
+  // ImageService (iOS / Android TV; ImageType is not yet wired for
+  // ISBN, so iOS falls back to the first volume's poster).
+  optional string cover_isbn = 4;
+  optional BookSeriesAuthor author = 5;
+  // Owned volumes, ordered by series_number then sort name.
+  repeated BookSeriesVolume volumes = 6;
+  // Author bibliography entries this series is missing — only
+  // populated when can_fill_gaps is true.
+  repeated BookSeriesMissingVolume missing_volumes = 7;
+  // True when [author] has an Open Library id we can enumerate
+  // against. Drives the visibility of the "Missing Volumes" section
+  // and the "Wishlist all missing" bulk action.
+  bool can_fill_gaps = 8;
+}
+
+message BookSeriesAuthor {
+  int64 id = 1;
+  string name = 2;
+}
+
+// Owned volume row on the book-series page. Cover artwork:
+// IMAGE_TYPE_POSTER_THUMBNAIL + title_id.
+message BookSeriesVolume {
+  int64 title_id = 1;
+  string title_name = 2;
+  // Volume number; raw string because half/decimal numbers are
+  // common ("3.5", "0.5").
+  optional string series_number = 3;
+  optional int32 first_publication_year = 4;
+  // Always true today — the missing case is in [BookSeriesMissingVolume].
+  bool owned = 5;
+}
+
+// Un-owned volume from the author's Open Library bibliography.
+// Cover artwork: IMAGE_TYPE_OPENLIBRARY_COVER + ol_work_id.
+message BookSeriesMissingVolume {
+  string ol_work_id = 1;
+  string title = 2;
+  optional string series_number = 3;
+  optional int32 year = 4;
+  // True when the user already has this volume on their book wishlist.
+  bool already_wished = 5;
+}
+
+// ============================================================================
+// List items (for collection/tag list endpoints)
+// ============================================================================
+
+message CollectionListItem {
+  int32 tmdb_collection_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  // Owned titles in this collection (always > 0 — empty collections
+  // are filtered out). Drives the left half of the "X / Y" badge.
+  int32 title_count = 4;
+  // Total parts the collection has on TMDB, including parts the user
+  // doesn't own. Right half of the "X / Y" badge. Falls back to
+  // title_count when TMDB hasn't enumerated the parts yet.
+  int32 total_parts = 5;
+}
+
+message TagListItem {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+  int32 title_count = 4;
+}
+
+// ============================================================================
+// Home feed
+// ============================================================================
+
+message Carousel {
+  string name = 1;
+  repeated Title items = 2;
+}
+
+// Track-level resume entry for the home page's "Resume Listening"
+// carousel. Distinct from Title.resume_position because audio
+// playback resumes inside a specific track, not at a title-level
+// timestamp. Cover image: ImageService with IMAGE_TYPE_TITLE_POSTER
+// + title_id (the parent album).
+message ResumeTrack {
+  int64 track_id = 1;
+  string track_name = 2;
+  int64 title_id = 3;
+  string title_name = 4;
+  optional string artist_name = 5;
+  optional string poster_url = 6;
+  PlaybackOffset position = 7;
+  optional PlaybackOffset duration = 8;
+  // Fraction of the track that has been played, 0..1. Server precomputes
+  // so the home page renders without doing the division client-side.
+  double percent = 9;
+  optional Timestamp updated_at = 10;
+}
+
+// Book-edition reading-progress entry for "Resume Reading". Distinct
+// from MissingSeason / Title because reading progress lives on a
+// specific edition (`media_item_id`) rather than the abstract title.
+message ResumeReading {
+  int64 media_item_id = 1;
+  int64 title_id = 2;
+  string title_name = 3;
+  optional string poster_url = 4;
+  MediaFormat media_format = 5;
+  // 0..1 fraction read.
+  double percent = 6;
+  optional Timestamp updated_at = 7;
+}
+
+message MissingSeason {
+  int64 title_id = 1;
+  string title_name = 2;
+  optional string poster_url = 3;
+  optional int32 tmdb_id = 4;
+  MediaType media_type = 5;
+  repeated MissingSeasonEntry seasons = 6;
+}
+
+message MissingSeasonEntry {
+  int32 season_number = 1;
+  optional string name = 2;
+  optional int32 episode_count = 3;
+}
+
+// ============================================================================
+// Audio / Books
+// ============================================================================
+//
+// All images referenced from this section are fetched via ImageService
+// using the identifiers on these messages. No URLs cross the gRPC wire.
+
+message Artist {
+  int64 id = 1;
+  string name = 2;
+  optional string sort_name = 3;
+  ArtistType artist_type = 4;
+  optional string musicbrainz_artist_id = 5;
+  optional int32 begin_year = 6;
+  optional int32 end_year = 7;
+  // Headshot: ImageService with IMAGE_TYPE_ARTIST_HEADSHOT + id.
+  // True when the server can serve a headshot for this artist;
+  // when false the client renders a placeholder rather than an
+  // `<img>` that would briefly show a broken-image indicator.
+  bool has_headshot = 10;
+
+  // Full begin / end dates when MusicBrainz has them. begin_year /
+  // end_year stay populated with just the year part for clients that
+  // only need carousel-card granularity.
+  optional CalendarDate begin_date = 8;
+  optional CalendarDate end_date = 9;
+}
+
+message ArtistDetail {
+  Artist artist = 1;
+  optional string biography = 2;
+  repeated Title owned_albums = 3;
+  repeated DiscographyEntry other_works = 4;
+  repeated ArtistMemberEntry members = 5;    // populated when artist_type = GROUP
+  repeated ArtistMemberEntry member_of = 6;  // populated when artist_type = PERSON
+}
+
+message DiscographyEntry {
+  // Use with IMAGE_TYPE_CAA_RELEASE_GROUP via ImageService.
+  string musicbrainz_release_group_id = 1;
+  string name = 2;
+  optional int32 year = 3;
+  ReleaseGroupType release_group_type = 4;
+  // True for "Greatest Hits" / "Best Of" — the SPA renders these
+  // dimmed under a separate header so they don't crowd out the
+  // primary discography.
+  bool is_compilation = 5;
+  // MusicBrainz release-group secondary types (e.g. "Live",
+  // "Soundtrack"). Empty when the entry is a plain studio release.
+  repeated string secondary_types = 6;
+  // True when the user already has the release on their wish list —
+  // drives the heart icon's filled state without a second fetch.
+  bool already_wished = 7;
+}
+
+message ArtistMemberEntry {
+  int64 artist_id = 1;
+  string name = 2;
+  optional int32 begin_year = 3;
+  optional int32 end_year = 4;
+  // PERSON for a member of a band; GROUP / ORCHESTRA / CHOIR for a
+  // band a person belongs to. Drives the icon (person vs. group)
+  // next to each membership row.
+  ArtistType artist_type = 5;
+  // Free-text instruments / role attribution from MusicBrainz.
+  // Empty for vocal-only members or when MB has no relationship
+  // attribute.
+  optional string instruments = 6;
+  // Full begin / end dates when MusicBrainz has them. begin_year /
+  // end_year above stay populated with the year only.
+  optional CalendarDate begin_date = 7;
+  optional CalendarDate end_date = 8;
+}
+
+message Track {
+  int64 id = 1;
+  int64 title_id = 2;                        // parent album
+  int32 track_number = 3;
+  int32 disc_number = 4;
+  string name = 5;
+  optional PlaybackOffset duration = 6;
+  optional string musicbrainz_recording_id = 7;
+  bool playable = 8;                         // audio file present on NAS
+  repeated string track_artist_names = 9;    // when different from album credit
+  // V089 — extracted from the file's ID3/Vorbis tags when ingested.
+  // BPM is the raw number (useful for ballroom "bpm ∈ [78,96]"
+  // queries); time_signature is the raw "3/4" / "4/4" string (null
+  // for files whose tagger didn't write it — rare).
+  optional int32 bpm = 10;
+  optional string time_signature = 11;
+  // Per-track artist credits with id, so the web track row can
+  // routerLink to /artist/:id. Mirrors track_artist_names but carries
+  // the join target instead of just a label.
+  repeated TrackArtistRef track_artists = 12;
+  // Per-track tags (BPM bucket, dance style, etc.). Filtered to those
+  // that don't already appear on the parent album to avoid noise.
+  repeated Tag tags = 13;
+  // Parent album's display name. Populated when the track is
+  // surfaced standalone (e.g. tag-detail's tagged-tracks list);
+  // omitted on Track lists that ship alongside the Album / Title
+  // they belong to, where the parent name is already addressable.
+  optional string title_name = 14;
+  // Parent album's primary-artist credit. Same surfacing rule as
+  // title_name — populated when the track is standalone (library
+  // shuffle, tag-detail, smart playlists), omitted when the track
+  // ships inside an Album that already carries its artists list.
+  // The mini-player and Now Playing surfaces use this when a
+  // track has no per-track credit (track_artist_names empty),
+  // which is the common case for non-compilation albums.
+  optional string title_artist_name = 15;
+}
+
+message TrackArtistRef {
+  int64 id = 1;
+  string name = 2;
+}
+
+message Album {
+  Title title = 1;
+  repeated Artist album_artists = 2;
+  repeated Track tracks = 3;
+  optional int32 track_count = 4;
+  optional PlaybackOffset total_duration = 5;
+  optional string label = 6;
+  optional string musicbrainz_release_group_id = 7;
+  optional string musicbrainz_release_id = 8;
+  // MusicBrainz personnel credits (performers, producers, engineers, …).
+  // Empty when MusicBrainz has nothing for this release group.
+  repeated AlbumPersonnelEntry personnel = 9;
+}
+
+// One credit row in the album personnel section. Multiple entries per
+// artist are normal — same person can appear under several roles or
+// per-track credits.
+message AlbumPersonnelEntry {
+  int64 artist_id = 1;
+  string artist_name = 2;
+  PersonnelRole role = 3;
+  // E.g. "trumpet", "piano". Optional — many roles don't take one.
+  optional string instrument = 4;
+  // When set, the credit is for one specific track rather than the
+  // album as a whole.
+  optional int64 track_id = 5;
+  optional string track_name = 6;
+}
+
+enum PersonnelRole {
+  PERSONNEL_ROLE_UNKNOWN = 0;
+  PERSONNEL_ROLE_PERFORMER = 1;
+  PERSONNEL_ROLE_COMPOSER = 2;
+  PERSONNEL_ROLE_PRODUCER = 3;
+  PERSONNEL_ROLE_ENGINEER = 4;
+  PERSONNEL_ROLE_MIXER = 5;
+  PERSONNEL_ROLE_OTHER = 6;
+}
+
+message Author {
+  int64 id = 1;
+  string name = 2;
+  optional string biography = 3;
+  optional string openlibrary_id = 4;
+  optional string wikidata_id = 5;
+  optional int32 birth_year = 6;
+  optional int32 death_year = 7;
+  // Headshot: ImageService with IMAGE_TYPE_AUTHOR_HEADSHOT + id.
+  // True when the server can serve a headshot for this author from
+  // any source (cached Wikimedia, OpenLibrary fallback). When false
+  // the client renders a placeholder rather than an `<img>` that
+  // would briefly show a broken-image indicator.
+  bool has_headshot = 10;
+
+  // Admin-controlled hide flag. Mirrors Author.hidden — set when an
+  // admin has hidden this author from the default authors grid.
+  // Surfaced on getAuthorDetail so the admin "Hide/Unhide" button
+  // can pick the right label.
+  bool hidden = 11;
+
+  // Full birth / death dates when known. birth_year / death_year
+  // above stay populated with just the year for clients that only
+  // need carousel-card granularity.
+  optional CalendarDate birth_date = 8;
+  optional CalendarDate death_date = 9;
+}
+
+message AuthorDetail {
+  Author author = 1;
+  repeated Title owned_books = 2;
+  repeated BibliographyEntry other_works = 3;
+}
+
+message BibliographyEntry {
+  // Use with IMAGE_TYPE_OPENLIBRARY_COVER via ImageService.
+  string openlibrary_work_id = 1;
+  string name = 2;
+  optional int32 year = 3;
+  // Raw series text from OpenLibrary (free-form, e.g. "Foundation (1)").
+  // SPA renders verbatim under the title row when present.
+  optional string series_raw = 4;
+  // True when the user already has the work on their wish list — drives
+  // the heart icon's filled state without a second fetch.
+  bool already_wished = 5;
+}
+
+message BookDetail {
+  repeated Author authors = 1;
+  repeated BookEdition editions = 2;
+  optional ReadingProgress reading_progress = 3;
+  // Series link for multi-book series (Dune, Foundation, …).
+  optional BookSeriesRef book_series = 4;
+  optional int32 page_count = 5;
+  optional int32 first_publication_year = 6;
+  // OpenLibrary work id (the abstract work, not a specific edition).
+  // Use with IMAGE_TYPE_OPENLIBRARY_COVER via ImageService for cover art.
+  optional string open_library_work_id = 7;
+}
+
+// Reference to a book_series row. `number` is the volume number within
+// the series for THIS title — kept as a string because some series use
+// "1.5" / "2a" / etc.
+message BookSeriesRef {
+  int64 id = 1;
+  string name = 2;
+  optional string number = 3;
+}
+
+message BookEdition {
+  int64 media_item_id = 1;
+  BookEditionFormat edition_format = 2;
+  optional int64 file_size_bytes = 3;
+  optional string storage_location = 4;      // physical shelf (non-digital only)
+  bool downloadable = 5;                     // true for digital editions
+}
+
+// Progress on a music track or digital audiobook.
+message ListeningProgress {
+  optional int64 track_id = 1;               // set when listening to a music track
+  optional int64 media_item_id = 2;          // set when listening to an audiobook
+  PlaybackOffset position = 3;
+  optional PlaybackOffset duration = 4;
+  optional Timestamp updated_at = 5;
+}
+
+// Progress within an ebook. Locator is an EPUB CFI or "/page/N" for PDF.
+message ReadingProgress {
+  int64 media_item_id = 1;
+  string locator = 2;
+  optional double fraction = 3;              // 0.0–1.0, dimensionless
+  optional Timestamp updated_at = 4;          // server wall-clock of last write
+  // Client wall-clock that produced this row — used by clients to
+  // compare a locally-queued offline write against what the server
+  // already knows, so the newer one wins regardless of which side
+  // got there first.
+  optional Timestamp client_recorded_at = 5;
+}

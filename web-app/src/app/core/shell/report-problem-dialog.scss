@@ -1,0 +1,100 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90vw;
+  max-width: 420px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  h3 { margin: 0; font-size: 1rem; }
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
+}
+
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.field-label {
+  // opacity: 0.6 dragged the label color to ~4.19:1 against the
+  // light-mode dialog background, below WCAG AA. Use the
+  // on-surface-variant token at full opacity instead — Material
+  // tunes those to clear AA in both modes.
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+  margin-top: 0.25rem;
+}
+
+.context-display {
+  font-size: 0.875rem;
+  padding: 6px 0;
+}
+
+.context-meta {
+  // Same opacity-vs-AA problem as .field-label.
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.field-input {
+  width: 100%;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  color: inherit;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  resize: vertical;
+  &:focus { border-color: var(--mat-sys-primary); }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.done-message {
+  text-align: center;
+  padding: 1rem 0;
+
+  p { margin: 0.75rem 0 1rem; font-size: 0.9375rem; }
+}
+
+.done-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #4caf50;
+}

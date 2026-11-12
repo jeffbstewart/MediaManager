@@ -1,0 +1,1 @@
+ALTER TABLE transcode ADD COLUMN for_mobile_available BOOLEAN NOT NULL DEFAULT FALSE;

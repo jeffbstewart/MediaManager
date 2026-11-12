@@ -1,0 +1,21 @@
+{
+  "tuners": [
+    {
+      "id": 1, "name": "HDHomeRun-Living-Room",
+      "device_id": "FFFFFFFF", "ip_address": "203.0.113.50",
+      "model_number": "HDHR4-2US", "tuner_count": 2,
+      "firmware_version": "20231024", "enabled": true
+    }
+  ],
+  "channels": [
+    { "id": 1, "tuner_id": 1, "guide_number": "5.1", "guide_name": "KNBC", "network_affiliation": "NBC", "reception_quality": 95, "enabled": true },
+    { "id": 2, "tuner_id": 1, "guide_number": "7.1", "guide_name": "KABC", "network_affiliation": "ABC", "reception_quality": 88, "enabled": true },
+    { "id": 3, "tuner_id": 1, "guide_number": "11.1", "guide_name": "KTTV", "network_affiliation": "FOX", "reception_quality": 60, "enabled": false }
+  ],
+  "active_streams": 1,
+  "settings": {
+    "live_tv_max_streams": 4,
+    "live_tv_idle_timeout_seconds": 300,
+    "live_tv_min_rating": 0
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "compliant": false,
+  "required_privacy_policy_version": 2,
+  "required_terms_of_use_version": 2,
+  "agreed_privacy_policy_version": 1,
+  "agreed_terms_of_use_version": 1,
+  "privacy_policy_url": "https://example.com/privacy",
+  "terms_of_use_url": "https://example.com/terms"
+}

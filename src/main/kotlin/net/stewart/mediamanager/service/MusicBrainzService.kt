@@ -1,0 +1,812 @@
+package net.stewart.mediamanager.service
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.slf4j.LoggerFactory
+import java.net.URI
+import java.net.URLEncoder
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.LocalDate
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+
+/**
+ * Client for [MusicBrainz](https://musicbrainz.org/) — the open, API-key-free
+ * metadata source for music.
+ *
+ * MB asks for one request per second with a descriptive `User-Agent`. The
+ * [RateLimiter] inside this class enforces the gap via a [ReentrantLock] so
+ * no call path bursts through. Every service instance shares the same limiter
+ * because MB rate-limits at the IP level, not per-connection.
+ */
+
+/** One credited artist on a release. */
+data class MusicBrainzArtistCredit(
+    /** MB artist ID (UUID). */
+    val musicBrainzArtistId: String,
+    /** Display name as MB carries it. May differ from `sort_name`. */
+    val name: String,
+    /** MB artist type (`Person`, `Group`, `Orchestra`, `Choir`, `Other`). Nullable for legacy records. */
+    val type: String?,
+    /** Sort form ("Beatles, The"). Fallback to `name` when MB doesn't supply one. */
+    val sortName: String
+)
+
+/** One track on a MB release. */
+data class MusicBrainzTrack(
+    val musicBrainzRecordingId: String,
+    val trackNumber: Int,
+    val discNumber: Int,
+    val name: String,
+    val durationSeconds: Int?,
+    /** When the track's performer differs from the album-level credit (compilation shape). Empty otherwise. */
+    val trackArtistCredits: List<MusicBrainzArtistCredit>
+)
+
+/** The full result of looking up a release by barcode or MBID. */
+data class MusicBrainzReleaseLookup(
+    /** Specific pressing MBID. */
+    val musicBrainzReleaseId: String,
+    /** Release-group MBID — the "work across pressings" key we dedup on. */
+    val musicBrainzReleaseGroupId: String,
+    /** Album title. */
+    val title: String,
+    /** Album-level artist credit(s) in display order. */
+    val albumArtistCredits: List<MusicBrainzArtistCredit>,
+    /** Release year if MB has one. */
+    val releaseYear: Int?,
+    /** Label name (if MB carries it; often null for very old releases). */
+    val label: String?,
+    /** Barcode from the release, if populated on the MB record. */
+    val barcode: String?,
+    /** Tracks in disc/track order. */
+    val tracks: List<MusicBrainzTrack>,
+    /** Total duration in seconds, sum of track durations (skipping nulls). */
+    val totalDurationSeconds: Int?,
+    /** Raw JSON body for audit storage (pairs with `media_item.upc_lookup_json`). */
+    val rawJson: String
+)
+
+sealed class MusicBrainzResult {
+    data class Success(val release: MusicBrainzReleaseLookup) : MusicBrainzResult()
+    data object NotFound : MusicBrainzResult()
+    data class Error(val message: String, val rateLimited: Boolean = false) : MusicBrainzResult()
+}
+
+/**
+ * One personnel credit on a single track. [role] maps onto
+ * [net.stewart.mediamanager.entity.CreditRole]; [instrument] carries the
+ * raw MB instrument string when the role is PERFORMER (e.g. "drums",
+ * "lead vocals", "Fender Rhodes") and is null for COMPOSER / PRODUCER etc.
+ */
+data class MusicBrainzRecordingCredit(
+    val musicBrainzRecordingId: String,
+    val creditArtist: MusicBrainzArtistCredit,
+    val role: String,
+    val instrument: String?
+)
+
+/**
+ * One band-lineup relationship with optional tenure. [groupMbid] is the
+ * band / orchestra; [memberMbid] is the person. Both sides always present
+ * — the caller decides which one to render as the link.
+ */
+data class MusicBrainzMembership(
+    val groupMbid: String,
+    val groupName: String,
+    val memberMbid: String,
+    val memberName: String,
+    val memberSortName: String,
+    val beginDate: String?,
+    val endDate: String?,
+    /** Freeform list MB returns, e.g. ["vocals", "guitar"]. Empty when not specified. */
+    val instruments: List<String>
+)
+
+/**
+ * One release-group from an artist's discography (`/ws/2/release-group`).
+ * Used to populate ArtistScreen's "Other Works" panel. No tracklist yet —
+ * the user clicks through to wishlist, so we don't need per-track detail
+ * on the artist page.
+ */
+data class ArtistReleaseGroupRef(
+    val musicBrainzReleaseGroupId: String,
+    val title: String,
+    /** "Album", "EP", "Single", ... from MB's `primary-type`. */
+    val primaryType: String?,
+    /**
+     * Secondary types like "Compilation" / "Live" / "Soundtrack". Drives the
+     * compilation-aware display rule on Wishlist rendering (docs/MUSIC.md Q9).
+     */
+    val secondaryTypes: List<String>,
+    val firstReleaseYear: Int?,
+    /**
+     * One representative release MBID for Cover Art Archive lookups. MB's
+     * release-group endpoint doesn't return the releases themselves, so
+     * this is null at the listing step — the wishlist-add flow resolves it
+     * lazily when the user clicks the heart.
+     */
+    val representativeReleaseId: String?
+) {
+    val isCompilation: Boolean get() = secondaryTypes.any { it.equals("Compilation", ignoreCase = true) }
+}
+
+interface MusicBrainzService {
+    /**
+     * Looks up a release by its EAN-13 / UPC barcode. Returns the first
+     * match when MB has more than one (shared barcodes across pressings are
+     * rare but possible).
+     */
+    fun lookupByBarcode(barcode: String): MusicBrainzResult
+
+    /** Looks up a specific release by MBID. Used when the caller already has an ID. */
+    fun lookupByReleaseMbid(releaseMbid: String): MusicBrainzResult
+
+    /**
+     * Returns up to [limit] release-groups from an artist's discography,
+     * filtered to type=Album (primary type) so EPs / singles / compilation
+     * appearances don't dominate the Other Works grid. Secondary types
+     * still carry through so the caller can distinguish compilations.
+     * Empty list on error — callers treat "no discography" and "fetch
+     * failed" the same way for UI.
+     */
+    fun listArtistReleaseGroups(artistMbid: String, limit: Int = 100): List<ArtistReleaseGroupRef>
+
+    /**
+     * Per-track personnel credits for every recording on a release. Fetches
+     * `/ws/2/release/{mbid}?inc=recordings+artist-credits+artist-rels+recording-rels`
+     * and flattens the `relations` arrays inside each track's recording into
+     * typed [MusicBrainzRecordingCredit] rows. Empty list when MB has no
+     * relations for the release (common for older, less-documented records)
+     * or when the fetch fails.
+     */
+    fun listReleaseRecordingCredits(releaseMbid: String): List<MusicBrainzRecordingCredit>
+
+    /**
+     * Band-lineup relationships on an artist, from
+     * `/ws/2/artist/{mbid}?inc=artist-rels`. For a GROUP artist, returns
+     * the members; for a PERSON, returns the bands they're in. Same result
+     * shape; caller decides which direction to render.
+     */
+    fun listArtistMemberships(artistMbid: String): List<MusicBrainzMembership>
+
+    /**
+     * Search releases by label catalog number (optionally constrained by
+     * label name), used as a fallback match key when MBIDs aren't in the
+     * tags. Returns candidate release MBIDs in MB's own relevance order,
+     * capped. Empty list on miss or error.
+     */
+    fun searchByCatalogNumber(catalogNumber: String, label: String? = null): List<String>
+
+    /**
+     * Search recordings by ISRC, returning the MBIDs of releases those
+     * recordings appear on. ISRC uniquely identifies a recording, so the
+     * release list is small and the top hit is almost always the right
+     * pressing. Empty list on miss or error.
+     */
+    fun searchByIsrc(isrc: String): List<String>
+
+    /**
+     * Fuzzy search of releases by album-artist + album title. Lucene-style
+     * query (`artist:"..." AND release:"..."`); returns candidate release
+     * MBIDs in MB's relevance order, capped. Lowest-confidence tier —
+     * callers should verify the first hit before auto-linking.
+     */
+    fun searchReleaseByArtistAndAlbum(albumArtist: String, album: String): List<String>
+
+    companion object {
+        /** Path the image proxy exposes for a release's cover art. */
+        fun coverUrlByReleaseMbid(releaseMbid: String, size: CoverSize = CoverSize.M): String =
+            "/proxy/caa/release/$releaseMbid/${size.pathSegment}"
+    }
+
+    enum class CoverSize(val pathSegment: String) {
+        S("front-250"), M("front-500"), L("front-1200")
+    }
+}
+
+class MusicBrainzHttpService : MusicBrainzService {
+
+    private val log = LoggerFactory.getLogger(MusicBrainzHttpService::class.java)
+    private val mapper = ObjectMapper()
+    private val httpClient: HttpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(10))
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build()
+
+    override fun lookupByBarcode(barcode: String): MusicBrainzResult {
+        val cleaned = barcode.trim()
+        if (!cleaned.matches(BARCODE_RE)) {
+            return MusicBrainzResult.Error("Barcode format invalid: $barcode")
+        }
+
+        val url = "$BASE/release/?query=barcode:$cleaned&fmt=json"
+        val body = try {
+            fetch(url) ?: return MusicBrainzResult.NotFound
+        } catch (e: RateLimitedException) {
+            return MusicBrainzResult.Error("rate limited", rateLimited = true)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz barcode fetch failed for {}: {}", cleaned, e.message)
+            return MusicBrainzResult.Error("fetch failed: ${e.message}")
+        }
+
+        val releaseMbid = try {
+            pickFirstReleaseMbid(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz barcode parse failed for {}: {}", cleaned, e.message)
+            return MusicBrainzResult.Error("parse failed: ${e.message}")
+        } ?: return MusicBrainzResult.NotFound
+
+        return lookupByReleaseMbid(releaseMbid)
+    }
+
+    override fun lookupByReleaseMbid(releaseMbid: String): MusicBrainzResult {
+        if (!releaseMbid.matches(MBID_RE)) {
+            return MusicBrainzResult.Error("MBID format invalid: $releaseMbid")
+        }
+        // `inc=recordings+artists+labels+release-groups+artist-credits` pulls
+        // the tracklist, the album-level and per-track artist credits, the
+        // label, and the release-group pointer in a single round trip.
+        val url = "$BASE/release/$releaseMbid?inc=recordings+artists+labels+release-groups+artist-credits&fmt=json"
+        val body = try {
+            fetch(url) ?: return MusicBrainzResult.NotFound
+        } catch (e: RateLimitedException) {
+            return MusicBrainzResult.Error("rate limited", rateLimited = true)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz release fetch failed for {}: {}", releaseMbid, e.message)
+            return MusicBrainzResult.Error("fetch failed: ${e.message}")
+        }
+
+        return try {
+            parseRelease(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz release parse failed for {}: {}", releaseMbid, e.message)
+            MusicBrainzResult.Error("parse failed: ${e.message}")
+        }
+    }
+
+    override fun listArtistReleaseGroups(artistMbid: String, limit: Int): List<ArtistReleaseGroupRef> {
+        if (!MBID_RE.matches(artistMbid)) return emptyList()
+        val url = "$BASE/release-group?artist=$artistMbid&type=album&limit=$limit&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited listing release-groups for artist {}", artistMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz list-release-groups failed for {}: {}", artistMbid, e.message)
+            return emptyList()
+        }
+
+        return try {
+            parseArtistReleaseGroups(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz release-group parse failed for {}: {}", artistMbid, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseArtistReleaseGroups(body: String): List<ArtistReleaseGroupRef> {
+        val root = mapper.readTree(body)
+        val groups = root.path("release-groups")
+        if (!groups.isArray) return emptyList()
+        val out = mutableListOf<ArtistReleaseGroupRef>()
+        for (g in groups) {
+            val id = g.textOrNull("id") ?: continue
+            val title = g.textOrNull("title") ?: continue
+            val primary = g.textOrNull("primary-type")
+            val secondaryNode = g.path("secondary-types")
+            val secondary = if (secondaryNode.isArray) {
+                secondaryNode.mapNotNull { n -> n.takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() } }
+            } else emptyList()
+            val year = g.textOrNull("first-release-date")?.let { extractYear(it) }
+            out += ArtistReleaseGroupRef(
+                musicBrainzReleaseGroupId = id,
+                title = title,
+                primaryType = primary,
+                secondaryTypes = secondary,
+                firstReleaseYear = year,
+                representativeReleaseId = null
+            )
+        }
+        return out
+    }
+
+    override fun listReleaseRecordingCredits(releaseMbid: String): List<MusicBrainzRecordingCredit> {
+        if (!MBID_RE.matches(releaseMbid)) return emptyList()
+        // `inc=recordings+artist-credits+artist-rels+recording-rels` returns
+        // each track's recording with its personnel relations inline —
+        // one request per album instead of one per track.
+        val url = "$BASE/release/$releaseMbid?inc=recordings+artist-credits+artist-rels+recording-rels&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited fetching recording credits for release {}", releaseMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz recording-credits fetch failed for {}: {}", releaseMbid, e.message)
+            return emptyList()
+        }
+        return try {
+            parseRecordingCredits(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz recording-credits parse failed for {}: {}", releaseMbid, e.message)
+            emptyList()
+        }
+    }
+
+    override fun listArtistMemberships(artistMbid: String): List<MusicBrainzMembership> {
+        if (!MBID_RE.matches(artistMbid)) return emptyList()
+        val url = "$BASE/artist/$artistMbid?inc=artist-rels&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited fetching memberships for artist {}", artistMbid)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz membership fetch failed for {}: {}", artistMbid, e.message)
+            return emptyList()
+        }
+        return try {
+            parseArtistMemberships(body, artistMbid)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz membership parse failed for {}: {}", artistMbid, e.message)
+            emptyList()
+        }
+    }
+
+    override fun searchByCatalogNumber(catalogNumber: String, label: String?): List<String> {
+        val cat = catalogNumber.trim()
+        if (cat.isBlank()) return emptyList()
+        val query = buildString {
+            append("catno:\"").append(luceneEscape(cat)).append('"')
+            if (!label.isNullOrBlank()) {
+                append(" AND label:\"").append(luceneEscape(label.trim())).append('"')
+            }
+        }
+        val url = "$BASE/release/?query=${URLEncoder.encode(query, Charsets.UTF_8)}&limit=10&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on catalog-number search: {}", cat)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz catalog-number search failed for {}: {}", cat, e.message)
+            return emptyList()
+        }
+        return try {
+            parseReleaseMbidList(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz catalog-number parse failed for {}: {}", cat, e.message)
+            emptyList()
+        }
+    }
+
+    override fun searchByIsrc(isrc: String): List<String> {
+        val cleaned = isrc.trim().uppercase()
+        if (!cleaned.matches(ISRC_RE)) return emptyList()
+        val url = "$BASE/isrc/$cleaned?inc=releases&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on ISRC lookup: {}", cleaned)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz ISRC lookup failed for {}: {}", cleaned, e.message)
+            return emptyList()
+        }
+        return try {
+            val root = mapper.readTree(body)
+            val recordings = root.path("recordings")
+            if (!recordings.isArray) return emptyList()
+            val out = linkedSetOf<String>()
+            for (rec in recordings) {
+                val releases = rec.path("releases")
+                if (!releases.isArray) continue
+                for (rel in releases) {
+                    rel.textOrNull("id")?.let { out += it }
+                }
+            }
+            out.toList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz ISRC parse failed for {}: {}", cleaned, e.message)
+            emptyList()
+        }
+    }
+
+    override fun searchReleaseByArtistAndAlbum(albumArtist: String, album: String): List<String> {
+        val artist = albumArtist.trim()
+        val title = album.trim()
+        if (artist.isBlank() || title.isBlank()) return emptyList()
+        val query = "artist:\"${luceneEscape(artist)}\" AND release:\"${luceneEscape(title)}\""
+        val url = "$BASE/release/?query=${URLEncoder.encode(query, Charsets.UTF_8)}&limit=10&fmt=json"
+        val body = try {
+            fetch(url) ?: return emptyList()
+        } catch (e: RateLimitedException) {
+            log.warn("MusicBrainz rate limited on artist+album search: {} / {}", artist, title)
+            return emptyList()
+        } catch (e: Exception) {
+            log.warn("MusicBrainz artist+album search failed for {} / {}: {}", artist, title, e.message)
+            return emptyList()
+        }
+        return try {
+            parseReleaseMbidList(body)
+        } catch (e: Exception) {
+            log.warn("MusicBrainz artist+album parse failed for {} / {}: {}", artist, title, e.message)
+            emptyList()
+        }
+    }
+
+    internal fun parseReleaseMbidList(body: String): List<String> {
+        val root = mapper.readTree(body)
+        val releases = root.path("releases")
+        if (!releases.isArray) return emptyList()
+        return releases.mapNotNull { it.textOrNull("id") }
+    }
+
+    /**
+     * Escape the subset of Lucene special chars that MB's search backend
+     * treats specially inside quoted phrases. We quote the value, so only
+     * backslash and double-quote need escaping.
+     */
+    private fun luceneEscape(s: String): String =
+        s.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    internal fun parseRecordingCredits(body: String): List<MusicBrainzRecordingCredit> {
+        val root = mapper.readTree(body)
+        val out = mutableListOf<MusicBrainzRecordingCredit>()
+        val media = root.path("media")
+        if (!media.isArray) return out
+        for (medium in media) {
+            val tracks = medium.path("tracks")
+            if (!tracks.isArray) continue
+            for (t in tracks) {
+                val recording = t.path("recording")
+                val recordingId = recording.textOrNull("id") ?: continue
+                val relations = recording.path("relations")
+                if (!relations.isArray) continue
+                for (rel in relations) {
+                    val targetType = rel.textOrNull("target-type") ?: continue
+                    if (targetType != "artist") continue
+                    val artistNode = rel.path("artist")
+                    val artistMbid = artistNode.textOrNull("id") ?: continue
+                    val artistName = artistNode.textOrNull("name") ?: continue
+                    val sortName = artistNode.textOrNull("sort-name") ?: artistName
+                    val artistType = artistNode.textOrNull("type")
+                    val relType = rel.textOrNull("type").orEmpty()
+
+                    val (role, instrument) = mapMbRelation(relType, rel)
+                    if (role == null) continue
+
+                    out += MusicBrainzRecordingCredit(
+                        musicBrainzRecordingId = recordingId,
+                        creditArtist = MusicBrainzArtistCredit(
+                            musicBrainzArtistId = artistMbid,
+                            name = artistName,
+                            type = artistType,
+                            sortName = sortName
+                        ),
+                        role = role,
+                        instrument = instrument
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    internal fun parseArtistMemberships(body: String, selfMbid: String): List<MusicBrainzMembership> {
+        val root = mapper.readTree(body)
+        val selfName = root.textOrNull("name") ?: selfMbid
+        val selfSort = root.textOrNull("sort-name") ?: selfName
+        val selfType = root.textOrNull("type")
+        val relations = root.path("relations")
+        if (!relations.isArray) return emptyList()
+
+        val out = mutableListOf<MusicBrainzMembership>()
+        for (rel in relations) {
+            val relType = rel.textOrNull("type") ?: continue
+            if (relType != "member of band") continue
+            val direction = rel.textOrNull("direction")
+            val targetArtist = rel.path("artist")
+            val targetMbid = targetArtist.textOrNull("id") ?: continue
+            val targetName = targetArtist.textOrNull("name") ?: continue
+            val targetSort = targetArtist.textOrNull("sort-name") ?: targetName
+
+            // `direction = backward` means the relation target is the group
+            // and the queried artist is the member (i.e. the queried person
+            // was a member of that band). `forward` means the reverse —
+            // the queried group had the target as a member.
+            val (groupMbid, groupName, memberMbid, memberName, memberSort) =
+                if (direction == "backward") {
+                    MembershipTuple(targetMbid, targetName, selfMbid, selfName, selfSort)
+                } else {
+                    MembershipTuple(selfMbid, selfName, targetMbid, targetName, targetSort)
+                }
+
+            val begin = rel.textOrNull("begin")
+            val end = rel.textOrNull("end")
+            val attrs = rel.path("attributes")
+            val instruments = if (attrs.isArray) {
+                attrs.mapNotNull { n -> n.takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() } }
+            } else emptyList()
+
+            // Skip the weird case where MB relates a group to itself.
+            if (groupMbid == memberMbid) continue
+            // Skip when neither side is the queried artist (shouldn't happen,
+            // but defensive: we only want rows touching selfMbid).
+            if (selfMbid != groupMbid && selfMbid != memberMbid) continue
+            // Only keep rows with a plausible group + person pairing when
+            // the self-type tells us which side we are. MB relations are
+            // typed, so if we're a PERSON but direction says self=group,
+            // the data is wrong — drop.
+            out += MusicBrainzMembership(
+                groupMbid = groupMbid,
+                groupName = groupName,
+                memberMbid = memberMbid,
+                memberName = memberName,
+                memberSortName = memberSort,
+                beginDate = begin,
+                endDate = end,
+                instruments = instruments
+            )
+            // selfType is referenced here only to log-decide; quiet warn if ever needed.
+            if (selfType == "Person" && groupMbid == selfMbid) {
+                log.debug("MB gave a Person as a group on membership rel: self={} target={}",
+                    selfMbid, targetMbid)
+            }
+        }
+        return out
+    }
+
+    /**
+     * Map a MusicBrainz recording-rel type to a [net.stewart.mediamanager.entity.CreditRole]
+     * and optional instrument string.
+     *
+     * MB's taxonomy is rich — we project it into the six roles the UI
+     * renders. Unknown types return null, and the caller skips the row.
+     */
+    private fun mapMbRelation(
+        relType: String,
+        rel: com.fasterxml.jackson.databind.JsonNode
+    ): Pair<String?, String?> {
+        val lowered = relType.lowercase()
+        // Instrument / vocal performances carry the specific instrument in
+        // the `attributes` array; fall back to the relation type's friendly
+        // form if nothing's there.
+        val attrs = rel.path("attributes")
+        val firstAttr = if (attrs.isArray && !attrs.isEmpty) {
+            attrs.firstOrNull { it.isTextual }?.asText()?.takeIf { it.isNotBlank() }
+        } else null
+
+        return when {
+            lowered == "instrument" ||
+                lowered == "vocal" ||
+                lowered == "performer" ||
+                lowered == "performance" ->
+                "PERFORMER" to (firstAttr ?: relType)
+            lowered == "composer" || lowered == "lyricist" || lowered == "writer" ->
+                "COMPOSER" to null
+            lowered == "producer" || lowered == "executive producer" ->
+                "PRODUCER" to null
+            lowered == "recording" || lowered == "engineer" ||
+                lowered == "mastering" || lowered == "sound" ->
+                "ENGINEER" to null
+            lowered == "mix" || lowered == "mix-dj" ->
+                "MIXER" to null
+            else -> null to null
+        }
+    }
+
+    /** Tiny tuple for destructuring memberships; inner data class keeps Kotlin happy. */
+    private data class MembershipTuple(
+        val groupMbid: String,
+        val groupName: String,
+        val memberMbid: String,
+        val memberName: String,
+        val memberSortName: String
+    )
+
+    internal fun pickFirstReleaseMbid(body: String): String? {
+        val root = mapper.readTree(body)
+        val releases = root.path("releases")
+        if (!releases.isArray || releases.isEmpty) return null
+        // When multiple releases share a barcode we pick the first; the user
+        // can correct via manual re-link later if the wrong pressing sticks.
+        return releases[0].path("id").takeIf { it.isTextual }?.asText()
+    }
+
+    internal fun parseRelease(body: String): MusicBrainzResult {
+        val root = mapper.readTree(body)
+        val releaseId = root.textOrNull("id")
+            ?: return MusicBrainzResult.Error("release missing id")
+        val releaseGroupId = root.path("release-group").textOrNull("id")
+            ?: return MusicBrainzResult.Error("release missing release-group id")
+
+        val title = root.textOrNull("title") ?: "Untitled"
+        val albumArtists = parseArtistCredits(root.path("artist-credit"))
+        val releaseYear = root.textOrNull("date")?.let { extractYear(it) }
+        val label = root.path("label-info").firstOrNull()?.path("label")?.textOrNull("name")
+        val barcode = root.textOrNull("barcode")
+
+        val tracks = mutableListOf<MusicBrainzTrack>()
+        val media = root.path("media")
+        if (media.isArray) {
+            for ((discIndex, medium) in media.withIndex()) {
+                val discNumber = medium.get("position")?.takeIf { it.isInt }?.asInt() ?: (discIndex + 1)
+                val tracksJson = medium.path("tracks")
+                if (!tracksJson.isArray) continue
+                for (t in tracksJson) {
+                    val recording = t.path("recording")
+                    val recordingId = recording.textOrNull("id") ?: continue
+                    val trackNum = t.get("position")?.takeIf { it.isInt }?.asInt()
+                        ?: t.get("number")?.takeIf { it.isTextual }?.asText()?.toIntOrNull()
+                        ?: continue
+                    val name = t.textOrNull("title") ?: recording.textOrNull("title") ?: "Untitled Track"
+                    val durationMs = t.get("length")?.takeIf { it.isInt || it.isLong }?.asLong()
+                        ?: recording.get("length")?.takeIf { it.isInt || it.isLong }?.asLong()
+                    val durationSec = durationMs?.let { (it / 1000).toInt() }
+
+                    val titleCreditFingerprint = creditFingerprint(albumArtists)
+                    val trackCredits = parseArtistCredits(t.path("artist-credit"))
+                    val trackArtistCredits = if (creditFingerprint(trackCredits) == titleCreditFingerprint) {
+                        // Same as album-level — don't carry a redundant per-track credit.
+                        emptyList()
+                    } else trackCredits
+
+                    tracks += MusicBrainzTrack(
+                        musicBrainzRecordingId = recordingId,
+                        trackNumber = trackNum,
+                        discNumber = discNumber,
+                        name = name,
+                        durationSeconds = durationSec,
+                        trackArtistCredits = trackArtistCredits
+                    )
+                }
+            }
+        }
+
+        val totalDuration = tracks.mapNotNull { it.durationSeconds }.sum().takeIf { it > 0 }
+
+        return MusicBrainzResult.Success(MusicBrainzReleaseLookup(
+            musicBrainzReleaseId = releaseId,
+            musicBrainzReleaseGroupId = releaseGroupId,
+            title = title,
+            albumArtistCredits = albumArtists,
+            releaseYear = releaseYear,
+            label = label,
+            barcode = barcode,
+            tracks = tracks,
+            totalDurationSeconds = totalDuration,
+            rawJson = body
+        ))
+    }
+
+    private fun parseArtistCredits(node: JsonNode): List<MusicBrainzArtistCredit> {
+        if (!node.isArray) return emptyList()
+        val out = mutableListOf<MusicBrainzArtistCredit>()
+        for (entry in node) {
+            val artist = entry.path("artist")
+            val mbid = artist.textOrNull("id") ?: continue
+            val name = entry.textOrNull("name") ?: artist.textOrNull("name") ?: continue
+            val sortName = artist.textOrNull("sort-name") ?: name
+            val type = artist.textOrNull("type")
+            out += MusicBrainzArtistCredit(
+                musicBrainzArtistId = mbid,
+                name = name,
+                type = type,
+                sortName = sortName
+            )
+        }
+        return out
+    }
+
+    /** Stable representation of an ordered credit list for equality checks. */
+    private fun creditFingerprint(credits: List<MusicBrainzArtistCredit>): String =
+        credits.joinToString("|") { it.musicBrainzArtistId }
+
+    private fun fetch(url: String): String? {
+        RATE_LIMITER.awaitSlot()
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofSeconds(15))
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .GET()
+            .build()
+        val response: HttpResponse<String> =
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        return when (response.statusCode()) {
+            200 -> response.body()
+            404 -> null
+            429, 503 -> {
+                // MB pushed back. Penalise the shared limiter so the next
+                // caller (possibly another agent on another thread) sees
+                // a real pause before attempting again, instead of
+                // hammering right at the 1-per-second boundary.
+                RATE_LIMITER.penalise(RATE_LIMIT_BACKOFF_MILLIS)
+                throw RateLimitedException()
+            }
+            else -> throw RuntimeException("HTTP ${response.statusCode()} from $url")
+        }
+    }
+
+    /**
+     * Single-slot gate that guarantees at least [minGapMillis] between
+     * consecutive fetches, regardless of which thread calls. Blocking.
+     */
+    private class RateLimiter(private val minGapMillis: Long) {
+        private val lock = ReentrantLock()
+        private var lastCall: Long = 0
+
+        fun awaitSlot() = lock.withLock {
+            val now = System.currentTimeMillis()
+            val elapsed = now - lastCall
+            if (elapsed < minGapMillis) {
+                Thread.sleep(minGapMillis - elapsed)
+            }
+            lastCall = System.currentTimeMillis()
+        }
+
+        /**
+         * Mark a 429 / 503 rate-limit refusal — pushes the next-allowed
+         * timestamp forward so everyone contending for the limiter gets
+         * a real pause. Called from [fetch] when MB pushes back.
+         */
+        fun penalise(backoffMillis: Long) = lock.withLock {
+            lastCall = maxOf(lastCall, System.currentTimeMillis()) + backoffMillis - minGapMillis
+        }
+    }
+
+    companion object {
+        private const val BASE = "https://musicbrainz.org/ws/2"
+        private const val USER_AGENT =
+            "MediaManager/1.0 (+https://github.com/jeffbstewart/MediaManager)"
+        /**
+         * MB asks for ≤1 req/sec at the IP level; 1300 ms leaves headroom
+         * for clock skew between our wall clock and whatever MB measures
+         * inbound with. Observed behaviour with 1100 ms was 429 bursts
+         * when multiple agents (scanner + recommendations + personnel
+         * enrichment) fired concurrently.
+         */
+        private const val MIN_GAP_MILLIS = 1300L
+        /** Extra sleep injected after a 429 / 503 before the next attempt. */
+        private const val RATE_LIMIT_BACKOFF_MILLIS = 5_000L
+        /**
+         * Process-wide rate limiter. Every [MusicBrainzHttpService]
+         * instance shares this because MB rate-limits at the IP level,
+         * not per connection — six service instances each with their
+         * own lock is what gave us the observed 429 storm.
+         */
+        private val RATE_LIMITER = RateLimiter(MIN_GAP_MILLIS)
+        private val MBID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private val BARCODE_RE = Regex("^\\d{8,14}$")
+        /** ISRC: 2-letter country, 3-char registrant, 2-digit year, 5-digit designation. */
+        private val ISRC_RE = Regex("^[A-Z]{2}[A-Z0-9]{3}\\d{2}\\d{5}$")
+    }
+
+    private class RateLimitedException : RuntimeException("rate limited")
+}
+
+// ---- Helpers, shared with tests ----
+//
+// textOrNull and extractYear are already provided by OpenLibraryService.kt
+// at the same package scope — reused here to avoid duplication.
+
+/** Convert an MB release date (YYYY / YYYY-MM / YYYY-MM-DD) to LocalDate where possible. */
+internal fun parseMbDate(raw: String?): LocalDate? {
+    if (raw.isNullOrBlank()) return null
+    return try {
+        when {
+            raw.matches(Regex("^\\d{4}$")) -> LocalDate.of(raw.toInt(), 1, 1)
+            raw.matches(Regex("^\\d{4}-\\d{2}$")) -> LocalDate.parse("$raw-01")
+            raw.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) -> LocalDate.parse(raw)
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}

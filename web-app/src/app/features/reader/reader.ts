@@ -1,0 +1,264 @@
+import {
+  Component, inject, signal, OnInit, OnDestroy, ChangeDetectionStrategy,
+  ElementRef, viewChild,
+} from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatButtonModule } from '@angular/material/button';
+import { CatalogService } from '../../core/catalog.service';
+import { AppRoutes } from '../../core/routes';
+
+/**
+ * Minimal epub.js surface used by the reader. The full API is large — only the
+ * bits we touch are typed here.
+ */
+interface EpubJsThemes {
+  fontSize(size: string): void;
+  /** Register a named theme; rules are a CSS-rule-tree (selector → declarations). */
+  register(name: string, rules: Record<string, Record<string, string>>): void;
+  /** Activate a previously-registered theme. */
+  select(name: string): void;
+}
+interface EpubJsRendition {
+  display(target?: string): Promise<unknown>;
+  on(event: 'relocated', handler: (loc: EpubJsLocation) => void): void;
+  themes: EpubJsThemes;
+  next(): void;
+  prev(): void;
+  destroy(): void;
+}
+interface EpubJsLocation {
+  start: { cfi: string; percentage: number };
+  end: { cfi: string; percentage: number };
+}
+interface EpubJsLocations {
+  /**
+   * Build the locations index. Until this resolves, `loc.start.percentage`
+   * on relocated events is always 0 — without an index, epub.js has no
+   * way to convert a CFI to a fraction of the book.
+   *
+   * The argument is the target characters-per-page; 1024 is epub.js's
+   * documented default.
+   */
+  generate(charsPerPage: number): Promise<unknown>;
+  /** Returns 0..1 for a given CFI once the index is built. */
+  percentageFromCfi(cfi: string): number;
+}
+interface EpubJsBook {
+  renderTo(el: HTMLElement, opts: Record<string, unknown>): EpubJsRendition;
+  destroy(): void;
+  locations: EpubJsLocations;
+  ready: Promise<unknown>;
+}
+declare global {
+  interface Window {
+    // `openAs: 'epub'` forces the library to treat the URL as a binary
+    // archive (default is to sniff by file extension, which fails for our
+    // /ebook/{id} paths that don't end in ".epub").
+    ePub?: (url: string, options?: { openAs?: 'epub' | 'directory' | 'binary' }) => EpubJsBook;
+  }
+}
+
+// Vendored under web-app/public/vendor/ — see THIRD_PARTY_LICENSES.md.
+// epub.js's UMD wrapper expects window.JSZip to exist when it loads, so
+// JSZip must be injected first.
+//
+// SRI hashes pin the byte content of the vendored bundles so a
+// compromised build pipeline can't silently swap in malicious JS.
+// Regenerate with: openssl dgst -sha384 -binary <file> | base64 -w 0
+const JSZIP_SRC = 'vendor/jszip.min.js';
+const JSZIP_INTEGRITY = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+const EPUB_JS_SRC = 'vendor/epub.min.js';
+const EPUB_JS_INTEGRITY = 'sha384-ZqmkDa/1AGF4SKdSmXgEG+3G+Gsb6yNqUSq2Mqp0jDf1GWk+UY5eNbEd7hgwiywI';
+const PROGRESS_REPORT_MS = 10_000;
+
+@Component({
+  selector: 'app-reader',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MatIconModule, MatProgressSpinnerModule, MatButtonModule],
+  templateUrl: './reader.html',
+  styleUrl: './reader.scss',
+})
+export class ReaderComponent implements OnInit, OnDestroy {
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly catalog = inject(CatalogService);
+  readonly routes = AppRoutes;
+
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly mediaFormat = signal<'EBOOK_EPUB' | 'EBOOK_PDF' | null>(null);
+  readonly percent = signal(0);
+  readonly fontSize = signal(100);
+  readonly ebookSrc = signal('');  // PDF mode uses this directly.
+
+  private mediaItemId = 0;
+  private rendition: EpubJsRendition | null = null;
+  private book: EpubJsBook | null = null;
+  private lastCfi: string | null = null;
+  private locationsReady = false;
+  private reportTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly container = viewChild<ElementRef<HTMLDivElement>>('epubContainer');
+
+  async ngOnInit(): Promise<void> {
+    this.mediaItemId = Number(this.route.snapshot.paramMap.get('mediaItemId'));
+    if (!this.mediaItemId) { this.error.set('Invalid ID'); this.loading.set(false); return; }
+    this.ebookSrc.set(`/ebook/${this.mediaItemId}`);
+
+    // Discover format by peeking at the reading-progress response (which we'd
+    // want anyway for resume). Format info comes from title-detail in real use;
+    // for the reader we'll probe the URL instead since we only have the ID.
+    try {
+      const progress = await this.catalog.getReadingProgress(this.mediaItemId);
+      this.percent.set(Math.round((progress.percent ?? 0) * 100));
+      // We need to know EPUB vs PDF to render. HEAD the URL for Content-Type.
+      const head = await fetch(this.ebookSrc(), { method: 'HEAD' });
+      const ct = head.headers.get('content-type') ?? '';
+      const fmt: 'EBOOK_EPUB' | 'EBOOK_PDF' =
+        ct.includes('application/pdf') ? 'EBOOK_PDF' : 'EBOOK_EPUB';
+      this.mediaFormat.set(fmt);
+      // Flip loading off *before* bootEpub so the #epubContainer branch of
+      // the template enters the DOM. Otherwise viewChild() resolves to
+      // undefined and bootEpub throws "epub container missing".
+      this.loading.set(false);
+
+      if (fmt === 'EBOOK_EPUB') {
+        // Wait one animation frame so Angular commits the DOM change from
+        // the loading/mediaFormat signal updates above. afterNextRender
+        // would be stricter, but rAF is simpler and sufficient here.
+        await new Promise<void>(r => requestAnimationFrame(() => r()));
+        await this.bootEpub(progress.cfi);
+      }
+      // PDF path: the template binds an <iframe> to ebookSrc(); nothing else to do.
+    } catch (e) {
+      this.error.set('Failed to load book');
+      this.loading.set(false);
+      console.error('reader init', e);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.reportTimer) { clearInterval(this.reportTimer); this.reportTimer = null; }
+    this.rendition?.destroy();
+    this.book?.destroy();
+    // Fire one last report so closing the tab doesn't lose the tail of progress.
+    if (this.lastCfi) void this.reportProgress(true);
+  }
+
+  close(): void {
+    this.router.navigate([this.routes.home()]);
+  }
+
+  increaseFont(): void { this.fontSize.update(v => Math.min(200, v + 10)); this.applyFont(); }
+  decreaseFont(): void { this.fontSize.update(v => Math.max(60, v - 10)); this.applyFont(); }
+  nextPage(): void { this.rendition?.next(); }
+  prevPage(): void { this.rendition?.prev(); }
+
+  private applyFont(): void {
+    this.rendition?.themes.fontSize(`${this.fontSize()}%`);
+  }
+
+  private async bootEpub(resumeCfi: string | null): Promise<void> {
+    await loadScriptOnce(JSZIP_SRC, JSZIP_INTEGRITY);
+    await loadScriptOnce(EPUB_JS_SRC, EPUB_JS_INTEGRITY);
+    const el = this.container()?.nativeElement;
+    if (!el) throw new Error('epub container missing');
+    if (!window.ePub) throw new Error('epub.js failed to load');
+
+    const book = window.ePub(this.ebookSrc(), { openAs: 'epub' });
+    this.book = book;
+    const rendition = book.renderTo(el, {
+      width: '100%',
+      height: '100%',
+      flow: 'paginated',
+      allowScriptedContent: false,
+    });
+    this.rendition = rendition;
+    // EPUB stylesheets routinely set `p { font-size: 12pt }` (or some
+    // other absolute unit) directly on inner elements. Without an
+    // override, themes.fontSize() — which only injects on body —
+    // gets ignored: paragraphs keep their fixed font-size while the
+    // body-derived line-height scales, so the user just sees the
+    // gaps between lines stretch when they hit + or –. Force the
+    // common text containers to inherit body's font-size so the
+    // body-level override actually flows into the rendered text.
+    rendition.themes.register('mm-reader', {
+      'p, div, span, li, blockquote, dt, dd, td, th': {
+        'font-size': 'inherit !important',
+      },
+    });
+    rendition.themes.select('mm-reader');
+    rendition.themes.fontSize(`${this.fontSize()}%`);
+    // Track CFI on every relocated event. We only update the displayed
+    // percent against the locations index (built below) — `loc.start.
+    // percentage` is 0 until then.
+    rendition.on('relocated', (loc) => {
+      this.lastCfi = loc.start.cfi;
+      if (this.locationsReady) {
+        const pct = book.locations.percentageFromCfi(loc.start.cfi);
+        if (Number.isFinite(pct)) {
+          this.percent.set(Math.round(pct * 100));
+        }
+      }
+    });
+
+    await rendition.display(resumeCfi ?? undefined);
+
+    // Build the locations index in the background so percent updates
+    // as the user paginates. Without this, epub.js can't convert a
+    // CFI to a fraction of the book and percent stays stuck at the
+    // saved value (or 0% on a fresh open). 1024 chars/page is the
+    // epub.js default — accurate enough for a progress bar without
+    // the cost of a finer-grained scan.
+    void book.ready
+      .then(() => book.locations.generate(1024))
+      .then(() => {
+        this.locationsReady = true;
+        // Recompute against the most-recent CFI so the header reflects
+        // the user's current position the moment the index is ready.
+        if (this.lastCfi) {
+          const pct = book.locations.percentageFromCfi(this.lastCfi);
+          if (Number.isFinite(pct) && pct > 0) {
+            this.percent.set(Math.round(pct * 100));
+          }
+        }
+      })
+      .catch(e => console.warn('epub locations index failed', e));
+
+    // Report progress every 10 s; suppresses duplicate reports when the user
+    // hasn't moved since the last tick.
+    this.reportTimer = setInterval(() => { void this.reportProgress(false); }, PROGRESS_REPORT_MS);
+  }
+
+  private async reportProgress(force: boolean): Promise<void> {
+    const cfi = this.lastCfi;
+    if (!cfi) return;
+    const pct = this.percent() / 100;
+    try {
+      await this.catalog.saveReadingProgress(this.mediaItemId, cfi, pct);
+    } catch (e) {
+      if (force) console.warn('final reading-progress report failed', e);
+    }
+  }
+}
+
+const loadedScripts = new Set<string>();
+function loadScriptOnce(src: string, integrity?: string): Promise<void> {
+  if (loadedScripts.has(src)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    if (integrity) {
+      // SRI requires `crossorigin` for the integrity check to apply.
+      // `anonymous` avoids sending credentials; same-origin static
+      // assets don't need them.
+      s.integrity = integrity;
+      s.crossOrigin = 'anonymous';
+    }
+    s.onload = () => { loadedScripts.add(src); resolve(); };
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}

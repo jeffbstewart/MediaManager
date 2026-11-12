@@ -1,0 +1,102 @@
+<!--
+  Bottom-bar audio player. Rendered inside the shell, hidden by a class when
+  the queue is empty so the DOM node stays mounted across route changes
+  (required for the <audio> element to keep playing).
+-->
+<div class="audio-player" [class.visible]="queue.hasQueue()">
+  <audio #audioEl preload="auto"
+         (timeupdate)="onTimeUpdate()"
+         (ended)="onEnded()"
+         (loadedmetadata)="onLoadedMetadata()"
+         (error)="onError()"
+         (stalled)="onStalled()"
+         (canplay)="onCanPlay()">
+  </audio>
+
+  @if (queue.currentTrack(); as track) {
+    <a class="now-playing" [routerLink]="routes.title(track.albumTitleId)">
+      @if (track.albumPosterUrl) {
+        <img [src]="track.albumPosterUrl" class="cover" [alt]="track.albumName" />
+      } @else {
+        <div class="cover-placeholder"><mat-icon>album</mat-icon></div>
+      }
+      <div class="track-info">
+        <span class="track-name">{{ track.trackName }}</span>
+        <span class="track-meta">
+          @if (track.trackArtistName) { {{ track.trackArtistName }} } @else if (track.primaryArtistName) { {{ track.primaryArtistName }} }
+          @if (track.primaryArtistName && track.albumName) { &nbsp;·&nbsp; }
+          <span class="track-album">{{ track.albumName }}</span>
+        </span>
+        @if (queue.queueMode() === 'RADIO' && queue.radioSeed(); as seed) {
+          <span class="radio-chip" (click)="$event.stopPropagation(); $event.preventDefault(); queue.stopRadio()"
+                [attr.title]="'Click to turn off radio'">
+            <mat-icon class="radio-icon">graphic_eq</mat-icon>
+            Radio: from {{ seed.seed_name }}
+            <mat-icon class="close-icon">close</mat-icon>
+          </span>
+        }
+      </div>
+    </a>
+
+    <div class="transport">
+      <button mat-icon-button (click)="queue.prev()" aria-label="Previous track">
+        <mat-icon>skip_previous</mat-icon>
+      </button>
+      <button mat-icon-button class="play-btn" (click)="queue.toggle()"
+              [attr.aria-label]="queue.playing() ? 'Pause' : 'Play'">
+        <mat-icon>{{ queue.playing() ? 'pause' : 'play_arrow' }}</mat-icon>
+      </button>
+      <button mat-icon-button (click)="queue.next()" aria-label="Next track">
+        <mat-icon>skip_next</mat-icon>
+      </button>
+    </div>
+
+    <div class="scrubber">
+      <span class="time">{{ formatTime(queue.positionSeconds()) }}</span>
+      <input type="range" min="0" step="1"
+             [max]="queue.durationSeconds() || 0"
+             [value]="queue.positionSeconds()"
+             (input)="onScrub($event)"
+             aria-label="Seek" />
+      <span class="time">{{ formatTime(queue.durationSeconds()) }}</span>
+    </div>
+
+    <div class="extras">
+      <div class="volume-cluster">
+        <button mat-icon-button (click)="queue.toggleMute()"
+                [attr.aria-label]="queue.muted() ? 'Unmute' : 'Mute'"
+                [attr.title]="queue.muted() ? 'Unmute' : 'Mute'">
+          <mat-icon>{{ volumeIcon() }}</mat-icon>
+        </button>
+        <input type="range" class="volume-slider"
+               min="0" max="1" step="0.01"
+               [value]="queue.muted() ? 0 : queue.volume()"
+               (input)="onVolume($event)"
+               aria-label="Volume" />
+      </div>
+      <button mat-icon-button (click)="toggleQueuePanel()"
+              [class.active]="queuePanelOpen()"
+              [attr.aria-label]="queuePanelOpen() ? 'Hide queue' : 'Show queue'"
+              [attr.aria-expanded]="queuePanelOpen()">
+        <mat-icon>queue_music</mat-icon>
+      </button>
+      <button mat-icon-button (click)="queue.toggleShuffle()"
+              [class.active]="queue.shuffleEnabled()" aria-label="Toggle shuffle">
+        <mat-icon>shuffle</mat-icon>
+      </button>
+      <button mat-icon-button (click)="queue.cycleRepeat()"
+              [class.active]="queue.repeatMode() !== 'OFF'" aria-label="Cycle repeat mode"
+              [title]="'Repeat: ' + queue.repeatMode()">
+        <mat-icon>{{ queue.repeatMode() === 'ONE' ? 'repeat_one' : 'repeat' }}</mat-icon>
+      </button>
+      <button mat-icon-button (click)="closePlayer()"
+              aria-label="Close audio player" title="Close audio player">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <app-queue-panel
+      [open]="queuePanelOpen()"
+      (closeRequested)="queuePanelOpen.set(false)" />
+  }
+</div>

@@ -1,0 +1,597 @@
+package net.stewart.mediamanager.armeria
+
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.linecorp.armeria.common.Cookie
+import com.linecorp.armeria.common.HttpData
+import com.linecorp.armeria.common.HttpResponse
+import com.linecorp.armeria.common.HttpStatus
+import com.linecorp.armeria.common.MediaType
+import com.linecorp.armeria.common.ResponseHeaders
+import com.linecorp.armeria.server.ServiceRequestContext
+import com.linecorp.armeria.server.annotation.Blocking
+import com.linecorp.armeria.server.annotation.Post
+import net.stewart.mediamanager.entity.AppConfig
+import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.service.AuthService
+import net.stewart.mediamanager.service.JwtService
+import net.stewart.mediamanager.service.LegalRequirements
+import net.stewart.mediamanager.service.LoginResult
+import net.stewart.mediamanager.service.PasswordService
+import net.stewart.mediamanager.service.RefreshResult
+import net.stewart.mediamanager.service.TrustedProxies
+import net.stewart.mediamanager.service.WebAuthnService
+import com.gitlab.mvysny.jdbiorm.JdbiOrm
+import org.slf4j.LoggerFactory
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
+
+/** Version the first-run setup stamps on the seeded legal documents and on the first admin agreement. */
+private const val INITIAL_LEGAL_VERSION = 1
+
+/**
+ * REST auth endpoints for the Angular SPA.
+ *
+ * Token strategy:
+ * - Access token: returned in JSON body, stored in memory by the SPA
+ * - Refresh token: set as HttpOnly cookie (mm_refresh), never exposed to JS
+ *
+ * All endpoints require transit through a configured TLS-terminating
+ * reverse proxy (see [TrustedProxies]; X-Forwarded-* headers are honored
+ * only when the TCP peer is a trusted proxy) or a loopback caller. Direct
+ * network connections to the plaintext Armeria port are rejected.
+ *
+ * Rate limits are applied per-IP at the HTTP level (defense in depth —
+ * [AuthService.login] also enforces per-IP and per-username limits internally).
+ *
+ * No [ArmeriaAuthDecorator] — these endpoints are unauthenticated by design.
+ */
+@Blocking
+class AuthRestService {
+
+    private val log = LoggerFactory.getLogger(AuthRestService::class.java)
+    private val gson = Gson()
+
+    companion object {
+        private const val REFRESH_COOKIE_NAME = "mm_refresh"
+        private const val REFRESH_COOKIE_MAX_AGE_SECONDS = 30L * 24 * 60 * 60 // 30 days
+
+        // Per-IP HTTP-level rate limits (defense in depth)
+        private const val LOGIN_MAX_PER_MINUTE = 10
+        private const val REFRESH_MAX_PER_MINUTE = 30
+        private const val LOGOUT_MAX_PER_MINUTE = 10
+        private const val WINDOW_MS = 60_000L
+
+        /**
+         * Content-Security-Policy for JSON API responses. Locked down since these
+         * endpoints return data, not HTML — no scripts, styles, or media needed.
+         */
+        private const val API_CSP = "default-src 'none'; frame-ancestors 'none'"
+    }
+
+    private val loginRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+    private val refreshRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+    private val logoutRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+
+    /**
+     * Pre-login discovery: returns server capabilities and legal document URLs/versions.
+     * The Angular login page uses this to show "agree to terms" checkboxes before login.
+     */
+    @com.linecorp.armeria.server.annotation.Get("/api/v2/auth/discover")
+    fun discover(ctx: ServiceRequestContext): HttpResponse {
+        val legal = mutableMapOf<String, Any?>()
+        LegalRequirements.privacyPolicyUrl?.let { legal[LegalJson.PRIVACY_POLICY_URL] = it }
+        if (LegalRequirements.privacyPolicyVersion > 0) {
+            legal[LegalJson.PRIVACY_POLICY_VERSION] = LegalRequirements.privacyPolicyVersion
+        }
+        LegalRequirements.webTermsOfUseUrl?.let { legal[LegalJson.TERMS_OF_USE_URL] = it }
+        if (LegalRequirements.webTermsOfUseVersion > 0) {
+            legal[LegalJson.TERMS_OF_USE_VERSION] = LegalRequirements.webTermsOfUseVersion
+        }
+
+        val responseBody = mapOf(
+            "setup_required" to !AuthService.hasUsers(),
+            "legal" to legal.ifEmpty { null },
+            "passkeys_available" to WebAuthnService.isAvailable()
+        )
+        return jsonResponse(HttpStatus.OK, responseBody)
+    }
+
+    /**
+     * Initial server setup: creates the first admin user and configures legal document URLs.
+     * Only works when no users exist (setup_required=true from discover).
+     */
+    private val setupRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+
+    @Post("/api/v2/auth/setup")
+    fun setup(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(setupRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf("error" to "Too many requests"))
+        }
+
+        val body = parseBody(ctx) ?: return badRequest("Invalid request body")
+
+        val username = body.get("username")?.asString
+        val password = body.get("password")?.asString
+        if (username.isNullOrBlank() || password.isNullOrBlank()) {
+            return badRequest("username and password are required")
+        }
+
+        val violations = PasswordService.validate(password, username)
+        if (violations.isNotEmpty()) {
+            return jsonResponse(HttpStatus.BAD_REQUEST, mapOf("error" to violations.first()))
+        }
+
+        // Create first user in a transaction (rejects if users already exist)
+        val user = try {
+            JdbiOrm.jdbi().inTransaction<AppUser, Exception> { handle ->
+                val count = handle.createQuery("SELECT COUNT(*) FROM app_user")
+                    .mapTo(Int::class.java).one()
+                if (count > 0) throw IllegalStateException("Setup already complete")
+                val now = java.time.LocalDateTime.now()
+                val u = AppUser(
+                    username = username,
+                    display_name = "TOBEREMOVED",
+                    password_hash = PasswordService.hash(password),
+                    access_level = AppUser.ACCESS_LEVEL_ADMIN,
+                    created_at = now,
+                    updated_at = now
+                )
+                u.save()
+                AuthService.invalidateHasUsersCache()
+                u
+            }
+        } catch (_: IllegalStateException) {
+            return jsonResponse(HttpStatus.CONFLICT, mapOf("error" to "Setup already complete — users exist"))
+        }
+
+        // Save legal document URLs (seed with about:blank if not provided)
+        val privacyPolicyUrl = body.get(LegalJson.PRIVACY_POLICY_URL)?.asString?.ifBlank { null } ?: "about:blank"
+        val termsOfUseUrl = body.get(LegalJson.TERMS_OF_USE_URL)?.asString?.ifBlank { null } ?: "about:blank"
+
+        if (!isValidLegalUrl(privacyPolicyUrl) || !isValidLegalUrl(termsOfUseUrl)) {
+            return badRequest("Legal URLs must be https:// or about:blank")
+        }
+
+        saveConfig(LegalRequirements.PRIVACY_POLICY_URL_KEY, privacyPolicyUrl)
+        saveConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, INITIAL_LEGAL_VERSION.toString())
+        saveConfig(LegalRequirements.WEB_TERMS_OF_USE_URL_KEY, termsOfUseUrl)
+        saveConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, INITIAL_LEGAL_VERSION.toString())
+        LegalRequirements.refresh()
+
+        // Record the user's agreement to the initial versions
+        user.privacy_policy_version = INITIAL_LEGAL_VERSION
+        user.terms_of_use_version = INITIAL_LEGAL_VERSION
+        user.privacy_policy_accepted_at = java.time.LocalDateTime.now()
+        user.terms_of_use_accepted_at = java.time.LocalDateTime.now()
+        user.save()
+
+        // Issue tokens so the user is logged in immediately after setup
+        val tokenPair = JwtService.createTokenPair(user, LegalRequirements.PLATFORM_WEB)
+        val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+        val sessionCookie = newSessionCookie(user, LegalRequirements.PLATFORM_WEB)
+
+        val responseBody = mapOf(
+            "access_token" to tokenPair.accessToken,
+            "expires_in" to tokenPair.expiresIn
+        )
+
+        val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .add("Content-Security-Policy", API_CSP)
+            .cookie(refreshCookie)
+            .cookie(sessionCookie)
+        buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+        return HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
+    }
+
+    private fun isValidLegalUrl(url: String): Boolean =
+        url == "about:blank" || url.startsWith("https://")
+
+    private fun saveConfig(key: String, value: String) {
+        val existing = AppConfig.findAll().firstOrNull { it.config_key == key }
+        if (existing != null) {
+            existing.config_val = value
+            existing.save()
+        } else {
+            AppConfig(config_key = key, config_val = value).save()
+        }
+    }
+
+    @Post("/api/v2/auth/login")
+    fun login(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(loginRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            log.warn("Login HTTP rate limit exceeded for IP {}", proxy.clientIp)
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                "error" to "Too many requests",
+                "retry_after" to 60
+            ))
+        }
+
+        val body = parseBody(ctx) ?: return badRequest("Invalid request body")
+        val username = body.get("username")?.asString
+        val password = body.get("password")?.asString
+        if (username.isNullOrBlank() || password.isNullOrBlank()) {
+            return badRequest("username and password are required")
+        }
+
+        val result = AuthService.login(username, password, proxy.clientIp)
+
+        return when (result) {
+            is LoginResult.Success -> {
+                val user = result.user
+                val deviceName = body.get("device_name")?.asString ?: LegalRequirements.PLATFORM_WEB
+                val tokenPair = JwtService.createTokenPair(user, deviceName)
+                val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+                // HttpOnly session cookie for browser auth — replaces the
+                // SPA's previous JS-set mm_jwt approach. Cookie auth on
+                // gRPC + HTTP servlets keys off this cookie via
+                // AuthService.validateCookieToken.
+                val sessionCookie = newSessionCookie(user, deviceName)
+
+                val responseBody = mapOf(
+                    "access_token" to tokenPair.accessToken,
+                    "expires_in" to tokenPair.expiresIn,
+                    "password_change_required" to user.must_change_password
+                )
+
+                val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+                    .contentType(MediaType.JSON_UTF_8)
+                    .add("Content-Security-Policy", API_CSP)
+                    .cookie(refreshCookie)
+                    .cookie(sessionCookie)
+                buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+                HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
+            }
+            LoginResult.Failed -> {
+                jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to AuthService.INVALID_CREDENTIALS_MESSAGE))
+            }
+            is LoginResult.RateLimited -> {
+                jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                    "error" to "Too many login attempts",
+                    "retry_after" to result.retryAfterSeconds
+                ))
+            }
+        }
+    }
+
+    // -- Passkey authentication --
+
+    private val passkeyRateLimit = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
+
+    @Post("/api/v2/auth/passkey/authentication-options")
+    fun passkeyAuthenticationOptions(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(passkeyRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                "error" to "Too many requests",
+                "retry_after" to 60
+            ))
+        }
+
+        return try {
+            val options = WebAuthnService.generateAuthenticationOptions()
+            val responseBody = mapOf(
+                "challenge" to options.signedChallenge,
+                "options" to gson.fromJson(options.options.toString(), Map::class.java)
+            )
+            jsonResponse(HttpStatus.OK, responseBody)
+        } catch (e: IllegalStateException) {
+            jsonResponse(HttpStatus.SERVICE_UNAVAILABLE, mapOf("error" to e.message))
+        }
+    }
+
+    @Post("/api/v2/auth/passkey/authenticate")
+    fun passkeyAuthenticate(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(passkeyRateLimit, proxy.clientIp, LOGIN_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf(
+                "error" to "Too many requests",
+                "retry_after" to 60
+            ))
+        }
+
+        val body = parseBody(ctx) ?: return badRequest("Invalid request body")
+        val challenge = body.get("challenge")?.asString
+            ?: return badRequest("challenge is required")
+        val credential = body.getAsJsonObject("credential")
+            ?: return badRequest("credential is required")
+
+        val credentialId = credential.get("id")?.asString
+            ?: return badRequest("credential.id is required")
+        // WebAuthn JSON nests assertion fields under credential.response
+        val response = credential.getAsJsonObject("response")
+            ?: return badRequest("credential.response is required")
+        val clientDataJSON = response.get("clientDataJSON")?.asString
+            ?: return badRequest("credential.response.clientDataJSON is required")
+        val authenticatorData = response.get("authenticatorData")?.asString
+            ?: return badRequest("credential.response.authenticatorData is required")
+        val signature = response.get("signature")?.asString
+            ?: return badRequest("credential.response.signature is required")
+        val userHandle = response.get("userHandle")?.asString
+
+        return try {
+            val user = WebAuthnService.verifyAuthentication(
+                signedChallenge = challenge,
+                credentialId = credentialId,
+                clientDataJSON = clientDataJSON,
+                authenticatorData = authenticatorData,
+                signature = signature,
+                userHandle = userHandle
+            )
+
+            if (user.locked) {
+                return jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Account locked"))
+            }
+
+            val tokenPair = JwtService.createTokenPair(user, "web-passkey")
+            val refreshCookie = buildRefreshCookie(tokenPair.refreshToken)
+            val sessionCookie = newSessionCookie(user, "web-passkey")
+
+            val responseBody = mapOf(
+                "access_token" to tokenPair.accessToken,
+                "expires_in" to tokenPair.expiresIn,
+                "password_change_required" to user.must_change_password
+            )
+
+            val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+                .contentType(MediaType.JSON_UTF_8)
+                .add("Content-Security-Policy", API_CSP)
+                .cookie(refreshCookie)
+                .cookie(sessionCookie)
+            buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+            HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
+        } catch (e: IllegalArgumentException) {
+            log.warn("Passkey authentication failed from IP {}: {}", proxy.clientIp, e.message)
+            jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "Passkey authentication failed"))
+        }
+    }
+
+    @Post("/api/v2/auth/refresh")
+    fun refresh(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(refreshRateLimit, proxy.clientIp, REFRESH_MAX_PER_MINUTE)) {
+            log.warn("Refresh HTTP rate limit exceeded for IP {}", proxy.clientIp)
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS,
+                mapOf("error" to "Too many requests", "retry_after" to 60))
+        }
+
+        val refreshToken = ctx.request().headers().cookies()
+            .firstOrNull { it.name() == REFRESH_COOKIE_NAME }
+            ?.value()
+
+        if (refreshToken.isNullOrBlank()) {
+            return jsonResponse(HttpStatus.UNAUTHORIZED, mapOf("error" to "No refresh token"))
+        }
+
+        return when (val result = JwtService.refresh(refreshToken)) {
+            is RefreshResult.Success -> {
+                val refreshCookie = buildRefreshCookie(result.tokenPair.refreshToken)
+                // If the request didn't carry a session cookie (post-deploy
+                // user with stale refresh-only state, or anyone whose
+                // mm_session expired before the refresh token), issue a
+                // fresh one. Otherwise leave the existing session in
+                // place — refresh fires every ~24 minutes during normal
+                // use; reissuing here would churn the session_token
+                // table and prematurely evict legitimate concurrent
+                // sessions on other devices.
+                val hasExistingSession = ctx.request().headers().cookies()
+                    .any { it.name() == AuthService.COOKIE_NAME && !it.value().isNullOrBlank() }
+
+                val responseBody = mapOf(
+                    "access_token" to result.tokenPair.accessToken,
+                    "expires_in" to result.tokenPair.expiresIn
+                )
+
+                val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+                    .contentType(MediaType.JSON_UTF_8)
+                    .add("Content-Security-Policy", API_CSP)
+                    .cookie(refreshCookie)
+                if (!hasExistingSession) {
+                    headersBuilder.cookie(newSessionCookie(result.user, "web-refresh"))
+                }
+                buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+                HttpResponse.of(headersBuilder.build(), HttpData.ofUtf8(gson.toJson(responseBody)))
+            }
+            RefreshResult.InvalidToken -> {
+                clearRefreshCookie(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token")
+            }
+            RefreshResult.FamilyRevoked -> {
+                clearRefreshCookie(HttpStatus.UNAUTHORIZED, "Session revoked — please log in again")
+            }
+        }
+    }
+
+    @Post("/api/v2/auth/logout")
+    fun logout(ctx: ServiceRequestContext): HttpResponse {
+        val proxy = requireProxy(ctx) ?: return proxyRequired()
+
+        if (isRateLimited(logoutRateLimit, proxy.clientIp, LOGOUT_MAX_PER_MINUTE)) {
+            return jsonResponse(HttpStatus.TOO_MANY_REQUESTS, mapOf("error" to "Too many requests"))
+        }
+
+        val cookies = ctx.request().headers().cookies()
+        val refreshToken = cookies.firstOrNull { it.name() == REFRESH_COOKIE_NAME }?.value()
+        val sessionToken = cookies.firstOrNull { it.name() == AuthService.COOKIE_NAME }?.value()
+
+        if (!refreshToken.isNullOrBlank()) {
+            try {
+                JwtService.revoke(refreshToken)
+            } catch (_: Exception) {}
+        }
+        if (!sessionToken.isNullOrBlank()) {
+            try {
+                AuthService.revokeSessionByToken(sessionToken)
+            } catch (_: Exception) {}
+        }
+
+        // Clear refresh + session + every legacy auth cookie name in one shot.
+        val expiredRefresh = Cookie.secureBuilder(REFRESH_COOKIE_NAME, "")
+            .httpOnly(true).sameSite("Lax").path("/api/v2/auth/").maxAge(0).build()
+        val expiredSession = Cookie.secureBuilder(AuthService.COOKIE_NAME, "")
+            .httpOnly(true).sameSite("Lax").path("/").maxAge(0).build()
+
+        val headersBuilder = ResponseHeaders.builder(HttpStatus.OK)
+            .contentType(MediaType.JSON_UTF_8)
+            .add("Content-Security-Policy", API_CSP)
+            .cookie(expiredRefresh)
+            .cookie(expiredSession)
+        buildLegacyCookieClears().forEach { headersBuilder.cookie(it) }
+        return HttpResponse.of(headersBuilder.build(),
+            HttpData.ofUtf8(gson.toJson(mapOf("ok" to true))))
+    }
+
+    // -- Proxy validation --
+
+    private data class ProxyContext(val clientIp: String)
+
+    /**
+     * Verifies the request transited a configured TLS-terminating reverse
+     * proxy (or is a loopback caller). Forwarded headers are honored only
+     * from a trusted proxy peer; see [TrustedProxies]. Returns null and logs
+     * otherwise — credentials must never be issued over a plaintext direct
+     * network connection.
+     */
+    private fun requireProxy(ctx: ServiceRequestContext): ProxyContext? {
+        val headers = ctx.request().headers()
+        val peer = ctx.remoteAddress().address
+        val origin = TrustedProxies.resolve(
+            peer = peer,
+            forwardedProto = headers.get("x-forwarded-proto"),
+            forwardedFor = headers.getAll("x-forwarded-for"),
+        )
+        if (origin == null) {
+            log.warn("Auth request rejected: not via a trusted HTTPS proxy (peer={}, trusted_proxy={})",
+                peer?.hostAddress ?: "unknown", TrustedProxies.isTrusted(peer))
+            return null
+        }
+        return ProxyContext(origin.clientIp)
+    }
+
+    private fun proxyRequired(): HttpResponse =
+        jsonResponse(HttpStatus.FORBIDDEN, mapOf("error" to "Direct access not permitted"))
+
+    // -- Cookie helpers --
+
+    private fun buildRefreshCookie(value: String): Cookie =
+        Cookie.secureBuilder(REFRESH_COOKIE_NAME, value)
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/api/v2/auth/")
+            .maxAge(REFRESH_COOKIE_MAX_AGE_SECONDS)
+            .build()
+
+    /**
+     * Build the HttpOnly session cookie (browser SPA path). Carries an
+     * opaque DB-backed session token, validated server-side via
+     * AuthService.validateCookieToken on every request. JS can never
+     * read the value — defense against XSS exfiltration.
+     *
+     * Issued at every browser-facing login path (password, passkey,
+     * first-user-setup) alongside the existing refresh-token cookie.
+     */
+    private fun buildSessionCookie(token: String): Cookie =
+        Cookie.secureBuilder(AuthService.COOKIE_NAME, token)
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(AuthService.SESSION_DAYS * 24L * 60 * 60)
+            .build()
+
+    /**
+     * Build expired-cookie headers for every legacy auth-cookie name we
+     * used to issue. Attached to the response on any path that touches
+     * the auth lifecycle so old cookies still cached in browsers stop
+     * being sent. Prevents both wasted request bytes and accidental
+     * acceptance of a stale auth token by an HTTP servlet that still
+     * recognises the legacy name.
+     */
+    private fun buildLegacyCookieClears(): List<Cookie> {
+        val clears = mutableListOf<Cookie>()
+        // mm_jwt — the SPA's old JS-set cookie. Path / matches the
+        // path it was set with from JS.
+        clears += Cookie.secureBuilder(JwtService.JWT_COOKIE_NAME, "")
+            .httpOnly(false)  // JS originally created it; clear with the same flags
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(0)
+            .build()
+        // mm_auth — the previous server-side session cookie name,
+        // pre-rename. Existing browsers shouldn't have it (it was
+        // dead code) but clearing is cheap and forecloses surprises.
+        clears += Cookie.secureBuilder("mm_auth", "")
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(0)
+            .build()
+        return clears
+    }
+
+    /** Build a fresh session for [user] tied to [deviceName] and return its cookie. */
+    private fun newSessionCookie(user: AppUser, deviceName: String): Cookie {
+        val token = AuthService.createSession(user, deviceName)
+        return buildSessionCookie(token)
+    }
+
+    private fun clearRefreshCookie(status: HttpStatus, error: String?): HttpResponse {
+        val expiredCookie = Cookie.secureBuilder(REFRESH_COOKIE_NAME, "")
+            .httpOnly(true)
+            .sameSite("Lax")
+            .path("/api/v2/auth/")
+            .maxAge(0)
+            .build()
+
+        val body = if (error != null) mapOf("error" to error) else mapOf("ok" to true)
+        val headers = ResponseHeaders.builder(status)
+            .contentType(MediaType.JSON_UTF_8)
+            .add("Content-Security-Policy", API_CSP)
+            .cookie(expiredCookie)
+            .build()
+        return HttpResponse.of(headers, HttpData.ofUtf8(gson.toJson(body)))
+    }
+
+    // -- Rate limiting --
+
+    private fun isRateLimited(
+        bucket: ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>,
+        ip: String, maxPerMinute: Int
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        val timestamps = bucket.computeIfAbsent(ip) { ConcurrentLinkedDeque() }
+        while (timestamps.peekFirst()?.let { it < now - WINDOW_MS } == true) {
+            timestamps.pollFirst()
+        }
+        if (timestamps.size >= maxPerMinute) return true
+        timestamps.addLast(now)
+        return false
+    }
+
+    // -- Request parsing --
+
+    private fun parseBody(ctx: ServiceRequestContext): com.google.gson.JsonObject? {
+        return try {
+            val text = ctx.request().aggregate().join().contentUtf8()
+            JsonParser.parseString(text).asJsonObject
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun badRequest(message: String): HttpResponse =
+        jsonResponse(HttpStatus.BAD_REQUEST, mapOf("error" to message))
+
+    private fun jsonResponse(status: HttpStatus, data: Any): HttpResponse =
+        HttpResponse.builder()
+            .status(status)
+            .content(MediaType.JSON_UTF_8, gson.toJson(data))
+            .header("Content-Security-Policy", API_CSP)
+            .build()
+}

@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'claude.log'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/mediamanager
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        run: ./gradlew test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate timestamp tag
+        id: timestamp
+        run: echo "tag=$(date +'%Y%m%d%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      # The label the SPA shows in its lower-right corner: the merged PR
+      # number when this push is a PR merge (merge commit or squash), the
+      # tag for a tag build, else the short commit.
+      - name: Compute build label
+        id: label
+        run: |
+          subject="$(git log -1 --pretty=%s)"
+          merge_re='^Merge pull request #([0-9]+)'
+          squash_re='\(#([0-9]+)\)$'
+          if [[ "$subject" =~ $merge_re ]] || [[ "$subject" =~ $squash_re ]]; then
+            label="PR #${BASH_REMATCH[1]}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            label="$GITHUB_REF_NAME"
+          else
+            label="${GITHUB_SHA::7}"
+          fi
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+          echo "Build label: $label"
+
+      - name: Tag previous latest as rollback
+        continue-on-error: true
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || exit 0
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:rollback
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:rollback
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.timestamp.outputs.tag }}
+          build-args: |
+            BUILD_LABEL=${{ steps.label.outputs.label }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Package Roku channel
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cd roku-channel && zip -r ../roku-channel.zip . -x '.*'
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: roku-channel.zip

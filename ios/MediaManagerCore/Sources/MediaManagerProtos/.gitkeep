@@ -1,0 +1,3 @@
+Placeholder so swift build sees the target.
+Real contents (*.pb.swift, *.grpc.swift) are written by
+lifecycle/ios-gen-protos.sh and are gitignored.

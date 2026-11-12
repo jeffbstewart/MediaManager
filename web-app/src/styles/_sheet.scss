@@ -1,0 +1,54 @@
+// Sheets (spec 3.10): a native <dialog> opened with showModal(), which
+// gives focus trapping, Escape to close and a ::backdrop. The panel
+// sits 12px in from the viewport edges with a 16px radius and slides
+// in from its own edge. `.sheet` is the right-hand sheet (user menu);
+// `.sheet.left` is the same panel from the left (the phone nav, 4h).
+//
+// Global rather than component-scoped because the element lives in
+// the top layer and several components render one.
+
+dialog.sheet {
+  position: fixed;
+  inset: 12px 12px 12px auto;
+  margin: 0;
+  width: min(312px, calc(100vw - 24px));
+  height: auto;
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+  border-radius: 16px;
+  background: var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface);
+  overflow-y: auto;
+
+  &[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: sheet-in-r 0.15s ease-out;
+  }
+
+  &.left {
+    inset: 12px auto 12px 12px;
+
+    &[open] { animation-name: sheet-in-l; }
+  }
+
+  &::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[open] { animation: none; }
+  }
+}
+
+@keyframes sheet-in-r {
+  from { transform: translateX(24px); opacity: 0; }
+}
+
+@keyframes sheet-in-l {
+  from { transform: translateX(-24px); opacity: 0; }
+}

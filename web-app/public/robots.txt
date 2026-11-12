@@ -1,0 +1,5 @@
+# MediaManager is a single-tenant private media library. Nothing here
+# is meant for indexing, ranking, training, or any other crawler-side
+# purpose.
+User-agent: *
+Disallow: /

@@ -1,0 +1,124 @@
+<div class="discover-page">
+  @if (hero(); as h) {
+    <section class="hero-section" aria-label="Spotlight">
+      <app-hero-banner [heading]="h.title.title_name" [level]="2" [eager]="true"
+                       [imageUrl]="h.title.backdrop_url" [tint]="h.title.backdrop_tint"
+                       [contentRating]="h.title.content_rating" [year]="h.title.release_year"
+                       [description]="h.title.description" [kicker]="h.kicker"
+                       [primaryLabel]="h.title.playable && h.title.transcode_id ? 'Play' : 'Details'"
+                       [primaryIcon]="h.title.playable && h.title.transcode_id ? 'play_arrow' : 'info'"
+                       [primaryLink]="h.title.playable && h.title.transcode_id ? routes.play(h.title.transcode_id) : routes.title(h.title.title_id)"
+                       secondaryLabel="Details" secondaryIcon="info"
+                       [secondaryLink]="h.title.playable && h.title.transcode_id ? routes.title(h.title.title_id) : null" />
+    </section>
+  }
+
+  <section class="promo">
+    <h1>Find Something New To Watch</h1>
+    <p>Discover suggestions based on what's already in your collection: new seasons of shows you own, more from authors and artists you love, and titles from your wish list.</p>
+    <a class="btn" [routerLink]="routes.wishlist()">Open My Wish List</a>
+  </section>
+
+  @if (missingSeasons().length > 0) {
+    <section class="carousel-section new-seasons">
+      <app-section-head heading="New Seasons Out" />
+      <app-media-row label="New Seasons Out">
+        @for (item of missingSeasons(); track item.title_id) {
+          <li>
+            <app-wide-card [name]="item.title_name" [imageUrl]="'/backdrops/' + item.title_id"
+                           [link]="routes.title(item.title_id)"
+                           [meta]="seasonsAvailable(item)" [metaAccent]="true" />
+          </li>
+        }
+      </app-media-row>
+    </section>
+  }
+
+  @if (authorBooks().length > 0) {
+    <section class="carousel-section author-books">
+      <app-section-head heading="More From Authors You Read" tag="Books" />
+      <app-media-row label="More From Authors You Read">
+        @for (book of authorBooks(); track book.title_id) {
+          <li>
+            <app-poster-card [name]="book.title_name" [imageUrl]="book.poster_url"
+                             [link]="routes.title(book.title_id)"
+                             [credit]="book.author_name" [meta]="book.release_year" />
+          </li>
+        }
+      </app-media-row>
+    </section>
+  }
+
+  <section class="artists-section" aria-labelledby="discover-artists-heading">
+    <div class="header">
+      <h2 id="discover-artists-heading">Artists You Might Like</h2>
+      <span class="subtitle">Artists similar to what's already in your library, ranked by how much overlap there is with your taste.</span>
+      @if (hasMusicRadio()) {
+        <button mat-stroked-button class="refresh-btn"
+                (click)="refresh()"
+                [disabled]="refreshing() || loading()">
+          <mat-icon>refresh</mat-icon>
+          {{ refreshing() ? 'Refreshing…' : 'Refresh now' }}
+        </button>
+      }
+    </div>
+
+    @if (!hasMusicRadio()) {
+      <div class="empty-state">
+        <mat-icon>library_music</mat-icon>
+        <p>Discovery needs the Last.fm integration to find similar artists.</p>
+        <p class="hint">Ask your admin to add a Last.fm API key in Settings → Music.</p>
+      </div>
+    } @else if (loading()) {
+      <div class="loading"><mat-spinner aria-label="Loading" diameter="40" /></div>
+    } @else if (error()) {
+      <p class="error-message">{{ error() }}</p>
+    } @else if (artists().length === 0) {
+      <div class="empty-state">
+        <mat-icon>graphic_eq</mat-icon>
+        <p>No recommendations yet.</p>
+        <p class="hint">The nightly job hasn't run against your library yet &mdash; hit <strong>Refresh now</strong> to kick it manually. The first refresh for a fresh library can take a minute or two while Last.fm similarity data hydrates for each owned artist.</p>
+      </div>
+    } @else {
+      <app-media-row label="Artists You Might Like">
+        @for (artist of artists(); track artist.suggested_artist_mbid) {
+          <li>
+            <app-person-card class="rec-card" [withActions]="true"
+                             [name]="artist.suggested_artist_name"
+                             [link]="artist.artist_id ? routes.artist(artist.artist_id) : null"
+                             [imageUrl]="artist.cover_url" [lines]="artistLines(artist)">
+              @if (artist.representative_release_group_id && artist.representative_release_title) {
+                <button cardAction type="button" class="pill wish-btn"
+                        (click)="wishlist(artist)"
+                        [disabled]="isWishSubmitting(artist.suggested_artist_mbid) || isWished(artist.suggested_artist_mbid)">
+                  <mat-icon aria-hidden="true">{{ isWished(artist.suggested_artist_mbid) ? 'favorite' : 'favorite_border' }}</mat-icon>
+                  {{ isWished(artist.suggested_artist_mbid) ? 'Wishlisted' : 'Wishlist' }}
+                </button>
+              }
+              <button cardAction type="button" class="pill icon dismiss-btn"
+                      [attr.aria-label]="'Dismiss ' + artist.suggested_artist_name"
+                      [attr.title]="'Dismiss ' + artist.suggested_artist_name"
+                      (click)="dismiss(artist)">
+                <mat-icon aria-hidden="true">close</mat-icon>
+              </button>
+            </app-person-card>
+          </li>
+        }
+      </app-media-row>
+    }
+  </section>
+
+  @if (popular().length > 0) {
+    <section class="carousel-section popular">
+      <app-section-head heading="Popular In Your Library" [link]="routes.movies()" />
+      <app-media-row label="Popular In Your Library">
+        @for (title of popular(); track title.title_id) {
+          <li>
+            <app-poster-card [name]="title.title_name" [imageUrl]="title.poster_url"
+                             [link]="routes.title(title.title_id)" [meta]="title.release_year" />
+          </li>
+        }
+      </app-media-row>
+    </section>
+  }
+</div>

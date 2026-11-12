@@ -1,0 +1,2 @@
+-- Baseline migration: empty schema placeholder.
+-- Flyway will track this as the first applied migration.

@@ -1,0 +1,46 @@
+.terms-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.terms-card {
+  max-width: 480px;
+  width: 100%;
+}
+
+.terms-description {
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.legal-section {
+  margin-bottom: 1rem;
+
+  mat-checkbox {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+}
+
+.field-error {
+  color: var(--mat-sys-error);
+  font-size: 0.8rem;
+  margin: 0 0 0.5rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error);
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}

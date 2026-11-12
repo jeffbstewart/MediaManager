@@ -1,0 +1,74 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner aria-label="Loading" diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (actor(); as a) {
+
+    <!-- Hero section -->
+    <div class="hero">
+      @if (a.headshot_url) {
+        <img [src]="a.headshot_url" [alt]="a.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder">
+          <mat-icon>person</mat-icon>
+        </div>
+      }
+      <div class="hero-info">
+        <h1>{{ a.name }}</h1>
+        @if (a.known_for) {
+          <span class="known-for">{{ a.known_for }}</span>
+        }
+        @if (formatLifespan()) {
+          <span class="lifespan">{{ formatLifespan() }}</span>
+        }
+        @if (a.place_of_birth) {
+          <span class="birthplace">{{ a.place_of_birth }}</span>
+        }
+        @if (a.biography) {
+          <p class="biography">
+            {{ bioExpanded() || a.biography.length <= 500 ? a.biography : a.biography.substring(0, 500) + '...' }}
+          </p>
+          @if (a.biography.length > 500) {
+            <button class="bio-toggle" (click)="bioExpanded.set(!bioExpanded())">
+              {{ bioExpanded() ? 'Show less' : 'Show more' }}
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    <!-- In Your Collection -->
+    @if (a.owned_titles.length > 0) {
+      <h2>In Your Collection</h2>
+      <div class="grid">
+        @for (title of a.owned_titles; track title.title_id) {
+          <app-poster-card [name]="title.title_name" [imageUrl]="title.poster_url"
+                           [link]="routes.title(title.title_id)" [lazy]="false"
+                           [subtitle]="title.character_name ? 'as ' + title.character_name : null"
+                           [meta]="title.release_year" />
+        }
+      </div>
+    }
+
+    <!-- Other Works -->
+    @if (a.other_works.length > 0) {
+      <h2>Other Works</h2>
+      <div class="grid">
+        @for (credit of a.other_works; track credit.tmdb_id) {
+          <app-poster-card [name]="credit.title" [imageUrl]="credit.poster_path ? posterUrl(credit.poster_path) : null"
+                           dim="card" [lazy]="false"
+                           [subtitle]="credit.character_name ? 'as ' + credit.character_name : null"
+                           [meta]="(credit.release_year ?? '') + (credit.release_year && credit.media_type ? ' · ' : '') + (credit.media_type === 'TV' ? 'TV' : 'Film')">
+            <button cardAction class="wish-btn" type="button" [class.wished]="credit.already_wished"
+                    (click)="toggleWish(credit)"
+                    [attr.aria-label]="credit.already_wished ? 'On your wish list' : 'Add to wish list'"
+                    [title]="credit.already_wished ? 'On your wish list' : 'Add to wish list'">
+              <mat-icon>{{ credit.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+            </button>
+          </app-poster-card>
+        }
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,7 @@
+{
+  "members": [
+    { "id": 1, "name": "Alice Stewart", "notes": "Eldest daughter, born 2010", "video_count": 24 },
+    { "id": 2, "name": "Bob Stewart", "notes": null, "video_count": 18 },
+    { "id": 3, "name": "Charlie Stewart", "notes": "Youngest, often appears in beach footage", "video_count": 9 }
+  ]
+}

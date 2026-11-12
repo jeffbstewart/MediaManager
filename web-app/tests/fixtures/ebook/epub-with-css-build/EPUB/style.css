@@ -1,0 +1,15 @@
+/* Stylesheet that reproduces the "font-size controls only change line
+ * spacing" bug in the web reader. Many real EPUBs declare an absolute
+ * font-size on inner text containers; without an inheritance override
+ * in the reader theme, the body-level font-size injection from
+ * `themes.fontSize()` gets ignored — only line-height ends up scaling.
+ *
+ * Use a fixed pixel value (not pt) so a Playwright assertion on the
+ * iframe element's computed font-size has a stable starting point.
+ */
+body {
+  line-height: 1.6em;
+}
+p {
+  font-size: 16px;
+}

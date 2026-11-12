@@ -1,0 +1,1014 @@
+<p align="center">
+  <img src="images/logo.png" alt="Media Manager" width="96">
+</p>
+
+# Administrator Guide
+
+This guide covers the management tools available to admin users (access level 2). All of these are found in the **Manage** section of the sidebar.
+
+---
+
+## Environment Variables
+
+Set these in `secrets/.env` (local) or as Docker environment variables.
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `H2_PASSWORD` | **Yes** | &mdash; | H2 database password |
+| `H2_PRIOR_PASSWORD` | No | *(empty)* | Previous password, for migrating to a new `H2_PASSWORD` |
+| `H2_FILE_PASSWORD` | No | *(empty)* | Enables AES encryption at rest; auto-migrates on first set |
+| `TMDB_API_KEY` | Recommended | &mdash; | TMDB API key for title enrichment, posters, cast data |
+| `TMDB_API_READ_ACCESS_TOKEN` | No | &mdash; | TMDB read access token (alternative auth, not currently used) |
+| `MM_NAS_ROOT` | For media | &mdash; | Path to NAS media root (must match Docker volume mount) |
+| `MM_TRUSTED_PROXIES` | If proxied | *(empty)* | Comma-separated IPs/CIDRs of the TLS-terminating reverse proxy. `X-Forwarded-*` headers are honored only from these peers. See [Reverse Proxy Trust](#reverse-proxy-trust). |
+| `MM_FFMPEG_PATH` | No | `/usr/bin/ffmpeg` | Override FFmpeg binary location |
+
+### Reverse Proxy Trust
+
+Sign-in, token refresh, and every gRPC call must arrive over HTTPS. When a reverse proxy terminates TLS and forwards to the main port, the server learns that (and the real client address) from the `X-Forwarded-Proto` and `X-Forwarded-For` headers. Those headers are trusted **only** when the TCP connection comes from an address listed in `MM_TRUSTED_PROXIES`:
+
+```
+MM_TRUSTED_PROXIES=192.0.2.10
+MM_TRUSTED_PROXIES=192.0.2.0/28, 2001:db8:ffff::/48
+```
+
+- List the address the proxy connects **from** (its source address on the server's network), not the public address clients use.
+- The client IP is the right-most `X-Forwarded-For` entry that is not itself a listed proxy. Entries the client supplied further left are ignored. With several proxies in a chain, list all of them.
+- Requests from any other non-loopback address are refused on sign-in endpoints and gRPC, even if they carry `X-Forwarded-*` headers. Loopback callers are accepted as local.
+- Configure the proxy to **append** to `X-Forwarded-For` (HAProxy: `option forwardfor`) and to set `X-Forwarded-Proto: https`.
+- An unparseable entry stops the server at startup.
+
+If this is unset or wrong while running behind a proxy, every sign-in is refused with "Direct access not permitted" and gRPC clients get `PERMISSION_DENIED`. The startup log prints the trusted list.
+
+`MM_BEHIND_PROXY` from earlier versions is no longer read; a warning is logged if it is set without `MM_TRUSTED_PROXIES`.
+
+### Sign-in Throttling
+
+Failed password sign-ins are throttled per username and, separately, per client IP. After 5 failures within 15 minutes, further attempts wait out a cool-off that doubles with each additional failure (30 seconds up to 15 minutes); 100 failures within 24 hours hold the username or IP at the maximum until they age out. Throttling is always temporary and never locks the account. An IP's failures only slow down that IP.
+
+The **locked** flag on a user is separate: it is never set automatically, and a locked account cannot sign in or use its paired devices until an admin unlocks it in **Users**.
+
+---
+
+## Command-Line Flags
+
+Pass via `./gradlew run --args="--flag"` or as Docker CMD arguments.
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--developer_mode` | off | Enables H2 web console at the configured console port |
+| `--port N` | 9090 | Main listen port (gRPC + HTTP + SPA on one port via Armeria) |
+| `--internal_port N` | 8081 | Internal monitoring port (`/health` + `/metrics`, LAN-only) |
+| `--h2_console_port N` | 8082 | H2 web console port (developer mode only) |
+| `--listen_on_all_interfaces` | off | Bind to 0.0.0.0 instead of 127.0.0.1 |
+| `--max_transcode_deletes N` | 25 | Mass-deletion guard threshold for NAS cleanup |
+| `--disable_local_transcoding` | off | Stop the in-process TranscoderAgent. Remote buddies can still claim work. The Docker image ships with this on so transcoding is buddy-only by default. |
+| `--disable_ssdp` | off | Don't answer SSDP discovery. Set on secondary instances (e.g. a demo backend) so devices on the LAN only discover the primary server. |
+| `--skip_tint_backfill` | off | Don't start the backdrop tint backfill at startup (see [Backdrop Tints](#backdrop-tints)). For debugging; new backdrops still get a tint when cached. |
+
+---
+
+## Docker Deployment Notes
+
+### Build Label
+
+The web app shows the running build's label under the title of the Help page. On a release image it is the merged pull request number (`PR #137`), on a tag build the tag, and on a local `lifecycle/docker-build.sh` image the short commit (`-dirty` when the tree had uncommitted changes). The value arrives as the `BUILD_LABEL` Docker build argument, which the Dockerfile writes to `build-info.json` beside the SPA's `index.html`; the SPA fetches that file uncached on load. A missing file hides the label, and `ng serve` shows `dev`. If the label does not change after a redeploy, the container is still running the old image: a restart does not pull, so recreate it from a fresh pull. A browser tab left open across a redeploy reloads itself once the first time it opens a page whose code it has not loaded yet, since the old build's files are gone from the server.
+
+### Backdrop Tints
+
+Each title's backdrop has a hero tint (`title.backdrop_tint`, `#rrggbb`): the image's saturated average colour at about 20% lightness, which the web app uses to colour hero banners. The tint is computed once, when the backdrop is cached, and is also written into the image's sidecar. Backdrops cached before tints existed are caught up by a backfill that starts after migrations on every launch: one thread, batches of 50 with a pause between them, each row claimed only after its sidecar is written, so stopping the server at any point leaves rows either done or untouched and the next start resumes. A backdrop missing from disk or failing to decode gets the neutral `#2a2a2a` so the job converges; caching that backdrop again recomputes it. The backfill finds nothing to do once caught up. `--skip_tint_backfill` disables it.
+
+### Host Networking
+
+The example `docker-compose.yml` uses `network_mode: host` instead of port mappings. This is required for **SSDP** (Roku device discovery), which uses UDP multicast on `239.255.255.250:1900`. Docker's default bridge networking blocks multicast traffic, so Roku devices on the LAN cannot discover the server.
+
+With host networking the container shares the host's network stack directly. The `ports:` clause in docker-compose is commented out as documentation of which ports are in use &mdash; port mapping is not needed (or allowed) in host mode.
+
+### Non-Root Container User
+
+The `user: "1046:100"` directive runs the container process as a specific UID:GID instead of root. This is a security best practice &mdash; if the application is compromised, the attacker has limited filesystem access.
+
+The UID and GID must have **read/write access** to both the cache volume (database, poster cache, backups) and the media volume (NAS files, ForBrowser transcodes). On **Synology DSM**, find the correct UID by SSH-ing into the NAS and running:
+
+```bash
+id -u <your-username>    # e.g., id -u admin → 1046
+id -g <your-username>    # e.g., id -g admin → 100
+```
+
+Use these values in the `user:` directive. If the container can't write to the volumes (permission errors in the logs), the UID:GID doesn't match the volume ownership.
+
+### Synology NAS: ACL Permissions
+
+Synology DSM uses an **overlay ACL layer** on top of standard POSIX permissions. This means that even if a file or directory shows `chmod 777`, access can still be denied if the ACL doesn't grant the requesting UID access. Standard `ls -la` output can be misleading.
+
+When running the container as a non-root user, the UID must:
+
+1. **Correspond to a real Synology user** &mdash; creating a Linux-only user inside the container (e.g., UID 1000) won't work because Synology's ACL layer doesn't recognize it
+2. **Be a member of the `users` group** (GID 100) &mdash; Synology's default shared folder permissions grant access to the `users` group
+3. **Have explicit access to the shared folder** containing your media &mdash; in DSM, go to **Control Panel &rarr; Shared Folder &rarr; (your share) &rarr; Permissions** and ensure the user has Read/Write access
+
+**Symptom:** The container starts successfully and the database works (cache volume is fine), but streaming fails with permission errors when accessing files on the media volume. The logs may show `java.io.FileNotFoundException` or `AccessDeniedException` for paths under `/media`.
+
+**Fix:** Use the UID of an existing Synology user who has access to the media shared folder:
+
+```bash
+# SSH into the NAS
+ssh admin@your-nas-ip
+
+# Find your user's UID and GID
+id -u your-username    # → e.g., 1046
+id -g your-username    # → e.g., 100
+
+# Verify the user can access the media share
+ls -la /volume1/your-media-share/
+```
+
+Use those values in `docker-compose.yml`:
+```yaml
+user: "1046:100"
+```
+
+---
+
+## Adding Titles to the Catalog
+
+**Sidebar &rarr; Add Item**
+
+The unified Add Item page is the single entry point for adding new media to the catalog. It has three tabs and a persistent items grid:
+
+### Scan Barcode Tab
+
+Two input methods are available:
+
+- **Text field** &mdash; Type or scan a UPC barcode using a USB barcode scanner. Press Enter to submit.
+- **Scan with Camera** &mdash; Tap the button to open your phone's camera as a barcode scanner. Point the camera at a UPC barcode and it is detected automatically. Supports continuous scanning &mdash; after each scan, the camera stays active so you can scan the next disc immediately. Audio and visual feedback confirm each scan (green flash for new, blue for duplicate, red for error).
+
+The camera scanner works on **iOS Safari**, **iOS Chrome**, and other mobile browsers with camera access. It supports UPC-A, UPC-E, EAN-8, and EAN-13 barcode formats. On desktop browsers without a camera, the dialog shows an appropriate error message.
+
+> **Bluetooth barcode scanner tip (iOS):** When a Bluetooth barcode scanner is paired, iOS treats it as an external keyboard and hides the on-screen keyboard. This prevents typing in the search field. To keep the software keyboard available alongside the scanner, go to **Settings &rarr; Accessibility &rarr; Keyboards &rarr; Full Keyboard Access** and turn it off, or enable **Settings &rarr; Accessibility &rarr; Touch &rarr; AssistiveTouch** which forces the on-screen keyboard to remain available. The most reliable method is **Settings &rarr; General &rarr; Keyboard &rarr; Show Keyboard** (iPadOS) or tapping the small keyboard icon in the bottom-right corner of the screen when a text field is focused.
+
+If you scan a barcode that's already in the database, a notification tells you so (with the title name if known) instead of silently ignoring it.
+
+After scanning, the system:
+
+1. Looks up the barcode via UPCitemdb (free, no API key)
+2. Creates a catalog entry with the product name
+3. Cleans the title (strips marketing text like "Blu-ray + Digital")
+4. Searches TMDB for the canonical title, poster, cast, genres, and description
+5. Detects multi-packs ("Double Feature", "Trilogy") for manual expansion
+
+The UPC API has a daily limit of 100 lookups. A quota tracker in the UI shows remaining capacity.
+
+### Search TMDB Tab
+
+Search TMDB directly and add a title without a barcode. Useful for discs where you've thrown away the case. Select Movie or TV, pick a result, choose a format (and seasons for TV), and add to the collection. The title is immediately enriched with full TMDB data.
+
+### From NAS Tab
+
+Shows unmatched files discovered on the NAS. You can accept a suggested title match, open a link dialog to search for the right title, or ignore files that don't belong. Linking creates the Title and Transcode records. This is the same data shown on the Transcodes &rarr; Unmatched page, but accessible inline for convenience.
+
+### Items Needing Attention
+
+Below the tabs, a persistent grid shows recently added items (last 30 days) that still need work. Items appear here regardless of how they were added. Completion indicators show what's missing: enrichment status, purchase info, and ownership photos. Click any row to open the detail panel.
+
+The grid is database-backed, so it works across sessions. Scan 150 barcodes today, hit the UPC quota limit, come back tomorrow &mdash; the items that enriched overnight appear ready for details.
+
+A filter toggle switches between "Needs Attention Only" (default) and "Show All Recent".
+
+### Item Detail Panel
+
+Clicking a row opens an inline detail panel with:
+
+- **Title &amp; Enrichment** &mdash; poster, title, format, enrichment status. "Fix" button for failed enrichment.
+- **Purchase Info** &mdash; place, date, and price fields that auto-save on change.
+- **Matching NAS Files** &mdash; if the title has unmatched NAS files with similar names, they appear here with "Link" buttons. This bridges the physical-disc and digital-file worlds.
+- **Ownership Photos** &mdash; camera capture button and photo strip for proof-of-ownership documentation.
+- **Actions** &mdash; "Done" collapses the panel; "View in Catalog" navigates to the title detail page.
+
+### Amazon Import
+
+**Sidebar &rarr; Amazon Order Import**
+
+Upload an Amazon order history CSV to bulk-fill purchase dates and prices for titles already in your catalog. The system fuzzy-matches Amazon product names to catalog titles, then presents matches for your review before committing.
+
+---
+
+## Expanding Multi-Packs
+
+**Sidebar &rarr; Expand**
+
+Some products contain multiple titles: double features, trilogies, box sets, or slash-separated packs ("Aliens / Predator"). The multi-pack detector flags these during scanning.
+
+On the Expand page, search TMDB for each individual title in the pack, link them, and the system creates separate catalog entries. Each child title gets its own poster, metadata, and transcode links.
+
+---
+
+## Library Layout & Supported Formats
+
+Three independent scanners walk three configurable directories.
+None overlap; each is configured via its own `app_config` key (set
+through Settings or environment variables) and accepts a fixed list
+of file extensions.
+
+| Library | Setting key | Setting → label | Accepted extensions | Layout style |
+|---|---|---|---|---|
+| Movies / TV | `nas_root_path` | Settings → NAS Path | `mkv` `mp4` `avi` `m4v` | Auto-classified per top-level subdirectory (see "NAS Directory Structure" below) |
+| Books | `books_root_path` | Settings → Books → EBook Directory | `epub` `pdf` | Flat or nested — scanner walks recursively |
+| Music | `music_root_path` | Settings → Music → Music Directory | `flac` `mp3` `m4a` `ogg` `oga` `opus` `wav` | `<Artist>/<Album>/NN-<Track>.<ext>` (de facto convention; scanner buckets by parent dir, not on path shape) |
+
+The three scanners share **no common parent** — you can point them
+at completely separate filesystems if you like. Files outside the
+configured roots are not seen.
+
+### Common rules across all three
+
+- **Idempotent.** A file already linked to the catalog is skipped.
+  Re-running a scan picks up new files; nothing on disk is renamed
+  or moved.
+- **Loud failure beats silent skip.** A file the scanner couldn't
+  match doesn't disappear — it parks in an *unmatched* admin queue
+  (Unmatched Audio for music, Unmatched Books for books, the
+  discovered-files surface for video) until you triage it.
+- **One extension per file.** Add a file with a recognized extension,
+  it gets discovered. Add a `.bak` or `.partial` and the scanner
+  ignores it. The fetcher tooling under `app_store_demo_setup/`
+  uses `.partial` siblings during in-progress downloads for exactly
+  this reason — interrupted fetches don't tempt the scanner with
+  half-files.
+- **Dropping a file is enough.** No sidecar metadata or rename ritual
+  is required. Tags inside the file (id3 / FLAC / OPF) drive matching
+  for books and music; filename + classification drives matching for
+  video.
+
+### Movies vs TV — file-naming conventions
+
+The NAS scanner classifies each top-level subdirectory under
+`nas_root_path` as **MOVIE** (flat layout) or **TV** (nested
+layout). It then parses each filename to extract title, year, season
+and episode metadata.
+
+**Movies** — flat under the title directory:
+
+```
+nas_root/
+├── The Matrix (1999)/
+│   └── matrix.mp4
+└── Inception (2010)/
+    └── inception.mkv
+```
+
+A `(YYYY)` between 1950 and 2050 in the filename is interpreted as
+the release year. Trailing articles get normalized: `Karate Kid The`
+becomes `The Karate Kid`. A trailing `_t00` / `_t01` title-number suffix
+(the naming pattern MakeMKV uses) is stripped automatically.
+
+**TV** — nested two levels deep:
+
+```
+nas_root/
+└── The Adventures of Sherlock Holmes (1954)/
+    └── Season 01/
+        ├── The Adventures of Sherlock Holmes - S01E01 - The Case of the Cunningham Heritage.mp4
+        └── The Adventures of Sherlock Holmes - S01E02 - The Case of Lady Beryl.mp4
+```
+
+The episode filename is required to match
+`<Show> - SXXEXX - <Episode Title>.<ext>` (case-insensitive on the
+`S` and `E`, two-digit numbers required). The "doubled" form some
+rippers emit — `<Show> - SXXEXX - <Show> - sXXeXX - <Title>.<ext>` —
+is also recognised.
+
+A directory containing `SXXEXX` filenames is classified as TV
+**regardless of whether the videos are nested in season folders**.
+That matches what naive bulk-download dumps look like.
+
+### Music tag-driven matching
+
+Layout is not what the music scanner matches on — it matches on
+*tags inside the file*. Files with no useful tags (the
+"unidentifiable shellac transfer" case) park in **Unmatched Audio**
+until an admin links them by hand.
+
+Tier ladder (first that hits wins, after track-list validation):
+
+1. `MUSICBRAINZ_ALBUMID` — direct release MBID.
+2. `UPC` / `BARCODE` — MusicBrainz barcode lookup.
+3. `CATALOGNUMBER` (+ optional `LABEL`) — MB catno search.
+4. Per-track `ISRC` — MB ISRC lookup.
+5. `ALBUMARTIST` + `ALBUM` — fuzzy MB search (lowest confidence).
+
+Common tag-only formats (FLAC, MP3 with id3v2, M4A) all expose
+these. dBpoweramp's default-tagged rips hit Tier 1 every time;
+archive.org `78rpm` MP3s usually carry only Tier 5 tags so they may
+land in Unmatched Audio depending on what MusicBrainz can fuzzy-
+match. Re-tag with an MBID-aware tool if you need deterministic
+ingestion.
+
+### Books
+
+Drop `.epub` or `.pdf` files anywhere under `books_root_path`. EPUBs
+with embedded ISBNs auto-catalogue via OpenLibrary. PDFs and EPUBs
+without ISBNs park in **Unmatched Books** for admin link-up. A PDF
+sitting next to an EPUB of the same name auto-links as a sibling
+edition once the EPUB resolves.
+
+---
+
+## NAS Directory Structure
+
+Media Manager auto-discovers media files under the configured NAS root path. It classifies each top-level subdirectory as either **Movies** (flat — files directly in the folder) or **TV** (nested — files inside show/season subdirectories).
+
+You can organize your directories however you like — names don't matter. The scanner determines TV vs Movie by structure, not by directory name. A directory with `SxxExx` patterns in filenames is always classified as TV regardless of depth.
+
+### Excluding Directories with `.mm-ignore`
+
+Drop an empty file named **`.mm-ignore`** in any directory under the NAS root to exclude it from scanning. The scanner skips any directory containing this marker file.
+
+**Automatically managed:** Media Manager creates and maintains `.mm-ignore` in its own managed directories (currently `ForBrowser/`). If the `ForBrowser/` directory doesn't exist, it is created automatically on startup with a `.mm-ignore` marker.
+
+**User-managed:** Create `.mm-ignore` in any other directory you want excluded — bonus features folders, work-in-progress directories, etc. Just create an empty file:
+
+```bash
+touch /path/to/nas/root/SomeFolder/.mm-ignore
+```
+
+### Media Format Detection
+
+Media format (DVD, Blu-ray, UHD) is determined by **FFprobe resolution analysis**, not by directory name. After the NAS scan discovers new files, a background probe phase examines each file's video resolution:
+
+| Resolution | Format |
+|-----------|--------|
+| 3840×2160 or higher | UHD Blu-ray |
+| 1920×1080 or higher | Blu-ray |
+| 640×480 or higher | DVD |
+| Below 640×480 | Other |
+
+Files that haven't been probed yet show as **Unknown** until the probe completes.
+
+---
+
+## Transcoding & NAS Management
+
+The Transcodes section has four sub-pages:
+
+### Status
+
+<a href="images/screenshots/transcode-status.png" target="_blank">
+  <img src="images/screenshots/transcode-status.png" alt="Transcode status dashboard with progress, throughput, and recent activity" width="640">
+</a>
+
+- **Scan NAS** &mdash; Discover new files on the NAS, auto-match to catalog titles, clean up deleted files
+- **Transcoder progress** &mdash; Shows the current file being transcoded, queue depth, and completion stats
+- **Buddy status** &mdash; If a Transcode Buddy is connected, shows its progress and encoder type
+
+### Unmatched
+
+Files found on the NAS that couldn't be automatically matched to a catalog title. For each file you can:
+
+- **Link** to an existing title (search by name)
+- **Create** a new title and link in one step
+- **Ignore** if it's not a real title (bonus features, etc.)
+
+The system suggests possible matches based on filename similarity.
+
+### Linked
+
+All files successfully matched to catalog titles. Shows the file path, format, codec, and whether a ForBrowser MP4 exists. From here you can:
+
+- Play any linked file
+- Re-trigger transcoding
+- Unlink incorrect matches
+
+### Backlog
+
+Catalog titles that have no media file on the NAS. Sorted by request count, then TMDB popularity, so the most-wanted titles are at the top.
+
+---
+
+## Intro & Credits Detection (MediaSkipDetector)
+
+[MediaSkipDetector](https://github.com/jeffbstewart/MediaSkipDetector) is a companion service that automatically finds shared intro and end-credits sequences across TV episodes using Chromaprint audio fingerprinting. It runs alongside Media Manager, pointing at the same NAS media root.
+
+### How It Works
+
+1. **Scans** the NAS for directories containing 2+ TV episodes (files matching `SxxExx*.mkv`)
+2. **Fingerprints** the first 10 minutes of each episode (for intros) and the last 5 minutes (for credits) using fpcalc/FFmpeg
+3. **Compares** episodes pairwise to find shared audio sequences (the intro music, the credits theme)
+4. **Writes** a `.skip.json` file alongside each source MKV with the detected timestamps
+
+### Setup
+
+Deploy MediaSkipDetector as a Docker container pointing at the same media volume:
+
+```yaml
+services:
+  skipdetector:
+    image: ghcr.io/jeffbstewart/mediaskipdetector:latest
+    container_name: skipdetector
+    restart: unless-stopped
+    user: "1046:100"          # Same UID:GID as mediamanager
+    ports:
+      - "16004:16004"        # Status page + Prometheus metrics
+    volumes:
+      - /volume1/your-media-share:/media          # Same media volume, read/write
+      - /volume1/docker/skipdetector/data:/data    # Persistent fingerprint cache
+    environment:
+      - MEDIA_ROOT=/media
+      - DATA_DIR=/data
+```
+
+The media volume **must be read/write** &mdash; the detector writes `.skip.json` result files alongside the source MKV files. The UID:GID should match your media share permissions (same as the mediamanager container).
+
+fpcalc (Chromaprint) and FFmpeg are bundled in the Docker image. No additional configuration is needed for default operation. See the [MediaSkipDetector tuning docs](https://github.com/jeffbstewart/MediaSkipDetector/blob/main/docs/TUNING.md) for advanced parameter adjustment.
+
+### Import into Media Manager
+
+Media Manager automatically imports skip data during NAS scans (**Transcodes &rarr; Status &rarr; Scan NAS**). The scanner looks for files named `{video_basename}.{agent}.skip.json` alongside each source MKV. Each file contains a JSON array of skip segments:
+
+```json
+[
+  {"start": 42.15, "end": 87.93, "region_type": "INTRO"},
+  {"start": 2606.04, "end": 2658.31, "region_type": "END_CREDITS"}
+]
+```
+
+On every NAS scan, existing segments from the same agent are deleted and re-imported, so updated detections are picked up automatically.
+
+### Playback Integration
+
+Once imported, skip segments enhance playback in both the browser and Roku players:
+
+- **Progress bar** &mdash; Detected segments appear as **cyan regions** on the video progress bar, so you can see at a glance where the intro and credits are
+- **Skip Intro button** &mdash; When playback enters an INTRO segment, a "Skip Intro" button appears in the bottom-right corner. Click it to jump past the intro.
+- **Next Episode at credits** &mdash; When playback enters an END_CREDITS segment, the "Up Next" overlay appears with a 10-second countdown to auto-advance to the next episode. Without credits data, "Up Next" only appears when the video reaches the end.
+- **Roku** &mdash; The Roku channel shows "Press UP to Skip Intro" during intro segments
+
+### Monitoring
+
+The MediaSkipDetector status page at `http://<host>:16004/status` shows scan progress, fingerprint cache stats, and a history of recent analyses with hit rates. Prometheus metrics are available at `/metrics`.
+
+---
+
+## Family Videos
+
+Family videos let you add personal recordings (home movies, recitals, events) to Media Manager alongside your movie and TV collection. The feature must be enabled in Settings before use.
+
+### Enabling the Feature
+
+**Sidebar &rarr; Settings &rarr; Personal Video Enabled** &mdash; Toggle on. When enabled, the NAS scanner classifies files in designated directories as personal video candidates, and a "Family" link appears in the sidebar's Content section.
+
+### Creating Family Videos
+
+Family videos are created from unmatched NAS files:
+
+1. **Scan your NAS** (Transcodes &rarr; Status &rarr; Scan NAS) to discover new files
+2. Go to **Transcodes &rarr; Unmatched** &mdash; personal video files show a "Create" button
+3. Click **Create** to open the dialog where you enter:
+   - **Title** &mdash; A name for the video (e.g., "Emma's Dance Recital 2024")
+   - **Event date** &mdash; When it was filmed
+   - **Description** &mdash; Optional notes
+   - **Family members** &mdash; Tag the people who appear in the video
+   - **Tags** &mdash; Apply any existing tags for organization
+
+The system creates a catalog entry, links it to the file, and it immediately appears in the Family Videos grid.
+
+### Managing Family Members
+
+**Navigate to `/family`** to manage the global family member registry. This page lets you:
+
+- **Add members** with a name, optional birth date, and notes
+- **Edit** existing member details
+- **Delete** members (removes all video associations)
+
+Family members are shared across all videos &mdash; add a person once, then tag them in as many videos as you like. Birth dates are used to calculate and display ages at the time of each video's event date.
+
+You can also add new family members on the fly from the title detail page's "Edit Family Members" dialog.
+
+### Setting Hero Images
+
+Each family video can have a custom hero image extracted from the video itself, displayed in the poster-style 2:3 aspect ratio used throughout the app.
+
+From a family video's title detail page:
+
+1. Click **Set Hero Image** (admin only)
+2. The system extracts 12 evenly-spaced frames from the video using FFmpeg
+3. Each frame shows its **timestamp** (e.g., "1:23", "12:45") so you can identify the scene
+4. Click a frame to set it as the hero image
+5. Click **Shuffle** to get a different set of frame offsets if none of the current options work
+
+Hero images are stored locally (not on TMDB) and served from the `/local-images/` endpoint.
+
+### Editing Family Video Details
+
+From the title detail page, click **Edit** to update:
+
+- **Title** &mdash; Display name
+- **Event date** &mdash; Date filmed
+- **Description** &mdash; Notes about the video
+
+Click the pencil icon next to "People in this Video" to add or remove family member tags.
+
+### How Family Videos Differ from Catalog Titles
+
+| Aspect | Catalog titles | Family videos |
+|--------|---------------|---------------|
+| **Source** | UPC scan or TMDB search | Unmatched NAS file |
+| **Enrichment** | TMDB metadata, posters, cast | Manual entry only |
+| **Poster** | TMDB poster image | Extracted video frame (hero image) |
+| **People** | TMDB cast members | Family member registry |
+| **Sorting** | Alphabetical, popularity | Event date, name, recently added |
+| **Playback** | Same HTML5 player | Same HTML5 player |
+| **Progress** | Same tracking &amp; resume | Same tracking &amp; resume |
+
+---
+
+## Live Camera Streaming
+
+**Sidebar &rarr; Cameras (in Manage section)**
+
+Media Manager can relay live RTSP camera feeds to authenticated browsers and Roku devices via an embedded [go2rtc](https://github.com/AlexxIT/go2rtc) process. The server proxies all streams, so cameras don't need to be directly accessible to clients &mdash; they only need to be reachable from the server.
+
+### Architecture
+
+```
+Camera (RTSP) &rarr; go2rtc (relay, 127.0.0.1:1984) &rarr; HLS &rarr; MediaManager proxy &rarr; Roku
+                                                        &rarr; MJPEG &rarr; MediaManager proxy &rarr; Browser
+                                                        &rarr; JPEG snapshot &rarr; Browser thumbnails
+```
+
+### go2rtc Configuration
+
+The camera settings page includes a **go2rtc Settings** card at the bottom:
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| **go2rtc Binary Path** | `/usr/local/bin/go2rtc` | Path to the go2rtc executable. Pre-installed in the Docker image. |
+| **go2rtc API Port** | `1984` | Port go2rtc binds to on 127.0.0.1 (not externally accessible) |
+
+go2rtc is bundled in the Docker image automatically (downloaded during the image build into `/usr/local/bin/go2rtc`). For non-Docker installs, download the binary from [go2rtc releases](https://github.com/AlexxIT/go2rtc/releases) and set the path.
+
+### Adding Cameras
+
+1. Navigate to **Cameras** in the Manage section of the sidebar
+2. Click **Add Camera**
+3. Fill in the fields:
+   - **Name** &mdash; Display name (e.g., "Front Door", "Driveway")
+   - **RTSP URL** &mdash; Full RTSP URL including credentials (e.g., `rtsp://admin:password@192.168.1.100:554/stream`)
+   - **Snapshot URL** &mdash; Optional HTTP URL for JPEG snapshots (may also contain credentials)
+   - **Stream Name** &mdash; Auto-generated from the camera name (lowercase, underscores). Used internally by go2rtc.
+   - **Enabled** &mdash; Toggle camera on/off without deleting it
+4. Click **Save**
+
+go2rtc automatically restarts with the new camera configuration.
+
+### Credential Security
+
+Camera credentials (in RTSP and snapshot URLs) are handled with care:
+
+- **On initial add:** You type/paste the full RTSP URL with credentials in a plain text field
+- **On edit:** The URL is shown redacted (`rtsp://***:***@192.168.1.100:554/stream`). A "Change URL" button reveals an empty password field. Leave it empty to keep the existing URL, or enter a new URL to replace it. The raw credential never leaves the server after initial entry.
+- **In the grid:** The URL column always shows the redacted form
+- **In logs:** All go2rtc process output is filtered to redact credentials before logging
+- **In API responses:** RTSP URLs are never included in Roku or browser API responses
+
+### Managing Cameras
+
+- **Reorder** &mdash; Use the up/down arrow buttons to change display order
+- **Test** &mdash; Click to fetch a live snapshot and display it in a dialog (verifies connectivity)
+- **Edit** &mdash; Modify name, URL (via blind update), snapshot URL, stream name, or enabled status
+- **Delete** &mdash; Remove the camera. go2rtc reconfigures automatically.
+
+### Feature Gating
+
+- The **Cameras** viewer link (Content section) only appears when at least one enabled camera exists
+- The **Cameras** admin link (Manage section) is always visible to admins
+- The Roku home screen's Cameras button only appears when cameras are configured
+- No camera-related UI is shown anywhere when zero cameras exist
+
+### Docker Notes
+
+The go2rtc binary is included in the Docker image. go2rtc binds to `127.0.0.1:1984` inside the container &mdash; **do not** map port 1984 in your docker-compose file. All client access goes through MediaManager's authenticated proxy on the main port (default 9090).
+
+---
+
+## Live TV (OTA Tuner)
+
+**Sidebar &rarr; Live TV (in Manage section)**
+
+Media Manager can stream over-the-air (OTA) television via a networked HDHomeRun tuner. The server transcodes live MPEG-2 broadcasts to H.264/AAC HLS for playback in any browser.
+
+### Architecture
+
+```
+HDHomeRun (MPEG-TS/MPEG-2/AC-3)
+  &rarr; FFmpeg (H.264/AAC HLS transcode, -preset veryfast -tune zerolatency)
+    &rarr; LiveTvStreamManager (manages FFmpeg processes, temp dirs)
+      &rarr; LiveTvStreamServlet (serves HLS playlist + segments)
+        &rarr; Browser (auth via cookie) / Roku (auth via device token)
+```
+
+### Adding a Tuner
+
+1. Navigate to **Live TV** in the Manage section of the sidebar
+2. Click **Add Tuner**
+3. Enter the tuner's IP address and click **Validate**
+4. The app connects to `http://{ip}/discover.json` and auto-fills the device name, model, tuner count, and firmware
+5. Click **Save**
+
+After adding a tuner, click **Refresh Channels** to import the channel lineup from `http://{ip}/lineup.json`. Channels that have been removed from the lineup are automatically deleted on refresh.
+
+### Channel Management
+
+The channel grid shows all imported channels with:
+
+- **Guide #** and **Name** &mdash; from the tuner's lineup
+- **Reception Quality** &mdash; 1&ndash;5 stars (admin-rated). Default 3. Users can filter channels by quality threshold.
+- **Enabled** &mdash; Toggle individual channels on/off
+
+Quality ratings can also be set inline while watching in the browser viewer (admin only).
+
+### Content Rating Gate
+
+Live TV access can be restricted by content rating. Set the **Content Rating Minimum** in the Live TV settings card (default: TV-14 / PG-13). Users whose content rating ceiling is below this threshold cannot access live TV streams. Admins and unrestricted users (no rating ceiling) always have access.
+
+### Concurrency Settings
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| **Max Concurrent Streams** | 2 | Global cap on simultaneous FFmpeg transcode processes. Prevents CPU overload. |
+| **Idle Timeout (seconds)** | 60 | How long a stream runs with no client requests before FFmpeg is stopped. |
+
+Each user holds at most one active stream. Switching channels automatically stops the previous stream. Multiple users watching the same channel share a single FFmpeg process.
+
+### Roku Integration
+
+Live TV channels appear on the Roku home screen as a carousel row (filtered by each user's quality threshold) and via a dedicated Live TV button. The Roku Video node plays the same HLS streams served by LiveTvStreamServlet. Channel stepping (left/right on the remote) is supported during playback, with a loading overlay shown during the 10&ndash;15 second stream startup.
+
+### Docker Notes
+
+FFmpeg is included in the Docker image. The FFmpeg path and NAS root path are locked in Docker mode &mdash; they cannot be changed from the settings UI.
+
+Temporary stream files are written to `data/live-tv-streams/` inside the container. These are automatically cleaned up when streams stop and on server startup.
+
+---
+
+## Settings
+
+**Sidebar &rarr; Settings**
+
+<a href="images/screenshots/settings.png" target="_blank">
+  <img src="images/screenshots/settings.png" alt="Settings page showing Basic Configuration, Books, Music, Transcode Buddy, Price Lookup, and Legal Documents sections" width="640">
+</a>
+
+| Setting | Purpose |
+|---------|---------|
+| **NAS Root Path** | Root directory of your media files |
+| **FFmpeg Path** | Path to FFmpeg binary (auto-detected in Docker) |
+| **Public Server URL** | The server's public base URL, used in pairing links, QR codes, device stream URLs, the Roku feed, and the address clients adopt from discovery (auto-detected if blank). Stored as `public_base_url`; pre-rename databases still holding `roku_base_url` are read through a fallback. |
+| **Buddy API Keys** | Named API keys for Transcode Buddy workers (bcrypt-hashed, shown once at creation). Supports multiple keys with per-key delete. |
+| **Lease Duration** | How long a buddy lease lasts before expiring |
+| **Keepa API Key** | API key from keepa.com for automated replacement value estimation |
+| **Tokens per minute** | Keepa API rate limit (default 20, match to your subscription tier) |
+| **Enable Keepa** | Activates the background price lookup agent |
+| **Last.fm API Key** | Optional &mdash; API key from last.fm that enables Start Radio on album pages and the Library Recommendations discovery surface. See the Music section below. |
+| **WebAuthn RP ID** | Relying Party domain for passkey authentication. Must exactly match the domain in users' browser address bar, without protocol or port (e.g., `mm.example.com`; use `localhost` for local development) |
+| **WebAuthn RP Origin** | Full origin URL including protocol and port if non-standard (e.g., `https://mm.example.com:8443`). Leave blank to default to `https://<RP ID>` on port 443. Required when using a non-standard HTTPS port. |
+| **WebAuthn RP Name** | Display name shown in browser passkey prompts (defaults to "Media Manager") |
+
+### Price Lookup
+
+The price lookup agent uses the **Keepa API** to estimate replacement values by querying Amazon.com (US marketplace) prices. When enabled, it runs in the background pricing eligible items (DVD, Blu-ray, UHD, HD DVD) at the configured token rate.
+
+**Setup:** Subscribe to Keepa at [keepa.com](https://keepa.com), copy your API key, paste it in Settings, enable the agent. At 20 tokens/minute, a 1,000-item collection takes about 50 minutes to price.
+
+**ASIN resolution priority:** The agent resolves each item to an Amazon ASIN using: (1) user-set override ASIN, (2) linked Amazon order ASIN, (3) UPC-to-ASIN via Keepa, (4) title keyword search on Amazon. You can manually set or correct an ASIN from the Valuation edit dialog.
+
+**Price selection:** Uses 30-day weighted average of new 3rd-party prices, falling back to current new, Amazon direct, or used price. Items are re-priced every 30 days.
+
+**Deleting items:** The Valuation edit dialog includes a Delete button for removing incorrectly scanned items (e.g., non-media barcodes). This cascades to all linked data.
+
+---
+
+## Books
+
+Book support is always on &mdash; no enablement flag. The feature covers both physical books (catalogued by ISBN barcode scan) and ebooks (.epub / .pdf files discovered from a configured directory on the NAS). Metadata comes from [Open Library](https://openlibrary.org) (free, no API key); author biographies are enriched from Wikipedia.
+
+### Configuration
+
+**Sidebar &rarr; Settings &rarr; Books**
+
+| Setting | Purpose |
+|---------|---------|
+| **EBook Directory** | Absolute path (as visible inside the server container) to a directory holding .epub / .pdf files. Leave blank to disable the ebook scanner. |
+
+The ebook scanner walks this directory once an hour and also immediately after a NAS scan finishes. A NAS scan classifies the directory as `BOOKS` and hands it off to the ebook scanner rather than trying to match video files there.
+
+### Ingestion paths
+
+| Source | Entry point | What happens |
+|--------|-------------|--------------|
+| Physical book (ISBN barcode) | **Add Item &rarr; Scan Barcode** | ISBN-13 prefixes (978/979) route to Open Library instead of UPCitemdb. OL resolves the work, edition, authors, and series; a Title + MediaItem are created. |
+| Physical book (title/author) | **Add Item &rarr; Search Books** | Free-text query against OL. Each result pre-picks a best-available ISBN; clicking **Add** runs the same ISBN ingestion path as a scan. Use this when a scan fails or the book has no barcode. |
+| Ebook file (.epub / .pdf) | Background scanner | EPUBs with embedded ISBNs auto-catalogue via OL. PDFs and EPUBs without ISBNs park in the **Unmatched Books** queue. A PDF sitting next to a catalogued EPUB of the same name auto-links as a sibling edition. |
+
+### Unmatched Books queue
+
+**Sidebar &rarr; Unmatched Books** (red badge shows pending count)
+
+Files that couldn't auto-resolve go here. The **Link** dialog offers three resolution paths:
+
+- **Look up by ISBN** &mdash; Supply a corrected ISBN; server re-queries Open Library and ingests.
+- **Search Open Library** &mdash; Title/author search against OL, same UX as the Add Item tab. Results with a known ISBN are selectable; the Add action delegates to the ISBN lookup path.
+- **Link to existing catalogue title** &mdash; Pick an already-catalogued book title to attach this file as another edition. Useful when the parsed ISBN is wrong or you already own a different edition.
+
+**Ignore** marks the row as IGNORED (stops re-triaging in the queue) without deleting the file on disk.
+
+### Cover and headshot image proxy
+
+All third-party images (book covers from `covers.openlibrary.org`, author photos from `upload.wikimedia.org`) route through a server-side proxy with disk cache so client IPs never leak to those CDNs and the CSP stays `img-src 'self'`:
+
+- Book covers: `/posters/{size}/{titleId}` falls back to `/proxy/ol/isbn/{isbn}/{S|M|L}` when the title is a book. `?default=false` is appended so OL 404s instead of returning a 1&times;1 placeholder.
+- Author photos: `/author-headshots/{authorId}` downloads the Wikipedia thumbnail once and serves subsequent requests from disk.
+
+The image proxy enforces a host allowlist, re-runs an SSRF screen on every redirect hop (up to 4), and rejects non-image content types. Failures are logged at WARN; successful fetches count toward the `mm_image_proxy_total` metric.
+
+---
+
+## Music
+
+Music support is always on &mdash; no enablement flag. Albums can be catalogued by CD barcode scan or discovered from ripped audio files on the NAS. Metadata comes from [MusicBrainz](https://musicbrainz.org) (free, no API key) with cover art from the [Cover Art Archive](https://coverartarchive.org); embedded cover art in the rip files is preferred when present. The optional **Start Radio** and **Library Recommendations** features additionally use [Last.fm](https://www.last.fm/api) and are gated on an API key &mdash; see below.
+
+### Configuration
+
+**Sidebar &rarr; Settings &rarr; Music**
+
+| Setting | Purpose |
+|---------|---------|
+| **Music Directory** | Absolute path (as visible inside the server container) to a directory holding .flac / .mp3 / .m4a / .ogg / .oga / .opus / .wav rips. Leave blank to disable the music scanner. |
+| **Last.fm API Key** | Optional. Enables Start Radio and Library Recommendations. Apply for a free non-commercial key at [last.fm/api/account/create](https://www.last.fm/api/account/create). |
+
+The music scanner walks the directory once an hour and also immediately after a NAS scan finishes. A NAS scan classifies the directory as `MUSIC` and hands it off to the music scanner rather than trying to match video files there.
+
+### Ingestion paths
+
+| Source | Entry point | What happens |
+|--------|-------------|--------------|
+| Physical CD (EAN-13 barcode) | **Add Item &rarr; Scan Barcode** | EAN-13s that don't look like book ISBNs route to MusicBrainz's barcode search. On a hit, a `Title` (media_type `ALBUM`) plus `Track` rows and album-level `TitleArtist` credits are created. Cover art comes from Cover Art Archive. |
+| Audio rip (.flac / .mp3 / .m4a / .ogg / .wav) | Background scanner | The scanner reads tags via `ffprobe` and walks a five-tier match ladder to identify the release: `MUSICBRAINZ_ALBUMID` &rarr; `UPC`/`BARCODE` tag &rarr; `CATALOGNUMBER` (+ `LABEL`) &rarr; any track's `ISRC` &rarr; fuzzy `ALBUMARTIST` + `ALBUM` search. First tier to hit wins. On match, each track's `file_path` is set; unresolved files park in **Unmatched Audio**. |
+
+Every scan cycle also reprocesses existing **Unmatched Audio** rows using the stored parsed identifiers &mdash; tag-only matches that couldn't resolve at staging time can resolve later when MusicBrainz data improves, without re-walking the filesystem.
+
+### Cover art
+
+Embedded cover art wins. The scanner extracts the first video stream (FLAC PICTURE / ID3 APIC / M4A `covr`) from whichever track linked first per album via ffmpeg and stashes JPEG bytes into the `poster-cache` directory, then sets `title.poster_cache_id`. Subsequent requests serve from disk, regardless of origin.
+
+When a rip has no embedded art, album covers fall through to the Cover Art Archive proxy at `/proxy/caa/release/{mbid}/front-500`. The unowned **Other Works** grid on the artist page uses `/proxy/caa/release-group/{rgid}/front-250` to render covers without a second MusicBrainz round trip.
+
+### Unmatched Audio queue
+
+**Sidebar &rarr; Unmatched Audio** (red badge shows pending count)
+
+Files the scanner couldn't auto-link go here. The admin table shows the file path, parsed tags (title / album / artist / track number / duration), and an **Identifiers** column with chips for any UPC / catalog # / ISRC / MBID that were read from the tags. Two resolution actions per row:
+
+- **Link** &mdash; Search the catalogue for the track this file should attach to, then click to associate. This sets `track.file_path` and marks the unmatched row `LINKED`. Useful when tags pointed at the wrong release.
+- **Ignore** &mdash; Mark `IGNORED` so the row stops re-triaging. The file stays on disk.
+
+### Start Radio (M7)
+
+Session-scoped radio queues seeded from an album or track. Gated on the `has_music_radio` feature flag, which is true whenever either (a) a Last.fm API key is configured *or* (b) at least one `artist` row has cached Last.fm similarity data &mdash; so the feature degrades gracefully if the key is later removed, continuing to work for artists that have already been radio'd from.
+
+**Setup.** Create a free non-commercial API account at [last.fm/api/account/create](https://www.last.fm/api/account/create), copy the API Key (the shared secret isn't needed &mdash; Media Manager only reads public data), and paste it into **Settings &rarr; Music &rarr; Last.fm API Key**. The Start Radio button appears on album detail pages once at least one similarity lookup has succeeded.
+
+**Data flow.** `LastFmService` calls `artist.getSimilar` at ≤1 req/sec with a descriptive User-Agent. Results cache on the `artist.lastfm_similar_json` column with a 30-day refresh horizon; subsequent radio sessions reading from the same seed artist hit the cache, not Last.fm. `NotFound` / `Error` responses cache an empty marker so the endpoint isn't pounded every hour.
+
+**Endpoint.** The Angular player calls `POST /api/v2/radio/start` (body `{seed_type, seed_id}`) to open a session and `POST /api/v2/radio/next` (body `{radio_seed_id, history}`) to top up the queue when fewer than five tracks remain. Session state (seed artist MBIDs + display name) lives in-memory with a 4-hour sliding TTL; skips within 30 s of track start flow into `history` and down-weight the skipped artist for the rest of the session. No database table involved.
+
+**Privacy.** No listening data is sent to Last.fm &mdash; the service only queries similarity by artist MBID. The key is stored in `app_config`, never logged, and never returned from non-admin APIs.
+
+### Library Recommendations (M8)
+
+Reuses M7's similar-artist cache to surface a **Discover** page &mdash; for each user, a ranked list of unowned artists whose similar-artist votes overlap the user's owned library. Sidebar gains a "Discover" link under Music whenever `has_music_radio` is true (same gate as Start Radio; the cache is shared).
+
+**Compute.** `RecommendationService.recompute(userId)` aggregates similar-artist scores across every owned artist, weighting each voter's contribution by their owned-album count (so the artists a user listens to heavily push harder). Suggestions that match already-owned or previously-dismissed MBIDs drop out; the top 30 get representative release-group covers resolved via MusicBrainz (`listArtistReleaseGroups(mbid, type=album)` picking the earliest non-compilation) and get upserted into `recommended_artist` with a voters JSON blob for the "because you have X, Y, and Z" explanation.
+
+**Schedule.** `RecommendationAgent` runs on a 24 h cycle with a 3-minute startup delay; it walks every non-locked user in order and caps per-user work with the same limits. `POST /api/v2/recommendations/refresh` queues a manual recompute for the calling user via the same shared mutex.
+
+**Endpoints.**
+
+- `GET /api/v2/recommendations/artists?limit=30` &mdash; returns the current active (non-dismissed) recommendations, each with `cover_url` pointing at `/proxy/caa/release-group/{rgid}/front-250`.
+- `POST /api/v2/recommendations/dismiss` &mdash; body `{suggested_artist_mbid}`. Dismissals persist across recomputes so a no-thanks artist doesn't come back unless the user explicitly reverses the dismissal (no UI for that today &mdash; admins can clear `dismissed_at` in the DB).
+- `POST /api/v2/recommendations/refresh` &mdash; fire-and-forget; kicks the background recompute for the caller's user.
+
+**Schema.** `V082__recommended_artist.sql` creates the table with a unique index on `(user_id, suggested_artist_mbid)` plus a score-ordered covering index for list queries. FK to `app_user` has `ON DELETE CASCADE` so deleting a user purges their recommendations.
+
+### Troubleshooting
+
+**Start Radio button is missing.** Verify the key is configured in Settings *and* that at least one artist has similarity data cached. On a fresh install with a key set, this triggers on the first radio session; the button appears after MusicBrainz has seen at least one of your owned artists.
+
+**"No tracks to play" after pressing Start Radio.** The owned library has no artist overlap with the seed's similar-artist list and the fallback cascade (same genre &rarr; same era &rarr; any owned) didn't find anything either. Expect this on libraries under ~10 albums.
+
+**Repetitive queue.** The engine caps at 3 tracks per similar artist per batch and interleaves across artists before within an artist. If the queue still feels repetitive, your library likely has a narrow overlap with the seed &mdash; skip-early (within 30 s) to down-weight artists for the remainder of the session, or start radio from a different seed.
+
+**Discover page is empty on a fresh install.** The agent runs on a 24 h cycle with a 3-minute startup delay; on a new install the user can hit **Refresh now** in the page header to kick it manually. The first refresh against a fresh library calls Last.fm once per owned artist (≤1 req/sec), so expect a minute or two of wall-clock time before the list populates.
+
+**MusicBrainz 429 bursts.** `MusicBrainzHttpService` shares a single `RATE_LIMITER` across every service instance (scanner, radio, recommendations, personnel enrichment). A 429 or 503 response penalises the limiter by 5 s so contending threads back off instead of hammering the 1-req/sec boundary. Occasional bursts during a first-time Discover refresh are expected and self-correct.
+
+---
+
+## User Management
+
+**Sidebar &rarr; Users**
+
+<a href="images/screenshots/users.png" target="_blank">
+  <img src="images/screenshots/users.png" alt="Users admin grid showing roles, rating ceilings, and creation dates" width="640">
+</a>
+
+### Access Levels
+
+| Level | Role | Access |
+|-------|------|--------|
+| 1 | **Viewer** | Browse, search, watch, wish lists, personalization |
+| 2 | **Admin** | Everything above + all Manage section features |
+
+### Per-User Settings
+
+- **Display name** &mdash; Shown in the profile menu and session list
+- **Content rating ceiling** &mdash; Maximum MPAA/TV rating this user can see (e.g., PG-13 hides R and NC-17 titles)
+- **Subtitles** &mdash; Default subtitle preference for browser and Roku playback
+
+### Actions
+
+- **Reset password** &mdash; Set a new password for any user (also invalidates all passkeys)
+- **Promote / Demote** &mdash; Toggle between Viewer and Admin
+- **Sessions** &mdash; View and revoke active sessions for any user
+- **Passkeys** &mdash; View and delete passkeys registered by any user
+- **Delete** &mdash; Remove the account and all associated sessions and passkeys
+
+### Passkey Administration
+
+Users can register passkeys (Face ID, Touch ID, hardware security keys) for faster re-login. Passkeys supplement passwords &mdash; they do not replace them.
+
+As an admin you can view how many passkeys each user has registered in the user list. Click into a user to see their individual passkeys and delete any that should be revoked. Resetting a user's password automatically deletes all their passkeys.
+
+To enable passkey support, set the **WebAuthn RP ID** in Settings to match the domain your users access the site from (e.g., `mm.example.com`). Passkeys will not be offered on the login page until at least one user has registered a passkey and the RP ID is configured.
+
+---
+
+## User Wishes
+
+**Sidebar &rarr; User Wishes**
+
+<a href="images/screenshots/purchase-wishes.png" target="_blank">
+  <img src="images/screenshots/purchase-wishes.png" alt="User Wishes aggregate view with vote counts and per-row status dropdowns" width="640">
+</a>
+
+This page aggregates media wish list requests from all users into a single view, sorted by vote count. When multiple users wish for the same title, their votes are combined so you can prioritize popular requests.
+
+Each row shows the title poster, name (with season number for TV shows), release year, media type, vote count, and the list of users who requested it.
+
+### Setting Acquisition Status
+
+Click the status badge on any row to update its acquisition status:
+
+| Status | Color | Meaning |
+|--------|-------|---------|
+| **Unknown** | Gray | Not yet reviewed |
+| **Ordered** | Blue | You've ordered it &mdash; users see "Ordered" on their wish list |
+| **Owned** | Green | Acquired and in the catalog &mdash; automatically fulfills matching user wishes |
+| **Rejected** | Red | Won't be purchased &mdash; users see "Won't be purchased" |
+| **Not Available** | Gray | Title isn't available for purchase yet |
+| **Needs Assistance** | Orange | Requires special handling |
+
+Setting a title to **Owned** triggers automatic fulfillment: all users who wished for that title (and season, for TV) see their wish updated to "Added to collection" or "Ready to watch!" depending on whether a playable transcode exists.
+
+---
+
+## Tags
+
+**Sidebar &rarr; Tags**
+
+Create colored tags to organize your collection. Each tag has a name and a background color (chosen via color picker). Tags appear as pill badges on title detail pages and as filter options in the catalog.
+
+- Create, edit, and delete tags from the tag management page
+- Apply tags to titles from the title detail page (admin edit dialog)
+- Browse tagged titles at the tag detail page
+
+---
+
+## Valuation & Inventory
+
+**Sidebar &rarr; Valuation**
+
+Track what you paid for each disc &mdash; useful for insurance documentation or curiosity. Links to Amazon order data when available. The edit dialog also shows any evidence photos attached to the item, with download links.
+
+### Document Ownership
+
+**Sidebar &rarr; Document Ownership**
+
+Capture proof-of-ownership photos for insurance claims. This mobile-friendly view supports two workflows:
+
+1. **Scan &amp; Snap** &mdash; Scan a UPC barcode to identify a media item, then take photos of the disc case or shelf using the device camera.
+2. **Search &amp; Snap** &mdash; Search for an item by title or UPC, then capture photos.
+
+Photos are stored as original files (EXIF/GPS metadata preserved) in `data/ownership-photos/` on disk, with only metadata tracked in the database.
+
+### Insurance Report
+
+**Sidebar &rarr; Report**
+
+Generates a downloadable PDF and CSV inventory summary. The PDF includes:
+
+- **Executive summary** &mdash; total items, format breakdown, documented value, evidence coverage percentage
+- **Gap analysis** &mdash; estimates the value of unpriced items using format-average pricing
+- **Detailed item tables** &mdash; grouped by retailer, with purchase dates, prices, and replacement values
+- **Ownership photos** (optional) &mdash; check the "Include ownership photos in PDF" box to embed evidence photos inline below each item, approximately 1 inch tall
+
+---
+
+## Monitoring
+
+HTTP access logs and application log records are shipped to Binnacle via
+SLF4J (`http.access` and per-class loggers flow through `BinnacleExporter`).
+Query them there rather than on the server itself.
+
+### Health Check
+
+**`/health`** (internal port 8081, not on main app port) &mdash; Returns HTTP 200 when the server is running. Used by Docker health checks and monitoring tools. In Docker, mapped to LAN port 16002. Not internet-accessible.
+
+### Prometheus Metrics
+
+**`/metrics`** (internal port 8081, not on main app port) &mdash; Application metrics in Prometheus exposition format. JVM stats, transcode queue depth, HTTP request counts, and more. Configure Prometheus to scrape `<nas-ip>:16002/metrics`.
+
+---
+
+## Active Sessions
+
+Each user can view their active sessions from the profile menu &rarr; **Active Sessions**. Admins can also view and revoke sessions for any user from the Users page.
+
+Sessions include:
+- **Browser sessions** &mdash; 30-day cookie-based login, showing browser/OS summary and last-used time
+- **Device tokens** &mdash; Permanently paired Roku devices, showing device name
+
+Admins can revoke individual sessions or use "Revoke All Other Sessions" as a security measure.
+
+---
+
+## Database Backups &amp; Restore
+
+### Automated Backups
+
+The server creates rolling database backups automatically:
+
+- **6 daily backups** &mdash; one per day, rotating through slots 0&ndash;5
+- **4 weekly backups** &mdash; one per Sunday, rotating through slots 0&ndash;3
+- First backup runs 1 minute after startup, then every 24 hours
+- Stored in `data/backups/` (inside the container volume)
+
+When `H2_FILE_PASSWORD` is set, backups are AES-encrypted using H2's `CIPHER AES` (no plaintext ever touches disk). Without encryption, backups are gzip-compressed SQL scripts.
+
+| Encryption | Daily files | Weekly files |
+|------------|-------------|--------------|
+| Enabled | `daily-N.sql.enc` | `weekly-N.sql.enc` |
+| Disabled | `daily-N.sql.gz` | `weekly-N.sql.gz` |
+
+### Restoring from a Backup
+
+To restore the database from a backup:
+
+1. **Stop the server** (or plan for a restart)
+2. **Copy the desired backup** to `data/restore.sql`:
+   ```bash
+   cp data/backups/daily-3.sql.enc data/restore.sql
+   ```
+3. **Start (or restart) the server**
+
+On startup, the server detects `data/restore.sql` and automatically:
+1. Backs up the current database to `data/mediamanager.mv.db.pre-restore`
+2. Creates a fresh database and imports the backup
+3. Deletes the sentinel file
+4. Continues normal startup (Flyway migrations, etc.)
+
+If the import fails, the previous database is restored and the sentinel is deleted.
+
+**Important:** The backup file must match the current encryption setting. If `H2_FILE_PASSWORD` is set, the restore file must be an encrypted backup (`.sql.enc`). If not set, it must be a plain/gzip backup (`.sql.gz`).
+
+### Docker Restore Example
+
+```bash
+# List available backups
+docker exec mediamanager ls -la /app/data/backups/
+
+# Copy a backup to the sentinel location
+docker exec mediamanager cp /app/data/backups/daily-2.sql.enc /app/data/restore.sql
+
+# Restart the container — restore happens automatically on startup
+docker restart mediamanager
+```
+
+---
+
+<p align="center">
+  <a href="index.md">Documentation Home</a> &bull;
+  <a href="USER_GUIDE.md">User Guide</a> &bull;
+  <a href="GETTING_STARTED.md">Getting Started</a>
+</p>

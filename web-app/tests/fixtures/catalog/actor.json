@@ -1,0 +1,16 @@
+{
+  "person_id": 6384,
+  "name": "Keanu Reeves",
+  "biography": "Canadian actor and musician, best known for his roles in The Matrix and John Wick.",
+  "birthday": "1964-09-02",
+  "deathday": null,
+  "place_of_birth": "Beirut, Lebanon",
+  "known_for": "Acting",
+  "profile_path": "/headshots/6384",
+  "owned_titles": [
+    { "title_id": 100, "title_name": "The Matrix", "poster_url": "/posters/w185/100", "release_year": 1999, "character_name": "Neo" }
+  ],
+  "other_works": [
+    { "tmdb_id": 245891, "title": "John Wick", "media_type": "movie", "character_name": "John Wick", "release_year": 2014, "poster_path": "/fZPSd91yGE9fCcCe6OoQZ6ljZeB.jpg", "popularity": 85.2, "already_wished": false }
+  ]
+}

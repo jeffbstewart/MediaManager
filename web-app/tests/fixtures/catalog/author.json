@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "name": "Frank Herbert",
+  "biography": "American science-fiction author, best known for the Dune saga.",
+  "headshot_url": "/author-headshots/1",
+  "birth_date": "1920-10-08",
+  "death_date": "1986-02-11",
+  "open_library_author_id": "OL21594A",
+  "owned_books": [
+    { "title_id": 300, "title_name": "Dune", "poster_url": "/posters/w185/300", "release_year": 1965, "series_name": "Dune", "series_number": "1" }
+  ],
+  "other_works": [
+    { "ol_work_id": "OL12345W", "title": "Dune Messiah", "year": 1969, "cover_url": null, "series_raw": "Dune #2", "already_wished": false }
+  ]
+}

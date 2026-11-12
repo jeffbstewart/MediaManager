@@ -1,0 +1,205 @@
+.queue-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 80px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(520px, 70vh);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-highest) 98%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 20;
+}
+
+.queue-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.header-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(187, 134, 252, 0.95);
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.header-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-note {
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+
+.close-btn {
+  flex-shrink: 0;
+}
+
+.queue-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.375rem 0.75rem;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 4%, transparent); }
+
+  &.past { opacity: 0.45; }
+
+  &.current {
+    background: rgba(187, 134, 252, 0.12);
+
+    .row-title { font-weight: 600; color: rgba(187, 134, 252, 0.95); }
+  }
+}
+
+.row-thumb {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  mat-icon {
+    opacity: 0.4;
+  }
+}
+
+.now-playing-indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.55);
+
+  span {
+    display: block;
+    width: 3px;
+    background: rgba(187, 134, 252, 0.95);
+    border-radius: 1px;
+    animation: bar 0.9s ease-in-out infinite;
+
+    &:nth-child(1) { height: 10px; animation-delay: -0.3s; }
+    &:nth-child(2) { height: 16px; animation-delay: -0.15s; }
+    &:nth-child(3) { height: 12px; }
+  }
+}
+
+@keyframes bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
+}
+
+.row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.row-title {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-meta {
+  font-size: 0.6875rem;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-album {
+  opacity: 0.85;
+}
+
+.row-duration {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+// Phase 2 — save/add actions row at the top of the panel.
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+// Picker is anchored over the panel itself; click-out closes it.
+.picker-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.picker-anchor {
+  // Stop the overlay click from bubbling — set on (click) in template.
+}

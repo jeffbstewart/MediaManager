@@ -1,0 +1,35 @@
+# Marquee chain progress
+
+Working file for the cloud chain. Deleted in the mop-up.
+
+PR numbers and hashes refer to the retired repository's history and do not resolve here.
+
+| Row | Branch | Status | PR | Screenshots SHA | Notes |
+|---|---|---|---|---|---|
+| 01 | agent/marquee-01-dark | done | #121 | d58ad2949f8d | Dark only (S2). No removed override had to be re-added; axe 78/78. Screenshots captured by the operator (the wrapper's capture mode landed in retired-repo PR #122). |
+| 02 | agent/marquee-02-breakpoints | done | #123 | ff6c16018b22 | 1023/599 only; `styles/_layout.scss` added (no consumers yet). Audio player 720px query became 599px. Playwright 652/652. |
+| 03 | agent/marquee-03-shell-extract | done | #126 | 0920852d466e | 4a to 4c as pure refactors; no spec changes. Drawer audio-player padding now targets the `app-nav-list` host. Playwright 652/652. |
+| 04 | agent/marquee-04-header | done | #128 | 4fe6db6fe001 | 4d and 4e. Brand kept as the h1 (most views start at h2). `scroll-source.ts` holds the scroller for `is-scrolled`; 4h passes `window`. Search folds to an icon at 599px. Playwright 656/656. |
+| 05 | agent/marquee-05-user-sheet | done | #129 | 32b50b3e3c48 | 4f. Account pill reads the username from `GET /api/v2/profile` (one extra request per load; icon only if it fails). `styles/_sheet.scss` is global so 4h can reuse it. Playwright 663/663. |
+| 06 | agent/marquee-06-nav-pills | done | #131 | 1785dcb06c6b | 4g. Plain `nav > a.nav-item` pills; active style keys off `aria-current`; group toggles carry `aria-expanded`. Deviation: the MANAGE label is a styled `div`, not an `h3` (axe heading-order). `mat-divider` dropped. Playwright 664/664. PR body image cells rewritten in transit (3 of 10 intact after one PATCH). |
+| 07 | agent/marquee-07-container | done | #132 | bbbed912b78c | 4h. `aside.side-nav` plus `main.app-main`, document scrolling; below 1024px the nav opens in `dialog.sheet.left`, closed on navigation. `--player-h` (73px) reserves the audio bar. Axe then measured text the old scroller hid: four contrast fixes (home poster meta, help inline link, settings read-only inputs, document ownership divider). Playwright 669/669. |
+| 08 | agent/marquee-08-tabbar-glow | done | #133 | db230f41d2e2 | 4i to 4k. `app-tab-bar` below 1024px, active tab from the URL section (Movies & TV covers movies and TV); `--tabbar-off` lifts `main` and the audio player. `.page-glow` with `body[data-page]` (home, discover); gradients are `--g-*` properties from `--mat-sys-*` for Phase 1 to replace. Shell chunk 113.69 kB before 4a to 69.03 kB; sidenav, toolbar, list gone from the build (menu stays for six feature pages). New functional 58; axe 05 audits the tab bar. Playwright 677/677. |
+| 09 | agent/marquee-09-shared-components | done | #134 | 80332f647a31 | Step 5. `shared/media/` with all eleven components plus the `appRowScroll` directive. Home, title grid, actor, author, artist, series, collections and collection detail use `poster-card`; private card CSS deleted. The `.poster-card` host is no longer the anchor, so specs 05, 17, 50 and 51 select `a.card-link`. Deviation: search and wish-list cards not migrated (see Notes for later). Playwright 677/677. Screenshots under `agent/marquee-09-media/` (see Notes for later). |
+| 10 | agent/marquee-10-theme-server | done | #136 | 4c84c3007643 | V101 `web_theme`, `WebTheme` (`classic`, `marquee`, `DEFAULT = CLASSIC`), profile GET `web_theme` + `default_theme`, `POST /api/v2/profile/theme`. Profile GET now serializes nulls explicitly (`rating_ceiling` arrives as `null`, not omitted). Gradle green; Playwright 677/677. |
+| 11 | agent/marquee-11-theme-client | done | #137 | 921e7c3850fa | `ThemeService` + `theme-ids.ts`, `_theme-classic.scss` / `_theme-marquee.scss` (generated palette in `_marquee-palette.scss`), `main.ts` pre-bootstrap read, `index.html` fallback checked by `WebThemeTest`. Profile Theme radio group posts `/api/v2/profile/theme`. Harness runs axe per theme via `MM_THEME`. Gradle green; Playwright 764/764 (axe 81 per theme). |
+
+Status values: todo, done (set by the run when it opens the PR; the merge makes it true), blocked. The operator sets a row back to `todo` to have it redone.
+
+## Notes for later
+- Row 05: `docs/ADMIN_GUIDE.md` says the display name is "shown in the profile menu"; the user sheet shows the username. Either show the display name in the sheet or fix the guide (Phase 4 docs).
+- Row 05: `tests/visual/capture.mjs` never opens the user sheet, so PR screenshots show only the pill. A sheet-open capture would help review of 4f and the 4h phone nav.
+- Row 06: captures run as a viewer, so the MANAGE group, its collapsibles and the badges never appear in PR screenshots. An admin capture would cover them.
+- Row 06: the wish-list badge is white on `#4caf50` (about 2.8:1 by calculation) and axe has not flagged it; check whether any audited page renders it, and recolor it when badges move to theme tokens.
+- Row 07: a nav sheet opened below 1024px stays open if the window is widened past 1023px (the side nav then shows behind its backdrop). Closing on a `(min-width: 1024px)` match would need a media listener, which 4h removed on purpose.
+- Row 09: search result cards (type pills, type icons) and wish-list cards (lifecycle state, cancel and dismiss actions) still carry their own markup; move them onto `poster-card` with the Phase 3 search page rebuild. Tag detail (media-type pill, admin remove button) and title detail's Similar row also still use private card CSS.
+- Row 09: hero-banner, hero-carousel, wide-card, person-card, chip-row, category-tile and faq-accordion have no consumer until Phase 2; give each a functional and axe spec when home starts using it (the hero dots are 8px targets, so check axe's target-size rule then).
+- Row 09: `media-row`'s arrows track scroll and row resizes but not items removed by a dismiss; a MutationObserver would keep the next arrow exact.
+- Row 09: the PR-body image rewrite is triggered by URL length, not by the markup. With the screenshots SHA, a folder of 22 characters (`marquee-08-tabbar-glow`) passes, 27 is partly rewritten and 28 always is, whatever the words. Row 09's images live under the shorter `agent/marquee-09-media/`. The brief's screenshot step should name the folder after the row number only (for example `agent/marquee-10/`) so later rows stay under the limit.
+- Row 11: `tests/harness.mjs` counts a spec that fails to load (a syntax error in a helper, Playwright's "No tests found") as passing with 0 tests, because the JSON report parses and holds no failures. Treat an empty spec as a failure.
+- Row 11: the hex sweep only removed the dead `#bb86fc` / `#4a90e2` / `#2a2a2a` fallbacks behind `--mat-sys-*`. The `#1a1b1f` card backgrounds in actor, artist, author and series, and the profile and playlist badge fills, are still literal; move them to tokens with the Phase 3 view rebuilds.
+- Row 11: `docs/USER_GUIDE.md` has no Theme subsection yet and `CLAUDE.md` no Theming paragraph (Phase 4).

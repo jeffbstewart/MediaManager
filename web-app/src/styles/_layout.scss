@@ -1,0 +1,55 @@
+// Layout tokens shared by every theme (docs/plans/web-theming.md,
+// decision 1 and S4). Themes own color, type, shape and depth; the
+// geometry below is the same whichever theme is active, so it is not
+// scoped to a `data-theme` value.
+//
+// There are two breakpoints and only two:
+//   1023px and below: the side nav collapses and the bottom tab bar
+//                     appears (tablet and narrow desktop).
+//   599px and below:  phone sizes.
+// Component stylesheets use the same two values in their own media
+// queries; the shell's matchMedia query uses the 1023px one.
+
+:root {
+  --header-h: 64px;
+  --nav-w: 240px;
+  --pad-x: 64px;
+  --pad-top: 24px;
+  --section-gap: 32px;
+  --row-gap: 16px;
+  --poster-w: 203px;
+  --poster-h: 304px;
+  --wide-w: 247px;
+  --wide-h: 139px;
+  --hero-h: 394px;
+  --tabbar-h: 64px;
+  --grid-min: 192px;
+  --grid-gap: 32px;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --pad-x: 16px;
+    --pad-top: 16px;
+    --section-gap: 24px;
+    --row-gap: 12px;
+    --poster-w: 175px;
+    --poster-h: 262px;
+    --wide-w: 220px;
+    --wide-h: 124px;
+    --grid-min: 160px;
+    --grid-gap: 16px;
+  }
+}
+
+@media (max-width: 599px) {
+  :root {
+    --row-gap: 8px;
+    --poster-w: 114px;
+    --poster-h: 171px;
+    --wide-w: 175px;
+    --wide-h: 99px;
+    --grid-min: 104px;
+    --grid-gap: 12px;
+  }
+}

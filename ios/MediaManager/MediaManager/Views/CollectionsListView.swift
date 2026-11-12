@@ -1,0 +1,65 @@
+import SwiftUI
+import MediaManagerCore
+import MediaManagerProtos
+
+struct CollectionRoute: Hashable {
+    let tmdbCollectionId: TmdbCollectionID
+    let name: String
+}
+
+struct CollectionsListView: View {
+    @Environment(OnlineDataModel.self) private var dataModel
+    @State private var collections: [ApiCollectionListItem] = []
+    @State private var loading = true
+
+    var body: some View {
+        Group {
+            if loading {
+                ProgressView("Loading...")
+            } else if collections.isEmpty {
+                ContentUnavailableView("No collections", systemImage: "square.stack")
+            } else {
+                List(collections) { collection in
+                    NavigationLink(value: CollectionRoute(tmdbCollectionId: collection.tmdbCollectionId, name: collection.name)) {
+                        HStack(spacing: 12) {
+                            CachedImage(ref: .collectionPoster(tmdbCollectionId: collection.tmdbCollectionId.protoValue))
+                                .frame(width: 50, height: 75)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(collection.name)
+                                    .fontWeight(.medium)
+                                Text("\(collection.titleCount) titles")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Collections")
+        .task {
+            await loadCollections()
+        }
+        .refreshable {
+            await loadCollections()
+        }
+    }
+
+    private func loadCollections() async {
+        loading = collections.isEmpty
+        do {
+            let response = try await dataModel.collections()
+            collections = response.collections
+        } catch {
+            // Rapid tab nav cancels and re-fires `.task`; the
+            // cancelled call would otherwise drop `loading=false`
+            // with `collections.isEmpty=true` and briefly flash
+            // the "No collections" empty state. Bail before
+            // touching state if we were cancelled.
+            if Task.isCancelled || error is CancellationError { return }
+        }
+        loading = false
+    }
+}

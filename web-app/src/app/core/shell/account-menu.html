@@ -1,0 +1,41 @@
+<button type="button" class="account-btn" [class.has-account]="account() !== null"
+        aria-label="Open user menu" aria-haspopup="dialog"
+        [attr.aria-expanded]="sheetOpen()" (click)="open()">
+  @if (account(); as a) {
+    <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+    <span class="label" aria-hidden="true">{{ a.username }}</span>
+  }
+  <mat-icon class="acct-icon" aria-hidden="true">account_circle</mat-icon>
+</button>
+
+<dialog #sheet class="sheet" aria-label="User menu"
+        (close)="onClosed()" (click)="onDialogClick($event)">
+  <button type="button" class="icon-btn sheet-close" aria-label="Close" (click)="close()">
+    <mat-icon aria-hidden="true">close</mat-icon>
+  </button>
+
+  @if (account(); as a) {
+    <div class="who">
+      <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+      <b>{{ a.username }}</b>
+      <span>{{ roleLabel() }}</span>
+    </div>
+  }
+
+  <a class="sheet-link" [routerLink]="routes.profile()" (click)="close()">
+    <mat-icon aria-hidden="true">person</mat-icon>
+    <span>Profile</span>
+  </a>
+  <a class="sheet-link" [routerLink]="routes.help()" (click)="close()">
+    <mat-icon aria-hidden="true">help_outline</mat-icon>
+    <span>Help</span>
+  </a>
+  <button type="button" class="sheet-link" (click)="onReportProblem()">
+    <mat-icon aria-hidden="true">flag</mat-icon>
+    <span>Report a Problem</span>
+  </button>
+  <button type="button" class="sheet-link" (click)="onSignOut()">
+    <mat-icon aria-hidden="true">logout</mat-icon>
+    <span>Sign Out</span>
+  </button>
+</dialog>

@@ -1,0 +1,1718 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// Admin-only operations. All RPCs require access_level >= 2.
+service AdminService {
+  // --- Transcode Monitoring ---
+  rpc GetTranscodeStatus(Empty) returns (TranscodeStatusResponse);
+  rpc GetBuddyStatus(Empty) returns (BuddyStatusResponse);
+  rpc ScanNas(Empty) returns (Empty);
+  rpc ClearFailures(Empty) returns (ClearFailuresResponse);
+
+  // Server-streaming: live transcode progress pushed to client.
+  rpc WatchTranscodeProgress(Empty) returns (stream TranscodeProgressEvent);
+
+  // Server-streaming: initial snapshot + live delta updates.
+  rpc MonitorTranscodeStatus(Empty) returns (stream TranscodeStatusUpdate);
+
+  // --- Barcode Scanning ---
+  rpc SubmitBarcode(SubmitBarcodeRequest) returns (SubmitBarcodeResponse);
+  rpc ListRecentScans(Empty) returns (RecentScansResponse);
+
+  // Server-streaming: initial snapshot of recent scans + live progress updates.
+  rpc MonitorScanProgress(Empty) returns (stream ScanProgressUpdate);
+
+  // --- Scan Detail ---
+  rpc GetScanDetail(ScanIdRequest) returns (ScanDetailResponse);
+  rpc AssignTmdb(AssignTmdbRequest) returns (AssignTmdbResponse);
+  rpc UpdatePurchaseInfo(UpdatePurchaseInfoRequest) returns (Empty);
+  rpc UploadOwnershipPhoto(UploadOwnershipPhotoRequest) returns (UploadOwnershipPhotoResponse);
+  rpc DeleteOwnershipPhoto(DeleteOwnershipPhotoRequest) returns (Empty);
+
+  // --- Add Title ---
+  // Create a title + media item from a TMDB search result.
+  rpc AddTitle(AddTitleRequest) returns (AddTitleResponse);
+
+  // --- Transcode Management ---
+  rpc ListLinkedTranscodes(PaginationRequest) returns (LinkedTranscodeResponse);
+  rpc UnlinkTranscode(TranscodeIdRequest) returns (Empty);
+  rpc ListUnmatchedFiles(Empty) returns (UnmatchedResponse);
+  rpc AcceptUnmatched(UnmatchedIdRequest) returns (AcceptUnmatchedResponse);
+  rpc IgnoreUnmatched(UnmatchedIdRequest) returns (Empty);
+  rpc LinkUnmatched(LinkUnmatchedRequest) returns (AcceptUnmatchedResponse);
+
+  // --- Data Quality ---
+  rpc ListDataQuality(DataQualityRequest) returns (DataQualityResponse);
+  rpc ReEnrich(TitleIdRequest) returns (Empty);
+  rpc DeleteTitle(TitleIdRequest) returns (Empty);
+  rpc UpdateTitleMetadata(UpdateTitleMetadataRequest) returns (Empty);
+
+  // --- Purchase Wishes ---
+  rpc ListPurchaseWishes(Empty) returns (PurchaseWishListResponse);
+  rpc UpdatePurchaseWishStatus(UpdatePurchaseWishStatusRequest) returns (Empty);
+
+  // --- Rip Backlog ---
+  rpc ListRipBacklog(PaginationRequest) returns (RipBacklogResponse);
+
+  // --- Tags ---
+  rpc ListTags(Empty) returns (AdminTagListResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc UpdateTag(UpdateTagRequest) returns (Empty);
+  rpc DeleteTag(TagIdRequest) returns (Empty);
+  rpc AddTagToTitle(TagTitleRequest) returns (Empty);
+  rpc RemoveTagFromTitle(TagTitleRequest) returns (Empty);
+
+  // --- Album Rescan ---
+  // Walk the album's directory tree and link any unlinked tracks
+  // whose tags match a file on disk. Long-running; admin-initiated.
+  // Returns FAILED_PRECONDITION when the album has no tracks or no
+  // search root is available, NOT_FOUND for an unknown title id.
+  rpc RescanAlbum(TitleIdRequest) returns (RescanAlbumResponse);
+
+  // --- User Management ---
+  rpc ListUsers(Empty) returns (UserListResponse);
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc UpdateUserRole(UpdateUserRoleRequest) returns (Empty);
+  rpc UpdateUserRatingCeiling(UpdateUserRatingCeilingRequest) returns (Empty);
+  rpc UnlockUser(UserIdRequest) returns (Empty);
+  rpc ForcePasswordChange(UserIdRequest) returns (Empty);
+  rpc ResetPassword(ResetPasswordRequest) returns (Empty);
+  rpc DeleteUser(UserIdRequest) returns (Empty);
+
+  // --- Settings ---
+  rpc GetSettings(Empty) returns (SettingsResponse);
+  rpc UpdateSetting(UpdateSettingRequest) returns (Empty);
+
+  // --- Camera Admin ---
+  rpc ListAdminCameras(Empty) returns (AdminCameraListResponse);
+  rpc CreateCamera(CreateCameraRequest) returns (AdminCamera);
+  rpc UpdateCamera(UpdateCameraRequest) returns (AdminCamera);
+  rpc DeleteCamera(CameraIdRequest) returns (Empty);
+  rpc ReorderCameras(ReorderCamerasRequest) returns (Empty);
+
+  // --- Amazon Import ---
+  rpc ImportAmazonOrders(ImportAmazonOrdersRequest) returns (ImportAmazonOrdersResponse);
+  rpc SearchAmazonOrders(SearchAmazonOrdersRequest) returns (SearchAmazonOrdersResponse);
+  rpc LinkAmazonOrder(LinkAmazonOrderRequest) returns (Empty);
+  rpc UnlinkAmazonOrder(AmazonOrderIdRequest) returns (Empty);
+  rpc GetAmazonOrderSummary(Empty) returns (AmazonOrderSummaryResponse);
+
+  // --- Expand Multi-Packs ---
+  rpc ListPendingExpansions(Empty) returns (PendingExpansionsResponse);
+  rpc GetExpansionDetail(MediaItemIdRequest) returns (ExpansionDetailResponse);
+  rpc AddTitleToExpansion(AddTitleToExpansionRequest) returns (AddTitleToExpansionResponse);
+  rpc RemoveTitleFromExpansion(RemoveTitleFromExpansionRequest) returns (Empty);
+  rpc MarkExpanded(MediaItemIdRequest) returns (Empty);
+  rpc MarkNotMultiPack(MediaItemIdRequest) returns (Empty);
+
+  // --- Valuation ---
+  rpc ListValuations(ValuationRequest) returns (ValuationResponse);
+  rpc UpdateMediaItem(UpdateMediaItemRequest) returns (Empty);
+  rpc TriggerKeepaLookup(MediaItemIdRequest) returns (Empty);
+  // Change the physical/digital format of an existing MediaItem.
+  // The new format must be compatible with the linked title's
+  // media_type (book titles take book formats, etc.).
+  rpc SetMediaItemFormat(SetMediaItemFormatRequest) returns (Empty);
+
+  // --- Document Ownership ---
+  rpc ListUndocumentedItems(PaginationRequest) returns (UndocumentedItemsResponse);
+
+  // --- Family Members ---
+  rpc ListFamilyMembers(Empty) returns (FamilyMemberListResponse);
+  rpc CreateFamilyMember(CreateFamilyMemberRequest) returns (FamilyMemberResponse);
+  rpc UpdateFamilyMember(UpdateFamilyMemberRequest) returns (Empty);
+  rpc DeleteFamilyMember(FamilyMemberIdRequest) returns (Empty);
+
+  // --- Live TV Settings ---
+  rpc GetLiveTvSettings(Empty) returns (LiveTvSettingsResponse);
+  rpc UpdateLiveTvSettings(UpdateLiveTvSettingsRequest) returns (Empty);
+  rpc ListTuners(Empty) returns (TunerListResponse);
+  rpc AddTuner(AddTunerRequest) returns (TunerResponse);
+  rpc UpdateTuner(UpdateTunerRequest) returns (Empty);
+  rpc DeleteTuner(TunerIdRequest) returns (Empty);
+  rpc RefreshTunerChannels(TunerIdRequest) returns (RefreshChannelsResponse);
+  rpc ListAdminChannels(TunerIdRequest) returns (AdminChannelListResponse);
+  rpc UpdateChannel(UpdateChannelRequest) returns (Empty);
+
+  // --- Inventory Report ---
+  rpc GenerateInventoryReport(InventoryReportRequest) returns (InventoryReportResponse);
+
+  // --- Unmatched Books (M4 — ebook files awaiting admin action) ---
+  rpc ListUnmatchedBooks(Empty) returns (UnmatchedBookListResponse);
+  rpc LinkUnmatchedBookByIsbn(LinkUnmatchedBookByIsbnRequest) returns (LinkUnmatchedBookResponse);
+  rpc LinkUnmatchedBookToTitle(LinkUnmatchedBookToTitleRequest) returns (LinkUnmatchedBookResponse);
+  rpc IgnoreUnmatchedBook(UnmatchedBookIdRequest) returns (Empty);
+  rpc SearchOpenLibrary(SearchOpenLibraryRequest) returns (SearchOpenLibraryResponse);
+  rpc SearchCatalogTitles(SearchCatalogTitlesRequest) returns (SearchCatalogTitlesResponse);
+
+  // --- Unmatched Audio (M4 — audio files awaiting admin action) ---
+  rpc ListUnmatchedAudio(Empty) returns (UnmatchedAudioListResponse);
+  rpc LinkUnmatchedAudioToTrack(LinkUnmatchedAudioToTrackRequest) returns (LinkUnmatchedAudioResponse);
+  rpc IgnoreUnmatchedAudio(UnmatchedAudioIdRequest) returns (Empty);
+  rpc SearchCatalogTracks(SearchCatalogTracksRequest) returns (SearchCatalogTracksResponse);
+
+  // --- Author admin ---
+  rpc ListAdminAuthors(ListAdminAuthorsRequest) returns (AdminAuthorListResponse);
+  rpc UpdateAuthor(UpdateAuthorRequest) returns (Empty);
+  rpc DeleteAuthor(AdminAuthorIdRequest) returns (Empty);
+  rpc MergeAuthors(MergeAuthorsRequest) returns (Empty);
+  // Admin-toggleable hide. Sets author.hidden so the author drops out
+  // of the default authors grid; iOS surfaces a Hide / Unhide button
+  // on the author detail page. Also reachable via the
+  // ListAuthorsRequest.hidden_only=true admin view.
+  rpc SetAuthorHidden(SetAuthorHiddenRequest) returns (Empty);
+
+  // --- Artist admin ---
+  rpc ListAdminArtists(ListAdminArtistsRequest) returns (AdminArtistListResponse);
+  rpc UpdateArtist(UpdateArtistRequest) returns (Empty);
+  rpc DeleteArtist(AdminArtistIdRequest) returns (Empty);
+  rpc MergeArtists(MergeArtistsRequest) returns (Empty);
+
+  // --- External identifier assignment + agent-specific re-enrichment ---
+  rpc AssignExternalIdentifier(AssignExternalIdentifierRequest) returns (AssignExternalIdentifierResponse);
+  rpc ReEnrichWithAgent(ReEnrichWithAgentRequest) returns (Empty);
+
+  // --- Book series admin ---
+  rpc ListBookSeries(ListBookSeriesRequest) returns (BookSeriesListResponse);
+  rpc UpdateBookSeries(UpdateBookSeriesRequest) returns (Empty);
+  rpc ReassignTitleToSeries(ReassignTitleToSeriesRequest) returns (Empty);
+
+  // --- Track metadata edits ---
+  rpc UpdateTrack(UpdateTrackRequest) returns (Empty);
+  rpc ReorderTracks(ReorderTracksRequest) returns (Empty);
+
+  // --- Artist membership (M6 lineup editing) ---
+  rpc ListArtistMemberships(AdminArtistIdRequest) returns (ArtistMembershipListResponse);
+  rpc UpsertArtistMembership(UpsertArtistMembershipRequest) returns (ArtistMembershipResponse);
+  rpc DeleteArtistMembership(MembershipIdRequest) returns (Empty);
+  rpc TriggerArtistEnrichment(AdminArtistIdRequest) returns (Empty);
+
+  // --- Audio transcode cache ---
+  rpc GetAudioTranscodeCacheStatus(Empty) returns (AudioTranscodeCacheStatus);
+  rpc ClearAudioTranscodeCache(ClearAudioTranscodeCacheRequest) returns (Empty);
+
+  // --- Image cache migration verifier (phase 4a). Read-only audit of the
+  // first-party image cache migration: walks ownership_photo / local_image
+  // rows and checks each has a copy at the new FirstPartyImageStore layout
+  // plus a valid sidecar. Safe to call any time; never deletes.
+  rpc VerifyFirstPartyImageMigration(Empty) returns (VerifyFirstPartyImageMigrationResponse);
+
+  // --- Unmatched-audio group triage (admin flow for stuck whole-album
+  // bundles). Grouping collapses multi-disc sibling folders by
+  // (album_artist, album); MB search escalates when the scanner's
+  // auto-matcher picked the wrong release or gave up; link-album
+  // ingests + auto-links the whole group in one call; link-album-manual
+  // creates the title + tracks directly from file tags when MB has
+  // nothing useful for the album.
+  rpc ListUnmatchedAudioGroups(Empty) returns (UnmatchedAudioGroupListResponse);
+  rpc SearchMusicBrainzForUnmatchedAudio(SearchMusicBrainzForUnmatchedAudioRequest)
+      returns (SearchMusicBrainzForUnmatchedAudioResponse);
+  rpc LinkUnmatchedAudioAlbumToRelease(LinkUnmatchedAudioAlbumToReleaseRequest)
+      returns (LinkUnmatchedAudioAlbumResponse);
+  rpc LinkUnmatchedAudioAlbumManual(LinkUnmatchedAudioAlbumManualRequest)
+      returns (LinkUnmatchedAudioAlbumResponse);
+
+  // Generic MusicBrainz search by free-text query (and optional
+  // barcode) — used by the scan-detail page when a UPC scan misses
+  // the video metadata pipeline because the disc is a music CD.
+  // The picked release-group MBID gets attached via the existing
+  // AssignExternalIdentifier RPC (kind=MUSICBRAINZ_RELEASE_GROUP).
+  rpc SearchMusicBrainz(SearchMusicBrainzRequest) returns (SearchMusicBrainzResponse);
+}
+
+// --- ID Requests ---
+
+message UnmatchedIdRequest {
+  int64 unmatched_id = 1;
+}
+
+message UserIdRequest {
+  int64 user_id = 1;
+}
+
+// --- Transcode Status ---
+
+enum LeaseStatus {
+  LEASE_STATUS_UNKNOWN = 0;
+  LEASE_STATUS_CLAIMED = 1;
+  LEASE_STATUS_IN_PROGRESS = 2;
+  LEASE_STATUS_COMPLETED = 3;
+  LEASE_STATUS_FAILED = 4;
+  LEASE_STATUS_EXPIRED = 5;
+}
+
+enum LeaseType {
+  LEASE_TYPE_UNKNOWN = 0;
+  LEASE_TYPE_TRANSCODE = 1;
+  LEASE_TYPE_THUMBNAILS = 2;
+  LEASE_TYPE_SUBTITLES = 3;
+  LEASE_TYPE_CHAPTERS = 4;
+  LEASE_TYPE_LOW_STORAGE_TRANSCODE = 5;
+}
+
+message TranscodeStatusResponse {
+  int32 pending_transcode = 1;
+  int32 pending_thumbnails = 2;
+  int32 pending_subtitles = 3;
+  int32 pending_chapters = 4;
+  int32 pending_low_storage = 5;
+  int32 poison_pills = 6;
+  repeated ActiveLease active_leases = 7;
+}
+
+message ActiveLease {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseType lease_type = 4;
+  LeaseStatus status = 5;
+  int32 progress_percent = 6;
+  optional string encoder = 7;
+  optional Timestamp claimed_at = 8;
+  optional Timestamp expires_at = 9;
+}
+
+message BuddyStatusResponse {
+  repeated BuddyInfo buddies = 1;
+  repeated RecentLease recent_leases = 2;
+}
+
+message BuddyInfo {
+  string name = 1;
+  int32 active_leases = 2;
+  optional Timestamp last_seen = 3;
+}
+
+message RecentLease {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseType lease_type = 4;
+  LeaseStatus status = 5;
+  int32 progress_percent = 6;
+  optional Timestamp completed_at = 7;
+}
+
+message ClearFailuresResponse {
+  int32 cleared = 1;
+}
+
+// --- Live Transcode Progress (server-streaming) ---
+
+message TranscodeProgressEvent {
+  int64 lease_id = 1;
+  string buddy_name = 2;
+  string relative_path = 3;
+  LeaseStatus status = 4;
+  int32 progress_percent = 5;
+  optional string encoder = 6;
+  LeaseType lease_type = 7;
+}
+
+// --- Transcode Status Monitor (server-streaming with initial snapshot) ---
+
+message TranscodeStatusUpdate {
+  oneof update {
+    TranscodeStatusResponse snapshot = 1;
+    TranscodeProgressEvent event = 2;
+  }
+}
+
+// --- Barcode Scanning ---
+
+enum ScanStatus {
+  SCAN_STATUS_UNKNOWN = 0;
+  SCAN_STATUS_SUBMITTED = 1;
+  SCAN_STATUS_UPC_FOUND = 2;
+  SCAN_STATUS_UPC_NOT_FOUND = 3;
+  SCAN_STATUS_ENRICHING = 4;
+  SCAN_STATUS_ENRICHED = 5;
+  SCAN_STATUS_ENRICHMENT_FAILED = 6;
+  SCAN_STATUS_NO_MATCH = 7;
+}
+
+enum SubmitBarcodeResult {
+  SUBMIT_BARCODE_RESULT_UNKNOWN = 0;
+  SUBMIT_BARCODE_RESULT_CREATED = 1;
+  SUBMIT_BARCODE_RESULT_DUPLICATE = 2;
+  SUBMIT_BARCODE_RESULT_INVALID = 3;
+}
+
+message SubmitBarcodeRequest {
+  string upc = 1;
+}
+
+message SubmitBarcodeResponse {
+  SubmitBarcodeResult result = 1;
+  int64 scan_id = 2;
+  optional string title_name = 3;
+  optional string message = 4;
+}
+
+message RecentScan {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string title_name = 4;
+  optional string poster_url = 5;
+  optional int64 title_id = 6;
+  optional Timestamp scanned_at = 7;
+}
+
+message RecentScansResponse {
+  repeated RecentScan scans = 1;
+}
+
+message ScanProgressUpdate {
+  oneof update {
+    RecentScansResponse snapshot = 1;
+    ScanProgressEvent event = 2;
+  }
+}
+
+message ScanProgressEvent {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string title_name = 4;
+  optional string poster_url = 5;
+  optional int64 title_id = 6;
+}
+
+// --- Scan Detail ---
+
+message ScanIdRequest {
+  int64 scan_id = 1;
+}
+
+message ScanDetailResponse {
+  int64 scan_id = 1;
+  string upc = 2;
+  ScanStatus status = 3;
+  optional string product_name = 4;
+  MediaFormat media_format = 5;
+  optional int64 title_id = 6;
+  optional string title_name = 7;
+  optional string poster_url = 8;
+  optional int32 release_year = 9;
+  optional string description = 10;
+  EnrichmentStatus enrichment_status = 11;
+  optional string purchase_place = 12;
+  optional CalendarDate purchase_date = 13;
+  optional double purchase_price = 14;
+  repeated OwnershipPhotoInfo photos = 15;
+
+  // --- Book-specific (populated when the scan resolved to a BOOK). ---
+  optional string isbn = 16;
+  optional string openlibrary_work_id = 17;
+
+  // --- Album-specific (populated when the scan resolved to an ALBUM). ---
+  optional string musicbrainz_release_id = 18;
+  optional string musicbrainz_release_group_id = 19;
+  optional int32 track_count = 20;
+  optional string parsed_label = 21;
+  optional string parsed_catalog_number = 22;
+}
+
+message OwnershipPhotoInfo {
+  string photo_id = 1;
+  // Deprecated: clients must fetch bytes via ImageService using
+  // ImageRef{ type: IMAGE_TYPE_OWNERSHIP_PHOTO, uuid: photo_id }.
+  // Field retained for Android TV back-compat.
+  string url = 2 [deprecated = true];
+  optional Timestamp captured_at = 3;
+}
+
+message AssignTmdbRequest {
+  int64 title_id = 1;
+  int32 tmdb_id = 2;
+  MediaType media_type = 3;
+}
+
+message AssignTmdbResponse {
+  bool merged = 1;
+  optional string merged_title_name = 2;
+}
+
+message AddTitleRequest {
+  int32 tmdb_id = 1;
+  MediaType media_type = 2;
+  MediaFormat media_format = 3;
+  // For TV shows: which seasons to create (e.g., "1,2,3" or "1-3").
+  // Omit for movies.
+  optional string seasons = 4;
+}
+
+message AddTitleResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  bool already_existed = 3;
+}
+
+message UpdatePurchaseInfoRequest {
+  int64 scan_id = 1;
+  optional string purchase_place = 2;
+  optional CalendarDate purchase_date = 3;
+  optional double purchase_price = 4;
+}
+
+message UploadOwnershipPhotoRequest {
+  int64 scan_id = 1;
+  bytes photo_data = 2;
+  string content_type = 3;
+}
+
+message UploadOwnershipPhotoResponse {
+  string photo_id = 1;
+}
+
+message DeleteOwnershipPhotoRequest {
+  string photo_id = 1;
+}
+
+// --- Linked Transcodes ---
+
+message LinkedTranscodeResponse {
+  repeated LinkedTranscodeItem transcodes = 1;
+  PaginationInfo pagination = 2;
+}
+
+enum MatchMethod {
+  MATCH_METHOD_UNKNOWN = 0;
+  MATCH_METHOD_AUTO_EXACT = 1;
+  MATCH_METHOD_AUTO_NORMALIZED = 2;
+  MATCH_METHOD_MANUAL = 3;
+}
+
+message LinkedTranscodeItem {
+  int64 transcode_id = 1;
+  string title_name = 2;
+  int64 title_id = 3;
+  optional string file_path = 4;
+  MediaFormat media_format = 5;
+  MatchMethod match_method = 6;
+  bool file_exists = 7;
+  bool high_quality_transcode_available = 8;
+  bool low_storage_transcode_available = 9;
+}
+
+// --- Unmatched Files ---
+
+message UnmatchedResponse {
+  repeated UnmatchedFile unmatched = 1;
+  int32 total = 2;
+}
+
+message UnmatchedFile {
+  int64 id = 1;
+  string file_path = 2;
+  optional string suggested_title = 3;
+  optional int64 suggested_title_id = 4;
+  optional double match_score = 5;
+}
+
+message LinkUnmatchedRequest {
+  int64 unmatched_id = 1;
+  int64 title_id = 2;
+}
+
+message AcceptUnmatchedResponse {
+  bool linked = 1;
+  optional string title_name = 2;
+}
+
+// --- Data Quality ---
+
+enum EnrichmentStatus {
+  ENRICHMENT_STATUS_UNKNOWN = 0;
+  ENRICHMENT_STATUS_PENDING = 1;
+  ENRICHMENT_STATUS_ENRICHED = 2;
+  ENRICHMENT_STATUS_SKIPPED = 3;
+  ENRICHMENT_STATUS_FAILED = 4;
+  ENRICHMENT_STATUS_REASSIGNMENT_REQUESTED = 5;
+  ENRICHMENT_STATUS_ABANDONED = 6;
+}
+
+enum DataQualityIssue {
+  DATA_QUALITY_ISSUE_UNKNOWN = 0;
+  DATA_QUALITY_ISSUE_NO_POSTER = 1;
+  DATA_QUALITY_ISSUE_NO_DESCRIPTION = 2;
+  DATA_QUALITY_ISSUE_NO_TMDB_ID = 3;
+  DATA_QUALITY_ISSUE_NO_YEAR = 4;
+  DATA_QUALITY_ISSUE_NO_CONTENT_RATING = 5;
+  DATA_QUALITY_ISSUE_NO_BACKDROP = 6;
+  DATA_QUALITY_ISSUE_NO_CAST = 7;
+  DATA_QUALITY_ISSUE_NO_GENRES = 8;
+  DATA_QUALITY_ISSUE_ENRICHMENT_FAILED = 9;
+  DATA_QUALITY_ISSUE_ENRICHMENT_ABANDONED = 10;
+  // Book-specific.
+  DATA_QUALITY_ISSUE_NO_OPENLIBRARY_ID = 11;
+  DATA_QUALITY_ISSUE_NO_AUTHORS = 12;
+  // Album-specific.
+  DATA_QUALITY_ISSUE_NO_MUSICBRAINZ_ID = 13;
+  DATA_QUALITY_ISSUE_NO_TRACKS = 14;
+  DATA_QUALITY_ISSUE_NO_ALBUM_ARTISTS = 15;
+}
+
+// Which media slice ListDataQuality surfaces issues from.
+// Default (UNKNOWN) preserves the pre-books/audio behavior: video titles only.
+enum DataQualityScope {
+  DATA_QUALITY_SCOPE_UNKNOWN = 0;
+  DATA_QUALITY_SCOPE_VIDEO = 1;
+  DATA_QUALITY_SCOPE_BOOK = 2;
+  DATA_QUALITY_SCOPE_AUDIO = 3;
+}
+
+message DataQualityRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional EnrichmentStatus status = 3;
+  DataQualityScope scope = 4;   // UNKNOWN → legacy video-only behavior
+}
+
+message DataQualityResponse {
+  repeated DataQualityItem items = 1;
+  PaginationInfo pagination = 2;
+}
+
+message DataQualityItem {
+  int64 title_id = 1;
+  string name = 2;
+  EnrichmentStatus enrichment_status = 3;
+  MediaType media_type = 4;
+  optional string poster_url = 5;
+  repeated DataQualityIssue issues = 6;
+}
+
+message UpdateTitleMetadataRequest {
+  int64 title_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional int32 release_year = 4;
+  // --- Book-specific (ignored for non-BOOK titles). ---
+  optional int32 first_publication_year = 5;
+  optional int32 page_count = 6;
+  // --- Album-specific (ignored for non-ALBUM titles). ---
+  optional int32 track_count = 7;
+  optional string label = 8;
+}
+
+// --- Purchase Wishes ---
+
+message PurchaseWishListResponse {
+  repeated PurchaseWish wishes = 1;
+}
+
+message PurchaseWish {
+  int32 tmdb_id = 1;
+  MediaType media_type = 2;
+  string title = 3;
+  optional string poster_url = 4;
+  optional int32 release_year = 5;
+  int32 vote_count = 6;
+  repeated string voters = 7;
+  AcquisitionStatus acquisition_status = 8;
+  optional int32 season_number = 9;
+  WishLifecycleStage lifecycle_stage = 10;
+  optional int64 title_id = 11;
+}
+
+message UpdatePurchaseWishStatusRequest {
+  int32 tmdb_id = 1;
+  MediaType media_type = 2;
+  AcquisitionStatus status = 3;
+  optional int32 season_number = 4;
+}
+
+// --- Rip Backlog ---
+
+message RipBacklogResponse {
+  repeated RipBacklogItem items = 1;
+  PaginationInfo pagination = 2;
+}
+
+message RipBacklogItem {
+  int64 title_id = 1;
+  string name = 2;
+  optional string poster_url = 3;
+  MediaType media_type = 4;
+  optional int32 year = 5;
+  int32 wish_count = 6;
+}
+
+// --- Tags ---
+
+message AdminTagListResponse {
+  repeated AdminTagListItem tags = 1;
+}
+
+message AdminTagListItem {
+  int64 id = 1;
+  string name = 2;
+  Color color = 3;
+  int32 title_count = 4;
+}
+
+message CreateTagRequest {
+  string name = 1;
+  Color color = 2;
+}
+
+enum CreateTagResult {
+  CREATE_TAG_RESULT_UNKNOWN = 0;
+  CREATE_TAG_RESULT_CREATED = 1;
+  CREATE_TAG_RESULT_DUPLICATE = 2;   // name collision; id points to the existing tag
+}
+
+message CreateTagResponse {
+  CreateTagResult result = 1;
+  int64 id = 2;   // new tag id on CREATED, existing tag id on DUPLICATE
+}
+
+message UpdateTagRequest {
+  int64 tag_id = 1;
+  optional string name = 2;
+  optional Color color = 3;
+}
+
+// --- Album Rescan ---
+
+message RescanAlbumResponse {
+  // Per-file decision counters from the directory walk.
+  int32 linked = 1;
+  int32 skipped_already_linked = 2;
+  int32 no_match = 3;
+  int32 candidates_considered = 4;
+  int32 files_walked = 5;
+  int32 files_already_linked_elsewhere = 6;
+  int32 files_wrong_album_tag = 7;
+  int32 files_path_rejected = 8;
+  int32 files_accepted_by_artist_position = 9;
+  // Sample of album-tag values from rejected files — admins use
+  // this to spot tag drift ("file says ALBUM='X' vs catalog 'X (Deluxe)'").
+  repeated string rejected_album_tag_samples = 10;
+  // Directories the walker actually traversed.
+  repeated string roots_walked = 11;
+  // Configured music_root_path; surfaced so admins can confirm the
+  // server is searching the right place.
+  string music_root_configured = 12;
+  // Tracks still unresolved after the rescan — empty on a clean run.
+  repeated UnlinkedTrack unlinked_after_rescan = 13;
+  // Free-form note (e.g. "All tracks already linked — nothing to do.").
+  // Empty when the run had nothing notable to report.
+  optional string message = 14;
+}
+
+message UnlinkedTrack {
+  int64 track_id = 1;
+  int32 disc_number = 2;
+  int32 track_number = 3;
+  string name = 4;
+}
+
+// --- User Management ---
+
+message UserListResponse {
+  repeated UserInfo users = 1;
+}
+
+message UserInfo {
+  int64 id = 1;
+  string username = 2;
+  optional string display_name = 3;
+  AccessLevel access_level = 4;
+  bool locked = 5;
+  bool must_change_password = 6;
+  optional RatingLevel rating_ceiling = 7;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  optional string display_name = 3;
+  bool force_change = 4;
+}
+
+message CreateUserResponse {
+  int64 id = 1;
+  string username = 2;
+}
+
+message UpdateUserRoleRequest {
+  int64 user_id = 1;
+  AccessLevel access_level = 2;
+}
+
+message UpdateUserRatingCeilingRequest {
+  int64 user_id = 1;
+  optional RatingLevel ceiling = 2;  // omit to remove ceiling (unrestricted)
+}
+
+message ResetPasswordRequest {
+  int64 user_id = 1;
+  string new_password = 2;
+  bool force_change = 3;
+}
+
+// --- Settings ---
+
+// Enumerated setting keys. Each corresponds to an app_config row in the database.
+enum SettingKey {
+  SETTING_KEY_UNKNOWN = 0;
+
+  // Paths
+  SETTING_KEY_NAS_ROOT_PATH = 1;
+  SETTING_KEY_FFMPEG_PATH = 2;
+  SETTING_KEY_GO2RTC_PATH = 3;
+
+  // Networking
+  // The server's public base URL ("Public Server URL" in Settings), used
+  // in pairing links, QR codes, and device stream URLs. Renamed from
+  // SETTING_KEY_ROKU_BASE_URL; the field number is unchanged so older
+  // clients stay wire-compatible.
+  SETTING_KEY_PUBLIC_BASE_URL = 4;
+  SETTING_KEY_GO2RTC_API_PORT = 5;
+
+  // Feature toggles
+  SETTING_KEY_PERSONAL_VIDEO_ENABLED = 6;
+  SETTING_KEY_FOR_MOBILE_ENABLED = 7;
+  SETTING_KEY_KEEPA_ENABLED = 8;
+
+  // Personal video
+  SETTING_KEY_PERSONAL_VIDEO_NAS_DIR = 9;
+
+  // Transcode buddy
+  SETTING_KEY_BUDDY_LEASE_DURATION_MINUTES = 10;
+
+  // Keepa (Amazon price tracking)
+  SETTING_KEY_KEEPA_API_KEY = 11;
+  SETTING_KEY_KEEPA_TOKENS_PER_MINUTE = 12;
+
+  // Live TV
+  SETTING_KEY_LIVE_TV_MIN_RATING = 13;
+  SETTING_KEY_LIVE_TV_MAX_STREAMS = 14;
+  SETTING_KEY_LIVE_TV_IDLE_TIMEOUT_SECONDS = 15;
+  SETTING_KEY_PRIVACY_POLICY_URL = 16;
+  SETTING_KEY_PRIVACY_POLICY_VERSION = 17;
+  SETTING_KEY_IOS_TERMS_OF_USE_URL = 18;
+  SETTING_KEY_IOS_TERMS_OF_USE_VERSION = 19;
+  SETTING_KEY_WEB_TERMS_OF_USE_URL = 20;
+  SETTING_KEY_WEB_TERMS_OF_USE_VERSION = 21;
+}
+
+message Setting {
+  SettingKey key = 1;
+  string value = 2;
+}
+
+message SettingsResponse {
+  repeated Setting settings = 1;
+}
+
+message UpdateSettingRequest {
+  SettingKey key = 1;
+  string value = 2;
+}
+
+// --- Camera Admin ---
+
+message CameraIdRequest {
+  int64 camera_id = 1;
+}
+
+message AdminCamera {
+  int64 id = 1;
+  string name = 2;
+  string rtsp_url = 3;         // credentials redacted as ***:***
+  string snapshot_url = 4;     // credentials redacted
+  string stream_name = 5;     // go2rtc identifier
+  bool enabled = 6;
+  int32 display_order = 7;
+}
+
+message AdminCameraListResponse {
+  repeated AdminCamera cameras = 1;
+}
+
+message CreateCameraRequest {
+  string name = 1;
+  string rtsp_url = 2;        // full URL with credentials
+  string snapshot_url = 3;
+  optional string stream_name = 4;
+  bool enabled = 5;
+}
+
+message UpdateCameraRequest {
+  int64 camera_id = 1;
+  string name = 2;
+  string rtsp_url = 3;        // redacted = preserve, new = replace
+  string snapshot_url = 4;
+  string stream_name = 5;
+  bool enabled = 6;
+}
+
+message ReorderCamerasRequest {
+  repeated int64 camera_ids = 1;
+}
+
+// --- Amazon Import Messages ---
+
+message ImportAmazonOrdersRequest {
+  bytes csv_data = 1;
+  string filename = 2;  // hint for ZIP vs CSV detection
+}
+
+message ImportAmazonOrdersResponse {
+  int32 imported = 1;
+  int32 skipped = 2;
+  optional string error = 3;
+}
+
+message SearchAmazonOrdersRequest {
+  optional string query = 1;
+  bool media_only = 2;
+  bool unlinked_only = 3;
+  bool hide_cancelled = 4;
+  int32 limit = 5;
+}
+
+message AmazonOrder {
+  int64 id = 1;
+  string order_id = 2;
+  string asin = 3;
+  string product_name = 4;
+  optional string order_date = 5;     // ISO date string
+  optional double unit_price = 6;
+  optional string product_condition = 7;
+  optional string order_status = 8;
+  optional int64 linked_media_item_id = 9;
+  optional string linked_title_name = 10;
+}
+
+message SearchAmazonOrdersResponse {
+  repeated AmazonOrder orders = 1;
+}
+
+message LinkAmazonOrderRequest {
+  int64 amazon_order_id = 1;
+  int64 media_item_id = 2;
+}
+
+message AmazonOrderIdRequest {
+  int64 amazon_order_id = 1;
+}
+
+message AmazonOrderSummaryResponse {
+  int32 total = 1;
+  int32 media_related = 2;
+  int32 linked = 3;
+}
+
+message MediaItemIdRequest {
+  int64 media_item_id = 1;
+}
+
+// --- Expand Multi-Pack Messages ---
+
+message PendingExpansionItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  MediaFormat media_format = 4;
+  int32 estimated_title_count = 5;
+}
+
+message PendingExpansionsResponse {
+  repeated PendingExpansionItem items = 1;
+}
+
+message ExpansionLinkedTitle {
+  int64 join_id = 1;
+  int64 title_id = 2;
+  string name = 3;
+  optional int32 release_year = 4;
+  optional string poster_path = 5;
+  int32 disc_number = 6;
+}
+
+message ExpansionDetailResponse {
+  int64 media_item_id = 1;
+  string product_name = 2;
+  MediaFormat media_format = 3;
+  int32 estimated_title_count = 4;
+  repeated ExpansionLinkedTitle linked_titles = 5;
+}
+
+message AddTitleToExpansionRequest {
+  int64 media_item_id = 1;
+  int32 tmdb_id = 2;
+  MediaType media_type = 3;
+}
+
+message AddTitleToExpansionResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  int32 disc_number = 3;
+  bool already_existed = 4;
+}
+
+message RemoveTitleFromExpansionRequest {
+  int64 media_item_id = 1;
+  int64 title_id = 2;
+}
+
+// --- Valuation Messages ---
+
+message ValuationRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  optional string query = 3;
+  bool unpriced_only = 4;
+}
+
+message ValuationItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  repeated string title_names = 4;
+  MediaFormat media_format = 5;
+  optional string purchase_place = 6;
+  optional string purchase_date = 7;
+  optional double purchase_price = 8;
+  optional double replacement_value = 9;
+  optional string replacement_value_date = 10;
+  optional string override_asin = 11;
+  int32 photo_count = 12;
+}
+
+message ValuationResponse {
+  repeated ValuationItem items = 1;
+  int32 total_count = 2;
+  int32 total_items = 3;
+  double total_purchase_value = 4;
+  double total_replacement_value = 5;
+}
+
+message SetMediaItemFormatRequest {
+  int64 media_item_id = 1;
+  MediaFormat media_format = 2;
+}
+
+message UpdateMediaItemRequest {
+  int64 media_item_id = 1;
+  optional string purchase_place = 2;
+  optional string purchase_date = 3;    // ISO date
+  optional double purchase_price = 4;
+  optional double replacement_value = 5;
+  optional string override_asin = 6;
+  // Physical shelf, e.g. "Living room bookcase, shelf 3". Empty
+  // string clears the value (the HTTP edit path treats blank the
+  // same way; mirroring keeps the two surfaces in lockstep).
+  optional string storage_location = 7;
+}
+
+// --- Document Ownership Messages ---
+
+message UndocumentedItem {
+  int64 media_item_id = 1;
+  optional string upc = 2;
+  string product_name = 3;
+  repeated string title_names = 4;
+  MediaFormat media_format = 5;
+}
+
+message UndocumentedItemsResponse {
+  repeated UndocumentedItem items = 1;
+  int32 total_count = 2;
+}
+
+// --- Family Member Messages ---
+
+message FamilyMemberIdRequest {
+  int64 family_member_id = 1;
+}
+
+message FamilyMemberResponse {
+  int64 id = 1;
+  string name = 2;
+  optional string birth_date = 3;
+  optional string notes = 4;
+  int32 video_count = 5;
+}
+
+message FamilyMemberListResponse {
+  repeated FamilyMemberResponse members = 1;
+}
+
+message CreateFamilyMemberRequest {
+  string name = 1;
+  optional string birth_date = 2;
+  optional string notes = 3;
+}
+
+message UpdateFamilyMemberRequest {
+  int64 family_member_id = 1;
+  string name = 2;
+  optional string birth_date = 3;
+  optional string notes = 4;
+}
+
+// --- Live TV Settings Messages ---
+
+message LiveTvSettingsResponse {
+  optional string min_content_rating = 1;
+  int32 max_streams = 2;
+  int32 idle_timeout_seconds = 3;
+  int32 active_tuner_count = 4;
+  int32 active_stream_count = 5;
+}
+
+message UpdateLiveTvSettingsRequest {
+  optional string min_content_rating = 1;
+  int32 max_streams = 2;
+  int32 idle_timeout_seconds = 3;
+}
+
+message TunerIdRequest {
+  int64 tuner_id = 1;
+}
+
+message TunerResponse {
+  int64 id = 1;
+  string name = 2;
+  string ip_address = 3;
+  optional string device_id = 4;
+  optional string model_number = 5;
+  int32 tuner_count = 6;
+  bool enabled = 7;
+  int32 channel_count = 8;
+}
+
+message TunerListResponse {
+  repeated TunerResponse tuners = 1;
+}
+
+message AddTunerRequest {
+  string ip_address = 1;
+  optional string name = 2;
+}
+
+message UpdateTunerRequest {
+  int64 tuner_id = 1;
+  string name = 2;
+  bool enabled = 3;
+}
+
+message RefreshChannelsResponse {
+  int32 channels_found = 1;
+  int32 channels_added = 2;
+}
+
+message AdminChannelResponse {
+  int64 id = 1;
+  string guide_number = 2;
+  string guide_name = 3;
+  optional string network_affiliation = 4;
+  int32 reception_quality = 5;
+  bool enabled = 6;
+  int32 display_order = 7;
+}
+
+message AdminChannelListResponse {
+  repeated AdminChannelResponse channels = 1;
+}
+
+message UpdateChannelRequest {
+  int64 channel_id = 1;
+  optional string network_affiliation = 2;
+  int32 reception_quality = 3;
+  bool enabled = 4;
+}
+
+// --- Inventory Report Messages ---
+
+message InventoryReportRequest {
+  bool include_photos = 1;
+}
+
+message InventoryReportRow {
+  string title_names = 1;
+  string media_format = 2;
+  optional string upc = 3;
+  optional string purchase_date = 4;
+  optional string purchase_place = 5;
+  optional double purchase_price = 6;
+  optional double replacement_value = 7;
+  optional string replacement_value_date = 8;
+  int32 photo_count = 9;
+}
+
+message InventoryReportResponse {
+  repeated InventoryReportRow rows = 1;
+  int32 total_items = 2;
+  double total_purchase_value = 3;
+  double total_replacement_value = 4;
+}
+
+// ============================================================================
+// Unmatched media: shared + book + audio
+// ============================================================================
+
+// Staging status for ebook / audio files the scanner couldn't auto-link.
+enum UnmatchedStatus {
+  UNMATCHED_STATUS_UNKNOWN = 0;
+  UNMATCHED_STATUS_UNMATCHED = 1;
+  UNMATCHED_STATUS_LINKED = 2;
+  UNMATCHED_STATUS_IGNORED = 3;
+}
+
+// --- Unmatched books ---
+
+message UnmatchedBookListResponse {
+  repeated UnmatchedBookItem items = 1;
+}
+
+message UnmatchedBookItem {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional int64 file_size_bytes = 4;
+  BookEditionFormat edition_format = 5;
+  optional string parsed_title = 6;
+  optional string parsed_author = 7;
+  optional string parsed_isbn = 8;
+  UnmatchedStatus status = 9;
+  optional int64 linked_title_id = 10;
+  optional Timestamp discovered_at = 11;
+  optional Timestamp linked_at = 12;
+}
+
+message UnmatchedBookIdRequest { int64 unmatched_book_id = 1; }
+
+message LinkUnmatchedBookByIsbnRequest {
+  int64 unmatched_book_id = 1;
+  string isbn = 2;              // 10- or 13-digit ISBN
+}
+
+message LinkUnmatchedBookToTitleRequest {
+  int64 unmatched_book_id = 1;
+  int64 title_id = 2;
+}
+
+message LinkUnmatchedBookResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  bool created_new_title = 3;
+}
+
+message SearchOpenLibraryRequest {
+  string query = 1;
+  int32 limit = 2;              // 0 → server default 10, max 50
+}
+
+message SearchOpenLibraryResponse {
+  repeated OpenLibraryHit hits = 1;
+}
+
+message OpenLibraryHit {
+  string openlibrary_work_id = 1;
+  string title = 2;
+  optional string author_name = 3;
+  optional int32 first_publish_year = 4;
+  // Cover fetch: ImageService + IMAGE_TYPE_OPENLIBRARY_COVER.
+}
+
+message SearchCatalogTitlesRequest {
+  string query = 1;
+  MediaType media_type = 2;     // MEDIA_TYPE_UNKNOWN = any
+  int32 limit = 3;
+}
+
+message SearchCatalogTitlesResponse {
+  repeated Title matches = 1;
+}
+
+// --- Unmatched audio ---
+
+message UnmatchedAudioListResponse {
+  repeated UnmatchedAudioItem items = 1;
+}
+
+message UnmatchedAudioItem {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional int64 file_size_bytes = 4;
+  // Parsed tag data — every field optional because tags are lossy.
+  optional string parsed_title = 5;
+  optional string parsed_album = 6;
+  optional string parsed_album_artist = 7;
+  optional string parsed_track_artist = 8;
+  optional int32 parsed_track_number = 9;
+  optional int32 parsed_disc_number = 10;
+  optional PlaybackOffset parsed_duration = 11;
+  optional string parsed_musicbrainz_release_id = 12;
+  optional string parsed_musicbrainz_release_group_id = 13;
+  optional string parsed_musicbrainz_recording_id = 14;
+  optional string parsed_upc = 15;
+  optional string parsed_isrc = 16;
+  optional string parsed_catalog_number = 17;
+  optional string parsed_label = 18;
+  UnmatchedStatus status = 19;
+  optional int64 linked_track_id = 20;
+  optional Timestamp discovered_at = 21;
+  optional Timestamp linked_at = 22;
+}
+
+message UnmatchedAudioIdRequest { int64 unmatched_audio_id = 1; }
+
+message LinkUnmatchedAudioToTrackRequest {
+  int64 unmatched_audio_id = 1;
+  int64 track_id = 2;
+}
+
+message LinkUnmatchedAudioResponse {
+  int64 track_id = 1;
+  int64 album_title_id = 2;
+  string track_name = 3;
+  string album_name = 4;
+}
+
+message SearchCatalogTracksRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchCatalogTracksResponse {
+  repeated TrackSearchMatch matches = 1;
+}
+
+message TrackSearchMatch {
+  int64 track_id = 1;
+  int64 album_title_id = 2;
+  string track_name = 3;
+  string album_name = 4;
+  optional string album_artist_name = 5;
+  optional int32 disc_number = 6;
+  optional int32 track_number = 7;
+}
+
+// ============================================================================
+// Author + artist admin
+// ============================================================================
+
+message AdminAuthorIdRequest { int64 author_id = 1; }
+
+message SetAuthorHiddenRequest {
+  int64 author_id = 1;
+  bool hidden = 2;
+}
+message AdminArtistIdRequest { int64 artist_id = 1; }
+
+message ListAdminAuthorsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+  // When true, only surfaces authors with data-quality issues
+  // (no OpenLibrary ID, no headshot, no biography).
+  bool issues_only = 4;
+}
+
+message AdminAuthorListResponse {
+  repeated AdminAuthorItem authors = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AdminAuthorItem {
+  int64 id = 1;
+  string name = 2;
+  string sort_name = 3;
+  bool has_biography = 4;
+  bool has_headshot = 5;
+  optional string openlibrary_id = 6;
+  int32 owned_book_count = 7;
+}
+
+// Tri-state field semantics: absent = no change, present = set (empty clears).
+message UpdateAuthorRequest {
+  int64 author_id = 1;
+  optional string name = 2;
+  optional string sort_name = 3;
+  optional string biography = 4;
+  optional string openlibrary_id = 5;
+  optional string wikidata_id = 6;
+  optional CalendarDate birth_date = 7;
+  optional CalendarDate death_date = 8;
+}
+
+message MergeAuthorsRequest {
+  int64 keep_author_id = 1;
+  int64 drop_author_id = 2;     // title_author rows re-pointed, then author deleted
+}
+
+message ListAdminArtistsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+  bool issues_only = 4;
+}
+
+message AdminArtistListResponse {
+  repeated AdminArtistItem artists = 1;
+  PaginationInfo pagination = 2;
+}
+
+message AdminArtistItem {
+  int64 id = 1;
+  string name = 2;
+  string sort_name = 3;
+  ArtistType artist_type = 4;
+  bool has_biography = 5;
+  bool has_headshot = 6;
+  optional string musicbrainz_artist_id = 7;
+  int32 owned_album_count = 8;
+}
+
+message UpdateArtistRequest {
+  int64 artist_id = 1;
+  optional string name = 2;
+  optional string sort_name = 3;
+  // ARTIST_TYPE_UNKNOWN = no change.
+  ArtistType artist_type = 4;
+  optional string biography = 5;
+  optional string musicbrainz_artist_id = 6;
+  optional string wikidata_id = 7;
+  optional CalendarDate begin_date = 8;
+  optional CalendarDate end_date = 9;
+}
+
+message MergeArtistsRequest {
+  int64 keep_artist_id = 1;
+  int64 drop_artist_id = 2;
+}
+
+// ============================================================================
+// External identifier assignment + agent-specific re-enrichment
+// ============================================================================
+
+// Successor to AssignTmdbRequest — supports OpenLibrary + MusicBrainz.
+// AssignTmdbRequest stays for Android TV back-compat.
+enum ExternalIdentifierKind {
+  EXTERNAL_IDENTIFIER_KIND_UNKNOWN = 0;
+  EXTERNAL_IDENTIFIER_KIND_TMDB = 1;
+  EXTERNAL_IDENTIFIER_KIND_OPENLIBRARY_WORK = 2;
+  EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE_GROUP = 3;
+  EXTERNAL_IDENTIFIER_KIND_MUSICBRAINZ_RELEASE = 4;
+}
+
+message AssignExternalIdentifierRequest {
+  int64 title_id = 1;
+  ExternalIdentifierKind kind = 2;
+  // Server validates value-shape against kind (int for TMDB,
+  // OL work regex for OPENLIBRARY_WORK, MBID regex for MB kinds).
+  string value = 3;
+  // Required when kind = TMDB to disambiguate movie/TV namespace.
+  MediaType media_type = 4;
+}
+
+message AssignExternalIdentifierResponse {
+  bool merged = 1;
+  optional string merged_title_name = 2;
+}
+
+enum EnrichmentAgent {
+  ENRICHMENT_AGENT_UNKNOWN = 0;
+  ENRICHMENT_AGENT_TMDB = 1;
+  ENRICHMENT_AGENT_OPENLIBRARY = 2;
+  ENRICHMENT_AGENT_MUSICBRAINZ = 3;
+  ENRICHMENT_AGENT_AUTHOR_HEADSHOT = 4;
+  ENRICHMENT_AGENT_ARTIST_HEADSHOT = 5;
+  ENRICHMENT_AGENT_ARTIST_PERSONNEL = 6;
+}
+
+message ReEnrichWithAgentRequest {
+  int64 title_id = 1;
+  EnrichmentAgent agent = 2;
+}
+
+// ============================================================================
+// Book series admin
+// ============================================================================
+
+message ListBookSeriesRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  optional string q = 3;
+}
+
+message BookSeriesListResponse {
+  repeated BookSeriesItem series = 1;
+  PaginationInfo pagination = 2;
+}
+
+message BookSeriesItem {
+  int64 id = 1;
+  string name = 2;
+  int32 volume_count = 3;
+  optional int64 primary_author_id = 4;
+}
+
+message UpdateBookSeriesRequest {
+  int64 series_id = 1;
+  optional string name = 2;
+  optional int64 primary_author_id = 3;
+}
+
+message ReassignTitleToSeriesRequest {
+  int64 title_id = 1;
+  // Absent = remove from series; present = assign.
+  optional int64 series_id = 2;
+  // Decimal-as-string to preserve fractional numbering (e.g. "1.5").
+  optional string series_number = 3;
+}
+
+// ============================================================================
+// Track metadata edits
+// ============================================================================
+
+message UpdateTrackRequest {
+  int64 track_id = 1;
+  optional string name = 2;
+  optional int32 track_number = 3;
+  optional int32 disc_number = 4;
+  optional string musicbrainz_recording_id = 5;
+}
+
+message ReorderTracksRequest {
+  int64 album_title_id = 1;
+  repeated TrackOrderEntry order = 2;
+}
+
+message TrackOrderEntry {
+  int64 track_id = 1;
+  int32 disc_number = 2;
+  int32 track_number = 3;
+}
+
+// ============================================================================
+// Artist membership (M6 lineup)
+// ============================================================================
+
+message ArtistMembershipListResponse {
+  repeated ArtistMembershipRow memberships = 1;
+}
+
+message ArtistMembershipRow {
+  int64 id = 1;
+  int64 group_artist_id = 2;
+  int64 member_artist_id = 3;
+  // Denormalized name columns so iOS doesn't need a second RPC.
+  string group_name = 4;
+  string member_name = 5;
+  optional CalendarDate begin_date = 6;
+  optional CalendarDate end_date = 7;
+  repeated string primary_instruments = 8;
+}
+
+message UpsertArtistMembershipRequest {
+  // Absent = create; present = update.
+  optional int64 id = 1;
+  int64 group_artist_id = 2;
+  int64 member_artist_id = 3;
+  optional CalendarDate begin_date = 4;
+  optional CalendarDate end_date = 5;
+  repeated string primary_instruments = 6;
+}
+
+message ArtistMembershipResponse { int64 id = 1; }
+message MembershipIdRequest { int64 membership_id = 1; }
+
+// ============================================================================
+// Audio transcode cache admin
+// ============================================================================
+
+message AudioTranscodeCacheStatus {
+  int64 total_size_bytes = 1;
+  int32 entry_count = 2;
+  optional Timestamp oldest_entry_at = 3;
+}
+
+message ClearAudioTranscodeCacheRequest {
+  // Absent = clear everything. Present = only entries for this track.
+  optional int64 track_id = 1;
+}
+
+// ============================================================================
+// Unmatched-audio group triage
+// ============================================================================
+
+message UnmatchedAudioGroupListResponse {
+  repeated UnmatchedAudioGroup groups = 1;
+  int32 total_groups = 2;
+  int32 total_files = 3;
+}
+
+message UnmatchedAudioGroup {
+  // Stable derived id for referring to this group from client calls.
+  // SHA-256 prefix of the sorted member row ids — when the row set
+  // changes the id changes, which is fine: clients always re-list.
+  string group_id = 1;
+  repeated string dirs = 2;
+  optional string dominant_album = 3;
+  optional string dominant_album_artist = 4;
+  optional string dominant_upc = 5;
+  optional string dominant_mb_release_id = 6;
+  optional string dominant_label = 7;
+  optional string dominant_catalog_number = 8;
+  repeated int32 disc_numbers = 9;
+  int32 total_files = 10;
+  // How many files carry a MUSICBRAINZ_TRACKID tag. When this equals
+  // total_files, a matching MB release gives us the strongest possible
+  // link signal; when zero, we fall back to (disc, track) positions.
+  int32 recording_mbid_count = 11;
+  repeated int64 file_ids = 12;
+  repeated UnmatchedAudioGroupFile files = 13;
+}
+
+message UnmatchedAudioGroupFile {
+  int64 id = 1;
+  string file_path = 2;
+  string file_name = 3;
+  optional string parsed_title = 4;
+  optional string parsed_track_artist = 5;
+  optional int32 parsed_track_number = 6;
+  optional int32 parsed_disc_number = 7;
+  optional PlaybackOffset parsed_duration = 8;
+  optional string parsed_mb_recording_id = 9;
+}
+
+message SearchMusicBrainzForUnmatchedAudioRequest {
+  // File ids in the group. Server re-derives the group by computing
+  // dominant values across these rows.
+  repeated int64 unmatched_audio_ids = 1;
+  // Optional free-text override when the parsed tags' artist+album
+  // don't find the right MB record. "Artist - Album" is split on
+  // " - "; otherwise the value is treated as an album name.
+  optional string query_override = 2;
+}
+
+message SearchMusicBrainzForUnmatchedAudioResponse {
+  string search_artist = 1;
+  string search_album = 2;
+  repeated MusicBrainzReleaseCandidate candidates = 3;
+}
+
+message MusicBrainzReleaseCandidate {
+  string release_mbid = 1;
+  optional string release_group_mbid = 2;
+  string title = 3;
+  string artist_credit = 4;
+  optional int32 year = 5;
+  optional string label = 6;
+  optional string barcode = 7;
+  int32 track_count = 8;
+  int32 disc_count = 9;
+  // True when every file's (disc, track) position exists on the
+  // release. A false here means the scanner's current validator would
+  // also reject this candidate — the admin sees the reason and picks
+  // a different one.
+  bool accommodates_files = 10;
+  // Count of the group's files whose parsed_mb_recording_id appears
+  // on this release. Non-zero = high confidence; = total_files means
+  // gold-standard match (new ripper populates recording MBIDs).
+  int32 recording_mbid_coverage = 11;
+}
+
+message LinkUnmatchedAudioAlbumToReleaseRequest {
+  repeated int64 unmatched_audio_ids = 1;
+  string release_mbid = 2;
+}
+
+message SearchMusicBrainzRequest {
+  // Free-text query. Server splits on " - " when present (treated
+  // as "Artist - Album"); otherwise treats the whole string as an
+  // album name. Empty when only barcode is set.
+  string query = 1;
+  // Optional EAN/UPC barcode lookup tried first when present —
+  // matches the user's original scan if MB knows it.
+  optional string barcode = 2;
+}
+
+message SearchMusicBrainzResponse {
+  // What the server actually searched for (for the UI to echo back).
+  string search_artist = 1;
+  string search_album = 2;
+  // Re-uses the existing candidate shape from the unmatched-audio
+  // admin flow. Fields like accommodates_files / recording_mbid_
+  // coverage aren't relevant here — server zeroes them.
+  repeated MusicBrainzReleaseCandidate candidates = 3;
+}
+
+message LinkUnmatchedAudioAlbumManualRequest {
+  repeated int64 unmatched_audio_ids = 1;
+  // No admin overrides by design — the ripper already wrote album
+  // name, artist, track name, track number, disc number, duration
+  // into the files. Server derives everything from file tags.
+}
+
+message LinkUnmatchedAudioAlbumResponse {
+  int64 title_id = 1;
+  string title_name = 2;
+  int32 linked = 3;
+  repeated LinkUnmatchedAudioAlbumFailure failed = 4;
+}
+
+message LinkUnmatchedAudioAlbumFailure {
+  string file_path = 1;
+  string reason = 2;
+}
+
+// ============================================================================
+// Image cache migration verifier (phase 4a)
+// ============================================================================
+
+message VerifyFirstPartyImageMigrationResponse {
+  FirstPartyCategoryAudit ownership_photos = 1;
+  FirstPartyCategoryAudit local_images = 2;
+  // True when every category reports verified == total and every failure
+  // counter is zero. Phase 4b deletion is safe to consider only when this
+  // is true.
+  bool safe_to_delete_old_layout = 3;
+  Timestamp audited_at = 4;
+}
+
+message FirstPartyCategoryAudit {
+  // Total rows in the driving table (ownership_photo or local_image).
+  int32 total_rows = 1;
+  // Rows whose legacy file is missing — nothing to verify against, not
+  // necessarily broken (may have been intentionally deleted from disk).
+  int32 legacy_missing = 2;
+  // Rows where both legacy + new layout exist with matching bytes AND
+  // a parseable sidecar sits next to the new file. The happy path.
+  int32 verified = 3;
+  // Rows where the legacy file exists but no new-layout copy was found.
+  int32 missing_new_copy = 4;
+  // Rows where both copies exist but file sizes (treated as a
+  // byte-identity proxy; the copy updater does a byte-for-byte copy)
+  // disagree.
+  int32 mismatched_bytes = 5;
+  // Rows where the new-layout copy exists but no sidecar sits next to it.
+  int32 missing_sidecar = 6;
+  // Rows where a sidecar exists but doesn't parse as valid JSON.
+  int32 invalid_sidecar = 7;
+
+  // Up to SAMPLE_LIMIT example file paths per failure bucket so the admin
+  // can spot-check without running a separate tool.
+  repeated string sample_missing_new_copy = 10;
+  repeated string sample_mismatched_bytes = 11;
+  repeated string sample_missing_sidecar = 12;
+  repeated string sample_invalid_sidecar = 13;
+}

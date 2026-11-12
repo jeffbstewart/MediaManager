@@ -1,0 +1,204 @@
+.loading-container,
+.error-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 1rem;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+// Spec main padding and section rhythm; rows bleed into the right
+// padding so the next card peeks out (STYLE-SPEC.md 1, 3.1).
+.home-container {
+  --row-bleed: var(--pad-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  min-width: 0;
+  padding: var(--pad-top) var(--pad-x) 64px;
+}
+
+.carousel-section {
+  min-width: 0;
+}
+
+// Hero banners (spec 3.4): the featured carousel and the spotlight.
+.hero-section {
+  min-width: 0;
+}
+
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  mat-icon {
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+    color: white;
+  }
+}
+
+app-poster-card:hover .play-overlay {
+  opacity: 1;
+}
+
+.dismiss-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+app-poster-card:hover .dismiss-btn,
+.dismiss-btn:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .dismiss-btn { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-overlay,
+  .dismiss-btn { transition: none; }
+}
+
+// Welcome block (spec 3.8). On desktop the greeting sits on the page glow
+// with a tilted poster mosaic in the top-right corner, masked to fade
+// left and down. Below 1024px it becomes a card: mosaic on top, then the
+// text over the theme's home gradient.
+.welcome {
+  position: relative;
+  min-height: 156px;
+}
+
+.welcome-text {
+  position: relative;
+  z-index: 1;
+  max-width: 728px;
+  padding-top: 32px;
+
+  h1 {
+    margin: 0;
+    font: 700 var(--fs-h1, 2rem)/1.25 var(--f-display, inherit);
+    color: var(--mat-sys-on-surface);
+    text-wrap: balance;
+  }
+
+  p {
+    max-width: 600px;
+    margin: 24px 0 0;
+    font: 400 16px/22px var(--f-body, inherit);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.mosaic {
+  position: absolute;
+  z-index: 0;
+  top: calc(-1 * var(--pad-top));
+  right: calc(-1 * var(--pad-x));
+  width: 600px;
+  height: 212px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 100%), linear-gradient(0deg, transparent 0%, #000 40%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 100%), linear-gradient(0deg, transparent 0%, #000 40%);
+  mask-composite: intersect;
+}
+
+.mosaic-grid {
+  position: absolute;
+  top: -150px;
+  left: 40px;
+  display: grid;
+  grid-template-columns: repeat(7, 92px);
+  gap: 10px;
+  transform: rotate(-30deg) skewX(10deg);
+  transform-origin: 50% 50%;
+  opacity: 0.75;
+
+  img {
+    width: 92px;
+    height: 138px;
+    object-fit: cover;
+    border-radius: var(--r-card, 8px);
+    box-shadow: var(--sh-card, rgba(0, 0, 0, 0.2) 0 4px 4px 0);
+  }
+}
+
+@media (max-width: 1023px) {
+  .welcome-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--r-hero, 16px);
+    background: var(--g-top);
+  }
+
+  .mosaic {
+    position: relative;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 180px;
+    -webkit-mask-image: linear-gradient(0deg, transparent 0%, #000 40%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(0deg, transparent 0%, #000 40%);
+    mask-composite: add;
+  }
+
+  .mosaic-grid { left: 24px; }
+
+  .welcome-card .welcome-text {
+    max-width: 512px;
+    margin-top: -90px;
+    padding: 0 16px 24px;
+
+    p { max-width: 512px; margin-top: 16px; }
+  }
+}
+
+@media (max-width: 599px) {
+  .welcome-card .welcome-text { margin-top: -60px; }
+}
+
+// All Channels tile at the end of Continue Watching (spec 3.3): a wide
+// card's footprint, plum to indigo to blue to teal, icon and label.
+.tile-all {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  width: var(--wide-w);
+  height: var(--wide-h);
+  border-radius: var(--r-card, 8px);
+  box-shadow: var(--sh-card, rgba(0, 0, 0, 0.2) 0 4px 4px 0);
+  background: linear-gradient(135deg, var(--c-plum, #823165) 0%, #2a2a8f 45%, #0e4f9e 75%, #1b7f8f 100%);
+  color: #fff;
+  font: 400 20.55px/1 var(--f-body, inherit);
+  text-decoration: none;
+
+  mat-icon { width: 41px; height: 41px; font-size: 41px; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+}

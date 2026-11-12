@@ -1,0 +1,596 @@
+# CLAUDE.md
+
+## Project Overview
+
+mediaManager is a Kotlin web application for managing physical media collections (DVD, Blu-ray, UHD, HD DVD). It catalogs titles via UPC barcode scanning, enriches them with TMDB metadata, discovers transcoded media files on a NAS, links them to catalog titles, and provides in-browser video playback via pre-transcoded ForBrowser cache. Built with Angular 22 (TypeScript) for the web UI, served by a Kotlin/Armeria backend, with an H2 embedded database.
+
+## Working Directory
+
+At the start of every session, `cd` to the project root (`/c/Programming/github/MediaManager`) as your **first Bash command** so all subsequent commands can use relative paths without repeating the `cd` prefix. Do this before any other shell operations on the mediaManager project.
+
+## Build and Run Commands
+
+```bash
+./gradlew build          # Build the project (production mode)
+./gradlew --no-daemon run            # Run the server (localhost:9090, production mode)
+./gradlew test           # Run tests
+./gradlew clean build    # Clean and rebuild
+```
+
+**Important:** Always use `--no-daemon` when running the server to avoid Gradle daemon locking problems. Kill existing Java processes first (`taskkill //F //IM java.exe`) if needed.
+
+## Docker Deployment
+
+```bash
+./lifecycle/deploy-all.sh         # Stop buddy, build Docker + push + Watchtower, restart buddy
+./lifecycle/docker-build.sh       # Build image, tag, push to registry, trigger Watchtower redeploy
+```
+
+Use `deploy-all.sh` for changes that affect both the server and the transcode buddy (shared code in transcode-common, buddy code, or server code). Use `docker-build.sh` alone for server-only changes.
+
+**Buddy commands:**
+```bash
+./lifecycle/run-buddy.sh             # Start buddy (output to data/buddy.log)
+./lifecycle/stop-buddy.sh            # Stop buddy
+./lifecycle/buddy-log.sh             # Last 50 lines of buddy log
+./lifecycle/buddy-log.sh -f          # Live follow
+```
+
+For Watchtower config, health/metrics server, and Prometheus setup, see `docs/ADMIN_GUIDE.md`. For transcode buddy architecture, see `docs/TRANSCODE_BUDDY.md`.
+
+## Architecture
+
+- **Web UI:** Angular 22 (TypeScript) single-page app under `web-app/`, built with npm and served as static assets. The shell (`core/shell/`) is plain markup, not Material wrappers: a sticky `header.app-header`, a fixed `aside.side-nav` at 1024px and up, the same nav in a native `<dialog class="sheet left">` below that, a bottom `nav.tabbar` below 1024px, a decorative `.page-glow` keyed off `body[data-page]`, and document scrolling. Layout tokens and the two breakpoints (1023px, 599px) live in `src/styles/_layout.scss`.
+- **Theming:** one theme ships today, `marquee`; `classic` was retired on 2026-11-10 (migration V103 clears stored pins, and the profile page no longer offers a choice), but the plumbing for a second theme is kept (plan: `docs/plans/web-theming.md`). Layout tokens and the breakpoints are universal (`src/styles/_layout.scss`); a theme is a token set plus fonts, nothing more, so templates never branch on the theme. `_theme-marquee.scss` scopes its tokens under `html[data-theme="marquee"]`, with the Material palette generated in `_marquee-palette.scss` from the reference spec's seeds; a new theme is another such file plus an entry in `core/theme-ids.ts` and `WebTheme`. `main.ts` sets `data-theme` before bootstrap from the `mm.theme.effective` localStorage cache; `ThemeService` then applies the profile's choice (server wins), treating a retired or unknown id as the default. The choice is per user and nullable (`app_user.web_theme`, Kotlin `WebTheme`): NULL means the built-in default, `WebTheme.DEFAULT`, and an explicit pick pins it. Theme ids are persisted, so never rename one without a migration. The app is dark only. Fonts are vendored under `web-app/public/vendor/fonts/` (Inter for body text, Figtree 800 for headings, Material Icons) with their licenses; the SPA makes no third-party requests, and the Playwright harness runs axe once per shipped theme.
+- **Server:** Armeria (Netty-based) HTTP/2 server started from `main()` — serves gRPC, HTTP endpoints, and the SPA (no app server deployment)
+- **gRPC:** Served by Armeria on the main port (default 9090, `--port`) alongside HTTP and the SPA. 10 services, ~130 RPCs. Proto definitions in `proto/`. iOS app and the Angular web UI communicate via gRPC.
+- **Database:** H2 in file mode (`./data/mediamanager.mv.db`)
+- **Connection Pool:** HikariCP
+- **Migrations:** Flyway — SQL files in `src/main/resources/db/migration/`, naming convention `V{NNN}__{description}.sql`
+- **ORM:** jdbi-orm (pulled in via the `vok-framework-vokdb` module, whose UI stack is excluded in `build.gradle.kts`)
+- **Logging:** SLF4J with custom BufferingServiceProvider (stderr + Binnacle export)
+- **Build:** Gradle 9.3.1 with Kotlin DSL, version catalog in `gradle/libs.versions.toml`
+- **JDK:** Corretto 25 (Java 21+)
+- **Package:** net.stewart.mediamanager
+
+For the full file listing (views, entities, services, servlets), see `docs/index.md`.
+
+### Database
+
+H2 stores its file at `./data/mediamanager.mv.db` (in the `data/` directory, which is gitignored). Flyway manages schema migrations via SQL files in `src/main/resources/db/migration/`, applied in lexicographic order on startup.
+
+**Encryption at rest:** When `H2_FILE_PASSWORD` is set, the database uses AES encryption (`CIPHER=AES`). On first startup with the env var, Bootstrap automatically exports, backs up, encrypts, and reimports. Once encrypted, `H2_FILE_PASSWORD` is required on every startup.
+
+### External APIs
+
+- **UPCitemdb** — Free trial tier, no API key required. Per-IP throttling: 6 requests/minute, 100/day. Used for barcode-to-product lookup.
+- **TMDB (The Movie Database)** — Requires API key via `secrets/.env` file (`TMDB_API_KEY`). Used for canonical title names, poster images, release years, and descriptions. A TMDB API key is required for a functional catalog — without it, there are no poster images, cast data, descriptions, or popularity sorting.
+  - **IMPORTANT: TMDB ID namespaces are separate for movies and TV shows.** A movie and a TV show can share the same integer ID (e.g., movie 253 = "Live and Let Die", TV 253 = "Star Trek"). Any lookup, dedup, or comparison involving `tmdb_id` **must also consider `media_type`**. Failing to do so causes cross-type collisions — titles silently reused, wishes fulfilled for the wrong type, etc. Always pair `tmdb_id` with `media_type` in all queries and set operations.
+- **Keepa** — Amazon price tracking API. Requires paid subscription. API key stored in `app_config` (`keepa_api_key`). **Amazon.com (US, domain=1) only.** Token-based rate limiting configured via `keepa_tokens_per_minute` in Settings.
+
+### Video Playback
+
+Two modes: **In-Browser** (HTML5 `<video>` via `VideoStreamServlet`) and **Roku** (custom sideloaded BrightScript channel consuming `/roku/feed.json`). MP4/M4V stream directly; MKV/AVI served from pre-transcoded ForBrowser mirror. Background `TranscoderAgent` batch-transcodes to browser/Roku-compatible MP4, prioritized by TMDB popularity.
+
+For FFmpeg command details, codec requirements, and Roku-specific output flags, see `docs/TRANSCODE_BUDDY.md`.
+
+### Live Camera Streaming
+
+Architecture: `Camera (RTSP) → go2rtc → HLS/MJPEG → MediaManager proxy → clients`. Cameras configured in DB, administered via `/cameras/settings`. `UriCredentialRedactor` redacts RTSP credentials everywhere. go2rtc binary path via `app_config` key `go2rtc_path`. Never port-map go2rtc's API port (1984) in docker-compose.
+
+### Live TV Streaming
+
+Architecture: `HDHomeRun (MPEG-TS) → FFmpeg (HLS) → LiveTvStreamManager → LiveTvStreamServlet → Browser/Roku`. Admin enters HDHomeRun IP (IPv4-only, no SSRF). Concurrency controls: global max streams, per-tuner limits, per-user stream replacement, idle timeout. Content rating gate and per-user quality filter on channels.
+
+### Schema Updater Framework
+
+Programmatic data updates that need Kotlin code (API calls, computation). Flyway handles DDL; SchemaUpdaters handle data population. Tracked in `schema_updater` table (name PK, version, applied_at). Bumping an updater's version re-triggers it on next startup. Runner called from Bootstrap.init() after Flyway migrations.
+
+### CLI Flags
+
+See `docs/ADMIN_GUIDE.md` for the full CLI flags table. Key ones: `--developer_mode`, `--port N` (main port serving gRPC + HTTP + SPA, default 9090), `--max_transcode_deletes N`, `--disable_local_transcoding`, `--internal_port N` (health/metrics, default 8081).
+
+### Network Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│    Operator's network: LAN, plus a VPN for remote clients   │
+│                                                             │
+│  ┌─────────────────────────────────────┐                    │
+│  │  TLS-terminating reverse proxy      │                    │
+│  │  (HTTP/2 end-to-end, gRPC-aware)    │                    │
+│  │                                     │                    │
+│  │  https://mm.domain:443 ─────────────┼──► NAS:9090        │
+│  │     (wildcard cert from an ACME     │    (everything)    │
+│  │      client)                        │                    │
+│  └─────────────────────────────────────┘                    │
+│                                                             │
+│  Router: no inbound port forward. Internet clients never    │
+│  reach the proxy; remote use goes over the VPN.             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│              NAS (Docker)               │
+│                                         │
+│  Armeria :9090 (HTTP/2)                 │
+│    gRPC + HTTP + SPA + streaming        │
+│    10 services                          │
+│                                         │
+│  Health:  :8081/health (Docker/proxy)   │
+│  Metrics: :8081/metrics (Prometheus)    │
+└─────────────────────────────────────────┘
+```
+
+**One hostname, one port, every protocol.** A TLS-terminating reverse
+proxy (wildcard cert) listens on 443 and forwards HTTP/2 end-to-end to
+the NAS's main port 9090, which Armeria serves gRPC, the Angular SPA,
+images, and video streaming from alike. There is no separate gRPC
+hostname or port — the `grpc.domain` / `mm.domain` split was a
+servlet-era artifact and is gone.
+
+- The proxy must speak HTTP/2 to the backend (no downgrade to HTTP/1.1)
+  and pass gRPC trailers through; HAProxy, nginx with `grpc_pass`, and
+  traefik all qualify.
+- Health checks target `/health`, served on the internal monitoring port 8081.
+- Give long-lived connections (streaming RPCs) a long proxy tunnel/idle
+  timeout; an hour is a good default.
+- The canonical public URL is stored server-side as the `public_base_url`
+  setting and handed to clients by `InfoService/Discover` (`secure_url`),
+  so a hostname change propagates to devices on their next discovery.
+
+**Clients** (iOS, Android TV, Roku, web) each store that single address
+and use it for both data operations and binary ones (images, video
+streaming, file downloads).
+
+**Reachable from the LAN and over a VPN only.** The router forwards no
+port, so internet clients never reach the proxy; remote clients first
+join a VPN of the operator's choosing. The hostname should resolve the
+same way on the LAN and over the VPN so clients keep one address. Apple
+App Review cannot reach a VPN-only instance, so a review window needs a
+separately hosted demo server. Set `MM_TRUSTED_PROXIES` to the addresses
+your proxy connects from; if the proxy can fail over between hosts, list
+every address it may connect from, or a failover breaks sign-in. The
+proxy and router configuration are not part of this repository.
+
+### Decisions Made
+
+- **Angular SPA over server-rendered UI** — the web UI is a standalone Angular (TypeScript) app under `web-app/`, talking to the server over gRPC; built with npm and served as static assets.
+- **H2 over SQLite** — native Java, no JNI/native wrappers, fully supported by the jdbi-orm/Flyway/HikariCP ecosystem. File-mode gives same single-file-DB experience.
+- **Flyway for migrations** — standard Java migration tool, auto-creates tracking table, checksums applied migrations.
+- **Gradle version catalog** (`libs.versions.toml`) — centralizes dependency versions.
+- **Gradle 9.3.1 over 8.12** — Java 25 support requires Gradle 9.1+; 8.x cannot parse version "25.0.2".
+- **discovered_file staging table** — `transcode.title_id` is NOT NULL, so unmatched NAS files park in `discovered_file` until linked (auto or manual), then a `Transcode` record is created.
+- **Stateless parser/matcher** — `TranscodeFileParser` and `TranscodeMatcherService` are pure-logic objects with no DB or I/O dependencies, fully unit-testable.
+- **In-browser playback** — HTML5 `<video>` allows any network client to watch. MKV files are pre-transcoded to ForBrowser mirror; MP4 files stream directly.
+- **Background transcoder over on-the-fly remux** — Pre-transcoding in the background avoids interactive wait times. Files are transcoded in TMDB popularity order (most popular first). Play button only appears when the ForBrowser MP4 exists.
+- **Path-mirrored ForBrowser cache** — `{nas_root}/ForBrowser/` mirrors the source directory structure.
+- **Schema updater framework** — Flyway handles DDL only; SchemaUpdater interface + runner handles programmatic data updates (API calls, computation) with version tracking for re-runnability.
+- **Roku JSON feed over Direct Publisher** — Direct Publisher was sunset January 2024. Custom sideloaded BrightScript channel consumes `/roku/feed.json`. API key auth (UUID in `app_config`) for stateless device authentication.
+- **Sideloaded Roku channel over beta channel** — Beta channels expire after 120 days. Sideloading via Developer Mode has no expiration and requires no certification review.
+- **Armeria (Netty) over servlet-based gRPC** — `grpc-servlet-jakarta` inside a servlet container had async support issues with servlet filters and couldn't handle HTTP/2 end-to-end through reverse proxies. Armeria serves gRPC, HTTP, and the SPA together on one Netty-based HTTP/2 port, avoiding all servlet-container constraints.
+- **HAProxy over the NAS's bundled reverse proxy** — NAS-bundled Nginx-based proxies typically don't support gRPC (no `grpc_pass`). HAProxy handles HTTP/2 natively with proper trailer framing for gRPC; any proxy that passes HTTP/2 and gRPC trailers end-to-end works. The wildcard cert is issued beside the proxy by an ACME client and reloaded into it.
+- **gRPC over REST API** — Type-safe protobuf wire format, server-streaming RPCs for live updates, multi-platform code generation from `.proto` files. REST API (`/api/v1/*`) removed.
+
+## Coding Rules
+
+- **Always use `Clock.sleep()` instead of `Thread.sleep` directly.** The `Clock` interface (in `service/Clock.kt`) abstracts time operations for testability. All production code should inject `clock: Clock = SystemClock` and call `clock.sleep(duration)`. Direct `Thread.sleep` calls make code untestable.
+
+- **Armeria `@Param` annotations must use `@Default` for optional parameters.** Kotlin nullable types (`String?`, `Boolean?`) are **not** treated as optional by Armeria — they cause `IllegalArgumentException: Mandatory parameter is missing` at runtime. Always pair `@Param("name")` with `@Default("value")` and use a non-nullable type. For example: `@Param("sort") @Default("name") sort: String`. The `AnnotatedServiceRegistrationTest` catches wiring issues at test time.
+
+## Philosophy
+
+**"Debugging sucks, Testing Rocks."** — Write integration and unit tests before unleashing code on real data. If something can be tested with mocked dependencies and an in-memory database, it should be.
+
+## Security
+
+- Claude must **never read files with the `.env` extension** in `secrets/` (contains real API keys and passwords)
+- Claude **may read `.agent_visible_env` files** in `secrets/` (test credentials, non-secret config)
+- Values from `secrets/.env` must **never be committed to source control or logged**
+- Use `secrets/example.env` as the template for documenting required environment variables
+
+### User Authentication
+
+Two roles, distinguished by `AppUser.isAdmin()`:
+
+| Role | Access |
+|------|--------|
+| Viewer | Catalog browsing, search, playback, own profile |
+| Admin | Everything a viewer can, plus scan/import, purchases, transcodes, settings, and user management (all `AdminService` RPCs + admin REST endpoints) |
+
+Enforcement is **server-side**; the Angular SPA's router guards are a
+convenience only.
+
+**gRPC (`grpc/AuthInterceptor`):** Every RPC except a small unauthenticated
+set (`AuthService/Login`, `Refresh`, `Revoke`, `CreateFirstUser`, the
+passkey-auth RPCs, `InfoService/Discover`) requires a caller identity,
+resolved in precedence order:
+1. `Authorization: Bearer <jwt>` — iOS, Android TV, Roku, and direct gRPC
+   clients (`JwtService.validateAccessToken`).
+2. HttpOnly `mm_session` cookie — the Angular SPA (can't read the token),
+   DB-validated via `AuthService`, gated by a CSRF check that requires the
+   `Origin` header (when present) to match the request authority.
+
+All `AdminService` RPCs additionally require admin role. Two further gates
+block otherwise-authenticated calls (except gate-exempt RPCs such as
+`ChangePassword` and all of `ProfileService`): an unmet legal-terms
+agreement and a pending `must_change_password`.
+
+**HTTP (`armeria/ArmeriaAuthDecorator`):** Wraps the image, streaming, and
+REST (`/api/v2/*`) services — posters/headshots/backdrops,
+video/camera/live-TV streams, and the catalog + admin REST endpoints. Same
+identity chain as gRPC, plus two extra fallbacks: the `mm_jwt` cookie (iOS
+HLS — AVPlayer can't set headers) and a `?key=` device token
+(`PairingService.validateDeviceToken`, for paired Roku/devices). Returns
+**401** when unauthenticated, **403** before first-user setup, and **451**
+when the user still owes a terms agreement. Cookie-authenticated
+(`mm_session` / `mm_jwt`) state-changing requests must also pass
+`armeria/CookieCsrfGuard`: same Origin as gRPC (**403** otherwise) and a
+non-"simple" body type, i.e. not `text/plain`, form-encoded, multipart, or
+untyped (**415** otherwise). Bearer and `?key=` requests are exempt. A few endpoints are deliberately
+unauthenticated (health check, CSP report sink, `AuthRestService`, and the
+Roku feed / pairing endpoints, which carry their own auth).
+
+**Tokens & sessions:** `JwtService` issues short-lived access tokens (with a
+`Refresh` RPC); `WebAuthnService` backs passkey login. Browser sessions use
+a server-set, HttpOnly, `SameSite=Lax` `mm_session` cookie (30-day
+`Max-Age`) mapped to hashed rows in the `session_token` table; validated
+tokens are cached ~60s to avoid a DB hit per request, and expired rows are
+purged on startup.
+
+**First-user setup:** When `app_user` is empty, `AuthService.hasUsers()` is
+false — the HTTP decorator returns 403 and only the unauthenticated
+`AuthService/CreateFirstUser` RPC is reachable, which the SPA's setup flow
+calls to create the first account (always admin).
+
+**Owned strings:** every persisted key and wire-contract string on the auth
+and legal paths is defined once, and the owner's comment says whether the
+value may change: `LegalRequirements` (legal config keys, platform ids),
+`WebAuthnService` (relying-party keys), `AppUser` (access levels),
+`JwtService` (Bearer prefix, `mm_jwt`), `PairingService` (`?key=`),
+`AuthInterceptor` (`x-client-platform`, `legal_agreement_required`), and
+`LegalJson` (REST field names). Reference the constant; never retype the
+string.
+
+**Testing:** `secrets/test-credentials.agent_visible_env` (gitignored) contains test account credentials for automated UI and API testing. Claude may read this file. Copy from `secrets/example.test-credentials.env` and create the test accounts manually after first setup.
+
+### Content Security Policy
+
+`src/main/resources/csp-policy.txt` is the policy, one directive per line with the reason for each. `armeria/CspDecorator` joins it into the `Content-Security-Policy` header on every response (plus `Reporting-Endpoints` and the companion security headers), and the Playwright suite serves every page it tests with the same header (see "Content Security Policy in the suite" below). Browsers post violations to `/csp-report`; `armeria/CspReportHttpService` logs each at ERROR under the `csp.violation` logger, which Binnacle receives. Never load a resource from another origin in the SPA: route it through the image proxy or vendor it.
+
+## Version Control
+
+This repository uses **git** hosted on GitHub. See `.gitignore` for excluded files and directories.
+
+### Commit Message Style
+
+Commit messages follow this format:
+
+```
+Short summary line (imperative mood, ~50 chars)
+
+Body paragraph(s) describing what changed and why. Wrap at ~72 chars.
+Use bullet points with `-` for lists of changes. Include context like
+"replaces X with Y" or "adds X for Y purpose".
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+```
+
+- **First line**: imperative verb ("Add", "Fix", "Replace", "Redesign"), concise summary
+- **Body**: explain the what/why, list notable changes with `-` bullets
+- **Co-author trailer**: always include when Claude authored or co-authored the change
+- No need to check `git log` for style — just follow this format
+
+### Creating Releases
+
+Releases are created by pushing a version tag. **Never create releases manually via `gh release create`** — the CI workflow handles release creation and attaches the Roku channel zip as an asset. Manually-created releases are immutable by the time CI runs, causing asset upload failures.
+
+```bash
+git tag v1.0.3
+git push --tags
+```
+
+The release workflow (`.github/workflows/release.yml`) will:
+1. Run tests
+2. Build and push the Docker image to GHCR
+3. Package `roku-channel/` as `roku-channel.zip`
+4. Create a GitHub Release with auto-generated notes and the zip attached
+
+To add custom release notes, edit the release on GitHub after CI creates it.
+
+### Presubmit Check
+
+A git pre-commit hook scans staged changes for sensitive data (hardcoded IPs, UUIDs, API keys, etc.). If the commit is rejected, fix the violations or add known-safe values to `lifecycle/presubmit-allowlist.txt`.
+
+For the **Playwright suite presubmit gate**, run `lifecycle/pre-submit.sh` before pushing. It exits non-zero on any failure and writes the structured artifacts described under "Web-app Test Harness" below. Wire it as a git pre-push hook with:
+
+```bash
+ln -s ../../lifecycle/pre-submit.sh .git/hooks/pre-push
+```
+
+### Pull requests opened by the agent account
+
+Stacked pull-request chains under `agent/<chain>-NN-*` are built by unattended
+cloud routines that follow `docs/plans/chain-agent-brief.md` and a chain file it
+names. The finished chains: Marquee (`agent/marquee-*`, from the older
+`docs/plans/marquee-agent-brief.md`), Grids (`docs/plans/chain-grids.md`), and
+Live (`docs/plans/chain-live.md`); a new chain gets a new chain file.
+If you are a fixer session on one of those branches (a CI failure or a
+review comment woke you), the brief's rules apply to you too:
+
+- Author commits as `jbstewart-agent` with the noreply address given in the brief. Add commits only: never force-push, amend, or rebase anything that has been pushed.
+- Verify before pushing: `./gradlew --no-daemon --max-workers=2 test` when Kotlin, proto, or SQL changed, and always `cd web-app && tests/ci-run.sh` (it finds the browser; never install one, and never change timeouts or concurrency to pass).
+- Reply to each review thread with what changed; the operator resolves threads.
+- After fixing an earlier branch, merge it forward into every later branch of the same chain with a merge commit so the stack stays consistent.
+
+## Web-app Test Harness
+
+The Angular Playwright suite under `web-app/tests/` is split into two directories that the harness runs separately:
+
+- `tests/axe/` — accessibility audits via axe-core. One assertion per test: zero violations.
+- `tests/functional/` — request-mocked DOM / navigation / signal-driven UI tests.
+
+Numbers 01–08 are paired across both directories where the same view exists in each (login / setup / terms / change-password / home / help / profile / report-problem). After 08, each directory continues independently.
+
+### Canonical runner: `tests/harness.mjs`
+
+Always run the suite via the harness — never invoke `npx playwright test` ad-hoc when you want to know status. The harness preserves the Windows worker-loader workaround (per-spec process), captures Playwright's JSON reporter output, and writes structured artifacts.
+
+```bash
+cd web-app
+node tests/harness.mjs              # both suites
+node tests/harness.mjs axe          # only tests/axe
+node tests/harness.mjs functional   # only tests/functional
+node tests/harness.mjs --files tests/functional/04-change-password.spec.ts ...
+```
+
+Or via the wrapper: `tests/run-all.sh` (forwards args verbatim) or `lifecycle/pre-submit.sh` (same, with the gate semantics).
+
+The harness expects `ng serve` to be listening on port 4200 already. On a fresh checkout or in CI use `tests/ci-run.sh <same args>`, which starts the dev server, waits for it, runs the harness, and stops the server. It also uses whatever Chromium the host already has when Playwright's pinned build is absent (cloud sandboxes without browser downloads), and `CI_RUN_INSTALL_BROWSERS=1` downloads the pinned build where the network allows. `tests/visual/capture.mjs` writes review screenshots of the main views against the mocked backend; it is not part of the gate. The `visual` job in `.github/workflows/ci.yml` runs the same capture with `ARGOS_UPLOAD=1`, which attaches the Argos reporter and uploads the screenshots to Argos. Argos compares them with the merge-base build and posts the `argos` commit status and a pull request comment: either no visible change, or a link to the diffs. The upload authenticates with the job's GitHub OIDC token, so there is no secret; desk and sandbox runs never upload.
+
+**Console output (stderr)** — for the human watching the run, NOT for parsing:
+- Single-line CR-updating progress bar with elapsed / ETA / current spec when stderr is a TTY; one-line-per-update fallback when piped (CI logs).
+- Final line is the at-a-glance verdict: `✓ axe 17/17, functional 26/26 — 357 passed, 0 failed (2m51s)` or `✘ ... 1 FAILED ... — first: tests/functional/04-...:103`.
+
+**Never redirect stderr** (`2>/dev/null`, `2>&1 | head`, etc.) — the live progress bar is what the user watches. Use the on-disk artifacts for findings.
+
+### On-disk artifacts under `tests/.last-run/` (gitignored)
+
+These are the canonical post-run handoff. Read them instead of tailing the harness output.
+
+| File | Purpose | Read when |
+|------|---------|-----------|
+| `summary.txt` | First line is the at-a-glance verdict (`OK — N passed...` or `FAIL — N failed, first: path:line`). Rest is per-suite roll-up + one-line-per-failure. | First file to read after any run. |
+| `failures.md` | Markdown with trimmed per-failure context (error headline + body + screenshot path). 10-line cap on body. | When `summary.txt` reports failures and you need the error message. |
+| `progress.json` | Atomically updated after each spec — carries `elapsedSec`, `etaSec`, `currentSpec`, `completedSpecs`, `totalSpecs`, per-spec pass/fail counts. | Mid-run, to check status without tailing stderr. |
+| `run.json` | Full structured per-spec results for tooling. | When you need to script over results. |
+| `raw/<spec>.json` | Per-spec Playwright JSON reporter output (untrimmed). | Forensics — when `failures.md` truncated the body and you need the full axe violation node JSON, color values, etc. |
+
+### Helper: `tests/inspect-failure.mjs`
+
+For axe failures the 10-line body cap in `failures.md` often hides the offending DOM nodes / colors. This helper pulls the full error from `raw/*.json` for tests matching a pattern.
+
+```bash
+node tests/inspect-failure.mjs "Edit dialog"           # default 4000 chars per error
+node tests/inspect-failure.mjs "color contrast" --max 8000
+```
+
+Pattern is a case-insensitive substring of the test title.
+
+### Workflow when a spec fails
+
+1. Run `node tests/harness.mjs` (or whichever subset is relevant). Watch the progress bar.
+2. After it exits, `cat tests/.last-run/summary.txt` — the first line tells you pass/fail and (on fail) the first failing spec:line.
+3. If failed: `cat tests/.last-run/failures.md` for the trimmed body.
+4. If the body was truncated and you need the axe node detail (e.g., which DOM element + which colors): `node tests/inspect-failure.mjs "<test title substring>" --max 8000`.
+
+This keeps token usage bounded — the harness itself uses zero tokens during execution.
+
+### Asserting navigation in a spec
+
+After a click that should navigate, call `expectView(page, urlRegex, 'app-view', text?)` from `tests/helpers/expect-view.ts`, not `toHaveURL` alone. The URL changes even when the view did not reload: Angular reuses a component when only a route parameter changes (`/title/1` to `/title/2`), and a page that kept its old content still passes a URL check. `core/route-reuse.ts` now recreates the view on a parameter change; the helper is what catches a regression. When the destination is the same kind of page as the start, pass the destination's title as `text`.
+
+### Content Security Policy in the suite
+
+Every page the suite loads is served with the production Content-Security-Policy. The `cspViolations` fixture in `tests/helpers/test-fixture.ts` reads `src/main/resources/csp-policy.txt`, the file `CspDecorator` builds the server's header from, and adds that header to each document `ng serve` returns. A `securitypolicyviolation` event during a test fails the test with the directive and the blocked URL. Serve the resource from our origin (the image proxy, for example); a test that must trigger a violation opts out with `test.use({ allowCspViolations: true })` and reads the `cspViolations` fixture. Change a directive in the policy file and the server and the suite follow together. The visual capture (`tests/visual/capture.spec.ts`) is the one page set served without enforcement: Argos readies each page with an inline script, so that spec runs with Playwright's `bypassCSP`, and the functional specs for the same views carry the policy check.
+
+### Documentation Check Before Commit
+
+Before each commit, consider whether the changes require documentation updates. Check:
+
+- **CLAUDE.md** — Does a new flag, entity, service, servlet, or architectural change need to be reflected here?
+- **README.md** — Does the user-facing overview need updating?
+- **docs/** — Do the Admin Guide, Getting Started, Transcode Buddy, Roku Guide, User Guide, or architecture diagram (index.md) need updating?
+- **docs/FEATURES.md** — Should a feature request be marked done, or a new one added?
+- **docker-compose.yml** — Do port mappings, environment variables, or healthchecks need updating?
+
+If documentation updates are needed, include them in the same commit or a follow-up commit before moving on.
+
+## Roku Debugging
+
+Three helper scripts in `lifecycle/` support Roku channel development. All read `ROKU_IP` and `ROKU_DEV_PASSWORD` from `secrets/roku-deploy.env` (gitignored; copy from `secrets/example.roku-deploy.env`).
+
+### Deploy Channel
+
+```bash
+./lifecycle/roku-deploy.sh          # Zip roku-channel/, sideload to Roku via HTTP digest auth
+```
+
+After deploy, the channel auto-launches on the Roku. Verify installation:
+```bash
+./lifecycle/roku-remote.sh apps     # List installed apps (look for "dev" entry)
+```
+
+### Debug Console
+
+The Roku debug console (port 8085) accumulates all BrightScript `print` output since the channel launched. The `roku-debug.sh` script connects via ncat and streams output to both the terminal and a local file via `tee` (overwrites each run, no `-a`). The connection is fragile — ncat frequently drops, so don't rely on it staying connected. The local log file (`data/roku-debug.log`) is **always stale** — it only contains output captured during the last script run. Never read the local file and assume it reflects current Roku state.
+
+```bash
+./lifecycle/roku-debug.sh                                  # Stream to terminal + data/roku-debug.log
+./lifecycle/roku-debug.sh prod                             # Connect to prod Roku
+./lifecycle/roku-debug.sh dev data/custom-output.log       # Custom log file name
+```
+
+Always write debug logs to the `data/` directory (gitignored) to avoid cluttering the project root.
+
+All mediaManager channel logs use the `[MM]` prefix. Filter with:
+```bash
+grep '\[MM\]' data/roku-debug.log
+```
+
+### Build Timestamp Verification
+
+Each deploy stamps a `build_timestamp` into the manifest (format `YYYYMMDD-HHMMSS`, e.g., `20260313-075327`). The deploy scripts (`roku-deploy-dev.sh`, `roku-deploy-prod.sh`) inject this into the manifest before zipping and remove it after, so it only appears in the deployed package. The channel logs it at startup:
+```
+[MM] main: starting Media Manager v2.0.0 (build 20260313-075327)
+```
+**Always check this line** after fetching debug logs to confirm you are reading output from the expected build, not a stale session.
+
+### Roku Debug Workflow
+
+Follow this exact sequence when debugging Roku channel behavior. Do NOT skip steps or read stale logs.
+
+1. **Delete the local debug log** — `rm -f data/roku-debug.log` — ensures no stale data contaminates results
+2. **Deploy the channel** — `./lifecycle/roku-deploy-dev.sh` (or `-prod.sh`) — stamps build timestamp, zips, sideloads; channel auto-launches on the Roku
+3. **Perform the user action** — navigate menus, play content, trigger the behavior under test. Use `./lifecycle/roku-remote.sh` for ECP keypresses if needed, or ask the user to perform the action manually
+4. **Fetch debug logs** — `./lifecycle/roku-debug.sh` — connects to port 8085, captures the console buffer to `data/roku-debug.log`, connection will drop on its own
+5. **Inspect logs** — `grep '\[MM\]' data/roku-debug.log` — verify the build timestamp matches the deploy (step 2), then analyze the relevant log lines
+
+**Critical:** Steps must be sequential. The log file captures output printed since the channel launched. If you fetch logs before the user action, you won't see the relevant output. If you skip step 1, you may confuse old output with new.
+
+**Important:** This Windows environment does not have `nc` (netcat). Use `ncat` (from Nmap, installed at `/c/Program Files (x86)/Nmap/ncat`) instead. The roku-debug.sh script uses `ncat` for this reason.
+
+**Roku audio requirement:** The Roku's **Settings > Audio > Digital Output Format** must be set to **Stereo** (not "Auto"). When set to "Auto", the Roku attempts to negotiate audio formats with the TV, which causes the Video node to play video without audio while system/UI navigation sounds still work. This is a device-level setting, not a channel code issue.
+
+**Debug ports:**
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 8080 | HTTP | Roku installer web UI |
+| 8085 | Telnet | BrightScript debug console (`print` output) |
+| 8087 | Telnet | SceneGraph debug console (node inspector) |
+| 8089 | Telnet | SceneGraph profiler |
+| 8060 | HTTP | External Control Protocol (ECP) |
+
+### Remote Control via ECP
+
+**Prerequisite:** The Roku must have ECP keypress enabled: **Settings > System > Advanced system settings > Control by mobile apps > Network access** set to **"Enabled"** (default is "Limited", which returns HTTP 403 for keypress commands). Query endpoints like `active-app` and `device-info` work regardless.
+
+```bash
+./lifecycle/roku-remote.sh                # Press Select (OK)
+./lifecycle/roku-remote.sh Home           # Press Home
+./lifecycle/roku-remote.sh Back           # Press Back
+./lifecycle/roku-remote.sh Up             # Navigation keys: Up, Down, Left, Right
+./lifecycle/roku-remote.sh launch         # Launch the sideloaded dev channel
+./lifecycle/roku-remote.sh apps           # List installed apps (XML)
+./lifecycle/roku-remote.sh active         # Show active app
+./lifecycle/roku-remote.sh info           # Device info
+./lifecycle/roku-remote.sh player         # Media player state (playing/paused/stopped)
+./lifecycle/roku-remote.sh type "text"    # Type text into a Roku keyboard dialog
+```
+
+**Key names:** `Home`, `Rev`, `Fwd`, `Play`, `Select`, `Left`, `Right`, `Down`, `Up`, `Back`, `InstantReplay`, `Info`, `Backspace`, `Search`, `Enter`, `VolumeDown`, `VolumeUp`, `VolumeMute`
+
+## Screenshots
+
+Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/navbar-test.png`). The `data/` directory is gitignored so screenshots never enter version control.
+
+## MCP Tools
+
+The Playwright MCP server is available for browser automation and visual verification. Use it to:
+- Navigate to the running app (`http://localhost:9090/`)
+- Take snapshots (accessibility tree) and screenshots (visual)
+- Click elements, fill forms, and verify navigation
+- Run arbitrary Playwright code for complex interactions
+
+**Login persistence:** The browser session persists across Playwright launches. The default state when opening the browser is **already logged in** as the admin test user. You do not need to navigate to `/login` or enter credentials at the start of each session — just navigate directly to the page you want to test.
+
+Console logs are stored in `.playwright-mcp/` (gitignored).
+
+## Querying Binnacle Logs
+
+All MediaManager server, iOS, and Android TV logs forward to Binnacle
+(`https://<binnacle-host>:<port>`) via the custom SLF4J exporter in
+`logging-common/`. The real endpoint is not in the repo: it comes from the
+`BINNACLE_URL` environment variable or a `BINNACLE_URL=...` line in the
+gitignored `secrets/binnacle.agent_visible_env` (template:
+`secrets/example.binnacle.env`). The examples below assume `BINNACLE_URL`
+is exported. Binnacle exposes a small JSON query API that's more
+useful than scraping the HTML viewer for debugging. Source is at
+`/c/programming/github/Binnacle/` — check there when the shape of a
+parameter is unclear.
+
+### Endpoint
+
+```
+GET $BINNACLE_URL/api/logs/query
+```
+
+Response is JSON `{ "records": [...], "count_returned": N }`. Records
+carry `time` (RFC3339), `ingest`, `severity`, `service`, `instance`,
+`version`, `logger`, `message`, and an `attrs` map including
+`thread.name` and `code.namespace`. Stack traces ride along on an
+`exception` field when present. Records come back newest-first.
+
+### Filter parameters
+
+| Param | Purpose | Shape |
+|-------|---------|-------|
+| `service` | Exact match; repeatable for OR | e.g. `service=mediamanager-server` or `service=mediamanager-android-tv` |
+| `severity` | **Minimum** severity (ERROR returns ERROR+FATAL) | Label or int — `INFO` / `WARN` / `ERROR` / `FATAL` |
+| `since` | `time >=` | RFC3339 (e.g. `2026-04-18T00:00:00Z`) |
+| `until` | `time <` | RFC3339 |
+| `limit` | Page size | Default 100, hard-capped at 1000 |
+
+There is **no free-text search parameter** — the query endpoint filters
+only on service / severity / time / limit. For text matching use jq /
+grep on the response body:
+
+```bash
+# Every WARN from the main server, filter locally for CSP reports:
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&severity=WARN&limit=1000" \
+  | jq -r '.records[] | select(.message | test("CSP violation")) | "\(.time) \(.message)"'
+
+# Recent errors across a specific time window:
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&severity=ERROR&since=2026-04-18T00:00:00Z&limit=500" \
+  | jq '.records[] | {time, message, thread: .attrs["thread.name"]}'
+
+# Anything from a specific logger:
+curl -sSk "$BINNACLE_URL/api/logs/query?service=mediamanager-server&limit=1000" \
+  | jq '.records[] | select(.logger == "net.stewart.mediamanager.armeria.CspReportHttpService")'
+```
+
+### Services registered
+
+- `mediamanager-server` — the main backend
+- `mediamanager-ios` — the iOS app
+- `mediamanager-android-tv` — the Android TV app
+
+### Helper script: `lifecycle/binnacle-tail.sh`
+
+Wraps the `/api/logs/query` endpoint and pretty-prints results so you don't
+have to remember the curl + jq incantation. Defaults to the iOS app, last 50
+records, oldest-first (so the most recent line is at the bottom).
+
+```bash
+lifecycle/binnacle-tail.sh                     # last 50 from mediamanager-ios
+lifecycle/binnacle-tail.sh -n 200              # last 200
+lifecycle/binnacle-tail.sh -s server           # short alias (server|ios|tv)
+lifecycle/binnacle-tail.sh -s ios -l WARN      # min severity
+lifecycle/binnacle-tail.sh --since 2026-05-01T00:00:00Z
+lifecycle/binnacle-tail.sh --raw               # raw JSON instead of formatted lines
+```
+
+The endpoint comes from `BINNACLE_URL` (env var, else
+`secrets/binnacle.agent_visible_env`); the script exits with an error if
+neither is set.
+The script uses `curl -k` because Binnacle terminates with an internal
+self-signed cert.
+
+### Other endpoints
+
+- `GET /logs` — HTML viewer (redirect from `/`). Useful for eyeball
+  scanning but awkward to script against.
+- `GET /api/logs/health` — health probe.
+- `GET /metrics` — Prometheus scrape (separate from query).
+
+The read path is unauthenticated by design — Binnacle assumes it's
+behind a trusted network. Ingest is API-key gated on a different port.

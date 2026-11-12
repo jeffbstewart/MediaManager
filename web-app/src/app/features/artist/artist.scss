@@ -1,0 +1,160 @@
+.content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+.error-message { color: var(--mat-sys-error); text-align: center; padding: 2rem; }
+.empty-state { color: var(--mat-sys-on-surface-variant); font-style: italic; padding: 1rem 0; }
+
+// Hero
+.hero {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+// Artists get square headshots (band photos / portraits are typically square-ish;
+// a 2:3 crop makes band group photos look awkward).
+.profile-img, .profile-placeholder {
+  width: 200px;
+  height: 200px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.profile-img { object-fit: cover; }
+
+.profile-placeholder {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  mat-icon {
+    font-size: 72px;
+    width: 72px;
+    height: 72px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  h1 { margin: 0; font-size: 1.75rem; }
+}
+
+.lifespan {
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.biography {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-line;
+  color: var(--mat-sys-on-surface);
+}
+
+.bio-toggle {
+  background: none; border: none; color: var(--mat-sys-primary);
+  cursor: pointer; font-size: 0.8125rem; padding: 0; margin-top: 0.25rem;
+  &:hover { text-decoration: underline; }
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+// Album covers are ~square (1:1); crop the grid tile to match.
+.muted { color: var(--mat-sys-on-surface-variant); font-size: 0.875rem; margin: 0.25rem 0 1rem; }
+
+// Heart overlay on unowned covers. Solid dark pill — translucent
+// bg (rgba 0.6/0.85) axe-measured below 4.5:1 once blended.
+.wish-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1a1b1f;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: white;
+  transition: color 0.15s;
+
+  &:hover { color: white; }
+
+  &.wished {
+    color: var(--mat-sys-error);
+    mat-icon { color: var(--mat-sys-error); }
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    // Pin icon color: Material's icon-button rules otherwise dull
+    // it below AA on the dark pill.
+    color: white;
+  }
+}
+
+// Band Members / Member Of lists (M6). Flat list with name + tenure +
+// instruments. Deliberately not a grid — these are textual metadata, not
+// browseable destinations in their own right.
+.membership-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.membership-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.membership-name {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &:hover { border-bottom-color: var(--mat-sys-outline); }
+}
+
+.membership-tenure {
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.membership-instruments {
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+  font-style: italic;
+}
+
+@media (max-width: 599px) {
+  .hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .biography {
+    text-align: left;
+  }
+}

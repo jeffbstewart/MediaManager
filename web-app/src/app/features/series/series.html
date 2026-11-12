@@ -1,0 +1,71 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner aria-label="Loading" diameter="40" /></div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (series(); as s) {
+
+    <div class="hero">
+      @if (s.poster_url) {
+        <img [src]="s.poster_url" [alt]="s.name" class="profile-img" />
+      } @else {
+        <div class="profile-placeholder"><mat-icon>auto_stories</mat-icon></div>
+      }
+      <div class="hero-info">
+        <h1>{{ s.name }}</h1>
+        @if (s.author) {
+          <span class="known-for">
+            by <a [routerLink]="routes.author(s.author.id)">{{ s.author.name }}</a>
+          </span>
+        }
+        @if (s.description) {
+          <p class="biography">{{ s.description }}</p>
+        }
+        <span class="lifespan">{{ s.volumes.length }} volume{{ s.volumes.length === 1 ? '' : 's' }} in your collection</span>
+      </div>
+    </div>
+
+    @if (s.volumes.length > 0) {
+      <h2>Volumes in Your Collection</h2>
+      <div class="grid">
+        @for (v of s.volumes; track v.title_id) {
+          <app-poster-card [name]="volumeName(v.series_number, v.title_name)" [imageUrl]="v.poster_url"
+                           [link]="routes.title(v.title_id)" [meta]="v.first_publication_year" />
+        }
+      </div>
+    }
+
+    @if (s.can_fill_gaps) {
+      @if (s.missing_volumes.length > 0) {
+        <div class="section-header-row">
+          <h2>Missing Volumes</h2>
+          @if (bulkAdding()) {
+            <mat-spinner aria-label="Loading" diameter="24" />
+          } @else {
+            <button mat-flat-button color="primary" type="button" (click)="wishlistAllGaps()">
+              Wishlist all missing
+            </button>
+          }
+        </div>
+        @if (bulkMessage()) {
+          <p class="muted">{{ bulkMessage() }}</p>
+        }
+        <div class="grid">
+          @for (v of s.missing_volumes; track v.ol_work_id) {
+            <app-poster-card [name]="volumeName(v.series_number, v.title)" [imageUrl]="v.cover_url"
+                             dim="card" [meta]="v.year">
+              <button cardAction class="wish-btn" [class.wished]="v.already_wished"
+                      type="button"
+                      [attr.aria-label]="v.already_wished ? 'Remove from wish list' : 'Add to wish list'"
+                      (click)="toggleWish(v)">
+                <mat-icon>{{ v.already_wished ? 'favorite' : 'favorite_border' }}</mat-icon>
+              </button>
+            </app-poster-card>
+          }
+        </div>
+      }
+    } @else if (s.volumes.length > 0) {
+      <p class="muted">We don't know this series's full volume list yet. Scan or add more volumes to enable gap-filling.</p>
+    }
+  }
+</div>

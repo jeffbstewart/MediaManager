@@ -1,0 +1,770 @@
+.loading-container,
+.error-container {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.detail-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+// Hero, tinted (web-theming plan, Phase 3; spec 3.4 for the tint). The
+// header fills with the backdrop's tint, about 20% lightness, so the
+// page opens in the title's own colour; the backdrop shows through on
+// the right and the fill fades into the page surface at the bottom.
+// Without a tint (backdrop not cached yet) the fill is the theme's
+// container tone, which is what the header used to sit on.
+.hero {
+  --tint-c: var(--tint, var(--mat-sys-surface-container));
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 2rem;
+  min-height: 300px;
+  background: var(--tint-c);
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, var(--tint-c) 0%, var(--tint-c) 38%,
+        color-mix(in srgb, var(--tint-c) 55%, transparent) 60%, transparent 100%),
+      linear-gradient(0deg, var(--mat-sys-surface) 0%, color-mix(in srgb, var(--mat-sys-surface) 60%, transparent) 18%, transparent 45%);
+  }
+}
+
+.hero-backdrop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+  mask-image: linear-gradient(to right, transparent, black 30%);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 30%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  display: flex;
+  gap: 2rem;
+  z-index: 1;
+}
+
+.hero-poster {
+  width: 300px;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+}
+
+// Album art is square. Swap the aspect ratio and let the image display
+// at its native size (object-fit: contain) so embedded covers that aren't
+// perfectly 1:1 don't get cropped.
+.hero-poster.hero-poster-square {
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+}
+
+.star-btn {
+  flex-shrink: 0;
+  opacity: 0.3;
+
+  &.starred {
+    opacity: 1;
+    color: #f59e0b;
+  }
+}
+
+.hide-btn {
+  flex-shrink: 0;
+  opacity: 0.3;
+
+  &.hidden-title {
+    opacity: 0.7;
+    color: #f44336;
+  }
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  opacity: 0.7;
+  font-size: 0.875rem;
+  flex-wrap: wrap;
+}
+
+// Track list (albums) — one row per track within a disc group.
+.disc-header {
+  font-size: 0.875rem;
+  opacity: 0.55;
+  margin: 1rem 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.375rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: rgba(255, 255, 255, 0.03); }
+}
+
+.track-number {
+  width: 2rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.track-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.track-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.track-music-meta {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  font-size: 0.6875rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-bpm,
+.track-time-sig {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.track-tag-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.track-tag-chip {
+  font-size: 0.625rem;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  text-decoration: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0.9;
+
+  &:hover { opacity: 1; }
+}
+
+.track-tag-remove-btn {
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  padding: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+
+  &:hover { opacity: 1; }
+  mat-icon { font-size: 10px; width: 10px; height: 10px; }
+}
+
+.track-name {
+  font-size: 0.9375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-artist {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.track-duration {
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.track-play-btn {
+  flex-shrink: 0;
+  color: var(--mat-sys-on-surface);
+  transition: color 0.15s;
+
+  // Material's mat-icon-button exposes --mat-icon-button-icon-color;
+  // it defaults to a muted on-surface-variant that fails AA in dark
+  // mode. Pin the inner mat-icon to on-surface explicitly.
+  mat-icon { color: var(--mat-sys-on-surface); }
+
+  &:hover {
+    color: var(--mat-sys-primary);
+    mat-icon { color: var(--mat-sys-primary); }
+  }
+}
+
+// Personnel section (M6). Collapsed by default; expand chevron rotates
+// to signal open state.
+.personnel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+
+  h3 { margin: 0; }
+}
+
+.expand-chevron {
+  transition: transform 0.2s;
+  &.expanded { transform: rotate(90deg); }
+}
+
+.personnel-hint {
+  font-size: 0.8125rem;
+  opacity: 0.55;
+  margin-left: auto;
+}
+
+.personnel-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.personnel-role {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+  margin: 0 0 0.375rem;
+  font-weight: 600;
+}
+
+.personnel-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.personnel-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+.personnel-name {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+
+  &:hover { border-bottom-color: rgba(255, 255, 255, 0.6); }
+}
+
+.personnel-instrument {
+  font-size: 0.8125rem;
+  opacity: 0.65;
+  font-style: italic;
+}
+
+.personnel-track {
+  font-size: 0.75rem;
+  opacity: 0.45;
+}
+
+// "by Author1 & Author2" — directly under the title, distinct from the
+// muted meta-row so the byline reads as part of the heading cluster.
+.byline {
+  font-size: 1rem;
+  opacity: 0.85;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+
+    &:hover {
+      border-bottom-color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+// "#3 of Foundation Series" — same visual weight as a caption.
+.series-line {
+  font-size: 0.875rem;
+  opacity: 0.7;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+
+    &:hover {
+      border-bottom-color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+.rating-badge {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 0.75rem;
+}
+
+.format-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.format-badge {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+
+  &.small {
+    font-size: 0.6875rem;
+    padding: 1px 6px;
+  }
+}
+
+.tag-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag-badge {
+  border-radius: 9999px;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tag-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.tag-remove-btn {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+
+  &:hover { opacity: 1; }
+  mat-icon { font-size: 12px; width: 12px; height: 12px; }
+}
+
+.tag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 1px 10px;
+  font-family: inherit;
+
+  &:hover { background: rgba(255, 255, 255, 0.12); }
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+}
+
+.collection-link {
+  font-size: 0.875rem;
+  opacity: 0.7;
+
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
+}
+
+.description {
+  max-width: 700px;
+  line-height: 1.6;
+  opacity: 0.8;
+  margin: 0.5rem 0 0;
+}
+
+.resume-btn {
+  margin-top: 0.75rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+// Sections
+.section {
+  padding: 0 2rem 1.5rem;
+
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 500;
+  }
+}
+
+// Family members
+.family-row {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+}
+
+.family-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.family-initial {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.family-name {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+
+// Seasons
+.season-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.season-chip {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+
+  &[data-status="OWNED"] { background: rgba(0, 200, 83, 0.2); }
+  &[data-status="ORDERED"] { background: rgba(30, 136, 229, 0.2); }
+  &[data-status="REJECTED"] { background: rgba(244, 67, 54, 0.15); }
+  &[data-status="NOT_AVAILABLE"],
+  &[data-status="UNKNOWN"] { background: rgba(255, 255, 255, 0.08); }
+  &[data-status="NEEDS_ASSISTANCE"] { background: rgba(255, 165, 0, 0.2); }
+}
+
+// Episodes
+.season-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+
+  .active {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.episode-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.episode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ep-number {
+  width: 2rem;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.875rem;
+}
+
+.ep-name {
+  flex: 1;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-spacer { flex: 1; }
+
+.ep-resume {
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.ep-play-link {
+  text-decoration: none;
+  display: flex;
+}
+
+.ep-play {
+  color: var(--mat-sys-primary);
+  cursor: pointer;
+}
+
+// Transcodes
+.transcode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.tc-filename {
+  font-size: 0.875rem;
+  color: var(--mat-sys-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-spacer { flex: 1; }
+
+.tc-resume {
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.tc-play-link {
+  text-decoration: none;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.tc-play {
+  color: var(--mat-sys-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+// Cast
+.cast-row {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.cast-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 100px;
+  width: 100px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cast-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.cast-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.cast-name {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+.cast-character {
+  font-size: 0.6875rem;
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+// Similar titles: the shared row and poster cards (shared/media). The
+// row bleeds into the section's right padding so the next card peeks
+// out; card width comes from the --poster-w layout token.
+.similar-row {
+  --row-bleed: 2rem;
+}
+
+// Responsive
+@media (max-width: 599px) {
+  .hero-backdrop { display: none; }
+  .hero-poster { width: 150px; }
+  .hero-content { flex-direction: column; align-items: center; text-align: center; }
+  .title-row { justify-content: center; }
+  .meta-row { justify-content: center; }
+  .hero, .section { padding-left: 1rem; padding-right: 1rem; }
+  .similar-row { --row-bleed: 1rem; }
+}
+
+// Phase 2 — overlay for the "Add to playlist" picker.
+.playlist-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.playlist-picker-anchor { display: contents; }
+
+// Phase B — keep the album hero action row tight: Play is primary,
+// everything else collapses into the More pulldown.
+.album-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.album-more-btn mat-icon { margin-right: 0.25rem; }
+
+// Admin-only per-MediaItem edit links under the format badge strip.
+.admin-items-row {
+  display: flex; flex-wrap: wrap; gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+.admin-item-link {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 0.6875rem;
+  text-decoration: none; color: inherit;
+  opacity: 0.7;
+  &:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+  .admin-item-upc {
+    opacity: 0.5;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-left: 0.25rem;
+  }
+}

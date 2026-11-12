@@ -1,0 +1,70 @@
+.valuation-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+h2 { margin: 0 0 1rem; }
+
+// Summary
+.summary-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.summary-card { flex: 1; min-width: 180px; text-align: center; }
+.summary-value { display: block; font-size: 1.5rem; font-weight: 700; }
+.summary-label { display: block; font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.125rem; }
+
+// Filters
+.filter-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.search-input {
+  width: 250px; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  border: 1px solid var(--mat-sys-outline-variant); border-radius: 20px;
+  color: inherit; padding: 6px 14px; font-size: 0.8125rem;
+  outline: none; font-family: inherit;
+  &:focus { border-color: var(--mat-sys-outline); }
+  &::placeholder { color: var(--mat-sys-on-surface-variant); }
+}
+
+// Table
+.table-container { overflow-x: auto; }
+.valuation-table {
+  width: 100%;
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--mat-sys-on-surface-variant); }
+  .mat-mdc-cell { font-size: 0.8125rem; }
+}
+.item-name { font-weight: 500; display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upc-label { display: block; font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
+.photo-icon { font-size: 18px; width: 18px; height: 18px; opacity: 0.5; }
+
+// Modal
+.modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; }
+.modal-content { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); border-radius: 12px; padding: 1.5rem; width: 90vw; max-width: 550px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; h3 { margin: 0; font-size: 1rem; } }
+.close-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 4px; border-radius: 50%; &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); } }
+.form-fields { display: flex; flex-direction: column; gap: 0.375rem; }
+.field-label { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.25rem; }
+.field-input {
+  width: 100%; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
+  &:focus { border-color: var(--mat-sys-primary); }
+}
+.dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+.amazon-search-row { display: flex; gap: 0.375rem; align-items: center; .flex { flex: 1; } }
+.amazon-list { max-height: 200px; overflow-y: auto; margin-top: 0.25rem; }
+.amazon-row {
+  display: flex; align-items: center; gap: 0.5rem; padding: 6px 4px; border-radius: 4px;
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); }
+}
+.amazon-name { flex: 1; font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amazon-meta { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }
+.amazon-price { font-size: 0.8125rem; flex-shrink: 0; }
+.small-btn { font-size: 0.75rem !important; padding: 0 10px !important; min-height: 28px !important; line-height: 28px !important; }
+
+// Keepa
+.keepa-btn { margin-bottom: 0.25rem; }
+.keepa-error { color: var(--mat-sys-error); font-size: 0.75rem; }
+.keepa-list { max-height: 200px; overflow-y: auto; margin-top: 0.25rem; }
+.keepa-row {
+  display: flex; align-items: center; gap: 0.5rem; padding: 6px 4px; border-radius: 4px;
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 5%, transparent); }
+}
+.keepa-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.keepa-title { font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keepa-asin { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); font-family: monospace; }
+.keepa-price { font-size: 0.875rem; font-weight: 600; color: var(--mat-sys-primary); flex-shrink: 0; }
+.keepa-no-price { font-size: 0.75rem; color: var(--mat-sys-on-surface-variant); flex-shrink: 0; }

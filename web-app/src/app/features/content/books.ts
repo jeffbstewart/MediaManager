@@ -1,0 +1,100 @@
+import { Component, ChangeDetectionStrategy, OnInit, signal, inject } from '@angular/core';
+import { PersonCardComponent } from '../../shared/media';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { CatalogService, AuthorsListItem, AuthorsSortMode } from '../../core/catalog.service';
+import { AppRoutes } from '../../core/routes';
+
+/**
+ * Books landing page — author exploration grid. Replaces the original
+ * book-title grid because the title list grew unwieldy as the catalog
+ * scaled. Drilling through author → existing author detail page (which
+ * already lists owned books grouped by series + an OpenLibrary
+ * "other works" wishlist) keeps the book view one click away.
+ *
+ * Mirrors MusicComponent's artist grid: person cards (spec 3.6) whose
+ * photo is the cached author headshot, an owned-book cover otherwise,
+ * and the name's initial when there is neither.
+ */
+@Component({
+  selector: 'app-books',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [PersonCardComponent, MatIconModule, MatProgressSpinnerModule],
+  templateUrl: './books.html',
+  styleUrl: './books.scss',
+})
+export class BooksComponent implements OnInit {
+  private readonly catalog = inject(CatalogService);
+  readonly routes = AppRoutes;
+
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly authors = signal<AuthorsListItem[]>([]);
+  readonly total = signal(0);
+
+  readonly sortMode = signal<AuthorsSortMode>('books');
+  readonly query = signal('');
+  // On-by-default "Readable" filter — restricts to authors with at
+  // least one EPUB/PDF on disk that the browser reader can open.
+  // Analog of the Playable chip on the movies/TV catalog.
+  readonly readableOnly = signal(true);
+
+  readonly sortOptions: { value: AuthorsSortMode; label: string }[] = [
+    { value: 'books', label: 'Books' },
+    { value: 'name', label: 'Name' },
+    { value: 'recent', label: 'Recent' },
+  ];
+
+  // Same 200ms debounce window as the artist search — short enough to
+  // feel snappy, long enough to absorb mid-word typing.
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async ngOnInit(): Promise<void> {
+    await this.refresh();
+  }
+
+  async setSort(mode: AuthorsSortMode): Promise<void> {
+    this.sortMode.set(mode);
+    await this.refresh();
+  }
+
+  async toggleReadable(): Promise<void> {
+    this.readableOnly.update(v => !v);
+    await this.refresh();
+  }
+
+  onQueryInput(value: string): void {
+    this.query.set(value);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { void this.refresh(); }, 200);
+  }
+
+  async clearQuery(): Promise<void> {
+    if (this.searchTimer) { clearTimeout(this.searchTimer); this.searchTimer = null; }
+    this.query.set('');
+    await this.refresh();
+  }
+
+  /** Hero image for a card: real headshot first, owned-book cover fallback. */
+  cardImageUrl(a: AuthorsListItem): string | null {
+    return a.headshot_url ?? a.fallback_poster_url;
+  }
+
+  private async refresh(): Promise<void> {
+    this.loading.set(true);
+    this.error.set('');
+    try {
+      const data = await this.catalog.listAuthors({
+        sort: this.sortMode(),
+        q: this.query().trim() || undefined,
+        readableOnly: this.readableOnly(),
+      });
+      this.authors.set(data.authors);
+      this.total.set(data.total);
+    } catch {
+      this.error.set('Failed to load authors');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+}

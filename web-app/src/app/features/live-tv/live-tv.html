@@ -1,0 +1,65 @@
+<div class="content-page">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner aria-label="Loading" diameter="40" />
+    </div>
+  } @else if (error()) {
+    <p class="error-message">{{ error() }}</p>
+  } @else if (channels().length === 0) {
+    <p class="empty-message">No channels available.</p>
+  } @else {
+    @if (current(); as ch) {
+      <section class="live-top" aria-labelledby="live-channel-h">
+        <div class="live-player">
+          <div class="channel-tile" aria-hidden="true">
+            {{ ch.guide_name }}
+            <small>CH {{ ch.guide_number }}@if (ch.network_affiliation) { · {{ ch.network_affiliation }}}</small>
+          </div>
+          <span class="badge" aria-hidden="true">Live</span>
+        </div>
+        <div class="live-info">
+          <h1 id="live-channel-h">{{ ch.guide_name }}</h1>
+          <h2>{{ ch.network_affiliation ?? 'Over-the-air' }}</h2>
+          <div class="meta">
+            <span class="rating">{{ currentQuality() }}</span>
+            <span>Channel {{ ch.guide_number }}</span>
+          </div>
+          <div class="live-actions">
+            <a class="btn" [routerLink]="['/live-tv', ch.id]" [queryParams]="watchParams(ch)">
+              <mat-icon aria-hidden="true">play_arrow</mat-icon>Watch Live
+            </a>
+          </div>
+        </div>
+      </section>
+    }
+
+    <section class="guide-section" aria-label="Channel guide">
+      <app-media-row class="guide-tabs" label="Channel groups">
+        @for (g of groups(); track g) {
+          <li>
+            <button class="chip" type="button" [attr.aria-pressed]="g === group()" (click)="group.set(g)">
+              {{ g }}
+            </button>
+          </li>
+        }
+      </app-media-row>
+
+      <ul class="guide">
+        @for (ch of guideChannels(); track ch.id) {
+          <li>
+            <a class="guide-row" [routerLink]="['/live-tv', ch.id]" [queryParams]="watchParams(ch)">
+              <span class="guide-ch" [class.on]="ch.id === current()?.id" aria-hidden="true">
+                {{ ch.guide_name }}<small>{{ ch.guide_number }}</small>
+              </span>
+              <span class="guide-prog">
+                <span class="t">{{ ch.guide_name }}@if (ch.network_affiliation) { · {{ ch.network_affiliation }}}</span>
+                <span class="m">Live now · Channel {{ ch.guide_number }}</span>
+                <span class="badge" aria-hidden="true">Live</span>
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</div>

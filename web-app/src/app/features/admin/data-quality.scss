@@ -1,0 +1,71 @@
+.dq-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+h2 { margin: 0 0 0.75rem; }
+
+.filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; row-gap: 6px; margin-bottom: 0.75rem; }
+.search-input {
+  width: 220px; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 20px; color: inherit; padding: 6px 14px; font-size: 0.8125rem; outline: none; font-family: inherit;
+  &:focus { border-color: var(--mat-sys-outline); } &::placeholder { color: var(--mat-sys-on-surface-variant); }
+}
+
+.attention-label { display: block; font-size: 0.8125rem; color: var(--mat-sys-error); margin-bottom: 0.5rem; }
+
+.table-container { overflow-x: auto; }
+.dq-table {
+  width: 100%;
+  .mat-mdc-header-cell { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; color: var(--mat-sys-on-surface-variant); }
+  .mat-mdc-cell { font-size: 0.8125rem; vertical-align: top; padding-top: 8px; padding-bottom: 8px; }
+}
+
+.row-poster { width: 36px; height: 54px; border-radius: 4px; object-fit: cover; }
+.title-link { color: var(--mat-sys-primary); text-decoration: none; &:hover { text-decoration: underline; } }
+.hidden-badge { font-size: 0.5625rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); margin-left: 0.375rem; color: var(--mat-sys-on-surface-variant); }
+.hidden-row { opacity: 0.4; }
+
+.status-badge {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  color: white;
+}
+
+.issue-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.issue-chip {
+  font-size: 0.5625rem; padding: 1px 6px; border-radius: 4px;
+  background: color-mix(in srgb, var(--mat-sys-error) 15%, transparent); color: var(--mat-sys-error); white-space: nowrap;
+}
+
+.delete-item { color: var(--mat-sys-error) !important; }
+
+// Modal
+.modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; }
+.modal-content { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); border-radius: 12px; padding: 1.5rem; width: 90vw; max-width: 420px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; h3 { margin: 0; font-size: 1rem; } }
+.close-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 4px; border-radius: 50%; &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); } }
+.form-fields { display: flex; flex-direction: column; gap: 0.375rem; }
+.field-label { font-size: 0.8125rem; color: var(--mat-sys-on-surface-variant); margin-top: 0.25rem; }
+.field-input, .field-select {
+  width: 100%; background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px; color: inherit; padding: 8px 12px; font-size: 0.875rem; outline: none; box-sizing: border-box;
+  &:focus { border-color: var(--mat-sys-primary); }
+  option { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); }
+}
+.field-hint { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+// Widen modal for TMDB search
+.modal-content { max-width: 600px; }
+
+.tmdb-search-row { display: flex; gap: 0.375rem; align-items: center; }
+.tmdb-results { max-height: 250px; overflow-y: auto; margin-top: 0.25rem; }
+.tmdb-row {
+  display: flex; align-items: center; gap: 0.5rem; padding: 6px 4px; border-radius: 4px; cursor: pointer;
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent); }
+}
+.tmdb-poster { width: 36px; height: 54px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
+.tmdb-info { display: flex; flex-direction: column; flex: 1; }
+.tmdb-title { font-size: 0.8125rem; }
+.tmdb-meta { font-size: 0.6875rem; color: var(--mat-sys-on-surface-variant); }

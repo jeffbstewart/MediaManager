@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CameraListScreen" extends="Group">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="camerasData" type="assocarray" alwaysNotify="true" onChange="onCamerasDataChanged" />
+
+        <!-- Outputs -->
+        <field id="cameraSelected" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="CameraListScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle
+            width="1920"
+            height="1080"
+            color="#1a1a2e" />
+
+        <!-- Title -->
+        <Label
+            id="titleLabel"
+            translation="[60, 40]"
+            text="Cameras"
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0" />
+
+        <!-- Camera list (vertical) -->
+        <MarkupList
+            id="cameraList"
+            translation="[60, 120]"
+            itemComponentName="CameraListItem"
+            drawFocusFeedback="true"
+            itemSize="[1800, 200]"
+            itemSpacing="[0, 10]"
+            numRows="4" />
+
+        <!-- Loading label -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading cameras..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="true" />
+
+        <!-- No cameras message -->
+        <Label
+            id="noCamerasLabel"
+            translation="[0, 500]"
+            text="No cameras configured"
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Background task -->
+        <CameraListTask id="cameraListTask" />
+
+        <!-- Snapshot refresh timer -->
+        <Timer
+            id="snapshotTimer"
+            repeat="true"
+            duration="10" />
+    </children>
+</component>

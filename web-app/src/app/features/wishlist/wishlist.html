@@ -1,0 +1,162 @@
+<div class="content-page">
+  <h2>My Wish List</h2>
+
+  <!-- TMDB Search -->
+  <h3>Search TMDB</h3>
+  <div class="search-bar">
+    <input class="search-input" type="text" placeholder="Search for a movie or TV show..."
+           [value]="searchQuery()" (input)="updateSearchQuery($event)" (keydown)="onSearchKeydown($event)" />
+    <button class="search-btn" (click)="search()">
+      <mat-icon>search</mat-icon> Search
+    </button>
+  </div>
+
+  @if (searchVisible()) {
+    @if (searching()) {
+      <div class="loading-container"><mat-spinner aria-label="Loading" diameter="32" /></div>
+    } @else if (searchResults().length === 0) {
+      <p class="empty">No results found.</p>
+    } @else {
+      <div class="grid search-results">
+        @for (item of searchResults(); track item.tmdb_id) {
+          <app-poster-card class="search-card"
+                           [name]="item.title"
+                           [imageUrl]="item.poster_path ? posterUrl(item.poster_path) : null"
+                           [meta]="yearAndType(item.release_year, item.media_type)">
+            @if (item.already_wished) {
+              <span class="wished-label">&#9829; Wished</span>
+            } @else {
+              <button class="add-wish-btn" type="button" (click)="addWish(item)">
+                <mat-icon aria-hidden="true">favorite</mat-icon> Add
+              </button>
+            }
+          </app-poster-card>
+        }
+      </div>
+    }
+  }
+
+  <!-- Media Wishes -->
+  <h3>Media Wishes</h3>
+  @if (loading()) {
+    <div class="loading-container"><mat-spinner aria-label="Loading" diameter="32" /></div>
+  } @else if (mediaWishes().length === 0) {
+    <p class="empty">No media wishes yet — search above or browse actor filmographies.</p>
+  } @else {
+    <div class="grid media-grid">
+      @for (wish of mediaWishes(); track wish.id) {
+        <app-poster-card class="media-card" [class.dismissible]="wish.dismissible"
+                         [name]="wish.tmdb_title"
+                         [imageUrl]="wish.tmdb_poster_path ? posterUrl(wish.tmdb_poster_path) : null"
+                         [asButton]="wish.dismissible && !!wish.title_id"
+                         [hint]="wish.dismissible && wish.title_id ? 'Dismiss and open the title' : null"
+                         [dim]="wish.dismissible ? 'art' : 'none'"
+                         [subtitle]="yearAndType(wish.tmdb_release_year, wish.tmdb_media_type)"
+                         [credit]="wish.season_number ? 'Season ' + wish.season_number : null"
+                         (activate)="dismissMediaWish(wish)">
+          <!-- Lifecycle stage as a status chip in the caption; its tone
+               carries the stage (ready, moving, blocked, attention). -->
+          <span class="status-chip" [attr.data-tone]="lifecycleTone(wish.lifecycle_stage)">{{ wish.lifecycle_label }}</span>
+          @if (wish.dismissible) {
+            <button cardAction class="card-pill dismiss-btn" type="button" (click)="dismissMediaWish(wish)">
+              <mat-icon aria-hidden="true">check</mat-icon> Dismiss
+            </button>
+          } @else {
+            <button cardAction class="card-icon-btn cancel-btn" type="button"
+                    aria-label="Cancel wish" title="Cancel wish" (click)="cancelMediaWish(wish)">
+              <mat-icon aria-hidden="true">close</mat-icon>
+            </button>
+          }
+        </app-poster-card>
+      }
+    </div>
+  }
+
+  <!-- Transcode Wishes -->
+  <h3>Transcode Wishes</h3>
+  @if (transcodeWishes().length === 0) {
+    <p class="empty">No transcode wishes yet — look for the priority button on titles waiting to be transcoded.</p>
+  } @else {
+    <div class="transcode-list">
+      @for (wish of transcodeWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.poster_url) {
+            <img [src]="wish.poster_url" [alt]="wish.title_name" class="transcode-poster" />
+          }
+          <a class="transcode-title" [routerLink]="routes.title(wish.title_id)">{{ wish.title_name }}</a>
+          <span class="transcode-status" [class.ready]="wish.status === 'ready'">
+            {{ wish.status === 'ready' ? 'Ready to watch' : 'On NAS, pending desktop' }}
+          </span>
+          <button class="remove-btn" (click)="removeTranscodeWish(wish)" aria-label="Remove from wish list">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Book Wishes -->
+  @if (bookWishes().length > 0) {
+    <h3>Book Wishes</h3>
+    <div class="transcode-list">
+      @for (wish of bookWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.cover_url) {
+            <img [src]="wish.cover_url" [alt]="wish.title" class="transcode-poster" />
+          }
+          <span class="transcode-title">
+            {{ wish.title }}
+            @if (wish.author) { <span class="book-wish-author"> by {{ wish.author }}</span> }
+            @if (wish.series_id) {
+              &nbsp;·&nbsp;<a [routerLink]="routes.series(wish.series_id)">
+                Series@if (wish.series_number) { #{{ wish.series_number }} }
+              </a>
+            }
+          </span>
+          <button class="remove-btn" (click)="removeBookWish(wish)" aria-label="Remove from wish list">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Album Wishes. Compilation entries render title-first with a
+       "Compilation · year" subtitle; single-artist entries read
+       "Artist · year". See docs/MUSIC.md Q9. -->
+  @if (albumWishes().length > 0) {
+    <h3>Album Wishes</h3>
+    <div class="transcode-list">
+      @for (wish of albumWishes(); track wish.id) {
+        <div class="transcode-row">
+          @if (wish.cover_url) {
+            <img [src]="wish.cover_url" [alt]="wish.title" class="transcode-poster"
+                 loading="lazy" decoding="async" />
+          }
+          <span class="transcode-title">
+            {{ wish.title }}
+            <span class="book-wish-author"> &nbsp;·&nbsp; {{ albumWishSubtitle(wish) }}</span>
+          </span>
+          <button class="remove-btn" (click)="removeAlbumWish(wish)" aria-label="Remove from wish list">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- First-wish interstitial -->
+  @if (showInterstitial()) {
+    <div class="modal-overlay" (click)="cancelInterstitial()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>Heads up</h3>
+        <p>Your media wish list entries are visible to administrators to help inform media purchase decisions.</p>
+        <p class="hint">This means your wishes may influence what gets added to the shared library. You can remove wishes at any time.</p>
+        <div class="modal-actions">
+          <button class="cancel-btn" (click)="cancelInterstitial()">Cancel</button>
+          <button class="confirm-btn" (click)="confirmInterstitial()">Got it, add to wish list</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

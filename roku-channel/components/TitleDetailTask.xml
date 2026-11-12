@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="TitleDetailTask" extends="Task">
+    <interface>
+        <field id="detailUrl" type="string" />
+        <field id="detailResult" type="assocarray" />
+        <field id="detailError" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="TitleDetailTask.brs" />
+</component>

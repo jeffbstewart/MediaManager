@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package mediamanager;
+
+option java_package = "net.stewart.mediamanager.grpc";
+option java_multiple_files = true;
+option swift_prefix = "MM";
+
+import "common.proto";
+import "time.proto";
+
+// On-device download metadata database. Serialized as a single protobuf
+// binary file (downloads.meta.db) in the Downloads directory. Not a gRPC
+// service — this is a local persistence format for the iOS client.
+//
+// Atomic write protocol:
+//   1. If both .db and .backup exist, delete .backup
+//   2. If .db exists, rename .db → .backup
+//   3. Write new .db
+//   On startup: try .db first, fall back to .backup, else wipe directory.
+
+message DownloadDatabase {
+  int32 next_sequence = 1;
+  repeated DownloadEntry entries = 2;
+}
+
+message DownloadEntry {
+  // File identity
+  int32 sequence = 1;                      // maps to filename: 7-digit zero-padded (e.g. 1 → "0000001.mp4")
+  int64 transcode_id = 2;
+  int64 title_id = 3;
+
+  // Title metadata (cached for offline display)
+  string title_name = 4;
+  MediaType media_type = 5;
+  int32 year = 6;
+  DownloadQuality quality = 7;
+  ContentRating content_rating = 8;
+  int32 season_number = 9;                 // 0 for movies
+  int32 episode_number = 10;               // 0 for movies
+  string episode_title = 11;
+
+  // File metadata
+  string content_type = 12;               // "video/mp4"
+  int64 file_size_bytes = 13;             // expected total size from manifest
+  int64 bytes_downloaded = 14;            // progress so far
+
+  // Download state
+  DownloadState state = 15;
+  bytes resume_data = 16;                  // URLSession resume data blob for pause/resume
+  Timestamp added_at = 17;
+  Timestamp completed_at = 18;
+  string error_message = 19;
+  int32 retry_count = 20;
+
+  // Supporting files present
+  bool has_subtitles = 21;
+  bool has_chapters = 22;
+  bool has_thumbnails = 23;
+  bool has_poster = 24;
+
+  // Offline playback position tracking
+  PlaybackOffset playback_position = 25;
+  PlaybackOffset duration = 26;
+  Timestamp position_updated_at = 27;
+  bool position_synced = 28;
+}
+
+enum DownloadState {
+  DOWNLOAD_STATE_UNKNOWN = 0;
+  DOWNLOAD_STATE_QUEUED = 1;
+  DOWNLOAD_STATE_FETCHING_METADATA = 2;
+  DOWNLOAD_STATE_DOWNLOADING = 3;
+  DOWNLOAD_STATE_PAUSED = 4;
+  DOWNLOAD_STATE_COMPLETED = 5;
+  DOWNLOAD_STATE_FAILED = 6;
+}
+
+enum DownloadQuality {
+  DOWNLOAD_QUALITY_UNKNOWN = 0;
+  DOWNLOAD_QUALITY_SD = 1;
+  DOWNLOAD_QUALITY_FHD = 2;
+  DOWNLOAD_QUALITY_UHD = 3;
+}

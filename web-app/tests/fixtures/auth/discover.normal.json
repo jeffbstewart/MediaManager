@@ -1,0 +1,10 @@
+{
+  "setup_required": false,
+  "passkeys_available": false,
+  "legal": {
+    "privacy_policy_url": "https://example.com/privacy",
+    "privacy_policy_version": 1,
+    "terms_of_use_url": "https://example.com/terms",
+    "terms_of_use_version": 1
+  }
+}

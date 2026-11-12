@@ -1,0 +1,46 @@
+@use 'styles/layout';
+@use 'styles/grid';
+@use 'styles/chips';
+@use 'styles/search-box';
+@use 'styles/sheet';
+@use 'styles/page-glow';
+@use 'styles/theme-marquee';
+
+// The app is dark only (docs/plans/web-theming.md, S2): `color-scheme:
+// dark` keeps native controls and scrollbars dark whatever the OS
+// preference is. The Material theme itself, and every color, type, shape
+// and depth token, comes from the theme selected by `data-theme` on this
+// element (styles/_theme-marquee.scss; one theme ships today);
+// `index.html` sets it to the default and `main.ts` to the cached choice.
+html {
+  height: 100%;
+  color-scheme: dark;
+}
+
+// Accessible-name utility: render off-screen but readable by screen
+// readers. Used to label empty cells (e.g. action columns in admin
+// tables) without changing the visual layout.
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+body {
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}

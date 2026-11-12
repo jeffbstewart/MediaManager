@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ActorScreen" extends="Group">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="actorData" type="assocarray" alwaysNotify="true" onChange="onActorDataChanged" />
+
+        <!-- Outputs -->
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
+        <field id="episodePickerRequested" type="assocarray" alwaysNotify="true" />
+        <field id="wishRequested" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="ActorScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle width="1920" height="1080" color="#1a1a2e" />
+
+        <!-- Header with actor name -->
+        <Label
+            id="headerLabel"
+            translation="[60, 30]"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            width="1800" />
+
+        <!-- Actor headshot -->
+        <Poster
+            id="actorHeadshot"
+            translation="[60, 90]"
+            width="150"
+            height="225"
+            loadingBitmapOpacity="0" />
+
+        <!-- Hint text -->
+        <Label
+            id="hintLabel"
+            translation="[60, 330]"
+            text="Press ★ to add wish"
+            font="font:SmallestSystemFont"
+            color="#555555"
+            width="400" />
+
+        <!-- Results row -->
+        <RowList
+            id="itemsGrid"
+            translation="[240, 90]"
+            itemComponentName="CarouselItem"
+            numRows="2"
+            itemSize="[1620, 400]"
+            rowItemSize="[[210, 360]]"
+            rowItemSpacing="[[20, 0]]"
+            showRowLabel="[false]"
+            drawFocusFeedback="true"
+            rowFocusAnimationStyle="floatingFocus"
+            vertFocusAnimationStyle="floatingFocus"
+            focusXOffset="[0]"
+            itemSpacing="[0, 20]" />
+
+        <!-- Loading indicator -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Detail task -->
+        <DetailTask id="detailTask" />
+    </children>
+</component>

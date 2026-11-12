@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CarouselItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged" />
+    </interface>
+
+    <script type="text/brightscript" uri="CarouselItem.brs" />
+
+    <children>
+        <!-- Fallback background (behind poster, visible until poster loads) -->
+        <Rectangle
+            id="fallbackBg"
+            width="210"
+            height="310"
+            color="#333355" />
+
+        <!-- Poster image (on top of fallback) -->
+        <Poster
+            id="posterImage"
+            width="210"
+            height="310"
+            loadingBitmapOpacity="0.0"
+            failedBitmapOpacity="0.0" />
+
+        <!-- Title label below poster -->
+        <Label
+            id="titleLabel"
+            translation="[0, 314]"
+            text=""
+            font="font:SmallestSystemFont"
+            color="#cccccc"
+            width="210"
+            maxLines="2"
+            wrap="true" />
+
+        <!-- Wish-fulfilled star badge (top-right corner) -->
+        <Group id="wishBadge" translation="[170, 5]" visible="false">
+            <Rectangle
+                width="32"
+                height="32"
+                color="#00000088" />
+            <Label
+                translation="[4, 2]"
+                text="★"
+                font="font:SmallBoldSystemFont"
+                color="#fbbf24"
+                width="24"
+                horizAlign="center" />
+        </Group>
+    </children>
+</component>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="TagScreen" extends="Group">
+    <interface>
+        <!-- Inputs -->
+        <field id="serverUrl" type="string" />
+        <field id="apiKey" type="string" />
+        <field id="tagData" type="assocarray" alwaysNotify="true" onChange="onTagDataChanged" />
+        <field id="detailType" type="string" value="tag" />  <!-- "tag" or "genre" -->
+
+        <!-- Outputs -->
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
+        <field id="episodePickerRequested" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="TagScreen.brs" />
+
+    <children>
+        <!-- Background -->
+        <Rectangle width="1920" height="1080" color="#1a1a2e" />
+
+        <!-- Header -->
+        <Label
+            id="headerLabel"
+            translation="[60, 30]"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#e0e0e0"
+            width="1800" />
+
+        <!-- Results row -->
+        <RowList
+            id="itemsGrid"
+            translation="[60, 100]"
+            itemComponentName="CarouselItem"
+            numRows="2"
+            itemSize="[1800, 400]"
+            rowItemSize="[[210, 360]]"
+            rowItemSpacing="[[20, 0]]"
+            showRowLabel="[false]"
+            drawFocusFeedback="true"
+            rowFocusAnimationStyle="floatingFocus"
+            vertFocusAnimationStyle="floatingFocus"
+            focusXOffset="[0]"
+            itemSpacing="[0, 20]" />
+
+        <!-- Loading indicator -->
+        <Label
+            id="loadingLabel"
+            translation="[0, 500]"
+            text="Loading..."
+            font="font:MediumSystemFont"
+            color="#666666"
+            width="1920"
+            horizAlign="center"
+            visible="false" />
+
+        <!-- Detail task -->
+        <DetailTask id="detailTask" />
+    </children>
+</component>

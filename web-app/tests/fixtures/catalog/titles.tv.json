@@ -1,0 +1,9 @@
+{
+  "titles": [
+    { "title_id": 200, "title_name": "Breaking Bad", "media_type": "TV", "poster_url": "/posters/w185/200", "release_year": 2008, "content_rating": "TV-MA", "playable": true, "progress_fraction": 0.62 },
+    { "title_id": 201, "title_name": "The Expanse", "media_type": "TV", "poster_url": "/posters/w185/201", "release_year": 2015, "content_rating": "TV-14", "playable": true, "progress_fraction": null },
+    { "title_id": 202, "title_name": "Severance", "media_type": "TV", "poster_url": "/posters/w185/202", "release_year": 2022, "content_rating": "TV-MA", "playable": true, "progress_fraction": null }
+  ],
+  "total": 3,
+  "available_ratings": ["TV-G", "TV-PG", "TV-14", "TV-MA"]
+}

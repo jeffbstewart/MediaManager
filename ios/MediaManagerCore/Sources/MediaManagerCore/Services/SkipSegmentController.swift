@@ -1,0 +1,191 @@
+import Foundation
+import AVFoundation
+import Observation
+import MediaManagerProtos
+
+public struct SkipSegmentData: Codable {
+    public let type: String
+    public let start: Double
+    public let end: Double
+    public let method: String?
+}
+
+public struct ChaptersResponse: Codable {
+    public let chapters: [ChapterData]
+    public let skipSegments: [SkipSegmentData]
+
+    enum CodingKeys: String, CodingKey {
+        case chapters
+        case skipSegments = "skip_segments"
+    }
+}
+
+public struct ChapterData: Codable {
+    public let number: Int
+    public let start: Double
+    public let end: Double
+    public let title: String?
+}
+
+/// Monitors playback position and triggers skip prompts for intro/credits segments.
+@Observable
+@MainActor
+public final class SkipSegmentController {
+    public private(set) var showSkipIntro = false
+    public private(set) var showUpNext = false
+    public private(set) var upNextCountdown: Int = 0
+    public private(set) var chapters: [ChapterData] = []
+    public private(set) var currentChapterTitle: String?
+
+    public init() {}
+
+    private var introSegment: SkipSegmentData?
+    private var creditsSegment: SkipSegmentData?
+    private var timeObserver: Any?
+    private var countdownTimer: Timer?
+    private var hasSkippedIntro = false
+    private var hasTriggeredUpNext = false
+
+    public func load(transcodeId: Int, grpcClient: GrpcClient, localDir: URL? = nil, localChaptersFile: URL? = nil) async {
+        // Try local file first (specific path or legacy chapters.json)
+        let candidates = [localChaptersFile, localDir?.appendingPathComponent("chapters.json")].compactMap { $0 }
+        for localFile in candidates {
+            if let data = try? Data(contentsOf: localFile),
+               let response = try? JSONDecoder().decode(ChaptersResponse.self, from: data) {
+                chapters = response.chapters.sorted { $0.number < $1.number }
+                for seg in response.skipSegments {
+                    if seg.type == "INTRO" { introSegment = seg }
+                    if seg.type == "END_CREDITS" { creditsSegment = seg }
+                }
+                suppressAutoIntroIfChaptered()
+                return
+            }
+        }
+
+        do {
+            let response = try await grpcClient.getChapters(transcodeId: Int64(transcodeId))
+            chapters = response.chapters.enumerated().map { (index, ch) in
+                ChapterData(
+                    number: index + 1,
+                    start: ch.start.seconds,
+                    end: ch.end.seconds,
+                    title: ch.title.isEmpty ? nil : ch.title
+                )
+            }
+            for seg in response.skipSegments {
+                let type = seg.segmentType
+                let data = SkipSegmentData(
+                    type: type == .intro ? "INTRO" : type == .credits ? "END_CREDITS" : "UNKNOWN",
+                    start: seg.start.seconds,
+                    end: seg.end.seconds,
+                    method: nil
+                )
+                if type == .intro { introSegment = data }
+                if type == .credits { creditsSegment = data }
+            }
+            suppressAutoIntroIfChaptered()
+        } catch {
+            // No chapters/skip data available
+        }
+    }
+
+    public func startObserving(player: AVPlayer) {
+        guard introSegment != nil || creditsSegment != nil || !chapters.isEmpty else {
+            return
+        }
+
+        let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
+        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            let seconds = time.seconds
+            guard seconds.isFinite else { return }
+            Task { @MainActor [weak self] in
+                self?.updateState(at: seconds)
+            }
+        }
+    }
+
+    private func updateState(at seconds: Double) {
+        // Intro skip
+        if let intro = introSegment, !hasSkippedIntro {
+            showSkipIntro = seconds >= intro.start && seconds < intro.end
+        }
+
+        // Credits / Up Next
+        if let credits = creditsSegment, !hasTriggeredUpNext {
+            if seconds >= credits.start && seconds < credits.end {
+                if !showUpNext {
+                    showUpNext = true
+                    hasTriggeredUpNext = true
+                    startCountdown()
+                }
+            }
+        }
+
+        // Current chapter title
+        updateCurrentChapter(at: seconds)
+    }
+
+    /// Skip past the intro segment.
+    public func skipIntro(player: AVPlayer?) {
+        guard let intro = introSegment, let player else { return }
+        player.seek(to: CMTime(seconds: intro.end, preferredTimescale: 600))
+        hasSkippedIntro = true
+        showSkipIntro = false
+    }
+
+    /// Returns the credits start time for seeking (used by "Up Next" to advance).
+    public var creditsEndTime: Double? { creditsSegment?.end }
+
+    private func startCountdown() {
+        upNextCountdown = 10
+        countdownTimer?.invalidate()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.upNextCountdown > 0 else { return }
+                self.upNextCountdown -= 1
+            }
+        }
+    }
+
+    public func cancelUpNext() {
+        showUpNext = false
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+    }
+
+    /// Seek to a chapter by index.
+    public func seekToChapter(_ chapter: ChapterData, player: AVPlayer?) {
+        player?.seek(to: CMTime(seconds: chapter.start, preferredTimescale: 600))
+    }
+
+    public func stop(player: AVPlayer?) {
+        if let timeObserver, let player {
+            player.removeTimeObserver(timeObserver)
+        }
+        timeObserver = nil
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        showSkipIntro = false
+        showUpNext = false
+        chapters = []
+        currentChapterTitle = nil
+    }
+
+    /// If chapters are available, suppress the auto-detected intro skip.
+    /// The user can navigate via chapter list instead.
+    private func suppressAutoIntroIfChaptered() {
+        if !chapters.isEmpty, let intro = introSegment {
+            // Only suppress auto-detected (CHAPTER method), not manually created
+            if intro.method == "CHAPTER" {
+                introSegment = nil
+            }
+        }
+    }
+
+    /// Update current chapter title based on playback position.
+    public func updateCurrentChapter(at seconds: Double) {
+        guard !chapters.isEmpty else { return }
+        let current = chapters.last { $0.start <= seconds }
+        currentChapterTitle = current?.title
+    }
+}

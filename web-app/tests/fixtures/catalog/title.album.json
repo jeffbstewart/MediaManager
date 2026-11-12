@@ -1,0 +1,37 @@
+{
+  "title_id": 301,
+  "title_name": "Kind of Blue",
+  "media_type": "ALBUM",
+  "release_year": 1959,
+  "description": "Seminal modal jazz album.",
+  "content_rating": null,
+  "poster_url": "/posters/w500/301",
+  "backdrop_url": null,
+  "event_date": null,
+  "is_starred": false,
+  "is_hidden": false,
+  "genres": ["Jazz"],
+  "tags": [],
+  "formats": ["CD"],
+  "admin_media_items": [],
+  "transcodes": [],
+  "cast": [],
+  "episodes": [],
+  "seasons": [],
+  "family_members": [],
+  "similar_titles": [],
+  "collection": null,
+  "artists": [
+    { "id": 1, "name": "Miles Davis", "artist_type": "Person" }
+  ],
+  "tracks": [
+    { "track_id": 4001, "disc_number": 1, "track_number": 1, "name": "So What", "duration_seconds": 565, "track_artists": [], "tags": [], "bpm": null, "time_signature": null, "playable": true },
+    { "track_id": 4002, "disc_number": 1, "track_number": 2, "name": "Freddie Freeloader", "duration_seconds": 589, "track_artists": [], "tags": [], "bpm": null, "time_signature": null, "playable": true }
+  ],
+  "track_count": 2,
+  "total_duration_seconds": 1154,
+  "label": "Columbia",
+  "musicbrainz_release_group_id": "c96c4a9b-9464-3e7c-9ed5-b8d7d9ca4cf4",
+  "musicbrainz_release_id": null,
+  "personnel": []
+}

@@ -1,0 +1,255 @@
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner aria-label="Loading" diameter="40" />
+  </div>
+} @else if (error()) {
+  <div class="error-container">
+    <p>{{ error() }}</p>
+  </div>
+} @else if (feed(); as feed) {
+  <div class="home-container">
+    <!-- Welcome block (spec 3.8): the greeting over the page glow with a
+         tilted mosaic of recent posters; a card below 1024px. -->
+    <section class="welcome" aria-labelledby="welcome-h">
+      <div class="welcome-card">
+        @if (mosaic().length > 0) {
+          <div class="mosaic" aria-hidden="true">
+            <div class="mosaic-grid">
+              @for (src of mosaic(); track src) {
+                <img [src]="src" alt="" loading="lazy" decoding="async" />
+              }
+            </div>
+          </div>
+        }
+        <div class="welcome-text">
+          <h1 id="welcome-h">{{ welcomeHeading() }}</h1>
+          <p>Pick up where you left off, or see what's new on your shelves.</p>
+        </div>
+      </div>
+    </section>
+
+    @if (feed.featured.length > 0) {
+      <section class="hero-section" aria-label="Featured">
+        <app-hero-carousel label="Featured" [count]="feed.featured.length">
+          @for (item of feed.featured; track item.title_id; let first = $first) {
+            <li>
+              <app-hero-banner [heading]="item.title_name" [level]="2"
+                               [imageUrl]="item.backdrop_url" [tint]="item.backdrop_tint"
+                               [contentRating]="item.content_rating" [year]="item.release_year"
+                               [description]="item.description" [eager]="first"
+                               [primaryLink]="item.playable && item.transcode_id ? routes.play(item.transcode_id) : null"
+                               secondaryLabel="Details" secondaryIcon="info"
+                               [secondaryLink]="routes.title(item.title_id)" />
+            </li>
+          }
+        </app-hero-carousel>
+      </section>
+    }
+
+    <!-- Browse Your Library (spec 3.5): one chip per section the nav shows. -->
+    @if (browseChips().length > 0) {
+      <section class="carousel-section" aria-label="Browse your library">
+        <app-section-head heading="Browse Your Library" />
+        <app-chip-row label="Browse" [chips]="browseChips()" />
+      </section>
+    }
+
+    @if (feed.continue_watching.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Continue Watching" />
+        <app-media-row label="Continue Watching">
+          @for (item of feed.continue_watching; track item.transcode_id) {
+            <li>
+              <app-wide-card [name]="item.title_name" [imageUrl]="item.backdrop_url"
+                             [link]="routes.play(item.transcode_id)"
+                             [queryParams]="{ title: item.title_name }"
+                             [titleLink]="routes.title(item.title_id)"
+                             [caption]="item.is_episode && item.episode_label ? item.title_name + ' • ' + item.episode_label : null"
+                             [meta]="item.time_remaining"
+                             [progress]="item.progress_fraction">
+                <div cardArt class="play-overlay" aria-hidden="true"><mat-icon>play_arrow</mat-icon></div>
+                <button cardAction class="dismiss-btn" mat-icon-button type="button"
+                        [attr.aria-label]="'Dismiss ' + item.title_name"
+                        (click)="dismissProgress($event, item.transcode_id)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </app-wide-card>
+            </li>
+          }
+          @if (features.hasLiveTv()) {
+            <!-- All Channels tile (spec 3.3): the row ends at live TV. -->
+            <li>
+              <a class="tile-all" [routerLink]="routes.liveTv()">
+                <mat-icon aria-hidden="true">live_tv</mat-icon>
+                <span>All Channels</span>
+              </a>
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.recently_added.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Recently Added" />
+        <app-media-row label="Recently Added">
+          @for (item of feed.recently_added; track item.title_id) {
+            <li>
+              <app-poster-card [name]="item.title_name" [imageUrl]="item.poster_url"
+                               [link]="routes.title(item.title_id)" [meta]="item.release_year" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.spotlight; as spotlight) {
+      <section class="hero-section" aria-label="Spotlight">
+        <app-hero-banner [heading]="spotlight.title_name" [level]="2"
+                         [imageUrl]="spotlight.backdrop_url" [tint]="spotlight.backdrop_tint"
+                         [contentRating]="spotlight.content_rating" [year]="spotlight.release_year"
+                         [description]="spotlight.description" kicker="New season available"
+                         secondaryLabel="Details" secondaryIcon="info"
+                         [secondaryLink]="routes.title(spotlight.title_id)" />
+      </section>
+    }
+
+    @if (feed.resume_reading && feed.resume_reading.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Resume Reading" />
+        <app-media-row label="Resume Reading">
+          @for (item of feed.resume_reading; track item.media_item_id) {
+            <li>
+              <app-poster-card [name]="item.title_name" [imageUrl]="item.poster_url"
+                               [link]="routes.reader(item.media_item_id)"
+                               [meta]="((item.percent * 100) | number:'1.0-0') + '% read'"
+                               [metaAccent]="true" [progress]="item.percent" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.recently_added_books && feed.recently_added_books.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Recently Added Books" />
+        <app-media-row label="Recently Added Books">
+          @for (book of feed.recently_added_books; track book.title_id) {
+            <li>
+              <app-poster-card [name]="book.title_name" [imageUrl]="book.poster_url"
+                               [link]="routes.title(book.title_id)"
+                               [meta]="book.series_name
+                                 ? book.series_name + (book.series_number ? ' #' + book.series_number : '')
+                                 : book.author_name" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.resume_listening && feed.resume_listening.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Continue Listening" />
+        <app-media-row label="Continue Listening">
+          @for (item of feed.resume_listening; track item.track_id) {
+            <li>
+              <app-poster-card [name]="item.track_name" [imageUrl]="item.poster_url"
+                               [asButton]="true" [hint]="'Resume: ' + item.track_name"
+                               [meta]="item.artist_name || item.title_name"
+                               [square]="true" placeholderIcon="album"
+                               [progress]="item.percent"
+                               (activate)="resumeListening(item)" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.recent_artists.length > 0) {
+      <!-- Artists in Your Library (spec 3.6): the people behind the recently added albums. -->
+      <section class="carousel-section">
+        <app-section-head heading="Artists in Your Library" />
+        <app-media-row label="Artists in Your Library">
+          @for (artist of feed.recent_artists; track artist.id) {
+            <li>
+              <app-person-card [name]="artist.name" [link]="routes.artist(artist.id)"
+                               [imageUrl]="artist.headshot_url ?? artist.fallback_poster_url"
+                               [lines]="[artist.album_count + (artist.album_count === 1 ? ' Album' : ' Albums')]"
+                               action="View artist" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.recently_added_albums && feed.recently_added_albums.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Recently Added Albums" />
+        <app-media-row label="Recently Added Albums">
+          @for (album of feed.recently_added_albums; track album.title_id) {
+            <li>
+              <app-poster-card [name]="album.title_name" [imageUrl]="album.poster_url"
+                               [link]="routes.title(album.title_id)" [square]="true"
+                               [meta]="album.artist_name || album.release_year" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.recently_watched.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="Recently Watched" />
+        <app-media-row label="Recently Watched">
+          @for (item of feed.recently_watched; track item.title_id) {
+            <li>
+              <app-poster-card [name]="item.title_name" [imageUrl]="item.poster_url"
+                               [link]="routes.title(item.title_id)" [meta]="item.release_year" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (feed.missing_seasons.length > 0) {
+      <section class="carousel-section">
+        <app-section-head heading="New Seasons Available" />
+        <app-media-row label="New Seasons Available">
+          @for (item of feed.missing_seasons; track item.title_id) {
+            <li>
+              <app-wide-card [name]="item.title_name" [imageUrl]="'/backdrops/' + item.title_id"
+                             [link]="routes.title(item.title_id)"
+                             [meta]="'Missing ' + seasonList(item)"
+                             [badge]="newSeasonBadge(item)" badgeTone="accent">
+                <button cardAction class="dismiss-btn" mat-icon-button type="button"
+                        [attr.aria-label]="'Dismiss ' + item.title_name"
+                        (click)="dismissMissingSeasons($event, item.title_id)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </app-wide-card>
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+
+    @if (liveChannels().length > 0) {
+      <!-- On Live TV (spec 3.3): the first channels as wide cards with the LIVE badge. -->
+      <section class="carousel-section">
+        <app-section-head heading="On Live TV" [link]="routes.liveTv()" />
+        <app-media-row label="On Live TV">
+          @for (ch of liveChannels(); track ch.id) {
+            <li>
+              <app-wide-card [name]="ch.guide_name" [link]="['/live-tv', ch.id]"
+                             [queryParams]="{ name: ch.guide_number + ' ' + ch.guide_name }"
+                             [caption]="ch.network_affiliation ? ch.guide_name + ' • ' + ch.network_affiliation : ch.guide_name"
+                             [meta]="'Channel ' + ch.guide_number" badge="Live" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+    <!-- FAQ (spec 3.9) closes the page. -->
+    <app-faq-accordion [entries]="faq()" />
+  </div>
+}

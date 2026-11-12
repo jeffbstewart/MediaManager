@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CameraPlayerScreen" extends="Group">
+    <interface>
+        <field id="playContent" type="assocarray" alwaysNotify="true" onChange="onPlayContent" />
+        <field id="playbackFinished" type="boolean" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="CameraPlayerScreen.brs" />
+
+    <children>
+        <!-- Fullscreen video player for live HLS streams -->
+        <Video
+            id="cameraPlayer"
+            width="1920"
+            height="1080"
+            enableUI="false" />
+
+        <!-- Camera name overlay (top-left) -->
+        <Label
+            id="cameraNameLabel"
+            translation="[60, 40]"
+            text=""
+            font="font:MediumBoldSystemFont"
+            color="#ffffff" />
+
+        <!-- Live indicator -->
+        <Group id="liveIndicator" translation="[60, 90]">
+            <Rectangle
+                width="60"
+                height="28"
+                color="#ef4444" />
+            <Label
+                translation="[8, 2]"
+                text="LIVE"
+                font="font:SmallBoldSystemFont"
+                color="#ffffff" />
+        </Group>
+    </children>
+</component>

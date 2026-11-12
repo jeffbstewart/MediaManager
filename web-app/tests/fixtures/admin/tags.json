@@ -1,0 +1,8 @@
+{
+  "tags": [
+    { "id": 1, "name": "Family Movie Night", "bg_color": "#1d4ed8", "text_color": "#FFFFFF", "source_type": "USER", "title_count": 12 },
+    { "id": 2, "name": "Christmas", "bg_color": "#b91c1c", "text_color": "#FFFFFF", "source_type": "USER", "title_count": 8 },
+    { "id": 3, "name": "Halloween", "bg_color": "#c2410c", "text_color": "#FFFFFF", "source_type": "USER", "title_count": 5 },
+    { "id": 4, "name": "TMDB Genre: Comedy", "bg_color": "#047857", "text_color": "#FFFFFF", "source_type": "TMDB", "title_count": 47 }
+  ]
+}

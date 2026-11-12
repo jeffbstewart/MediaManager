@@ -1,0 +1,35 @@
+.content-page {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.search-box {
+  margin-bottom: 16px;
+}
+
+.status-label {
+  display: block;
+  margin-bottom: 16px;
+  font: 600 12px/16px var(--f-body, inherit);
+  color: var(--c-text-3, var(--mat-sys-on-surface-variant));
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error);
+  text-align: center;
+  padding: 2rem;
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  font-size: 14px;
+  color: var(--c-text-3, var(--mat-sys-on-surface-variant));
+}

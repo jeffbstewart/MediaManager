@@ -1,0 +1,150 @@
+import {
+  ChangeDetectionStrategy, Component, ElementRef, OnDestroy, Injector, afterNextRender, inject, signal, viewChild,
+} from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { MatIconModule } from '@angular/material/icon';
+import { CatalogService, SearchResult } from '../catalog.service';
+
+/**
+ * Top-bar search: the input with its debounced suggestions dropdown,
+ * the clear button, and the advanced-search button.
+ */
+@Component({
+  selector: 'app-search-box',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, MatIconModule],
+  templateUrl: './search-box.html',
+  styleUrl: './search-box.scss',
+  host: { class: 'search-container', '[class.collapsed]': 'collapsed()' },
+})
+export class SearchBoxComponent implements OnDestroy {
+  private readonly catalog = inject(CatalogService);
+  private readonly router = inject(Router);
+
+  readonly searchQuery = signal('');
+  readonly suggestions = signal<SearchResult[]>([]);
+  readonly showSuggestions = signal(false);
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Phone layout only: true while the pill is folded down to its icon.
+   * CSS ignores it above 599px, where the pill is always shown.
+   */
+  readonly collapsed = signal(true);
+  private readonly input = viewChild.required<ElementRef<HTMLInputElement>>('searchInput');
+  private readonly injector = inject(Injector);
+
+  ngOnDestroy(): void {
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+  }
+
+  onSearchInput(event: Event): void {
+    const q = (event.target as HTMLInputElement).value;
+    this.searchQuery.set(q);
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    if (q.trim().length < 2) {
+      this.suggestions.set([]);
+      return;
+    }
+    this.searchDebounce = setTimeout(async () => {
+      try {
+        const data = await this.catalog.search(q.trim(), 8);
+        this.suggestions.set(data.results);
+        this.showSuggestions.set(true);
+      } catch { /* ignore */ }
+    }, 250);
+  }
+
+  onSearchSubmit(): void {
+    const q = this.searchQuery().trim();
+    if (q) {
+      this.showSuggestions.set(false);
+      this.router.navigate(['/search'], { queryParams: { q } });
+    }
+  }
+
+  onSearchFocus(): void {
+    if (this.suggestions().length > 0) this.showSuggestions.set(true);
+  }
+
+  /** Unfold the phone pill and put the caret in it. */
+  expand(): void {
+    this.collapsed.set(false);
+    afterNextRender(() => this.input().nativeElement.focus(), { injector: this.injector });
+  }
+
+  onSearchEscape(): void {
+    this.clearSearch();
+    this.collapsed.set(true);
+  }
+
+  onSearchBlur(): void {
+    setTimeout(() => {
+      this.showSuggestions.set(false);
+      // Fold the phone pill back up unless there's text worth keeping.
+      if (this.searchQuery().trim().length === 0) this.collapsed.set(true);
+    }, 200);
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+    this.suggestions.set([]);
+    this.showSuggestions.set(false);
+  }
+
+  /**
+   * Navigate to the search page with `advanced=1`, which triggers the
+   * Advanced dialog to open automatically. The current input text (if
+   * any) rides along so the user doesn't lose what they typed.
+   */
+  openAdvancedSearch(): void {
+    const queryParams: Record<string, string> = { advanced: '1' };
+    const q = this.searchQuery().trim();
+    if (q) queryParams['q'] = q;
+    this.showSuggestions.set(false);
+    this.router.navigate(['/search'], { queryParams });
+  }
+
+  onSuggestionClick(): void {
+    this.showSuggestions.set(false);
+    this.searchQuery.set('');
+    this.collapsed.set(true);
+  }
+
+  resultRoute(item: SearchResult): string {
+    switch (item.type) {
+      case 'movie': case 'tv': case 'personal':
+      case 'book': case 'album':
+      case 'track':
+        // Tracks open the album detail page — no per-track surface exists.
+        return `/title/${item.title_id}`;
+      case 'actor': return `/actor/${item.person_id}`;
+      case 'artist': return `/artist/${item.artist_id}`;
+      case 'author': return `/author/${item.author_id}`;
+      case 'collection': return `/content/collection/${item.collection_id}`;
+      case 'tag': return `/tag/${item.tag_id}`;
+      case 'channel': return `/live-tv/${item.channel_id}`;
+      case 'camera': return '/cameras';
+      default: return '/';
+    }
+  }
+
+  typeLabel(type: string): string {
+    switch (type) {
+      case 'movie': return 'Movie';
+      case 'tv': return 'TV';
+      case 'personal': return 'Video';
+      case 'book': return 'Book';
+      case 'album': return 'Album';
+      case 'track': return 'Track';
+      case 'actor': return 'Actor';
+      case 'artist': return 'Artist';
+      case 'author': return 'Author';
+      case 'collection': return 'Collection';
+      case 'tag': return 'Tag';
+      case 'channel': return 'Channel';
+      case 'camera': return 'Camera';
+      default: return type;
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rows": [
+    {
+      "title_id": 100, "name": "The Matrix",
+      "poster_url": "/posters/100.jpg", "release_year": 1999,
+      "media_type": "MOVIE", "content_rating": "R",
+      "enrichment_status": "NEEDS_ATTENTION", "hidden": false,
+      "tmdb_id": null, "issues": ["MISSING_TMDB_ID", "MISSING_POSTER"]
+    },
+    {
+      "title_id": 200, "name": "Old Show",
+      "poster_url": null, "release_year": 1985,
+      "media_type": "TV", "content_rating": null,
+      "enrichment_status": "FAILED", "hidden": false,
+      "tmdb_id": null, "issues": ["TMDB_LOOKUP_FAILED"]
+    }
+  ],
+  "total": 2,
+  "needs_attention": 2
+}

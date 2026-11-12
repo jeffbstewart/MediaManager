@@ -1,0 +1,202 @@
+<div class="page">
+  <header>
+    <h1>Unmatched Audio</h1>
+    <p class="muted">
+      Files the music scanner couldn't auto-link. Grouped by album so multi-disc
+      compilations resolve in one shot.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <div class="loading"><mat-spinner aria-label="Loading" diameter="40" /></div>
+  } @else if (groups().length === 0) {
+    <p class="empty">Nothing to triage. Every audio file is linked.</p>
+  } @else {
+    <p class="status">
+      {{ groups().length }} {{ groups().length === 1 ? 'album' : 'albums' }}
+      &mdash; {{ totalFiles() }} files queued
+    </p>
+
+    <div class="group-list">
+      @for (g of groups(); track g.group_id) {
+        <mat-card class="group-card">
+          <mat-card-header>
+            <mat-card-title>
+              {{ g.dominant_album ?? '(unknown album)' }}
+              @if (g.dominant_album_artist) {
+                <span class="artist"> &mdash; {{ g.dominant_album_artist }}</span>
+              } @else {
+                <span class="artist va"> &mdash; Various Artists</span>
+              }
+            </mat-card-title>
+            <mat-card-subtitle>
+              {{ g.total_files }} files
+              @if (g.disc_numbers.length > 1) {
+                &middot; {{ g.disc_numbers.length }} discs
+              }
+              @if (g.recording_mbid_count > 0) {
+                &middot; <span class="mbid-chip">{{ g.recording_mbid_count }} files have recording MBIDs</span>
+              }
+            </mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <div class="meta-row">
+              @for (dir of g.dirs; track dir) {
+                <span class="dir">{{ shortDir(dir) }}</span>
+              }
+            </div>
+            @if (g.dominant_upc) {
+              <div class="meta-row meta-tags"><b>UPC:</b> {{ g.dominant_upc }}</div>
+            }
+            @if (g.dominant_label || g.dominant_catalog_number) {
+              <div class="meta-row meta-tags">
+                @if (g.dominant_label) { <b>Label:</b> {{ g.dominant_label }} }
+                @if (g.dominant_catalog_number) {
+                  &nbsp; <b>Catno:</b> {{ g.dominant_catalog_number }}
+                }
+              </div>
+            }
+
+            @if (isExpanded(g.group_id)) {
+              <div class="files">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Artist</th>
+                      <th>Length</th>
+                      <th>MBID?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (f of g.files; track f.id) {
+                      <tr>
+                        <td>{{ formatDiscTrack(f.parsed_disc_number, f.parsed_track_number) }}</td>
+                        <td>{{ f.parsed_title ?? f.file_name }}</td>
+                        <td>{{ f.parsed_track_artist ?? '—' }}</td>
+                        <td>{{ formatDuration(f.parsed_duration_seconds) }}</td>
+                        <td>{{ f.parsed_mb_recording_id ? '✓' : '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </mat-card-content>
+
+          <mat-card-actions>
+            <button mat-button type="button" (click)="toggleExpand(g.group_id)">
+              {{ isExpanded(g.group_id) ? 'Hide files' : 'Show files' }}
+            </button>
+            <button mat-flat-button color="primary" type="button" (click)="openMbDialog(g)">
+              <mat-icon>search</mat-icon>
+              Find on MusicBrainz
+            </button>
+            <button mat-stroked-button type="button" (click)="createFromTags(g)">
+              <mat-icon>label</mat-icon>
+              Create from file metadata
+            </button>
+            <button mat-button type="button" (click)="ignoreGroup(g)">
+              <mat-icon>visibility_off</mat-icon>
+              Ignore all
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      }
+    </div>
+  }
+
+  <!-- MusicBrainz candidate dialog -->
+  <dialog #mbDialog class="mb-dialog">
+    @if (mbGroup(); as g) {
+      <header class="mb-header">
+        <h2>{{ g.dominant_album ?? '(unknown album)' }}</h2>
+        <button mat-icon-button (click)="closeMbDialog()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="mb-search-row">
+        <input type="text"
+               placeholder="Artist - Album, just Album, or paste a release MBID"
+               [ngModel]="mbQueryOverride()" (ngModelChange)="mbQueryOverride.set($event)"
+               name="mbOverride" (keydown.enter)="runMbSearch()" />
+        <button mat-stroked-button type="button" (click)="runMbSearch()" [disabled]="mbBusy()">
+          Search
+        </button>
+      </div>
+
+      <p class="muted small">
+        Searching: <b>{{ mbSearchArtist() }}</b> &mdash; <b>{{ mbSearchAlbum() }}</b>
+      </p>
+
+      @if (mbBusy()) {
+        <div class="loading"><mat-spinner aria-label="Loading" diameter="32" /></div>
+      } @else if (mbError()) {
+        <p class="error">{{ mbError() }}</p>
+      } @else if (mbCandidates().length === 0) {
+        <p class="muted">No candidates. Try an override search above.</p>
+      } @else {
+        <ul class="candidates">
+          @for (c of mbCandidates(); track c.release_mbid) {
+            <li class="candidate">
+              <div class="candidate-main">
+                <div class="candidate-title">{{ c.title }}</div>
+                <div class="candidate-meta">
+                  {{ c.artist_credit }}
+                  @if (c.year) { &middot; {{ c.year }} }
+                  @if (c.label) { &middot; {{ c.label }} }
+                  &middot; {{ c.track_count }} tracks
+                  @if (c.disc_count > 1) { ({{ c.disc_count }} discs) }
+                  @if (c.barcode) { &middot; UPC {{ c.barcode }} }
+                </div>
+                <div class="candidate-badge"
+                     [class]="'badge-' + candidateBadgeColor(c, g.total_files)">
+                  {{ candidateBadgeLabel(c, g.total_files) }}
+                </div>
+              </div>
+              <button mat-flat-button color="primary" type="button"
+                      (click)="pickCandidate(c)" [disabled]="mbBusy()">
+                Pick
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </dialog>
+
+  <!-- Last-action result toast -->
+  @if (lastResult(); as r) {
+    <div class="result-toast" [class.result-toast-error]="r.failed.length > 0" role="status">
+      <div class="result-summary">
+        @if (r.linked > 0) {
+          <span>Linked {{ r.linked }} files to <b>{{ r.title_name }}</b></span>
+        }
+        @if (r.failed.length) {
+          <span class="result-failed-count">
+            {{ r.failed.length }} {{ r.failed.length === 1 ? 'file' : 'files' }} failed
+          </span>
+        }
+      </div>
+      @if (r.failed.length) {
+        <details open>
+          <summary>Failure reasons</summary>
+          <ul>
+            @for (f of r.failed; track f.file_path) {
+              <li>
+                <span class="failure-reason">{{ f.reason }}</span>
+                <span class="failure-path">{{ f.file_path }}</span>
+              </li>
+            }
+          </ul>
+        </details>
+      }
+      <button mat-icon-button type="button" (click)="dismissResult()" aria-label="Dismiss">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  }
+</div>

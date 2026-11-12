@@ -1,0 +1,21 @@
+// Poster grid (docs/plans/marquee-reference/styles.css, `.grid`).
+// Auto-fill columns no narrower than --grid-min, which the layout
+// tokens step down at the two breakpoints. Cards fill their column:
+// poster-card reads --card-w and keeps its 2:3 (or square) art box.
+
+.grid {
+  --card-w: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min), 1fr));
+  gap: var(--grid-gap);
+  width: 100%;
+  max-width: 1152px;
+}
+
+// People grid: person cards (STYLE-SPEC 3.6) in the same auto-fill
+// grid. The spec card is 350 wide (300 on phones); here it fills its
+// column, and 300px is the narrowest column, so one card fits a phone.
+.grid.people {
+  --grid-min: 300px;
+  --person-w: 100%;
+}

@@ -1,0 +1,78 @@
+/*
+ * Locally-served fonts. Nothing here loads from a third-party host, so
+ * browser visits don't leak client IPs and the app works offline. The
+ * server's CSP (`font-src 'self'`) enforces the same thing.
+ *
+ * Source + licenses:
+ *   Inter          — SIL Open Font License 1.1 (inter.LICENSE)
+ *   Figtree        — SIL Open Font License 1.1 (figtree.LICENSE)
+ *   Material Icons — Apache 2.0 (material-icons.LICENSE)
+ * See THIRD_PARTY_LICENSES.md at the repo root.
+ *
+ * The woff2 files are the latin-subset builds published by Fontsource
+ * (@fontsource/inter 5.3.0, @fontsource/figtree 5.3.0), redistributed
+ * unmodified. Each face below is fetched by the browser only when a
+ * rendered rule asks for that family and weight.
+ */
+
+/* Inter — body text for every theme. Weights 400 / 600 / 700 are the
+   three the UI uses; one static face per weight. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('inter-latin-700-normal.woff2') format('woff2');
+}
+
+/* Figtree 800 — display headings in the Marquee theme. Only the 800
+   face ships, on purpose: display rules written as weight 700 resolve
+   to this face, which is the weight that matched the reference best
+   (docs/plans/marquee-reference/font-bakeoff-report.md). */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700 800;
+  font-display: swap;
+  src: url('figtree-latin-800-normal.woff2') format('woff2');
+}
+
+/* Material Icons — classic static icon font. Matches the CSS Google
+   Fonts serves for the same family name. */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('material-icons.woff2') format('woff2');
+}
+
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,17 @@
+{
+  "rows": [
+    {
+      "title_id": 100, "title_name": "The Matrix",
+      "media_type": "MOVIE", "release_year": 1999,
+      "poster_url": "/posters/100.jpg", "request_count": 4,
+      "popularity": 87.5, "is_wished": true
+    },
+    {
+      "title_id": 200, "title_name": "Inception",
+      "media_type": "MOVIE", "release_year": 2010,
+      "poster_url": null, "request_count": 1,
+      "popularity": 65.2, "is_wished": false
+    }
+  ],
+  "total": 2
+}

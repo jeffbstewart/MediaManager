@@ -1,0 +1,60 @@
+{
+  "name": "media-manager",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "test:a11y": "bash tests/run-all.sh",
+    "proto:gen": "node tests/scripts/gen-proto.mjs",
+    "prebuild": "node tests/scripts/gen-proto.mjs",
+    "prestart": "node tests/scripts/gen-proto.mjs",
+    "prewatch": "node tests/scripts/gen-proto.mjs"
+  },
+  "private": true,
+  "packageManager": "npm@11.7.0",
+  "overrides": {
+    "@babel/core": "^7.29.6",
+    "vite": {
+      "esbuild": "^0.28.1"
+    }
+  },
+  "dependencies": {
+    "@angular/animations": "~22.2.5",
+    "@angular/cdk": "~22.2.6",
+    "@angular/common": "~22.2.5",
+    "@angular/compiler": "~22.2.5",
+    "@angular/core": "~22.2.5",
+    "@angular/forms": "~22.2.5",
+    "@angular/material": "~22.2.6",
+    "@angular/platform-browser": "~22.2.5",
+    "@angular/router": "~22.2.5",
+    "@bufbuild/protobuf": "^2.12.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectrpc/connect-web": "^2.1.1",
+    "@simplewebauthn/browser": "^13.1.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
+    "hls.js": "^1.6.15",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "~22.2.6",
+    "@angular/cli": "~22.2.6",
+    "@angular/compiler-cli": "~22.2.5",
+    "@argos-ci/playwright": "^7.8.0",
+    "@axe-core/playwright": "^4.11.2",
+    "@bufbuild/protoc-gen-es": "^2.12.0",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.6.0",
+    "jsdom": "^28.0.0",
+    "monocart-reporter": "^2.12.2",
+    "prettier": "^3.8.1",
+    "protoc": "^33.6.0",
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.8"
+  }
+}

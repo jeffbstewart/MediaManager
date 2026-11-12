@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 40" width="72" height="40">
+  <rect x="1" y="1" width="70" height="38" rx="5" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+  <path d="M52 6 A22 22 0 0 1 52 34" stroke="#555" stroke-width="1.5" fill="none"/>
+  <text x="32" y="27" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="bold" fill="#ccc">DVD</text>
+</svg>

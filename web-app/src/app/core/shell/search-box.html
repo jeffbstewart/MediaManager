@@ -1,0 +1,88 @@
+<!-- Below 599px the pill collapses to this icon; tapping it reveals
+     the input across the header. Hidden by CSS at wider sizes. -->
+<button type="button" class="search-toggle" aria-label="Search"
+        [attr.aria-expanded]="!collapsed()"
+        (click)="expand()">
+  <mat-icon aria-hidden="true">search</mat-icon>
+</button>
+<mat-icon class="search-icon" aria-hidden="true">search</mat-icon>
+<input #searchInput class="search-input" type="text" placeholder="Search"
+       aria-label="Search"
+       [value]="searchQuery()"
+       (input)="onSearchInput($event)"
+       (keydown.enter)="onSearchSubmit()"
+       (keydown.escape)="onSearchEscape()"
+       (focus)="onSearchFocus()"
+       (blur)="onSearchBlur()" />
+@if (searchQuery().length > 0) {
+  <button class="search-clear" type="button" aria-label="Clear search"
+          (mousedown)="clearSearch(); $event.preventDefault()">
+    <mat-icon aria-hidden="true">close</mat-icon>
+  </button>
+}
+<!-- Always-visible advanced-search button so you can reach the
+     BPM / time-sig / dance-preset dialog without having to
+     issue a throwaway text search first. Carries the current
+     input text along as a starting point. -->
+<button class="search-advanced" type="button"
+        (mousedown)="openAdvancedSearch(); $event.preventDefault()"
+        title="Advanced search (BPM, time signature, dance presets)"
+        aria-label="Advanced search">
+  <mat-icon>tune</mat-icon>
+</button>
+@if (showSuggestions() && suggestions().length > 0) {
+  <div class="suggestions-dropdown">
+    @for (item of suggestions(); track item.name + item.type) {
+      <a class="suggestion-item" [routerLink]="resultRoute(item)"
+         (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
+        @if (item.type === 'movie' || item.type === 'tv' || item.type === 'personal'
+             || item.type === 'book' || item.type === 'album' || item.type === 'track') {
+          @if (item.poster_url) {
+            <img [src]="item.poster_url" class="suggestion-thumb" alt="" />
+          } @else {
+            <div class="suggestion-thumb-placeholder"><mat-icon>movie</mat-icon></div>
+          }
+          <div class="suggestion-text">
+            <span class="suggestion-name">{{ item.name }}</span>
+            <span class="suggestion-sub">
+              {{ typeLabel(item.type) }}{{ item.year ? ' · ' + item.year : '' }}{{ item.album_name ? ' · ' + item.album_name : '' }}
+            </span>
+          </div>
+        } @else if (item.type === 'actor' || item.type === 'artist' || item.type === 'author') {
+          @if (item.headshot_url) {
+            <img [src]="item.headshot_url" class="suggestion-thumb actor" alt="" />
+          } @else {
+            <div class="suggestion-thumb-placeholder actor"><mat-icon>person</mat-icon></div>
+          }
+          <div class="suggestion-text">
+            <span class="suggestion-name">{{ item.name }}</span>
+            <span class="suggestion-sub">{{ typeLabel(item.type) }}</span>
+          </div>
+        } @else if (item.type === 'tag') {
+          <span class="suggestion-tag-pill"
+                [style.background-color]="item.bg_color"
+                [style.color]="item.text_color">{{ item.name }}</span>
+          @if (item.title_count) {
+            <span class="suggestion-sub">{{ item.title_count }} titles</span>
+          }
+        } @else if (item.type === 'channel') {
+          <span class="suggestion-type type-channel">Channel</span>
+          <div class="suggestion-text">
+            <span class="suggestion-name">{{ item.name }}</span>
+            @if (item.affiliation) {
+              <span class="suggestion-sub">{{ item.affiliation }}</span>
+            }
+          </div>
+        } @else {
+          <span class="suggestion-type" [class]="'type-' + item.type">{{ typeLabel(item.type) }}</span>
+          <span class="suggestion-name">{{ item.name }}</span>
+        }
+      </a>
+    }
+    <a class="suggestion-item suggestion-all" routerLink="/search"
+       [queryParams]="{ q: searchQuery() }"
+       (mousedown)="$event.preventDefault()" (click)="onSuggestionClick()">
+      See all results
+    </a>
+  </div>
+}

@@ -1,0 +1,83 @@
+# The presubmit suite (forge-lint docs/requirements.md R3): the "verify" check
+# the main ruleset requires.  Zero secrets by policy (R6) — the forge
+# lint audits Actions secrets to empty.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The wrapper jar is a binary a PR review cannot read; validate it
+      # against Gradle's published checksums so a swapped jar fails here.
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build and test
+        run: ./gradlew --no-daemon build
+
+      # The forge's own merge-path protections (forge-lint
+      # docs/requirements.md R1-R8), asserted against this repo's pinned
+      # expectations.  The
+      # workflow token cannot read collaborator roles or Actions secrets,
+      # so those report UNVERIFIED (-allow-unverified downgrades them to
+      # warnings); the operator runs the same lint with an admin token
+      # for the full verdict.  Any readable rule that drifts still fails
+      # the PR.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Forge lint (merge-path protections)
+        env:
+          FORGE_LINT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run github.com/jeffbstewart/forge-lint/cmd/forge-lint@v0.1.0 -config .github/forge-lint.yaml -allow-unverified
+
+  # Visual review (docs/plans/web-theming.md, "Screenshots in PRs").
+  # Captures the main views against the mocked backend and uploads them
+  # to Argos, which compares them with the merge-base build and posts the
+  # `argos` commit status and a PR comment: no visible change, or a link
+  # to the diff.  Informational, not a required check.  R6's zero-secret
+  # policy holds: the upload authenticates with a GitHub OIDC token minted
+  # for this job (`id-token: write`) and exchanged for a short-lived
+  # credential scoped to the one Argos project linked to this repository;
+  # nothing is stored in Actions secrets.  Runs on main pushes too so the
+  # baseline is always there.
+  visual:
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright has no
+    # browser build for yet. Revisit when Playwright lists it.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: web-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-app/package-lock.json
+
+      - run: npm ci
+
+      - run: npx playwright install chromium --with-deps
+
+      - name: Capture and upload to Argos
+        env:
+          ARGOS_UPLOAD: 1
+        run: tests/ci-run.sh capture --out ../data/screenshots/ci --themes marquee

@@ -1,0 +1,114 @@
+.content-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.loading-container { display: flex; justify-content: center; padding: 4rem; }
+
+h2 { margin: 0 0 0.75rem; }
+
+.result-count {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 1rem;
+}
+
+// Centered page search box (STYLE-SPEC `.search-box`, styles in
+// styles/_search-box.scss) above the results.
+.search-wrap { margin: 0 0 1.5rem; }
+
+// Spec `.empty`: muted small text for the empty and error states.
+.empty {
+  margin: 0;
+  padding: 2rem;
+  text-align: center;
+  font-size: var(--fs-sm, 14px);
+  color: var(--c-text-3, var(--mat-sys-on-surface-variant));
+}
+
+// Results sit in the global `.grid` (styles/_grid.scss) as poster cards;
+// the type label is each card's meta line.
+.results-grid { margin: 0 auto; }
+
+/* Advanced search layout additions. */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+
+  h2 { margin: 0; }
+}
+
+.header-actions { display: flex; gap: 0.5rem; }
+
+.filter-summary {
+  display: inline-block;
+  margin-bottom: 1rem;
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.track-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.75rem 0;
+}
+
+.track-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+
+  &.unplayable { opacity: 0.55; }
+
+  .track-thumb {
+    width: 3rem; height: 3rem;
+    border-radius: 4px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    &.track-thumb-placeholder {
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0.4;
+    }
+  }
+
+  .track-text { min-width: 0; display: flex; flex-direction: column; }
+  .track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-album {
+    font-size: 0.8125rem; opacity: 0.7;
+    text-decoration: none; color: inherit;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    &:hover { text-decoration: underline; }
+  }
+
+  .track-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.75rem;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .track-bpm, .track-ts {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  .track-duration { opacity: 0.7; }
+}

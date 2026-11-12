@@ -1,0 +1,52 @@
+// Page glow (spec section 2, `.page-glow`): a decorative gradient
+// behind the header and the top of the page. The shell renders the
+// element and sets `data-page` on `body` from the route: `home` and
+// `discover` get their own gradients, every other page the plain one.
+//
+// The element sits at z-index -1 in the root stacking context, so it
+// paints over the body background and under all page content. The
+// gradient colors are custom properties so a theme can replace them.
+
+html {
+  --g-top: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mat-sys-primary-container) 55%, var(--mat-sys-surface)) 0%,
+    color-mix(in srgb, var(--mat-sys-tertiary-container) 45%, var(--mat-sys-surface)) 100%
+  );
+  --g-discover: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mat-sys-tertiary-container) 40%, var(--mat-sys-surface)) 0%,
+    color-mix(in srgb, var(--mat-sys-primary-container) 50%, var(--mat-sys-surface)) 100%
+  );
+  --g-plain: linear-gradient(180deg, var(--mat-sys-surface-container-high) 0%, var(--mat-sys-surface) 100%);
+}
+
+.page-glow {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: -1;
+  height: 900px;
+  pointer-events: none;
+  background: var(--g-plain);
+}
+
+body[data-page="home"] .page-glow,
+body[data-page="discover"] .page-glow {
+  height: 660px;
+
+  // Fade the horizontal gradient into the page by the glow's bottom edge.
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--mat-sys-surface) 55%, transparent) 45%,
+      var(--mat-sys-surface) 100%
+    );
+  }
+}
+
+body[data-page="home"] .page-glow { background: var(--g-top); }
+body[data-page="discover"] .page-glow { background: var(--g-discover); }

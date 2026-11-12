@@ -1,0 +1,242 @@
+// The host element carries the `search-container` class, plus
+// `collapsed` while the phone-width pill is folded to its icon.
+//
+// Spec 2 / `.search-pill`: a 40px pill on a 10% white surface, search
+// icon at the left, 14px / 600 text.
+:host {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  max-width: 360px;
+  min-width: 104px;
+  flex: 1;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: var(--mat-sys-on-surface);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  height: 40px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  color: var(--mat-sys-on-surface);
+  padding: 0 64px 0 44px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  outline: none;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 20%, transparent); }
+
+  &:focus {
+    border-color: var(--mat-sys-outline);
+    background: color-mix(in srgb, var(--mat-sys-on-surface) 20%, transparent);
+  }
+
+  // Full on-surface, like the spec's white "Search" label.
+  &::placeholder { color: var(--mat-sys-on-surface); opacity: 1; }
+}
+
+.search-clear,
+.search-advanced {
+  position: absolute;
+  background: none;
+  border: none;
+  color: var(--mat-sys-on-surface-variant);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: 50%;
+
+  &:hover { color: var(--mat-sys-on-surface); }
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+// Sits to the LEFT of the advanced button when both are visible.
+.search-clear { right: 36px; }
+.search-advanced { right: 10px; }
+
+// The icon button that stands in for the pill on phones.
+.search-toggle {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: none;
+  color: var(--mat-sys-on-surface);
+  cursor: pointer;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent); }
+
+  mat-icon { font-size: 24px; width: 24px; height: 24px; }
+}
+
+@media (max-width: 599px) {
+  // Folded: only the icon shows, at the end of the header row.
+  :host(.collapsed) {
+    flex: none;
+    min-width: 0;
+    order: 1;
+
+    .search-toggle { display: inline-grid; }
+    .search-icon,
+    .search-input,
+    .search-clear,
+    .search-advanced { display: none; }
+  }
+
+  // Unfolded: the pill spans the whole header row, over the brand and
+  // account button, until it is dismissed.
+  :host(:not(.collapsed)) {
+    position: absolute;
+    inset: 0;
+    margin: auto 0;
+    max-width: none;
+    height: 40px;
+    z-index: 2;
+    background: var(--mat-sys-surface);
+    border-radius: 9999px;
+  }
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  z-index: 1000;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 10px 14px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover { background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent); }
+
+  &.suggestion-all {
+    justify-content: center;
+    font-size: 0.8125rem;
+    opacity: 0.5;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    padding: 10px;
+
+    &:hover { opacity: 0.8; }
+  }
+}
+
+.suggestion-type {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: white;
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+
+  &.type-movie { background: #1565c0; }
+  &.type-tv { background: #6a1b9a; }
+  &.type-actor { background: #2e7d32; }
+  &.type-collection { background: #e65100; }
+  &.type-tag { background: #455a64; }
+  &.type-channel { background: #00838f; }
+  &.type-camera { background: #4e342e; }
+  &.type-personal { background: #ad1457; }
+}
+
+.suggestion-thumb {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+
+  &.actor {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-position: top;
+  }
+}
+
+.suggestion-thumb-placeholder {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; opacity: 0.3; }
+
+  &.actor {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+}
+
+.suggestion-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.suggestion-name {
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-sub {
+  font-size: 0.6875rem;
+  opacity: 0.45;
+}
+
+.suggestion-tag-pill {
+  padding: 3px 12px;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.suggestion-meta {
+  font-size: 0.75rem;
+  opacity: 0.4;
+  flex-shrink: 0;
+}

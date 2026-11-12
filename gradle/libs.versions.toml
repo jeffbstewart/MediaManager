@@ -1,0 +1,48 @@
+[versions]
+vok = "0.18.1"
+kotlin = "2.4.21"
+slf4j = "2.0.17"
+micrometer = "1.14.4"
+grpc = "1.85.1"
+protobuf = "4.34.1"
+armeria = "1.43.0"
+webauthn4j = "0.28.4.RELEASE"
+opentelemetry = "1.47.0"
+pdfbox = "3.0.8"
+
+[libraries]
+vok-db = { module = "eu.vaadinonkotlin:vok-framework-vokdb", version.ref = "vok" }
+hikaricp = "com.zaxxer:HikariCP:5.1.0"
+h2 = "com.h2database:h2:2.4.240"
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+flyway-core = "org.flywaydb:flyway-core:10.15.2"
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+jbcrypt = "org.mindrot:jbcrypt:0.4"
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
+gson = "com.google.code.gson:gson:2.11.0"
+java-jwt = "com.auth0:java-jwt:4.4.0"
+openpdf = "com.github.librepdf:openpdf:2.0.3"
+zxing-core = "com.google.zxing:core:3.5.3"
+zxing-javase = "com.google.zxing:javase:3.5.3"
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-kotlin-stub = "io.grpc:grpc-kotlin-stub:1.5.0"
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+armeria-grpc = { module = "com.linecorp.armeria:armeria-grpc", version.ref = "armeria" }
+protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
+grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+grpc-testing = { module = "io.grpc:grpc-testing", version.ref = "grpc" }
+jimfs = "com.google.jimfs:jimfs:1.3.0"
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+kotlinx-coroutines-core = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1"
+webauthn4j-core = { module = "com.webauthn4j:webauthn4j-core", version.ref = "webauthn4j" }
+opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref = "opentelemetry" }
+opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+owasp-depcheck = { id = "org.owasp.dependencycheck", version = "12.1.1" }
+protobuf = { id = "com.google.protobuf", version = "0.9.4" }

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="VideoPlayerScreen" extends="Group">
+    <interface>
+        <field id="playContent" type="assocarray" alwaysNotify="true" onChange="onPlayContent" />
+        <field id="playbackFinished" type="boolean" alwaysNotify="true" />
+        <field id="nextEpisodeStarted" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="VideoPlayerScreen.brs" />
+
+    <children>
+        <!-- Fullscreen video player -->
+        <Video
+            id="videoPlayer"
+            width="1920"
+            height="1080"
+            enableUI="true"
+            notificationInterval="1" />
+
+        <!-- Skip Intro button is added dynamically as a child of the Video node -->
+
+        <!-- Background tasks -->
+        <ProgressTask id="progressTask" />
+        <SkipSegmentTask id="skipSegmentTask" />
+    </children>
+</component>

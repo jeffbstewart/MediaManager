@@ -1,0 +1,570 @@
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner aria-label="Loading" diameter="40" />
+  </div>
+} @else if (error()) {
+  <div class="error-container">
+    <p>{{ error() }}</p>
+  </div>
+} @else if (title(); as t) {
+  <div class="detail-container">
+    <!-- Hero section: filled with the backdrop's tint (web-theming plan, Phase 3). -->
+    <div class="hero" [style.--tint]="t.backdrop_tint">
+      @if (t.backdrop_url) {
+        <img [src]="t.backdrop_url" class="hero-backdrop" alt="" />
+      }
+      <div class="hero-content">
+        @if (t.poster_url) {
+          <img [src]="t.poster_url" [alt]="t.title_name" class="hero-poster"
+               [class.hero-poster-square]="isAlbum" />
+        }
+        <div class="hero-info">
+          <div class="title-row">
+            <h1>{{ t.title_name }}</h1>
+            <button mat-icon-button class="star-btn" [class.starred]="t.is_starred"
+                    (click)="toggleStar()" aria-label="Star">
+              <mat-icon>{{ t.is_starred ? 'star' : 'star_border' }}</mat-icon>
+            </button>
+            <button mat-icon-button class="hide-btn" [class.hidden-title]="t.is_hidden"
+                    (click)="confirmHide()" [attr.aria-label]="t.is_hidden ? 'Unhide' : 'Hide'"
+                    [title]="t.is_hidden ? 'This title is hidden from your library. Click to unhide.' : 'Hide this title from your library'">
+              <mat-icon>{{ t.is_hidden ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
+          </div>
+
+          <!-- Authors (books) — prominent byline directly under the title,
+               mirrors the "cast" surface for movies/TV. -->
+          @if (isBook && t.authors && t.authors.length > 0) {
+            <div class="byline">
+              by
+              @for (a of t.authors; track a.id; let last = $last) {
+                <a [routerLink]="routes.author(a.id)">{{ a.name }}</a>@if (!last) { & }
+              }
+            </div>
+          }
+
+          <!-- Series (books) — "#3 of Foundation Series" linked to the
+               series browse page. Omits the number when series_number is
+               null (OL sometimes doesn't know the volume). -->
+          @if (isBook && t.book_series; as bs) {
+            <div class="series-line">
+              @if (bs.number != null) {
+                <span>#{{ bs.number }} of </span>
+              } @else {
+                <span>Part of </span>
+              }
+              <a [routerLink]="routes.series(bs.id)">{{ bs.name }}</a>
+            </div>
+          }
+
+          <!-- Artists (albums) — album-level byline, each linked to the
+               artist detail page. Mirrors the book byline. -->
+          @if (isAlbum && t.artists && t.artists.length > 0) {
+            <div class="byline">
+              by
+              @for (a of t.artists; track a.id; let last = $last) {
+                <a [routerLink]="routes.artist(a.id)">{{ a.name }}</a>@if (!last) { & }
+              }
+            </div>
+          }
+
+          <!-- Metadata -->
+          <div class="meta-row">
+            @if (isAlbum) {
+              @if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.label) {
+                <span>{{ t.label }}</span>
+              }
+              @if (t.track_count) {
+                <span>{{ t.track_count }} tracks</span>
+              }
+              @if (formatAlbumDuration(t.total_duration_seconds); as dur) {
+                <span>{{ dur }}</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else if (isBook) {
+              @if (t.first_publication_year) {
+                <span [title]="t.release_year && t.release_year !== t.first_publication_year ? 'Original publication (this edition: ' + t.release_year + ')' : ''">
+                  First published {{ t.first_publication_year }}
+                </span>
+              } @else if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.page_count) {
+                <span>{{ t.page_count | number }} pages</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else if (!isPersonal) {
+              @if (t.release_year) {
+                <span>{{ t.release_year }}</span>
+              }
+              @if (t.content_rating) {
+                <span class="rating-badge">{{ t.content_rating }}</span>
+              }
+              @if (t.genres.length > 0) {
+                <span>{{ t.genres.join(', ') }}</span>
+              }
+            } @else {
+              @if (t.event_date) {
+                <span>{{ t.event_date }}</span>
+              }
+              <span>Family Video</span>
+            }
+          </div>
+
+          <!-- Format badges -->
+          @if (t.formats.length > 0) {
+            <div class="format-row">
+              @for (fmt of t.formats; track fmt) {
+                <span class="format-badge">{{ formatLabel(fmt) }}</span>
+              }
+            </div>
+          }
+
+          <!-- Admin: per-physical-copy edit links. Renders one pill
+               per linked MediaItem so the admin can reach the detail
+               page for the specific paperback vs. hardcover (or DVD
+               vs. Blu-ray) when multiple copies exist. Non-admin
+               users never see this — the server returns an empty list. -->
+          @if (features.isAdmin() && t.admin_media_items.length > 0) {
+            <div class="admin-items-row">
+              @for (mi of t.admin_media_items; track mi.media_item_id) {
+                <a class="admin-item-link"
+                   [routerLink]="routes.adminMediaItem(mi.media_item_id)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Edit {{ formatLabel(mi.media_format) }}</span>
+                  @if (mi.upc) { <span class="admin-item-upc">{{ mi.upc }}</span> }
+                </a>
+              }
+            </div>
+          }
+
+          <!-- Tags -->
+          @if (t.tags.length > 0 || features.isAdmin()) {
+            <div class="tag-row">
+              @for (tag of t.tags; track tag.id) {
+                <span class="tag-badge-wrap">
+                  <a class="tag-badge" [routerLink]="routes.tag(tag.id)"
+                     [style.background-color]="tag.bg_color" [style.color]="tag.text_color">
+                    {{ tag.name }}
+                  </a>
+                  @if (features.isAdmin()) {
+                    <button class="tag-remove-btn" type="button"
+                            (click)="removeTagFromTitle(tag.id)"
+                            [attr.aria-label]="'Remove ' + tag.name">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  }
+                </span>
+              }
+              @if (features.isAdmin()) {
+                <button class="tag-add-btn" type="button" (click)="openTagPicker()"
+                        aria-label="Add tag">
+                  <mat-icon>add</mat-icon>
+                  Tag
+                </button>
+              }
+            </div>
+          }
+
+          <!-- Collection -->
+          @if (t.collection) {
+            <div class="collection-link">
+              Part of
+              <a [routerLink]="routes.collection(t.collection.id)">{{ t.collection.name }}</a>
+            </div>
+          }
+
+          <!-- Description -->
+          @if (t.description) {
+            <p class="description">{{ t.description }}</p>
+          }
+
+          <!-- Resume / Play button -->
+          @if (resumeTranscode; as rc) {
+            <a class="resume-btn" mat-flat-button
+               [routerLink]="routes.play(rc.transcode_id)" [queryParams]="{ title: t.title_name }">
+              <mat-icon>play_arrow</mat-icon>
+              {{ resumeLabel(rc) }}
+            </a>
+          }
+
+          <!-- Play Album (albums) — only enabled when there's at least one
+               track with a playable file on the NAS. Play is the primary
+               action; everything else lives behind the "More" pulldown so
+               the hero stays uncluttered. -->
+          @if (isAlbum && t.tracks && t.tracks.length > 0) {
+            <div class="album-actions">
+              <button mat-flat-button color="primary" class="resume-btn"
+                      (click)="playAlbum(0)">
+                <mat-icon>play_arrow</mat-icon>
+                Play Album
+              </button>
+              <button mat-stroked-button class="resume-btn album-more-btn"
+                      [matMenuTriggerFor]="albumActionsMenu"
+                      aria-label="More album actions">
+                <mat-icon>more_horiz</mat-icon>
+                More
+              </button>
+              <mat-menu #albumActionsMenu>
+                @if (hasMusicRadio()) {
+                  <button mat-menu-item type="button"
+                          [disabled]="radioStarting()"
+                          (click)="startRadio()">
+                    <mat-icon>graphic_eq</mat-icon>
+                    <span>{{ radioStarting() ? 'Starting…' : 'Start Radio' }}</span>
+                  </button>
+                }
+                <button mat-menu-item type="button" (click)="openPickerForAlbum()">
+                  <mat-icon>playlist_add</mat-icon>
+                  <span>Add to playlist</span>
+                </button>
+                @if (features.isAdmin()) {
+                  <button mat-menu-item type="button" (click)="rescanAlbum()"
+                          [disabled]="rescanning()">
+                    <mat-icon>refresh</mat-icon>
+                    <span>{{ rescanning() ? 'Rescanning…' : 'Rescan files (admin)' }}</span>
+                  </button>
+                }
+              </mat-menu>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Family members (personal only) -->
+    @if (isPersonal && t.family_members.length > 0) {
+      <section class="section">
+        <h2>People in this Video</h2>
+        <div class="family-row">
+          @for (member of t.family_members; track member.id) {
+            <div class="family-card">
+              <div class="family-initial">{{ member.name.charAt(0) }}</div>
+              <span class="family-name">{{ member.name }}</span>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Seasons (TV only) -->
+    @if (isTv && t.seasons.length > 0) {
+      <section class="section">
+        <h2>Seasons</h2>
+        <div class="season-chips">
+          @for (s of t.seasons; track s.season_number) {
+            <span class="season-chip" [attr.data-status]="s.acquisition_status">
+              S{{ s.season_number }} {{ s.acquisition_status }}
+            </span>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Episodes (TV only) -->
+    @if (isTv && t.episodes.length > 0) {
+      <section class="section">
+        <h2>Episodes</h2>
+        <div class="season-selector">
+          @for (s of availableSeasons; track s) {
+            <button mat-stroked-button [class.active]="selectedSeason() === s"
+                    (click)="selectSeason(s)">
+              {{ seasonLabel(s) }}
+            </button>
+          }
+        </div>
+        <div class="episode-list">
+          @for (ep of filteredEpisodes; track ep.id) {
+            <div class="episode-row">
+              <span class="ep-number">{{ ep.episode_number }}</span>
+              <span class="ep-name">{{ ep.name ?? 'Episode ' + ep.episode_number }}</span>
+              <span class="ep-spacer"></span>
+              @if (formatResume(ep.position_seconds, ep.duration_seconds); as resume) {
+                <span class="ep-resume">{{ resume }}</span>
+              }
+              @if (ep.playable && ep.transcode_id) {
+                <a [routerLink]="routes.play(ep.transcode_id)" [queryParams]="{ title: t.title_name }"
+                   class="ep-play-link"
+                   [attr.aria-label]="'Play ' + (ep.name ?? ('Episode ' + ep.episode_number))">
+                  <mat-icon class="ep-play">play_circle</mat-icon>
+                </a>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Tracks (albums) — grouped by disc, with per-track artist credit shown
+         only when it differs from the album-level byline (compilations).
+         Play buttons are disabled placeholders until M5 wires audio playback. -->
+    @if (isAlbum && albumDiscs.length > 0) {
+      <section class="section">
+        <h2>Tracks</h2>
+        @for (disc of albumDiscs; track disc.discNumber) {
+          @if (albumDiscs.length > 1) {
+            <h3 class="disc-header">Disc {{ disc.discNumber }}</h3>
+          }
+          <div class="track-list">
+            @for (track of disc.tracks; track track.track_id) {
+              <div class="track-row">
+                <span class="track-number">{{ track.track_number }}</span>
+                <div class="track-info">
+                  <span class="track-name-row">
+                    <span class="track-name">{{ track.name }}</span>
+                    @if (track.tags && track.tags.length > 0) {
+                      @for (tag of track.tags; track tag.id) {
+                        <span class="track-tag-chip-wrap">
+                          <a class="track-tag-chip"
+                             [routerLink]="routes.tag(tag.id)"
+                             [style.background-color]="tag.bg_color"
+                             [style.color]="tag.text_color">{{ tag.name }}</a>
+                          @if (features.isAdmin()) {
+                            <button type="button" class="track-tag-remove-btn"
+                                    (click)="removeTrackTag(track.track_id, tag.id); $event.preventDefault(); $event.stopPropagation()"
+                                    [attr.aria-label]="'Remove ' + tag.name">
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          }
+                        </span>
+                      }
+                    }
+                  </span>
+                  @if (track.track_artists.length > 0) {
+                    <span class="track-artist">
+                      @for (a of track.track_artists; track a.id; let last = $last) {
+                        <a [routerLink]="routes.artist(a.id)">{{ a.name }}</a>@if (!last) { , }
+                      }
+                    </span>
+                  }
+                </div>
+                @if (track.bpm || track.time_signature) {
+                  <span class="track-music-meta" [attr.title]="musicMetaTitle(track)">
+                    @if (track.bpm) { <span class="track-bpm">{{ track.bpm }} BPM</span> }
+                    @if (track.time_signature) {
+                      <span class="track-time-sig">{{ track.time_signature }}</span>
+                    }
+                  </span>
+                }
+                <span class="track-duration">{{ formatTrackDuration(track.duration_seconds) }}</span>
+
+                <!-- Play stays as the only always-visible action. -->
+                <button mat-icon-button class="track-play-btn"
+                        (click)="playTrackAt((t.tracks ?? []).indexOf(track))"
+                        aria-label="Play this track">
+                  <mat-icon>play_circle</mat-icon>
+                </button>
+                <!-- Everything else lives behind a three-dots menu so
+                     each action has room for a text label. Labels
+                     make the admin-only items self-documenting. -->
+                <button mat-icon-button class="track-play-btn"
+                        [matMenuTriggerFor]="trackRowMenu"
+                        aria-label="More track actions">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #trackRowMenu>
+                  <button mat-menu-item type="button"
+                          (click)="openPickerForTrack(track.track_id, track.name)">
+                    <mat-icon>playlist_add</mat-icon>
+                    <span>Add to playlist</span>
+                  </button>
+                  @if (features.isAdmin()) {
+                    <button mat-menu-item type="button"
+                            (click)="openTrackTagPicker(track.track_id, track.name)">
+                      <mat-icon>sell</mat-icon>
+                      <span>Tag this track</span>
+                    </button>
+                    <button mat-menu-item type="button"
+                            (click)="editTrackMusicTags(track)">
+                      <mat-icon>music_note</mat-icon>
+                      <span>Edit BPM &amp; time signature</span>
+                    </button>
+                  }
+                </mat-menu>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
+    <!-- Personnel (albums, M6). Collapsed by default so the track list
+         stays the focus; click to expand and see who played what. Hidden
+         entirely when MusicBrainz hasn't documented the album's personnel. -->
+    @if (isAlbum && personnelByRole.length > 0) {
+      <section class="section">
+        <button type="button" class="personnel-toggle"
+                (click)="personnelExpanded.set(!personnelExpanded())">
+          <mat-icon class="expand-chevron" [class.expanded]="personnelExpanded()">
+            chevron_right
+          </mat-icon>
+          <h2>Personnel</h2>
+          @if (!personnelExpanded()) {
+            <span class="personnel-hint">
+              {{ (t.personnel ?? []).length }} credits documented by MusicBrainz
+            </span>
+          }
+        </button>
+        @if (personnelExpanded()) {
+          <div class="personnel-groups">
+            @for (bucket of personnelByRole; track bucket.role) {
+              <div class="personnel-group">
+                <h3 class="personnel-role">{{ bucket.label }}</h3>
+                <ul class="personnel-list">
+                  @for (entry of bucket.entries; track entry.artist_id + '-' + entry.track_id + '-' + (entry.instrument ?? '')) {
+                    <li class="personnel-entry">
+                      <a [routerLink]="routes.artist(entry.artist_id)" class="personnel-name">
+                        {{ entry.artist_name }}
+                      </a>
+                      @if (entry.instrument) {
+                        <span class="personnel-instrument">{{ entry.instrument }}</span>
+                      }
+                      @if (entry.track_name) {
+                        <span class="personnel-track">on {{ entry.track_name }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
+    <!-- Readable editions (books) -->
+    @if (t.readable_editions && t.readable_editions.length > 0) {
+      <section class="section">
+        <h2>Read</h2>
+        @for (ed of t.readable_editions; track ed.media_item_id) {
+          <div class="transcode-row">
+            <span class="format-badge small">{{ ed.media_format === 'EBOOK_EPUB' ? 'EPUB' : 'PDF' }}</span>
+            <span class="tc-spacer"></span>
+            @if (ed.percent > 0) {
+              <span class="tc-resume">{{ (ed.percent * 100) | number:'1.0-0' }}% read</span>
+            }
+            <a [routerLink]="routes.reader(ed.media_item_id)" class="tc-play-link"
+               [attr.aria-label]="ed.percent > 0 ? 'Resume reading' : 'Read'">
+              <mat-icon class="tc-play">menu_book</mat-icon>
+            </a>
+          </div>
+        }
+      </section>
+    }
+
+    <!-- Transcodes / Watch -->
+    @if (t.transcodes.length > 0) {
+      <section class="section">
+        <h2>{{ isTv ? '' : 'Watch' }}</h2>
+        @for (tc of t.transcodes; track tc.transcode_id) {
+          @if (!isTv || !tc.season_number) {
+            <div class="transcode-row">
+              @if (tc.media_format) {
+                <span class="format-badge small">{{ tc.media_format }}</span>
+              }
+              <span class="tc-filename">{{ tc.file_name }}</span>
+              <span class="tc-spacer"></span>
+              @if (formatResume(tc.position_seconds, tc.duration_seconds); as resume) {
+                <span class="tc-resume">{{ resume }}</span>
+              }
+              @if (tc.playable) {
+                <a [routerLink]="routes.play(tc.transcode_id)" [queryParams]="{ title: t.title_name }"
+                   class="tc-play-link"
+                   [attr.aria-label]="'Play ' + tc.file_name">
+                  <mat-icon class="tc-play">play_circle</mat-icon>
+                </a>
+              }
+            </div>
+          }
+        }
+      </section>
+    }
+
+    <!-- Cast (non-personal) -->
+    @if (!isPersonal && t.cast.length > 0) {
+      <section class="section">
+        <h2>Cast</h2>
+        <div class="cast-row">
+          @for (member of t.cast; track member.id) {
+            <a class="cast-card" [routerLink]="routes.actor(member.tmdb_person_id)">
+              @if (member.headshot_url) {
+                <img [src]="member.headshot_url" [alt]="member.name" class="cast-img" />
+              } @else {
+                <div class="cast-placeholder">{{ member.name.charAt(0) }}</div>
+              }
+              <span class="cast-name">{{ member.name }}</span>
+              @if (member.character_name) {
+                <span class="cast-character">{{ member.character_name }}</span>
+              }
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Similar titles (non-personal): the shared row and poster cards.
+         Every entry is a catalog title, so every card links to its page;
+         titles without a disc or digital edition are shown not owned. -->
+    @if (!isPersonal && t.similar_titles.length > 0) {
+      <section class="section">
+        <h2>Similar Titles</h2>
+        <app-media-row class="similar-row" label="Similar titles">
+          @for (item of t.similar_titles; track item.title_id) {
+            <li>
+              <app-poster-card [name]="item.title_name" [imageUrl]="item.poster_url"
+                               [link]="routes.title(item.title_id)" [meta]="item.release_year"
+                               [playable]="!!item.playable"
+                               [dim]="item.owned ? 'none' : 'art'"
+                               [subtitle]="item.owned ? null : 'Not owned'" />
+            </li>
+          }
+        </app-media-row>
+      </section>
+    }
+  </div>
+}
+
+@if (pickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closePicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-add-to-playlist
+        [trackIds]="pickerTrackIds()"
+        [heading]="pickerHeading()"
+        (picked)="onPickerPicked($event)"
+        (cancelled)="closePicker()" />
+    </div>
+  </div>
+}
+
+@if (tagPickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closeTagPicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-tag-picker
+        [excludeTagIds]="currentTagIds()"
+        heading="Add tag to this title"
+        (picked)="onTagPicked($event)"
+        (created)="onTagCreatedAndPicked($event)"
+        (cancelled)="closeTagPicker()" />
+    </div>
+  </div>
+}
+
+@if (trackTagPickerOpen()) {
+  <div class="playlist-picker-overlay" (click)="closeTrackTagPicker()">
+    <div class="playlist-picker-anchor" (click)="$event.stopPropagation()">
+      <app-tag-picker
+        [excludeTagIds]="currentTrackTagIds()"
+        [heading]="trackTagPickerHeading()"
+        (picked)="onTrackTagPicked($event)"
+        (created)="onTrackTagCreatedAndPicked($event)"
+        (cancelled)="closeTrackTagPicker()" />
+    </div>
+  </div>
+}

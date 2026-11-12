@@ -1,0 +1,44 @@
+{
+  "groups": [
+    {
+      "group_id": "g-1",
+      "dirs": ["Music/Some Album"],
+      "dominant_album": "Some Album",
+      "dominant_album_artist": "Some Artist",
+      "dominant_upc": "1234567890123",
+      "dominant_mb_release_id": null,
+      "dominant_label": "Indie Records",
+      "dominant_catalog_number": "IR-001",
+      "disc_numbers": [1],
+      "total_files": 12,
+      "recording_mbid_count": 0,
+      "file_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "files": [
+        {
+          "id": 1,
+          "file_path": "/nas/Music/Some Album/01 Track One.flac",
+          "file_name": "01 Track One.flac",
+          "parsed_title": "Track One",
+          "parsed_track_artist": "Some Artist",
+          "parsed_track_number": 1,
+          "parsed_disc_number": 1,
+          "parsed_duration_seconds": 215,
+          "parsed_mb_recording_id": null
+        },
+        {
+          "id": 2,
+          "file_path": "/nas/Music/Some Album/02 Track Two.flac",
+          "file_name": "02 Track Two.flac",
+          "parsed_title": "Track Two",
+          "parsed_track_artist": "Some Artist",
+          "parsed_track_number": 2,
+          "parsed_disc_number": 1,
+          "parsed_duration_seconds": 184,
+          "parsed_mb_recording_id": null
+        }
+      ]
+    }
+  ],
+  "total_groups": 1,
+  "total_files": 12
+}
