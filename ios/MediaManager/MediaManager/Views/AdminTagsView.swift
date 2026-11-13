@@ -23,14 +23,14 @@ struct AdminTagsView: View {
                 ForEach(tags) { tag in
                     HStack {
                         Circle()
-                            .fill(Color(hex: tag.color) ?? .gray)
+                            .fill(Color(hex: tag.color) ?? MarqueeTheme.Colors.grey4)
                             .frame(width: 16, height: 16)
                         Text(tag.name)
                             .fontWeight(.medium)
                         Spacer()
                         Text("\(tag.titleCount)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     .swipeActions(edge: .trailing) {
                         Button("Delete", role: .destructive) {
@@ -39,7 +39,7 @@ struct AdminTagsView: View {
                         Button("Edit") {
                             editingTag = tag
                         }
-                        .tint(.blue)
+                        .tint(MarqueeTheme.Colors.blue)
                     }
                     .contextMenu {
                         Button("Edit") { editingTag = tag }
@@ -48,8 +48,10 @@ struct AdminTagsView: View {
                         }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Tags")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -123,12 +125,13 @@ struct AdminTagEditView: View {
                 Section {
                     TextField("Tag Name", text: $name)
                 }
+                .mmRow()
 
-                Section("Color") {
+                Section(header: MMSectionHeader("Color")) {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
                         ForEach(presetColors, id: \.self) { c in
                             Circle()
-                                .fill(Color(hex: c) ?? .gray)
+                                .fill(Color(hex: c) ?? MarqueeTheme.Colors.grey4)
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if c == color {
@@ -142,23 +145,26 @@ struct AdminTagEditView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .mmRow()
 
                 if let error {
-                    Text(error).foregroundStyle(.red).font(.callout)
+                    Text(error).foregroundStyle(MarqueeTheme.Colors.pink).font(MarqueeTheme.Fonts.cardTitle)
                 }
 
                 Section {
                     Button(saving ? "Saving..." : (tag == nil ? "Create Tag" : "Save")) {
                         Task { await save() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.mmPrimary)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                     .disabled(name.isEmpty || saving)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
+                .mmRow()
             }
+            .mmListChrome()
             .navigationTitle(tag == nil ? "New Tag" : "Edit Tag")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

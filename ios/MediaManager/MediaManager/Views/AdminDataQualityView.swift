@@ -20,7 +20,7 @@ struct AdminDataQualityView: View {
                 List {
                     ForEach(titles) { title in
                         HStack(spacing: 12) {
-                            CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue))
+                            MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: title.id.protoValue), cornerRadius: 0) }
                             .frame(width: 50, height: 75)
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -31,13 +31,13 @@ struct AdminDataQualityView: View {
                                 HStack(spacing: 6) {
                                     if let type = title.mediaType {
                                         Text(type.rawValue)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     if let year = title.releaseYear {
                                         Text(String(year))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                 }
 
@@ -45,12 +45,12 @@ struct AdminDataQualityView: View {
                                     statusBadge(title.enrichmentStatus)
                                     if title.hidden {
                                         Text("Hidden")
-                                            .font(.caption2)
+                                            .font(MarqueeTheme.Fonts.meta)
                                             .fontWeight(.bold)
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(.gray)
+                                            .background(MarqueeTheme.Colors.grey3)
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -62,7 +62,7 @@ struct AdminDataQualityView: View {
                             Button("Re-enrich") {
                                 Task { await reEnrich(title) }
                             }
-                            .tint(.blue)
+                            .tint(MarqueeTheme.Colors.blue)
 
                             Button("Delete", role: .destructive) {
                                 Task { await deleteTitle(title) }
@@ -77,6 +77,7 @@ struct AdminDataQualityView: View {
                             }
                         }
                     }
+                    .mmRow()
 
                     if page < totalPages {
                         Button("Load More") {
@@ -87,6 +88,7 @@ struct AdminDataQualityView: View {
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Data Quality")
         .task { await loadTitles() }
         .refreshable {
@@ -106,7 +108,7 @@ struct AdminDataQualityView: View {
         }
 
         Text(label)
-            .font(.caption2)
+            .font(MarqueeTheme.Fonts.meta)
             .fontWeight(.bold)
             .foregroundStyle(.white)
             .padding(.horizontal, 6)

@@ -36,10 +36,12 @@ struct AdminCamerasView: View {
                         cameras.move(fromOffsets: source, toOffset: destination)
                         saveOrder()
                     }
+                    .mmRow()
                 }
                 .environment(\.editMode, .constant(.active))
             }
         }
+        .mmListChrome()
         .navigationTitle("Camera Admin")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -119,33 +121,34 @@ struct CameraAdminRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Snapshot thumbnail
-            CachedImage(
-                ref: .cameraSnapshot(cameraId: camera.id),
-                cornerRadius: 6,
-                contentMode: .fill
-            )
+            MMArtFrame {
+                CachedImage(
+                    ref: .cameraSnapshot(cameraId: camera.id),
+                    cornerRadius: 0,
+                    contentMode: .fill
+                )
+            }
             .frame(width: 80, height: 45)
-            .clipped()
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(camera.name)
-                    .font(.subheadline)
+                    .font(MarqueeTheme.Fonts.cardTitle)
                     .fontWeight(.medium)
 
                 Text(camera.streamName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
 
             Spacer()
 
             if !camera.enabled {
                 Text("Disabled")
-                    .font(.caption2)
+                    .font(MarqueeTheme.Fonts.meta)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.red.opacity(0.15))
-                    .foregroundStyle(.red)
+                    .background(MarqueeTheme.Colors.live.opacity(0.15))
+                    .foregroundStyle(MarqueeTheme.Colors.pink)
                     .clipShape(Capsule())
             }
         }
@@ -187,6 +190,7 @@ struct CameraEditSheet: View {
                             }
                         }
                 }
+                .mmRow()
 
                 Section {
                     TextField("RTSP URL", text: $rtspUrl)
@@ -195,10 +199,11 @@ struct CameraEditSheet: View {
                         .autocorrectionDisabled()
                     if !isAdd {
                         Text("Credentials shown as *** — leave unchanged to keep, or enter new ones")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
+                .mmRow()
 
                 Section {
                     TextField("Snapshot URL (optional)", text: $snapshotUrl)
@@ -206,20 +211,24 @@ struct CameraEditSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
+                .mmRow()
 
                 Section {
                     TextField("Stream Name", text: $streamName)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     Text("go2rtc stream identifier")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
+                .mmRow()
 
                 Section {
                     Toggle("Enabled", isOn: $enabled)
                 }
+                .mmRow()
             }
+            .mmListChrome()
             .navigationTitle(isAdd ? "Add Camera" : "Edit Camera")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

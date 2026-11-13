@@ -28,6 +28,7 @@ struct MiniPlayerBar: View {
             HStack(spacing: 12) {
                 CachedImage(ref: .posterThumbnail(titleId: track.titleId), cornerRadius: 4)
                     .frame(width: 40, height: 40)  // square — album art aspect ratio
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
@@ -43,7 +44,7 @@ struct MiniPlayerBar: View {
                                 .accessibilityLabel("Radio")
                         }
                         Text(track.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(MarqueeTheme.Fonts.control)
                             .lineLimit(1)
                     }
                     // Subtitle joins artist + album when both are
@@ -53,8 +54,8 @@ struct MiniPlayerBar: View {
                     // tracks carry the album name + the credit
                     // AlbumDetailView captured at queue time.
                     Text(subtitle(for: track))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(readerTheme.current == nil ? MarqueeTheme.Colors.text3 : .secondary)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -129,7 +130,12 @@ struct MiniPlayerBar: View {
                     colors.background
                         .ignoresSafeArea(edges: .bottom)
                 } else {
-                    Rectangle().fill(.regularMaterial)
+                    // Spec footer band: near-black slab with a
+                    // hairline on top, not the system material.
+                    Rectangle().fill(Color(mmHex: 0x121212))
+                        .overlay(alignment: .top) {
+                            Rectangle().fill(MarqueeTheme.Colors.hairline).frame(height: 1)
+                        }
                         .ignoresSafeArea(edges: .bottom)
                 }
             }

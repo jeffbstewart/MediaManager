@@ -16,26 +16,35 @@ struct CollectionsListView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if collections.isEmpty {
                 ContentUnavailableView("No collections", systemImage: "square.stack")
+                    .mmPage()
             } else {
                 List(collections) { collection in
                     NavigationLink(value: CollectionRoute(tmdbCollectionId: collection.tmdbCollectionId, name: collection.name)) {
                         HStack(spacing: 12) {
-                            CachedImage(ref: .collectionPoster(tmdbCollectionId: collection.tmdbCollectionId.protoValue))
-                                .frame(width: 50, height: 75)
+                            MMPosterTile(
+                                name: collection.name,
+                                ref: .collectionPoster(tmdbCollectionId: collection.tmdbCollectionId.protoValue),
+                                width: 50,
+                                placeholderIcon: "square.stack")
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(collection.name)
-                                    .fontWeight(.medium)
+                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(MarqueeTheme.Colors.text)
                                 Text("\(collection.titleCount) titles")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                             }
                         }
                         .padding(.vertical, 4)
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
             }
         }
         .navigationTitle("Collections")

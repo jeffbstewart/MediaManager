@@ -78,6 +78,7 @@ struct AddTitleView: View {
                 }
                 .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || searching)
             }
+            .mmRow()
 
             switch mode {
             case .movieOrTv:
@@ -91,11 +92,13 @@ struct AddTitleView: View {
             if let statusMessage {
                 Section {
                     Text(statusMessage)
-                        .font(.callout)
-                        .foregroundStyle(statusIsError ? .red : .green)
+                        .font(MarqueeTheme.Fonts.cardTitle)
+                        .foregroundStyle(statusIsError ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.green)
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Add Title")
     }
 
@@ -104,7 +107,7 @@ struct AddTitleView: View {
     @ViewBuilder
     private func tmdbResultsSection() -> some View {
         if !tmdbResults.isEmpty {
-            Section("Results") {
+            Section(header: MMSectionHeader("Results")) {
                 ForEach(tmdbResults, id: \.tmdbID) { result in
                     Button {
                         selectedTmdbResult = result
@@ -114,12 +117,13 @@ struct AddTitleView: View {
                             TmdbResultRow(result: result)
                             if selectedTmdbResult?.tmdbID == result.tmdbID {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(MarqueeTheme.Colors.blue)
                             }
                         }
                     }
                 }
             }
+            .mmRow()
         }
     }
 
@@ -150,6 +154,7 @@ struct AddTitleView: View {
                 }
                 .disabled(adding)
             }
+            .mmRow()
         }
     }
 
@@ -158,7 +163,7 @@ struct AddTitleView: View {
     @ViewBuilder
     private func olResultsSection() -> some View {
         if !olResults.isEmpty {
-            Section("Results") {
+            Section(header: MMSectionHeader("Results")) {
                 ForEach(olResults, id: \.openlibraryWorkID) { hit in
                     Button {
                         selectedOlResult = hit
@@ -167,12 +172,13 @@ struct AddTitleView: View {
                             OpenLibraryHitRow(hit: hit)
                             if selectedOlResult?.openlibraryWorkID == hit.openlibraryWorkID {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(MarqueeTheme.Colors.blue)
                             }
                         }
                     }
                 }
             }
+            .mmRow()
         }
     }
 
@@ -187,8 +193,8 @@ struct AddTitleView: View {
                 // owned MediaItem. Same flow the web app uses for OL
                 // search results.
                 Text("This book will be added to your wishlist. Scan an ISBN or import an ebook file later to mark it owned.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
 
                 Button {
                     addBook(selected)
@@ -201,6 +207,7 @@ struct AddTitleView: View {
                 }
                 .disabled(adding)
             }
+            .mmRow()
         }
     }
 
@@ -300,14 +307,14 @@ private struct OpenLibraryHitRow: View {
                     .lineLimit(2)
                 if hit.hasAuthorName {
                     Text(hit.authorName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(1)
                 }
                 if hit.hasFirstPublishYear {
                     Text(String(hit.firstPublishYear))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
             Spacer()

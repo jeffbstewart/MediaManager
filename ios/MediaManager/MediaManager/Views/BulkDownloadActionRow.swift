@@ -65,10 +65,10 @@ struct BulkDownloadActionRow: View {
                         .fontWeight(.medium)
                     Spacer()
                 }
-                ProgressView(value: fraction)
+                ProgressView(value: fraction).tint(MarqueeTheme.Colors.accent)
             }
             .padding(12)
-            .background(.fill.quaternary)
+            .background(MarqueeTheme.Colors.surface)
             .clipShape(RoundedRectangle(cornerRadius: 10))
         } else if failed > 0 && pending == 0 {
             // Settled with failures — offer a single-tap retry.
@@ -80,19 +80,23 @@ struct BulkDownloadActionRow: View {
                     Spacer()
                 }
             }
-            .buttonStyle(.bordered)
-            .tint(.orange)
+            .buttonStyle(.mmGhost)
+            .tint(MarqueeTheme.Colors.orange)
         } else if pending > 0 {
             // Idle with work to do — the primary call to action.
             let label = pending == total
                 ? "Download all \(pending) \(plural)"
                 : "Download remaining \(pending) \(plural)"
+            // A quiet amber text row, matching EpisodesView's
+            // "Download Season": bulk download is secondary to
+            // browsing on every screen that shows this row.
             Button(action: action) {
                 Label(label, systemImage: "arrow.down.circle")
-                    .fontWeight(.medium)
-                    .frame(maxWidth: .infinity)
+                    .font(MarqueeTheme.Fonts.control)
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.plain)
         }
         // pending == 0 && failed == 0 && inFlight == 0 → caller is
         // responsible for hiding the row in the "all done" case so

@@ -18,35 +18,39 @@ struct FamilyMembersView: View {
                     systemImage: "person.2",
                     description: Text("Add family members to tag personal videos."))
             } else {
-                List(members, id: \.id) { member in
-                    Button {
-                        editingMember = member
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(member.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                            HStack(spacing: 8) {
-                                if member.hasBirthDate {
-                                    Text(member.birthDate)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text("\(member.videoCount) videos")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                if member.hasNotes {
-                                    Text(member.notes)
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                        .lineLimit(1)
+                List {
+                    ForEach(members, id: \.id) { member in
+                        Button {
+                            editingMember = member
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(member.name)
+                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(MarqueeTheme.Colors.text)
+                                HStack(spacing: 8) {
+                                    if member.hasBirthDate {
+                                        Text(member.birthDate)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
+                                    }
+                                    Text("\(member.videoCount) videos")
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
+                                    if member.hasNotes {
+                                        Text(member.notes)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
                         }
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Family Members")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -99,7 +103,7 @@ struct FamilyMemberEditSheet: View {
                     .lineLimit(3...6)
 
                 if let error {
-                    Text(error).foregroundStyle(.red).font(.callout)
+                    Text(error).foregroundStyle(MarqueeTheme.Colors.pink).font(MarqueeTheme.Fonts.cardTitle)
                 }
 
                 if isEditing {
@@ -108,8 +112,10 @@ struct FamilyMemberEditSheet: View {
                             Task { await delete() }
                         }
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle(isEditing ? "Edit Member" : "Add Member")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

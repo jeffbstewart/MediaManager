@@ -33,6 +33,8 @@ struct AddToPlaylistSheet: View {
             Group {
                 if loading && playlists.isEmpty {
                     ProgressView("Loading...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .mmPage()
                 } else {
                     List {
                         Section {
@@ -40,34 +42,36 @@ struct AddToPlaylistSheet: View {
                                 showCreate = true
                             } label: {
                                 Label("New Playlist", systemImage: "plus.circle.fill")
+                                    .font(MarqueeTheme.Fonts.control)
                             }
                         }
+                        .mmRow()
                         if !playlists.isEmpty {
-                            Section("Your Playlists") {
+                            Section(header: MMSectionHeader("Your Playlists")) {
                                 ForEach(playlists) { p in
                                     Button {
                                         Task { await add(to: p) }
                                     } label: {
                                         HStack(spacing: 12) {
-                                            Group {
+                                            ZStack {
+                                                MMPlaceholderArt(name: p.name, systemImage: "music.note.list")
                                                 if let titleId = p.heroTitleId {
-                                                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 4)
-                                                } else {
-                                                    LinearGradient(
-                                                        colors: [.indigo, .teal],
-                                                        startPoint: .topLeading,
-                                                        endPoint: .bottomTrailing)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                                    CachedImage(
+                                                        ref: .posterThumbnail(titleId: titleId.protoValue),
+                                                        cornerRadius: 0,
+                                                        transparentPlaceholder: true)
                                                 }
                                             }
                                             .frame(width: 40, height: 40)
+                                            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.badge, style: .continuous))
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(p.name)
-                                                    .foregroundStyle(.primary)
+                                                    .font(MarqueeTheme.Fonts.control)
+                                                    .foregroundStyle(MarqueeTheme.Colors.text)
                                                 if let desc = p.description, !desc.isEmpty {
                                                     Text(desc)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
+                                                        .font(MarqueeTheme.Fonts.meta)
+                                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                                         .lineLimit(1)
                                                 }
                                             }
@@ -80,15 +84,18 @@ struct AddToPlaylistSheet: View {
                                     .disabled(pendingPlaylistId != nil)
                                 }
                             }
+                            .mmRow()
                         }
                         if let status {
                             Section {
                                 Text(status)
-                                    .font(.callout)
-                                    .foregroundStyle(statusIsError ? .red : .green)
+                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(statusIsError ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.green)
                             }
+                            .mmRow()
                         }
                     }
+                    .mmListChrome()
                 }
             }
             .navigationTitle(trackHeaderName.map { "Add \"\($0)\"" } ?? "Add to Playlist")

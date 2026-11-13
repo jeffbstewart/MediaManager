@@ -17,6 +17,7 @@ struct PlaylistDetailView: View {
     @Environment(AudioPlayerManager.self) private var audio
     @Environment(AudioCacheManager.self) private var audioCache
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.marquee) private var layout
     let route: PlaylistRoute
 
     @State private var detail: ApiPlaylistDetail?
@@ -39,10 +40,19 @@ struct PlaylistDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 List {
-                    Section { hero(detail); actionRow(detail) }
-                    Section("Tracks") {
+                    // Hero and actions sit on the page, not in a row
+                    // surface, like the album page's header.
+                    Section {
+                        hero(detail)
+                        actionRow(detail)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    Section {
                         ForEach(detail.tracks) { entry in
                             trackRow(entry, in: detail)
                         }
@@ -52,12 +62,19 @@ struct PlaylistDetailView: View {
                         .onDelete { offsets in
                             removeTracks(at: offsets, in: detail)
                         }
+                    } header: {
+                        Text("Tracks")
+                            .mmSectionTitle()
+                            .textCase(nil)
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
                 .environment(\.editMode, $editMode)
             } else {
                 ContentUnavailableView("Playlist not found",
                     systemImage: "music.note.list")
+                    .mmPage()
             }
         }
         .navigationTitle(detail?.summary.name ?? route.name)
@@ -139,40 +156,41 @@ struct PlaylistDetailView: View {
 
     @ViewBuilder
     private func hero(_ detail: ApiPlaylistDetail) -> some View {
+        let heroSide: CGFloat = layout.isWide ? 180 : 130
         HStack(alignment: .top, spacing: 16) {
-            Group {
-                if let titleId = detail.summary.heroTitleId {
-                    CachedImage(ref: .posterFull(titleId: titleId.protoValue), cornerRadius: 8)
-                } else {
-                    LinearGradient(
-                        colors: [.indigo, .teal],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-            .frame(width: 130, height: 130)  // square
+            // Square — the pinned hero track's album cover.
+            MMPosterTile(
+                name: detail.summary.name,
+                ref: detail.summary.heroTitleId.map { .posterFull(titleId: $0.protoValue) },
+                square: true,
+                width: heroSide,
+                placeholderIcon: "music.note.list")
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(detail.summary.name).font(.title2).fontWeight(.bold)
+                Text(detail.summary.name)
+                    .font(layout.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
                 if let desc = detail.summary.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.cardTitle)
+                        .foregroundStyle(MarqueeTheme.Colors.text2)
                         .lineLimit(3)
                 }
                 let count = detail.tracks.count
                 Text("\(count) track\(count == 1 ? "" : "s") · \(formatDuration(Double(detail.totalDurationSeconds)))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 if detail.summary.isPrivate {
                     Label("Private", systemImage: "lock.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 Spacer(minLength: 0)
             }
         }
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
@@ -188,8 +206,7 @@ struct PlaylistDetailView: View {
                 } label: {
                     Label("Play", systemImage: "play.fill").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.mmPrimary)
                 .disabled(isEmpty)
 
                 Button {
@@ -197,8 +214,7 @@ struct PlaylistDetailView: View {
                 } label: {
                     Label("Shuffle", systemImage: "shuffle").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.mmGhost)
                 .disabled(isEmpty)
             }
             playlistDownloadButton(
@@ -227,23 +243,22 @@ struct PlaylistDetailView: View {
                     ProgressView(value: progress.fraction)
                         .progressViewStyle(.circular)
                         .controlSize(.small)
+                        .tint(MarqueeTheme.Colors.accent)
                     Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
-                        .font(.caption.monospacedDigit())
+                        .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .buttonStyle(.mmGhost)
         } else if isDownloaded {
             Button {
                 audioCache.deletePlaylist(playlistId: detail.summary.id)
             } label: {
                 Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(MarqueeTheme.Colors.green)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .tint(.green)
+            .buttonStyle(.mmGhost)
         } else {
             Button {
                 audioCache.downloadPlaylist(detail: detail)
@@ -251,8 +266,7 @@ struct PlaylistDetailView: View {
                 Label("Download", systemImage: "arrow.down.circle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .buttonStyle(.mmGhost)
             .disabled(isEmpty)
         }
     }
@@ -276,14 +290,16 @@ struct PlaylistDetailView: View {
                     ref: .posterThumbnail(titleId: entry.albumTitleId),
                     cornerRadius: 4)
                     .frame(width: 40, height: 40)  // square album cover
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.track.name)
+                        .font(MarqueeTheme.Fonts.body)
                         .lineLimit(1)
-                        .foregroundStyle(entry.track.playable ? .primary : .secondary)
+                        .foregroundStyle(entry.track.playable ? MarqueeTheme.Colors.text : MarqueeTheme.Colors.text3)
                     Text(subtitle(for: entry))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -294,22 +310,22 @@ struct PlaylistDetailView: View {
                 if audioCache.isDownloaded(titleId: entry.albumTitleId) {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
                         .accessibilityLabel("Downloaded")
                 }
                 if isCurrent {
                     Image(systemName: audio.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(MarqueeTheme.Colors.accent)
                 } else if let secs = entry.track.durationSeconds {
                     Text(formatDuration(secs))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta.monospacedDigit())
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 Button {
                     toggleHero(entry, in: detail)
                 } label: {
                     Image(systemName: isHero ? "star.fill" : "star")
-                        .foregroundStyle(isHero ? .yellow : .secondary)
+                        .foregroundStyle(isHero ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
@@ -488,15 +504,16 @@ struct RenamePlaylistSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Name") {
+                Section(header: MMSectionHeader("Name")) {
                     TextField("Playlist name", text: $name)
                         .textInputAutocapitalization(.words)
                 }
-                Section("Description") {
+                Section(header: MMSectionHeader("Description")) {
                     TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                 }
             }
+            .mmListChrome()
             .navigationTitle("Edit Playlist")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

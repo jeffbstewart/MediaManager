@@ -12,6 +12,7 @@ private let log = MMLogger(category: "BookSeriesDetailView")
 struct BookSeriesDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(\.marquee) private var layout
     let route: BookSeriesRoute
 
     @State private var detail: ApiBookSeriesDetail?
@@ -29,16 +30,19 @@ struct BookSeriesDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: layout.sectionGap) {
                         header(detail)
                         if let desc = detail.description, !desc.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("About")
-                                    .font(.headline)
+                                    .mmSectionTitle()
                                 Text(desc)
-                                    .font(.body)
+                                    .font(MarqueeTheme.Fonts.body)
+                                    .foregroundStyle(MarqueeTheme.Colors.text2)
                             }
                         }
                         volumesSection(detail.volumes)
@@ -46,10 +50,14 @@ struct BookSeriesDetailView: View {
                             missingSection(detail.missingVolumes, canFill: detail.canFillGaps)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 48)
                 }
+                .mmPage()
             } else {
                 ContentUnavailableView("Series not found", systemImage: "books.vertical")
+                    .mmPage()
             }
         }
         .navigationTitle(route.name)
@@ -70,24 +78,28 @@ struct BookSeriesDetailView: View {
     @ViewBuilder
     private func header(_ detail: ApiBookSeriesDetail) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            BookCoverView(ref: heroRef(detail), seed: detail.name, cornerRadius: 8)
-                .frame(width: 120, height: 180)
+            MMArtFrame {
+                BookCoverView(ref: heroRef(detail), seed: detail.name, cornerRadius: 0)
+                    .frame(width: 120, height: 180)
+            }
+            .frame(width: 120, height: 180)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(detail.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(layout.hero)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .minimumScaleFactor(0.7)
                 if let author = detail.author {
                     NavigationLink(value: AuthorRoute(id: author.id, name: author.name)) {
                         Text(author.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.tint)
+                            .font(MarqueeTheme.Fonts.control)
+                            .foregroundStyle(MarqueeTheme.Colors.accent)
                     }
                     .buttonStyle(.plain)
                 }
                 Text("\(detail.volumes.count) of \(detail.volumes.count + detail.missingVolumes.count) owned")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 Spacer(minLength: 0)
             }
         }
@@ -113,9 +125,9 @@ struct BookSeriesDetailView: View {
         if volumes.isEmpty {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
                 Text("Volumes on your shelf")
-                    .font(.headline)
+                    .mmSectionTitle()
 
                 let status = volumeBulkStatus(volumes)
                 if status.completed < status.total {
@@ -132,41 +144,47 @@ struct BookSeriesDetailView: View {
                         mediaType: .movie,
                         year: volume.firstPublicationYear)) {
                         HStack(spacing: 12) {
-                            BookCoverView(
-                                ref: .posterThumbnail(titleId: volume.titleId.protoValue),
-                                seed: volume.titleName)
-                                .frame(width: 50, height: 75)
+                            MMArtFrame {
+                                BookCoverView(
+                                    ref: .posterThumbnail(titleId: volume.titleId.protoValue),
+                                    seed: volume.titleName,
+                                    cornerRadius: 0)
+                                    .frame(width: 50, height: 75)
+                            }
+                            .frame(width: 50, height: 75)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(volume.titleName)
-                                    .font(.body)
+                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(MarqueeTheme.Colors.text)
                                     .lineLimit(2)
                                 HStack(spacing: 8) {
                                     if let n = volume.seriesNumber {
                                         Text("#\(n)")
-                                            .foregroundStyle(.secondary)
                                     }
                                     if let y = volume.firstPublicationYear {
                                         Text(String(y))
-                                            .foregroundStyle(.secondary)
                                     }
                                     if bookCache.offlineTitleIds.contains(volume.titleId.protoValue) {
                                         // Inline (list-row) variant.
                                         Image(systemName: "arrow.down.circle.fill")
-                                            .foregroundStyle(.green)
+                                            .foregroundStyle(MarqueeTheme.Colors.green)
                                             .accessibilityLabel("Downloaded")
                                     }
                                 }
-                                .font(.caption)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                                 .font(.caption)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(MarqueeTheme.Colors.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    Divider()
                 }
             }
         }
@@ -174,10 +192,10 @@ struct BookSeriesDetailView: View {
 
     @ViewBuilder
     private func missingSection(_ missing: [ApiBookSeriesMissingVolume], canFill: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Missing Volumes")
-                    .font(.headline)
+                    .mmSectionTitle()
                 Spacer()
                 // "Fill Gaps" is the bulk-wishlist affordance the
                 // web app has had for a while — only render when the
@@ -193,52 +211,56 @@ struct BookSeriesDetailView: View {
                             ProgressView().controlSize(.small)
                         } else {
                             Label("Fill Gaps", systemImage: "wand.and.stars")
-                                .font(.caption)
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(.mmGhost)
                     .disabled(fillingGaps)
                 }
             }
 
             if let summary = fillResult {
                 Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.tint)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
             }
 
             ForEach(missing) { volume in
                 HStack(spacing: 12) {
-                    BookCoverView(
-                        ref: .openlibraryCover(workId: volume.openLibraryWorkId),
-                        seed: volume.title)
-                        .frame(width: 50, height: 75)
+                    MMArtFrame {
+                        BookCoverView(
+                            ref: .openlibraryCover(workId: volume.openLibraryWorkId),
+                            seed: volume.title,
+                            cornerRadius: 0)
+                            .frame(width: 50, height: 75)
+                    }
+                    .frame(width: 50, height: 75)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(volume.title)
-                            .font(.body)
+                            .font(MarqueeTheme.Fonts.cardTitle)
+                            .foregroundStyle(MarqueeTheme.Colors.text)
                             .lineLimit(2)
                         HStack(spacing: 8) {
                             if let n = volume.seriesNumber {
                                 Text("#\(n)")
-                                    .foregroundStyle(.secondary)
                             }
                             if let y = volume.year {
                                 Text(String(y))
-                                    .foregroundStyle(.secondary)
                             }
                         }
-                        .font(.caption)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     Spacer()
                     let wished = wishOverrides[volume.openLibraryWorkId] ?? volume.alreadyWished
                     if wished {
                         Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
                 }
-                .padding(.vertical, 4)
-                Divider()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(MarqueeTheme.Colors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
             }
         }
     }

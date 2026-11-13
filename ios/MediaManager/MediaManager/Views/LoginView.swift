@@ -14,30 +14,29 @@ struct LoginView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                Image(systemName: "person.circle")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.tint)
+                MMBrandWordmark(size: 34)
 
                 Text("Sign In")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
                     .accessibilityIdentifier("login-title")
 
                 if !SnapshotMode.isActive {
                     Text(serverURL.host() ?? serverURL.absoluteString)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
 
                 VStack(spacing: 12) {
                     TextField("Username", text: $username)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("login-username")
 
                     SecureField("Password", text: $password)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.password)
                         .onSubmit { login() }
                         .accessibilityIdentifier("login-password")
@@ -51,8 +50,7 @@ struct LoginView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
                     .disabled(username.isEmpty || password.isEmpty || isLoggingIn)
                     .accessibilityIdentifier("login-submit")
 
@@ -64,15 +62,14 @@ struct LoginView: View {
                                   systemImage: biometricIcon)
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                        .buttonStyle(.mmGhost)
                     }
                 }
                 .padding(.horizontal)
 
                 if let error = authManager.error {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                         .font(.callout)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
@@ -83,10 +80,14 @@ struct LoginView: View {
                 Button("Use a different server") {
                     authManager.disconnectServer()
                 }
-                .font(.callout)
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 .padding(.bottom)
             }
             .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .navigationTitle("")
             .onAppear {
                 if authManager.awaitingBiometric {

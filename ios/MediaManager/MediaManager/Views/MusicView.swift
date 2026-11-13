@@ -23,6 +23,7 @@ private let log = MMLogger(category: "MusicView")
 struct MusicView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
+    @Environment(\.marquee) private var layout
 
     @State private var smartPlaylists: [ApiSmartPlaylistSummary] = []
     @State private var userPlaylists: [ApiPlaylistSummary] = []
@@ -57,12 +58,19 @@ struct MusicView: View {
             // seconds — looks half-loaded.
             if loading {
                 ProgressView("Loading…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             } else if !trimmedQuery.isEmpty {
                 searchResultsList()
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    // Section heads and rows pad themselves to the
+                    // page gutter; the rows bleed to the screen edge
+                    // (spec 3.1), so the stack carries no horizontal
+                    // padding of its own.
+                    VStack(alignment: .leading, spacing: layout.sectionGap) {
                         shuffleHeroCard()
+                            .padding(.horizontal, layout.pageX)
                         yourPlaylistsSection()
                         if !smartPlaylists.isEmpty {
                             smartPlaylistsSection()
@@ -78,9 +86,12 @@ struct MusicView: View {
                             recentlyAddedSection()
                         }
                         browseArtistsLink()
+                            .padding(.horizontal, layout.pageX)
                     }
-                    .padding()
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 48)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             }
         }
         .navigationTitle("Music")
@@ -140,8 +151,10 @@ struct MusicView: View {
                 ForEach(searchResults) { result in
                     musicResultRow(result)
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
     }
 
     /// Music-only result-row dispatch. `searchMusicOnly` only returns
@@ -203,36 +216,44 @@ struct MusicView: View {
         } label: {
             HStack(spacing: 16) {
                 Image(systemName: "shuffle")
-                    .font(.system(size: 36, weight: .semibold))
+                    .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 64, height: 64)
                     .background(LinearGradient(
-                        colors: [.purple, .blue],
+                        colors: [MarqueeTheme.Colors.plum, MarqueeTheme.Colors.blue],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Shuffle Library")
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.h3)
+                        .foregroundStyle(MarqueeTheme.Colors.text)
                     Text("Random tracks from your whole collection")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(2)
                 }
                 Spacer()
                 if shuffleStarting {
                     ProgressView()
                 } else {
+                    // The play glyph sits in the spec's white pill
+                    // so the card reads as the page's primary action.
                     Image(systemName: "play.fill")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(MarqueeTheme.Colors.ink)
+                        .frame(width: MarqueeTheme.Sizes.pillHeight, height: MarqueeTheme.Sizes.pillHeight)
+                        .background(Color.white, in: Circle())
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity)
-            .background(.fill.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .background(MarqueeTheme.Colors.surface)
+            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.hero, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: MarqueeTheme.Radius.hero, style: .continuous)
+                    .strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(shuffleStarting)
@@ -240,53 +261,39 @@ struct MusicView: View {
 
     @ViewBuilder
     private func yourPlaylistsSection() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Your Playlists").font(.headline)
-                Spacer()
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            MMSectionHead("Your Playlists") {
                 NavigationLink(value: AllPlaylistsRoute()) {
-                    Text("See All").font(.subheadline)
+                    MMSeeAllChevron()
                 }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    // "+" card always first so creating a playlist is
-                    // discoverable from the landing surface, not buried
-                    // behind a See All tap. Hidden offline because
-                    // playlist creation requires the server.
-                    if dataModel.isOnline {
+                .buttonStyle(.plain)
+                .accessibilityLabel("See all playlists")
+                Spacer(minLength: 0)
+                // Create lives beside the title as a quiet pill, so
+                // it stays discoverable without competing with the
+                // playlist art in the row. Hidden offline because
+                // creation needs the server.
+                if dataModel.isOnline {
                     Button {
                         showCreate = true
                     } label: {
-                        VStack(spacing: 8) {
-                            ZStack {
-                                LinearGradient(
-                                    colors: [.gray.opacity(0.4), .gray.opacity(0.2)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing)
-                                Image(systemName: "plus")
-                                    .font(.system(size: 36, weight: .light))
-                                    .foregroundStyle(.tint)
-                            }
-                            .frame(width: 130, height: 130)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            Text("New Playlist")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.tint)
-                                .frame(maxWidth: 130, alignment: .leading)
-                            Text(" ").font(.caption2)  // spacer to match other card heights
-                        }
-                        .frame(width: 130)
+                        Label("New", systemImage: "plus")
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text)
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .background(MarqueeTheme.Colors.surface, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("New playlist")
+                }
+            }
+            MMRow {
+                ForEach(userPlaylists) { p in
+                    NavigationLink(value: PlaylistRoute(id: p.id, name: p.name)) {
+                        userPlaylistCard(p)
                     }
-
-                    ForEach(userPlaylists) { p in
-                        NavigationLink(value: PlaylistRoute(id: p.id, name: p.name)) {
-                            userPlaylistCard(p)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -294,55 +301,34 @@ struct MusicView: View {
 
     @ViewBuilder
     private func userPlaylistCard(_ p: ApiPlaylistSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if let titleId = p.heroTitleId {
-                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 8)
-                } else {
-                    LinearGradient(
-                        colors: [.purple, .pink],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-            .frame(width: 130, height: 130)  // square — playlist hero aspect
-            HStack(spacing: 4) {
-                Text(p.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                if p.isPrivate {
-                    Image(systemName: "lock.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: 130, alignment: .leading)
-            if let desc = p.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            } else {
-                Text(" ").font(.caption2)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            // Square — playlist hero aspect. No hero yet → the seeded
+            // placeholder with a playlist glyph.
+            MMPosterTile(
+                name: p.name,
+                ref: p.heroTitleId.map { .posterThumbnail(titleId: $0.protoValue) },
+                square: true,
+                width: layout.squareWidth,
+                placeholderIcon: "music.note.list")
+            MMCaption(
+                title: p.name,
+                meta: (p.description?.isEmpty == false) ? p.description : nil,
+                credit: p.isPrivate ? "Private" : nil,
+                width: layout.squareWidth)
         }
-        .frame(width: 130)
+        .frame(width: layout.squareWidth, alignment: .topLeading)
     }
 
     @ViewBuilder
     private func smartPlaylistsSection() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Smart Playlists")
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(smartPlaylists) { p in
-                        NavigationLink(value: SmartPlaylistRoute(key: p.key, name: p.name)) {
-                            smartPlaylistCard(p)
-                        }
-                        .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            MMSectionHead("Smart Playlists")
+            MMRow {
+                ForEach(smartPlaylists) { p in
+                    NavigationLink(value: SmartPlaylistRoute(key: p.key, name: p.name)) {
+                        smartPlaylistCard(p)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -350,40 +336,29 @@ struct MusicView: View {
 
     @ViewBuilder
     private func smartPlaylistCard(_ p: ApiSmartPlaylistSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if let titleId = p.heroTitleId {
-                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 8)
-                } else {
-                    LinearGradient(
-                        colors: [.indigo, .teal],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-            .frame(width: 130, height: 130)  // square — album art aspect
-            Text(p.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .frame(maxWidth: 130, alignment: .leading)
-            Text("\(p.trackCount) track\(p.trackCount == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            // Square — album art aspect.
+            MMPosterTile(
+                name: p.name,
+                ref: p.heroTitleId.map { .posterThumbnail(titleId: $0.protoValue) },
+                square: true,
+                width: layout.squareWidth,
+                placeholderIcon: "sparkles")
+            MMCaption(
+                title: p.name,
+                meta: "\(p.trackCount) track\(p.trackCount == 1 ? "" : "s")",
+                width: layout.squareWidth)
         }
-        .frame(width: 130)
+        .frame(width: layout.squareWidth, alignment: .topLeading)
     }
 
     @ViewBuilder
     private func recentlyAddedSection() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recently Added")
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(recentlyAdded) { album in
-                        recentlyAddedCard(album)
-                    }
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            MMSectionHead("Recently Added")
+            MMRow {
+                ForEach(recentlyAdded) { album in
+                    recentlyAddedCard(album)
                 }
             }
         }
@@ -393,22 +368,19 @@ struct MusicView: View {
     private func recentlyAddedCard(_ album: ApiTitle) -> some View {
         ZStack(alignment: .topTrailing) {
             NavigationLink(value: album) {
-                VStack(alignment: .leading, spacing: 6) {
-                    CachedImage(
+                VStack(alignment: .leading, spacing: 0) {
+                    MMPosterTile(
+                        name: album.name,
                         ref: .posterThumbnail(titleId: album.id.protoValue),
-                        cornerRadius: 8)
-                        .frame(width: 130, height: 130)
-                    Text(album.name)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
-                        .frame(maxWidth: 130, alignment: .leading)
-                    if let year = album.year {
-                        Text(String(year))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                        square: true,
+                        width: layout.squareWidth,
+                        placeholderIcon: "music.note")
+                    MMCaption(
+                        title: album.name,
+                        meta: album.year.map(String.init),
+                        width: layout.squareWidth)
                 }
-                .frame(width: 130)
+                .frame(width: layout.squareWidth, alignment: .topLeading)
             }
             .buttonStyle(.plain)
 
@@ -421,11 +393,10 @@ struct MusicView: View {
                 Task { await dismiss(album) }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(6)
-                    .background(.black.opacity(0.55))
-                    .clipShape(Circle())
+                    .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
             }
             .buttonStyle(.plain)
             .padding(6)
@@ -435,14 +406,11 @@ struct MusicView: View {
 
     @ViewBuilder
     private func forYouSection() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("For You")
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(recommendedArtists) { rec in
-                        forYouCard(rec)
-                    }
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            MMSectionHead("For You")
+            MMRow {
+                ForEach(recommendedArtists) { rec in
+                    forYouCard(rec)
                 }
             }
         }
@@ -476,11 +444,10 @@ struct MusicView: View {
                 Task { await dismissRecommendation(rec) }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(6)
-                    .background(.black.opacity(0.55))
-                    .clipShape(Circle())
+                    .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
             }
             .buttonStyle(.plain)
             .padding(6)
@@ -490,40 +457,22 @@ struct MusicView: View {
 
     @ViewBuilder
     private func forYouCardBody(_ rec: ApiRecommendedArtist) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if let rgid = rec.representativeReleaseGroupMbid, !rgid.isEmpty {
-                    CachedImage(
-                        ref: .coverArtArchiveReleaseGroup(releaseGroupId: rgid),
-                        cornerRadius: 8)
-                } else {
-                    LinearGradient(
-                        colors: [.orange, .pink],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay {
-                            Image(systemName: "music.mic")
-                                .font(.system(size: 36))
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                }
-            }
-            .frame(width: 130, height: 130)  // square — album cover aspect
-            Text(rec.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .frame(maxWidth: 130, alignment: .leading)
+        let rgid = rec.representativeReleaseGroupMbid.flatMap { $0.isEmpty ? nil : $0 }
+        VStack(alignment: .leading, spacing: 0) {
+            // Square — album cover aspect; a missing cover shows the
+            // seeded placeholder with a microphone.
+            MMPosterTile(
+                name: rec.name,
+                ref: rgid.map { .coverArtArchiveReleaseGroup(releaseGroupId: $0) },
+                square: true,
+                width: layout.squareWidth,
+                placeholderIcon: "music.mic")
             // Voters teaser: "Liked by X & Y" / "Liked by X, Y +N"
             // depending on count. Falls back to the representative
             // release title when the server didn't ship voters.
-            Text(votersCaption(rec))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: 130, alignment: .leading)
+            MMCaption(title: rec.name, meta: votersCaption(rec), width: layout.squareWidth)
         }
-        .frame(width: 130)
+        .frame(width: layout.squareWidth, alignment: .topLeading)
     }
 
     private func votersCaption(_ rec: ApiRecommendedArtist) -> String {
@@ -545,20 +494,20 @@ struct MusicView: View {
     @ViewBuilder
     private func browseArtistsLink() -> some View {
         NavigationLink(value: BrowseArtistsRoute()) {
-            HStack {
+            HStack(spacing: 12) {
                 Image(systemName: "music.mic")
-                    .foregroundStyle(.tint)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
                 Text("Browse Artists")
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.h3)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
-                    .font(.caption)
+                MMSeeAllChevron()
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 12)
-            .background(.fill.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .background(MarqueeTheme.Colors.surface)
+            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
     }

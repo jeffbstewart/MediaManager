@@ -14,7 +14,7 @@ import MediaManagerProtos
 struct BookCoverView: View {
     let ref: MMImageRef?
     let seed: String
-    var cornerRadius: CGFloat = 6
+    var cornerRadius: CGFloat = MarqueeTheme.Radius.card
 
     var body: some View {
         ZStack {
@@ -26,7 +26,7 @@ struct BookCoverView: View {
                     transparentPlaceholder: true)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
     @ViewBuilder
@@ -39,9 +39,9 @@ struct BookCoverView: View {
             .overlay {
                 GeometryReader { geo in
                     Text(Self.initial(for: seed))
-                        .font(.system(
-                            size: min(geo.size.width, geo.size.height) * 0.56,
-                            weight: .bold))
+                        .font(MarqueeTheme.Fonts.display(
+                            min(geo.size.width, geo.size.height) * 0.56,
+                            relativeTo: .largeTitle))
                         .foregroundStyle(.white.opacity(0.78))
                         .minimumScaleFactor(0.3)
                         .frame(width: geo.size.width, height: geo.size.height)

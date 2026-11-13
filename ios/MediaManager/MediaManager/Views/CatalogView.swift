@@ -4,6 +4,7 @@ import MediaManagerProtos
 
 struct CatalogView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
     var typeFilter: MediaType? = nil
     var navigationTitle: String = "Catalog"
 
@@ -21,20 +22,25 @@ struct CatalogView: View {
     /// ArtistsView for the rationale.
     @State private var isLoadingMore = false
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 110), spacing: 12)
-    ]
+    /// Grid columns at the spec's poster width (114 on phones, 175 on
+    /// tablets) and card gap. `PosterCard` takes the column width so
+    /// the art fills the cell.
+    private var columns: [GridItem] {
+        layout.gridColumns
+    }
 
     var body: some View {
         Group {
             if loading && titles.isEmpty {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: layout.sectionGap) {
                         ForEach(titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title)
+                                PosterCard(title: title, width: layout.gridCellWidth)
                             }
                             .buttonStyle(.plain)
                         }
@@ -47,8 +53,10 @@ struct CatalogView: View {
                                 }
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             }
         }
         .navigationTitle(total.map { "\(navigationTitle) (\($0))" } ?? navigationTitle)

@@ -28,16 +28,19 @@ struct ValuationView: View {
                         LabeledContent("Purchase Value", value: String(format: "$%.2f", totalPurchase))
                         LabeledContent("Replacement Value", value: String(format: "$%.2f", totalReplacement))
                     }
+                    .mmRow()
 
                     Section {
                         Toggle("Unpriced only", isOn: $unpricedOnly)
                             .onChange(of: unpricedOnly) { _, _ in load() }
                     }
+                    .mmRow()
 
                     if loading {
                         // Refresh / filter-driven reload — page is
                         // visible, show a small spinner inline.
                         Section { ProgressView("Loading…") }
+                        .mmRow()
                     } else {
                         Section("Items (\(items.count))") {
                             ForEach(items, id: \.mediaItemID) { item in
@@ -48,10 +51,12 @@ struct ValuationView: View {
                                 }
                             }
                         }
+                        .mmRow()
                     }
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Valuation")
         // Standardize on `.searchable` instead of an inline TextField
         // in the filter section — the system search bar floats above
@@ -90,33 +95,33 @@ struct ValuationItemRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(item.titleNames.isEmpty ? item.productName : item.titleNames.joined(separator: ", "))
-                .font(.subheadline)
-                .foregroundStyle(.primary)
+                .font(MarqueeTheme.Fonts.cardTitle)
+                .foregroundStyle(MarqueeTheme.Colors.text)
                 .lineLimit(2)
             HStack(spacing: 8) {
                 if item.hasPurchasePrice {
                     Text(String(format: "$%.2f", item.purchasePrice))
-                        .font(.caption)
-                        .foregroundStyle(.green)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
                 } else {
                     Text("No price")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.orange)
                 }
                 if item.hasReplacementValue {
                     Text(String(format: "Repl: $%.2f", item.replacementValue))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if item.hasPurchasePlace {
                     Text(item.purchasePlace)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if item.photoCount > 0 {
                     Label("\(item.photoCount)", systemImage: "camera")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
         }
@@ -140,18 +145,21 @@ struct EditMediaItemSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Purchase Info") {
+                Section(header: MMSectionHeader("Purchase Info")) {
                     TextField("Place", text: $place)
                     TextField("Date (YYYY-MM-DD)", text: $date)
                     TextField("Price", text: $price)
                         .keyboardType(.decimalPad)
                 }
-                Section("Replacement") {
+                .mmRow()
+                Section(header: MMSectionHeader("Replacement")) {
                     TextField("Replacement Value", text: $replacement)
                         .keyboardType(.decimalPad)
                     TextField("Override ASIN", text: $asin)
                 }
+                .mmRow()
             }
+            .mmListChrome()
             .navigationTitle("Edit Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

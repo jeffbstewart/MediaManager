@@ -52,32 +52,34 @@ struct BarcodeScanView: View {
 
                 if let statusMessage {
                     Text(statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(statusIsError ? .red : .green)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(statusIsError ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.green)
                 }
-            } header: {
-                Text("Scan Barcode")
-            } footer: {
+            } header: { MMSectionHeader("Scan Barcode") } footer: {
                 Text("Scan a UPC for movies, TV, or music — or an EAN-13 (ISBN) for a book. The server picks the right lookup automatically.")
-                    .font(.caption2)
+                    .font(MarqueeTheme.Fonts.meta)
             }
+            .mmRow()
 
             // Recent scans with live status
             if !recentScans.isEmpty {
-                Section("Recent Scans") {
+                Section(header: MMSectionHeader("Recent Scans")) {
                     ForEach(recentScans) { scan in
                         NavigationLink(value: scan.id) {
                             ScanRow(scan: scan)
                         }
                     }
                 }
+                .mmRow()
             } else if !loading {
-                Section("Recent Scans") {
+                Section(header: MMSectionHeader("Recent Scans")) {
                     Text("No scans yet")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Scan")
         .task {
             startMonitor()
@@ -103,6 +105,7 @@ struct BarcodeScanView: View {
                     },
                     onDismiss: { showCamera = false }
                 )
+                .mmListChrome()
                 .navigationTitle("Scan Barcode")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -261,20 +264,20 @@ struct ScanRow: View {
         HStack(spacing: 12) {
             // Poster thumbnail (if available)
             if let titleId = scan.titleId {
-                CachedImage(ref: .posterThumbnail(titleId: titleId), cornerRadius: 4)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: titleId), cornerRadius: 0) }
                     .frame(width: 40, height: 56)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 if let title = scan.titleName {
                     Text(title)
-                        .font(.subheadline)
+                        .font(MarqueeTheme.Fonts.cardTitle)
                         .lineLimit(1)
                 }
 
                 Text(scan.upc)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .monospacedDigit()
             }
 
@@ -293,7 +296,7 @@ struct StatusBadge: View {
 
     var body: some View {
         Text(status.displayString)
-            .font(.caption2)
+            .font(MarqueeTheme.Fonts.meta)
             .fontWeight(.medium)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)

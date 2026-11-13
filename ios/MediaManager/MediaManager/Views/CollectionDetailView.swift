@@ -4,14 +4,15 @@ import MediaManagerProtos
 
 struct CollectionDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
     let route: CollectionRoute
     @State private var detail: ApiCollectionDetail?
     @State private var loading = true
     @State private var localWished: [TmdbID: Bool] = [:]
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 110), spacing: 12)
-    ]
+    private var columns: [GridItem] {
+        layout.gridColumns
+    }
 
     /// Transcode IDs eligible for bulk download from this collection.
     /// Owned + playable + has a transcodeId. ApiCollectionItem doesn't
@@ -36,6 +37,8 @@ struct CollectionDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 ScrollView {
                     VStack(spacing: 16) {
@@ -47,11 +50,11 @@ struct CollectionDetailView: View {
                                 noun: "movie",
                                 pluralNoun: "movies",
                                 action: { startBulkDownload(detail) })
-                                .padding(.horizontal)
+                                .padding(.horizontal, layout.pageX)
                                 .padding(.top, 8)
                         }
 
-                        LazyVGrid(columns: columns, spacing: 16) {
+                        LazyVGrid(columns: columns, spacing: layout.sectionGap) {
                             ForEach(detail.items) { item in
                                 if item.owned, let titleId = item.titleId {
                                     NavigationLink(value: ApiTitle(
@@ -73,12 +76,15 @@ struct CollectionDetailView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal)
+                        .padding(.horizontal, layout.pageX)
+                        .padding(.top, 8)
                     }
-                    .padding(.bottom)
+                    .padding(.bottom, 48)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             } else {
                 ContentUnavailableView("Collection not found", systemImage: "square.stack")
+                    .mmPage()
             }
         }
         .navigationTitle(route.name)
@@ -115,12 +121,12 @@ struct CollectionDetailView: View {
 
     @ViewBuilder
     private func collectionItemCard(_ item: ApiCollectionItem) -> some View {
-        VStack(alignment: .center, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topTrailing) {
-                posterImage(item)
-                    .frame(width: 120, height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .opacity(item.owned ? 1.0 : 0.6)
+                MMPosterTile(
+                    name: item.name,
+                    ref: posterRef(item),
+                    dimmed: !item.owned)
                     .overlay(alignment: .bottomTrailing) {
                         // Same badge as ArtistDetailView's downloaded-
                         // album marker. Bottom-right so it doesn't
@@ -128,14 +134,7 @@ struct CollectionDetailView: View {
                         // un-owned tiles.
                         if item.owned, let titleId = item.titleId,
                            dataModel.downloads.offlineTitleIds.contains(titleId.protoValue) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                                .padding(4)
-                                .background(.black.opacity(0.55))
-                                .clipShape(Circle())
-                                .padding(6)
-                                .accessibilityLabel("Downloaded")
+                            MMArtBadge(systemImage: "arrow.down", label: "Downloaded")
                         }
                     }
 
@@ -145,42 +144,29 @@ struct CollectionDetailView: View {
                     } label: {
                         Image(systemName: isWished(item) ? "heart.fill" : "heart")
                             .font(.body)
-                            .foregroundStyle(isWished(item) ? .red : .white)
+                            .foregroundStyle(isWished(item) ? MarqueeTheme.Colors.pink : .white)
                             .padding(6)
-                            .background(.black.opacity(0.5))
-                            .clipShape(Circle())
+                            .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
                     }
                     .padding(4)
+                    .accessibilityLabel(isWished(item) ? "Remove \(item.name) from wish list" : "Add \(item.name) to wish list")
                 }
             }
 
-            Text(item.name)
-                .font(.caption)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-
-            if let year = item.year {
-                Text(String(year))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !item.owned {
-                Text("Not owned")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            MMCaption(
+                title: item.name,
+                meta: item.owned ? item.year.map(String.init) : "Not owned",
+                credit: item.owned ? nil : item.year.map(String.init),
+                width: layout.gridCellWidth)
         }
-        .frame(width: 120)
+        .frame(width: layout.gridCellWidth, alignment: .topLeading)
     }
 
-    @ViewBuilder
-    private func posterImage(_ item: ApiCollectionItem) -> some View {
+    private func posterRef(_ item: ApiCollectionItem) -> MMImageRef {
         if let titleId = item.titleId {
-            CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
-        } else {
-            CachedImage(ref: .tmdbPoster(tmdbId: item.tmdbMovieId.protoValue, mediaType: .movie))
+            return .posterThumbnail(titleId: titleId.protoValue)
         }
+        return .tmdbPoster(tmdbId: item.tmdbMovieId.protoValue, mediaType: .movie)
     }
 
     private func toggleWish(_ item: ApiCollectionItem) async {

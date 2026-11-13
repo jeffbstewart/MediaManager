@@ -45,13 +45,15 @@ struct RootView: View {
             // Task settles whether we have valid tokens. Showing a
             // spinner here avoids a flash of ServerSetupView when
             // the user is in fact already logged in.
-            VStack(spacing: 16) {
+            VStack(spacing: 24) {
+                MMBrandWordmark(size: 34)
                 ProgressView().controlSize(.large)
                 Text("Connecting…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
         case .needsServer:
             ServerSetupView()
         case .needsSetup(let serverURL):
@@ -118,43 +120,47 @@ struct ForcedPasswordChangeView: View {
                 Spacer()
 
                 Image(systemName: "lock.rotation")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.orange)
+                    .font(.system(size: 56))
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
 
                 Text("Password Change Required")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .multilineTextAlignment(.center)
 
                 Text("Your administrator requires you to change your password before continuing. Enter the temporary password you were given, then pick a new one.")
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.body)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 VStack(spacing: 12) {
                     SecureField("Current Password", text: $currentPassword)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.password)
 
                     SecureField("New Password", text: $newPassword)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.newPassword)
 
                     SecureField("Confirm New Password", text: $confirmPassword)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.newPassword)
 
                     if let error {
                         Text(error)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                             .font(.callout)
                             .multilineTextAlignment(.center)
                     }
 
-                    Button(saving ? "Saving..." : "Change Password") {
+                    Button {
                         Task { await changePassword() }
+                    } label: {
+                        Text(saving ? "Saving..." : "Change Password")
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
                     .disabled(currentPassword.isEmpty
                               || newPassword.isEmpty
                               || newPassword != confirmPassword
@@ -165,6 +171,10 @@ struct ForcedPasswordChangeView: View {
                 Spacer()
                 Spacer()
             }
+            .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .interactiveDismissDisabled()
         }
     }
@@ -203,59 +213,70 @@ struct FingerprintMismatchView: View {
                 Spacer()
 
                 Image(systemName: "exclamationmark.shield.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.red)
+                    .font(.system(size: 56))
+                    .foregroundStyle(MarqueeTheme.Colors.live)
 
                 Text("Server Identity Changed")
-                    .font(.title)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .multilineTextAlignment(.center)
 
                 Text("This server's identity has changed since you last connected. This could mean the server's signing key was rotated, or it could indicate a security issue.")
+                    .font(MarqueeTheme.Fonts.body)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .padding(.horizontal)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Expected fingerprint:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     Text(expected.prefix(16) + "...")
                         .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(MarqueeTheme.Colors.text)
 
                     Text("Received fingerprint:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     Text(received.prefix(16) + "...")
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                 }
                 .padding()
-                .background(.fill.quaternary)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MarqueeTheme.Colors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.hero, style: .continuous))
 
                 Text("If you deliberately rotated the server's JWT signing key, tap \"I Rotated the Key\" to proceed. Otherwise, do not connect.")
-                    .font(.callout)
+                    .font(MarqueeTheme.Fonts.cardTitle)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .padding(.horizontal)
 
                 Spacer()
 
                 VStack(spacing: 12) {
-                    Button("I Rotated the Key") {
+                    Button {
                         Task { await authManager.acceptFingerprintChange() }
+                    } label: {
+                        Text("I Rotated the Key").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
 
-                    Button("Disconnect") {
+                    Button {
                         authManager.disconnectServer()
+                    } label: {
+                        Text("Disconnect").frame(maxWidth: .infinity)
                     }
-                    .foregroundStyle(.red)
+                    .buttonStyle(.mmGhost)
+                    .foregroundStyle(MarqueeTheme.Colors.pink)
                 }
                 .padding(.bottom, 32)
             }
             .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .navigationTitle("")
         }
     }

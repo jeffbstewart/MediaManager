@@ -5,6 +5,7 @@ import MediaManagerProtos
 struct TitleDetailView: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
     let titleId: TitleID
     @State private var detail: ApiTitleDetail?
     @State private var loading = true
@@ -26,10 +27,13 @@ struct TitleDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 detailContent(detail)
             } else {
                 ContentUnavailableView("Title not found", systemImage: "film")
+                    .mmPage()
             }
         }
         .navigationTitle("")
@@ -47,68 +51,43 @@ struct TitleDetailView: View {
     @ViewBuilder
     private func detailContent(_ detail: ApiTitleDetail) -> some View {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 0) {
                         heroImage(detail: detail)
 
                         VStack(alignment: .leading, spacing: 12) {
                             // Title + metadata
                             Text(detail.name)
-                                .font(.title)
-                                .fontWeight(.bold)
+                                .font(layout.hero)
+                                .foregroundStyle(MarqueeTheme.Colors.text)
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: 10) {
+                                if let rating = detail.contentRating {
+                                    MMRatingBox(rating: rating)
+                                }
                                 if let year = detail.year {
                                     Text(String(year))
                                 }
-                                if let rating = detail.contentRating {
-                                    Text(rating)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(.secondary, lineWidth: 1)
-                                        )
-                                }
                                 if let quality = detail.quality {
                                     Text(quality)
-                                        .fontWeight(.semibold)
                                 }
                                 Text(detail.mediaType == .tv ? "TV Series" : "Movie")
-                                    .foregroundStyle(.secondary)
                             }
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text2)
 
                             // Non-playable info banner (movies/personal only — TV shows have Seasons button)
                             if !detail.playable && detail.mediaType != .tv && !isOffline {
                                 if detail.transcodes.isEmpty {
                                     // No file on NAS at all — disc not ripped or not released
-                                    HStack(spacing: 8) {
-                                        Image(systemName: detail.wished == true ? "heart.circle" : "info.circle")
-                                            .foregroundStyle(detail.wished == true ? .red : .orange)
-                                        Text(detail.wished == true
+                                    MMNotice(
+                                        text: detail.wished == true
                                             ? "This title is on the wish list"
-                                            : "This title isn't available yet")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background((detail.wished == true ? Color.red : .orange).opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            : "This title isn't available yet",
+                                        systemImage: detail.wished == true ? "heart.circle" : "info.circle",
+                                        tint: detail.wished == true ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.accent)
                                 } else {
                                     // File exists on NAS but hasn't been transcoded yet
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "info.circle")
-                                            .foregroundStyle(.orange)
-                                        Text("This title hasn't been transcoded yet")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(.orange.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    MMNotice(text: "This title hasn't been transcoded yet")
 
                                     Button {
                                         Task { await requestRetranscode(detail.id) }
@@ -116,7 +95,7 @@ struct TitleDetailView: View {
                                         Label("Request Transcode", systemImage: "arrow.clockwise")
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .buttonStyle(.bordered)
+                                    .buttonStyle(.mmGhost)
                                 }
                             }
 
@@ -132,8 +111,7 @@ struct TitleDetailView: View {
                                         Label("Play", systemImage: "play.fill")
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .buttonStyle(.borderedProminent)
-                                    .controlSize(.large)
+                                    .buttonStyle(.mmPrimary)
                                 }
                             }
 
@@ -143,8 +121,7 @@ struct TitleDetailView: View {
                                     Label("Seasons & Episodes", systemImage: "list.number")
                                         .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.large)
+                                .buttonStyle(.mmPrimary)
 
                                 // Surfaced when every episode of every
                                 // season has a completed download —
@@ -154,14 +131,16 @@ struct TitleDetailView: View {
                                 if isSeriesFullyOffline {
                                     Label("Available offline",
                                           systemImage: "arrow.down.circle.fill")
-                                        .foregroundStyle(.green)
-                                        .font(.subheadline)
+                                        .foregroundStyle(MarqueeTheme.Colors.green)
+                                        .font(MarqueeTheme.Fonts.meta)
                                 }
                             }
 
                             // Action row: favorite, hide, re-transcode, download
                             if !isOffline {
-                                HStack(spacing: 20) {
+                                // Pills wrap onto further lines rather than
+                                // scrolling off the page.
+                                FlowLayout(spacing: 8) {
                                     Button {
                                         Task { await toggleFavorite(detail.id) }
                                     } label: {
@@ -169,8 +148,9 @@ struct TitleDetailView: View {
                                             isFavorite ? "Favorited" : "Favorite",
                                             systemImage: isFavorite ? "star.fill" : "star"
                                         )
-                                        .foregroundStyle(isFavorite ? .yellow : .secondary)
+                                        .foregroundStyle(isFavorite ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text)
                                     }
+                                    .buttonStyle(.mmGhost)
 
                                     Button {
                                         Task { await toggleHidden(detail.id) }
@@ -179,16 +159,17 @@ struct TitleDetailView: View {
                                             isHidden ? "Hidden" : "Hide",
                                             systemImage: isHidden ? "eye.slash.fill" : "eye.slash"
                                         )
-                                        .foregroundStyle(isHidden ? .red : .secondary)
+                                        .foregroundStyle(isHidden ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.text)
                                     }
+                                    .buttonStyle(.mmGhost)
 
                                     if detail.playable {
                                         Button {
                                             Task { await requestRetranscode(detail.id) }
                                         } label: {
                                             Label("Re-transcode", systemImage: "arrow.clockwise")
-                                                .foregroundStyle(.secondary)
                                         }
+                                        .buttonStyle(.mmGhost)
                                     }
 
                                     // Download area (movies only, when downloads capability available)
@@ -198,31 +179,24 @@ struct TitleDetailView: View {
                                         if detail.forMobileAvailable == true {
                                             downloadButton(detail: detail, transcodeId: tcId)
                                         } else if mobileRequested {
-                                            Label("Download Requested", systemImage: "clock.arrow.circlepath")
-                                                .foregroundStyle(.orange)
+                                            MMChip(label: "Download Requested", systemImage: "clock.arrow.circlepath")
                                         } else {
                                             Button {
                                                 Task { await requestMobileTranscode(detail.id) }
                                             } label: {
-                                                Label("Request Transcode for Download", systemImage: "gearshape.arrow.triangle.2.circlepath")
-                                                    .foregroundStyle(.secondary)
+                                                Label("Prepare Download", systemImage: "gearshape.arrow.triangle.2.circlepath")
                                             }
+                                            .buttonStyle(.mmGhost)
                                         }
                                     }
                                 }
-                                .font(.subheadline)
                             }
 
                             // Genres
                             if !detail.genres.isEmpty {
                                 FlowLayout(spacing: 6) {
                                     ForEach(detail.genres) { genre in
-                                        Text(genre.name)
-                                            .font(.caption)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(.fill.tertiary)
-                                            .clipShape(Capsule())
+                                        MMTag(label: genre.name)
                                     }
                                 }
                             }
@@ -231,12 +205,13 @@ struct TitleDetailView: View {
                             if let collName = detail.tmdbCollectionName {
                                 if isOffline {
                                     Label(collName, systemImage: "square.stack")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.control)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 } else if let collId = detail.tmdbCollectionId {
                                     NavigationLink(value: CollectionRoute(tmdbCollectionId: collId, name: collName)) {
                                         Label(collName, systemImage: "square.stack")
-                                            .font(.subheadline)
+                                            .font(MarqueeTheme.Fonts.control)
+                                            .foregroundStyle(MarqueeTheme.Colors.accent)
                                     }
                                 }
                             }
@@ -244,7 +219,8 @@ struct TitleDetailView: View {
                             // Description
                             if let description = detail.description {
                                 Text(description)
-                                    .font(.body)
+                                    .font(MarqueeTheme.Fonts.body)
+                                    .foregroundStyle(MarqueeTheme.Colors.text2)
                             }
 
                             // Tags
@@ -270,16 +246,11 @@ struct TitleDetailView: View {
                             // Family members
                             if let members = detail.familyMembers, !members.isEmpty {
                                 Text("People")
-                                    .font(.headline)
+                                    .mmSectionTitle()
                                     .padding(.top, 8)
                                 FlowLayout(spacing: 6) {
                                     ForEach(members, id: \.self) { name in
-                                        Label(name, systemImage: "person")
-                                            .font(.caption)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(.fill.tertiary)
-                                            .clipShape(Capsule())
+                                        MMTag(label: name, systemImage: "person")
                                     }
                                 }
                             }
@@ -287,29 +258,34 @@ struct TitleDetailView: View {
                             // Cast
                             if !detail.cast.isEmpty {
                                 Text("Cast")
-                                    .font(.headline)
+                                    .mmSectionTitle()
                                     .padding(.top, 8)
 
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     LazyHStack(alignment: .top, spacing: 16) {
                                         ForEach(detail.cast.prefix(20)) { member in
                                             let castContent = VStack(spacing: 6) {
-                                                CachedImage(
-                                                    ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue),
-                                                    cornerRadius: 40,
-                                                    contentMode: .fit
-                                                )
+                                                ZStack {
+                                                    MMPlaceholderArt(name: member.name, systemImage: "person.fill")
+                                                    CachedImage(
+                                                        ref: .headshot(tmdbPersonId: member.tmdbPersonId.protoValue),
+                                                        cornerRadius: 0,
+                                                        transparentPlaceholder: true
+                                                    )
+                                                }
                                                 .frame(width: 80, height: 80)
+                                                .clipShape(Circle())
+                                                .overlay(Circle().strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
 
                                                 Text(member.name)
-                                                    .font(.caption)
-                                                    .fontWeight(.medium)
+                                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                                    .foregroundStyle(MarqueeTheme.Colors.text)
                                                     .lineLimit(2)
                                                     .multilineTextAlignment(.center)
                                                 if let character = member.characterName {
                                                     Text(character)
-                                                        .font(.caption2)
-                                                        .foregroundStyle(.secondary)
+                                                        .font(MarqueeTheme.Fonts.meta)
+                                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                                         .lineLimit(2)
                                                         .multilineTextAlignment(.center)
                                                 }
@@ -330,9 +306,19 @@ struct TitleDetailView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal)
+                        .padding(.horizontal, layout.pageX)
+                        .padding(.bottom, 48)
+                        // Overlap the backdrop's fade so the title sits
+                        // on the image's tail instead of under a band of
+                        // page colour (spec 3.4).
+                        .padding(.top, detail.backdropUrl != nil ? -72 : 0)
                     }
                 }
+                // With a backdrop the page starts under the (transparent)
+                // navigation bar so the image runs to the top edge, as the
+                // spec's hero does; the poster layout keeps the inset.
+                .ignoresSafeArea(edges: detail.backdropUrl != nil ? .top : [])
+                .mmPage()
     }
 
     private func loadDetail() async {
@@ -401,32 +387,35 @@ struct TitleDetailView: View {
 
         switch dlState {
         case .completed:
-            Label("Downloaded", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            MMChip(label: "Downloaded", systemImage: "checkmark.circle.fill")
         case .downloading, .fetchingMetadata:
             if let entry = dataModel.downloads.entries.first(where: { $0.transcodeID == transcodeId.protoValue }) {
-                HStack(spacing: 4) {
+                HStack(spacing: 8) {
                     ProgressView(value: entry.progress)
-                        .frame(width: 40)
+                        .tint(MarqueeTheme.Colors.accent)
+                        .frame(width: 48)
                     Text("\(Int(entry.progress * 100))%")
-                        .font(.caption2)
                 }
-                .foregroundStyle(.blue)
+                .font(MarqueeTheme.Fonts.control)
+                .padding(.horizontal, 16)
+                .frame(height: MarqueeTheme.Sizes.pillHeight)
+                .background(MarqueeTheme.Colors.surface, in: Capsule())
             }
         case .paused:
             Button {
                 dataModel.downloads.resumeDownload(transcodeId: transcodeId.protoValue)
             } label: {
-                Label("Resume", systemImage: "arrow.down.circle")
-                    .foregroundStyle(.orange)
+                Label("Resume Download", systemImage: "arrow.down.circle")
             }
+            .buttonStyle(.mmGhost)
         case .failed:
             Button {
                 dataModel.downloads.resumeDownload(transcodeId: transcodeId.protoValue)
             } label: {
-                Label("Retry", systemImage: "arrow.clockwise.circle")
-                    .foregroundStyle(.red)
+                Label("Retry Download", systemImage: "arrow.clockwise.circle")
+                    .foregroundStyle(MarqueeTheme.Colors.pink)
             }
+            .buttonStyle(.mmGhost)
         case .unknown, .queued, .UNRECOGNIZED:
             Button {
                 dataModel.downloads.startDownload(
@@ -440,21 +429,53 @@ struct TitleDetailView: View {
                 )
             } label: {
                 Label("Download", systemImage: "arrow.down.circle")
-                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(.mmGhost)
         }
     }
 
+    /// The backdrop bleeds under the navigation bar and fades into
+    /// the page colour at the bottom (spec 3.4's hero fade), so the
+    /// title block sits on the image's tail rather than under a hard
+    /// edge. Without a backdrop the full poster stands in, framed.
     @ViewBuilder
     private func heroImage(detail: ApiTitleDetail) -> some View {
-        CachedImage(
-            ref: detail.backdropUrl != nil
-                ? .backdrop(titleId: detail.id.protoValue)
-                : .posterFull(titleId: detail.id.protoValue),
-            cornerRadius: 0
-        )
-        .frame(height: 220)
-        .frame(maxWidth: .infinity)
+        if detail.backdropUrl != nil {
+            // A clear base sized to the page, with the image as an
+            // overlay: a resizable image in `.fill` mode would report
+            // its own 16:9 width and widen the whole column.
+            Color.clear
+                .frame(height: layout.isWide ? 400 : 300)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    ZStack {
+                        MMPlaceholderArt(name: detail.name, systemImage: "film")
+                        CachedImage(ref: .backdrop(titleId: detail.id.protoValue), cornerRadius: 0, transparentPlaceholder: true)
+                    }
+                }
+                .clipped()
+            // A long fade so light backdrops don't end in a visible
+            // cut; the title block below overlaps its tail.
+            .overlay(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.2),
+                        .init(color: MarqueeTheme.Colors.page.opacity(0.45), location: 0.6),
+                        .init(color: MarqueeTheme.Colors.page.opacity(0.9), location: 0.85),
+                        .init(color: MarqueeTheme.Colors.page, location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom))
+        } else {
+            HStack {
+                Spacer()
+                MMPosterTile(
+                    name: detail.name,
+                    ref: .posterFull(titleId: detail.id.protoValue),
+                    width: layout.isWide ? 200 : 150)
+                Spacer()
+            }
+            .padding(.vertical, 24)
+        }
     }
 
     // MARK: - Offline Image Helpers
@@ -466,14 +487,8 @@ struct TagChip: View {
     let hexColor: String
 
     var body: some View {
-        let tagColor: Color = Color(hex: hexColor) ?? .blue
-        Text(name)
-            .font(.caption)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(tagColor.opacity(0.2))
-            .foregroundStyle(tagColor)
-            .clipShape(Capsule())
+        let tagColor: Color = Color(hex: hexColor) ?? MarqueeTheme.Colors.blue
+        MMTag(label: name, tint: tagColor)
     }
 }
 

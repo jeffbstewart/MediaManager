@@ -14,21 +14,20 @@ struct ServerSetupView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                Image(systemName: "film.stack")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.tint)
+                MMBrandWordmark(size: 40)
 
-                Text("Household Disc Keeper")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                Text("Connect to your server")
+                    .font(MarqueeTheme.Fonts.h2)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
 
                 if let discovered = discoveredURL {
                     VStack(spacing: 12) {
                         Label("Server found", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.headline)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
+                            .font(MarqueeTheme.Fonts.control)
                         Text(discovered.absoluteString)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
 
                         Button(action: { connectTo(discovered.absoluteString) }) {
                             if isConnecting {
@@ -39,8 +38,7 @@ struct ServerSetupView: View {
                                     .frame(maxWidth: .infinity)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(.mmPrimary)
                         .disabled(isConnecting)
                         .padding(.horizontal)
                     }
@@ -49,15 +47,17 @@ struct ServerSetupView: View {
                 VStack(spacing: 16) {
                     if discoveredURL != nil {
                         Text("Or enter a different address:")
-                            .foregroundStyle(.secondary)
-                            .font(.callout)
+                            .foregroundStyle(MarqueeTheme.Colors.text2)
+                            .font(MarqueeTheme.Fonts.body)
                     } else {
                         Text("Enter your server address to connect.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text2)
+                            .font(MarqueeTheme.Fonts.body)
                     }
 
                     TextField("https://your-server.example.com", text: $serverURL)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
+                        .keyboardType(.URL)
                         .textContentType(.URL)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -73,8 +73,7 @@ struct ServerSetupView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(MMPillButtonStyle(prominent: discoveredURL == nil))
                     .disabled(serverURL.isEmpty || isConnecting)
                     .accessibilityIdentifier("server-connect")
                 }
@@ -82,7 +81,7 @@ struct ServerSetupView: View {
 
                 if let error = authManager.error {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                         .font(.callout)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
@@ -93,6 +92,9 @@ struct ServerSetupView: View {
                 Spacer()
             }
             .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .navigationTitle("")
             .task {
                 await discoverServer()

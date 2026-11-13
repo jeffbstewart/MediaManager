@@ -21,16 +21,17 @@ struct AdminPurchaseWishesView: View {
                         HStack(spacing: 12) {
                             Group {
                                 if let titleId = wish.titleId {
-                                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
+                                    MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 0) }
                                 } else {
-                                    CachedImage(ref: .tmdbPoster(
-                                        tmdbId: wish.tmdbId.protoValue,
-                                        mediaType: wish.mediaType == .tv ? .tv : .movie
-                                    ))
+                                    MMArtFrame {
+                                        CachedImage(ref: .tmdbPoster(
+                                            tmdbId: wish.tmdbId.protoValue,
+                                            mediaType: wish.mediaType == .tv ? .tv : .movie
+                                        ), cornerRadius: 0)
+                                    }
                                 }
                             }
                             .frame(width: 50, height: 75)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(wish.title)
@@ -39,35 +40,35 @@ struct AdminPurchaseWishesView: View {
 
                                 HStack(spacing: 6) {
                                     Text(wish.mediaType.rawValue)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                     if let year = wish.releaseYear {
                                         Text(String(year))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     if let season = wish.seasonNumber {
                                         Text("S\(season)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                 }
 
                                 HStack(spacing: 4) {
                                     Image(systemName: "hand.thumbsup.fill")
-                                        .font(.caption2)
+                                        .font(MarqueeTheme.Fonts.meta)
                                     Text("\(wish.voteCount)")
-                                        .font(.caption)
+                                        .font(MarqueeTheme.Fonts.meta)
                                         .fontWeight(.medium)
                                     Text(wish.voters.joined(separator: ", "))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                         .lineLimit(1)
                                 }
 
                                 if let lifecycle = wish.lifecycleStage {
                                     Text(lifecycle.displayLabel)
-                                        .font(.caption)
+                                        .font(MarqueeTheme.Fonts.meta)
                                         .fontWeight(.medium)
                                         .foregroundStyle(statusColor(lifecycle))
                                 }
@@ -83,7 +84,7 @@ struct AdminPurchaseWishesView: View {
                                 }
                             } label: {
                                 Text(wish.acquisitionStatus?.displayLabel ?? "Wished for")
-                                    .font(.caption)
+                                    .font(MarqueeTheme.Fonts.meta)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(decisionColor(wish.acquisitionStatus))
@@ -92,9 +93,11 @@ struct AdminPurchaseWishesView: View {
                             }
                         }
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Purchase Wishes")
         .task { await loadWishes() }
         .refreshable { await loadWishes() }

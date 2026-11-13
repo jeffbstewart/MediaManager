@@ -12,6 +12,7 @@ private let log = MMLogger(category: "BookDetailView")
 struct BookDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(\.marquee) private var layout
     let titleId: TitleID
 
     @State private var detail: ApiTitleDetail?
@@ -32,10 +33,13 @@ struct BookDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 content(detail)
             } else {
                 ContentUnavailableView("Book not found", systemImage: "books.vertical")
+                    .mmPage()
             }
         }
         .navigationTitle(detail?.name ?? "")
@@ -79,39 +83,39 @@ struct BookDetailView: View {
                     editionsBlock(book.editions)
                 }
             }
-            .padding()
+            .padding(.horizontal, layout.pageX)
+            .padding(.vertical, 16)
+            .padding(.bottom, 48)
         }
+        .mmPage()
     }
 
     @ViewBuilder
     private func hero(_ detail: ApiTitleDetail) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            BookCoverView(
-                ref: .posterThumbnail(titleId: detail.id.protoValue),
-                seed: detail.name,
-                cornerRadius: 8)
-                .frame(width: 130, height: 195)
-                .overlay(alignment: .bottomTrailing) {
-                    // Tile-variant badge — any cached edition (EPUB
-                    // or PDF) of this book counts as "available
-                    // offline". Per-edition status lives in
-                    // editionsBlock below for finer-grained control.
-                    if bookCache.offlineTitleIds.contains(detail.id.protoValue) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .padding(4)
-                            .background(.black.opacity(0.55))
-                            .clipShape(Circle())
-                            .padding(6)
-                            .accessibilityLabel("Downloaded")
-                    }
+            MMArtFrame {
+                BookCoverView(
+                    ref: .posterThumbnail(titleId: detail.id.protoValue),
+                    seed: detail.name,
+                    cornerRadius: 0)
+                    .frame(width: 130, height: 195)
+            }
+            .frame(width: 130, height: 195)
+            .overlay(alignment: .bottomTrailing) {
+                // Tile-variant badge — any cached edition (EPUB
+                // or PDF) of this book counts as "available
+                // offline". Per-edition status lives in
+                // editionsBlock below for finer-grained control.
+                if bookCache.offlineTitleIds.contains(detail.id.protoValue) {
+                    MMArtBadge(systemImage: "arrow.down", label: "Downloaded")
                 }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(detail.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(layout.hero)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .minimumScaleFactor(0.7)
 
                 if let series = detail.book?.bookSeries {
                     NavigationLink(value: BookSeriesRoute(id: series.id, name: series.name)) {
@@ -121,16 +125,16 @@ struct BookDetailView: View {
                             }
                             Text(series.name)
                         }
-                        .font(.subheadline)
-                        .foregroundStyle(.tint)
+                        .font(MarqueeTheme.Fonts.control)
+                        .foregroundStyle(MarqueeTheme.Colors.accent)
                     }
                     .buttonStyle(.plain)
                 }
 
                 if let author = detail.authorName {
                     Text(author)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.control)
+                        .foregroundStyle(MarqueeTheme.Colors.text2)
                 }
 
                 HStack(spacing: 8) {
@@ -142,8 +146,8 @@ struct BookDetailView: View {
                         Text("\(pages) pages")
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
 
                 Spacer(minLength: 0)
             }
@@ -158,10 +162,10 @@ struct BookDetailView: View {
             // reader lands.
             HStack(spacing: 6) {
                 Image(systemName: "bookmark.fill")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
                 Text("\(Int(progress.fraction * 100))% read")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
             }
         }
     }
@@ -195,8 +199,7 @@ struct BookDetailView: View {
                 Label("Read", systemImage: "book")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.mmPrimary)
         } else {
             Button {
                 // No-op: no readable edition (physical only, or only
@@ -205,10 +208,8 @@ struct BookDetailView: View {
                 Label("Read", systemImage: "book")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.mmPrimary)
             .disabled(true)
-            .opacity(0.4)
         }
     }
 
@@ -243,8 +244,7 @@ struct BookDetailView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.mmGhost)
         } else if let failure {
             // Failure state: red Retry button stacked over the actual
             // error text, so the user knows the click had an effect
@@ -269,14 +269,13 @@ struct BookDetailView: View {
                     }
                 } label: {
                     Label("Retry Download", systemImage: "arrow.clockwise")
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .tint(.red)
+                .buttonStyle(.mmGhost)
                 Text(failure)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.pink)
                     .lineLimit(3)
             }
         } else if isDownloaded {
@@ -284,10 +283,10 @@ struct BookDetailView: View {
                 pendingRemoval = mediaItemId
             } label: {
                 Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(MarqueeTheme.Colors.green)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.mmGhost)
             .confirmationDialog(
                 "Remove this download?",
                 isPresented: Binding(
@@ -332,8 +331,7 @@ struct BookDetailView: View {
                 Label("Download", systemImage: "arrow.down.circle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.mmGhost)
         }
     }
 
@@ -358,47 +356,54 @@ struct BookDetailView: View {
     private func descriptionBlock(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Description")
-                .font(.headline)
+                .mmSectionTitle()
             Text(text)
-                .font(.body)
+                .font(MarqueeTheme.Fonts.body)
+                .foregroundStyle(MarqueeTheme.Colors.text2)
         }
     }
 
     @ViewBuilder
     private func editionsBlock(_ editions: [ApiBookEdition]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Editions")
-                .font(.headline)
-            ForEach(editions) { edition in
-                HStack(spacing: 8) {
-                    Image(systemName: edition.downloadable ? "square.and.arrow.down" : "books.vertical")
-                        .foregroundStyle(.secondary)
-                    Text(format(edition.format))
-                    if let location = edition.storageLocation {
-                        Text("•")
-                            .foregroundStyle(.secondary)
-                        Text(location)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if edition.downloadable {
-                        Text("digital")
-                            .font(.caption)
-                            .foregroundStyle(.tint)
-                    }
-                    if isAdmin {
-                        Button {
-                            editingEdition = edition
-                        } label: {
-                            Image(systemName: "pencil.circle")
-                                .foregroundStyle(.tint)
+                .mmSectionTitle()
+            VStack(spacing: 1) {
+                ForEach(editions) { edition in
+                    HStack(spacing: 8) {
+                        Image(systemName: edition.downloadable ? "square.and.arrow.down" : "books.vertical")
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
+                        Text(format(edition.format))
+                            .foregroundStyle(MarqueeTheme.Colors.text)
+                        if let location = edition.storageLocation {
+                            Text("•")
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
+                            Text(location)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         }
-                        .buttonStyle(.plain)
+                        Spacer()
+                        if edition.downloadable {
+                            Text("digital")
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.accent)
+                        }
+                        if isAdmin {
+                            Button {
+                                editingEdition = edition
+                            } label: {
+                                Image(systemName: "pencil.circle")
+                                    .foregroundStyle(MarqueeTheme.Colors.accent)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .font(MarqueeTheme.Fonts.cardTitle)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(MarqueeTheme.Colors.surface)
                 }
-                .font(.subheadline)
-                Divider()
             }
+            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
         }
         .sheet(item: $editingEdition) { edition in
             EditEditionSheet(edition: edition) {
@@ -442,7 +447,7 @@ private struct EditEditionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Storage location") {
+                Section(header: MMSectionHeader("Storage location")) {
                     TextField("e.g. Living room, shelf 3", text: $storageLocation)
                         .textInputAutocapitalization(.sentences)
                         .autocorrectionDisabled(false)
@@ -452,10 +457,11 @@ private struct EditEditionSheet: View {
                     Section {
                         Text(error)
                             .font(.callout)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
                 }
             }
+            .mmListChrome()
             .navigationTitle("Edit Edition")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -23,13 +23,15 @@ struct InventoryReportView: View {
                 }
                 .disabled(loading)
             }
+            .mmRow()
 
             if let report {
-                Section("Summary") {
+                Section(header: MMSectionHeader("Summary")) {
                     LabeledContent("Total Items", value: "\(report.totalItems)")
                     LabeledContent("Purchase Value", value: String(format: "$%.2f", report.totalPurchaseValue))
                     LabeledContent("Replacement Value", value: String(format: "$%.2f", report.totalReplacementValue))
                 }
+                .mmRow()
 
                 Section {
                     Button {
@@ -38,39 +40,42 @@ struct InventoryReportView: View {
                         Label("Export CSV", systemImage: "square.and.arrow.up")
                     }
                 }
+                .mmRow()
 
                 Section("Items (\(report.rows.count))") {
                     ForEach(Array(report.rows.enumerated()), id: \.offset) { _, row in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(row.titleNames)
-                                .font(.subheadline)
+                                .font(MarqueeTheme.Fonts.cardTitle)
                                 .lineLimit(2)
                             HStack(spacing: 8) {
                                 Text(row.mediaFormat)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                 if row.hasPurchasePrice {
                                     Text(String(format: "$%.2f", row.purchasePrice))
-                                        .font(.caption)
-                                        .foregroundStyle(.green)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.green)
                                 }
                                 if row.hasReplacementValue {
                                     Text(String(format: "Repl: $%.2f", row.replacementValue))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 if row.photoCount > 0 {
                                     Label("\(row.photoCount)", systemImage: "camera")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                             }
                         }
                         .padding(.vertical, 1)
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Inventory Report")
         .sheet(isPresented: $showShare) {
             if let csvURL {

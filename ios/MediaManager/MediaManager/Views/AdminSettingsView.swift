@@ -15,28 +15,32 @@ struct AdminSettingsView: View {
                 ProgressView("Loading...")
             } else {
                 List {
-                    Section("Paths") {
+                    Section(header: MMSectionHeader("Paths")) {
                         settingField("nas_root_path", label: "NAS Root Path")
                         settingField("ffmpeg_path", label: "FFmpeg Path")
                         settingField("public_base_url", label: "Public Server URL")
                     }
+                    .mmRow()
 
-                    Section("Personal Videos") {
+                    Section(header: MMSectionHeader("Personal Videos")) {
                         settingToggle("personal_video_enabled", label: "Enable Personal Videos")
                         settingField("personal_video_nas_dir", label: "Personal Video Directory")
                     }
+                    .mmRow()
 
-                    Section("Transcode Buddy") {
+                    Section(header: MMSectionHeader("Transcode Buddy")) {
                         settingField("buddy_lease_duration_minutes", label: "Lease Duration (min)")
                     }
+                    .mmRow()
 
-                    Section("Keepa Price Lookup") {
+                    Section(header: MMSectionHeader("Keepa Price Lookup")) {
                         settingToggle("keepa_enabled", label: "Enable Keepa")
                         settingField("keepa_api_key", label: "Keepa API Key", secure: true)
                         settingField("keepa_tokens_per_minute", label: "Tokens/Minute")
                     }
+                    .mmRow()
 
-                    Section("Legal Documents") {
+                    Section(header: MMSectionHeader("Legal Documents")) {
                         settingField("privacy_policy_url", label: "Privacy Policy URL")
                         settingField("privacy_policy_version", label: "Privacy Policy Version")
                         settingField("ios_terms_of_use_url", label: "iOS Terms of Use URL")
@@ -44,33 +48,37 @@ struct AdminSettingsView: View {
                         settingField("web_terms_of_use_url", label: "Web Terms of Use URL")
                         settingField("web_terms_of_use_version", label: "Web Terms Version")
                     }
+                    .mmRow()
 
                     if !buddyKeys.isEmpty {
-                        Section("Buddy Keys") {
+                        Section(header: MMSectionHeader("Buddy Keys")) {
                             ForEach(buddyKeys) { key in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(key.name)
                                         .fontWeight(.medium)
                                     if let created = key.createdAt {
                                         Text(created)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
                     if let statusMessage {
                         Section {
                             Text(statusMessage)
-                                .font(.callout)
-                                .foregroundStyle(.green)
+                                .font(MarqueeTheme.Fonts.cardTitle)
+                                .foregroundStyle(MarqueeTheme.Colors.green)
                         }
+                        .mmRow()
                     }
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Settings")
         .task { await loadSettings() }
         .refreshable { await loadSettings() }

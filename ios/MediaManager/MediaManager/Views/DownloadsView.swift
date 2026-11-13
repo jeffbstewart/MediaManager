@@ -18,7 +18,7 @@ struct DownloadsView: View {
             let completed = items.filter { $0.state == .completed }
 
             if !active.isEmpty && !isOffline {
-                Section("Active") {
+                Section(header: MMSectionHeader("Active")) {
                     ForEach(active) { item in
                         activeRow(item)
                             .swipeActions(edge: .trailing) {
@@ -30,6 +30,7 @@ struct DownloadsView: View {
                             }
                     }
                 }
+                .mmRow()
             }
 
             if !queued.isEmpty && !isOffline {
@@ -45,6 +46,7 @@ struct DownloadsView: View {
                             }
                     }
                 }
+                .mmRow()
             }
 
             // ---- Active sections for non-video downloads ----
@@ -52,31 +54,34 @@ struct DownloadsView: View {
             let activeBooks = Array(bookCache.activeDownloads.values)
                 .sorted { $0.mediaItemId < $1.mediaItemId }
             if !activeBooks.isEmpty && !isOffline {
-                Section("Active Books") {
+                Section(header: MMSectionHeader("Active Books")) {
                     ForEach(activeBooks, id: \.mediaItemId) { progress in
                         activeBookRow(progress)
                     }
                 }
+                .mmRow()
             }
 
             let activeAlbums = Array(audioCache.activeDownloads.values)
                 .sorted { $0.albumName < $1.albumName }
             if !activeAlbums.isEmpty && !isOffline {
-                Section("Active Albums") {
+                Section(header: MMSectionHeader("Active Albums")) {
                     ForEach(activeAlbums, id: \.titleId) { progress in
                         activeAlbumRow(progress)
                     }
                 }
+                .mmRow()
             }
 
             let activePlaylists = Array(audioCache.activePlaylistDownloads.values)
                 .sorted { $0.playlistName < $1.playlistName }
             if !activePlaylists.isEmpty && !isOffline {
-                Section("Active Playlists") {
+                Section(header: MMSectionHeader("Active Playlists")) {
                     ForEach(activePlaylists, id: \.playlistId) { progress in
                         activePlaylistRow(progress)
                     }
                 }
+                .mmRow()
             }
 
             // ---- Completed: navigate to per-category sub-pages ----
@@ -93,7 +98,7 @@ struct DownloadsView: View {
             let anyCompleted = movieCount + tvShowCount + bookCount + musicCount > 0
 
             if anyCompleted {
-                Section("Downloaded") {
+                Section(header: MMSectionHeader("Downloaded")) {
                     if movieCount > 0 {
                         NavigationLink {
                             DownloadedMoviesView()
@@ -131,11 +136,13 @@ struct DownloadsView: View {
                         }
                     }
                 }
+                .mmRow()
             }
 
-            Section("Storage") {
+            Section(header: MMSectionHeader("Storage")) {
                 storageRow(items: items)
             }
+            .mmRow()
 
             if active.isEmpty && !anyCompleted && activeBooks.isEmpty && activeAlbums.isEmpty && activePlaylists.isEmpty {
                 ContentUnavailableView(
@@ -145,6 +152,7 @@ struct DownloadsView: View {
                 )
             }
         }
+        .mmListChrome()
         .navigationTitle("Downloads")
     }
 
@@ -157,16 +165,16 @@ struct DownloadsView: View {
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
             Spacer()
             Text("\(count)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
         }
     }
 
@@ -184,16 +192,16 @@ struct DownloadsView: View {
     @ViewBuilder
     private func activeAlbumRow(_ progress: AlbumDownloadProgress) -> some View {
         HStack(spacing: 12) {
-            ProgressView(value: progress.fraction)
+            ProgressView(value: progress.fraction).tint(MarqueeTheme.Colors.accent)
                 .progressViewStyle(.circular)
                 .controlSize(.small)
             VStack(alignment: .leading, spacing: 2) {
                 Text(progress.albumName)
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
                 Text("\(progress.tracksCompleted) / \(progress.tracksTotal) tracks")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
             Spacer()
             Button {
@@ -201,7 +209,7 @@ struct DownloadsView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red.opacity(0.7))
+                    .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -212,16 +220,16 @@ struct DownloadsView: View {
     @ViewBuilder
     private func activePlaylistRow(_ progress: PlaylistDownloadProgress) -> some View {
         HStack(spacing: 12) {
-            ProgressView(value: progress.fraction)
+            ProgressView(value: progress.fraction).tint(MarqueeTheme.Colors.accent)
                 .progressViewStyle(.circular)
                 .controlSize(.small)
             VStack(alignment: .leading, spacing: 2) {
                 Text(progress.playlistName)
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
                 Text("\(progress.tracksCompleted) / \(progress.tracksTotal) tracks")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
             Spacer()
             Button {
@@ -229,7 +237,7 @@ struct DownloadsView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red.opacity(0.7))
+                    .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -244,17 +252,17 @@ struct DownloadsView: View {
                 .controlSize(.small)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Book \(progress.mediaItemId)")
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
                 if let total = progress.totalBytes, total > 0 {
                     let pct = Int((Double(progress.bytesReceived) / Double(total)) * 100)
                     Text("\(pct)% (\(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 } else {
                     Text(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
             Spacer()
@@ -263,7 +271,7 @@ struct DownloadsView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red.opacity(0.7))
+                    .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -278,7 +286,7 @@ struct DownloadsView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.titleName)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                         .lineLimit(1)
 
                     if let s = item.seasonNumber, let e = item.episodeNumber {
@@ -289,16 +297,16 @@ struct DownloadsView: View {
                                 Text(title)
                             }
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(1)
                     }
 
                     switch item.state {
                     case .fetchingMetadata:
                         Text("Preparing...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     case .downloading:
                         // Auto-retry in progress writes a "Retrying
                         // in Ns — <last error>" message into
@@ -309,22 +317,22 @@ struct DownloadsView: View {
                         // of staring at a frozen progress bar.
                         if let msg = item.errorMessage, !msg.isEmpty {
                             Text(msg)
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.orange)
                                 .lineLimit(2)
                         } else {
                             Text(downloadProgressText(item))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         }
                     case .paused:
                         Text("Paused")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.orange)
                     case .failed:
                         Text(item.errorMessage ?? "Failed")
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                             .lineLimit(3)
                     case .completed, .queued, .unknown, .UNRECOGNIZED:
                         EmptyView()
@@ -353,15 +361,15 @@ struct DownloadsView: View {
                 Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId.protoValue) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.red.opacity(0.7))
+                        .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
             }
 
             if item.state == .downloading {
-                ProgressView(value: item.progress)
-                    .tint(.blue)
+                ProgressView(value: item.progress).tint(MarqueeTheme.Colors.accent)
+                    .tint(MarqueeTheme.Colors.blue)
             }
         }
         .padding(.vertical, 4)
@@ -394,7 +402,7 @@ struct DownloadsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.titleName)
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
 
                 if let s = item.seasonNumber, let e = item.episodeNumber {
@@ -405,14 +413,14 @@ struct DownloadsView: View {
                             Text(title)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .lineLimit(1)
                 }
 
                 Text("Queued")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
 
             Spacer()
@@ -420,7 +428,7 @@ struct DownloadsView: View {
             Button { dataModel.downloads.deleteDownload(transcodeId: item.transcodeId.protoValue) } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red.opacity(0.7))
+                    .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -430,7 +438,7 @@ struct DownloadsView: View {
 
     @ViewBuilder
     private func posterImage(_ item: DownloadItem) -> some View {
-        CachedImage(ref: .posterThumbnail(titleId: item.titleId.protoValue), cornerRadius: 4, contentMode: .fill)
+        MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: item.titleId.protoValue), cornerRadius: 0, contentMode: .fill) }
             .frame(width: 44, height: 64)
             .clipped()
     }
@@ -456,7 +464,7 @@ struct DownloadsView: View {
                     Text("Movies & TV")
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: videoUsed, countStyle: .file))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
 
@@ -465,7 +473,7 @@ struct DownloadsView: View {
                     Text("Music")
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: musicUsed, countStyle: .file))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
 
@@ -474,7 +482,7 @@ struct DownloadsView: View {
                     Text("Books")
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: bookUsed, countStyle: .file))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
 
@@ -483,7 +491,7 @@ struct DownloadsView: View {
                     Text("Pending")
                     Spacer()
                     Text("+ \(ByteCountFormatter.string(fromByteCount: remaining, countStyle: .file))")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(MarqueeTheme.Colors.orange)
                 }
             }
 
@@ -491,7 +499,7 @@ struct DownloadsView: View {
                 Text("Free Space")
                 Spacer()
                 Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
         }
     }
@@ -503,7 +511,7 @@ struct DownloadsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.titleName)
-                    .font(.headline)
+                    .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
 
                 if let s = item.seasonNumber, let e = item.episodeNumber {
@@ -514,8 +522,8 @@ struct DownloadsView: View {
                             Text(title)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .lineLimit(1)
                 }
 
@@ -532,14 +540,14 @@ struct DownloadsView: View {
                         Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
             }
 
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(MarqueeTheme.Colors.green)
 
             Button {
                 let titleId = item.titleId
@@ -552,7 +560,7 @@ struct DownloadsView: View {
             } label: {
                 Image(systemName: "trash.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.red.opacity(0.7))
+                    .foregroundStyle(MarqueeTheme.Colors.pink.opacity(0.7))
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
