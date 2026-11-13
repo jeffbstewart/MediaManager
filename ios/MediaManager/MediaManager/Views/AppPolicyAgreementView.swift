@@ -16,19 +16,17 @@ struct AppPolicyAgreementView: View {
             VStack(spacing: 24) {
                 Spacer(minLength: 40)
 
-                Image(systemName: "hand.raised.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.tint)
+                MMBrandWordmark(size: 34)
                     .padding(.top)
 
                 Text("Before You Continue")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
                     .multilineTextAlignment(.center)
 
                 Text("Household Disc Keeper is an app that connects you to a server you (or someone you trust) operates. Your data lives on that server, not in the cloud.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.body)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
@@ -48,15 +46,18 @@ struct AppPolicyAgreementView: View {
                     }
                 }
                 .padding(16)
-                .background(.fill.quaternary)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .background(MarqueeTheme.Colors.scrim)
+                .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.hero, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MarqueeTheme.Radius.hero, style: .continuous)
+                        .strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
                 .padding(.horizontal, 16)
 
                 VStack(alignment: .leading, spacing: 8) {
                     sectionHeader("A note about server terms")
                     Text("On the next page, you'll pick the server to connect to. That server may have its own privacy policy and terms and conditions you will have to agree to in order to use the server. Those are different, and we'll show them to you on a later page.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 .padding(.horizontal, 24)
 
@@ -68,16 +69,14 @@ struct AppPolicyAgreementView: View {
                     } label: {
                         Text("I Agree")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
                     .padding(.horizontal, 24)
                     .accessibilityIdentifier("app-policy-agree")
 
                     Text("By tapping I Agree, you acknowledge that you've reviewed both documents and accept their terms.")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
 
@@ -99,13 +98,17 @@ struct AppPolicyAgreementView: View {
 
                 Spacer(minLength: 32)
             }
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
         }
+        .mmGlowPage()
     }
 
     @ViewBuilder
     private func sectionHeader(_ text: String) -> some View {
         Text(text)
-            .font(.headline)
+            .font(MarqueeTheme.Fonts.h3)
+            .foregroundStyle(MarqueeTheme.Colors.text)
     }
 
     /// Tappable card for one of the two document URLs. Opens in the
@@ -129,8 +132,8 @@ struct AppPolicyAgreementView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(.background)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(MarqueeTheme.Colors.surface)
+            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
     }

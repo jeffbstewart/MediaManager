@@ -4,32 +4,38 @@ import MediaManagerProtos
 
 struct TagDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
     let route: TagRoute
     @State private var detail: ApiTagDetail?
     @State private var loading = true
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 110), spacing: 12)
-    ]
+    private var columns: [GridItem] {
+        layout.gridColumns
+    }
 
     var body: some View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: layout.sectionGap) {
                         ForEach(detail.titles) { title in
                             NavigationLink(value: title) {
-                                PosterCard(title: title)
+                                PosterCard(title: title, width: layout.gridCellWidth)
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             } else {
                 ContentUnavailableView("Tag not found", systemImage: "tag")
+                    .mmPage()
             }
         }
         .navigationTitle(route.name)

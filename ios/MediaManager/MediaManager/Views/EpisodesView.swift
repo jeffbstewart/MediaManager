@@ -26,8 +26,11 @@ struct EpisodesView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if episodes.isEmpty {
                 ContentUnavailableView("No episodes", systemImage: "tv")
+                    .mmPage()
             } else {
                 List {
                     // Download Season button
@@ -40,8 +43,11 @@ struct EpisodesView: View {
                                     "Download Season (\(downloadableEpisodes.count) episodes)",
                                     systemImage: "arrow.down.circle"
                                 )
+                                .font(MarqueeTheme.Fonts.control)
+                                .foregroundStyle(MarqueeTheme.Colors.accent)
                             }
                         }
+                        .mmRow()
                     }
 
                     Section {
@@ -78,7 +84,9 @@ struct EpisodesView: View {
                             }
                         }
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
             }
         }
         .navigationTitle(route.season.name ?? "Season \(route.season.seasonNumber)")
@@ -174,36 +182,37 @@ struct EpisodeRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Episode number badge
+            // Episode number badge (display face, like the wide
+            // card's overlay title).
             Text("\(episode.episodeNumber)")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.cardOverlay)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 .frame(width: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(episode.name ?? "Episode \(episode.episodeNumber)")
-                    .fontWeight(.medium)
+                    .font(MarqueeTheme.Fonts.cardTitle)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
 
                 HStack(spacing: 8) {
                     if let quality = episode.quality {
                         Text(quality)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if episode.hasSubtitles {
                         Label("CC", systemImage: "captions.bubble")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if isOfflineUnavailable {
                         Text("Not downloaded")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.orange)
                     } else if !episode.playable {
                         Text("Unavailable")
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
                 }
             }
@@ -215,19 +224,21 @@ struct EpisodeRow: View {
                 episodeDownloadIndicator(transcodeId: tcId)
             }
 
-            // Watch progress indicator
+            // Watch progress indicator (the validated circular
+            // pattern, in the accent).
             if episode.watchedPercent > 0 {
                 ZStack {
                     Circle()
-                        .stroke(.quaternary, lineWidth: 3)
+                        .stroke(MarqueeTheme.Colors.progressTrack, lineWidth: 3)
                     Circle()
                         .trim(from: 0, to: Double(episode.watchedPercent) / 100.0)
-                        .stroke(.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(MarqueeTheme.Colors.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     if episode.watchedPercent >= 90 {
                         Image(systemName: "checkmark")
                             .font(.caption2)
                             .fontWeight(.bold)
+                            .foregroundStyle(MarqueeTheme.Colors.text)
                     }
                 }
                 .frame(width: 24, height: 24)
@@ -242,18 +253,18 @@ struct EpisodeRow: View {
 
         if dlState == .completed {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(MarqueeTheme.Colors.green)
                 .font(.body)
         } else if dlState == .downloading || dlState == .fetchingMetadata {
             ProgressView()
                 .controlSize(.small)
         } else if dlState == .failed {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(MarqueeTheme.Colors.pink)
                 .font(.body)
         } else if dlState == .paused {
             Image(systemName: "pause.circle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(MarqueeTheme.Colors.orange)
                 .font(.body)
         } else if episode.forMobileAvailable == true {
             Button {
@@ -278,13 +289,13 @@ struct EpisodeRow: View {
                 )
             } label: {
                 Image(systemName: "arrow.down.circle")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .font(.body)
             }
             .buttonStyle(.plain)
         } else if mobileRequested {
             Image(systemName: "clock.arrow.circlepath")
-                .foregroundStyle(.orange)
+                .foregroundStyle(MarqueeTheme.Colors.orange)
                 .font(.caption)
         }
     }

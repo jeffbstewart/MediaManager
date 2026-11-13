@@ -63,7 +63,7 @@ struct ScanDetailView: View {
                                 // scale-and-crop minimally) and
                                 // matches Apple Music / iTunes
                                 // Store thumbnail conventions.
-                                CachedImage(ref: .posterFull(titleId: detail.titleID), cornerRadius: 8)
+                                MMArtFrame { CachedImage(ref: .posterFull(titleId: detail.titleID), cornerRadius: 0) }
                                     .frame(width: 80, height: 80)
                                     .clipped()
                                     .id(imageVersion)
@@ -72,26 +72,27 @@ struct ScanDetailView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 if detail.hasTitleName {
                                     Text(detail.titleName)
-                                        .font(.headline)
+                                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                                 }
                                 if detail.hasProductName && detail.productName != detail.titleName {
                                     Text(detail.productName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 Text(detail.upc)
-                                    .font(.caption)
+                                    .font(MarqueeTheme.Fonts.meta)
                                     .monospacedDigit()
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                 if detail.hasReleaseYear {
                                     Text(String(detail.releaseYear))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 StatusBadge(status: detail.status)
                             }
                         }
                     }
+                    .mmRow()
 
                     // No-match section. TMDB and MusicBrainz both
                     // offered when the catalog can't auto-match —
@@ -100,10 +101,10 @@ struct ScanDetailView: View {
                     // music CDs that the TMDB pipeline rightly
                     // skips because they aren't video.
                     if detail.status.needsTmdbAction {
-                        Section("No Match") {
+                        Section(header: MMSectionHeader("No Match")) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(detail.enrichmentStatus == .skipped ? "No TMDB match found" : "Enrichment failed")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(MarqueeTheme.Colors.orange)
 
                                 Button {
                                     activeSearchSheet = .tmdb
@@ -118,10 +119,11 @@ struct ScanDetailView: View {
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
                     // Purchase Info
-                    Section("Purchase Info") {
+                    Section(header: MMSectionHeader("Purchase Info")) {
                         TextField("Where purchased", text: $purchasePlace)
                             .onChange(of: purchasePlace) { debounceSave() }
 
@@ -139,13 +141,14 @@ struct ScanDetailView: View {
 
                         if purchasePlace.isEmpty && purchaseDate == nil && purchasePrice.isEmpty {
                             Text("No purchase info yet")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         }
                     }
+                    .mmRow()
 
                     // Ownership Photos
-                    Section("Photos") {
+                    Section(header: MMSectionHeader("Photos")) {
                         if !detail.photos.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
@@ -165,19 +168,22 @@ struct ScanDetailView: View {
                             Label("Take Photo", systemImage: "camera")
                         }
                     }
+                    .mmRow()
 
                     if let statusMessage {
                         Section {
                             Text(statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(statusIsError ? .red : .green)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(statusIsError ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.green)
                         }
+                        .mmRow()
                     }
                 }
             } else {
                 ContentUnavailableView("Not Found", systemImage: "barcode")
             }
         }
+        .mmListChrome()
         .navigationTitle("Scan Detail")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -342,7 +348,7 @@ struct PhotoThumbnail: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            CachedImage(ref: .ownershipPhoto(uuid: photo.photoID), cornerRadius: 6, contentMode: .fill)
+            MMArtFrame { CachedImage(ref: .ownershipPhoto(uuid: photo.photoID), cornerRadius: 0, contentMode: .fill) }
                 .frame(width: 80, height: 80)
                 .clipped()
 
@@ -350,7 +356,7 @@ struct PhotoThumbnail: View {
                 onDelete()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
+                    .font(MarqueeTheme.Fonts.meta)
                     .foregroundStyle(.white, .red)
             }
             .offset(x: 4, y: -4)

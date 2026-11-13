@@ -7,6 +7,28 @@ struct LiveTvView: View {
     @State private var channels: [ApiTvChannel] = []
     @State private var loading = true
     @State private var selectedChannel: ApiTvChannel?
+    @Environment(\.marquee) private var layout
+
+    private var columns: [GridItem] {
+        layout.wideGridColumns
+    }
+
+    private func channelCaption(_ channel: ApiTvChannel) -> String? {
+        guard let network = channel.networkAffiliation, !network.isEmpty else { return nil }
+        return "\(channel.guideName) • \(network)"
+    }
+
+    /// Reception quality indicator: five bars, lit in green.
+    private func receptionBars(_ quality: Int) -> some View {
+        HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { bar in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(bar <= quality ? MarqueeTheme.Colors.green : MarqueeTheme.Colors.grey3.opacity(0.5))
+                    .frame(width: 3, height: CGFloat(4 + bar * 2))
+            }
+        }
+        .accessibilityHidden(true)
+    }
 
     var body: some View {
         Group {
@@ -16,49 +38,42 @@ struct LiveTvView: View {
                 ContentUnavailableView("No channels", systemImage: "tv.slash",
                     description: Text("No live TV channels are available."))
             } else {
-                List(channels) { channel in
-                    Button {
-                        selectedChannel = channel
-                    } label: {
-                        HStack(spacing: 12) {
-                            Text(channel.guideNumber)
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 45, alignment: .trailing)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(channel.guideName)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.primary)
-
-                                if let network = channel.networkAffiliation, !network.isEmpty {
-                                    Text(network)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                // Channel tiles (spec 3.3): wide cards with the LIVE
+                // badge, the channel name over the art and the
+                // number as the meta line. The grid wraps to the
+                // column width; tapping a tile tunes the channel.
+                ScrollView {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: layout.sectionGap) {
+                        ForEach(channels) { channel in
+                            Button {
+                                selectedChannel = channel
+                            } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    MMWideCard(
+                                        name: channel.guideName,
+                                        ref: nil,
+                                        caption: channelCaption(channel),
+                                        meta: "Channel \(channel.guideNumber)",
+                                        badge: "Live",
+                                        badgeTone: .live,
+                                        showPlay: true,
+                                        width: layout.wideGridCellWidth)
+                                    if channel.receptionQuality > 0 {
+                                        receptionBars(channel.receptionQuality)
+                                            .padding(.top, 6)
+                                    }
                                 }
                             }
-
-                            Spacer()
-
-                            // Reception quality indicator
-                            HStack(spacing: 2) {
-                                ForEach(1...5, id: \.self) { bar in
-                                    RoundedRectangle(cornerRadius: 1)
-                                        .fill(bar <= channel.receptionQuality ? Color.green : Color.gray.opacity(0.3))
-                                        .frame(width: 3, height: CGFloat(4 + bar * 2))
-                                }
-                            }
-
-                            Image(systemName: "play.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.tint)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Channel \(channel.guideNumber), \(channel.guideName)")
                         }
-                        .padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Live TV")
         .task {
             await loadChannels()

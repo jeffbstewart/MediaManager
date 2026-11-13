@@ -21,7 +21,7 @@ struct AdminView: View {
                 List {
                     // Pending work
                     if let pending = pendingWork, pending.total > 0 {
-                        Section("Pending Work") {
+                        Section(header: MMSectionHeader("Pending Work")) {
                             if pending.transcodes > 0 {
                                 Label("\(pending.transcodes) transcodes", systemImage: "film")
                             }
@@ -38,16 +38,18 @@ struct AdminView: View {
                                 Label("\(pending.chapters) chapters", systemImage: "list.bullet")
                             }
                         }
+                        .mmRow()
                     } else {
-                        Section("Pending Work") {
+                        Section(header: MMSectionHeader("Pending Work")) {
                             Label("All caught up", systemImage: "checkmark.circle")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(MarqueeTheme.Colors.green)
                         }
+                        .mmRow()
                     }
 
                     // Active work
                     if !activeLeases.isEmpty {
-                        Section("Active Transcodes") {
+                        Section(header: MMSectionHeader("Active Transcodes")) {
                             ForEach(activeLeases) { lease in
                                 LeaseRow(
                                     path: lease.relativePath,
@@ -58,11 +60,12 @@ struct AdminView: View {
                                 )
                             }
                         }
+                        .mmRow()
                     }
 
                     // Buddies
                     if let buddies = buddyStatus?.buddies, !buddies.isEmpty {
-                        Section("Transcode Buddies") {
+                        Section(header: MMSectionHeader("Transcode Buddies")) {
                             ForEach(buddies) { buddy in
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
@@ -70,8 +73,8 @@ struct AdminView: View {
                                             .fontWeight(.medium)
                                         Spacer()
                                         Text("\(buddy.activeLeases) active")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     ForEach(buddy.currentWork) { work in
                                         LeaseRow(
@@ -86,10 +89,11 @@ struct AdminView: View {
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
                     // Actions
-                    Section("Actions") {
+                    Section(header: MMSectionHeader("Actions")) {
                         Button {
                             Task { await scanNas() }
                         } label: {
@@ -118,53 +122,56 @@ struct AdminView: View {
 
                         if let statusMessage {
                             Text(statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(.green)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.green)
                         }
                     }
+                    .mmRow()
 
                     // Recent activity
                     if let recent = buddyStatus?.recentLeases, !recent.isEmpty {
-                        Section("Recent Activity") {
+                        Section(header: MMSectionHeader("Recent Activity")) {
                             ForEach(recent) { lease in
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(lease.relativePath?.components(separatedBy: "/").last ?? "Unknown")
-                                        .font(.subheadline)
+                                        .font(MarqueeTheme.Fonts.cardTitle)
                                         .lineLimit(1)
 
                                     HStack(spacing: 8) {
                                         if let type = lease.leaseType {
                                             Text(typeLabel(type))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(MarqueeTheme.Fonts.meta)
+                                                .foregroundStyle(MarqueeTheme.Colors.text3)
                                         }
                                         if let status = lease.status {
                                             Text(status)
-                                                .font(.caption)
+                                                .font(MarqueeTheme.Fonts.meta)
                                                 .fontWeight(.medium)
-                                                .foregroundStyle(status == "COMPLETED" ? .green : .red)
+                                                .foregroundStyle(status == "COMPLETED" ? MarqueeTheme.Colors.green : MarqueeTheme.Colors.pink)
                                         }
                                         if let buddy = lease.buddyName {
                                             Text(buddy)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(MarqueeTheme.Fonts.meta)
+                                                .foregroundStyle(MarqueeTheme.Colors.text3)
                                         }
                                     }
 
                                     if let error = lease.errorMessage {
                                         Text(error)
-                                            .font(.caption)
-                                            .foregroundStyle(.red)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.pink)
                                             .lineLimit(2)
                                     }
                                 }
                                 .padding(.vertical, 2)
                             }
                         }
+                        .mmRow()
                     }
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Admin")
         .task {
             // Fetch buddy status (one-shot) while starting the monitor stream
@@ -346,29 +353,29 @@ struct LeaseRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(path?.components(separatedBy: "/").last ?? "Unknown")
-                .font(.subheadline)
+                .font(MarqueeTheme.Fonts.cardTitle)
                 .lineLimit(1)
 
             HStack(spacing: 8) {
                 if let type {
                     Text(typeLabel(type))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if let encoder {
                     Text(encoder)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if let buddy {
                     Text(buddy)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
 
             if let progress {
-                ProgressView(value: Double(progress), total: 100)
+                ProgressView(value: Double(progress), total: 100).tint(MarqueeTheme.Colors.accent)
                     .tint(progress >= 90 ? .green : .blue)
             }
         }

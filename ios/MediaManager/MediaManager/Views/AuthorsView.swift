@@ -10,6 +10,7 @@ private let log = MMLogger(category: "AuthorsView")
 /// pages 60 cards at a time off `ArtistService.ListAuthors`.
 struct AuthorsView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
 
     @State private var authors: [ApiAuthorListItem] = []
     @State private var page = 1
@@ -43,28 +44,33 @@ struct AuthorsView: View {
 
     private var isAdmin: Bool { dataModel.userInfo?.isAdmin == true }
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 130), spacing: 12)
-    ]
+    /// Grid at the spec's poster width and card gap (see CatalogView).
+    private var columns: [GridItem] {
+        layout.gridColumns
+    }
 
     var body: some View {
         Group {
             switch phase {
             case .initial, .loading:
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             case .empty:
                 ContentUnavailableView("No authors yet", systemImage: "books.vertical",
                     description: Text("Scan a book by ISBN or import an ebook to populate your library."))
+                    .mmPage()
             case .failed(let message):
                 ContentUnavailableView("Couldn't load authors",
                     systemImage: "exclamationmark.triangle",
                     description: Text(message))
+                    .mmPage()
             case .loaded:
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: layout.sectionGap) {
                         ForEach(authors) { author in
                             NavigationLink(value: AuthorRoute(id: author.id, name: author.name)) {
-                                AuthorCard(author: author)
+                                AuthorCard(author: author, width: layout.gridCellWidth)
                             }
                             .buttonStyle(.plain)
                         }
@@ -77,8 +83,10 @@ struct AuthorsView: View {
                                 }
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             }
         }
         .navigationTitle(hiddenOnly ? "Hidden Authors" : "Authors")
@@ -201,28 +209,29 @@ struct AuthorsView: View {
 
 /// Author exploration card — headshot when available, falls back to a
 /// representative book cover for authors we have books for but no
-/// Wikipedia thumbnail. Layout mirrors PosterCard's footprint so the
-/// authors / movies / tv grids feel like the same surface.
+/// Wikipedia thumbnail. Layout mirrors PosterCard's footprint (spec
+/// 3.2 art frame + caption) so the authors / movies / tv grids feel
+/// like the same surface.
 private struct AuthorCard: View {
     let author: ApiAuthorListItem
+    let width: CGFloat
+
+    private var height: CGFloat { (width * 3 / 2).rounded() }
 
     var body: some View {
-        VStack(alignment: .center, spacing: 6) {
-            heroImage
-                .frame(width: 120, height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+        VStack(alignment: .leading, spacing: 0) {
+            MMArtFrame {
+                heroImage
+                    .frame(width: width, height: height)
+            }
+            .frame(width: width, height: height)
 
-            Text(author.name)
-                .font(.caption)
-                .fontWeight(.medium)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-
-            Text("\(author.ownedBookCount) book\(author.ownedBookCount == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            MMCaption(
+                title: author.name,
+                meta: "\(author.ownedBookCount) book\(author.ownedBookCount == 1 ? "" : "s")",
+                width: width)
         }
-        .frame(width: 120)
+        .frame(width: width, alignment: .topLeading)
     }
 
     @ViewBuilder
@@ -241,11 +250,11 @@ private struct AuthorCard: View {
                     .posterThumbnail(titleId: $0.protoValue)
                 },
                 seed: author.name,
-                cornerRadius: 8)
+                cornerRadius: 0)
             if author.hasHeadshot {
                 CachedImage(
                     ref: .authorHeadshot(authorId: author.id.protoValue),
-                    cornerRadius: 8,
+                    cornerRadius: 0,
                     transparentPlaceholder: true)
             }
         }

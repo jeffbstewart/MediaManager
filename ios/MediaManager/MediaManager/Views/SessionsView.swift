@@ -24,28 +24,28 @@ struct SessionsView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
                                         Image(systemName: iconFor(session.type))
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                         Text(session.deviceName ?? session.type)
                                             .fontWeight(.medium)
                                         if session.isCurrent {
                                             Text("Current")
-                                                .font(.caption2)
+                                                .font(MarqueeTheme.Fonts.meta)
                                                 .fontWeight(.bold)
                                                 .foregroundStyle(.white)
                                                 .padding(.horizontal, 6)
                                                 .padding(.vertical, 2)
-                                                .background(.green)
+                                                .background(MarqueeTheme.Colors.green)
                                                 .clipShape(Capsule())
                                         }
                                     }
                                     if let lastUsed = session.lastUsedAt {
                                         Text(formatDate(lastUsed))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     Text(session.type)
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
 
                                 Spacer()
@@ -55,22 +55,25 @@ struct SessionsView: View {
                                         Task { await revokeSession(session) }
                                     } label: {
                                         Text("Revoke")
-                                            .font(.caption)
-                                            .foregroundStyle(.red)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.pink)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
                         }
+                        .mmRow()
 
                         Section {
                             Button("Revoke All Other Sessions", role: .destructive) {
                                 Task { await revokeAllOthers() }
                             }
                         }
+                        .mmRow()
                     }
                 }
             }
+            .mmListChrome()
             .navigationTitle("Active Sessions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

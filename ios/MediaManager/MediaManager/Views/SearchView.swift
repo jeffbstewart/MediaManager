@@ -25,14 +25,18 @@ struct SearchView: View {
                     ProgressView()
                     Spacer()
                 }
+                .listRowBackground(Color.clear)
             } else if results.isEmpty && hasSearched {
                 ContentUnavailableView.search(text: query)
+                    .listRowBackground(Color.clear)
             } else {
                 ForEach(results) { result in
                     resultRow(result)
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Search")
         .searchable(text: $query, prompt: "Movies, TV, books, music, actors…")
         .toolbar {
@@ -307,25 +311,25 @@ struct SearchResultRow: View {
 
                 HStack(spacing: 6) {
                     Text(resultTypeLabel)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     if let context = audioContextLabel {
-                        Text("·").foregroundStyle(.secondary)
+                        Text("·").foregroundStyle(MarqueeTheme.Colors.text3)
                         Text(context)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                             .lineLimit(1)
                     }
                     if let year = result.year {
                         Text("(\(String(year)))")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let quality = result.quality {
                         Text(quality)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let count = result.titleCount {
                         Text("\(count) titles")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if isDownloaded {
                         // Inline (list-row) variant of the offline
@@ -334,11 +338,11 @@ struct SearchResultRow: View {
                         // The 40px row thumbnail is too small for the
                         // corner-badge style used on poster tiles.
                         Image(systemName: "arrow.down.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                             .accessibilityLabel("Downloaded")
                     }
                 }
-                .font(.caption)
+                .font(MarqueeTheme.Fonts.meta)
             }
         }
     }
@@ -352,26 +356,28 @@ struct SearchResultRow: View {
         case "actor":
             if let personId = result.tmdbPersonId {
                 CachedImage(ref: .headshot(tmdbPersonId: personId.protoValue), cornerRadius: 20)
+                    .overlay(Circle().strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
                     .frame(width: 40, height: 40)
             }
         case "artist":
             if let artistId = result.artistId {
                 CachedImage(ref: .artistHeadshot(artistId: artistId.protoValue), cornerRadius: 20)
+                    .overlay(Circle().strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
                     .frame(width: 40, height: 40)
             }
         case "album":
             if let titleId = result.titleId {
-                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 4)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 0) }
                     .frame(width: 40, height: 40)  // square
             }
         case "track":
             if let albumTitleId = result.albumTitleId {
-                CachedImage(ref: .posterThumbnail(titleId: albumTitleId.protoValue), cornerRadius: 4)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: albumTitleId.protoValue), cornerRadius: 0) }
                     .frame(width: 40, height: 40)  // square
             }
         default:
             if let titleId = result.titleId {
-                CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue))
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 0) }
                     .frame(width: 40, height: 60)
             }
         }

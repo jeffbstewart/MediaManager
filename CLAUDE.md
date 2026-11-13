@@ -489,6 +489,19 @@ Follow this exact sequence when debugging Roku channel behavior. Do NOT skip ste
 
 **Key names:** `Home`, `Rev`, `Fwd`, `Play`, `Select`, `Left`, `Right`, `Down`, `Up`, `Back`, `InstantReplay`, `Info`, `Backspace`, `Search`, `Enter`, `VolumeDown`, `VolumeUp`, `VolumeMute`
 
+## iOS Simulator Driving
+
+`lifecycle/sim-drive.sh` drives the app in the booted simulator over
+idb (`brew tap facebook/fb && brew install idb-companion && pipx install
+fb-idb`): `tree` dumps the accessibility tree with tap points,
+`tap-label`, `tap`, `swipe-up`/`swipe-down`, `back`, `goto "Music"`
+(back out to the sidebar top, then tap), and `shot NAME` (to
+`data/screenshots/`). Install with `xcrun simctl install`, launch with
+`xcrun simctl launch --terminate-running-process`, then drive. The
+simulator keeps the signed-in session, so **never navigate into the
+server administration screens** (the sidebar's Catalog, Transcodes,
+Purchases and System groups); ask the user for those clicks.
+
 ## Screenshots
 
 Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/navbar-test.png`). The `data/` directory is gitignored so screenshots never enter version control.

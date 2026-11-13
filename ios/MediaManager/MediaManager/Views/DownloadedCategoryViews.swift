@@ -24,24 +24,24 @@ private struct TypeDeleteConfirmationSheet: View {
         VStack(spacing: 20) {
             Image(systemName: "trash.fill")
                 .font(.system(size: 52))
-                .foregroundStyle(.red)
+                .foregroundStyle(MarqueeTheme.Colors.pink)
                 .padding(.top, 24)
 
             Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(MarqueeTheme.Fonts.h2)
+                .foregroundStyle(MarqueeTheme.Colors.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
             Text(message)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 .padding(.horizontal)
 
             VStack(spacing: 6) {
                 Text("Type \(requiredKeyword) to confirm")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 TextField(requiredKeyword, text: $typed)
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.characters)
@@ -64,7 +64,7 @@ private struct TypeDeleteConfirmationSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.mmPrimary)
                 .controlSize(.large)
                 .disabled(typed != requiredKeyword)
 
@@ -134,6 +134,7 @@ struct DownloadedMoviesView: View {
                         Label("Delete All Movies", systemImage: "trash")
                     }
                 }
+                .mmRow()
 
                 Section {
                     ForEach(movies, id: \.transcodeID) { entry in
@@ -147,8 +148,10 @@ struct DownloadedMoviesView: View {
                             }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Downloaded Movies (\(movies.count))")
         .navigationBarTitleDisplayMode(.inline)
         .deleteAllSheet(
@@ -177,23 +180,23 @@ struct DownloadedMoviesView: View {
             hasSubtitles: item.hasSubtitles)
         ) {
             HStack {
-                CachedImage(ref: .posterThumbnail(titleId: entry.titleID), cornerRadius: 4, contentMode: .fill)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: entry.titleID), cornerRadius: 0, contentMode: .fill) }
                     .frame(width: 44, height: 64)
                     .clipped()
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.titleName)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                         .lineLimit(1)
                     HStack(spacing: 8) {
                         if entry.year > 0 { Text(String(entry.year)) }
                         Text(formatBytes(entry.fileSizeBytes))
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 Spacer()
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(MarqueeTheme.Colors.green)
             }
         }
     }
@@ -235,6 +238,7 @@ struct DownloadedTVShowsView: View {
                         Label("Delete All TV Episodes", systemImage: "trash")
                     }
                 }
+                .mmRow()
 
                 ForEach(groups, id: \.titleId) { group in
                     Section {
@@ -251,23 +255,26 @@ struct DownloadedTVShowsView: View {
                             }
                         } label: {
                             HStack {
-                                CachedImage(ref: .posterThumbnail(titleId: group.titleId), cornerRadius: 4, contentMode: .fill)
+                                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: group.titleId), cornerRadius: 0, contentMode: .fill) }
                                     .frame(width: 44, height: 64)
                                     .clipped()
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(group.titleName)
-                                        .font(.headline)
+                                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                                         .lineLimit(1)
                                     Text("\(group.episodes.count) episodes · \(formatBytes(group.episodes.map { $0.fileSizeBytes }.reduce(0, +)))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                             }
                         }
                     }
+                    .mmRow()
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Downloaded TV (\(groups.count))")
         .navigationBarTitleDisplayMode(.inline)
         .deleteAllSheet(
@@ -302,21 +309,21 @@ struct DownloadedTVShowsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("S\(entry.seasonNumber)E\(entry.episodeNumber)")
-                        .font(.subheadline)
+                        .font(MarqueeTheme.Fonts.cardTitle)
                         .fontWeight(.medium)
                     if !entry.episodeTitle.isEmpty {
                         Text(entry.episodeTitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                             .lineLimit(1)
                     }
                 }
                 Spacer()
                 Text(formatBytes(entry.fileSizeBytes))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(MarqueeTheme.Colors.green)
             }
         }
     }
@@ -347,6 +354,7 @@ struct DownloadedBooksView: View {
                         Label("Delete All Books", systemImage: "trash")
                     }
                 }
+                .mmRow()
 
                 Section {
                     ForEach(books) { book in
@@ -375,8 +383,10 @@ struct DownloadedBooksView: View {
                             }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Downloaded Books (\(books.count))")
         .navigationBarTitleDisplayMode(.inline)
         .deleteAllSheet(
@@ -402,15 +412,15 @@ struct DownloadedBooksView: View {
             titleName: book.titleName)
         ) {
             HStack(spacing: 12) {
-                CachedImage(ref: .posterThumbnail(titleId: book.titleId), cornerRadius: 4)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: book.titleId), cornerRadius: 0) }
                     .frame(width: 44, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(book.titleName)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                         .lineLimit(1)
                     Text(book.authorName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(1)
                     HStack(spacing: 8) {
                         Text(formatBytes(book.sizeBytes))
@@ -420,12 +430,12 @@ struct DownloadedBooksView: View {
                                 .foregroundStyle(.tint)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 Spacer()
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(MarqueeTheme.Colors.green)
             }
         }
     }
@@ -473,6 +483,7 @@ struct DownloadedMusicView: View {
                             }
                     }
                 }
+                .mmRow()
             }
 
             if !playlists.isEmpty {
@@ -493,8 +504,10 @@ struct DownloadedMusicView: View {
                             }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Downloaded Music")
         .navigationBarTitleDisplayMode(.inline)
         .deleteAllSheet(
@@ -533,11 +546,11 @@ struct DownloadedMusicView: View {
         // ContentView's isAlbum branch routes correctly.
         NavigationLink(value: albumNavTitle(album)) {
             HStack(spacing: 12) {
-                CachedImage(ref: .posterThumbnail(titleId: album.titleId), cornerRadius: 4)
+                MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: album.titleId), cornerRadius: 0) }
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(album.name)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                         .lineLimit(1)
                     HStack(spacing: 6) {
                         if !album.artistName.isEmpty {
@@ -546,8 +559,8 @@ struct DownloadedMusicView: View {
                         Text("\(album.trackIds.count) tracks")
                         Text(formatBytes(album.sizeBytes))
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
         }
@@ -561,18 +574,18 @@ struct DownloadedMusicView: View {
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .frame(width: 44, height: 44)
-                    .background(.fill.quaternary)
+                    .background(MarqueeTheme.Colors.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(playlist.name)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.body.weight(.semibold))
                         .lineLimit(1)
                     HStack(spacing: 6) {
                         Text("\(playlist.trackIds.count) tracks")
                         Text(formatBytes(playlist.sizeBytes))
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
         }

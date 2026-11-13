@@ -18,34 +18,38 @@ struct ExpandView: View {
                     systemImage: "tray",
                     description: Text("All multi-pack items have been expanded."))
             } else {
-                List(items, id: \.mediaItemID) { item in
-                    Button {
-                        selectedItem = item
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.productName)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-                            HStack(spacing: 8) {
-                                if item.hasUpc {
-                                    Text(item.upc)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                List {
+                    ForEach(items, id: \.mediaItemID) { item in
+                        Button {
+                            selectedItem = item
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.productName)
+                                    .font(MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(MarqueeTheme.Colors.text)
+                                    .lineLimit(2)
+                                HStack(spacing: 8) {
+                                    if item.hasUpc {
+                                        Text(item.upc)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
+                                    }
+                                    Text(formatName(item.mediaFormat))
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
+                                    Text("~\(item.estimatedTitleCount) titles")
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.orange)
                                 }
-                                Text(formatName(item.mediaFormat))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("~\(item.estimatedTitleCount) titles")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
                             }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Expand Multi-Packs")
         .task { await load() }
         .sheet(item: $selectedItem) { item in
@@ -102,29 +106,30 @@ struct ExpandDetailSheet: View {
                                 HStack {
                                     VStack(alignment: .leading) {
                                         Text(linked.name)
-                                            .font(.subheadline)
+                                            .font(MarqueeTheme.Fonts.cardTitle)
                                         if linked.hasReleaseYear {
                                             Text(String(linked.releaseYear))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(MarqueeTheme.Fonts.meta)
+                                                .foregroundStyle(MarqueeTheme.Colors.text3)
                                         }
                                     }
                                     Spacer()
                                     Text("Disc \(linked.discNumber)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                     Button(role: .destructive) {
                                         Task { await removeTitle(linked.titleID) }
                                     } label: {
                                         Image(systemName: "trash")
-                                            .font(.caption)
+                                            .font(MarqueeTheme.Fonts.meta)
                                     }
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
-                    Section("Add Title") {
+                    Section(header: MMSectionHeader("Add Title")) {
                         TextField("Search TMDB", text: $searchQuery)
                             .autocorrectionDisabled()
                             .onSubmit { search() }
@@ -146,9 +151,10 @@ struct ExpandDetailSheet: View {
                         }
                         .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || searching)
                     }
+                    .mmRow()
 
                     if !searchResults.isEmpty {
-                        Section("Results") {
+                        Section(header: MMSectionHeader("Results")) {
                             ForEach(searchResults, id: \.tmdbID) { result in
                                 Button {
                                     Task { await addTitle(result) }
@@ -157,6 +163,7 @@ struct ExpandDetailSheet: View {
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
                     Section {
@@ -169,16 +176,19 @@ struct ExpandDetailSheet: View {
                             Task { await markNotMultiPack() }
                         }
                     }
+                    .mmRow()
                 }
 
                 if let statusMessage {
                     Section {
                         Text(statusMessage)
-                            .font(.callout)
-                            .foregroundStyle(statusIsError ? .red : .green)
+                            .font(MarqueeTheme.Fonts.cardTitle)
+                            .foregroundStyle(statusIsError ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.green)
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle(productName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

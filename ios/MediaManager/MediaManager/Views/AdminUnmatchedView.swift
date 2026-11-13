@@ -24,26 +24,26 @@ struct AdminUnmatchedView: View {
 
                             if let dir = file.directory {
                                 Text(dir)
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                     .lineLimit(1)
                             }
 
                             HStack(spacing: 8) {
                                 if let parsed = file.parsedTitle {
                                     Text("Parsed: \(parsed)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 if let year = file.parsedYear {
                                     Text("(\(year))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 if let s = file.parsedSeason, let e = file.parsedEpisode {
                                     Text("S\(s)E\(e)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                             }
 
@@ -55,13 +55,13 @@ struct AdminUnmatchedView: View {
                                         } label: {
                                             HStack {
                                                 Image(systemName: "arrow.right.circle")
-                                                    .font(.caption)
+                                                    .font(MarqueeTheme.Fonts.meta)
                                                 Text(suggestion.titleName)
-                                                    .font(.caption)
+                                                    .font(MarqueeTheme.Fonts.meta)
                                                 Spacer()
                                                 Text("\(Int(suggestion.score * 100))%")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
+                                                    .font(MarqueeTheme.Fonts.meta)
+                                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                             }
                                         }
                                         .buttonStyle(.plain)
@@ -74,14 +74,14 @@ struct AdminUnmatchedView: View {
                             Button("Ignore") {
                                 Task { await ignoreFile(file) }
                             }
-                            .tint(.gray)
+                            .tint(MarqueeTheme.Colors.grey3)
                         }
                         .swipeActions(edge: .leading) {
                             if !file.suggestions.isEmpty {
                                 Button("Accept") {
                                     Task { await acceptSuggestion(file) }
                                 }
-                                .tint(.green)
+                                .tint(MarqueeTheme.Colors.green)
                             }
                         }
                         .contextMenu {
@@ -95,9 +95,11 @@ struct AdminUnmatchedView: View {
                             }
                         }
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Unmatched Files")
         .task { await loadFiles() }
         .refreshable { await loadFiles() }

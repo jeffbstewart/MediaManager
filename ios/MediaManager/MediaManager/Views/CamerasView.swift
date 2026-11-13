@@ -8,6 +8,11 @@ struct CamerasView: View {
     @State private var cameras: [ApiCamera] = []
     @State private var loading = true
     @State private var selectedCamera: ApiCamera?
+    @Environment(\.marquee) private var layout
+
+    private var columns: [GridItem] {
+        layout.wideGridColumns
+    }
 
     var body: some View {
         Group {
@@ -17,39 +22,33 @@ struct CamerasView: View {
                 ContentUnavailableView("No cameras", systemImage: "video.slash",
                     description: Text("No cameras are configured on the server."))
             } else {
-                List(cameras) { camera in
-                    Button {
-                        selectedCamera = camera
-                    } label: {
-                        HStack(spacing: 12) {
-                            // Snapshot preview
-                            CachedImage(
-                                ref: .cameraSnapshot(cameraId: camera.id.protoValue),
-                                cornerRadius: 6
-                            )
-                            .frame(width: 80, height: 45)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(camera.name)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.primary)
-                                Text("Live")
-                                    .font(.caption)
-                                    .foregroundStyle(.green)
+                // Camera tiles (spec 3.3): the latest snapshot as a
+                // wide card with the LIVE badge; tapping opens the
+                // stream.
+                ScrollView {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: layout.sectionGap) {
+                        ForEach(cameras) { camera in
+                            Button {
+                                selectedCamera = camera
+                            } label: {
+                                MMWideCard(
+                                    name: camera.name,
+                                    ref: .cameraSnapshot(cameraId: camera.id.protoValue),
+                                    badge: "Live",
+                                    badgeTone: .live,
+                                    showPlay: true,
+                                    width: layout.wideGridCellWidth)
                             }
-
-                            Spacer()
-
-                            Image(systemName: "play.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.tint)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Camera \(camera.name)")
                         }
-                        .padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Cameras")
         .task {
             await loadCameras()

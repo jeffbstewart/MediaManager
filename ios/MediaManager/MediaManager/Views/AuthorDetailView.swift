@@ -13,6 +13,7 @@ private let log = MMLogger(category: "AuthorDetailView")
 struct AuthorDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
+    @Environment(\.marquee) private var layout
     let route: AuthorRoute
 
     @State private var detail: ApiAuthorDetail?
@@ -36,9 +37,11 @@ struct AuthorDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: layout.sectionGap) {
                         header(detail)
                         if let bio = detail.author.biography, !bio.isEmpty {
                             biography(bio)
@@ -51,10 +54,14 @@ struct AuthorDetailView: View {
                             hideButton(detail.author)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 48)
                 }
+                .mmPage()
             } else {
                 ContentUnavailableView("Author not found", systemImage: "person.fill")
+                    .mmPage()
             }
         }
         .navigationTitle(route.name)
@@ -78,7 +85,7 @@ struct AuthorDetailView: View {
             )
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.mmGhost)
         .disabled(togglingHidden)
     }
 
@@ -113,34 +120,38 @@ struct AuthorDetailView: View {
             // on the headshot fetch should let the first owned book's
             // cover show through; a missing book cover falls through to
             // a synthesised swatch keyed off the author's name.
-            ZStack {
-                BookCoverView(
-                    ref: detail.ownedBooks.first.map {
-                        .posterThumbnail(titleId: $0.id.protoValue)
-                    },
-                    seed: detail.author.name,
-                    cornerRadius: 8)
-                if detail.author.hasHeadshot {
-                    CachedImage(
-                        ref: .authorHeadshot(authorId: detail.author.id.protoValue),
-                        cornerRadius: 8,
-                        transparentPlaceholder: true)
+            MMArtFrame {
+                ZStack {
+                    BookCoverView(
+                        ref: detail.ownedBooks.first.map {
+                            .posterThumbnail(titleId: $0.id.protoValue)
+                        },
+                        seed: detail.author.name,
+                        cornerRadius: 0)
+                    if detail.author.hasHeadshot {
+                        CachedImage(
+                            ref: .authorHeadshot(authorId: detail.author.id.protoValue),
+                            cornerRadius: 0,
+                            transparentPlaceholder: true)
+                    }
                 }
+                .frame(width: 120, height: 160)
             }
             .frame(width: 120, height: 160)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(detail.author.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(layout.hero)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .minimumScaleFactor(0.7)
                 if let lifespan = lifespanText(detail.author) {
                     Text(lifespan)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text2)
                 }
                 Text("\(detail.ownedBooks.count) owned book\(detail.ownedBooks.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                 Spacer(minLength: 0)
             }
         }
@@ -150,10 +161,10 @@ struct AuthorDetailView: View {
     private func biography(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("About")
-                .font(.headline)
+                .mmSectionTitle()
             Text(text)
-                .font(.body)
-                .foregroundStyle(.primary)
+                .font(MarqueeTheme.Fonts.body)
+                .foregroundStyle(MarqueeTheme.Colors.text2)
         }
     }
 
@@ -168,9 +179,9 @@ struct AuthorDetailView: View {
         if books.isEmpty {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
                 Text("Books on your shelf")
-                    .font(.headline)
+                    .mmSectionTitle()
 
                 let status = bookBulkStatus(books)
                 if status.completed < status.total {
@@ -180,32 +191,26 @@ struct AuthorDetailView: View {
                         action: { Task { await startBulkBookDownload(books) } })
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 16) {
+                LazyVGrid(columns: gridColumns, spacing: layout.sectionGap) {
                     ForEach(books) { book in
                         NavigationLink(value: book) {
-                            VStack(spacing: 4) {
-                                BookCoverView(
-                                    ref: .posterThumbnail(titleId: book.id.protoValue),
-                                    seed: book.name)
-                                    .frame(width: 110, height: 165)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        if bookCache.offlineTitleIds.contains(book.id.protoValue) {
-                                            Image(systemName: "arrow.down.circle.fill")
-                                                .font(.caption)
-                                                .foregroundStyle(.white)
-                                                .padding(4)
-                                                .background(.black.opacity(0.55))
-                                                .clipShape(Circle())
-                                                .padding(6)
-                                                .accessibilityLabel("Downloaded")
-                                        }
+                            VStack(alignment: .leading, spacing: 0) {
+                                MMArtFrame {
+                                    BookCoverView(
+                                        ref: .posterThumbnail(titleId: book.id.protoValue),
+                                        seed: book.name,
+                                        cornerRadius: 0)
+                                        .frame(width: layout.gridCellWidth, height: (layout.gridCellWidth * 3 / 2).rounded())
+                                }
+                                .frame(width: layout.gridCellWidth, height: (layout.gridCellWidth * 3 / 2).rounded())
+                                .overlay(alignment: .bottomTrailing) {
+                                    if bookCache.offlineTitleIds.contains(book.id.protoValue) {
+                                        MMArtBadge(systemImage: "arrow.down", label: "Downloaded")
                                     }
-                                Text(book.name)
-                                    .font(.caption)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                                    .frame(width: 110)
+                                }
+                                MMCaption(title: book.name, meta: book.year.map(String.init), width: layout.gridCellWidth)
                             }
+                            .frame(width: layout.gridCellWidth, alignment: .topLeading)
                         }
                         .buttonStyle(.plain)
                     }
@@ -216,16 +221,16 @@ struct AuthorDetailView: View {
 
     @ViewBuilder
     private func otherWorksSection(_ entries: [ApiBibliographyEntry]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Other Works")
-                    .font(.headline)
+                    .mmSectionTitle()
                 Spacer()
                 Text("Tap to wish")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 16) {
+            LazyVGrid(columns: gridColumns, spacing: layout.sectionGap) {
                 ForEach(entries) { entry in
                     bibliographyCard(entry)
                 }
@@ -240,46 +245,39 @@ struct AuthorDetailView: View {
         Button {
             Task { await toggleWish(entry, currentlyWished: wished) }
         } label: {
-            VStack(spacing: 4) {
-                BookCoverView(
-                    ref: .openlibraryCover(workId: entry.openLibraryWorkId),
-                    seed: entry.name)
-                    .frame(width: 110, height: 165)
-                    .overlay(alignment: .topTrailing) {
-                        ZStack {
-                            if inFlight {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .padding(6)
-                                    .background(.black.opacity(0.5))
-                                    .clipShape(Circle())
-                            } else if wished {
-                                Image(systemName: "heart.fill")
-                                    .foregroundStyle(.red)
-                                    .padding(6)
-                                    .background(.black.opacity(0.5))
-                                    .clipShape(Circle())
-                            } else {
-                                Image(systemName: "heart")
-                                    .foregroundStyle(.white)
-                                    .padding(6)
-                                    .background(.black.opacity(0.35))
-                                    .clipShape(Circle())
-                            }
-                        }
-                        .padding(4)
-                    }
-                Text(entry.name)
-                    .font(.caption)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 110)
-                if let year = entry.year {
-                    Text(String(year))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                MMArtFrame {
+                    BookCoverView(
+                        ref: .openlibraryCover(workId: entry.openLibraryWorkId),
+                        seed: entry.name,
+                        cornerRadius: 0)
+                        .frame(width: layout.gridCellWidth, height: (layout.gridCellWidth * 3 / 2).rounded())
                 }
+                .frame(width: layout.gridCellWidth, height: (layout.gridCellWidth * 3 / 2).rounded())
+                .overlay(alignment: .topTrailing) {
+                    ZStack {
+                        if inFlight {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(6)
+                                .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
+                        } else if wished {
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(MarqueeTheme.Colors.pink)
+                                .padding(6)
+                                .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
+                        } else {
+                            Image(systemName: "heart")
+                                .foregroundStyle(.white)
+                                .padding(6)
+                                .background(MarqueeTheme.Colors.scrim, in: Circle())
+                        }
+                    }
+                    .padding(4)
+                }
+                MMCaption(title: entry.name, meta: entry.year.map(String.init), width: layout.gridCellWidth)
             }
+            .frame(width: layout.gridCellWidth, alignment: .topLeading)
         }
         .buttonStyle(.plain)
         .disabled(inFlight)
@@ -310,6 +308,11 @@ struct AuthorDetailView: View {
             log.warning("toggleWish failed for \(workId): \(error.localizedDescription)")
             wishOverrides[workId] = currentlyWished
         }
+    }
+
+    /// Grid at the spec's poster width and card gap (see CatalogView).
+    private var gridColumns: [GridItem] {
+        layout.gridColumns
     }
 
     private func lifespanText(_ author: ApiAuthor) -> String? {

@@ -31,16 +31,15 @@ struct TermsAgreementView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                Image(systemName: "doc.text")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.tint)
+                MMBrandWordmark(size: 34)
 
                 Text("Terms & Privacy")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
 
                 Text("Please review and accept the following before continuing.")
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.body)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
@@ -51,7 +50,7 @@ struct TermsAgreementView: View {
                                 agreedToPrivacy.toggle()
                             } label: {
                                 Image(systemName: agreedToPrivacy ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(agreedToPrivacy ? .blue : .secondary)
+                                    .foregroundStyle(agreedToPrivacy ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
                                     .font(.title3)
                             }
                             .buttonStyle(.plain)
@@ -71,7 +70,7 @@ struct TermsAgreementView: View {
                                 agreedToTerms.toggle()
                             } label: {
                                 Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(agreedToTerms ? .blue : .secondary)
+                                    .foregroundStyle(agreedToTerms ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
                                     .font(.title3)
                             }
                             .buttonStyle(.plain)
@@ -96,15 +95,14 @@ struct TermsAgreementView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.mmPrimary)
                 .disabled(!allAgreed || isSubmitting)
                 .padding(.horizontal)
                 .accessibilityIdentifier("server-terms-continue")
 
                 if let error = authManager.error {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                         .font(.callout)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
@@ -124,11 +122,14 @@ struct TermsAgreementView: View {
                         Task { await authManager.logout() }
                     }
                 }
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 .padding(.bottom)
             }
             .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .navigationTitle("")
         }
     }

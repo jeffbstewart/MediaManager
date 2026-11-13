@@ -12,6 +12,7 @@ private let log = MMLogger(category: "ArtistsView")
 /// playable owned album.
 struct ArtistsView: View {
     @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(\.marquee) private var layout
 
     @State private var artists: [ApiArtistListItem] = []
     @State private var page = 1
@@ -36,15 +37,18 @@ struct ArtistsView: View {
         case failed(String)
     }
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 130), spacing: 12)
-    ]
+    /// Square tiles at the spec's poster width and card gap.
+    private var columns: [GridItem] {
+        layout.gridColumns
+    }
 
     var body: some View {
         Group {
             switch phase {
             case .initial, .loading:
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             case .empty:
                 ContentUnavailableView("No artists yet", systemImage: "music.mic",
                     description: Text("Add a CD by scanning its UPC, or import audio files to populate your library."))
@@ -54,10 +58,10 @@ struct ArtistsView: View {
                     description: Text(message))
             case .loaded:
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: layout.sectionGap) {
                         ForEach(artists) { artist in
                             NavigationLink(value: ArtistRoute(id: artist.id, name: artist.name)) {
-                                ArtistCard(artist: artist)
+                                ArtistCard(artist: artist, width: layout.gridCellWidth)
                             }
                             .buttonStyle(.plain)
                         }
@@ -82,8 +86,10 @@ struct ArtistsView: View {
                                 }
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
                 }
+                .mmGlowPage(MarqueeTheme.Colors.glowDiscover)
             }
         }
         .navigationTitle("Artists")
@@ -164,69 +170,60 @@ struct ArtistsView: View {
     }
 }
 
-/// Artist card. Square hero (album cover aspect), name + owned-album
-/// count. Layered fallback like the author card: the owned-album
-/// poster sits behind the headshot, so a missing headshot reveals
-/// the album, and a missing album reveals a synthesised swatch.
+/// Artist card. Square hero (album cover aspect) in the spec's art
+/// frame, name + owned-album count. Layered fallback like the author
+/// card: the owned-album poster sits behind the headshot, so a
+/// missing headshot reveals the album, and a missing album reveals
+/// the seeded placeholder.
 private struct ArtistCard: View {
     @Environment(AudioCacheManager.self) private var audioCache
     let artist: ApiArtistListItem
+    let width: CGFloat
 
     var body: some View {
-        VStack(alignment: .center, spacing: 6) {
-            heroImage
-                // Square — matches the album-cover aspect, different
-                // from the 2:3 movie/book poster aspect.
-                .frame(width: 130, height: 130)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(alignment: .bottomTrailing) {
-                    // "Any album by this artist is offline" — same
-                    // looser semantics the user accepted for TV
-                    // shows. Driven by the artistIds captured on
-                    // each DownloadedAlbum at cache-time.
-                    if audioCache.offlineArtistIds.contains(artist.id.protoValue) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .padding(4)
-                            .background(.black.opacity(0.55))
-                            .clipShape(Circle())
-                            .padding(6)
-                            .accessibilityLabel("Downloaded")
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            MMArtFrame {
+                heroImage
+                    // Square — matches the album-cover aspect, different
+                    // from the 2:3 movie/book poster aspect.
+                    .frame(width: width, height: width)
+            }
+            .frame(width: width, height: width)
+            .overlay(alignment: .bottomTrailing) {
+                // "Any album by this artist is offline" — same
+                // looser semantics the user accepted for TV
+                // shows. Driven by the artistIds captured on
+                // each DownloadedAlbum at cache-time.
+                if audioCache.offlineArtistIds.contains(artist.id.protoValue) {
+                    MMArtBadge(systemImage: "arrow.down", label: "Downloaded")
                 }
+            }
 
-            Text(artist.name)
-                .font(.caption)
-                .fontWeight(.medium)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-
-            Text("\(artist.ownedAlbumCount) album\(artist.ownedAlbumCount == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            MMCaption(
+                title: artist.name,
+                meta: "\(artist.ownedAlbumCount) album\(artist.ownedAlbumCount == 1 ? "" : "s")",
+                width: width)
         }
-        .frame(width: 130)
+        .frame(width: width, alignment: .topLeading)
     }
 
     @ViewBuilder
     private var heroImage: some View {
         ZStack {
+            MMPlaceholderArt(name: artist.name, systemImage: "music.mic")
             // Fallback layer: owned album poster (square) when the
-            // artist has no real headshot. CachedImage handles the
-            // synthesised-swatch fallback when neither layer
-            // resolves — keyed off the artist name for stability.
+            // artist has no real headshot; the placeholder shows
+            // through when neither layer resolves.
             if let albumId = artist.fallbackAlbumTitleId {
                 CachedImage(
                     ref: .posterThumbnail(titleId: albumId.protoValue),
-                    cornerRadius: 8)
-            } else {
-                Color.gray.opacity(0.2)
+                    cornerRadius: 0,
+                    transparentPlaceholder: true)
             }
             if artist.hasHeadshot {
                 CachedImage(
                     ref: .artistHeadshot(artistId: artist.id.protoValue),
-                    cornerRadius: 8,
+                    cornerRadius: 0,
                     transparentPlaceholder: true)
             }
         }

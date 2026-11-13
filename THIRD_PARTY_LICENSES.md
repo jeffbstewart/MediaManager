@@ -76,6 +76,19 @@ Reserved Font Name.
   `font-weight: 700 800` so heading rules written as 700 resolve to it
   (see `docs/plans/marquee-reference/font-bakeoff-report.md`).
 
+### Figtree (iOS app)
+
+- **File:** `ios/MediaManager/MediaManager/Resources/Fonts/Figtree-ExtraBold.ttf`
+- **Source:** upstream [erikdkennedy/figtree](https://github.com/erikdkennedy/figtree),
+  `fonts/ttf/Figtree-ExtraBold.ttf`
+- **Copyright:** 2022 The Figtree Project Authors
+- **License:** SIL Open Font License 1.1
+- **License text:** `ios/MediaManager/MediaManager/Resources/Fonts/Figtree.LICENSE`
+- **Scope:** the single weight-800 static face, registered through
+  `UIAppFonts`. Display headings, the brand wordmark and navigation
+  titles in the iOS app's Marquee look (`MediaManager/Theme/`). Body
+  text stays San Francisco, so Inter is not bundled on iOS.
+
 ### Material Icons
 
 - **File:** `web-app/public/vendor/fonts/material-icons.woff2`

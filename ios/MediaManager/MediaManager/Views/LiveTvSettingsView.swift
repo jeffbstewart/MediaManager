@@ -21,6 +21,7 @@ struct LiveTvSettingsView: View {
                 listBody
             }
         }
+        .mmListChrome()
         .navigationTitle("Live TV Settings")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -40,7 +41,7 @@ struct LiveTvSettingsView: View {
     private var listBody: some View {
         List {
             if let settings {
-                Section("Streaming Limits") {
+                Section(header: MMSectionHeader("Streaming Limits")) {
                     Stepper("Max Streams: \(maxStreams)", value: $maxStreams, in: 1...10)
                     Stepper("Idle Timeout: \(idleTimeout)s", value: $idleTimeout, in: 5...300, step: 5)
                     LabeledContent("Active Tuners", value: "\(settings.activeTunerCount)")
@@ -48,36 +49,37 @@ struct LiveTvSettingsView: View {
 
                     Button("Save Settings") { Task { await saveSettings() } }
                 }
+                .mmRow()
             }
 
-            Section("Tuners") {
+            Section(header: MMSectionHeader("Tuners")) {
                 ForEach(tuners, id: \.id) { tuner in
                     Button {
                         selectedTuner = tuner
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(tuner.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
+                                .font(MarqueeTheme.Fonts.cardTitle)
+                                .foregroundStyle(MarqueeTheme.Colors.text)
                             HStack(spacing: 8) {
                                 Text(tuner.ipAddress)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                 if tuner.hasModelNumber {
                                     Text(tuner.modelNumber)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 Text("\(tuner.channelCount) ch")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                 if !tuner.enabled {
                                     Text("Disabled")
-                                        .font(.caption2)
+                                        .font(MarqueeTheme.Fonts.meta)
                                         .padding(.horizontal, 4)
                                         .padding(.vertical, 1)
-                                        .background(.red.opacity(0.2))
-                                        .foregroundStyle(.red)
+                                        .background(MarqueeTheme.Colors.live.opacity(0.2))
+                                        .foregroundStyle(MarqueeTheme.Colors.pink)
                                         .clipShape(Capsule())
                                 }
                             }
@@ -85,9 +87,11 @@ struct LiveTvSettingsView: View {
                     }
                 }
             }
+            .mmRow()
 
             if let statusMessage {
-                Section { Text(statusMessage).font(.callout).foregroundStyle(.green) }
+                Section { Text(statusMessage).font(MarqueeTheme.Fonts.cardTitle).foregroundStyle(MarqueeTheme.Colors.green) }
+                .mmRow()
             }
         }
     }
@@ -130,6 +134,7 @@ struct AddTunerSheet: View {
                     .keyboardType(.decimalPad)
                 TextField("Name", text: $name)
             }
+            .mmListChrome()
             .navigationTitle("Add Tuner")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -164,7 +169,7 @@ struct TunerDetailSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Tuner") {
+                Section(header: MMSectionHeader("Tuner")) {
                     LabeledContent("IP Address", value: tuner.ipAddress)
                     if tuner.hasModelNumber { LabeledContent("Model", value: tuner.modelNumber) }
                     LabeledContent("Tuners", value: "\(tuner.tunerCount)")
@@ -177,6 +182,7 @@ struct TunerDetailSheet: View {
                         Task { await deleteTuner() }
                     }
                 }
+                .mmRow()
 
                 if !channels.isEmpty {
                     Section("Channels (\(channels.count))") {
@@ -184,32 +190,35 @@ struct TunerDetailSheet: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text("\(ch.guideNumber) \(ch.guideName)")
-                                        .font(.subheadline)
+                                        .font(MarqueeTheme.Fonts.cardTitle)
                                     HStack(spacing: 4) {
                                         if ch.hasNetworkAffiliation {
                                             Text(ch.networkAffiliation)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(MarqueeTheme.Fonts.meta)
+                                                .foregroundStyle(MarqueeTheme.Colors.text3)
                                         }
                                         Text(String(repeating: "\u{2605}", count: Int(ch.receptionQuality)))
-                                            .font(.caption)
+                                            .font(MarqueeTheme.Fonts.meta)
                                     }
                                 }
                                 Spacer()
                                 if !ch.enabled {
                                     Text("Off")
-                                        .font(.caption2)
-                                        .foregroundStyle(.red)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.pink)
                                 }
                             }
                         }
                     }
+                    .mmRow()
                 }
 
                 if let statusMessage {
-                    Section { Text(statusMessage).font(.callout).foregroundStyle(.green) }
+                    Section { Text(statusMessage).font(MarqueeTheme.Fonts.cardTitle).foregroundStyle(MarqueeTheme.Colors.green) }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle(tuner.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

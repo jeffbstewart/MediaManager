@@ -15,8 +15,8 @@ struct TrackMetadataChip: View {
     var body: some View {
         if let formatted {
             Text(formatted)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta.monospacedDigit())
+                .foregroundStyle(MarqueeTheme.Colors.text3)
         }
     }
 

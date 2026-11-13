@@ -38,12 +38,27 @@ struct ContentView: View {
                 // most. No tag → tapping the row only flips the toggle,
                 // it does not change `selectedTab`.
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { dataModel.downloads.isOfflineMode },
-                        set: { dataModel.downloads.isOfflineMode = $0 }
-                    )) {
-                        Label("Offline Mode", systemImage: "airplane")
+                    // Same icon frame, spacing and padding as SidebarRow
+                    // so the airplane lines up with the nav icons; the
+                    // toggle keeps its label for accessibility only.
+                    HStack(spacing: 12) {
+                        Image(systemName: "airplane")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: MarqueeTheme.Sizes.navIcon, height: MarqueeTheme.Sizes.navIcon)
+                            .foregroundStyle(MarqueeTheme.Colors.text)
+                        Text("Offline Mode")
+                            .font(MarqueeTheme.Fonts.control)
+                            .foregroundStyle(MarqueeTheme.Colors.text)
+                        Spacer(minLength: 0)
+                        Toggle("Offline Mode", isOn: Binding(
+                            get: { dataModel.downloads.isOfflineMode },
+                            set: { dataModel.downloads.isOfflineMode = $0 }
+                        ))
+                        .labelsHidden()
                     }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: MarqueeTheme.Sizes.pillHeight)
+                    .sidebarRowChrome()
                 }
 
                 // Home + the catalog tabs (Movies / TV / Books / Music /
@@ -58,21 +73,21 @@ struct ContentView: View {
                 // below the catalog tabs. Online-only; offline mode
                 // hides it entirely.
                 if !isOffline {
-                    Label("Search", systemImage: "magnifyingglass")
+                    SidebarRow("Search", icon: "magnifyingglass", selected: selectedTab == .search)
                         .tag(Tab.search)
                 }
 
-                Label("Home", systemImage: "house")
+                SidebarRow("Home", icon: "house", selected: selectedTab == .home)
                     .tag(Tab.home)
 
-                Section("Content") {
-                    Label("Movies", systemImage: "film")
+                Section(header: MMSectionHeader("Content")) { 
+                    SidebarRow("Movies", icon: "film", selected: selectedTab == .movies)
                         .tag(Tab.movies)
-                    Label("TV Shows", systemImage: "tv")
+                    SidebarRow("TV Shows", icon: "tv", selected: selectedTab == .tvShows)
                         .tag(Tab.tvShows)
-                    Label("Books", systemImage: "books.vertical")
+                    SidebarRow("Books", icon: "books.vertical", selected: selectedTab == .books)
                         .tag(Tab.books)
-                    Label("Music", systemImage: "music.note")
+                    SidebarRow("Music", icon: "music.note", selected: selectedTab == .music)
                         .tag(Tab.music)
                     if !isOffline {
                         // Collections + Tags rely on the server-side
@@ -82,61 +97,61 @@ struct ContentView: View {
                         // do work offline, but reaching them from
                         // the sidebar would dead-end on the listing,
                         // so the tabs hide entirely when offline.
-                        Label("Collections", systemImage: "square.stack")
+                        SidebarRow("Collections", icon: "square.stack", selected: selectedTab == .collections)
                             .tag(Tab.collections)
-                        Label("Tags", systemImage: "tag")
+                        SidebarRow("Tags", icon: "tag", selected: selectedTab == .tags)
                             .tag(Tab.tags)
-                        Label("Family", systemImage: "video")
+                        SidebarRow("Family", icon: "video", selected: selectedTab == .family)
                             .tag(Tab.family)
-                        Label("Cameras", systemImage: "web.camera")
+                        SidebarRow("Cameras", icon: "web.camera", selected: selectedTab == .cameras)
                             .tag(Tab.cameras)
-                        Label("Live TV", systemImage: "antenna.radiowaves.left.and.right")
+                        SidebarRow("Live TV", icon: "antenna.radiowaves.left.and.right", selected: selectedTab == .liveTv)
                             .tag(Tab.liveTv)
                     }
                 }
 
                 if !isOffline {
                     if dataModel.userInfo?.isAdmin == true {
-                        Section("Catalog") {
-                            Label("Add Title", systemImage: "plus.rectangle")
+                        Section(header: MMSectionHeader("Catalog")) { 
+                            SidebarRow("Add Title", icon: "plus.rectangle", selected: selectedTab == .adminAddTitle)
                                 .tag(Tab.adminAddTitle)
-                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                            SidebarRow("Scan Barcode", icon: "barcode.viewfinder", selected: selectedTab == .adminScan)
                                 .tag(Tab.adminScan)
-                            Label("Amazon Import", systemImage: "shippingbox")
+                            SidebarRow("Amazon Import", icon: "shippingbox", selected: selectedTab == .adminAmazonImport)
                                 .tag(Tab.adminAmazonImport)
-                            Label("Expand Packs", systemImage: "rectangle.expand.vertical")
+                            SidebarRow("Expand Packs", icon: "rectangle.expand.vertical", selected: selectedTab == .adminExpand)
                                 .tag(Tab.adminExpand)
-                            Label("Data Quality", systemImage: "exclamationmark.triangle")
+                            SidebarRow("Data Quality", icon: "exclamationmark.triangle", selected: selectedTab == .adminDataQuality)
                                 .tag(Tab.adminDataQuality)
-                            Label("Tags", systemImage: "tag")
+                            SidebarRow("Tags", icon: "tag", selected: selectedTab == .adminTags)
                                 .tag(Tab.adminTags)
                         }
-                        Section("Transcodes") {
-                            Label("Transcode Status", systemImage: "gearshape.2")
+                        Section(header: MMSectionHeader("Transcodes")) { 
+                            SidebarRow("Transcode Status", icon: "gearshape.2", selected: selectedTab == .adminStatus)
                                 .tag(Tab.adminStatus)
-                            Label("Linked Files", systemImage: "film.stack")
+                            SidebarRow("Linked Files", icon: "film.stack", selected: selectedTab == .adminTranscodes)
                                 .tag(Tab.adminTranscodes)
-                            Label("Unmatched Files", systemImage: "questionmark.folder")
+                            SidebarRow("Unmatched Files", icon: "questionmark.folder", selected: selectedTab == .adminUnmatched)
                                 .tag(Tab.adminUnmatched)
                         }
-                        Section("Purchases") {
-                            Label("Purchase Wishes", systemImage: "cart")
+                        Section(header: MMSectionHeader("Purchases")) { 
+                            SidebarRow("Purchase Wishes", icon: "cart", selected: selectedTab == .adminPurchaseWishes)
                                 .tag(Tab.adminPurchaseWishes)
-                            Label("Valuation", systemImage: "dollarsign.circle")
+                            SidebarRow("Valuation", icon: "dollarsign.circle", selected: selectedTab == .adminValuation)
                                 .tag(Tab.adminValuation)
-                            Label("Inventory Report", systemImage: "doc.text")
+                            SidebarRow("Inventory Report", icon: "doc.text", selected: selectedTab == .adminReport)
                                 .tag(Tab.adminReport)
                         }
-                        Section("System") {
-                            Label("Users", systemImage: "person.2")
+                        Section(header: MMSectionHeader("System")) { 
+                            SidebarRow("Users", icon: "person.2", selected: selectedTab == .adminUsers)
                                 .tag(Tab.adminUsers)
-                            Label("Family Members", systemImage: "figure.2.and.child.holdinghands")
+                            SidebarRow("Family Members", icon: "figure.2.and.child.holdinghands", selected: selectedTab == .adminFamilyMembers)
                                 .tag(Tab.adminFamilyMembers)
-                            Label("Cameras", systemImage: "web.camera")
+                            SidebarRow("Cameras", icon: "web.camera", selected: selectedTab == .adminCameras)
                                 .tag(Tab.adminCameras)
-                            Label("Live TV Settings", systemImage: "antenna.radiowaves.left.and.right")
+                            SidebarRow("Live TV Settings", icon: "antenna.radiowaves.left.and.right", selected: selectedTab == .adminLiveTvSettings)
                                 .tag(Tab.adminLiveTvSettings)
-                            Label("Settings", systemImage: "gear")
+                            SidebarRow("Settings", icon: "gear", selected: selectedTab == .adminSettings)
                                 .tag(Tab.adminSettings)
                         }
                     }
@@ -144,66 +159,53 @@ struct ContentView: View {
 
                 Section {
                     if !isOffline {
-                        HStack {
-                            Label("Wish List", systemImage: "heart")
-                            if let count = dataModel.userInfo?.fulfilledWishCount, count > 0 {
-                                Spacer()
-                                Text("\(count)")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.green)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .tag(Tab.wishList)
+                        SidebarRow("Wish List", icon: "heart", selected: selectedTab == .wishList,
+                                   count: dataModel.userInfo?.fulfilledWishCount)
+                            .tag(Tab.wishList)
                     }
 
                     if hasDownloadsCapability || dataModel.downloads.hasCompletedDownloads {
-                        HStack {
-                            Label("Downloads", systemImage: "arrow.down.circle")
-                            if dataModel.downloads.activeDownloadCount > 0 {
-                                Spacer()
-                                Text("\(dataModel.downloads.activeDownloadCount)")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.blue)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .tag(Tab.downloads)
+                        SidebarRow("Downloads", icon: "arrow.down.circle", selected: selectedTab == .downloads,
+                                   count: dataModel.downloads.activeDownloadCount)
+                            .tag(Tab.downloads)
                     }
                 }
 
                 Section {
-                    Label("Profile", systemImage: "person.circle")
+                    SidebarRow("Profile", icon: "person.circle", selected: selectedTab == .profile)
                         .tag(Tab.profile)
-                    Label("About", systemImage: "info.circle")
+                    SidebarRow("About", icon: "info.circle", selected: selectedTab == .about)
                         .tag(Tab.about)
                 }
-            }
-            .navigationTitle("Household Disc Keeper")
-            .toolbar {
-                ToolbarItem(placement: .bottomBar) {
-                    // Status-only row. The build/version number
-                    // moved to AboutView — it didn't earn the
-                    // prominent footer slot. The toolbar item is
-                    // only present when there's a status to show
-                    // so SwiftUI doesn't reserve empty chrome.
-                    if isOffline && !dataModel.downloads.isOfflineMode {
-                        Label("Server unreachable", systemImage: "exclamationmark.icloud")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    } else if dataModel.downloads.isOfflineMode {
-                        Label("Browsing downloads only", systemImage: "arrow.down.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+
+                // Connection status as the list's footer row (spec
+                // footer band). A bottom-bar toolbar item would become
+                // an icon-only glass button on iOS 26. Only present
+                // when there's a status, so no empty row is reserved.
+                if isOffline && !dataModel.downloads.isOfflineMode {
+                    Section {
+                        SidebarStatusRow("Server unreachable", icon: "exclamationmark.icloud",
+                                         tint: MarqueeTheme.Colors.orange)
                     }
+                } else if dataModel.downloads.isOfflineMode {
+                    Section {
+                        SidebarStatusRow("Browsing downloads only", icon: "arrow.down.circle.fill",
+                                         tint: MarqueeTheme.Colors.text3)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .environment(\.defaultMinListRowHeight, MarqueeTheme.Sizes.pillHeight)
+            .listSectionSpacing(16)
+            .scrollContentBackground(.hidden)
+            .mmGlowPage()
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // The brand wordmark stands in for the title (web
+                // shell `.brand`): display face, slash in the accent.
+                ToolbarItem(placement: .principal) {
+                    MMBrandWordmark(size: 22)
                 }
             }
             // The bar lives inside the sidebar's List too — so on
@@ -297,49 +299,77 @@ struct ContentView: View {
                 // stable. Same idea applied per-view in AuthorsView,
                 // generalized here so every tab gets it.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationDestination(for: BrowseRoute.self) { route in
+                    // "Browse Your Library" chips on Home open the
+                    // same views the sidebar tabs show, pushed.
+                    Group {
+                        switch route {
+                        case .movies: CatalogView(typeFilter: .movie, navigationTitle: "Movies")
+                        case .tvShows: CatalogView(typeFilter: .tv, navigationTitle: "TV Shows")
+                        case .books: AuthorsView()
+                        case .music: MusicView()
+                        case .collections: CollectionsListView()
+                        case .liveTv: LiveTvView()
+                        }
+                    }
+                    .mmMeasureWidth()
+                }
                 .navigationDestination(for: ApiTitle.self) { title in
                     // Books get a dedicated detail page; the movie-centric
                     // TitleDetailView (Play / Seasons & Episodes / transcode
                     // controls) doesn't fit. Routing on ApiTitle.isBook
                     // keeps a single navigation surface from the catalog,
                     // search, author detail, and series detail.
-                    if title.isBook {
-                        BookDetailView(titleId: title.id)
-                    } else if title.isAlbum {
-                        AlbumDetailView(titleId: title.id)
-                    } else {
-                        TitleDetailView(titleId: title.id)
+                    Group {
+                        if title.isBook {
+                            BookDetailView(titleId: title.id)
+                        } else if title.isAlbum {
+                            AlbumDetailView(titleId: title.id)
+                        } else {
+                            TitleDetailView(titleId: title.id)
+                        }
                     }
+                    .mmMeasureWidth()
                 }
                 .navigationDestination(for: AuthorRoute.self) { route in
                     AuthorDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: ArtistRoute.self) { route in
                     ArtistDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: BrowseArtistsRoute.self) { _ in
                     ArtistsView()
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: SmartPlaylistRoute.self) { route in
                     SmartPlaylistDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: PlaylistRoute.self) { route in
                     PlaylistDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: AllPlaylistsRoute.self) { _ in
                     PlaylistsView()
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: BookReaderRoute.self) { route in
                     BookReaderView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: TvShowRoute.self) { route in
                     SeasonsView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: SeasonRoute.self) { route in
                     EpisodesView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: PlaybackRoute.self) { route in
                     Color.clear.onAppear {
@@ -351,15 +381,19 @@ struct ContentView: View {
                 }
                 .navigationDestination(for: ActorRoute.self) { route in
                     ActorView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: CollectionRoute.self) { route in
                     CollectionDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: TagRoute.self) { route in
                     TagDetailView(route: route)
+                        .mmMeasureWidth()
                 }
                 .navigationDestination(for: GenreRoute.self) { route in
                     GenreDetailView(route: route)
+                        .mmMeasureWidth()
                 }
             }
             // Pin the mini-player inside the detail's NavigationStack
@@ -374,6 +408,8 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MiniPlayerBar()
             }
+            // Column width for the poster grids (`MarqueeLayout.gridCellWidth`).
+            .mmMeasureWidth()
         }
         .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
             // Flipping OFF: force a token refresh now so the next
@@ -436,6 +472,92 @@ struct ContentView: View {
         // `.safeAreaInset` call for why pinning at the outer
         // NavigationSplitView level didn't propagate the inset into
         // the column's ScrollView.
+    }
+}
+
+// MARK: - Sidebar rows (spec 2: `a.nav-item`, 40pt pill, 20pt icon,
+// 14/600 label; active: 1px white outline, icon in the accent)
+
+private struct SidebarRow: View {
+    let label: String
+    let icon: String
+    let selected: Bool
+    var count: Int? = nil
+
+    init(_ label: String, icon: String, selected: Bool, count: Int? = nil) {
+        self.label = label
+        self.icon = icon
+        self.selected = selected
+        self.count = count
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: MarqueeTheme.Sizes.navIcon, height: MarqueeTheme.Sizes.navIcon)
+                .foregroundStyle(selected ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text)
+            Text(label)
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if let count, count > 0 {
+                Text("\(count)")
+                    .font(MarqueeTheme.Fonts.badge)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(MarqueeTheme.Colors.live, in: Capsule())
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: MarqueeTheme.Sizes.pillHeight)
+        .background(selected ? MarqueeTheme.Colors.surface : .clear, in: Capsule())
+        .overlay(
+            Capsule().strokeBorder(
+                selected ? MarqueeTheme.Colors.navOutline : .clear, lineWidth: 1))
+        .contentShape(Capsule())
+        .sidebarRowChrome()
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Status line at the foot of the sidebar, on the nav rows' columns.
+private struct SidebarStatusRow: View {
+    let text: String
+    let icon: String
+    let tint: Color
+
+    init(_ text: String, icon: String, tint: Color) {
+        self.text = text
+        self.icon = icon
+        self.tint = tint
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: MarqueeTheme.Sizes.navIcon, height: MarqueeTheme.Sizes.navIcon)
+            Text(text)
+                .font(MarqueeTheme.Fonts.meta)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 12)
+        .frame(minHeight: MarqueeTheme.Sizes.pillHeight)
+        .sidebarRowChrome()
+    }
+}
+
+private extension View {
+    /// Row chrome for the sidebar: no system background or separator,
+    /// so the pill drawn by the row is the only highlight.
+    func sidebarRowChrome() -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
     }
 }
 

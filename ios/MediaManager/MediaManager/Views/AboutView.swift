@@ -22,15 +22,17 @@ struct AboutView: View {
 
     var body: some View {
         List {
-            Section("Build") {
+            Section(header: MMSectionHeader("Build")) {
                 LabeledContent("Version", value: marketingVersion)
                 LabeledContent("Build", value: buildNumber)
             }
+            .mmRow()
 
-            Section("Credits") {
+            Section(header: MMSectionHeader("Credits")) {
                 Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
                     .font(.footnote)
             }
+            .mmRow()
 
             Section {
                 VStack(alignment: .leading, spacing: 4) {
@@ -39,7 +41,7 @@ struct AboutView: View {
                     }
                     Text("Agreed to version \(AppPolicyAgreement.currentVersion)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 Link(destination: AppPolicyAgreement.termsOfServiceURL) {
                     Label("Terms of Service", systemImage: "doc.text")
@@ -47,15 +49,14 @@ struct AboutView: View {
                 Link(destination: AppPolicyAgreement.sourceCodeURL) {
                     Label("Open Source (MIT)", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
-            } header: {
-                Text("App Legal")
-            } footer: {
+            } header: { MMSectionHeader("App Legal") } footer: {
                 Text("Agreement between you and the app distributor. Stored on this device only.")
                     .font(.caption2)
             }
+            .mmRow()
 
             if let legal = authManager.legalDocs, legal.isConfigured {
-                Section("Server Legal") {
+                Section(header: MMSectionHeader("Server Legal")) {
                     if let url = legal.privacyPolicyURL_resolved {
                         VStack(alignment: .leading, spacing: 4) {
                             Link(destination: url) {
@@ -66,7 +67,7 @@ struct AboutView: View {
                                let date = profile.privacyPolicyAcceptedAt {
                                 Text("Agreed to version \(version) on \(date.formatted(date: .abbreviated, time: .shortened))")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                             }
                         }
                     }
@@ -80,13 +81,15 @@ struct AboutView: View {
                                let date = profile.termsOfUseAcceptedAt {
                                 Text("Agreed to version \(version) on \(date.formatted(date: .abbreviated, time: .shortened))")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                             }
                         }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("About")
         .task {
             // Profile only contributes the per-version "Agreed

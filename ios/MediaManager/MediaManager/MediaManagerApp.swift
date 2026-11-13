@@ -88,6 +88,10 @@ struct MediaManagerApp: App {
         // the attribution.
         crashReporter = CrashReporter()
 
+        // Marquee look: navigation bar, list backing views, tint.
+        // The app is dark only (Info.plist UIUserInterfaceStyle).
+        MarqueeTheme.install()
+
         // Run any pending on-disk migrations BEFORE the cache
         // managers construct themselves, so they always see a
         // coherent download tree. v2 wipes video + book downloads
@@ -169,6 +173,15 @@ struct MediaManagerApp: App {
 
     var body: some Scene {
         WindowGroup {
+            rootContent
+                .preferredColorScheme(.dark)
+                .tint(MarqueeTheme.Colors.accent)
+        }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        Group {
             // UI-test hook: when launched with `-MMReaderTestMode`, root
             // straight into a NavigationStack rendering BookReaderView
             // against the bundled `test.epub`. Bypasses login, server

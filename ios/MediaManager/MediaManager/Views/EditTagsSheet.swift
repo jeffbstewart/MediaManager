@@ -22,11 +22,11 @@ struct EditTagsSheet: View {
                 if loading {
                     ProgressView("Loading tags...")
                 } else {
-                    Section("Assigned") {
+                    Section(header: MMSectionHeader("Assigned")) {
                         let assigned = allTags.filter { assignedTagIds.contains($0.id.protoValue) }
                         if assigned.isEmpty {
                             Text("No tags assigned")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         } else {
                             ForEach(assigned) { tag in
                                 HStack {
@@ -36,18 +36,19 @@ struct EditTagsSheet: View {
                                         Task { await removeTag(tag) }
                                     } label: {
                                         Image(systemName: "minus.circle.fill")
-                                            .foregroundStyle(.red)
+                                            .foregroundStyle(MarqueeTheme.Colors.pink)
                                     }
                                 }
                             }
                         }
                     }
+                    .mmRow()
 
-                    Section("Available") {
+                    Section(header: MMSectionHeader("Available")) {
                         let available = allTags.filter { !assignedTagIds.contains($0.id.protoValue) }
                         if available.isEmpty {
                             Text("All tags assigned")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         } else {
                             ForEach(available) { tag in
                                 Button {
@@ -55,25 +56,28 @@ struct EditTagsSheet: View {
                                 } label: {
                                     HStack {
                                         Text(tag.name)
-                                            .foregroundStyle(.primary)
+                                            .foregroundStyle(MarqueeTheme.Colors.text)
                                         Spacer()
                                         Image(systemName: "plus.circle")
-                                            .foregroundStyle(.blue)
+                                            .foregroundStyle(MarqueeTheme.Colors.blue)
                                     }
                                 }
                             }
                         }
                     }
+                    .mmRow()
                 }
 
                 if let statusMessage {
                     Section {
                         Text(statusMessage)
-                            .font(.callout)
-                            .foregroundStyle(.red)
+                            .font(MarqueeTheme.Fonts.cardTitle)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle("Edit Tags")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

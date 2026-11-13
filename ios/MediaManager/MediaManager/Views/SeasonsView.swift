@@ -74,24 +74,29 @@ struct SeasonsView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if seasons.isEmpty {
                 ContentUnavailableView("No seasons", systemImage: "tv")
+                    .mmPage()
             } else {
                 List {
                     if isSeriesFullyOffline {
                         Section {
                             Label("Entire series available offline",
                                   systemImage: "arrow.down.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.subheadline)
+                                .foregroundStyle(MarqueeTheme.Colors.green)
+                                .font(MarqueeTheme.Fonts.control)
                         }
+                        .mmRow()
                     } else if showBulkDownload {
                         Section {
                             if preparingBulkDownload {
                                 HStack(spacing: 8) {
                                     ProgressView().controlSize(.small)
                                     Text("Preparing download…")
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.control)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                             } else {
                                 BulkDownloadActionRow(
@@ -100,27 +105,31 @@ struct SeasonsView: View {
                                     action: { Task { await startBulkSeriesDownload() } })
                             }
                         }
+                        .mmRow()
                     }
                     Section {
                         ForEach(seasons, id: \.seasonNumber) { season in
                             NavigationLink(value: SeasonRoute(titleId: route.titleId, titleName: route.titleName, season: season)) {
                                 HStack {
                                     Text(season.name ?? "Season \(season.seasonNumber)")
-                                        .fontWeight(.medium)
+                                        .font(MarqueeTheme.Fonts.control)
+                                        .foregroundStyle(MarqueeTheme.Colors.text)
                                     Spacer()
                                     if isSeasonFullyDownloaded(season) {
                                         Image(systemName: "arrow.down.circle.fill")
-                                            .foregroundStyle(.green)
+                                            .foregroundStyle(MarqueeTheme.Colors.green)
                                             .accessibilityLabel("Available offline")
                                     }
                                     Text("\(season.episodeCount) episodes")
-                                        .foregroundStyle(.secondary)
-                                        .font(.subheadline)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                             }
                         }
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
             }
         }
         .navigationTitle(route.titleName)

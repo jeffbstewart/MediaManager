@@ -41,9 +41,10 @@ struct TmdbSearchSheet: View {
                     }
                     .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || searching)
                 }
+                .mmRow()
 
                 if !results.isEmpty {
-                    Section("Results") {
+                    Section(header: MMSectionHeader("Results")) {
                         ForEach(results, id: \.tmdbID) { result in
                             Button {
                                 assignResult(result)
@@ -53,16 +54,19 @@ struct TmdbSearchSheet: View {
                             .disabled(assigning)
                         }
                     }
+                    .mmRow()
                 }
 
                 if let statusMessage {
                     Section {
                         Text(statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle("Search TMDB")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -123,34 +127,36 @@ struct TmdbResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedImage(
-                ref: .tmdbPoster(tmdbId: result.tmdbID, mediaType: result.mediaType),
-                cornerRadius: 4)
-                .frame(width: 46, height: 69)
+            MMArtFrame {
+                CachedImage(
+                    ref: .tmdbPoster(tmdbId: result.tmdbID, mediaType: result.mediaType),
+                    cornerRadius: 0)
+            }
+            .frame(width: 46, height: 69)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)
-                    .font(.subheadline)
+                    .font(MarqueeTheme.Fonts.cardTitle)
                     .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
                     if result.hasReleaseYear {
                         Text(String(result.releaseYear))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     Text(result.mediaType == .tv ? "TV" : "Movie")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     if result.owned {
                         Text("Owned")
-                            .font(.caption2)
+                            .font(MarqueeTheme.Fonts.meta)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(.green.opacity(0.2))
-                            .foregroundStyle(.green)
+                            .background(MarqueeTheme.Colors.green.opacity(0.2))
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                             .clipShape(Capsule())
                     }
                 }

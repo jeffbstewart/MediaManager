@@ -20,11 +20,14 @@ struct TrackSearchResultsView: View {
         Group {
             if loading {
                 ProgressView("Loading…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if hits.isEmpty {
                 ContentUnavailableView(
                     "No tracks match",
                     systemImage: "music.note.list",
                     description: Text(filtersSummary).font(.body))
+                    .mmPage()
             } else {
                 List {
                     Section {
@@ -33,9 +36,11 @@ struct TrackSearchResultsView: View {
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     } header: {
                         Text(filtersSummary)
-                            .font(.caption)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                             .textCase(nil)
                     }
+                    .listRowBackground(Color.clear)
                     Section {
                         ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
                             Button {
@@ -47,8 +52,10 @@ struct TrackSearchResultsView: View {
                             .disabled(!hit.playable)
                         }
                     }
+                    .mmRow()
                 }
                 .listStyle(.plain)
+                .mmListChrome()
             }
         }
         .navigationTitle("Track Results")
@@ -64,8 +71,7 @@ struct TrackSearchResultsView: View {
                 Label("Play All", systemImage: "play.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.mmPrimary)
             .disabled(playableHits.isEmpty)
 
             Button {
@@ -74,8 +80,7 @@ struct TrackSearchResultsView: View {
                 Label("Shuffle", systemImage: "shuffle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.mmGhost)
             .disabled(playableHits.isEmpty)
         }
     }
@@ -88,14 +93,16 @@ struct TrackSearchResultsView: View {
                 ref: .posterThumbnail(titleId: hit.titleId),
                 cornerRadius: 4)
                 .frame(width: 40, height: 40)  // square — album art aspect
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(hit.name)
+                    .font(MarqueeTheme.Fonts.body)
                     .lineLimit(1)
-                    .foregroundStyle(hit.playable ? .primary : .secondary)
+                    .foregroundStyle(hit.playable ? MarqueeTheme.Colors.text : MarqueeTheme.Colors.text3)
                 Text(subtitle(for: hit))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .lineLimit(1)
             }
 
@@ -103,11 +110,11 @@ struct TrackSearchResultsView: View {
 
             if isCurrent {
                 Image(systemName: audio.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(MarqueeTheme.Colors.accent)
             } else if let secs = hit.durationSeconds {
                 Text(formatDuration(Double(secs)))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta.monospacedDigit())
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
         }
         .contentShape(Rectangle())

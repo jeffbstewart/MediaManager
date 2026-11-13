@@ -16,24 +16,30 @@ struct TagsListView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if tags.isEmpty {
                 ContentUnavailableView("No tags", systemImage: "tag")
+                    .mmPage()
             } else {
                 List(tags) { tag in
                     NavigationLink(value: TagRoute(id: tag.id, name: tag.name)) {
                         HStack {
                             Circle()
-                                .fill(Color(hex: tag.color) ?? .gray)
+                                .fill(Color(hex: tag.color) ?? MarqueeTheme.Colors.grey4)
                                 .frame(width: 12, height: 12)
                             Text(tag.name)
-                                .fontWeight(.medium)
+                                .font(MarqueeTheme.Fonts.control)
+                                .foregroundStyle(MarqueeTheme.Colors.text)
                             Spacer()
                             Text("\(tag.titleCount) titles")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         }
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
             }
         }
         .navigationTitle("Tags")

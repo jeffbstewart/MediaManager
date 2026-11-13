@@ -11,6 +11,7 @@ struct AlbumDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioPlayerManager.self) private var audio
     @Environment(AudioCacheManager.self) private var audioCache
+    @Environment(\.marquee) private var layout
     let titleId: TitleID
 
     @State private var detail: ApiTitleDetail?
@@ -40,9 +41,11 @@ struct AlbumDetailView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail, let album = detail.album {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: layout.sectionGap) {
                         hero(detail, album: album)
                         actionRow(detail, album: album)
                         if let desc = detail.description, !desc.isEmpty {
@@ -50,10 +53,14 @@ struct AlbumDetailView: View {
                         }
                         tracklistBlock(album)
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 48)
                 }
+                .mmPage()
             } else {
                 ContentUnavailableView("Album not found", systemImage: "music.note")
+                    .mmPage()
             }
         }
         .navigationTitle(detail?.name ?? "")
@@ -102,20 +109,27 @@ struct AlbumDetailView: View {
 
     @ViewBuilder
     private func hero(_ detail: ApiTitleDetail, album: ApiAlbum) -> some View {
+        let heroSide: CGFloat = layout.isWide ? 200 : 150
         HStack(alignment: .top, spacing: 16) {
             // Square 1:1 — album cover aspect, not a 2:3 movie poster.
-            CachedImage(ref: .posterFull(titleId: detail.id.protoValue), cornerRadius: 8)
-                .frame(width: 160, height: 160)
+            MMPosterTile(
+                name: detail.name,
+                ref: .posterFull(titleId: detail.id.protoValue),
+                square: true,
+                width: heroSide,
+                placeholderIcon: "music.note")
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(detail.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(layout.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
                 if let artist = album.albumArtists.first {
                     NavigationLink(value: ArtistRoute(id: artist.id, name: artist.name)) {
                         Text(artist.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.tint)
+                            .font(MarqueeTheme.Fonts.control)
+                            .foregroundStyle(MarqueeTheme.Colors.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -130,8 +144,8 @@ struct AlbumDetailView: View {
                         Text(formatDuration(secs))
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 Spacer(minLength: 0)
             }
         }
@@ -151,8 +165,7 @@ struct AlbumDetailView: View {
                     Label("Play", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.mmPrimary)
                 .disabled(allUnplayable)
 
                 Button {
@@ -161,8 +174,7 @@ struct AlbumDetailView: View {
                     Label("Shuffle", systemImage: "shuffle")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.mmGhost)
                 .disabled(allUnplayable)
             }
             HStack(spacing: 8) {
@@ -172,8 +184,7 @@ struct AlbumDetailView: View {
                     Label("Start Station", systemImage: "dot.radiowaves.left.and.right")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .buttonStyle(.mmGhost)
                 .disabled(allUnplayable)
 
                 downloadButton(
@@ -206,23 +217,22 @@ struct AlbumDetailView: View {
                     ProgressView(value: progress.fraction)
                         .progressViewStyle(.circular)
                         .controlSize(.small)
+                        .tint(MarqueeTheme.Colors.accent)
                     Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
-                        .font(.caption.monospacedDigit())
+                        .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .buttonStyle(.mmGhost)
         } else if isDownloaded {
             Button {
                 audioCache.deleteAlbum(titleId: titleId.protoValue)
             } label: {
                 Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(MarqueeTheme.Colors.green)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .tint(.green)
+            .buttonStyle(.mmGhost)
         } else {
             Button {
                 audioCache.downloadAlbum(detail: detail, album: album)
@@ -230,19 +240,19 @@ struct AlbumDetailView: View {
                 Label("Download", systemImage: "arrow.down.circle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .buttonStyle(.mmGhost)
             .disabled(allUnplayable)
         }
     }
 
     @ViewBuilder
     private func descriptionBlock(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("About")
-                .font(.headline)
+                .mmSectionTitle()
             Text(text)
-                .font(.body)
+                .font(MarqueeTheme.Fonts.body)
+                .foregroundStyle(MarqueeTheme.Colors.text2)
         }
     }
 
@@ -250,10 +260,10 @@ struct AlbumDetailView: View {
     private func tracklistBlock(_ album: ApiAlbum) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tracks")
-                .font(.headline)
+                .mmSectionTitle()
             ForEach(Array(album.tracks.enumerated()), id: \.element.id) { idx, track in
                 trackRow(track, index: idx, album: album)
-                Divider()
+                Divider().overlay(MarqueeTheme.Colors.hairline)
             }
         }
     }
@@ -267,22 +277,23 @@ struct AlbumDetailView: View {
             HStack(spacing: 12) {
                 if isCurrent {
                     Image(systemName: audio.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(MarqueeTheme.Colors.accent)
                         .frame(width: 28)
                 } else {
                     Text("\(track.trackNumber)")
-                        .font(.body.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta.monospacedDigit())
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .frame(width: 28, alignment: .trailing)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(track.name)
+                        .font(MarqueeTheme.Fonts.body)
                         .lineLimit(1)
-                        .foregroundStyle(track.playable ? .primary : .secondary)
+                        .foregroundStyle(track.playable ? MarqueeTheme.Colors.text : MarqueeTheme.Colors.text3)
                     if let subtitle = trackSubtitle(track) {
                         Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                             .lineLimit(1)
                     }
                 }
@@ -294,15 +305,16 @@ struct AlbumDetailView: View {
                     // landed.
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .accessibilityLabel("Downloaded")
                 }
                 if let secs = track.durationSeconds {
                     Text(formatDuration(secs))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta.monospacedDigit())
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
             .opacity(track.playable ? 1.0 : 0.5)
         }

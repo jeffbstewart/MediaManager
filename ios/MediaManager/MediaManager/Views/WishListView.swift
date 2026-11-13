@@ -49,8 +49,9 @@ struct WishListView: View {
                             }
                         } header: {
                             Label("Ready to Watch", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(MarqueeTheme.Colors.green)
                         }
+                        .mmRow()
                     }
 
                     if !active.isEmpty {
@@ -61,21 +62,22 @@ struct WishListView: View {
                                 }
                             }
                         }
+                        .mmRow()
                     }
 
                     if !transcodeWishes.isEmpty {
-                        Section("Transcode Requests") {
+                        Section(header: MMSectionHeader("Transcode Requests")) {
                             ForEach(transcodeWishes) { wish in
                                 HStack(spacing: 12) {
-                                    CachedImage(ref: .posterThumbnail(titleId: wish.titleId.protoValue))
+                                    MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: wish.titleId.protoValue), cornerRadius: 0) }
                                         .frame(width: 40, height: 60)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(wish.titleName)
                                             .fontWeight(.medium)
                                         Text(wish.mediaType == .tv ? "TV Series" : "Movie")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
 
                                     Spacer()
@@ -84,16 +86,18 @@ struct WishListView: View {
                                         Task { await removeTranscodeWish(wish.titleId) }
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
                         }
+                        .mmRow()
                     }
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Wish List")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -160,7 +164,7 @@ struct WishRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedImage(ref: wishPosterRef(wish), cornerRadius: 6)
+            MMArtFrame { CachedImage(ref: wishPosterRef(wish), cornerRadius: 0) }
                 .frame(width: 50, height: 75)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -170,28 +174,28 @@ struct WishRow: View {
                 HStack(spacing: 6) {
                     if let type = wish.mediaType {
                         Text(type == .tv ? "TV Series" : "Movie")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let year = wish.releaseYear {
                         Text("(\(String(year)))")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let season = wish.seasonNumber {
                         Text("S\(season)")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
-                .font(.caption)
+                .font(MarqueeTheme.Fonts.meta)
 
                 if !wish.voters.isEmpty {
                     Text(wish.voters.joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
 
                 if let stage = wish.lifecycleStage {
                     Text(stage.displayLabel)
-                        .font(.caption)
+                        .font(MarqueeTheme.Fonts.meta)
                         .fontWeight(.medium)
                         .foregroundStyle(lifecycleColor(stage))
                 }
@@ -208,11 +212,11 @@ struct WishRow: View {
             } label: {
                 VStack(spacing: 2) {
                     Image(systemName: wish.voted ? "heart.fill" : "heart")
-                        .foregroundStyle(wish.voted ? .red : .secondary)
+                        .foregroundStyle(wish.voted ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.text3)
                     if wish.voteCount > 1 {
                         Text("\(wish.voteCount)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
             }
@@ -246,7 +250,7 @@ struct FulfilledWishRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedImage(ref: wishPosterRef(wish), cornerRadius: 6)
+            MMArtFrame { CachedImage(ref: wishPosterRef(wish), cornerRadius: 0) }
                 .frame(width: 50, height: 75)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -256,30 +260,30 @@ struct FulfilledWishRow: View {
                 HStack(spacing: 6) {
                     if let type = wish.mediaType {
                         Text(type == .tv ? "TV Series" : "Movie")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let year = wish.releaseYear {
                         Text("(\(String(year)))")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let season = wish.seasonNumber {
                         Text("S\(season)")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
-                .font(.caption)
+                .font(MarqueeTheme.Fonts.meta)
 
                 HStack(spacing: 6) {
                     Text(wish.lifecycleStage?.displayLabel ?? "Ready to watch")
-                        .font(.caption)
+                        .font(MarqueeTheme.Fonts.meta)
                         .fontWeight(.medium)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
                     if isDownloaded {
                         // Inline (list-row) variant — same as SearchView
                         // and SeasonsView's per-season indicator.
                         Image(systemName: "arrow.down.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                             .accessibilityLabel("Downloaded")
                     }
                 }
@@ -292,7 +296,7 @@ struct FulfilledWishRow: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
             .buttonStyle(.plain)
         }
@@ -328,8 +332,10 @@ struct WishSearchView: View {
                             await addToWishList(item)
                         }
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle("Add to Wish List")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Search movies and TV shows...")
@@ -392,7 +398,7 @@ struct TmdbSearchRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedImage(ref: tmdbResultPosterRef(item), cornerRadius: 6)
+            MMArtFrame { CachedImage(ref: tmdbResultPosterRef(item), cornerRadius: 0) }
                 .frame(width: 50, height: 75)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -401,18 +407,18 @@ struct TmdbSearchRow: View {
 
                 HStack(spacing: 6) {
                     Text(item.mediaType == .tv ? "TV Series" : "Movie")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                     if let year = item.releaseYear {
                         Text("(\(String(year)))")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
-                .font(.caption)
+                .font(MarqueeTheme.Fonts.meta)
 
                 if let overview = item.overview, !overview.isEmpty {
                     Text(overview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(2)
                 }
             }
@@ -421,14 +427,14 @@ struct TmdbSearchRow: View {
 
             if added {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(MarqueeTheme.Colors.green)
             } else {
                 Button {
                     Task { await onAdd() }
                 } label: {
                     Image(systemName: "heart.circle")
                         .font(.title2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                 }
                 .buttonStyle(.plain)
             }

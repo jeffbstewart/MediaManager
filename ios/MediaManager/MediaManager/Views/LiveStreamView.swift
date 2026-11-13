@@ -38,7 +38,7 @@ struct LiveStreamView: View {
                 VStack(spacing: 16) {
                     ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
                     Button("Close") { closeTapped() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.mmPrimary)
                 }
             } else if let player {
                 ZStack {
@@ -51,11 +51,11 @@ struct LiveStreamView: View {
                                 .scaleEffect(1.5)
                                 .tint(.white)
                             Text("Starting stream...")
-                                .font(.subheadline)
+                                .font(MarqueeTheme.Fonts.cardTitle)
                                 .foregroundStyle(.white)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.black.opacity(0.6))
+                        .background(MarqueeTheme.Colors.scrimStrong)
                     }
 
                     VStack {
@@ -72,7 +72,7 @@ struct LiveStreamView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(.black.opacity(0.6))
+                                .background(MarqueeTheme.Colors.scrimStrong)
                                 .clipShape(Capsule())
                                 // Pin the hit-test region to the
                                 // visible capsule. Without this,
@@ -99,7 +99,7 @@ struct LiveStreamView: View {
                             Spacer()
 
                             Text(title)
-                                .font(.subheadline)
+                                .font(MarqueeTheme.Fonts.cardTitle)
                                 .foregroundStyle(.white)
                                 .shadow(radius: 4)
                                 .padding(.trailing, 16)
@@ -115,7 +115,7 @@ struct LiveStreamView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                     Text("Connecting...")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
             }
         }

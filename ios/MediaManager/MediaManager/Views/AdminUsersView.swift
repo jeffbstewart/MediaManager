@@ -29,51 +29,53 @@ struct AdminUsersView: View {
                                     Spacer()
                                     if user.isAdmin {
                                         Text("Admin")
-                                            .font(.caption2)
+                                            .font(MarqueeTheme.Fonts.meta)
                                             .fontWeight(.bold)
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(.blue)
+                                            .background(MarqueeTheme.Colors.blue)
                                             .clipShape(Capsule())
                                     }
                                     if user.locked {
                                         Text("Locked")
-                                            .font(.caption2)
+                                            .font(MarqueeTheme.Fonts.meta)
                                             .fontWeight(.bold)
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(.red)
+                                            .background(MarqueeTheme.Colors.live)
                                             .clipShape(Capsule())
                                     }
                                     if user.mustChangePassword {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundStyle(.orange)
-                                            .font(.caption)
+                                            .foregroundStyle(MarqueeTheme.Colors.orange)
+                                            .font(MarqueeTheme.Fonts.meta)
                                     }
                                     Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
 
                                 HStack(spacing: 8) {
                                     Text(user.username)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                     if let ceiling = user.ratingCeilingLabel {
                                         Text(ceiling)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                 }
                             }
                         }
                         .buttonStyle(.plain)
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Users")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -138,30 +140,32 @@ struct AdminUserDetailView: View {
         NavigationStack {
             List {
                 // Info
-                Section("Account") {
+                Section(header: MMSectionHeader("Account")) {
                     LabeledContent("Username", value: user.username)
                     LabeledContent("Display Name", value: user.displayName ?? "-")
                     LabeledContent("Role", value: user.isAdmin ? "Admin" : "Viewer")
                     LabeledContent("Rating Limit", value: user.ratingCeilingLabel ?? "Unrestricted")
                     if user.locked {
                         LabeledContent("Status", value: "Locked")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
                     if user.mustChangePassword {
                         LabeledContent("Password", value: "Must change on login")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(MarqueeTheme.Colors.orange)
                     }
                 }
+                .mmRow()
 
                 // Role
-                Section("Role") {
+                Section(header: MMSectionHeader("Role")) {
                     Button(user.isAdmin ? "Demote to Viewer" : "Promote to Admin") {
                         Task { await toggleRole() }
                     }
                 }
+                .mmRow()
 
                 // Rating Ceiling
-                Section("Content Rating Limit") {
+                Section(header: MMSectionHeader("Content Rating Limit")) {
                     ForEach(ratingOptions, id: \.label) { option in
                         Button {
                             Task { await setRatingCeiling(option.value) }
@@ -171,16 +175,17 @@ struct AdminUserDetailView: View {
                                 Spacer()
                                 if user.ratingCeiling == option.value {
                                     Image(systemName: "checkmark")
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(MarqueeTheme.Colors.blue)
                                 }
                             }
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .mmRow()
 
                 // Password
-                Section("Password") {
+                Section(header: MMSectionHeader("Password")) {
                     Button("Reset Password") {
                         showResetPassword = true
                     }
@@ -191,6 +196,7 @@ struct AdminUserDetailView: View {
                         }
                     }
                 }
+                .mmRow()
 
                 // Account actions
                 if user.locked {
@@ -198,8 +204,9 @@ struct AdminUserDetailView: View {
                         Button("Unlock Account") {
                             Task { await unlockUser() }
                         }
-                        .foregroundStyle(.green)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
                     }
+                    .mmRow()
                 }
 
                 // Sessions
@@ -207,8 +214,9 @@ struct AdminUserDetailView: View {
                     Button("Invalidate All Sessions") {
                         Task { await invalidateSessions() }
                     }
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(MarqueeTheme.Colors.orange)
                 }
+                .mmRow()
 
                 // Danger zone
                 Section {
@@ -216,23 +224,27 @@ struct AdminUserDetailView: View {
                         showDeleteConfirm = true
                     }
                 }
+                .mmRow()
 
                 if let actionMessage {
                     Section {
                         Text(actionMessage)
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                     }
+                    .mmRow()
                 }
 
                 if let error {
                     Section {
                         Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle(user.displayName ?? user.username)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -338,36 +350,41 @@ struct AdminResetPasswordView: View {
             Form {
                 Section {
                     Text("Reset password for \(user.username)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.cardTitle)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
+                .mmRow()
 
                 Section {
                     SecureField("New Password", text: $newPassword)
                         .textContentType(.newPassword)
                     Toggle("Require change on login", isOn: $forceChange)
                 }
+                .mmRow()
 
                 if let error {
                     Section {
                         Text(error)
-                            .foregroundStyle(.red)
-                            .font(.callout)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
+                            .font(MarqueeTheme.Fonts.cardTitle)
                     }
+                    .mmRow()
                 }
 
                 Section {
                     Button(saving ? "Saving..." : "Reset Password") {
                         Task { await resetPassword() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.mmPrimary)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                     .disabled(newPassword.count < 8 || saving)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
+                .mmRow()
             }
+            .mmListChrome()
             .navigationTitle("Reset Password")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -419,27 +436,31 @@ struct AdminCreateUserView: View {
                         .textContentType(.newPassword)
                     Toggle("Require change on login", isOn: $forceChange)
                 }
+                .mmRow()
 
                 if let error {
                     Section {
                         Text(error)
-                            .foregroundStyle(.red)
-                            .font(.callout)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
+                            .font(MarqueeTheme.Fonts.cardTitle)
                     }
+                    .mmRow()
                 }
 
                 Section {
                     Button(saving ? "Creating..." : "Create User") {
                         Task { await createUser() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.mmPrimary)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                     .disabled(username.isEmpty || displayName.isEmpty || password.count < 8 || saving)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
+                .mmRow()
             }
+            .mmListChrome()
             .navigationTitle("New User")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

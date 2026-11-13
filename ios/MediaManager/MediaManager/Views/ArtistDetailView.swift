@@ -11,6 +11,7 @@ private let log = MMLogger(category: "ArtistDetailView")
 struct ArtistDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AudioCacheManager.self) private var audioCache
+    @Environment(\.marquee) private var layout
     let route: ArtistRoute
 
     @State private var detail: ApiArtistDetail?
@@ -22,17 +23,20 @@ struct ArtistDetailView: View {
     /// AuthorDetailView behaviour we shipped earlier).
     @State private var wishOverrides: [String: Bool] = [:]
 
-    private let albumColumns = [
-        GridItem(.adaptive(minimum: 130), spacing: 12)
-    ]
+    /// Square tiles at the spec's poster width and card gap.
+    private var albumColumns: [GridItem] {
+        layout.gridColumns
+    }
 
     var body: some View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if let detail {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: layout.sectionGap) {
                         header(detail)
                         if let bio = detail.biography, !bio.isEmpty {
                             biography(bio)
@@ -48,10 +52,14 @@ struct ArtistDetailView: View {
                             otherWorksSection(detail.otherWorks)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, layout.pageX)
+                    .padding(.vertical, 16)
+                    .padding(.bottom, 48)
                 }
+                .mmPage()
             } else {
                 ContentUnavailableView("Artist not found", systemImage: "music.mic")
+                    .mmPage()
             }
         }
         .navigationTitle(route.name)
@@ -72,38 +80,43 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func header(_ detail: ApiArtistDetail) -> some View {
         let artist = detail.artist
+        let heroSide: CGFloat = layout.isWide ? 180 : 130
         HStack(alignment: .top, spacing: 16) {
-            ZStack {
-                if let albumId = detail.ownedAlbums.first?.id {
-                    CachedImage(
-                        ref: .posterThumbnail(titleId: albumId.protoValue),
-                        cornerRadius: 8)
-                } else {
-                    Color.gray.opacity(0.2)
+            MMArtFrame {
+                ZStack {
+                    MMPlaceholderArt(name: artist.name, systemImage: "music.mic")
+                    if let albumId = detail.ownedAlbums.first?.id {
+                        CachedImage(
+                            ref: .posterThumbnail(titleId: albumId.protoValue),
+                            cornerRadius: 0,
+                            transparentPlaceholder: true)
+                    }
+                    if artist.hasHeadshot {
+                        CachedImage(
+                            ref: .artistHeadshot(artistId: artist.id.protoValue),
+                            cornerRadius: 0,
+                            transparentPlaceholder: true)
+                    }
                 }
-                if artist.hasHeadshot {
-                    CachedImage(
-                        ref: .artistHeadshot(artistId: artist.id.protoValue),
-                        cornerRadius: 8,
-                        transparentPlaceholder: true)
-                }
+                // Square hero (1:1) — albums, not posters.
+                .frame(width: heroSide, height: heroSide)
             }
-            // Square hero (1:1) — albums, not posters.
-            .frame(width: 130, height: 130)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(width: heroSide, height: heroSide)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(artist.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                if let years = lifespanText(artist) {
-                    Text(years)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    .font(layout.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
+                HStack(spacing: 8) {
+                    if let years = lifespanText(artist) {
+                        Text(years)
+                    }
+                    Text(artistTypeLabel(artist.artistType))
                 }
-                Text(artistTypeLabel(artist.artistType))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 Spacer(minLength: 0)
             }
         }
@@ -129,11 +142,12 @@ struct ArtistDetailView: View {
 
     @ViewBuilder
     private func biography(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("About")
-                .font(.headline)
+                .mmSectionTitle()
             Text(text)
-                .font(.body)
+                .font(MarqueeTheme.Fonts.body)
+                .foregroundStyle(MarqueeTheme.Colors.text2)
         }
     }
 
@@ -149,9 +163,9 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func ownedAlbumsSection(_ albums: [ApiTitle]) -> some View {
         if !albums.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
                 Text("Albums on your shelf")
-                    .font(.headline)
+                    .mmSectionTitle()
 
                 let status = albumBulkStatus(albums)
                 if status.completed < status.total {
@@ -161,48 +175,33 @@ struct ArtistDetailView: View {
                         action: { Task { await startBulkAlbumDownload(albums) } })
                 }
 
-                LazyVGrid(columns: albumColumns, spacing: 16) {
+                LazyVGrid(columns: albumColumns, spacing: layout.sectionGap) {
                     ForEach(albums) { album in
-                        // Album navigation routes via ApiTitle (a future
-                        // AlbumDetailView lands in Phase 3); for now
-                        // ContentView will fall back to TitleDetailView
-                        // for non-book / non-movie titles. That path
-                        // will get a proper destination in Phase 3.
+                        // Album navigation routes via ApiTitle;
+                        // ContentView dispatches isAlbum titles to
+                        // AlbumDetailView.
                         NavigationLink(value: album) {
-                            VStack(alignment: .center, spacing: 6) {
-                                ZStack(alignment: .bottomTrailing) {
-                                    CachedImage(
-                                        ref: .posterThumbnail(titleId: album.id.protoValue),
-                                        cornerRadius: 8)
-                                        .frame(width: 130, height: 130)  // square
+                            VStack(alignment: .leading, spacing: 0) {
+                                MMPosterTile(
+                                    name: album.name,
+                                    ref: .posterThumbnail(titleId: album.id.protoValue),
+                                    square: true,
+                                    width: layout.gridCellWidth,
+                                    placeholderIcon: "music.note")
+                                .overlay(alignment: .bottomTrailing) {
+                                    // Bottom-right corner badge, small
+                                    // enough not to obscure the cover.
+                                    // Same marker PosterCard uses.
                                     if audioCache.isDownloaded(titleId: album.id.protoValue) {
-                                        // Bottom-right corner badge,
-                                        // small enough not to obscure
-                                        // the cover. Same icon family
-                                        // used on AlbumDetailView's
-                                        // per-track downloaded marker
-                                        // for visual consistency.
-                                        Image(systemName: "arrow.down.circle.fill")
-                                            .font(.caption)
-                                            .foregroundStyle(.white)
-                                            .padding(4)
-                                            .background(.black.opacity(0.55))
-                                            .clipShape(Circle())
-                                            .padding(6)
-                                            .accessibilityLabel("Downloaded")
+                                        MMArtBadge(systemImage: "arrow.down", label: "Downloaded")
                                     }
                                 }
-                                Text(album.name)
-                                    .font(.caption)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                                if let year = album.year {
-                                    Text(String(year))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
+                                MMCaption(
+                                    title: album.name,
+                                    meta: album.year.map(String.init),
+                                    width: layout.gridCellWidth)
                             }
-                            .frame(width: 130)
+                            .frame(width: layout.gridCellWidth, alignment: .topLeading)
                         }
                         .buttonStyle(.plain)
                     }
@@ -213,33 +212,35 @@ struct ArtistDetailView: View {
 
     @ViewBuilder
     private func membershipSection(_ title: String, entries: [ApiArtistMember]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
             Text(title)
-                .font(.headline)
+                .mmSectionTitle()
             ForEach(entries) { entry in
                 NavigationLink(value: ArtistRoute(id: entry.id, name: entry.name)) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         Image(systemName: entry.artistType == .person ? "person.fill" : "person.3.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.name)
-                                .foregroundStyle(.tint)
+                                .font(MarqueeTheme.Fonts.control)
+                                .foregroundStyle(MarqueeTheme.Colors.accent)
                             if let inst = entry.instruments {
                                 Text(inst)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                             }
                         }
                         Spacer()
                         if let years = membershipYears(entry) {
                             Text(years)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(MarqueeTheme.Fonts.meta)
+                                .foregroundStyle(MarqueeTheme.Colors.text3)
                         }
                     }
+                    .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
-                Divider()
+                Divider().overlay(MarqueeTheme.Colors.hairline)
             }
         }
     }
@@ -254,16 +255,16 @@ struct ArtistDetailView: View {
 
     @ViewBuilder
     private func otherWorksSection(_ entries: [ApiDiscographyEntry]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: MarqueeTheme.Spacing.headToRow) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Other Works")
-                    .font(.headline)
+                    .mmSectionTitle()
                 Spacer()
                 Text("Tap to wish")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
             }
-            LazyVGrid(columns: albumColumns, spacing: 16) {
+            LazyVGrid(columns: albumColumns, spacing: layout.sectionGap) {
                 ForEach(entries) { entry in
                     discographyCard(entry)
                 }
@@ -278,46 +279,40 @@ struct ArtistDetailView: View {
         Button {
             Task { await toggleWish(entry, currentlyWished: wished) }
         } label: {
-            VStack(spacing: 4) {
-                CachedImage(
+            VStack(alignment: .leading, spacing: 0) {
+                MMPosterTile(
+                    name: entry.name,
                     ref: .coverArtArchiveReleaseGroup(releaseGroupId: entry.releaseGroupId),
-                    cornerRadius: 8)
-                    .frame(width: 130, height: 130)  // square
+                    square: true,
+                    width: layout.gridCellWidth,
+                    placeholderIcon: "music.note")
                     .overlay(alignment: .topTrailing) {
                         ZStack {
                             if inFlight {
                                 ProgressView()
                                     .controlSize(.small)
                                     .padding(6)
-                                    .background(.black.opacity(0.5))
-                                    .clipShape(Circle())
+                                    .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
                             } else if wished {
                                 Image(systemName: "heart.fill")
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(MarqueeTheme.Colors.pink)
                                     .padding(6)
-                                    .background(.black.opacity(0.5))
-                                    .clipShape(Circle())
+                                    .background(MarqueeTheme.Colors.scrimStrong, in: Circle())
                             } else {
                                 Image(systemName: "heart")
                                     .foregroundStyle(.white)
                                     .padding(6)
-                                    .background(.black.opacity(0.35))
-                                    .clipShape(Circle())
+                                    .background(MarqueeTheme.Colors.scrim, in: Circle())
                             }
                         }
-                        .padding(4)
+                        .padding(6)
                     }
-                Text(entry.name)
-                    .font(.caption)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 130)
-                if let year = entry.year {
-                    Text(String(year))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                MMCaption(
+                    title: entry.name,
+                    meta: entry.year.map(String.init),
+                    width: layout.gridCellWidth)
             }
+            .frame(width: layout.gridCellWidth, alignment: .topLeading)
         }
         .buttonStyle(.plain)
         .disabled(inFlight)

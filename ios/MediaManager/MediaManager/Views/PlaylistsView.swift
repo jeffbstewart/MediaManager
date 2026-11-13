@@ -19,19 +19,26 @@ struct PlaylistsView: View {
         Group {
             if loading && playlists.isEmpty {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else if playlists.isEmpty {
                 ContentUnavailableView(
                     "No playlists yet",
                     systemImage: "music.note.list",
                     description: Text("Tap the + button to create your first playlist."))
+                    .mmPage()
             } else {
                 List {
-                    ForEach(playlists) { playlist in
-                        NavigationLink(value: PlaylistRoute(id: playlist.id, name: playlist.name)) {
-                            PlaylistRow(playlist: playlist)
+                    Section {
+                        ForEach(playlists) { playlist in
+                            NavigationLink(value: PlaylistRoute(id: playlist.id, name: playlist.name)) {
+                                PlaylistRow(playlist: playlist)
+                            }
                         }
                     }
+                    .mmRow()
                 }
+                .mmListChrome()
             }
         }
         .navigationTitle("Your Playlists")
@@ -81,34 +88,37 @@ private struct PlaylistRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Group {
+            ZStack {
+                MMPlaceholderArt(name: playlist.name, systemImage: "music.note.list")
                 if let titleId = playlist.heroTitleId {
-                    CachedImage(ref: .posterThumbnail(titleId: titleId.protoValue), cornerRadius: 4)
-                } else {
-                    LinearGradient(
-                        colors: [.indigo, .teal],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    CachedImage(
+                        ref: .posterThumbnail(titleId: titleId.protoValue),
+                        cornerRadius: 0,
+                        transparentPlaceholder: true)
                 }
             }
             .frame(width: 50, height: 50)  // square
+            .clipShape(RoundedRectangle(cornerRadius: MarqueeTheme.Radius.badge, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: MarqueeTheme.Radius.badge, style: .continuous)
+                    .strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(playlist.name)
-                        .font(.headline)
+                        .font(MarqueeTheme.Fonts.control)
+                        .foregroundStyle(MarqueeTheme.Colors.text)
                         .lineLimit(1)
                     if playlist.isPrivate {
                         Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }
                 if let desc = playlist.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                         .lineLimit(1)
                 }
             }
@@ -130,15 +140,16 @@ struct CreatePlaylistSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Name") {
+                Section(header: MMSectionHeader("Name")) {
                     TextField("My favourite tracks", text: $name)
                         .textInputAutocapitalization(.words)
                 }
-                Section("Description (optional)") {
+                Section(header: MMSectionHeader("Description (optional)")) {
                     TextField("What's this playlist for?", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                 }
             }
+            .mmListChrome()
             .navigationTitle("New Playlist")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

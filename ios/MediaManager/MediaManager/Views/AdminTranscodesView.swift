@@ -19,7 +19,7 @@ struct AdminTranscodesView: View {
                 List {
                     ForEach(transcodes) { tc in
                         HStack(spacing: 12) {
-                            CachedImage(ref: .posterThumbnail(titleId: tc.titleId.protoValue))
+                            MMArtFrame { CachedImage(ref: .posterThumbnail(titleId: tc.titleId.protoValue), cornerRadius: 0) }
                             .frame(width: 40, height: 60)
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -29,26 +29,26 @@ struct AdminTranscodesView: View {
 
                                 if let s = tc.seasonNumber, let e = tc.episodeNumber {
                                     Text("S\(s)E\(e)" + (tc.episodeName.map { " \($0)" } ?? ""))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(MarqueeTheme.Fonts.meta)
+                                        .foregroundStyle(MarqueeTheme.Colors.text3)
                                         .lineLimit(1)
                                 }
 
                                 Text(tc.filePath?.components(separatedBy: "/").last ?? "Unknown file")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                     .lineLimit(1)
 
                                 HStack(spacing: 6) {
                                     if let format = tc.mediaFormat {
                                         Text(format)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.text3)
                                     }
                                     if tc.retranscodeRequested == true {
                                         Text("Re-transcode requested")
-                                            .font(.caption2)
-                                            .foregroundStyle(.orange)
+                                            .font(MarqueeTheme.Fonts.meta)
+                                            .foregroundStyle(MarqueeTheme.Colors.orange)
                                     }
                                 }
                             }
@@ -64,6 +64,7 @@ struct AdminTranscodesView: View {
                             }
                         }
                     }
+                    .mmRow()
 
                     if page < totalPages {
                         Button("Load More") {
@@ -74,6 +75,7 @@ struct AdminTranscodesView: View {
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Linked Transcodes")
         .task { await loadTranscodes() }
         .refreshable {

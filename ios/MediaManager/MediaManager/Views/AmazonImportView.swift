@@ -24,6 +24,7 @@ struct AmazonImportView: View {
                     LabeledContent("Media-Related", value: "\(summary.mediaRelated)")
                     LabeledContent("Linked to Catalog", value: "\(summary.linked)")
                 }
+                .mmRow()
 
                 Section {
                     Button {
@@ -33,14 +34,16 @@ struct AmazonImportView: View {
                     }
                     .disabled(importing)
                 }
+                .mmRow()
             }
 
             if let importMessage {
                 Section {
                     Text(importMessage)
-                        .font(.callout)
-                        .foregroundStyle(.green)
+                        .font(MarqueeTheme.Fonts.cardTitle)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
                 }
+                .mmRow()
             }
 
             Section {
@@ -51,14 +54,17 @@ struct AmazonImportView: View {
                 Toggle("Hide cancelled", isOn: $hideCancelled)
                     .onChange(of: hideCancelled) { _, _ in search() }
             }
+            .mmRow()
 
             if loading {
                 Section { ProgressView("Loading...") }
+                .mmRow()
             } else if orders.isEmpty {
                 Section {
                     Text("No orders found")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
+                .mmRow()
             } else {
                 Section("Orders (\(orders.count))") {
                     ForEach(orders, id: \.id) { order in
@@ -67,8 +73,10 @@ struct AmazonImportView: View {
                         }
                     }
                 }
+                .mmRow()
             }
         }
+        .mmListChrome()
         .navigationTitle("Amazon Import")
         // Standardize on `.searchable` (floats above the mini-player
         // on iOS 26) instead of an inline TextField in the filter
@@ -156,26 +164,26 @@ struct AmazonOrderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(order.productName)
-                .font(.subheadline)
+                .font(MarqueeTheme.Fonts.cardTitle)
                 .lineLimit(2)
 
             HStack(spacing: 8) {
                 if order.hasOrderDate {
                     Text(order.orderDate)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if order.hasUnitPrice {
                     Text(String(format: "$%.2f", order.unitPrice))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if order.hasProductCondition {
                     Text(order.productCondition)
-                        .font(.caption2)
+                        .font(MarqueeTheme.Fonts.meta)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(.quaternary)
+                        .background(MarqueeTheme.Colors.surface)
                         .clipShape(Capsule())
                 }
             }
@@ -183,17 +191,17 @@ struct AmazonOrderRow: View {
             if order.hasLinkedTitleName {
                 HStack(spacing: 4) {
                     Image(systemName: "link")
-                        .font(.caption2)
+                        .font(MarqueeTheme.Fonts.meta)
                     Text(order.linkedTitleName)
-                        .font(.caption)
-                        .foregroundStyle(.green)
+                        .font(MarqueeTheme.Fonts.meta)
+                        .foregroundStyle(MarqueeTheme.Colors.green)
 
                     Spacer()
 
                     Button("Unlink", role: .destructive) {
                         Task { await onUnlink() }
                     }
-                    .font(.caption)
+                    .font(MarqueeTheme.Fonts.meta)
                 }
             }
         }

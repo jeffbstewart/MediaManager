@@ -19,6 +19,8 @@ struct ProfileView: View {
         Group {
             if loading {
                 ProgressView("Loading...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mmPage()
             } else {
                 // The list renders whether or not the profile loaded.
                 // It used to render only on success, which hid Sign Out
@@ -27,7 +29,7 @@ struct ProfileView: View {
                 // app at a new address.
                 List {
                     if let profile {
-                        Section("Account") {
+                        Section(header: MMSectionHeader("Account")) {
                             LabeledContent("Username", value: profile.username ?? "-")
                             LabeledContent("Display Name", value: profile.displayName ?? "-")
                             LabeledContent("Role", value: profile.roleDisplay)
@@ -35,8 +37,9 @@ struct ProfileView: View {
                                 LabeledContent("Rating Limit", value: ceiling)
                             }
                         }
+                        .mmRow()
 
-                        Section("Live TV Quality") {
+                        Section(header: MMSectionHeader("Live TV Quality")) {
                             Picker("Minimum Quality", selection: $tvQuality) {
                                 ForEach(1...5, id: \.self) { q in
                                     Text(String(repeating: "\u{2605}", count: q) +
@@ -48,6 +51,7 @@ struct ProfileView: View {
                                 Task { try? await dataModel.updateTvQuality(newValue) }
                             }
                         }
+                        .mmRow()
 
                         Section {
                             Button("Change Password") {
@@ -58,10 +62,11 @@ struct ProfileView: View {
                                 showSessions = true
                             }
                         }
+                        .mmRow()
                     } else {
                         Section {
                             Label("Can't reach the server", systemImage: "exclamationmark.icloud")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(MarqueeTheme.Colors.orange)
                             Button("Retry") {
                                 loadTask = Task {
                                     await authManager.retryConnection()
@@ -71,10 +76,11 @@ struct ProfileView: View {
                         } footer: {
                             Text("Your profile couldn't be loaded. If the server moved, choose Change Server below and enter its new address — you'll stay signed in.")
                         }
+                        .mmRow()
                     }
 
                     if AuthManager.isBiometricAvailable {
-                        Section("Security") {
+                        Section(header: MMSectionHeader("Security")) {
                             Toggle(
                                 "Sign in with \(AuthManager.biometricTypeName)",
                                 isOn: Binding(
@@ -83,6 +89,7 @@ struct ProfileView: View {
                                 )
                             )
                         }
+                        .mmRow()
                     }
 
                     Section {
@@ -96,9 +103,11 @@ struct ProfileView: View {
                             showLogoutConfirmation = true
                         }
                     }
+                    .mmRow()
                 }
             }
         }
+        .mmListChrome()
         .navigationTitle("Profile")
         .alert("Sign Out", isPresented: $showLogoutConfirmation) {
             Button("Sign Out", role: .destructive) {
@@ -161,21 +170,22 @@ struct ChangePasswordView: View {
                     SecureField("Confirm New Password", text: $confirmPassword)
                         .textContentType(.newPassword)
                 }
+                .mmRow()
 
                 if let error {
                     Section {
                         Text(error)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MarqueeTheme.Colors.pink)
                             .font(.callout)
                     }
+                    .mmRow()
                 }
 
                 Section {
                     Button(saving ? "Saving..." : "Change Password") {
                         Task { await changePassword() }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
                     .frame(maxWidth: .infinity)
                     .disabled(currentPassword.isEmpty || newPassword.isEmpty ||
                               newPassword != confirmPassword || saving)
@@ -183,6 +193,7 @@ struct ChangePasswordView: View {
                     .listRowBackground(Color.clear)
                 }
             }
+            .mmListChrome()
             .navigationTitle("Change Password")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -48,11 +48,13 @@ struct AdvancedSearchSheet: View {
                             Spacer()
                         }
                     }
+                    .mmRow()
                 } else if !presets.isEmpty {
                     presetsSection
                 }
                 filtersSection
             }
+            .mmListChrome()
             .navigationTitle("Advanced Search")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -90,16 +92,15 @@ struct AdvancedSearchSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-        } header: {
-            Text("Dance Presets")
-        } footer: {
+        } header: { MMSectionHeader("Dance Presets") } footer: {
             // Show the active preset's description as a help line so
             // the user understands what tempo they just selected.
             if let active = activePreset {
                 Text(active.description)
-                    .font(.caption)
+                    .font(MarqueeTheme.Fonts.meta)
             }
         }
+        .mmRow()
     }
 
     @ViewBuilder
@@ -112,15 +113,15 @@ struct AdvancedSearchSheet: View {
                 .font(.subheadline.weight(isActive ? .semibold : .regular))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isActive ? Color.accentColor : Color.gray.opacity(0.15))
-                .foregroundStyle(isActive ? Color.white : Color.primary)
+                .background(isActive ? Color.accentColor : MarqueeTheme.Colors.grey3.opacity(0.15))
+                .foregroundStyle(isActive ? Color.white : MarqueeTheme.Colors.text)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }
 
     private var filtersSection: some View {
-        Section("Filters") {
+        Section(header: MMSectionHeader("Filters")) {
             HStack {
                 Text("Search")
                     .frame(width: 80, alignment: .leading)
@@ -136,7 +137,7 @@ struct AdvancedSearchSheet: View {
                     .keyboardType(.numberPad)
                     .frame(maxWidth: 80)
                     .onChange(of: bpmMinText) { _, _ in activePresetKey = nil }
-                Text("–").foregroundStyle(.secondary)
+                Text("–").foregroundStyle(MarqueeTheme.Colors.text3)
                 TextField("Max", text: $bpmMaxText)
                     .keyboardType(.numberPad)
                     .frame(maxWidth: 80)
@@ -159,6 +160,7 @@ struct AdvancedSearchSheet: View {
                 }
             }
         }
+        .mmRow()
     }
 
     // MARK: - State helpers

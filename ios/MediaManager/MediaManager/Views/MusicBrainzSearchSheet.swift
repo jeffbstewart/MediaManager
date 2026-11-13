@@ -47,11 +47,12 @@ struct MusicBrainzSearchSheet: View {
                     .disabled(searchQuery.trimmingCharacters(in: .whitespaces).isEmpty || searching)
                 } footer: {
                     Text("Format \"Artist - Album\" gives the best precision. The original UPC barcode is also tried — many CDs are registered on MusicBrainz by barcode.")
-                        .font(.caption2)
+                        .font(MarqueeTheme.Fonts.meta)
                 }
+                .mmRow()
 
                 if !candidates.isEmpty {
-                    Section("Candidates") {
+                    Section(header: MMSectionHeader("Candidates")) {
                         ForEach(candidates, id: \.releaseMbid) { candidate in
                             Button {
                                 assignCandidate(candidate)
@@ -61,16 +62,19 @@ struct MusicBrainzSearchSheet: View {
                             .disabled(assigning)
                         }
                     }
+                    .mmRow()
                 }
 
                 if let statusMessage {
                     Section {
                         Text(statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                            .font(MarqueeTheme.Fonts.meta)
+                            .foregroundStyle(MarqueeTheme.Colors.green)
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle("Search MusicBrainz")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -143,14 +147,17 @@ private struct MusicBrainzCandidateRow: View {
             // via Cover Art Archive. CachedImage falls through to
             // the placeholder when the lookup misses.
             if candidate.hasReleaseGroupMbid {
-                CachedImage(
-                    ref: .coverArtArchiveReleaseGroup(releaseGroupId: candidate.releaseGroupMbid),
-                    cornerRadius: 4)
-                    .frame(width: 46, height: 46)
+                MMArtFrame {
+                    CachedImage(
+                        ref: .coverArtArchiveReleaseGroup(releaseGroupId: candidate.releaseGroupMbid),
+                        cornerRadius: 0)
+                }
+                .frame(width: 46, height: 46)
             } else {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(.fill.quaternary)
-                    .frame(width: 46, height: 46)
+                MMArtFrame {
+                    MMPlaceholderArt(name: candidate.title, systemImage: "music.note")
+                }
+                .frame(width: 46, height: 46)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -158,8 +165,8 @@ private struct MusicBrainzCandidateRow: View {
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
                 Text(candidate.artistCredit)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.meta)
+                    .foregroundStyle(MarqueeTheme.Colors.text3)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     if candidate.hasYear { Text(String(candidate.year)) }
@@ -169,8 +176,8 @@ private struct MusicBrainzCandidateRow: View {
                     }
                     if candidate.hasLabel { Text(candidate.label) }
                 }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(MarqueeTheme.Fonts.meta)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
             }
             Spacer()
         }

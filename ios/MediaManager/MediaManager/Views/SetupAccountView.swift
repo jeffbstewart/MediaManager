@@ -16,36 +16,35 @@ struct SetupAccountView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                Image(systemName: "film.stack")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.tint)
+                MMBrandWordmark(size: 34)
 
                 Text("Welcome")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(MarqueeTheme.Fonts.h1)
+                    .foregroundStyle(MarqueeTheme.Colors.text)
 
                 Text("Create your administrator account to get started.")
-                    .foregroundStyle(.secondary)
+                    .font(MarqueeTheme.Fonts.body)
+                    .foregroundStyle(MarqueeTheme.Colors.text2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 VStack(spacing: 12) {
                     TextField("Username", text: $username)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
                     TextField("Display Name", text: $displayName)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.name)
 
                     SecureField("Password", text: $password)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.newPassword)
 
                     SecureField("Confirm Password", text: $confirmPassword)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.mmPill)
                         .textContentType(.newPassword)
 
                     Button(action: createAccount) {
@@ -57,15 +56,14 @@ struct SetupAccountView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.mmPrimary)
                     .disabled(!isValid || isCreating)
                 }
                 .padding(.horizontal)
 
                 if let error = authManager.error {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(MarqueeTheme.Colors.pink)
                         .font(.callout)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
@@ -76,10 +74,14 @@ struct SetupAccountView: View {
                 Button("Use a different server") {
                     authManager.disconnectServer()
                 }
-                .font(.callout)
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
                 .padding(.bottom)
             }
             .padding()
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mmGlowPage()
             .navigationTitle("")
         }
     }

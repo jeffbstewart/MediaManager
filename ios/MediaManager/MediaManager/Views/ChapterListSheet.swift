@@ -21,13 +21,12 @@ struct ChapterListSheet: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(chapter.title ?? "Chapter \(chapter.number)")
-                                    .font(.subheadline)
-                                    .fontWeight(isCurrent ? .bold : .regular)
-                                    .foregroundStyle(isCurrent ? .blue : .primary)
+                                    .font(isCurrent ? MarqueeTheme.Fonts.control : MarqueeTheme.Fonts.cardTitle)
+                                    .foregroundStyle(isCurrent ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text)
 
                                 Text(formatTime(chapter.start))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(MarqueeTheme.Fonts.meta)
+                                    .foregroundStyle(MarqueeTheme.Colors.text3)
                                     .monospacedDigit()
                             }
 
@@ -35,13 +34,15 @@ struct ChapterListSheet: View {
 
                             if isCurrent {
                                 Image(systemName: "speaker.wave.2.fill")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(MarqueeTheme.Colors.accent)
                                     .font(.caption)
                             }
                         }
                     }
+                    .mmRow()
                 }
             }
+            .mmListChrome()
             .navigationTitle("Chapters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
