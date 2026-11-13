@@ -19,6 +19,52 @@ Server / Android TV / Roku get their own tag schemes (or none — the server is 
 
 ---
 
+## iOS 1.3 (build 14) — 2026-11-13
+
+**TestFlight build, intended for the App Store.** The app takes on the Marquee look the web app already has: a dark charcoal page, an amber accent, pill buttons, heavy display headings, and poster-first layouts. Every screen was restyled; navigation and features are unchanged, so everything is where it was.
+
+### Look and feel
+
+- Dark only: charcoal page, amber accent on every control that takes the tint, and a soft glow behind the top of each page
+- Headings, page titles, and the wordmark are set in Figtree ExtraBold; body text stays San Francisco, so Dynamic Type works as before
+- The decisive action on each screen (Play, Sign In, Connect, Continue, I Agree) is a white pill; secondary actions are quieter surface pills
+- Poster and album art share one card style (rounded corners, hairline edge, shadow), with progress and badges drawn on the art
+- Navigation bar is transparent at the top of a page and frosts over once content scrolls under it
+
+### Home
+
+- Featured carousel at the top, each slide tinted from its own backdrop
+- Welcome block and browse chips for jumping straight into a section
+- Continue Watching as wide backdrop cards with progress; poster rows, Continue Reading, and New Seasons below
+
+### Sidebar
+
+- Wordmark at the top, taken from the app's display name
+- Rows are pills: the current section gets a white outline and an amber icon
+- Small-caps section headers, red counters, and the connection status as a footer row
+
+### Title pages
+
+- Backdrop runs under the navigation bar and fades into the page, with the title sitting on the fade
+- Play, favorite, and download actions are pills that wrap on narrow screens
+- Tags are chips; cast photos are round
+
+### Everything else
+
+- Movies, TV, Books, and Music grids fill the page width on both iPhone and iPad, with square tiles for music
+- Live TV and Cameras are wide-card grids with a red Live badge
+- Music, Books, Seasons and Episodes, Actor, Collections, Genres, Tags, Search, Wish List, Downloads, Sessions, Family, Profile, About, the sign-in flow, the terms and password gates, and the admin screens all use the same colours, type, and controls
+
+### Not changed
+
+- The video player and the book reader keep their own chrome (the reader still has its light, sepia, and dark themes)
+- iPhone navigation is still the sidebar list, not a bottom tab bar
+- Episode rows remain text rows
+
+Build 13 (1.2) was a TestFlight expiry refresh with no changes and has no entry.
+
+---
+
 ## iOS 1.2 (build 12) — 2026-08-15
 
 **TestFlight release.** Recovery from the 2026-08 server endpoint migration (fixes retired-repo issue #99), mirroring what a PR in the retired repository (#98 there) did for Roku and Android TV. Installs carrying the old address come up at server setup instead of wedged, and every escape hatch works with the server unreachable.
