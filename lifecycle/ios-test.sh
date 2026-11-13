@@ -23,19 +23,22 @@ PROJECT="$PROJECT_ROOT/ios/MediaManager/MediaManager.xcodeproj"
 # from `simctl list`. The `Booted` / `(...)` patterns in the
 # `simctl list devices available` text output are stable across
 # Xcode versions and easier to scan than the JSON schema.
+# `|| true`: a grep that matches nothing fails the pipeline under
+# pipefail, which would exit the script before the fallback (no
+# simulator booted) or the error message (none available) could run.
 DESTINATION_ID="$(xcrun simctl list devices available \
     | grep -E "iPhone.*\(Booted\)" \
     | head -1 \
     | grep -oE "\([0-9A-F-]{36}\)" \
     | head -1 \
-    | tr -d '()')"
+    | tr -d '()' || true)"
 if [ -z "$DESTINATION_ID" ]; then
     DESTINATION_ID="$(xcrun simctl list devices available \
         | grep -E "iPhone " \
         | head -1 \
         | grep -oE "\([0-9A-F-]{36}\)" \
         | head -1 \
-        | tr -d '()')"
+        | tr -d '()' || true)"
 fi
 if [ -z "$DESTINATION_ID" ]; then
     echo "ERROR: no available iOS simulator found." >&2

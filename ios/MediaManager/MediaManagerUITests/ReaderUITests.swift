@@ -100,10 +100,14 @@ final class ReaderUITests: XCTestCase {
     /// interactive across cycles.
     func testThemeButtonRemainsResponsive() {
         // Theme icon starts as one of `sun.max` / `book.closed` /
-        // `moon` (driven by UserDefaults). Match the family by suffix
-        // so we don't tightly couple to whichever the user last set.
+        // `moon` (driven by UserDefaults). Match the whole family so
+        // we don't tightly couple to whichever the user last set.
+        // Match on identifier, not label: the identifier is always
+        // the symbol name, but the system gives some symbols a spoken
+        // label (`moon` reads as "Do Not Disturb"), so a label match
+        // loses the button as soon as the cycle reaches dark.
         let themeButton = app.buttons.matching(
-            NSPredicate(format: "label IN {'sun.max', 'book.closed', 'moon'}"))
+            NSPredicate(format: "identifier IN {'sun.max', 'book.closed', 'moon'}"))
             .element(boundBy: 0)
         XCTAssertTrue(themeButton.waitForExistence(timeout: 5))
         let enabled = NSPredicate(format: "isEnabled == true")
