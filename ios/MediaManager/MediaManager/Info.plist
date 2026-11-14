@@ -81,6 +81,8 @@
 	</array>
 <key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
+	<key>MMBrandName</key>
+	<string>$(APP_BRAND_NAME)</string>
 <key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan barcodes on disc packaging.</string>
 	<key>NSFaceIDUsageDescription</key>

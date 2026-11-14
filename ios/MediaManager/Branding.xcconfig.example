@@ -3,5 +3,11 @@
 
 // --- App Identity ---
 
-// Display name shown under the app icon and in the system.
+// Display name shown under the app icon and in the system. The home
+// screen truncates at roughly 12 characters, so keep it short.
 APP_DISPLAY_NAME = Media Manager
+
+// Full brand name, drawn as the in-app wordmark (media/manager). May be
+// longer than the display name; when unset the wordmark falls back to
+// APP_DISPLAY_NAME.
+APP_BRAND_NAME = Media Manager

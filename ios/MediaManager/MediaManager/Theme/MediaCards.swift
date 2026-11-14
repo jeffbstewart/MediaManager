@@ -163,7 +163,7 @@ struct MMPlaceholderArt: View {
 }
 
 /// Progress pill over artwork (spec 3.2): 4pt tall, 8pt in from the
-/// art's edges, translucent track, amber fill.
+/// art's edges, translucent track, accent fill.
 struct MMProgressPill: View {
     let fraction: Double
 
@@ -185,7 +185,7 @@ struct MMProgressPill: View {
 }
 
 /// Corner badge at the top-right of art (spec 3.3): caps, 12/700,
-/// radius `0 0 0 8`. Red for LIVE, amber for NEW, scrim otherwise.
+/// radius `0 0 0 8`. Red for LIVE, accent for NEW, scrim otherwise.
 struct MMCornerBadge: View {
     enum Tone { case live, accent, scrim }
     let text: String
@@ -231,7 +231,7 @@ struct MMArtBadge: View {
 // MARK: - Caption
 
 /// The card caption: title (14 regular, white) and up to two meta
-/// lines (12 semibold, muted; `accent` turns one amber).
+/// lines (12 semibold, muted; `accent` gives one the accent colour).
 struct MMCaption: View {
     let title: String
     var meta: String? = nil

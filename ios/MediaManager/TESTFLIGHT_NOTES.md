@@ -1,10 +1,25 @@
-# TestFlight Test Notes — iOS 1.3 (14)
+# TestFlight Test Notes — iOS 1.3 (15)
 
 ---
 
+NEW IN BUILD 15
+
+- New app icon: a cream house with a disc in front, on a teal tile.
+- The name under the icon is now "Disc Keeper". The app is still Household Disc Keeper everywhere else.
+- The accent colour is teal, not gold: progress bars, "% read" labels, links, toggles and the sort control.
+- First-launch agreement screen: "I Agree" now sits right under the Privacy Policy and Terms links, and the page scrolls if it does not fit.
+
+WHAT TO TEST IN BUILD 15
+
+- Find the app on your home screen and in the App Library. Is the new icon easy to spot, and is the name shown in full?
+- Look for any gold that was left behind, and any teal text or icon that is hard to read against its background.
+- To see the agreement screen again, delete and reinstall the app. Check that everything is reachable, including at a large text size.
+
+EVERYTHING BELOW IS FROM BUILD 14 AND STILL APPLIES
+
 NEW LOOK
 
-The whole app has been restyled to match the web app: a dark charcoal page, an amber accent, pill buttons, bold display headings, and poster-first layouts. Nothing has moved and no feature was added or removed, so everything is where you left it. The app is now dark only.
+The whole app has been restyled along the lines of the web app: a dark charcoal page, a teal accent, pill buttons, bold display headings, and poster-first layouts. Nothing has moved and no feature was added or removed, so everything is where you left it. The app is now dark only.
 
 WHAT CHANGED
 

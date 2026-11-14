@@ -19,6 +19,33 @@ Server / Android TV / Roku get their own tag schemes (or none — the server is 
 
 ---
 
+## iOS 1.3 (build 15) — 2026-11-13
+
+**TestFlight build, intended for the App Store.** Follows build 14 by a few hours. The app gets its own identity: a new icon, a shorter name on the home screen, and a teal accent in place of the gold that build 14 carried over from the web app. The first-launch agreement screen is reworked so the button is always next to the documents it refers to.
+
+### Icon and name
+
+- New app icon: a cream house with a disc in front, on a deep teal tile. The artwork is tuned per size, with heavier outlines on the disc at home-screen sizes so it stays legible when small
+- The name under the icon is now "Disc Keeper", which fits without truncating; build 14 showed "HouseholdDisc..."
+- The App Store name and the in-app wordmark remain "Household Disc Keeper"
+
+### Accent colour
+
+- Bright teal replaces gold everywhere the accent appears: progress bars, "% read" labels, the wordmark's slashes, the sort control, active sidebar icons, links, toggles and other system controls
+- Contrast against the page is higher than before (9.0:1, up from 7.4:1)
+
+### First-launch agreement screen
+
+- "I Agree" and its acknowledgement now sit directly under the Privacy Policy and Terms of Service links; the note about server terms and the source link follow
+- The whole page scrolls when it does not fit. Previously the acknowledgement and the source link could sit below the fold with nothing to show they were there
+- At the accessibility text sizes the introduction and the button grow with the text, and the two document links stack so "Terms of Service" no longer breaks mid-word
+
+### Wordmark
+
+- The wordmark no longer truncates at large text sizes, and when it has to shrink it scales as one piece (previously only the longest word shrank). This applies everywhere it appears: sidebar, sign-in, server setup and the terms screens
+
+---
+
 ## iOS 1.3 (build 14) — 2026-11-13
 
 **TestFlight build, intended for the App Store.** The app takes on the Marquee look the web app already has: a dark charcoal page, an amber accent, pill buttons, heavy display headings, and poster-first layouts. Every screen was restyled; navigation and features are unchanged, so everything is where it was.

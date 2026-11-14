@@ -375,7 +375,7 @@ private struct ContinueWatchingRow: View {
 // MARK: - Continue Reading
 
 /// Resume-Reading row: poster cards with the reading-progress pill
-/// and an amber "% read" line. Each tap opens `BookReaderView`
+/// and an accent-coloured "% read" line. Each tap opens `BookReaderView`
 /// directly, since the user's intent is unambiguous from a resume
 /// list.
 struct ContinueReadingRow: View {
@@ -410,7 +410,7 @@ struct ContinueReadingRow: View {
     }
 }
 
-// MARK: - New Seasons Available (wide cards with the amber badge)
+// MARK: - New Seasons Available (wide cards with the accent badge)
 
 private struct MissingSeasonsRow: View {
     let items: [ApiMissingSeason]
@@ -508,7 +508,7 @@ struct CarouselView: View {
 
 /// The title-aware poster card used by Home carousels, catalog grids,
 /// actor pages and collections: spec art (8pt radius, shadow,
-/// hairline, amber progress pill) plus the download marker, playable
+/// hairline, accent progress pill) plus the download marker, playable
 /// dimming and the resume / year / family meta lines.
 struct PosterCard: View {
     @Environment(OnlineDataModel.self) private var dataModel

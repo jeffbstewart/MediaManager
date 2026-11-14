@@ -35,7 +35,9 @@ enum MarqueeTheme {
         /// `--c-ink` the primary pill button's text and the sheet fill.
         static let ink = Color.black
         /// `--c-accent` progress fill, active nav icon, accent meta.
-        static let accent = Color(mmHex: 0xe5a00d)
+        /// Bright teal, from the app icon's family. The web theme this
+        /// was adapted from uses a gold accent; the iOS app does not.
+        static let accent = Color(mmHex: 0x2dd4bf)
         /// `--c-surface` chips, search pill, ghost buttons, person cards.
         static let surface = Color.white.opacity(0.10)
         /// A second step up from `surface` for pressed / hovered pills.
@@ -52,7 +54,7 @@ enum MarqueeTheme {
         static let hairline = Color.white.opacity(0.08)
         /// Active nav pill outline (`#ffffffb3`).
         static let navOutline = Color.white.opacity(0.70)
-        /// Progress track under the amber fill (`#ffffff4d`).
+        /// Progress track under the accent fill (`#ffffff4d`).
         static let progressTrack = Color.white.opacity(0.30)
 
         // Secondary palette: category tiles, avatar fills.
@@ -235,7 +237,7 @@ enum MarqueeTheme {
 // MARK: - Color helpers
 
 extension Color {
-    /// `Color(mmHex: 0xe5a00d)`. Named to avoid colliding with the
+    /// `Color(mmHex: 0x2dd4bf)`. Named to avoid colliding with the
     /// string-based `Color(hex:)` initialiser the tag views use.
     init(mmHex hex: UInt32, opacity: Double = 1) {
         self.init(
