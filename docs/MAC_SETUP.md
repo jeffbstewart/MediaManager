@@ -200,18 +200,21 @@ Each family member needs to trust the developer certificate on first install (**
 ### App Store Screenshot Pipeline
 
 The iOS App Store screenshot pipeline runs Mac-only — it drives
-XCUITest against fresh disposable simulators to capture PNGs on
-Apple's currently-required device classes (iPhone 6.9" + iPad 13").
+XCUITest against fresh disposable simulators to capture PNGs on the
+newest device in each class App Store Connect asks for (two iPhone
+sizes, iPad 13", and the iPhone Duo's two displays).
 
 Driver: `lifecycle/capture-ios-screenshots.sh`. See
 [SCREENSHOT_PROCEDURES.md](SCREENSHOT_PROCEDURES.md#ios-app-store-screenshots-separate-flow)
-for the manifest, server-URL safety mechanism, and account roster.
+for the manifest, screenshot mode (invented names and generated
+artwork, so the capture can point at any server), and the account.
 
-Prereqs beyond a working iOS dev setup:
-- `app_store_demo_setup/secrets/.env` populated (copy from
-  `example.env`, fill in the seven `DEMO_*` passwords).
-- The four screenshot accounts (`viewer` / `kid` / `empty` /
-  `admin`) exist on the demo server (`seed-users` creates them).
+Prereqs beyond a working iOS dev setup, one of:
+- `secrets/ios-screenshots.agent_visible_env` with a server address
+  and two viewer accounts (copy from `secrets/example.ios-screenshots.env`).
+- For the demo server: `app_store_demo_setup/secrets/.env` populated
+  (copy from `example.env`), and its `viewer` account created
+  (`seed-users` creates it).
 
 ### SSDP Network Discovery (Multicast Entitlement)
 

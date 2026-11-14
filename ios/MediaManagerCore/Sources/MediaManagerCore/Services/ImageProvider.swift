@@ -22,6 +22,12 @@ public final class ImageProvider {
 
     /// Load an image by reference. Returns nil if not found or on error.
     public func image(for ref: MMImageRef) async -> UIImage? {
+        // Screenshot mode: generated artwork only. Nothing real is
+        // fetched, read from the cache, or written to it.
+        if ScreenshotMode.isActive {
+            return GeneratedArt.image(for: ref)
+        }
+
         // 1. Check cache (memory + disk)
         if let (cached, etag) = await cache.get(for: ref) {
             // Have a cached copy — do a conditional revalidation in the background

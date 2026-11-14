@@ -12,6 +12,7 @@ struct AboutView: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(OnlineDataModel.self) private var dataModel
     @State private var profile: ProfileResponse?
+    @State private var screenshotModeNotice: String?
 
     private var marketingVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -25,8 +26,28 @@ struct AboutView: View {
             Section(header: MMSectionHeader("Build")) {
                 LabeledContent("Version", value: marketingVersion)
                 LabeledContent("Build", value: buildNumber)
+                    // Hidden switch for screenshot mode (see
+                    // `ScreenshotMode`): four taps on the build row.
+                    // Deliberately unlabelled; it is a tool for
+                    // preparing store screenshots, not a feature.
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 4) {
+                        let on = !ScreenshotMode.stored
+                        ScreenshotMode.setStored(on)
+                        screenshotModeNotice = on
+                            ? "Screenshot mode will be on the next time the app starts. Names and artwork are replaced with invented ones. Do not edit anything while it is on."
+                            : "Screenshot mode will be off the next time the app starts."
+                    }
             }
             .mmRow()
+            .alert("Screenshot Mode", isPresented: Binding(
+                get: { screenshotModeNotice != nil },
+                set: { if !$0 { screenshotModeNotice = nil } })
+            ) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(screenshotModeNotice ?? "")
+            }
 
             Section(header: MMSectionHeader("Credits")) {
                 Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
