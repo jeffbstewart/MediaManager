@@ -185,10 +185,13 @@ video frames, book pages and the Downloads list are not covered.
 It can also be switched on a device: four taps on the **Build** row of
 the About screen, then restart the app. The same gesture turns it off.
 
-**Output.** The raw captures go to
+**Output.** The raw PNG captures go to
 `ios/MediaManager/fastlane/screenshots/en-US/<simulator>/`, which is
-gitignored. Each is also copied to `docs/images/screenshots/ios/` as
-`<device>_<screen>.png`, and those copies are committed:
+gitignored. Each is also saved to `docs/images/screenshots/ios/` as
+`<device>_<screen>.jpg` (JPEG, quality 90), and those are committed.
+The JPEGs are the ones to upload, so the store listing matches the
+record; they are about a fifth the size of the PNGs, which matters
+because git keeps every past capture.
 
 - `app-store/` is the set to upload, for each device in this order:
 

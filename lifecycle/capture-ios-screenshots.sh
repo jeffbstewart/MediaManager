@@ -13,7 +13,8 @@
 # ios/MediaManager/fastlane/screenshots/en-US/<device>/ and copies
 # a JPEG of each, as <device>_<screen>.jpg, into
 # docs/images/screenshots/ios/: `app-store/` holds the set to upload
-# and `reference/` the rest. Both are committed. Upload the PNGs.
+# and `reference/` the rest. Both are committed, and the JPEGs in
+# `app-store/` are what gets uploaded.
 #
 # Two phases, because a server shows its terms screen only until the
 # account agrees. `prelogin` photographs the screens up to and
@@ -398,10 +399,11 @@ for run in "${RUNS[@]}"; do
             continue
         fi
         cp "$src" "$out_device_dir/$stem.png"
-        # The committed copy: <device>_<screen>.jpg, JPEG at quality
-        # 90. About a fifth the size of the PNG, which matters because
-        # git keeps every past capture forever. The lossless PNG above
-        # is the one to upload.
+        # The committed copy, and the one to upload:
+        # <device>_<screen>.jpg, JPEG at quality 90. About a fifth the
+        # size of the PNG, which matters because git keeps every past
+        # capture forever. Uploading what is committed keeps the record
+        # and the store listing the same.
         mkdir -p "$DOCS_ROOT/$set_dir"
         sips -s format jpeg -s formatOptions 90 "$src" \
             --out "$DOCS_ROOT/$set_dir/${device_name}_${screen}.jpg" >/dev/null
