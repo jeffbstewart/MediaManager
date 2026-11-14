@@ -1,11 +1,11 @@
 import Foundation
+import MediaManagerCore
 
-/// UI-test hook for App Store screenshot capture. When the app is
-/// launched with `-MMSnapshotMode`, a small number of views suppress
-/// any rendering of the connected server's hostname (the demo server
-/// URL must never appear in submitted screenshots). Production
-/// launches never carry the arg and behave normally.
+/// App-side name for screenshot mode (`ScreenshotMode` in
+/// MediaManagerCore, which owns the switch and explains what the mode
+/// does). Views in the app use it to hide the connected server's
+/// hostname and to skip network discovery, so the server address never
+/// appears in a screenshot.
 enum SnapshotMode {
-    static let isActive: Bool =
-        ProcessInfo.processInfo.arguments.contains("-MMSnapshotMode")
+    static var isActive: Bool { ScreenshotMode.isActive }
 }
