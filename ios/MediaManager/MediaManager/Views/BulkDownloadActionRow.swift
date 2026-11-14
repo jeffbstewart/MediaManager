@@ -87,7 +87,7 @@ struct BulkDownloadActionRow: View {
             let label = pending == total
                 ? "Download all \(pending) \(plural)"
                 : "Download remaining \(pending) \(plural)"
-            // A quiet amber text row, matching EpisodesView's
+            // A quiet accent-coloured text row, matching EpisodesView's
             // "Download Season": bulk download is secondary to
             // browsing on every screen that shows this row.
             Button(action: action) {

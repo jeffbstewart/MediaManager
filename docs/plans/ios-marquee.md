@@ -13,11 +13,11 @@ was adapted on purpose, and what a later pass should pick up.
 | File | What |
 |------|------|
 | `ios/MediaManager/MediaManager/Theme/MarqueeTheme.swift` | Tokens: colour (`--c-*`), type (display face + roles), radius, spacing, card sizes; `MarqueeLayout` (the two breakpoints as the horizontal size class); `install()` for the UIKit appearance proxies; page modifiers `mmPage()`, `mmGlowPage()`, `mmListChrome()`, `mmRow()`. |
-| `Theme/MarqueeControls.swift` | Pill button styles (`.mmPrimary` white, `.mmGhost` surface, `.mmAccent` amber, `MMPillButtonStyle(prominent:)`), `MMChip`, `MMTag`, `MMRatingBox`, `.mmPill` text field, `MMBrandWordmark`, `MMPageGlow`. |
+| `Theme/MarqueeControls.swift` | Pill button styles (`.mmPrimary` white, `.mmGhost` surface, `.mmAccent` accent fill, `MMPillButtonStyle(prominent:)`), `MMChip`, `MMTag`, `MMRatingBox`, `.mmPill` text field, `MMBrandWordmark`, `MMPageGlow`. |
 | `Theme/MediaCards.swift` | Spec section 3 as views: `MMSectionHead`, `MMRow`, `MMArtFrame`, `MMPlaceholderArt`, `MMProgressPill`, `MMCornerBadge`, `MMArtBadge`, `MMCaption`, `MMPosterTile`, `MMWideCard`, `MMHeroBanner`, `MMPersonCard`, `MMCategoryTile`, `MMNotice`. |
 | `Theme/BackdropTint.swift` | Hero tint derived on device from the cached backdrop (`CIAreaAverage`, then saturate and set lightness to 20%). |
 | `Resources/Fonts/Figtree-ExtraBold.ttf` + `Figtree.LICENSE` | The display face, registered in `Info.plist` (`UIAppFonts`). |
-| `Assets.xcassets/AccentColor` | `#e5a00d`, so every system control that reads the tint is amber. |
+| `Assets.xcassets/AccentColor` | `#2dd4bf` (bright teal), so every system control that reads the tint takes the accent. |
 
 Views restyled in this pass: `MediaManagerApp` (install, dark only,
 tint), `ContentView` (sidebar: wordmark, pill rows, section headers,
@@ -57,7 +57,7 @@ and `PosterCard`), `TitleDetailView`, `CatalogView`, `MiniPlayerBar`,
   `mmRow()` for the surface token (Profile and About do).
 - **Sidebar.** `SidebarRow` draws the spec's nav pill itself (40pt,
   20pt icon, 14/600 label; active row gets the white outline and an
-  amber icon). `listRowBackground(.clear)` removes the system
+  accent-coloured icon). `listRowBackground(.clear)` removes the system
   selection highlight so the pill is the only state cue. Counters use
   the `--c-live` red like the web nav badges.
 - **Hero tint.** The server stores `Title.backdrop_tint` for the web,
@@ -68,10 +68,10 @@ and `PosterCard`), `TitleDetailView`, `CatalogView`, `MiniPlayerBar`,
   derives the featured set from the "Recently Added" carousel. When
   the bindings are regenerated, switch both to the typed fields.
 - **Buttons.** The spec's primary action is a white pill with black
-  text; `.borderedProminent` would give an amber one. The decisive
+  text; `.borderedProminent` would give an accent-coloured one. The decisive
   action per screen (Play, Sign In, Connect, Continue, I Agree) uses
   `.mmPrimary`; everything else on those screens is `.mmGhost`.
-  Admin forms were left on the system styles, which now tint amber.
+  Admin forms were left on the system styles, which now take the accent tint.
 - **Phone navigation.** The spec puts a 4-tab bottom bar on phones.
   The app's `NavigationSplitView` collapses to the sidebar list as the
   root on iPhone; that structure is unchanged in this pass, only
@@ -98,7 +98,7 @@ title page's backdrop runs under the navigation bar with the title on
 its fade, the hero image sizes from a clear base, square music tiles
 have their own width tier, the sidebar's status line is a list row,
 section headers are the small caps meta style, and the bulk download
-row is a quiet amber row everywhere.
+row is a quiet accent-coloured row everywhere.
 
 ## Second pass (same day)
 
@@ -111,9 +111,12 @@ the red `Live` badge), Downloads, Sessions, Family Members, the admin
 screens, the gate screens in `RootView` (connecting, forced password
 change, fingerprint mismatch), Profile and About rows.
 
-The wordmark now derives from `CFBundleDisplayName`, so the branded
-build reads `household/disc/keeper` and the open-source build
-`media/manager`.
+The wordmark derives from `MMBrandName` (`APP_BRAND_NAME` in
+`Branding.xcconfig`), falling back to `CFBundleDisplayName`, so the
+branded build reads `household/disc/keeper` and the open-source build
+`media/manager`. The two names are separate because the home screen
+truncates long display names: the branded build shows `Disc Keeper`
+under its icon.
 
 ## Not done yet
 
@@ -124,3 +127,20 @@ build reads `household/disc/keeper` and the open-source build
 - `CustomPlayerView` and `BookReaderView` keep their own chrome on
   purpose; the reader has its own light / sepia / dark themes.
 - A bottom tab bar on iPhone (spec section 2), if wanted.
+
+## Accent and icon (2026-11-13, after the first pass)
+
+The iOS app no longer uses the web theme's gold accent. Gold on
+charcoal is the look of the service the Marquee spec was drawn from,
+and a store review of comparable apps flagged the overlap. The iOS
+accent is bright teal, `#2dd4bf` (9.0:1 on the page colour), set in
+`MarqueeTheme.Colors.accent` and the `AccentColor` asset. The web app
+keeps its gold: it is self-hosted by each operator, not distributed
+through a store.
+
+The app icon is a cream house (`#f3e9d2`) with a disc in front on a
+deep teal tile (`#0e5a5e`). It ships as per-size PNGs: the 1024px store
+artwork has 1px outlines on the disc, the device sizes 6px, because the
+thin outline disappears when scaled down. The accent is a brighter
+member of the icon's teal family; the tile colour itself is too dark
+to read on the page.

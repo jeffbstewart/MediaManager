@@ -10,14 +10,29 @@ import SwiftUI
 struct AppPolicyAgreementView: View {
     @Environment(AppPolicyAgreement.self) private var agreement
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var typeSize
 
+    // The theme's body and control fonts are fixed sizes. This is the
+    // screen where the user accepts terms, so here they follow the
+    // user's text size like the rest of the copy on the page.
+    @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var controlSize: CGFloat = 14
+
+    /// Order matters here. The agreement sits directly under the two
+    /// documents it refers to, so the action and what it accepts are
+    /// read together. The note about server terms and the source link
+    /// are supplementary and come last: when the page is taller than
+    /// the screen (a short display, large text) the whole page
+    /// scrolls, and what falls below the fold is the least important
+    /// part, never the button.
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                Spacer(minLength: 40)
+                Spacer(minLength: 12)
 
                 MMBrandWordmark(size: 34)
                     .padding(.top)
+                    .padding(.horizontal, 16)
 
                 Text("Before You Continue")
                     .font(MarqueeTheme.Fonts.h1)
@@ -25,7 +40,7 @@ struct AppPolicyAgreementView: View {
                     .multilineTextAlignment(.center)
 
                 Text("Household Disc Keeper is an app that connects you to a server you (or someone you trust) operates. Your data lives on that server, not in the cloud.")
-                    .font(MarqueeTheme.Fonts.body)
+                    .font(.system(size: bodySize))
                     .foregroundStyle(MarqueeTheme.Colors.text2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
@@ -34,7 +49,13 @@ struct AppPolicyAgreementView: View {
                     sectionHeader("App-Level Privacy Policy and Terms")
                     Text("This is the agreement between **you and the app distributor** — what the app maker does (and doesn't do) with anything we touch.")
                         .font(.subheadline)
-                    HStack(spacing: 16) {
+                    // Side by side normally; stacked at the accessibility
+                    // text sizes, where two columns break the titles
+                    // mid-word.
+                    let links = typeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(spacing: 12))
+                        : AnyLayout(HStackLayout(spacing: 16))
+                    links {
                         documentLink(
                             title: "Privacy Policy",
                             icon: "lock.shield",
@@ -53,21 +74,13 @@ struct AppPolicyAgreementView: View {
                         .strokeBorder(MarqueeTheme.Colors.hairline, lineWidth: 1))
                 .padding(.horizontal, 16)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    sectionHeader("A note about server terms")
-                    Text("On the next page, you'll pick the server to connect to. That server may have its own privacy policy and terms and conditions you will have to agree to in order to use the server. Those are different, and we'll show them to you on a later page.")
-                        .font(.footnote)
-                        .foregroundStyle(MarqueeTheme.Colors.text3)
-                }
-                .padding(.horizontal, 24)
-
-                Spacer(minLength: 24)
-
                 VStack(spacing: 8) {
                     Button {
                         agreement.accept()
                     } label: {
                         Text("I Agree")
+                            .font(.system(size: controlSize, weight: .semibold))
+                            .padding(.vertical, 8)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.mmPrimary)
@@ -78,25 +91,35 @@ struct AppPolicyAgreementView: View {
                         .font(.caption2)
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 32)
-
-                    // Source / license tertiary link. Subtle on
-                    // purpose — transparency for the curious, plus a
-                    // visible reminder of the MIT license's
-                    // no-warranty clause for the audit trail.
-                    Button {
-                        openURL(AppPolicyAgreement.sourceCodeURL)
-                    } label: {
-                        Text("Open source under the MIT License — view source")
-                            .font(.caption2)
-                            .underline()
-                            .foregroundStyle(.tint)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
                 }
 
-                Spacer(minLength: 32)
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionHeader("A note about server terms")
+                    Text("On the next page, you'll pick the server to connect to. That server may have its own privacy policy and terms and conditions you will have to agree to in order to use the server. Those are different, and we'll show them to you on a later page.")
+                        .font(.footnote)
+                        .foregroundStyle(MarqueeTheme.Colors.text3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+
+                // Source / license tertiary link. Subtle on
+                // purpose — transparency for the curious, plus a
+                // visible reminder of the MIT license's
+                // no-warranty clause for the audit trail.
+                Button {
+                    openURL(AppPolicyAgreement.sourceCodeURL)
+                } label: {
+                    Text("Open source under the MIT License — view source")
+                        .font(.caption2)
+                        .underline()
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 24)
             }
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)

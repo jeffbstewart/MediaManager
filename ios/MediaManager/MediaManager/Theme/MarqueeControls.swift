@@ -41,7 +41,7 @@ struct MMGhostButtonStyle: ButtonStyle {
     }
 }
 
-/// Accent action: amber pill, black text. The one place the accent
+/// Accent action: accent-filled pill, black text. The one place the accent
 /// is used as a fill rather than a highlight (e.g. a wish list add).
 struct MMAccentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
@@ -162,20 +162,25 @@ extension TextFieldStyle where Self == MMFieldStyle {
 }
 
 /// The brand wordmark used in the sidebar and the sign-in screens
-/// (web shell `.brand-word`): the app's display name, lowercased,
+/// (web shell `.brand-word`): the app's brand name, lowercased,
 /// with each word break drawn as a slash in the accent. The name
-/// comes from `CFBundleDisplayName` (`APP_DISPLAY_NAME` in
+/// comes from `MMBrandName` (`APP_BRAND_NAME` in
 /// `Branding.xcconfig`), so the open-source build reads
 /// `media/manager` and a branded build reads its own name, e.g.
-/// `household/disc/keeper`.
+/// `household/disc/keeper`. It is separate from the display name
+/// because the home screen truncates long names: a branded build
+/// can show a short name under its icon and the full one here.
+/// Without a brand name the display name is used.
 struct MMBrandWordmark: View {
     var size: CGFloat = 26
 
-    /// Words of the display name; `Media Manager` when nothing is set.
+    /// Words of the brand name; `Media Manager` when nothing is set.
     static var words: [String] {
         let info = Bundle.main.infoDictionary
-        let name = (info?["CFBundleDisplayName"] as? String)
-            ?? (info?["CFBundleName"] as? String)
+        // An unset build setting expands to an empty string, not nil.
+        let name = ["MMBrandName", "CFBundleDisplayName", "CFBundleName"]
+            .compactMap { info?[$0] as? String }
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             ?? "Media Manager"
         let parts = name.split(whereSeparator: { $0.isWhitespace || $0 == "/" || $0 == "-" })
             .map { $0.lowercased() }
@@ -184,19 +189,22 @@ struct MMBrandWordmark: View {
 
     var body: some View {
         let words = Self.words
-        HStack(spacing: 0) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                if index > 0 {
-                    Text("/").foregroundStyle(MarqueeTheme.Colors.accent)
-                }
-                Text(word)
-            }
+        // One Text, not a row of them: when the name has to shrink to
+        // fit, the whole wordmark scales together. As separate views
+        // only the longest word shrank.
+        let slash = Text("/").foregroundStyle(MarqueeTheme.Colors.accent)
+        words.dropFirst().reduce(Text(words[0])) { mark, word in
+            Text("\(mark)\(slash)\(Text(word))")
         }
         .font(MarqueeTheme.Fonts.display(size, relativeTo: .title))
         .foregroundStyle(MarqueeTheme.Colors.text)
         .tracking(-1)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
+        // A logo, not copy: past this size a three-word name no longer
+        // fits a phone's width even scaled down, and it truncated to
+        // `hous.../disc/kee...`. VoiceOver reads the label below.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(words.map(\.capitalized).joined(separator: " "))
     }

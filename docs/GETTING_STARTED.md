@@ -137,7 +137,8 @@ cp ios/MediaManager/Developer.xcconfig.example ios/MediaManager/Developer.xcconf
 **2. Branding.xcconfig** (app identity):
 ```bash
 cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig
-# Edit APP_DISPLAY_NAME if you want a custom name under the app icon
+# Edit APP_DISPLAY_NAME for the name under the app icon (keep it near 12
+# characters) and APP_BRAND_NAME for the full name in the in-app wordmark
 ```
 
 Privacy policy and terms of use URLs are configured on the server (admin Settings page), not in the iOS build. Configure them after first login.
