@@ -17,6 +17,9 @@ final class AuthenticatedImageLoader {
     }
 
     func image(for path: String, using apiClient: APIClient) async -> UIImage? {
+        if ScreenshotMode.isActive {
+            return GeneratedArt.image(forPath: path)
+        }
         if let cached = cache.object(forKey: path as NSString) {
             return cached
         }

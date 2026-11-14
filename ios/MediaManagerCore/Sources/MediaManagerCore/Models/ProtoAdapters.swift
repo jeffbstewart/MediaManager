@@ -218,7 +218,7 @@ public struct ApiTitle: Identifiable, Hashable, Sendable {
     public init(proto: MMTitle) { self.proto = proto }
 
     public var id: TitleID { TitleID(proto: Int64(proto.id)) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
     /// True when the underlying proto media_type is BOOK. Distinct from
     /// `mediaType`, which collapses BOOK / ALBUM to .movie because the
@@ -231,7 +231,7 @@ public struct ApiTitle: Identifiable, Hashable, Sendable {
     /// instead of the movie-shaped TitleDetailView.
     public var isAlbum: Bool { proto.mediaType == .album }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
-    public var description: String? { proto.hasDescription_p ? proto.description_p : nil }
+    public var description: String? { Fiction.blurb(proto.hasDescription_p ? proto.description_p : nil) }
     public var backdropUrl: String? { proto.hasBackdropURL ? proto.backdropURL : nil }
     public var contentRating: String? { proto.contentRating.displayString }
     public var popularity: Double? { proto.hasPopularity ? proto.popularity : nil }
@@ -240,7 +240,7 @@ public struct ApiTitle: Identifiable, Hashable, Sendable {
     public var transcodeId: TranscodeID? { proto.hasTranscodeID ? TranscodeID(proto: proto.transcodeID) : nil }
     public var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: proto.tmdbID) : nil }
     public var tmdbCollectionId: TmdbCollectionID? { proto.hasTmdbCollectionID ? TmdbCollectionID(proto: proto.tmdbCollectionID) : nil }
-    public var tmdbCollectionName: String? { proto.hasTmdbCollectionName ? proto.tmdbCollectionName : nil }
+    public var tmdbCollectionName: String? { Fiction.title(proto.hasTmdbCollectionName ? proto.tmdbCollectionName : nil) }
     public var familyMembers: [String]? { proto.familyMembers.isEmpty ? nil : proto.familyMembers }
     public var forMobileAvailable: Bool? { proto.lowStorageTranscodeAvailable }
 
@@ -249,7 +249,7 @@ public struct ApiTitle: Identifiable, Hashable, Sendable {
     public var resumeDurationSeconds: Double? { proto.hasResumeDuration ? proto.resumeDuration.seconds : nil }
     public var resumeSeasonNumber: Int? { proto.hasResumeSeasonNumber ? Int(proto.resumeSeasonNumber) : nil }
     public var resumeEpisodeNumber: Int? { proto.hasResumeEpisodeNumber ? Int(proto.resumeEpisodeNumber) : nil }
-    public var resumeEpisodeName: String? { proto.hasResumeEpisodeName ? proto.resumeEpisodeName : nil }
+    public var resumeEpisodeName: String? { Fiction.title(proto.hasResumeEpisodeName ? proto.resumeEpisodeName : nil) }
 
     public var resumeProgress: Double? {
         guard let pos = resumePositionSeconds, let dur = resumeDurationSeconds, dur > 0 else { return nil }
@@ -334,7 +334,7 @@ public struct ApiResumeReading: Identifiable, Sendable {
     public var id: Int64 { proto.mediaItemID }
     public var mediaItemId: Int64 { proto.mediaItemID }
     public var titleId: TitleID { TitleID(proto: proto.titleID) }
-    public var titleName: String { proto.titleName }
+    public var titleName: String { Fiction.title(proto.titleName) }
     public var percent: Double { proto.percent }
 }
 
@@ -344,7 +344,7 @@ public struct ApiMissingSeason: Identifiable, Sendable {
 
     public var id: TitleID { titleId }
     public var titleId: TitleID { TitleID(proto: proto.titleID) }
-    public var titleName: String { proto.titleName }
+    public var titleName: String { Fiction.title(proto.titleName) }
     public var tmdbId: TmdbID? { proto.hasTmdbID ? TmdbID(proto: proto.tmdbID) : nil }
     public var mediaType: MediaType? { proto.mediaType.appMediaType }
     public var seasons: [ApiMissingSeasonEntry] { proto.seasons.map { ApiMissingSeasonEntry(proto: $0) } }
@@ -377,8 +377,8 @@ public struct ApiCastMember: Identifiable, Sendable {
 
     public var id: TmdbPersonID { tmdbPersonId }
     public var tmdbPersonId: TmdbPersonID { TmdbPersonID(proto: proto.tmdbPersonID) }
-    public var name: String { proto.name }
-    public var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
+    public var name: String { Fiction.person(proto.name) }
+    public var characterName: String? { Fiction.character(proto.hasCharacterName ? proto.characterName : nil) }
     public var headshotUrl: String? { proto.hasHeadshotURL ? proto.headshotURL : nil }
     public var order: Int { Int(proto.order) }
 }
@@ -410,7 +410,7 @@ public struct ApiTranscode: Identifiable, Sendable {
     public var episodeId: EpisodeID? { proto.hasEpisodeID ? EpisodeID(proto: proto.episodeID) : nil }
     public var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     public var episodeNumber: Int? { proto.hasEpisodeNumber ? Int(proto.episodeNumber) : nil }
-    public var episodeName: String? { proto.hasEpisodeName ? proto.episodeName : nil }
+    public var episodeName: String? { Fiction.title(proto.hasEpisodeName ? proto.episodeName : nil) }
     public var playable: Bool { proto.playable }
     public var hasSubtitles: Bool { proto.hasSubtitles_p }
     public var forMobileAvailable: Bool? { proto.lowStorageTranscodeAvailable }
@@ -435,11 +435,11 @@ public struct ApiTitleDetail: Sendable {
     private var t: MMTitle { proto.title }
 
     public var id: TitleID { TitleID(proto: Int64(t.id)) }
-    public var name: String { t.name }
+    public var name: String { Fiction.title(t.name) }
     public var mediaType: MediaType { t.mediaType.appMediaType ?? .movie }
     public var isBook: Bool { t.mediaType == .book }
     public var year: Int? { t.hasYear ? Int(t.year) : nil }
-    public var description: String? { t.hasDescription_p ? t.description_p : nil }
+    public var description: String? { Fiction.blurb(t.hasDescription_p ? t.description_p : nil) }
     public var backdropUrl: String? { t.hasBackdropURL ? t.backdropURL : nil }
     public var contentRating: String? { t.contentRating.displayString }
     public var popularity: Double? { t.hasPopularity ? t.popularity : nil }
@@ -448,7 +448,7 @@ public struct ApiTitleDetail: Sendable {
     public var transcodeId: TranscodeID? { t.hasTranscodeID ? TranscodeID(proto: t.transcodeID) : nil }
     public var tmdbId: TmdbID? { t.hasTmdbID ? TmdbID(proto: t.tmdbID) : nil }
     public var tmdbCollectionId: TmdbCollectionID? { t.hasTmdbCollectionID ? TmdbCollectionID(proto: t.tmdbCollectionID) : nil }
-    public var tmdbCollectionName: String? { t.hasTmdbCollectionName ? t.tmdbCollectionName : nil }
+    public var tmdbCollectionName: String? { Fiction.title(t.hasTmdbCollectionName ? t.tmdbCollectionName : nil) }
     public var familyMembers: [String]? { t.familyMembers.isEmpty ? nil : t.familyMembers }
     public var forMobileAvailable: Bool? { t.lowStorageTranscodeAvailable }
 
@@ -481,11 +481,11 @@ public struct ApiTitleDetail: Sendable {
     /// always have at least one credit; the server populates the
     /// primary author here so list cards don't need to walk
     /// `book.authors`.
-    public var authorName: String? { t.hasAuthorName ? t.authorName : nil }
+    public var authorName: String? { Fiction.person(t.hasAuthorName ? t.authorName : nil) }
 
     /// Series link from the embedded Title row. Both fields are populated
     /// together; nil when the book is a standalone work.
-    public var seriesName: String? { t.hasSeriesName ? t.seriesName : nil }
+    public var seriesName: String? { Fiction.title(t.hasSeriesName ? t.seriesName : nil) }
     public var seriesNumber: String? { t.hasSeriesNumber ? t.seriesNumber : nil }
 }
 
@@ -497,7 +497,16 @@ public struct ApiSearchResult: Identifiable, Sendable {
         "\(resultType)-\(name)-\(titleId?.rawValue ?? 0)-\(itemId ?? 0)"
     }
     public var resultType: String { proto.resultType.displayString }
-    public var name: String { proto.name }
+    /// Tags, genres and playlists are the user's own words; everything
+    /// else is a work or a person and is invented in screenshot mode.
+    public var name: String {
+        switch proto.resultType {
+        case .actor, .artist, .author: return Fiction.person(proto.name)
+        case .tag, .genre: return proto.name
+        case .channel: return Fiction.channel(proto.name, number: "")
+        default: return Fiction.title(proto.name)
+        }
+    }
     public var titleId: TitleID? { proto.hasTitleID ? TitleID(proto: proto.titleID) : nil }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     public var quality: String? { proto.quality.displayString }
@@ -528,12 +537,12 @@ public struct ApiSearchResult: Identifiable, Sendable {
     /// artist (e.g. "Taylor Swift" under "Folklore"). Falls back to
     /// per-track artist when the album-level credit is empty.
     public var artistName: String? {
-        proto.hasArtistName ? proto.artistName : nil
+        Fiction.person(proto.hasArtistName ? proto.artistName : nil)
     }
     /// Context line for TRACK results — the parent album's name.
     /// (ALBUM rows already carry the name in `name`.)
     public var albumName: String? {
-        proto.hasAlbumName ? proto.albumName : nil
+        Fiction.title(proto.hasAlbumName ? proto.albumName : nil)
     }
     /// Server playlist row id for PLAYLIST results. Routes to the
     /// playlist tracklist via dataModel.playlist(id:). Server only
@@ -585,10 +594,10 @@ public struct ApiTrackSearchHit: Identifiable, Sendable {
     /// Parent album's title id — drives artwork (square) and the
     /// "tap a row → land on its album" navigation.
     public var titleId: Int64 { proto.titleID }
-    public var name: String { proto.name }
-    public var albumName: String { proto.albumName }
+    public var name: String { Fiction.title(proto.name) }
+    public var albumName: String { Fiction.title(proto.albumName) }
     public var artistName: String? {
-        proto.hasArtistName ? proto.artistName : nil
+        Fiction.person(proto.hasArtistName ? proto.artistName : nil)
     }
     public var bpm: Int? { proto.hasBpm ? Int(proto.bpm) : nil }
     public var timeSignature: String? {
@@ -631,7 +640,7 @@ public struct ApiCollectionListItem: Identifiable, Sendable {
 
     public var id: TmdbCollectionID { tmdbCollectionId }
     public var tmdbCollectionId: TmdbCollectionID { TmdbCollectionID(proto: proto.tmdbCollectionID) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var titleCount: Int { Int(proto.titleCount) }
 }
 
@@ -683,12 +692,12 @@ public struct ApiActorDetail: Sendable {
     public let proto: MMActorDetail
     public init(proto: MMActorDetail) { self.proto = proto }
 
-    public var name: String { proto.name }
+    public var name: String { Fiction.person(proto.name) }
     public var headshotUrl: String? { proto.hasHeadshotURL ? proto.headshotURL : nil }
-    public var biography: String? { proto.hasBiography ? proto.biography : nil }
+    public var biography: String? { Fiction.biography(proto.hasBiography ? proto.biography : nil) }
     public var birthday: String? { proto.hasBirthday ? proto.birthday.dateString : nil }
     public var deathday: String? { proto.hasDeathday ? proto.deathday.dateString : nil }
-    public var placeOfBirth: String? { proto.hasPlaceOfBirth ? proto.placeOfBirth : nil }
+    public var placeOfBirth: String? { Fiction.place(proto.hasPlaceOfBirth ? proto.placeOfBirth : nil) }
     public var knownForDepartment: String? { proto.hasKnownForDepartment ? proto.knownForDepartment : nil }
     public var ownedTitles: [ApiOwnedCredit] { proto.ownedTitles.map { ApiOwnedCredit(proto: $0) } }
     public var otherWorks: [ApiCreditEntry] { proto.otherWorks.map { ApiCreditEntry(proto: $0) } }
@@ -699,7 +708,7 @@ public struct ApiOwnedCredit: Sendable {
     public init(proto: MMOwnedCredit) { self.proto = proto }
 
     public var title: ApiTitle { ApiTitle(proto: proto.title) }
-    public var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
+    public var characterName: String? { Fiction.character(proto.hasCharacterName ? proto.characterName : nil) }
 }
 
 public struct ApiCreditEntry: Identifiable, Sendable {
@@ -708,9 +717,9 @@ public struct ApiCreditEntry: Identifiable, Sendable {
 
     public var id: String { "\(tmdbId.rawValue)-\(mediaType.rawValue)" }
     public var tmdbId: TmdbID { TmdbID(proto: proto.tmdbID) }
-    public var title: String { proto.title }
+    public var title: String { Fiction.title(proto.title) }
     public var mediaType: MediaType { proto.mediaType.appMediaType ?? .movie }
-    public var characterName: String? { proto.hasCharacterName ? proto.characterName : nil }
+    public var characterName: String? { Fiction.character(proto.hasCharacterName ? proto.characterName : nil) }
     public var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     public var popularity: Double { proto.popularity }
     public var wished: Bool { proto.wished }
@@ -720,7 +729,7 @@ public struct ApiCollectionDetail: Sendable {
     public let proto: MMCollectionDetail
     public init(proto: MMCollectionDetail) { self.proto = proto }
 
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var items: [ApiCollectionItem] { proto.items.map { ApiCollectionItem(proto: $0) } }
 }
 
@@ -730,7 +739,7 @@ public struct ApiCollectionItem: Identifiable, Sendable {
 
     public var id: TmdbID { tmdbMovieId }
     public var tmdbMovieId: TmdbID { TmdbID(proto: proto.tmdbMovieID) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     public var owned: Bool { proto.owned }
     public var playable: Bool { proto.playable }
@@ -788,7 +797,7 @@ public struct ApiEpisode: Sendable {
     public var transcodeId: TranscodeID? { proto.hasTranscodeID ? TranscodeID(proto: proto.transcodeID) : nil }
     public var seasonNumber: Int { Int(proto.seasonNumber) }
     public var episodeNumber: Int { Int(proto.episodeNumber) }
-    public var name: String? { proto.hasName ? proto.name : nil }
+    public var name: String? { Fiction.title(proto.hasName ? proto.name : nil) }
     public var quality: String? { proto.quality.displayString }
     public var playable: Bool { proto.playable }
     public var hasSubtitles: Bool { proto.hasSubtitles_p }
@@ -832,7 +841,7 @@ public struct ServerUserInfo: Sendable {
 
     public var id: UserID { UserID(proto: proto.id) }
     public var username: String { proto.username }
-    public var displayName: String { proto.hasDisplayName ? proto.displayName : proto.username }
+    public var displayName: String { Fiction.displayName(proto.hasDisplayName ? proto.displayName : proto.username) }
     public var isAdmin: Bool { proto.isAdmin }
     public var ratingCeiling: Int? { nil }
     public var ratingCeilingLabel: String? { nil }
@@ -860,11 +869,11 @@ public struct ApiWish: Identifiable, Sendable {
     }
     public var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
     public var mediaType: MediaType? { proto.mediaType.appMediaType }
-    public var title: String { proto.title }
+    public var title: String { Fiction.title(proto.title) }
     public var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     public var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     public var voteCount: Int { Int(proto.voteCount) }
-    public var voters: [String] { proto.voters }
+    public var voters: [String] { proto.voters.map { Fiction.displayName($0) } }
     public var voted: Bool { proto.userVoted }
     public var wishId: WishID? { proto.id != 0 ? WishID(proto: proto.id) : nil }
     public var acquisitionStatus: AcquisitionStatus? { proto.acquisitionStatus.appStatus }
@@ -888,7 +897,7 @@ public struct ApiTranscodeWish: Identifiable, Sendable {
 
     public var id: TranscodeID { TranscodeID(proto: proto.titleID) }
     public var titleId: TitleID { TitleID(proto: proto.titleID) }
-    public var titleName: String { proto.titleName }
+    public var titleName: String { Fiction.title(proto.titleName) }
     // poster_url was retired from TranscodeWishItem (proto field 6 is reserved).
     // Clients now derive cover art from title_id via ImageService /
     // /posters/{size}/{title_id}.
@@ -909,7 +918,7 @@ public struct TmdbSearchItem: Identifiable, Sendable {
 
     public var id: String { "\(tmdbId?.rawValue ?? 0)-\(mediaType?.rawValue ?? "")" }
     public var tmdbId: TmdbID? { proto.tmdbID != 0 ? TmdbID(proto: proto.tmdbID) : nil }
-    public var title: String? { proto.title.isEmpty ? nil : proto.title }
+    public var title: String? { Fiction.title(proto.title.isEmpty ? nil : proto.title) }
     public var mediaType: MediaType? { proto.mediaType.appMediaType }
     public var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     public var popularity: Double? { proto.hasPopularity ? proto.popularity : nil }
@@ -930,7 +939,7 @@ public struct ApiCamera: Identifiable, Sendable {
     public init(proto: MMCamera) { self.proto = proto }
 
     public var id: CameraID { CameraID(proto: proto.id) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.camera(proto.name) }
     public var hlsUrl: String { proto.streamURL }
     public var snapshotUrl: String { proto.hasSnapshotURL ? proto.snapshotURL : "" }
 }
@@ -948,7 +957,7 @@ public struct ApiTvChannel: Identifiable, Sendable {
 
     public var id: ChannelID { ChannelID(proto: proto.id) }
     public var guideNumber: String { proto.number }
-    public var guideName: String { proto.name }
+    public var guideName: String { Fiction.channel(proto.name, number: proto.number) }
     public var networkAffiliation: String? { nil }
     public var receptionQuality: Int { 0 }
     public var hlsUrl: String { proto.streamURL }
@@ -968,7 +977,7 @@ public struct ProfileResponse: Sendable {
     public init(proto: MMProfileResponse) { self.proto = proto }
 
     public var username: String? { proto.username.isEmpty ? nil : proto.username }
-    public var displayName: String? { proto.hasDisplayName ? proto.displayName : nil }
+    public var displayName: String? { Fiction.displayName(proto.hasDisplayName ? proto.displayName : nil) }
     public var isAdmin: Bool? { proto.isAdmin }
     public var ratingCeiling: Int? { proto.hasRatingCeiling ? Int(proto.ratingCeiling.rawValue) : nil }
     public var ratingCeilingLabel: String? { proto.hasRatingCeilingLabel ? proto.ratingCeilingLabel : nil }
@@ -1415,7 +1424,7 @@ public struct ApiAuthorListItem: Identifiable, Sendable {
     public init(proto: MMAuthorListItem) { self.proto = proto }
 
     public var id: AuthorID { AuthorID(proto: proto.id) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.person(proto.name) }
     public var ownedBookCount: Int { Int(proto.ownedBookCount) }
     public var hasHeadshot: Bool { proto.hasHeadshot_p }
     public var hidden: Bool { proto.hidden }
@@ -1447,8 +1456,8 @@ public struct ApiArtistListItem: Identifiable, Sendable {
     public init(proto: MMArtistListItem) { self.proto = proto }
 
     public var id: ArtistID { ArtistID(proto: proto.id) }
-    public var name: String { proto.name }
-    public var sortName: String? { proto.hasSortName ? proto.sortName : nil }
+    public var name: String { Fiction.person(proto.name) }
+    public var sortName: String? { Fiction.personSortName(proto.hasSortName ? proto.sortName : nil) }
     public var artistType: MMArtistType { proto.artistType }
     public var ownedAlbumCount: Int { Int(proto.ownedAlbumCount) }
     public var hasHeadshot: Bool { proto.hasHeadshot_p }
@@ -1478,7 +1487,7 @@ public struct ApiArtist: Sendable {
     public init(proto: MMArtist) { self.proto = proto }
 
     public var id: ArtistID { ArtistID(proto: proto.id) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.person(proto.name) }
     public var artistType: MMArtistType { proto.artistType }
     public var beginYear: Int? { proto.hasBeginYear ? Int(proto.beginYear) : nil }
     public var endYear: Int? { proto.hasEndYear ? Int(proto.endYear) : nil }
@@ -1496,7 +1505,7 @@ public struct ApiArtistDetail: Sendable {
     public init(proto: MMArtistDetail) { self.proto = proto }
 
     public var artist: ApiArtist { ApiArtist(proto: proto.artist) }
-    public var biography: String? { proto.hasBiography ? proto.biography : nil }
+    public var biography: String? { Fiction.biography(proto.hasBiography ? proto.biography : nil) }
     public var ownedAlbums: [ApiTitle] { proto.ownedAlbums.map { ApiTitle(proto: $0) } }
     public var otherWorks: [ApiDiscographyEntry] { proto.otherWorks.map { ApiDiscographyEntry(proto: $0) } }
     /// Members of a group artist (populated when artistType == GROUP).
@@ -1513,7 +1522,7 @@ public struct ApiDiscographyEntry: Identifiable, Sendable {
 
     public var id: String { proto.musicbrainzReleaseGroupID }
     public var releaseGroupId: String { proto.musicbrainzReleaseGroupID }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     public var releaseGroupType: MMReleaseGroupType { proto.releaseGroupType }
     public var isCompilation: Bool { proto.isCompilation }
@@ -1534,7 +1543,7 @@ public struct ApiAlbum: Sendable {
     public var totalDurationSeconds: Double? {
         proto.hasTotalDuration ? proto.totalDuration.seconds : nil
     }
-    public var label: String? { proto.hasLabel ? proto.label : nil }
+    public var label: String? { Fiction.recordLabel(proto.hasLabel ? proto.label : nil) }
     public var releaseGroupId: String? {
         proto.hasMusicbrainzReleaseGroupID ? proto.musicbrainzReleaseGroupID : nil
     }
@@ -1551,7 +1560,7 @@ public struct ApiTrack: Identifiable, Sendable {
     public var titleId: Int64 { proto.titleID }
     public var trackNumber: Int32 { proto.trackNumber }
     public var discNumber: Int32 { proto.discNumber }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var durationSeconds: Double? {
         proto.hasDuration ? proto.duration.seconds : nil
     }
@@ -1559,7 +1568,7 @@ public struct ApiTrack: Identifiable, Sendable {
     /// Per-track artists (when different from the album credit). Used
     /// to render "feat. X" or compilation per-track artists in the
     /// tracklist row.
-    public var trackArtistNames: [String] { proto.trackArtistNames }
+    public var trackArtistNames: [String] { Fiction.people(proto.trackArtistNames) }
     /// Beats-per-minute, extracted from the file's ID3/Vorbis tags
     /// at ingest. nil for tracks the tagger never wrote one onto.
     /// Useful for ballroom / DJ contexts ("dance bpm ∈ [78, 96]").
@@ -1575,14 +1584,14 @@ public struct ApiTrack: Identifiable, Sendable {
     /// empty when the track ships inside an Album that already
     /// carries its title.
     public var albumName: String? {
-        proto.hasTitleName ? proto.titleName : nil
+        Fiction.title(proto.hasTitleName ? proto.titleName : nil)
     }
     /// Parent album's primary-artist credit. Populated alongside
     /// `albumName` for standalone surfaces. Used by the mini-player
     /// + Now Playing when `trackArtistNames` is empty (the common
     /// non-compilation case).
     public var albumArtistName: String? {
-        proto.hasTitleArtistName ? proto.titleArtistName : nil
+        Fiction.person(proto.hasTitleArtistName ? proto.titleArtistName : nil)
     }
 }
 
@@ -1669,7 +1678,7 @@ public struct ApiPlaylistTrackEntry: Identifiable, Sendable {
     /// Parent album's titleId — for posterThumbnail lookup.
     public var albumTitleId: Int64 { proto.titleID }
     /// Album name (the proto's `title_name` for the parent album).
-    public var albumName: String { proto.titleName }
+    public var albumName: String { Fiction.title(proto.titleName) }
     /// First per-track artist credit, when populated. Empty when
     /// the embedded Track has no per-track artists (use the album
     /// artist from elsewhere on the page in that case).
@@ -1683,7 +1692,7 @@ public struct ApiArtistMember: Identifiable, Sendable {
     public init(proto: MMArtistMemberEntry) { self.proto = proto }
 
     public var id: ArtistID { ArtistID(proto: proto.artistID) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.person(proto.name) }
     public var beginYear: Int? { proto.hasBeginYear ? Int(proto.beginYear) : nil }
     public var endYear: Int? { proto.hasEndYear ? Int(proto.endYear) : nil }
     public var artistType: MMArtistType { proto.artistType }
@@ -1698,8 +1707,8 @@ public struct ApiAuthor: Sendable {
     public init(proto: MMAuthor) { self.proto = proto }
 
     public var id: AuthorID { AuthorID(proto: proto.id) }
-    public var name: String { proto.name }
-    public var biography: String? { proto.hasBiography ? proto.biography : nil }
+    public var name: String { Fiction.person(proto.name) }
+    public var biography: String? { Fiction.biography(proto.hasBiography ? proto.biography : nil) }
     public var openLibraryId: String? { proto.hasOpenlibraryID ? proto.openlibraryID : nil }
     public var birthYear: Int? { proto.hasBirthYear ? Int(proto.birthYear) : nil }
     public var deathYear: Int? { proto.hasDeathYear ? Int(proto.deathYear) : nil }
@@ -1726,7 +1735,7 @@ public struct ApiBibliographyEntry: Identifiable, Sendable {
 
     public var id: String { proto.openlibraryWorkID }
     public var openLibraryWorkId: String { proto.openlibraryWorkID }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     public var seriesRaw: String? { proto.hasSeriesRaw ? proto.seriesRaw : nil }
     public var alreadyWished: Bool { proto.alreadyWished }
@@ -1741,8 +1750,8 @@ public struct ApiBookSeriesDetail: Sendable {
     public init(proto: MMBookSeriesDetail) { self.proto = proto }
 
     public var id: BookSeriesID { BookSeriesID(proto: proto.id) }
-    public var name: String { proto.name }
-    public var description: String? { proto.hasDescription_p ? proto.description_p : nil }
+    public var name: String { Fiction.title(proto.name) }
+    public var description: String? { Fiction.blurb(proto.hasDescription_p ? proto.description_p : nil) }
     public var coverIsbn: String? { proto.hasCoverIsbn ? proto.coverIsbn : nil }
     public var author: ApiBookSeriesAuthor? {
         proto.hasAuthor ? ApiBookSeriesAuthor(proto: proto.author) : nil
@@ -1761,7 +1770,7 @@ public struct ApiBookSeriesAuthor: Sendable {
     public init(proto: MMBookSeriesAuthor) { self.proto = proto }
 
     public var id: AuthorID { AuthorID(proto: proto.id) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.person(proto.name) }
 }
 
 public struct ApiBookSeriesVolume: Identifiable, Sendable {
@@ -1770,7 +1779,7 @@ public struct ApiBookSeriesVolume: Identifiable, Sendable {
 
     public var id: TitleID { titleId }
     public var titleId: TitleID { TitleID(proto: proto.titleID) }
-    public var titleName: String { proto.titleName }
+    public var titleName: String { Fiction.title(proto.titleName) }
     public var seriesNumber: String? { proto.hasSeriesNumber ? proto.seriesNumber : nil }
     public var firstPublicationYear: Int? { proto.hasFirstPublicationYear ? Int(proto.firstPublicationYear) : nil }
     public var owned: Bool { proto.owned }
@@ -1782,7 +1791,7 @@ public struct ApiBookSeriesMissingVolume: Identifiable, Sendable {
 
     public var id: String { proto.olWorkID }
     public var openLibraryWorkId: String { proto.olWorkID }
-    public var title: String { proto.title }
+    public var title: String { Fiction.title(proto.title) }
     public var seriesNumber: String? { proto.hasSeriesNumber ? proto.seriesNumber : nil }
     public var year: Int? { proto.hasYear ? Int(proto.year) : nil }
     public var alreadyWished: Bool { proto.alreadyWished }
@@ -1865,7 +1874,7 @@ public struct ApiBookSeriesRef: Sendable {
     public init(proto: MMBookSeriesRef) { self.proto = proto }
 
     public var id: BookSeriesID { BookSeriesID(proto: proto.id) }
-    public var name: String { proto.name }
+    public var name: String { Fiction.title(proto.name) }
     public var number: String? { proto.hasNumber ? proto.number : nil }
 }
 
@@ -1882,11 +1891,11 @@ public struct ApiRadioSeed: Sendable {
     /// True when seeded from a track (vs. an album). Drives label
     /// copy: "Station from <song>" vs "Station from <album>".
     public var isTrackSeed: Bool { proto.seedType == .track }
-    public var name: String { proto.seedName }
+    public var name: String { Fiction.title(proto.seedName) }
     /// Empty for album-seeded stations (the album credit is the
     /// album-artist; the seed name carries the album name). For
     /// track-seeded stations, this is the track's primary artist.
-    public var artistName: String { proto.seedArtistName }
+    public var artistName: String { Fiction.person(proto.seedArtistName) }
 }
 
 /// Wraps StartRadioResponse so the AudioPlayerManager doesn't need to
@@ -1921,12 +1930,12 @@ public struct ApiRecommendedArtist: Identifiable, Sendable {
     public var localArtistId: Int64? {
         proto.hasSuggestedArtistID ? proto.suggestedArtistID : nil
     }
-    public var name: String { proto.suggestedArtistName }
+    public var name: String { Fiction.person(proto.suggestedArtistName) }
     public var score: Double { proto.score }
     /// Names of the user's own artists that "voted" for this
     /// suggestion via the similar-artist graph. Drives the "Liked
     /// by X & Y" caption on the discover card.
-    public var voterArtistNames: [String] { proto.voterArtistNames }
+    public var voterArtistNames: [String] { Fiction.people(proto.voterArtistNames) }
     /// MBID of the release group whose cover represents the artist.
     /// Use with `MMImageRef.coverArtArchiveReleaseGroup(releaseGroupId:)`.
     /// nil for artists with no usable cover (rare — server tries).
@@ -1936,8 +1945,6 @@ public struct ApiRecommendedArtist: Identifiable, Sendable {
             : nil
     }
     public var representativeReleaseTitle: String? {
-        proto.hasRepresentativeReleaseTitle
-            ? proto.representativeReleaseTitle
-            : nil
+        Fiction.title(proto.hasRepresentativeReleaseTitle ? proto.representativeReleaseTitle : nil)
     }
 }

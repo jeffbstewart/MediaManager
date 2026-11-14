@@ -86,63 +86,142 @@ fine at that width even though their intrinsic height is much taller.
 
 ## iOS App Store screenshots (separate flow)
 
-> These shots are taken from the App Store demo server with its real
-> TMDB artwork, not from the mocked app. They are not committed here,
-> but the same redistribution question applies to what is uploaded to
-> App Store Connect.
+> These shots are taken from the real app in screenshot mode, which
+> replaces every title, person and image with invented ones (below), so
+> they are safe to publish and are committed under
+> `docs/images/screenshots/ios/`.
 
-App Store Connect requires functional iOS screenshots at one of
-its accepted pixel sizes per category:
+App Store Connect takes 1 to 10 screenshots per device size, PNG or
+JPEG with no transparency, at sizes it lists per device class
+([screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications),
+read 2026-11-13). The capture uses the newest simulator in each class:
 
-- iPhone — `1242x2688` (6.5", iPhone 11 Pro Max) or `1284x2778`
-  (6.7", iPhone 12 / 13 Pro Max). Newer Pro Max sims (14 / 15 / 16
-  Pro Max) capture at 1290x2796 / 1320x2868 which ASC rejects;
-  this pipeline uses **iPhone 13 Pro Max** to land on 1284x2778
-  natively, and lets ASC auto-derive larger 6.9" sizes.
-- iPad — **iPad Pro 13"** latest M-series (2064x2752 native).
+| Device | Size | App Store Connect class |
+|--------|------|-------------------------|
+| iPhone 18 Pro Max | 1320x2868 | iPhone with Dynamic Island, large display |
+| iPhone 18 Pro | 1206x2622 | iPhone with Dynamic Island, medium display |
+| iPad Pro 13-inch (M5) | 2064x2752 | iPad 13" display (required when the app runs on iPad) |
+| iPhone Duo, outer display | 1398x2034 | iPhone Duo |
 
-**Driver:** `lifecycle/capture-ios-screenshots.sh`. Sources
-`app_store_demo_setup/secrets/.env`, then for each device class:
+The iPhone Duo's inner display (2007x2853) is not captured yet; see
+"iPhone Duo" below.
+
+Smaller and older classes are scaled from these by App Store Connect.
+Duo screenshots become required in April 2027 for apps built with the
+iOS 27.1 SDK or later. None of these sizes has yet been through a real
+submission: the app has only been on TestFlight.
+
+**Driver:** `lifecycle/capture-ios-screenshots.sh [prelogin|viewer|all]`.
+It takes the server address and accounts from the environment, from
+`secrets/ios-screenshots.agent_visible_env`, or from the demo server's
+`app_store_demo_setup/secrets/.env` (first match wins; the script's
+header has the details). For each device and phase it:
 
 1. Builds the XCUITest target once.
-2. Creates a fresh disposable simulator with a `MM-Snap-*` prefix —
-   never reuses an existing simulator (those may be paired with the
-   production NAS server).
-3. Runs `MediaManagerUITests/SnapshotTests/testViewerShots`, with
-   demo credentials propagated through `TEST_RUNNER_MM_SNAPSHOT_*`
-   env vars to the test runner, then through
-   `app.launchEnvironment` to the app.
-4. Extracts the captured `XCTAttachment` PNGs from the
-   `.xcresult` bundle via `xcrun xcresulttool export attachments`.
+2. Creates a fresh disposable simulator with a `MM-Snap-*` prefix, on
+   the newest runtime that supports the device (the Duo has a runtime
+   of its own). It never reuses an existing simulator, which may be
+   signed in to a real server.
+3. Runs one test from `MediaManagerUITests/SnapshotTests`, with the
+   credentials propagated through `TEST_RUNNER_MM_SNAPSHOT_*` env vars
+   to the test runner, then through `app.launchEnvironment` to the app.
+4. Extracts the captured `XCTAttachment` PNGs from the `.xcresult`
+   bundle via `xcrun xcresulttool export attachments`.
 5. Tears down the simulator on success; leaves it (and prints its
    UDID) on failure for forensics.
 
-**Server-URL safety:** the demo URL must not appear in any
-submitted screenshot. The `-MMSnapshotMode` launch arg (see
-`MediaManager/Services/SnapshotMode.swift`) gates two view sites:
-`ServerSetupView` skips SSDP discovery (no "Server found" banner),
-and `LoginView` suppresses the `serverURL.host()` text. The
-`server-setup` shot is captured before any URL is typed.
+`MM_SNAPSHOT_DEVICES`, a space-separated list of simulator names,
+limits a run to some devices.
 
-**Manifest** (`MediaManagerUITests/SnapshotTests.swift`):
+**Two phases, two accounts.** A server shows its terms screen only
+until an account agrees to them.
 
-| File | Account | Screen |
-|------|---------|--------|
-| `01-server-setup.png`   | (none) | `ServerSetupView` empty state |
-| `02-app-policy.png`     | (none) | `AppPolicyAgreementView` |
-| `03-login.png`          | (none) | `LoginView` with `viewer` typed |
-| `04-home.png`           | viewer | Home with carousels |
-| `05-catalog-movies.png` | viewer | Movies catalog grid |
-| `06-title-detail-tv.png`| viewer | `TitleDetailView` for title 33 (Sherlock Holmes) |
+- `prelogin` (`testPreLoginShots`) captures the app's policy screen,
+  server setup, the login form and the server's terms screen, and
+  stops there without agreeing. Give it an account that is never used
+  for anything else (`MM_SNAPSHOT_USERNAME`): it then shows the terms
+  screen on every device, every time.
+- `viewer` (`testViewerShots`) signs in, agrees to the terms if it
+  must, and captures the signed-in screens. Give it an account with
+  some history (`MM_SNAPSHOT_VIEWER_USERNAME`): films in progress, a
+  book started, a playlist, a few wishes, so Home has rows to show.
 
-**Output:** `ios/MediaManager/fastlane/screenshots/en-US/<device>/`
-— `.gitignore`'d. Regenerate; do not commit.
+**iPhone Duo.** The outer display is captured like any other device.
+The inner display is not: its entry in the script's device list is
+commented out, and
+[issue #30](https://github.com/jeffbstewart/MediaManager/issues/30)
+records what was tried. In short, the simulator can only be unfolded
+by hand, with the fold control in the Device Hub window, and once it
+is unfolded the UI test still photographs the outer display. The
+simulator's own `simctl io screenshot --display=N` does capture the
+inner display, so the likely fix is to take the pictures from the
+script, cued by the test.
 
-**Prereqs:** populate `app_store_demo_setup/secrets/.env` (see
-`example.env`), and ensure the four screenshot accounts
-(`viewer` / `kid` / `empty` / `admin`) exist on the demo server.
-The `reviewer-*` accounts are reserved for Apple App Review and
-must never be used by this pipeline.
+**Screenshot mode:** published screenshots must not name real films,
+shows, books or albums, show their artwork, or show the server's
+address. The `-MMSnapshotMode` launch arg turns on screenshot mode
+(`ScreenshotMode` in `ios/MediaManagerCore`), which does three things:
+
+- **Names.** Every title, episode, album, track, person, character,
+  synopsis and biography is replaced with an invented one, as is the
+  signed-in user's display name. A name is chosen by hashing the real
+  one (`Fiction`), so the same title reads the same on every screen and
+  a library of any size is covered. The vocabulary is the one behind
+  the web screenshots' `fictional-names.ts`. Tags, genres and playlist
+  names are the user's own words and are left alone.
+- **Artwork.** Every image the app loads is replaced with generated
+  abstract artwork (`GeneratedArt`, a Swift port of `artFor` in
+  `web-app/tests/helpers/image-stub.ts`). Nothing real is fetched or
+  cached while the mode is on.
+- **Address.** `ServerSetupView` skips SSDP discovery (no "Server
+  found" banner) and `LoginView` suppresses the `serverURL.host()`
+  text. The `server-setup` shot is captured before any URL is typed.
+
+Because the substitution happens in the app, the capture can run
+against any server, including one with a real library. The mode is for
+screenshots only: text sent back to the server is not translated, and
+video frames, book pages and the Downloads list are not covered.
+
+It can also be switched on a device: four taps on the **Build** row of
+the About screen, then restart the app. The same gesture turns it off.
+
+**Output.** The raw PNG captures go to
+`ios/MediaManager/fastlane/screenshots/en-US/<simulator>/`, which is
+gitignored. Each is also saved to `docs/images/screenshots/ios/` as
+`<device>_<screen>.jpg` (JPEG, quality 90), and those are committed.
+The JPEGs are the ones to upload, so the store listing matches the
+record; they are about a fifth the size of the PNGs, which matters
+because git keeps every past capture.
+
+- `app-store/` is the set to upload, for each device in this order:
+
+  | Order | Screen | Shows |
+  |-------|--------|-------|
+  | 1 | `home` | Home: greeting, featured title, Continue Watching |
+  | 2 | `movies` | Movies grid |
+  | 3 | `tv-show` | The first show in the TV grid |
+  | 4 | `books` | Books, by author |
+  | 5 | `music` | Music: playlists and recent albums |
+  | 6 | `wish-list` | Wish List |
+  | 7 | `server-setup` | The app's first-run screen for entering a server address |
+
+- `reference/` is kept for the record and not uploaded: `app-policy`,
+  `login` (the empty form) and `server-terms`. Screenshots of sign-in
+  and legal screens do not show the app in use, which App Review
+  guideline 2.3.3 asks for.
+
+Look through every image before uploading. Screenshot mode covers the
+names and artwork the app is known to show; a new screen or field can
+add one it does not.
+
+**Prereqs:** a reachable server and two viewer accounts on it (above).
+Either copy `secrets/example.ios-screenshots.env` to
+`secrets/ios-screenshots.agent_visible_env` and fill it in, or, for the
+demo server, populate `app_store_demo_setup/secrets/.env` (see
+`example.env`) and make sure its `viewer` account exists. No account
+name appears in a screenshot. Do not use an admin account. The
+`reviewer-*` accounts are reserved for Apple App Review and must never
+be used by this pipeline.
 
 ## Roku screenshots (separate flow)
 
