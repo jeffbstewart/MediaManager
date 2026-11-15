@@ -114,6 +114,84 @@
         document.documentElement.style.background = t.bg;
       }
 
+      // Some publishers show a title as artwork and hide the title
+      // text from sighted readers by moving it far off-screen
+      // (`position: absolute; left: -999em`), leaving it for assistive
+      // technology. epub.js sizes a paginated section by measuring its
+      // content, counts that text, and lays the section out thousands
+      // of pixels wide: one real page followed by dozens of blank ones
+      // (issue #34; Standard Ebooks title, imprint and colophon pages).
+      //
+      // Hide such elements a different way: in place, clipped to
+      // nothing. They stay in the document and readable by assistive
+      // technology, and no longer widen the section. Keyed on the
+      // computed position, not on one publisher's class names. The web
+      // reader has the same function (reader.ts).
+      var OFFSCREEN_PX = 2000;  // farther than any real layout puts an element
+      function rehideOffscreenText(contents) {
+        // The rule lives in the book's stylesheet, and in a WKWebView
+        // the section's stylesheets are often still loading when this
+        // hook runs: the elements would look unpositioned and be
+        // skipped. epub.js waits for a promise returned from a content
+        // hook, so hold it until the stylesheets are in (or a second
+        // has passed, for one that never arrives).
+        var doc = contents.document;
+        var pending = [];
+        var links = doc.querySelectorAll('link[rel~="stylesheet"]');
+        for (var n = 0; n < links.length; n++) {
+          if (!links[n].sheet) pending.push(links[n]);
+        }
+        if (pending.length === 0) {
+          rehideNow(contents);
+          return undefined;
+        }
+        return new Promise(function(resolve) {
+          var left = pending.length;
+          var done = false;
+          function finish() {
+            if (done) return;
+            done = true;
+            try { rehideNow(contents); } catch (err) { console.warn('rehideOffscreenText failed', err); }
+            resolve();
+          }
+          function one() { left -= 1; if (left <= 0) finish(); }
+          for (var m = 0; m < pending.length; m++) {
+            pending[m].addEventListener('load', one);
+            pending[m].addEventListener('error', one);
+          }
+          setTimeout(finish, 1000);
+        });
+      }
+      function rehideNow(contents) {
+        var view = contents.window;
+        var all = contents.document.body.querySelectorAll('*');
+        // Offsets go back to `auto`, which leaves the element where it
+        // would have sat in the text. It must stay inside the page's
+        // margins: epub.js measures from the leftmost content, and a
+        // box pinned to the page edge (`left: 0` with a negative
+        // margin, the usual screen-reader-only recipe) sits outside
+        // the margin and costs one blank page on a phone-width column.
+        var hide = {
+          'left': 'auto', 'right': 'auto', 'top': 'auto', 'bottom': 'auto',
+          'width': '1px', 'height': '1px', 'margin': '0', 'padding': '0',
+          'overflow': 'hidden', 'clip-path': 'inset(50%)', 'white-space': 'nowrap'
+        };
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          var style = view.getComputedStyle(el);
+          if (style.position !== 'absolute' && style.position !== 'fixed') continue;
+          var offsets = [style.left, style.right, style.top, style.bottom];
+          var far = false;
+          for (var k = 0; k < offsets.length; k++) {
+            if (parseFloat(offsets[k]) <= -OFFSCREEN_PX) far = true;
+          }
+          if (!far) continue;
+          for (var prop in hide) {
+            el.style.setProperty(prop, hide[prop], 'important');
+          }
+        }
+      }
+
       window.MMReader = {
         async boot(epubUrl, resumeCfi, fontPct) {
           try {
@@ -158,6 +236,9 @@
             });
             rendition.themes.select('mm-reader');
             rendition.themes.fontSize((fontPct || 100) + '%');
+
+            // Title pages that hide their text off-screen (issue #34).
+            rendition.hooks.content.register(rehideOffscreenText);
             applyTheme('light');
 
             // Track CFI on every relocation. percent stays at the

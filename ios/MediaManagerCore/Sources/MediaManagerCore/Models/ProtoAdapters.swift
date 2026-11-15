@@ -841,7 +841,6 @@ public struct ServerUserInfo: Sendable {
 
     public var id: UserID { UserID(proto: proto.id) }
     public var username: String { proto.username }
-    public var displayName: String { Fiction.displayName(proto.hasDisplayName ? proto.displayName : proto.username) }
     public var isAdmin: Bool { proto.isAdmin }
     public var ratingCeiling: Int? { nil }
     public var ratingCeilingLabel: String? { nil }
@@ -873,7 +872,7 @@ public struct ApiWish: Identifiable, Sendable {
     public var releaseYear: Int? { proto.hasReleaseYear ? Int(proto.releaseYear) : nil }
     public var seasonNumber: Int? { proto.hasSeasonNumber ? Int(proto.seasonNumber) : nil }
     public var voteCount: Int { Int(proto.voteCount) }
-    public var voters: [String] { proto.voters.map { Fiction.displayName($0) } }
+    public var voters: [String] { proto.voters.map { Fiction.userName($0) } }
     public var voted: Bool { proto.userVoted }
     public var wishId: WishID? { proto.id != 0 ? WishID(proto: proto.id) : nil }
     public var acquisitionStatus: AcquisitionStatus? { proto.acquisitionStatus.appStatus }
@@ -977,7 +976,6 @@ public struct ProfileResponse: Sendable {
     public init(proto: MMProfileResponse) { self.proto = proto }
 
     public var username: String? { proto.username.isEmpty ? nil : proto.username }
-    public var displayName: String? { Fiction.displayName(proto.hasDisplayName ? proto.displayName : nil) }
     public var isAdmin: Bool? { proto.isAdmin }
     public var ratingCeiling: Int? { proto.hasRatingCeiling ? Int(proto.ratingCeiling.rawValue) : nil }
     public var ratingCeilingLabel: String? { proto.hasRatingCeilingLabel ? proto.ratingCeilingLabel : nil }
@@ -1115,7 +1113,6 @@ public struct AdminUser: Identifiable, Sendable {
 
     public var id: UserID { UserID(proto: proto.id) }
     public var username: String { proto.username }
-    public var displayName: String? { proto.hasDisplayName ? proto.displayName : nil }
     public var accessLevel: Int { Int(proto.accessLevel.rawValue) }
     public var isAdmin: Bool { proto.accessLevel == .admin }
     public var locked: Bool { proto.locked }

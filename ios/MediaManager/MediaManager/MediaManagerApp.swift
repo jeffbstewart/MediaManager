@@ -189,11 +189,14 @@ struct MediaManagerApp: App {
             // reader pane reachable in a deterministic state. Production
             // launches don't carry the arg and fall through to RootView.
             if ProcessInfo.processInfo.arguments.contains("-MMReaderTestMode") {
+                // `-MMReaderTestBook <file>` picks another bundled
+                // fixture; launch arguments of that shape arrive as
+                // UserDefaults values.
                 NavigationStack {
                     BookReaderView(route: BookReaderRoute(
                         mediaItemId: -1,
                         titleName: "Test Book",
-                        testBundleEpub: "test.epub"))
+                        testBundleEpub: UserDefaults.standard.string(forKey: "MMReaderTestBook") ?? "test.epub"))
                 }
                 .environment(authManager)
                 .environment(downloadManager)

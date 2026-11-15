@@ -27,6 +27,24 @@ public final class OnlineDataModel: DataModel {
         authManager.serverInfo?.user
     }
 
+    /// Which optional sections the server offers (cameras, live TV,
+    /// personal videos, books, music). Starts from the answer saved by
+    /// the previous launch, or `ServerFeatures.unknown` when there is
+    /// none, and is replaced whenever the server answers.
+    public private(set) var features: ServerFeatures = ServerFeatures.loadCached() ?? .unknown
+
+    /// Ask the server which sections it offers. Quietly keeps the
+    /// current answer when offline or when the call fails.
+    public func refreshFeatures() async {
+        guard isOnline, let proto = try? await grpcClient.getFeatures() else { return }
+        adopt(ServerFeatures(proto: proto))
+    }
+
+    private func adopt(_ fresh: ServerFeatures) {
+        if fresh != features { features = fresh }
+        fresh.saveToCache()
+    }
+
     public init(authManager: AuthManager, downloadManager: DownloadManager) {
         self.authManager = authManager
         self.apiClient = authManager.apiClient
@@ -44,6 +62,8 @@ public final class OnlineDataModel: DataModel {
     public func homeFeed() async throws -> ApiHomeFeed {
         if !isOnline { return try await offlineDelegate.homeFeed() }
         let response = try await grpcClient.homeFeed()
+        // The feed carries the same flags; take them while they are here.
+        if response.hasFeatures { adopt(ServerFeatures(proto: response.features)) }
         return ApiHomeFeed(proto: response)
     }
 
@@ -679,8 +699,8 @@ public final class OnlineDataModel: DataModel {
         return AdminUserListResponse(proto: response)
     }
 
-    public func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws {
-        try await grpcClient.adminCreateUser(username: username, password: password, displayName: displayName)
+    public func createUser(username: String, password: String, accessLevel: Int) async throws {
+        try await grpcClient.adminCreateUser(username: username, password: password)
     }
 
     public func updateUserRole(id: UserID, accessLevel: Int) async throws {

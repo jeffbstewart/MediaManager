@@ -21,7 +21,7 @@ import MediaManagerProtos
     func purchaseWishes() async throws -> AdminPurchaseWishListResponse
     func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws
     func adminUsers() async throws -> AdminUserListResponse
-    func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws
+    func createUser(username: String, password: String, accessLevel: Int) async throws
     func updateUserRole(id: UserID, accessLevel: Int) async throws
     func updateUserRatingCeiling(id: UserID, ceiling: Int?) async throws
     func unlockUser(id: UserID) async throws

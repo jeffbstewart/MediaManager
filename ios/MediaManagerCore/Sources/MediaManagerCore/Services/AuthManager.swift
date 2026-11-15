@@ -280,6 +280,8 @@ public final class AuthManager {
         for key in KeychainService.endpointKeys {
             KeychainService.delete(key: key)
         }
+        // What the old server offered says nothing about the next one.
+        ServerFeatures.clearCache()
     }
 
     public func connectToServer(urlString: String) async {
@@ -398,14 +400,13 @@ public final class AuthManager {
         }
     }
 
-    public func createFirstUser(username: String, password: String, displayName: String) async {
+    public func createFirstUser(username: String, password: String) async {
         logger.info("createFirstUser: creating admin account")
         error = nil
         let deviceName = UIDevice.current.name
         do {
             let response = try await grpcClient.createFirstUser(
-                username: username, password: password,
-                displayName: displayName, deviceName: deviceName)
+                username: username, password: password, deviceName: deviceName)
 
             let accessBase64 = response.accessToken.base64EncodedString()
             let refreshBase64 = response.refreshToken.base64EncodedString()

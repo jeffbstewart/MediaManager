@@ -13,7 +13,6 @@ import { ThemeService } from '../../core/theme.service';
 interface Profile {
   id: number;
   username: string;
-  display_name: string;
   is_admin: boolean;
   /** Raw ordinal level (0–6); see rating_ceiling_label for display. */
   rating_ceiling: number | null;

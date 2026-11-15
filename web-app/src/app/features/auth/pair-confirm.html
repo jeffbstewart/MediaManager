@@ -13,7 +13,9 @@
         </mat-card-header>
         <mat-card-content>
           <p>Link this device to your account?</p>
-          <div class="user-badge">{{ displayName() }}</div>
+          @if (username()) {
+            <div class="user-badge">{{ username() }}</div>
+          }
           <p class="hint">The device will have access to your media library, limited by your content rating settings.</p>
         </mat-card-content>
         <mat-card-actions align="end">

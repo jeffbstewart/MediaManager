@@ -6,7 +6,6 @@ struct SetupAccountView: View {
     @Environment(AuthManager.self) private var authManager
     let serverURL: URL
     @State private var username = ""
-    @State private var displayName = ""
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var isCreating = false
@@ -34,10 +33,6 @@ struct SetupAccountView: View {
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-
-                    TextField("Display Name", text: $displayName)
-                        .textFieldStyle(.mmPill)
-                        .textContentType(.name)
 
                     SecureField("Password", text: $password)
                         .textFieldStyle(.mmPill)
@@ -87,7 +82,7 @@ struct SetupAccountView: View {
     }
 
     private var isValid: Bool {
-        !username.isEmpty && !displayName.isEmpty &&
+        !username.isEmpty &&
         !password.isEmpty && password == confirmPassword
     }
 
@@ -95,7 +90,7 @@ struct SetupAccountView: View {
         isCreating = true
         Task {
             await authManager.createFirstUser(
-                username: username, password: password, displayName: displayName)
+                username: username, password: password)
             isCreating = false
         }
     }

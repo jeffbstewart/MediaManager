@@ -31,7 +31,6 @@ struct ProfileView: View {
                     if let profile {
                         Section(header: MMSectionHeader("Account")) {
                             LabeledContent("Username", value: profile.username ?? "-")
-                            LabeledContent("Display Name", value: profile.displayName ?? "-")
                             LabeledContent("Role", value: profile.roleDisplay)
                             if let ceiling = profile.ratingCeilingLabel {
                                 LabeledContent("Rating Limit", value: ceiling)

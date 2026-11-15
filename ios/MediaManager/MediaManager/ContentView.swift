@@ -27,6 +27,7 @@ struct ContentView: View {
     }
 
     private var isOffline: Bool { !dataModel.isOnline }
+    private var features: ServerFeatures { dataModel.features }
 
     var body: some View {
         NavigationSplitView {
@@ -85,10 +86,17 @@ struct ContentView: View {
                         .tag(Tab.movies)
                     SidebarRow("TV Shows", icon: "tv", selected: selectedTab == .tvShows)
                         .tag(Tab.tvShows)
-                    SidebarRow("Books", icon: "books.vertical", selected: selectedTab == .books)
-                        .tag(Tab.books)
-                    SidebarRow("Music", icon: "music.note", selected: selectedTab == .music)
-                        .tag(Tab.music)
+                    // Books, Music, Family, Cameras and Live TV appear
+                    // only when the server says it offers them
+                    // (`ServerFeatures`), as in the web app's nav.
+                    if features.hasBooks {
+                        SidebarRow("Books", icon: "books.vertical", selected: selectedTab == .books)
+                            .tag(Tab.books)
+                    }
+                    if features.hasMusic {
+                        SidebarRow("Music", icon: "music.note", selected: selectedTab == .music)
+                            .tag(Tab.music)
+                    }
                     if !isOffline {
                         // Collections + Tags rely on the server-side
                         // list endpoints (CollectionsListView /
@@ -101,12 +109,18 @@ struct ContentView: View {
                             .tag(Tab.collections)
                         SidebarRow("Tags", icon: "tag", selected: selectedTab == .tags)
                             .tag(Tab.tags)
-                        SidebarRow("Family", icon: "video", selected: selectedTab == .family)
-                            .tag(Tab.family)
-                        SidebarRow("Cameras", icon: "web.camera", selected: selectedTab == .cameras)
-                            .tag(Tab.cameras)
-                        SidebarRow("Live TV", icon: "antenna.radiowaves.left.and.right", selected: selectedTab == .liveTv)
-                            .tag(Tab.liveTv)
+                        if features.hasPersonalVideos {
+                            SidebarRow("Family", icon: "video", selected: selectedTab == .family)
+                                .tag(Tab.family)
+                        }
+                        if features.hasCameras {
+                            SidebarRow("Cameras", icon: "web.camera", selected: selectedTab == .cameras)
+                                .tag(Tab.cameras)
+                        }
+                        if features.hasLiveTv {
+                            SidebarRow("Live TV", icon: "antenna.radiowaves.left.and.right", selected: selectedTab == .liveTv)
+                                .tag(Tab.liveTv)
+                        }
                     }
                 }
 
@@ -410,6 +424,24 @@ struct ContentView: View {
             }
             // Column width for the poster grids (`MarqueeLayout.gridCellWidth`).
             .mmMeasureWidth()
+        }
+        // Ask which optional sections this server offers. Home's feed
+        // carries the same answer; this covers a launch that lands
+        // somewhere else.
+        .task { await dataModel.refreshFeatures() }
+        .onChange(of: dataModel.features) { _, features in
+            // A section that has just been withdrawn cannot stay
+            // selected with no row to show for it.
+            let withdrawn: Set<Tab> = Set([
+                features.hasBooks ? nil : Tab.books,
+                features.hasMusic ? nil : Tab.music,
+                features.hasPersonalVideos ? nil : Tab.family,
+                features.hasCameras ? nil : Tab.cameras,
+                features.hasLiveTv ? nil : Tab.liveTv,
+            ].compactMap { $0 })
+            if let tab = selectedTab, withdrawn.contains(tab) {
+                selectedTab = .home
+            }
         }
         .onChange(of: dataModel.downloads.isOfflineMode) { _, newValue in
             // Flipping OFF: force a token refresh now so the next

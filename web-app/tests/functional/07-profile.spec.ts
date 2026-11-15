@@ -44,18 +44,19 @@ async function setup(page: Page) {
 }
 
 test.describe('profile — account info', () => {
-  test('renders username / display name / role from the fixture', async ({ page }) => {
+  test('renders username and role from the fixture, and no display name', async ({ page }) => {
     await setup(page);
     const rows = page.locator('app-profile .info-row');
     await expect(rows.nth(0).locator('.info-value')).toContainText('testuser');
-    await expect(rows.nth(1).locator('.info-value')).toContainText('Test User');
-    await expect(rows.nth(2).locator('.info-value')).toContainText('Viewer');
+    await expect(rows.nth(1).locator('.info-value')).toContainText('Viewer');
+    // A user is known by their login name only.
+    await expect(page.locator('app-profile .info-label', { hasText: 'Display Name' })).toHaveCount(0);
   });
 
   test('rating ceiling row is hidden when null', async ({ page }) => {
     await setup(page);
-    // Default fixture rating_ceiling=null → only 3 info-rows.
-    await expect(page.locator('app-profile .info-row')).toHaveCount(3);
+    // Default fixture rating_ceiling=null → only 2 info-rows.
+    await expect(page.locator('app-profile .info-row')).toHaveCount(2);
   });
 
   test('rating ceiling row renders when set', async ({ page }) => {
@@ -64,7 +65,7 @@ test.describe('profile — account info', () => {
     await stubImages(page);
     await page.route('**/api/v2/profile', r =>
       r.fulfill({ json: {
-        id: 1, username: 'testuser', display_name: 'Test User',
+        id: 1, username: 'testuser',
         is_admin: false, rating_ceiling: 4, rating_ceiling_label: 'PG-13 / TV-14',
         live_tv_min_quality: 0,
         has_live_tv: true, passkeys_enabled: false,
@@ -72,10 +73,10 @@ test.describe('profile — account info', () => {
     );
     await page.goto('/profile');
     await page.waitForSelector('app-profile .info-row');
-    await expect(page.locator('app-profile .info-row')).toHaveCount(4);
+    await expect(page.locator('app-profile .info-row')).toHaveCount(3);
     // Server now sends a human-readable label like "PG-13 / TV-14"
     // alongside the raw ordinal — assert on the label text.
-    await expect(page.locator('app-profile .info-row').nth(3).locator('.info-value'))
+    await expect(page.locator('app-profile .info-row').nth(2).locator('.info-value'))
       .toContainText('PG-13 / TV-14');
   });
 });
@@ -104,7 +105,7 @@ test.describe('profile — live TV quality', () => {
     await loginAs(page);
     await page.route('**/api/v2/profile', r =>
       r.fulfill({ json: {
-        id: 1, username: 'testuser', display_name: 'Test User',
+        id: 1, username: 'testuser',
         is_admin: false, rating_ceiling: null, live_tv_min_quality: 0,
         has_live_tv: false, passkeys_enabled: false,
       } })

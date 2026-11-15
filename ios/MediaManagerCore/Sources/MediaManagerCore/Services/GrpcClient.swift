@@ -341,12 +341,16 @@ public actor GrpcClient {
         }
     }
 
-    public func createFirstUser(username: String, password: String, displayName: String, deviceName: String) async throws -> MMTokenResponse {
+    public func createFirstUser(username: String, password: String, deviceName: String) async throws -> MMTokenResponse {
         logger.info("createFirstUser: calling AuthService.CreateFirstUser")
         var request = MMCreateFirstUserRequest()
         request.username = username
         request.password = password
-        request.displayName = displayName
+        // Users have a login name and nothing else. The server still
+        // refuses a blank display_name on this request, so the login
+        // name is sent in its place until that field is retired
+        // (issue #29).
+        request.displayName = username
         request.deviceName = deviceName
         return try await callRPC {
             try await self.authService.createFirstUser(request)
@@ -358,6 +362,14 @@ public actor GrpcClient {
     public func homeFeed() async throws -> MMHomeFeedResponse {
         try await callRPC {
             try await self.catalogService.homeFeed(MMEmpty(), metadata: authMetadata())
+        }
+    }
+
+    /// Which optional sections the server offers this user. Cheap:
+    /// the same payload HomeFeed carries, without the carousels.
+    public func getFeatures() async throws -> MMFeatures {
+        try await callRPC {
+            try await self.catalogService.getFeatures(MMEmpty(), metadata: authMetadata())
         }
     }
 
@@ -1577,11 +1589,10 @@ public actor GrpcClient {
         }
     }
 
-    public func adminCreateUser(username: String, password: String, displayName: String?) async throws {
+    public func adminCreateUser(username: String, password: String) async throws {
         var request = MMCreateUserRequest()
         request.username = username
         request.password = password
-        if let dn = displayName { request.displayName = dn }
         request.forceChange = true
         _ = try await callRPC {
             try await self.adminService.createUser(request, metadata: authMetadata())

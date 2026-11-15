@@ -516,7 +516,7 @@ export async function mockBackend(page: Page, opts: MockBackendOptions = {}): Pr
 
   // /pair?code=X queries pair info.
   await page.route('**/api/v2/pair/info*', (r: Route) =>
-    r.fulfill({ json: { status: 'pending', display_name: 'iOS App' } })
+    r.fulfill({ json: { status: 'pending' } })
   );
 
   // --- Admin (Tier A: list + simple CRUD pages) ---

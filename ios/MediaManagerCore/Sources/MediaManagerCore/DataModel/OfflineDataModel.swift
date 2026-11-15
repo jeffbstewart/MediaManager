@@ -828,7 +828,7 @@ public final class OfflineDataModel: DataModel {
     public func purchaseWishes() async throws -> AdminPurchaseWishListResponse { throw DataModelError.offline }
     public func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws { throw DataModelError.offline }
     public func adminUsers() async throws -> AdminUserListResponse { throw DataModelError.offline }
-    public func createUser(username: String, password: String, displayName: String?, accessLevel: Int) async throws { throw DataModelError.offline }
+    public func createUser(username: String, password: String, accessLevel: Int) async throws { throw DataModelError.offline }
     public func updateUserRole(id: UserID, accessLevel: Int) async throws { throw DataModelError.offline }
     public func updateUserRatingCeiling(id: UserID, ceiling: Int?) async throws { throw DataModelError.offline }
     public func unlockUser(id: UserID) async throws { throw DataModelError.offline }
