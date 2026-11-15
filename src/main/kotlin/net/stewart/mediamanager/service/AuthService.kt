@@ -28,6 +28,18 @@ internal fun maskUsername(raw: String): String {
         truncated.substring(truncated.length - 2)
 }
 
+/**
+ * Stand-in for a username in a log line: the first 12 hex digits of its
+ * SHA-256, lowercased first so one account always gets the same tag.  For
+ * logs that must not hold the username itself -- someone who typed their
+ * password into the username field at sign-up has a username that IS a
+ * password -- yet still need to tie lines for one account together.
+ */
+internal fun usernameLogTag(raw: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(raw.lowercase().toByteArray(Charsets.UTF_8))
+    return "u:" + digest.joinToString("") { "%02x".format(it) }.take(12)
+}
+
 object AuthService {
     private val log = LoggerFactory.getLogger(AuthService::class.java)
 

@@ -43,10 +43,13 @@ object AccountDeletionService {
         val user = AppUser.findById(userId) ?: return Result.NotFound
         if (user.isAdmin() && AuthService.countAdmins() <= 1) return Result.LastAdmin
 
-        AuthService.invalidateUserSessions(userId)
+        // Delete first: if the delete fails (say a schema problem), the user
+        // keeps their account AND stays signed in, rather than being signed
+        // out of an account that still exists.  Sessions, device and
+        // refresh tokens and passkeys all reference app_user ON DELETE
+        // CASCADE, so they go with the row in the same statement; all that
+        // is left is the in-memory token cache.
         user.delete()
-        // A request that raced the invalidation could have re-cached a
-        // session for this user; the row is gone now, so evict once more.
         AuthService.evictTokenCacheForUser(userId)
         AuthService.invalidateHasUsersCache()
 

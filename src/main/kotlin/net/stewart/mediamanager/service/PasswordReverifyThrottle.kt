@@ -76,11 +76,12 @@ object PasswordReverifyThrottle {
     /**
      * Checks [password] against [passwordHash] for [userId], unless the user
      * is locked out, in which case the password is not checked at all.
-     * [username] and [action] go into the audit log only.
+     * [action] goes into the audit log, and [username] only as [usernameLogTag], never in the clear.
      */
     fun verify(userId: Long, username: String, password: String, passwordHash: String, action: String): Outcome {
         lockedOutFor(userId)?.let { seconds ->
-            log.warn("AUDIT: {} refused for user '{}': password re-entry locked out, {}s left", action, username, seconds)
+            log.warn("AUDIT: {} refused for user {} (id={}): password re-entry locked out, {}s left",
+                action, usernameLogTag(username), userId, seconds)
             return Outcome.LockedOut(seconds)
         }
         // BCrypt runs outside the lock; two racing wrong guesses can each
@@ -115,12 +116,12 @@ object PasswordReverifyThrottle {
         }
         if (lockout != null) {
             state.lockedUntil = now.plus(lockout)
-            log.warn("AUDIT: wrong password on {} for user '{}' ({} in {} min, {} in {} h): locked out for {} min",
-                action, username, inShortWindow, SHORT_WINDOW.toMinutes(), state.failures.size,
+            log.warn("AUDIT: wrong password on {} for user {} (id={}) ({} in {} min, {} in {} h): locked out for {} min",
+                action, usernameLogTag(username), userId, inShortWindow, SHORT_WINDOW.toMinutes(), state.failures.size,
                 DAILY_WINDOW.toHours(), lockout.toMinutes())
         } else {
-            log.info("AUDIT: wrong password on {} for user '{}' ({} in {} min)",
-                action, username, inShortWindow, SHORT_WINDOW.toMinutes())
+            log.info("AUDIT: wrong password on {} for user {} (id={}) ({} in {} min)",
+                action, usernameLogTag(username), userId, inShortWindow, SHORT_WINDOW.toMinutes())
         }
     }
 

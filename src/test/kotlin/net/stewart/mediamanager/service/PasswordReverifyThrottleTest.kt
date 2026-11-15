@@ -92,6 +92,15 @@ class PasswordReverifyThrottleTest {
     }
 
     @Test
+    fun `the username log tag is stable, case-blind and does not contain the name`() {
+        val tag = usernameLogTag("Hunter2-Password")
+        assertEquals(tag, usernameLogTag("hunter2-password"))
+        assertEquals(14, tag.length)
+        kotlin.test.assertFalse(tag.contains("hunter", ignoreCase = true))
+        kotlin.test.assertNotEquals(tag, usernameLogTag("someone-else"))
+    }
+
+    @Test
     fun `lockout message rounds up to whole minutes or hours`() {
         assertEquals("Too many incorrect passwords. Try again in 1 minute.", PasswordReverifyThrottle.lockedOutMessage(5))
         assertEquals("Too many incorrect passwords. Try again in 15 minutes.", PasswordReverifyThrottle.lockedOutMessage(900))
