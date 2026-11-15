@@ -1040,7 +1040,6 @@ class AdminGrpcService(
         val now = LocalDateTime.now()
         val user = AppUser(
             username = username,
-            display_name = request.displayName.ifBlank { username },
             password_hash = PasswordService.hash(request.password),
             access_level = AppUser.ACCESS_LEVEL_VIEWER,
             must_change_password = request.forceChange,

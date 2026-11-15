@@ -360,7 +360,8 @@ class WishListServiceMediaTest {
         assertEquals(2, aggregates.size)
         assertEquals(100, aggregates[0].tmdbId)
         assertEquals(2, aggregates[0].voteCount)
-        assertEquals(setOf("User One", "User Two"), aggregates[0].voters.toSet())
+        // Voters are named by username, never by the retired display name (#29).
+        assertEquals(setOf("u", "o"), aggregates[0].voters.toSet())
         assertEquals(200, aggregates[1].tmdbId)
         assertEquals(1, aggregates[1].voteCount)
     }

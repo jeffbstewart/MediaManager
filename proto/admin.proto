@@ -727,6 +727,8 @@ message UserListResponse {
 message UserInfo {
   int64 id = 1;
   string username = 2;
+  // Never set since #29: accounts have only a username. Kept so older
+  // clients still parse; reserve once no supported client reads it.
   optional string display_name = 3;
   AccessLevel access_level = 4;
   bool locked = 5;
@@ -737,6 +739,8 @@ message UserInfo {
 message CreateUserRequest {
   string username = 1;
   string password = 2;
+  // Ignored since #29: accounts have only a username. Clients may still
+  // send it; reserve once no supported client does.
   optional string display_name = 3;
   bool force_change = 4;
 }

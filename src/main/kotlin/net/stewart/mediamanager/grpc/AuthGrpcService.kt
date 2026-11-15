@@ -144,8 +144,8 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
     }
 
     override suspend fun createFirstUser(request: CreateFirstUserRequest): TokenResponse {
-        if (request.username.isBlank() || request.password.isBlank() || request.displayName.isBlank()) {
-            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Username, password, and display name required"))
+        if (request.username.isBlank() || request.password.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Username and password required"))
         }
 
         val violations = PasswordService.validate(request.password, request.username)
@@ -161,7 +161,6 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
                 if (count > 0) throw IllegalStateException("Setup already complete")
                 val u = AppUser(
                     username = request.username,
-                    display_name = request.displayName,
                     password_hash = PasswordService.hash(request.password),
                     access_level = AppUser.ACCESS_LEVEL_ADMIN,
                     created_at = now,

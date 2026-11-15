@@ -43,6 +43,8 @@ message DeleteAccountRequest {
 message ProfileResponse {
   int64 id = 1;
   string username = 2;
+  // Never set since #29: accounts have only a username. Kept so older
+  // clients still parse; reserve once no supported client reads it.
   optional string display_name = 3;
   bool is_admin = 4;
   optional RatingLevel rating_ceiling = 5;

@@ -215,6 +215,16 @@ class AuthGrpcServiceTest : GrpcTestBase() {
     }
 
     @Test
+    fun `createFirstUser does not need a display name`() = runBlocking {
+        val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
+        val resp = stub.createFirstUser(createFirstUserRequest {
+            username = "nameless"; password = PLAINTEXT
+        })
+        assertFalse(resp.accessToken.isEmpty)
+        assertEquals("", AppUser.findAll().single { it.username == "nameless" }.display_name)
+    }
+
+    @Test
     fun `createFirstUser rejects passwords that violate the policy`() = runBlocking {
         val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
         val ex = assertFailsWith<StatusException> {
@@ -238,6 +248,8 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         // The first user is always an admin.
         val created = AppUser.findAll().single { it.username == "rootadmin" }
         assertTrue(created.isAdmin(), "the first user is an admin")
+        // iOS 1.3 still sends a display name; it is accepted and not stored (#29).
+        assertEquals("", created.display_name)
 
         // Second call must be refused — setup is now complete.
         val ex = assertFailsWith<StatusException> {

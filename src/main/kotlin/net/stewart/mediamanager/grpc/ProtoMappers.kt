@@ -442,7 +442,6 @@ fun DeviceToken.toProto(): SessionInfo = sessionInfo {
 fun AppUser.toProfileResponse(): ProfileResponse = profileResponse {
     id = this@toProfileResponse.id!!
     username = this@toProfileResponse.username
-    this@toProfileResponse.display_name.takeIf { it.isNotBlank() }?.let { displayName = it }
     isAdmin = this@toProfileResponse.isAdmin()
     this@toProfileResponse.ratingCeilingValue?.let {
         ratingCeiling = it.ordinalLevel.toProtoRatingLevel()
@@ -465,7 +464,6 @@ fun AppUser.toProfileResponse(): ProfileResponse = profileResponse {
 fun AppUser.toUserInfo(): UserInfo = userInfo {
     id = this@toUserInfo.id!!
     username = this@toUserInfo.username
-    this@toUserInfo.display_name.takeIf { it.isNotBlank() }?.let { displayName = it }
     accessLevel = this@toUserInfo.access_level.toProtoAccessLevel()
     locked = this@toUserInfo.locked
     mustChangePassword = this@toUserInfo.must_change_password

@@ -113,7 +113,7 @@ object WebAuthnService {
             add("user", JsonObject().apply {
                 addProperty("id", base64UrlEncode(user.id.toString().toByteArray()))
                 addProperty("name", user.username)
-                addProperty("displayName", user.display_name)
+                addProperty("displayName", user.username)
             })
             addProperty("challenge", base64UrlEncode(challenge))
             add("pubKeyCredParams", gson.toJsonTree(listOf(

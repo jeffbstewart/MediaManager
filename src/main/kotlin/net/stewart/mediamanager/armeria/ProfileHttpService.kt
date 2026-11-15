@@ -67,7 +67,6 @@ class ProfileHttpService {
         val profile = mapOf(
             "id" to user.id,
             "username" to user.username,
-            "display_name" to user.display_name,
             "is_admin" to user.isAdmin(),
             "rating_ceiling" to user.rating_ceiling,
             "rating_ceiling_label" to ceilingLabel,

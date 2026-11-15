@@ -22,6 +22,26 @@ import kotlin.test.assertTrue
  */
 class WishListGrpcServiceTest : GrpcTestBase() {
 
+    // ---------------------- listWishes ----------------------
+
+    @Test
+    fun `listWishes counts other users' votes but never names them`() = runBlocking {
+        val viewer = createViewerUser(username = "listwish-me")
+        val other = createViewerUser(username = "listwish-other")
+        WishListService.addMediaWishForUser(viewer.id!!, TmdbId(777, MediaTypeEntity.MOVIE), "Shared", null, null, null)
+        WishListService.addMediaWishForUser(other.id!!, TmdbId(777, MediaTypeEntity.MOVIE), "Shared", null, null, null)
+        val authedChannel = authenticatedChannel(viewer)
+        try {
+            val stub = WishListServiceGrpcKt.WishListServiceCoroutineStub(authedChannel)
+            val wish = stub.listWishes(Empty.getDefaultInstance()).wishesList.single()
+            assertEquals(2, wish.voteCount)
+            // A viewer's own list must not hand out other users' login names (#29).
+            assertTrue(wish.votersList.isEmpty(), "voters: ${wish.votersList}")
+        } finally {
+            authedChannel.shutdownNow()
+        }
+    }
+
     // ---------------------- addWish ----------------------
 
     @Test

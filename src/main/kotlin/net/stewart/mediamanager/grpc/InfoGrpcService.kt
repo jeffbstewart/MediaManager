@@ -50,7 +50,6 @@ class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
             this.user = serverUserInfo {
                 id = user.id!!
                 username = user.username
-                user.display_name.takeIf { it.isNotBlank() }?.let { displayName = it }
                 isAdmin = user.isAdmin()
             }
         }
