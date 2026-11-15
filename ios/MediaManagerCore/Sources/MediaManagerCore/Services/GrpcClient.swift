@@ -384,11 +384,8 @@ public actor GrpcClient {
         var request = MMCreateFirstUserRequest()
         request.username = username
         request.password = password
-        // Users have a login name and nothing else. The server still
-        // refuses a blank display_name on this request, so the login
-        // name is sent in its place until that field is retired
-        // (issue #29).
-        request.displayName = username
+        // Users have a login name and nothing else, so display_name is
+        // left unset; servers since #29 stage 1 (PR #56) don't need it.
         request.deviceName = deviceName
         return try await callRPC {
             try await self.authService.createFirstUser(request)
