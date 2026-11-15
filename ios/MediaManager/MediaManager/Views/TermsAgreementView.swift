@@ -37,75 +37,36 @@ struct TermsAgreementView: View {
                     .font(MarqueeTheme.Fonts.h1)
                     .foregroundStyle(MarqueeTheme.Colors.text)
 
-                Text("Please review and accept the following before continuing.")
-                    .font(MarqueeTheme.Fonts.body)
-                    .foregroundStyle(MarqueeTheme.Colors.text2)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    if let url = privacyPolicyURL {
-                        HStack {
-                            Button {
-                                agreedToPrivacy.toggle()
-                            } label: {
-                                Image(systemName: agreedToPrivacy ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(agreedToPrivacy ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
-                                    .font(.title3)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("server-terms-privacy-checkbox")
-
-                            HStack(spacing: 4) {
-                                Text("I have read and agree to the")
-                                Link("Privacy Policy", destination: url)
-                            }
-                            .font(.callout)
-                        }
-                    }
-
-                    if let url = termsOfUseURL {
-                        HStack {
-                            Button {
-                                agreedToTerms.toggle()
-                            } label: {
-                                Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(agreedToTerms ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
-                                    .font(.title3)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("server-terms-terms-checkbox")
-
-                            HStack(spacing: 4) {
-                                Text("I have read and agree to the")
-                                Link("Terms of Use", destination: url)
-                            }
-                            .font(.callout)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-
-                Button(action: submit) {
-                    if isSubmitting {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Text("Continue")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .buttonStyle(.mmPrimary)
-                .disabled(!allAgreed || isSubmitting)
-                .padding(.horizontal)
-                .accessibilityIdentifier("server-terms-continue")
-
-                if let error = authManager.error {
-                    Text(error)
-                        .foregroundStyle(MarqueeTheme.Colors.pink)
-                        .font(.callout)
+                if let problem = authManager.legalGateProblem {
+                    // Agreeing again would not get past the server's
+                    // gate, so offer no Continue to loop on. Sign out
+                    // and change server stay below.
+                    Text(problem)
+                        .font(MarqueeTheme.Fonts.body)
+                        .foregroundStyle(MarqueeTheme.Colors.text2)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+                        .accessibilityIdentifier("server-terms-gate-problem")
+
+                    Button {
+                        isSubmitting = true
+                        Task {
+                            await authManager.retryLegalCheck()
+                            isSubmitting = false
+                        }
+                    } label: {
+                        if isSubmitting {
+                            ProgressView().frame(maxWidth: .infinity)
+                        } else {
+                            Text("Try Again").frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.mmPrimary)
+                    .disabled(isSubmitting)
+                    .padding(.horizontal)
+                    .accessibilityIdentifier("server-terms-retry")
+                } else {
+                    agreementForm
                 }
 
                 Spacer()
@@ -131,6 +92,80 @@ struct TermsAgreementView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .mmGlowPage()
             .navigationTitle("")
+        }
+    }
+
+    @ViewBuilder
+    private var agreementForm: some View {
+        Text("Please review and accept the following before continuing.")
+            .font(MarqueeTheme.Fonts.body)
+            .foregroundStyle(MarqueeTheme.Colors.text2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
+
+        VStack(alignment: .leading, spacing: 16) {
+            if let url = privacyPolicyURL {
+                HStack {
+                    Button {
+                        agreedToPrivacy.toggle()
+                    } label: {
+                        Image(systemName: agreedToPrivacy ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(agreedToPrivacy ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("server-terms-privacy-checkbox")
+
+                    HStack(spacing: 4) {
+                        Text("I have read and agree to the")
+                        Link("Privacy Policy", destination: url)
+                    }
+                    .font(.callout)
+                }
+            }
+
+            if let url = termsOfUseURL {
+                HStack {
+                    Button {
+                        agreedToTerms.toggle()
+                    } label: {
+                        Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(agreedToTerms ? MarqueeTheme.Colors.accent : MarqueeTheme.Colors.text3)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("server-terms-terms-checkbox")
+
+                    HStack(spacing: 4) {
+                        Text("I have read and agree to the")
+                        Link("Terms of Use", destination: url)
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+        .padding(.horizontal)
+
+        Button(action: submit) {
+            if isSubmitting {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            } else {
+                Text("Continue")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.mmPrimary)
+        .disabled(!allAgreed || isSubmitting)
+        .padding(.horizontal)
+        .accessibilityIdentifier("server-terms-continue")
+
+        if let error = authManager.error {
+            Text(error)
+                .foregroundStyle(MarqueeTheme.Colors.pink)
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
         }
     }
 

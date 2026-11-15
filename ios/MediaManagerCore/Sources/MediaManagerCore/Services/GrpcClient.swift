@@ -89,18 +89,42 @@ public actor GrpcClient {
     ///                 MMEmpty(), metadata: self.authMetadata())
     ///         }
     ///     }
+    ///
+    /// A call the server's gate refuses (see `GateRefusal`) is reported
+    /// to the gate handler, which brings up the screen that resolves it,
+    /// and surfaces to the caller as `GateRefusalError` rather than the
+    /// raw `RPCError`. Every RPC passes through here, so every call gets
+    /// that handling without the views knowing about the gates.
     private func callRPC<T>(
         _ name: String = #function,
         _ block: () async throws -> T
     ) async throws -> T {
         do {
-            return try await block()
-        } catch let error where isStaleStreamError(error) {
-            let code = (error as? RPCError)?.code.description ?? "unknown"
-            logger.warning("\(name): stale stream (\(code)) — reconnecting + retrying once")
-            try await reconnect()
-            return try await block()
+            do {
+                return try await block()
+            } catch let error where isStaleStreamError(error) {
+                let code = (error as? RPCError)?.code.description ?? "unknown"
+                logger.warning("\(name): stale stream (\(code)) — reconnecting + retrying once")
+                try await reconnect()
+                return try await block()
+            }
+        } catch {
+            guard let refusal = GateRefusal(error) else { throw error }
+            logger.info("\(name): refused by the server's gate (\(refusal))")
+            if let handler = gateRefusalHandler {
+                // Not awaited: the handler makes RPCs of its own, and the
+                // caller should get its error now, not after them.
+                Task { await handler(refusal) }
+            }
+            throw GateRefusalError(refusal)
         }
+    }
+
+    /// Called once per gate refusal. Set by `AuthManager`.
+    private var gateRefusalHandler: (@Sendable (GateRefusal) async -> Void)?
+
+    public func setGateRefusalHandler(_ handler: (@Sendable (GateRefusal) async -> Void)?) {
+        gateRefusalHandler = handler
     }
 
     /// Create the gRPC channel to the given server.

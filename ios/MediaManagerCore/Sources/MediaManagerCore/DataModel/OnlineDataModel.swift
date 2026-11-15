@@ -506,10 +506,6 @@ public final class OnlineDataModel: DataModel {
         try await grpcClient.updateTvQuality(protoQuality)
     }
 
-    public func changePassword(current: String, new: String) async throws {
-        _ = try await grpcClient.changePassword(current: current, new: new)
-    }
-
     public func sessions() async throws -> ApiSessionListResponse {
         let response = try await grpcClient.listSessions()
         return ApiSessionListResponse(proto: response)

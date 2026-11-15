@@ -36,6 +36,21 @@ public final class AuthManager {
     public private(set) var legalStatus: MMLegalStatusResponse?
     /// True when tokens exist but biometric gate hasn't been passed yet.
     public private(set) var awaitingBiometric = false
+    /// Set when agreeing to the terms again would not get past the
+    /// server's legal gate. The terms screen shows it in place of the
+    /// checkboxes, with sign out, so the user is not sent round a loop.
+    public private(set) var legalGateProblem: String?
+    /// Set when the server still demands a password change after one
+    /// succeeded in this session. The change-password screen shows it.
+    public private(set) var passwordGateProblem: String?
+
+    /// The versions agreed to in this session, so a refusal straight
+    /// after agreeing can be told apart from a new version to accept.
+    private var lastAgreedVersions: AgreedLegalVersions?
+    private var passwordChangedThisSession = false
+    /// Several calls are usually refused at once; one legal-status
+    /// fetch answers them all.
+    private var handlingLegalRefusal = false
 
     public let apiClient = APIClient()
     public let grpcClient = GrpcClient()
@@ -91,6 +106,7 @@ public final class AuthManager {
         case .faceID: return "Face ID"
         case .touchID: return "Touch ID"
         case .opticID: return "Optic ID"
+        case .none: return "Biometrics"
         @unknown default: return "Biometrics"
         }
     }
@@ -108,6 +124,13 @@ public final class AuthManager {
         Task { [weak self] in
             await self?.logStreamer.setAuthFailedHandler { [weak self] in
                 await self?.performTokenRefresh()
+            }
+        }
+        // Every RPC the server's gate refuses lands here, wherever in
+        // the app it was made.
+        Task { [weak self] in
+            await self?.grpcClient.setGateRefusalHandler { [weak self] refusal in
+                await self?.handleGateRefusal(refusal)
             }
         }
     }
@@ -407,16 +430,7 @@ public final class AuthManager {
         do {
             let response = try await grpcClient.createFirstUser(
                 username: username, password: password, deviceName: deviceName)
-
-            let accessBase64 = response.accessToken.base64EncodedString()
-            let refreshBase64 = response.refreshToken.base64EncodedString()
-            KeychainService.save(key: .accessToken, value: accessBase64)
-            KeychainService.save(key: .refreshToken, value: refreshBase64)
-
-            await grpcClient.setAccessToken(response.accessToken)
-            let tokenString = String(data: response.accessToken, encoding: .utf8)
-            await apiClient.setAccessToken(tokenString)
-            updateStreamingCookie(tokenString)
+            await adoptTokens(response)
 
             if case .needsSetup(let url) = state {
                 state = .authenticated(serverURL: url)
@@ -449,18 +463,7 @@ public final class AuthManager {
         do {
             let response = try await grpcClient.login(
                 username: username, password: password, deviceName: deviceName)
-
-            // Tokens are arbitrary bytes — base64 encode for Keychain storage
-            let accessBase64 = response.accessToken.base64EncodedString()
-            let refreshBase64 = response.refreshToken.base64EncodedString()
-            KeychainService.save(key: .accessToken, value: accessBase64)
-            KeychainService.save(key: .refreshToken, value: refreshBase64)
-
-            // Set tokens on both clients
-            await grpcClient.setAccessToken(response.accessToken)
-            let tokenString = String(data: response.accessToken, encoding: .utf8)
-            await apiClient.setAccessToken(tokenString)
-            updateStreamingCookie(tokenString)
+            await adoptTokens(response)
 
             if response.passwordChangeRequired {
                 passwordChangeRequired = true
@@ -519,6 +522,7 @@ public final class AuthManager {
         serverInfo = nil
         legalStatus = nil
         serverUnreachable = false
+        resetGateState()
 
         if let urlString = KeychainService.load(key: .serverURL),
            let url = URL(string: urlString) {
@@ -548,6 +552,7 @@ public final class AuthManager {
         legalStatus = nil
         serverUnreachable = false
         error = nil
+        resetGateState()
         Task {
             await logStreamer.stop()
             await grpcClient.close()
@@ -596,6 +601,7 @@ public final class AuthManager {
         awaitingBiometric = false
         biometricLoginEnabled = false
         serverUnreachable = false
+        resetGateState()
         persistLegalDocs(nil)
         Task {
             await logStreamer.stop()
@@ -642,17 +648,109 @@ public final class AuthManager {
             _ = try await grpcClient.agreeToTerms(
                 privacyPolicyVersion: status.requiredPrivacyPolicyVersion,
                 termsOfUseVersion: status.requiredTermsOfUseVersion)
+            lastAgreedVersions = AgreedLegalVersions(
+                privacyPolicy: status.requiredPrivacyPolicyVersion,
+                termsOfUse: status.requiredTermsOfUseVersion)
+            legalGateProblem = nil
             legalStatus = nil
             if case .needsLegalAgreement(let url) = state {
                 state = .authenticated(serverURL: url)
                 await logStreamer.start()
                 await refreshServerInfo()
             }
-        } catch let rpcError as RPCError {
-            self.error = rpcError.message
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// The terms screen's Try Again, after `legalGateProblem` was set.
+    /// Driven by the user, so it cannot loop on its own.
+    public func retryLegalCheck() async {
+        guard case .needsLegalAgreement(let url) = state else { return }
+        legalGateProblem = nil
+        error = nil
+        await transitionAfterAuth(serverURL: url)
+    }
+
+    // MARK: - Gate refusals
+
+    /// A call was refused by the server's gate. Brings up the screen
+    /// that resolves it, or, when that screen could not help, says so.
+    func handleGateRefusal(_ refusal: GateRefusal) async {
+        switch refusal {
+        case .passwordChangeRequired:
+            guard case .authenticated = state else { return }
+            if passwordChangedThisSession {
+                passwordGateProblem = PasswordChangeError.stillRequiredMessage
+            }
+            passwordChangeRequired = true
+
+        case .legalAgreementRequired:
+            // Already on the terms screen, or not signed in: nothing to do.
+            guard case .authenticated(let url) = state, !handlingLegalRefusal else { return }
+            handlingLegalRefusal = true
+            defer { handlingLegalRefusal = false }
+            logger.info("handleGateRefusal: legal agreement required, re-checking status")
+            do {
+                let status = try await grpcClient.getLegalStatus()
+                legalStatus = status
+                switch LegalGateDecision.afterRefusal(status: status, lastAgreed: lastAgreedVersions) {
+                case .presentTerms:
+                    legalGateProblem = nil
+                case .stuck:
+                    logger.warning("handleGateRefusal: still refused after agreeing (compliant=\(status.compliant))")
+                    legalGateProblem = LegalGateDecision.stuckMessage
+                }
+            } catch {
+                logger.warning("handleGateRefusal: legal status failed: \(error.localizedDescription)")
+                legalGateProblem = LegalGateDecision.statusUnavailableMessage
+            }
+            // The user may have signed out while the status was loading.
+            guard case .authenticated = state else { return }
+            state = .needsLegalAgreement(serverURL: url)
+        }
+    }
+
+    private func resetGateState() {
+        passwordChangeRequired = false
+        passwordGateProblem = nil
+        passwordChangedThisSession = false
+        legalGateProblem = nil
+        lastAgreedVersions = nil
+    }
+
+    // MARK: - Password change
+
+    /// Change the signed-in user's password. The server invalidates
+    /// every session on a change and answers with a fresh token pair,
+    /// so the app must switch to those tokens: carrying on with the old
+    /// ones got the next call refused and the next refresh signed out.
+    /// Throws `PasswordChangeError`, whose text is fit to show beside
+    /// the fields.
+    public func changePassword(current: String, new: String) async throws {
+        let response: MMTokenResponse
+        do {
+            response = try await grpcClient.changePassword(current: current, new: new)
+        } catch {
+            throw PasswordChangeError(error)
+        }
+        await adoptTokens(response)
+        scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
+        passwordChangedThisSession = true
+        passwordGateProblem = nil
+        passwordChangeRequired = false
+    }
+
+    /// Store a token pair the server just issued and hand it to every
+    /// client. Tokens are arbitrary bytes, base64-encoded for the
+    /// Keychain.
+    private func adoptTokens(_ response: MMTokenResponse) async {
+        KeychainService.save(key: .accessToken, value: response.accessToken.base64EncodedString())
+        KeychainService.save(key: .refreshToken, value: response.refreshToken.base64EncodedString())
+        await grpcClient.setAccessToken(response.accessToken)
+        let tokenString = String(data: response.accessToken, encoding: .utf8)
+        await apiClient.setAccessToken(tokenString)
+        updateStreamingCookie(tokenString)
     }
 
     // MARK: - Biometric Login
@@ -704,16 +802,7 @@ public final class AuthManager {
         }
         do {
             let response = try await grpcClient.refresh(token: refreshData)
-
-            let accessBase64 = response.accessToken.base64EncodedString()
-            let refreshBase64New = response.refreshToken.base64EncodedString()
-            KeychainService.save(key: .accessToken, value: accessBase64)
-            KeychainService.save(key: .refreshToken, value: refreshBase64New)
-
-            await grpcClient.setAccessToken(response.accessToken)
-            let tokenString = String(data: response.accessToken, encoding: .utf8)
-            await apiClient.setAccessToken(tokenString)
-            updateStreamingCookie(tokenString)
+            await adoptTokens(response)
 
             serverUnreachable = false
             scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
@@ -772,10 +861,6 @@ public final class AuthManager {
                 serverUnreachable = true
             }
         }
-    }
-
-    public func clearPasswordChangeRequired() {
-        passwordChangeRequired = false
     }
 
     private func refreshLegalDocs() async {

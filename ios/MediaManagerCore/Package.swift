@@ -36,5 +36,15 @@ let package = Package(
                 .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
             ]
         ),
+        // Pure-logic tests. iOS-only package, so run on a simulator:
+        // xcodebuild test -scheme MediaManagerCore -destination 'platform=iOS Simulator,name=…'
+        .testTarget(
+            name: "MediaManagerCoreTests",
+            dependencies: [
+                "MediaManagerCore",
+                "MediaManagerProtos",
+                .product(name: "GRPCCore", package: "grpc-swift-2"),
+            ]
+        ),
     ]
 )
