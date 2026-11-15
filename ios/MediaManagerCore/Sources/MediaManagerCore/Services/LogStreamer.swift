@@ -173,7 +173,7 @@ public extension LogStreamer.Identity {
     /// called from the main actor since `UIDevice.current` is main-isolated
     /// in iOS 16+.
     @MainActor
-    public static func current() -> LogStreamer.Identity {
+    static func current() -> LogStreamer.Identity {
         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
         let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "unknown"
 

@@ -899,7 +899,7 @@ public final class AuthManager {
 
     private func restoreLegalDocs() {
         guard let data = UserDefaults.standard.data(forKey: Self.legalDocsKey) else { return }
-        legalDocs = try? MMLegalDocumentInfo(serializedData: data)
+        legalDocs = try? MMLegalDocumentInfo(serializedBytes: data)
     }
 
     private func persistLegalDocs(_ docs: MMLegalDocumentInfo?) {

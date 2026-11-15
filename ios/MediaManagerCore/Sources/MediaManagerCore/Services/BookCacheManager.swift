@@ -222,7 +222,7 @@ public final class BookCacheManager {
     public func loadCachedTitleDetail(titleId: Int64) -> ApiTitleDetail? {
         let path = bookDetailPath(titleId: titleId)
         guard let data = try? Data(contentsOf: path),
-              let proto = try? MMTitleDetail(serializedData: data) else { return nil }
+              let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
         return ApiTitleDetail(proto: proto)
     }
 

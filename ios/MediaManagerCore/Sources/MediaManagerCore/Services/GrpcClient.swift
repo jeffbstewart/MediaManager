@@ -151,8 +151,17 @@ public actor GrpcClient {
             interceptors: [ClientPlatformInterceptor()]
         )
 
-        // Start the client's connection management background task
-        Task { try await client.runConnections() }
+        // Start the client's connection management background task. It
+        // returns when the client shuts down (reconnect, close); a throw
+        // means the transport failed, and the next RPC's stale-stream
+        // retry rebuilds it.
+        Task {
+            do {
+                try await client.runConnections()
+            } catch {
+                logger.warning("configure: connection manager for \(host):\(port) ended: \(error.localizedDescription)")
+            }
+        }
 
         self.grpcClient = client
         self.configuredHost = host

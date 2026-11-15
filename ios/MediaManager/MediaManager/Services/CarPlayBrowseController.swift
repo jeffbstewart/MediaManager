@@ -160,7 +160,7 @@ final class CarPlayBrowseController {
         let template = CPListTemplate(title: title.name, sections: [Self.loadingSection])
         interfaceController.pushTemplate(template, animated: true, completion: nil)
 
-        Task {
+        Task { [self] in
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openAlbum: dataModel is nil for titleId=\(title.id.protoValue)")
                 template.updateSections([Self.errorSection(message: "App not ready")])
@@ -237,7 +237,7 @@ final class CarPlayBrowseController {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
         interfaceController.pushTemplate(template, animated: true, completion: nil)
-        Task {
+        Task { [self] in
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openPlaylist: dataModel is nil for id=\(id)")
                 template.updateSections([Self.errorSection(message: "App not ready")])
@@ -369,7 +369,7 @@ final class CarPlayBrowseController {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
         interfaceController.pushTemplate(template, animated: true, completion: nil)
-        Task {
+        Task { [self] in
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openSmartPlaylist: dataModel is nil for key=\(key)")
                 template.updateSections([Self.errorSection(message: "App not ready")])
@@ -405,7 +405,7 @@ final class CarPlayBrowseController {
         guard let interfaceController else { return }
         let template = CPListTemplate(title: name, sections: [Self.loadingSection])
         interfaceController.pushTemplate(template, animated: true, completion: nil)
-        Task {
+        Task { [self] in
             guard let model = AppServices.shared.dataModel else {
                 logger.error("openArtist: dataModel is nil for id=\(artistId.protoValue)")
                 template.updateSections([Self.errorSection(message: "App not ready")])
