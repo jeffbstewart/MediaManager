@@ -503,6 +503,22 @@ public final class BookCacheManager {
         downloadTasks.removeValue(forKey: mediaItemId)
     }
 
+    /// Cancel every download and delete every downloaded book. Used
+    /// when the account is deleted. The Books directory itself stays.
+    public func removeAllDownloads() {
+        for task in downloadTasks.values { task.cancel() }
+        downloadTasks.removeAll()
+        activeDownloads.removeAll()
+        failedDownloads.removeAll()
+        downloads.removeAll()
+        let fm = FileManager.default
+        for url in (try? fm.contentsOfDirectory(at: booksDir, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.removeItem(at: url)
+        }
+        persistIndex()
+        logger.info("removeAllDownloads: book downloads cleared")
+    }
+
     // MARK: - Index persistence
 
     private func persistIndex() {

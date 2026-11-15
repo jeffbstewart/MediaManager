@@ -112,6 +112,7 @@ struct ForcedPasswordChangeView: View {
     @State private var confirmPassword = ""
     @State private var error: String?
     @State private var saving = false
+    @State private var showDeleteAccount = false
 
     var body: some View {
         NavigationStack {
@@ -150,12 +151,30 @@ struct ForcedPasswordChangeView: View {
 
                 Spacer()
                 Spacer()
+
+                // A way out that doesn't need a new password first;
+                // DeleteAccount is gate-exempt.
+                HStack(spacing: 24) {
+                    Button("Sign out") {
+                        Task { await authManager.logout() }
+                    }
+                    Button("Delete account") {
+                        showDeleteAccount = true
+                    }
+                    .accessibilityIdentifier("password-gate-delete-account")
+                }
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
+                .padding(.bottom)
             }
             .padding()
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .mmGlowPage()
             .interactiveDismissDisabled()
+            .sheet(isPresented: $showDeleteAccount) {
+                DeleteAccountView()
+            }
         }
     }
 

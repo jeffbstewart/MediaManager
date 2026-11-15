@@ -81,6 +81,16 @@ public actor LocalProgressStore {
         }
     }
 
+    /// Forget every position and write the empty state to disk. Used
+    /// when the account is deleted.
+    public func clear() {
+        loaded = true
+        playback.removeAll()
+        reading.removeAll()
+        savePlayback()
+        saveReading()
+    }
+
     private func savePlayback() {
         guard let data = try? JSONEncoder().encode(playback) else { return }
         try? data.write(to: playbackFile, options: .atomic)

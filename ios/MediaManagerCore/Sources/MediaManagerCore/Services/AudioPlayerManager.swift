@@ -276,12 +276,14 @@ public final class AudioPlayerManager {
 
     /// Stop playback, clear the queue, and tear down the Now Playing
     /// surface. Called by the mini-player's close button.
-    public func stop() {
+    /// `recordProgress: false` skips saving the final position, for
+    /// when the account it would be saved for is being deleted.
+    public func stop(recordProgress: Bool = true) {
         // Capture the final position before clearing state — same
         // rationale as loadAndPlayCurrent's prologue, but here we
         // know currentTrack is about to vanish so use the explicit
         // outgoing path with the live trackId.
-        enqueueCurrentProgress()
+        if recordProgress { enqueueCurrentProgress() }
         endRadioSession()
         player.pause()
         player.removeAllItems()

@@ -14,6 +14,7 @@ struct ProfileView: View {
     @State private var tvQuality: Int = 1
     @State private var loadTask: Task<Void, Never>?
     @State private var showLogoutConfirmation = false
+    @State private var showDeleteAccount = false
 
     var body: some View {
         Group {
@@ -103,6 +104,14 @@ struct ProfileView: View {
                         }
                     }
                     .mmRow()
+
+                    Section {
+                        Button("Delete Account…", role: .destructive) {
+                            showDeleteAccount = true
+                        }
+                        .accessibilityIdentifier("profile-delete-account")
+                    }
+                    .mmRow()
                 }
             }
         }
@@ -129,6 +138,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSessions) {
             SessionsView()
+        }
+        .sheet(isPresented: $showDeleteAccount) {
+            DeleteAccountView()
         }
     }
 

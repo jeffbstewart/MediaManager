@@ -668,6 +668,30 @@ public final class AudioCacheManager {
         audioDir.appendingPathComponent("playlist-\(playlistId)", isDirectory: true)
     }
 
+    /// Cancel every download and delete every downloaded album and
+    /// playlist. Used when the account is deleted. The Audio directory
+    /// itself stays, so later downloads still have somewhere to land.
+    public func removeAllDownloads() {
+        for task in downloadTasks.values { task.cancel() }
+        for task in playlistDownloadTasks.values { task.cancel() }
+        downloadTasks.removeAll()
+        playlistDownloadTasks.removeAll()
+        activeDownloads.removeAll()
+        activePlaylistDownloads.removeAll()
+        failedDownloads.removeAll()
+        failedPlaylistDownloads.removeAll()
+        downloads.removeAll()
+        playlistDownloads.removeAll()
+        let fm = FileManager.default
+        for url in (try? fm.contentsOfDirectory(at: audioDir, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.removeItem(at: url)
+        }
+        rebuildTrackIndex()
+        persistIndex()
+        persistPlaylistIndex()
+        logger.info("removeAllDownloads: audio downloads cleared")
+    }
+
     private func rebuildTrackIndex() {
         var albumIdx: [Int64: Int64] = [:]
         for album in downloads {
