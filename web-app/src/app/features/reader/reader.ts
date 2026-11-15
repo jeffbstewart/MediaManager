@@ -20,10 +20,19 @@ interface EpubJsThemes {
   /** Activate a previously-registered theme. */
   select(name: string): void;
 }
+/** One rendered section: epub.js's wrapper around the section's iframe. */
+interface EpubJsContents {
+  document: Document;
+  window: Window;
+}
 interface EpubJsRendition {
   display(target?: string): Promise<unknown>;
   on(event: 'relocated', handler: (loc: EpubJsLocation) => void): void;
   themes: EpubJsThemes;
+  hooks: {
+    /** Runs for each section once its document has loaded. */
+    content: { register(hook: (contents: EpubJsContents) => void): void };
+  };
   next(): void;
   prev(): void;
   destroy(): void;
@@ -190,6 +199,7 @@ export class ReaderComponent implements OnInit, OnDestroy {
     });
     rendition.themes.select('mm-reader');
     rendition.themes.fontSize(`${this.fontSize()}%`);
+    rendition.hooks.content.register(contents => rehideOffscreenText(contents));
     // Track CFI on every relocated event. We only update the displayed
     // percent against the locations index (built below) — `loc.start.
     // percentage` is 0 until then.
@@ -239,6 +249,47 @@ export class ReaderComponent implements OnInit, OnDestroy {
       await this.catalog.saveReadingProgress(this.mediaItemId, cfi, pct);
     } catch (e) {
       if (force) console.warn('final reading-progress report failed', e);
+    }
+  }
+}
+
+/** Farther off-screen than any real layout puts an element. */
+const OFFSCREEN_PX = 2000;
+
+/**
+ * Some publishers show a title as artwork and hide the title text from
+ * sighted readers by moving it far off-screen (`position: absolute;
+ * left: -999em`), leaving it for assistive technology. epub.js sizes a
+ * paginated section by measuring its content, counts that text, and
+ * lays the section out thousands of pixels wide: one real page followed
+ * by dozens of blank ones.
+ *
+ * Hide such elements a different way: in place, clipped to nothing.
+ * They stay in the document and readable by assistive technology, and
+ * no longer widen the section.
+ */
+function rehideOffscreenText(contents: EpubJsContents): void {
+  const view = contents.window;
+  for (const el of Array.from(contents.document.body.querySelectorAll<HTMLElement>('*'))) {
+    const style = view.getComputedStyle(el);
+    if (style.position !== 'absolute' && style.position !== 'fixed') continue;
+    const offsets = [style.left, style.right, style.top, style.bottom].map(v => parseFloat(v));
+    if (!offsets.some(px => px <= -OFFSCREEN_PX)) continue;
+    const hide: Record<string, string> = {
+      left: '0',
+      right: 'auto',
+      top: 'auto',
+      bottom: 'auto',
+      width: '1px',
+      height: '1px',
+      margin: '-1px',
+      padding: '0',
+      overflow: 'hidden',
+      'clip-path': 'inset(50%)',
+      'white-space': 'nowrap',
+    };
+    for (const [prop, value] of Object.entries(hide)) {
+      el.style.setProperty(prop, value, 'important');
     }
   }
 }

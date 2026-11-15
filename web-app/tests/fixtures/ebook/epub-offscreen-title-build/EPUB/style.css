@@ -1,0 +1,16 @@
+/* The rule under test. Some publishers show the title as artwork and hide
+   the title text for sighted readers by moving it far off-screen, leaving
+   it in place for assistive technology. A paginated reader that measures
+   the section's content counts the off-screen text and lays out dozens of
+   blank pages after the title page. */
+section.titlepage h1,
+section.titlepage p.byline,
+section.imprint h2 {
+  left: -999em;
+  position: absolute;
+}
+
+section.titlepage .art {
+  margin-top: 3em;
+  text-align: center;
+}

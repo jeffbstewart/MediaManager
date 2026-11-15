@@ -61,8 +61,15 @@ const EPUB_ITEM_ID = 8002;
 // custom theme actually scales the visible text.
 const EPUB_WITH_CSS_ITEM_ID = 8003;
 
+// Separate fixture: a title page whose title text is hidden by moving
+// it far off-screen, followed by an imprint and a chapter. Proves the
+// reader lays the title page out as one page. Source files are in
+// tests/fixtures/ebook/epub-offscreen-title-build/.
+const EPUB_OFFSCREEN_TITLE_ITEM_ID = 8004;
+
 const FIXTURE_EPUB = 'tests/fixtures/ebook/test.epub';
 const FIXTURE_EPUB_WITH_CSS = 'tests/fixtures/ebook/test-with-css.epub';
+const FIXTURE_EPUB_OFFSCREEN_TITLE = 'tests/fixtures/ebook/test-offscreen-title.epub';
 
 /** Capture each ListAuthors request's decoded body. */
 function captureAuthorRequests(page: Page) {
@@ -441,6 +448,54 @@ test.describe('reader — EPUB', () => {
     }
 
     await expect.poll(fontSizeOf, { timeout: 5_000 }).toBeGreaterThan(baseline);
+  });
+
+  test('one page turn from the title page reaches the next document when the title text is hidden off-screen', async ({ page }) => {
+    // Regression for the "dozens of blank pages after the title page"
+    // bug. Some publishers show the title as artwork and hide the
+    // title text with `position: absolute; left: -999em`. epub.js
+    // sizes a paginated section by measuring its content, counted
+    // the off-screen text, and laid the title page out ~16,000px
+    // wide: one real page followed by a run of blank ones. The
+    // fixture's title page uses that rule; its second document is
+    // the imprint.
+    await page.route(`**/ebook/${EPUB_OFFSCREEN_TITLE_ITEM_ID}`, route => {
+      const headers = { 'Content-Type': 'application/epub+zip' };
+      if (route.request().method() === 'HEAD') {
+        return route.fulfill({ status: 200, headers, body: '' });
+      }
+      return route.fulfill({
+        status: 200,
+        headers: { ...headers, 'Accept-Ranges': 'bytes' },
+        path: FIXTURE_EPUB_OFFSCREEN_TITLE,
+      });
+    });
+    // No saved progress: the book opens on its first document.
+    await page.route(`**${PB}/GetReadingProgress`, r =>
+      fulfillProto(r, ReadingProgressSchema, create(ReadingProgressSchema, {
+        mediaItemId: BigInt(EPUB_OFFSCREEN_TITLE_ITEM_ID),
+      })));
+
+    await page.goto(`/reader/${EPUB_OFFSCREEN_TITLE_ITEM_ID}`);
+    await page.waitForSelector('app-reader .epub-container iframe', { timeout: 10_000 });
+    const epubFrame = page.frameLocator('app-reader .epub-container iframe');
+    await expect(epubFrame.locator('#art')).toBeVisible({ timeout: 10_000 });
+
+    // The hidden title stays in the document for assistive technology.
+    await expect(epubFrame.locator('#hidden-title')).toHaveText('Test Book');
+
+    // The title page is one page wide: the section's rendered width
+    // is the reader's own width, not a multiple of it.
+    // (epub.js mounts its own .epub-container inside the reader's; the
+    // first match is the reader's.)
+    const widths = await page.locator('app-reader .epub-container').first().evaluate((el) => {
+      const frame = el.querySelector('iframe');
+      return { container: el.clientWidth, frame: frame ? frame.getBoundingClientRect().width : -1 };
+    });
+    expect(widths.frame).toBeLessThanOrEqual(widths.container + 1);
+
+    await page.locator('app-reader button[aria-label="Next page"]').click();
+    await expect(epubFrame.locator('#imprint-text')).toBeVisible({ timeout: 10_000 });
   });
 
   test('reader uses the saved CFI to jump on open', async ({ page }) => {
