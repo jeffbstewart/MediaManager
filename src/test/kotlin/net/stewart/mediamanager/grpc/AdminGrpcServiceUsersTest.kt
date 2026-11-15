@@ -117,7 +117,7 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             assertTrue(resp.id > 0)
             val saved = AppUser.findById(resp.id)!!
             assertEquals("ViewerOne", saved.username)
-            assertEquals("Viewer One", saved.display_name)
+            assertEquals("", saved.display_name, "display names are ignored (#29)")
             assertEquals(1, saved.access_level, "new users default to viewer")
             assertTrue(saved.must_change_password)
             assertTrue(PasswordService.verify(GOOD_PW, saved.password_hash))
@@ -127,15 +127,15 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
     }
 
     @Test
-    fun `createUser falls back to username when displayName is blank`() = runBlocking {
+    fun `createUser ignores a displayName in the request`() = runBlocking {
         val admin = createAdminUser(username = "u-create-noname")
         val authed = authenticatedChannel(admin)
         try {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
             val resp = stub.createUser(createUserRequest {
-                username = "JustUser"; password = GOOD_PW; displayName = ""
+                username = "JustUser"; password = GOOD_PW; displayName = "Just A. User"
             })
-            assertEquals("JustUser", AppUser.findById(resp.id)!!.display_name)
+            assertEquals("", AppUser.findById(resp.id)!!.display_name)
         } finally {
             authed.shutdownNow()
         }

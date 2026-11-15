@@ -51,7 +51,10 @@ class WishListGrpcService : WishListServiceGrpcKt.WishListServiceCoroutineImplBa
                 }
                 voteCount = summary.voteCount
                 userVoted = true
-                voters.addAll(summary.voters)
+                // voters stays empty: this is a viewer's own list, and naming the
+                // other users who wished for the same thing would hand out their
+                // login names (#29). voteCount still says how many there are.
+                // Admin views (purchase wishes) list voters by username.
                 acquisitionStatus = summary.acquisitionStatus.toProtoAcquisitionStatus()
                 lifecycleStage = summary.lifecycleStage.toProtoWishLifecycleStage()
                 summary.titleId?.let { titleId = it }

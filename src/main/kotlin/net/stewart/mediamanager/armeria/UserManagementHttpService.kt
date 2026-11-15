@@ -69,7 +69,6 @@ class UserManagementHttpService {
         val now = LocalDateTime.now()
         AppUser(
             username = username,
-            display_name = "TOBEREMOVED",
             password_hash = PasswordService.hash(password),
             access_level = AppUser.ACCESS_LEVEL_VIEWER,
             must_change_password = forceChange,

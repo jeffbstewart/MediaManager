@@ -82,7 +82,6 @@ enum class WishLifecycleStage {
 data class UserMediaWishSummary(
     val wish: WishListItem,
     val voteCount: Int,
-    val voters: List<String>,
     val acquisitionStatus: String?,
     val lifecycleStage: WishLifecycleStage,
     val titleId: Long?
@@ -352,7 +351,7 @@ object WishListService {
                     tmdbPopularity = first.tmdb_popularity,
                     seasonNumber = seasonNumber,
                     voteCount = wishes.size,
-                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name },
+                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.username },
                     acquisitionStatus = state.acquisitionStatus,
                     lifecycleStage = state.lifecycleStage,
                     titleId = state.titleId
@@ -396,7 +395,7 @@ object WishListService {
                     coverReleaseId = first.album_cover_release_id,
                     isCompilation = first.album_is_compilation,
                     voteCount = wishes.size,
-                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.display_name },
+                    voters = wishes.mapNotNull { w -> userMap[w.user_id]?.username },
                     lifecycleStage = stage,
                     titleId = titleId
                 )
@@ -554,7 +553,6 @@ object WishListService {
                 it.tmdb_id != null
         }
         val votesByKey = allVisible.groupBy { Pair(it.tmdbKey()!!, it.season_number) }
-        val userMap = AppUser.findAll().associateBy { it.id }
         val context = loadResolutionContext()
 
         return userWishes.mapNotNull { wish ->
@@ -564,7 +562,6 @@ object WishListService {
             UserMediaWishSummary(
                 wish = wish,
                 voteCount = grouped.size,
-                voters = grouped.mapNotNull { vote -> userMap[vote.user_id]?.display_name ?: userMap[vote.user_id]?.username },
                 acquisitionStatus = state.acquisitionStatus,
                 lifecycleStage = state.lifecycleStage,
                 titleId = state.titleId

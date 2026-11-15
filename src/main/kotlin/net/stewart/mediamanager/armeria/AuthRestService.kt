@@ -133,7 +133,6 @@ class AuthRestService {
                 val now = java.time.LocalDateTime.now()
                 val u = AppUser(
                     username = username,
-                    display_name = "TOBEREMOVED",
                     password_hash = PasswordService.hash(password),
                     access_level = AppUser.ACCESS_LEVEL_ADMIN,
                     created_at = now,

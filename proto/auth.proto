@@ -99,7 +99,9 @@ message ChangePasswordRequest {
 message CreateFirstUserRequest {
   string username = 1;
   string password = 2;
-  string display_name = 3;
+  // Ignored since #29: accounts have only a username. iOS 1.3 still
+  // sends it; reserve once no supported client does.
+  optional string display_name = 3;
   optional string device_name = 4;
 }
 
