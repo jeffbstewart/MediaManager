@@ -25,13 +25,11 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     // about this table for tests in this class to reset cleanly).
 
     private fun seedOrder(
-        userId: Long,
         orderId: String,
         productName: String = "DVD: $orderId",
         status: String? = null,
         linkedMediaItemId: Long? = null,
     ): AmazonOrder = AmazonOrder(
-        user_id = userId,
         order_id = orderId,
         asin = "ASIN$orderId",
         product_name = productName,
@@ -58,20 +56,17 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     }
 
     @Test
-    fun `searchAmazonOrders returns the caller's orders only`() = runBlocking {
+    fun `searchAmazonOrders returns the household's orders, whoever imported them`() = runBlocking {
         val admin = createAdminUser(username = "amz-search-mine")
-        val other = createAdminUser(username = "amz-search-other")
-        seedOrder(admin.id!!, "111-MINE", productName = "Mine 1")
-        seedOrder(admin.id!!, "222-MINE", productName = "Mine 2")
-        seedOrder(other.id!!, "333-THEIRS", productName = "Theirs")
+        seedOrder("111-A", productName = "Imported by one admin")
+        seedOrder("222-B", productName = "Imported by another")
 
         val authed = authenticatedChannel(admin)
         try {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
             val resp = stub.searchAmazonOrders(searchAmazonOrdersRequest { })
-            // Only the caller's two orders.
-            assertEquals(2, resp.ordersCount)
-            assertTrue(resp.ordersList.all { it.orderId.endsWith("MINE") })
+            // Orders belong to the household (V104), not the importing admin.
+            assertEquals(setOf("111-A", "222-B"), resp.ordersList.map { it.orderId }.toSet())
         } finally {
             authed.shutdownNow()
         }
@@ -81,8 +76,8 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     fun `searchAmazonOrders unlinkedOnly excludes linked orders`() = runBlocking {
         val admin = createAdminUser(username = "amz-search-unlinked")
         val mediaItem = MediaItem().apply { save() }
-        seedOrder(admin.id!!, "u1", productName = "Unlinked")
-        seedOrder(admin.id!!, "L1", productName = "Linked",
+        seedOrder("u1", productName = "Unlinked")
+        seedOrder("L1", productName = "Linked",
             linkedMediaItemId = mediaItem.id)
 
         val authed = authenticatedChannel(admin)
@@ -101,8 +96,8 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     @Test
     fun `searchAmazonOrders hideCancelled excludes Cancelled orders`() = runBlocking {
         val admin = createAdminUser(username = "amz-search-cancelled")
-        seedOrder(admin.id!!, "ok", status = "Closed")
-        seedOrder(admin.id!!, "x", status = "Cancelled")
+        seedOrder("ok", status = "Closed")
+        seedOrder("x", status = "Cancelled")
 
         val authed = authenticatedChannel(admin)
         try {
@@ -120,7 +115,7 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     @Test
     fun `searchAmazonOrders limit caps results`() = runBlocking {
         val admin = createAdminUser(username = "amz-search-limit")
-        for (i in 1..5) seedOrder(admin.id!!, "ord-$i")
+        for (i in 1..5) seedOrder("ord-$i")
 
         val authed = authenticatedChannel(admin)
         try {
@@ -142,7 +137,7 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
         net.stewart.mediamanager.entity.MediaItemTitle(
             media_item_id = mediaItem.id!!, title_id = title.id!!
         ).save()
-        seedOrder(admin.id!!, "withtitle", linkedMediaItemId = mediaItem.id)
+        seedOrder("withtitle", linkedMediaItemId = mediaItem.id)
 
         val authed = authenticatedChannel(admin)
         try {
@@ -162,7 +157,7 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     fun `linkAmazonOrder updates linked_media_item_id for the owner`() = runBlocking {
         val admin = createAdminUser(username = "amz-link")
         val mediaItem = MediaItem().apply { save() }
-        val order = seedOrder(admin.id!!, "to-link")
+        val order = seedOrder("to-link")
 
         val authed = authenticatedChannel(admin)
         try {
@@ -173,28 +168,6 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
             })
             val refreshed = AmazonOrder.findById(order.id!!)!!
             assertEquals(mediaItem.id, refreshed.linked_media_item_id)
-        } finally {
-            authed.shutdownNow()
-        }
-    }
-
-    @Test
-    fun `linkAmazonOrder refuses non-owners with PERMISSION_DENIED`() = runBlocking {
-        val owner = createAdminUser(username = "amz-link-owner")
-        val intruder = createAdminUser(username = "amz-link-intruder")
-        val mediaItem = MediaItem().apply { save() }
-        val order = seedOrder(owner.id!!, "owners-order")
-
-        val authed = authenticatedChannel(intruder)
-        try {
-            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
-            val ex = assertFailsWith<StatusException> {
-                stub.linkAmazonOrder(linkAmazonOrderRequest {
-                    amazonOrderId = order.id!!
-                    mediaItemId = mediaItem.id!!
-                })
-            }
-            assertEquals(Status.Code.PERMISSION_DENIED, ex.status.code)
         } finally {
             authed.shutdownNow()
         }
@@ -221,10 +194,10 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
     // ---------------------- unlinkAmazonOrder ----------------------
 
     @Test
-    fun `unlinkAmazonOrder clears linked_media_item_id for the owner`() = runBlocking {
+    fun `unlinkAmazonOrder clears linked_media_item_id`() = runBlocking {
         val admin = createAdminUser(username = "amz-unlink")
         val mediaItem = MediaItem().apply { save() }
-        val order = seedOrder(admin.id!!, "to-unlink",
+        val order = seedOrder("to-unlink",
             linkedMediaItemId = mediaItem.id)
 
         val authed = authenticatedChannel(admin)
@@ -234,26 +207,6 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
                 amazonOrderId = order.id!!
             })
             assertNull(AmazonOrder.findById(order.id!!)!!.linked_media_item_id)
-        } finally {
-            authed.shutdownNow()
-        }
-    }
-
-    @Test
-    fun `unlinkAmazonOrder PERMISSION_DENIED for non-owner`() = runBlocking {
-        val owner = createAdminUser(username = "amz-unlink-owner")
-        val intruder = createAdminUser(username = "amz-unlink-intruder")
-        val order = seedOrder(owner.id!!, "ownersorder")
-
-        val authed = authenticatedChannel(intruder)
-        try {
-            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
-            val ex = assertFailsWith<StatusException> {
-                stub.unlinkAmazonOrder(amazonOrderIdRequest {
-                    amazonOrderId = order.id!!
-                })
-            }
-            assertEquals(Status.Code.PERMISSION_DENIED, ex.status.code)
         } finally {
             authed.shutdownNow()
         }
@@ -285,9 +238,9 @@ class AdminGrpcServiceAmazonTest : GrpcTestBase() {
         // 3 orders: one linked, two unlinked. All count as "media_related"
         // since searchOrders(mediaOnly=true) returns everything that isn't
         // explicitly filtered out by the heuristic.
-        seedOrder(admin.id!!, "1")
-        seedOrder(admin.id!!, "2")
-        seedOrder(admin.id!!, "3", linkedMediaItemId = mediaItem.id)
+        seedOrder("1")
+        seedOrder("2")
+        seedOrder("3", linkedMediaItemId = mediaItem.id)
 
         val authed = authenticatedChannel(admin)
         try {

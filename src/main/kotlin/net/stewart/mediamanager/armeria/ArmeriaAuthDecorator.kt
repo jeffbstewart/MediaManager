@@ -57,6 +57,7 @@ class ArmeriaAuthDecorator : DecoratingHttpServiceFunction {
         private val LEGAL_EXEMPT_PREFIXES = listOf(
             "/api/v2/legal/",
             "/api/v2/profile/change-password",
+            "/api/v2/profile/delete-account",
             "/api/v2/profile/passkeys/",
             "/api/v2/auth/"
         )

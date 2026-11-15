@@ -42,7 +42,7 @@ class AmazonImportHttpService {
         val user = ArmeriaAuthDecorator.getUser(ctx) ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
         if (!user.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
 
-        val all = AmazonImportService.searchOrders(user.id!!, search, mediaOnly, unlinkedOnly, hideCancelled, limit = 10000)
+        val all = AmazonImportService.searchOrders(search, mediaOnly, unlinkedOnly, hideCancelled, limit = 10000)
         val mediaItems = MediaItem.findAll().associateBy { it.id }
         val titles = Title.findAll().associateBy { it.id }
         val links = MediaItemTitle.findAll().groupBy { it.media_item_id }
@@ -71,7 +71,7 @@ class AmazonImportHttpService {
             )
         }
 
-        val (statTotal, _, statLinked) = AmazonImportService.countOrders(user.id!!)
+        val (statTotal, _, statLinked) = AmazonImportService.countOrders()
         val statMedia = all.count { AmazonImportService.isLikelyMedia(it.product_name) }
 
         return jsonResponse(gson.toJson(mapOf(
@@ -97,7 +97,7 @@ class AmazonImportHttpService {
             AmazonImportService.parseCsv(ByteArrayInputStream(bytes))
         }
 
-        val result = AmazonImportService.importRows(user.id!!, rows)
+        val result = AmazonImportService.importRows(rows)
 
         return jsonResponse(gson.toJson(mapOf(
             "ok" to true,

@@ -35,11 +35,10 @@ object TagService {
         "Stone" to "#78716C"
     )
 
-    fun createTag(name: String, bgColor: String, createdBy: Long? = null): Tag {
+    fun createTag(name: String, bgColor: String): Tag {
         val tag = Tag(
             name = name.trim(),
             bg_color = bgColor,
-            created_by = createdBy,
             created_at = LocalDateTime.now()
         )
         tag.save()

@@ -13,7 +13,6 @@ import com.linecorp.armeria.server.annotation.Default
 import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
-import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.ProblemReport
 import net.stewart.mediamanager.entity.ReportStatus
 import net.stewart.mediamanager.entity.Title
@@ -40,7 +39,7 @@ class ProblemReportHttpService {
 
         val now = LocalDateTime.now()
         val report = ProblemReport(
-            user_id = user.id!!,
+            reporter_username = user.username,
             title_id = (map["title_id"] as? Number)?.toLong(),
             title_name = (map["title_name"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
             season_number = (map["season_number"] as? Number)?.toInt(),
@@ -77,16 +76,10 @@ class ProblemReportHttpService {
         val total = reports.size
         val paged = reports.drop(page * size).take(size)
 
-        // Pre-load user names for display
-        val userIds = (paged.map { it.user_id } + paged.mapNotNull { it.resolved_by }).toSet()
-        val usersById = if (userIds.isNotEmpty()) {
-            AppUser.findAll().filter { it.id in userIds }.associateBy { it.id }
-        } else emptyMap()
-
         val rows = paged.map { r ->
             mapOf(
                 "id" to r.id,
-                "reporter_name" to (usersById[r.user_id]?.username ?: "Unknown"),
+                "reporter_name" to (r.reporter_username ?: "Unknown"),
                 "title_id" to r.title_id,
                 "title_name" to r.title_name,
                 "season_number" to r.season_number,
@@ -94,7 +87,7 @@ class ProblemReportHttpService {
                 "description" to r.description,
                 "status" to r.status,
                 "admin_notes" to r.admin_notes,
-                "resolved_by_name" to r.resolved_by?.let { usersById[it]?.username },
+                "resolved_by_name" to r.resolver_username,
                 "created_at" to r.created_at?.toString(),
                 "updated_at" to r.updated_at?.toString()
             )
@@ -127,7 +120,7 @@ class ProblemReportHttpService {
 
         report.status = newStatus
         report.admin_notes = (map["notes"] as? String)?.trim()
-        report.resolved_by = user.id
+        report.resolver_username = user.username
         report.updated_at = LocalDateTime.now()
         report.save()
 
@@ -186,7 +179,7 @@ class ProblemReportHttpService {
         val auto = "Catalog entry removed; NAS files require manual cleanup."
         report.admin_notes = if (userNotes.isNullOrBlank()) auto else "$auto\n\n$userNotes"
         report.status = ReportStatus.RESOLVED.name
-        report.resolved_by = user.id
+        report.resolver_username = user.username
         report.updated_at = LocalDateTime.now()
         report.save()
 
@@ -205,7 +198,7 @@ class ProblemReportHttpService {
 
         report.status = ReportStatus.OPEN.name
         report.admin_notes = null
-        report.resolved_by = null
+        report.resolver_username = null
         report.updated_at = LocalDateTime.now()
         report.save()
 

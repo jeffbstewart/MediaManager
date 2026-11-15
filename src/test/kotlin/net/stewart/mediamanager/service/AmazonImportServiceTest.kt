@@ -285,7 +285,6 @@ class AmazonImportServiceTest {
     private fun makeOrder(id: Long, productName: String, price: BigDecimal? = BigDecimal("19.99")): AmazonOrder =
         AmazonOrder(
             id = id,
-            user_id = 1,
             order_id = "111-$id",
             asin = "B00$id",
             product_name = productName,

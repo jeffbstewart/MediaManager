@@ -410,10 +410,10 @@ internal class ProblemReportHttpServiceTest : ArmeriaTestBase() {
     @Test
     fun `list returns reports filtered by status`() {
         val admin = getOrCreateUser("admin", level = 2)
-        ProblemReport(user_id = admin.id!!, description = "open one",
+        ProblemReport(reporter_username = admin.username, description = "open one",
             status = ReportStatus.OPEN.name,
             created_at = LocalDateTime.now()).save()
-        ProblemReport(user_id = admin.id!!, description = "fixed one",
+        ProblemReport(reporter_username = admin.username, description = "fixed one",
             status = ReportStatus.RESOLVED.name,
             created_at = LocalDateTime.now()).save()
 

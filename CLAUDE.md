@@ -242,6 +242,29 @@ false — the HTTP decorator returns 403 and only the unauthenticated
 `AuthService/CreateFirstUser` RPC is reachable, which the SPA's setup flow
 calls to create the first account (always admin).
 
+**Account deletion and data ownership:** a user can delete their own
+account (`ProfileService/DeleteAccount`, the profile page's
+`/api/v2/profile/delete-account`, password required, gate-exempt), and an
+admin can delete someone else's (`AdminService/DeleteUser`); both go
+through `AccountDeletionService`, which refuses the last admin. That rule
+also means the last account can never be deleted, so the server never
+falls back to first-user setup. What goes with the account is decided by
+the schema: data belongs either to the user or to the household.
+**A per-user table references `app_user(id)` with `ON DELETE CASCADE`;
+a household table (catalog, tags, the Amazon order history) carries no
+user id at all**, and problem reports keep who filed and resolved them as
+plain username strings. `V104UserDataOwnershipTest` fails if a new
+foreign key to `app_user` does not cascade. Logs are never purged.
+
+**Password re-entry is throttled:** every endpoint where a signed-in user
+re-enters their current password (delete-account and change-password,
+REST and gRPC) checks it through `PasswordReverifyThrottle`, never
+`PasswordService.verify` directly, so a stolen session cannot be used to
+guess the password. The limit is per user and shared by all of those
+endpoints: 5 wrong in 15 minutes locks them for 15 minutes, 20 in 24
+hours for 24 hours, and while locked even the right password is refused
+unchecked. A new endpoint of this kind must go through it too.
+
 **Owned strings:** every persisted key and wire-contract string on the auth
 and legal paths is defined once, and the owner's comment says whether the
 value may change: `LegalRequirements` (legal config keys, platform ids),

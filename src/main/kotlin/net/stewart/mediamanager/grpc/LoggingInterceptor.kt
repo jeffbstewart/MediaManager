@@ -147,7 +147,8 @@ class LoggingInterceptor : ServerInterceptor {
             "mediamanager.AuthService/Login",
             "mediamanager.AuthService/Refresh",
             "mediamanager.AuthService/Revoke",
-            "mediamanager.AuthService/ChangePassword"
+            "mediamanager.AuthService/ChangePassword",
+            "mediamanager.ProfileService/DeleteAccount"
         )
 
         /** Methods that fire often enough that an OK INFO per call is

@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import { TimezoneService } from '../../core/timezone.service';
 import { WebAuthnService, Passkey } from '../../core/webauthn.service';
 import { ThemeService } from '../../core/theme.service';
+import { AuthService } from '../../core/auth.service';
 
 interface Profile {
   id: number;
@@ -49,6 +50,7 @@ export class ProfileComponent implements OnInit {
   private readonly http = inject(HttpClient);
   readonly tz = inject(TimezoneService);
   private readonly webauthnService = inject(WebAuthnService);
+  private readonly auth = inject(AuthService);
   // Still applied on load (applyFromServer): the server's default theme flows
   // through even though the page no longer offers a choice (one theme today).
   readonly theme = inject(ThemeService);
@@ -182,6 +184,51 @@ export class ProfileComponent implements OnInit {
     if (!confirm(`Delete passkey "${passkey.display_name}"?`)) return;
     await this.webauthnService.deletePasskey(passkey.id);
     this.passkeys.update(list => list.filter(p => p.id !== passkey.id));
+  }
+
+  // -- Delete account (App Store Review Guideline 5.1.1(v); the web UI
+  //    creates accounts too, so it offers deletion as well) --
+
+  readonly showDeleteDialog = signal(false);
+  readonly deletePassword = signal('');
+  readonly deleteError = signal('');
+  readonly deleteSubmitting = signal(false);
+
+  openDeleteDialog(): void {
+    this.deletePassword.set('');
+    this.deleteError.set('');
+    this.showDeleteDialog.set(true);
+  }
+
+  closeDeleteDialog(): void {
+    this.showDeleteDialog.set(false);
+  }
+
+  updateDeletePassword(event: Event): void {
+    this.deletePassword.set((event.target as HTMLInputElement).value);
+  }
+
+  async submitDeleteAccount(): Promise<void> {
+    this.deleteError.set('');
+    this.deleteSubmitting.set(true);
+    try {
+      const result = await firstValueFrom(this.http.post<{ ok: boolean; error?: string }>(
+        '/api/v2/profile/delete-account',
+        { current_password: this.deletePassword() }
+      ));
+      if (result.ok) {
+        // The account is gone and the server expired the cookie; logout()
+        // does the full-page reload to /login that drops every cached
+        // trace of the signed-in user.
+        await this.auth.logout();
+        return;
+      }
+      this.deleteError.set(result.error ?? 'Account deletion failed');
+    } catch {
+      this.deleteError.set('Request failed');
+    } finally {
+      this.deleteSubmitting.set(false);
+    }
   }
 
   qualityStars = [1, 2, 3, 4, 5];

@@ -193,10 +193,9 @@ object AmazonImportService {
 
     // --- C. Import ---
 
-    fun importRows(userId: Long, rows: List<AmazonOrderRow>): ImportResult {
+    fun importRows(rows: List<AmazonOrderRow>): ImportResult {
         // Load existing keys for dedup (mutable to track within-batch dupes too)
         val seen = AmazonOrder.findAll()
-            .filter { it.user_id == userId }
             .map { it.order_id + "|" + it.asin }
             .toMutableSet()
 
@@ -210,7 +209,6 @@ object AmazonImportService {
             }
 
             val order = AmazonOrder(
-                user_id = userId,
                 order_id = row.orderId,
                 asin = row.asin,
                 product_name = row.productName,
@@ -231,21 +229,20 @@ object AmazonImportService {
             order.save()
             inserted++
         }
-        log.info("Amazon import for user {}: {} inserted, {} skipped", userId, inserted, skipped)
+        log.info("Amazon import: {} inserted, {} skipped", inserted, skipped)
         return ImportResult(inserted, skipped)
     }
 
     // --- D. Search ---
 
     fun searchOrders(
-        userId: Long,
         query: String = "",
         mediaOnly: Boolean = false,
         unlinkedOnly: Boolean = false,
         hideCancelled: Boolean = true,
         limit: Int = 200
     ): List<AmazonOrder> {
-        var results = AmazonOrder.findAll().filter { it.user_id == userId }
+        var results = AmazonOrder.findAll()
 
         if (query.isNotBlank()) {
             val q = query.trim().lowercase()
@@ -266,8 +263,8 @@ object AmazonImportService {
             .take(limit)
     }
 
-    fun countOrders(userId: Long): Triple<Int, Int, Int> {
-        val all = AmazonOrder.findAll().filter { it.user_id == userId }
+    fun countOrders(): Triple<Int, Int, Int> {
+        val all = AmazonOrder.findAll()
         val total = all.size
         val linked = all.count { it.linked_media_item_id != null }
         return Triple(total, 0, linked)
@@ -304,11 +301,10 @@ object AmazonImportService {
     // --- F. Suggestions ---
 
     fun findSuggestionsForMediaItems(
-        userId: Long,
         unpricedItems: List<MediaItem>,
         titleMap: Map<Long, String>
     ): Map<Long, AmazonSuggestion> {
-        val unlinkedOrders = searchOrders(userId, unlinkedOnly = true, mediaOnly = true, limit = Int.MAX_VALUE)
+        val unlinkedOrders = searchOrders(unlinkedOnly = true, mediaOnly = true, limit = Int.MAX_VALUE)
         return matchSuggestions(unlinkedOrders, unpricedItems, titleMap)
     }
 

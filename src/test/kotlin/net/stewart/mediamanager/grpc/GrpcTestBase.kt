@@ -161,6 +161,10 @@ open class GrpcTestBase {
         // a now-empty AppConfig zeroes the cache so the AuthInterceptor
         // legal-agreement gate stays open by default for fresh tests.
         net.stewart.mediamanager.service.LegalRequirements.refresh()
+
+        // Wrong-password history is keyed by user id, and ids are not
+        // guaranteed fresh between tests.
+        net.stewart.mediamanager.service.PasswordReverifyThrottle.resetForTests()
     }
 
     // ========================================================================

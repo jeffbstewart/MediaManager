@@ -115,9 +115,7 @@ class AuthGrpcService : AuthServiceGrpcKt.AuthServiceCoroutineImplBase() {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("Both passwords required"))
         }
 
-        if (!PasswordService.verify(request.currentPassword, user.password_hash)) {
-            throw StatusException(Status.UNAUTHENTICATED.withDescription("Invalid current password"))
-        }
+        requireReverifiedPassword(user, request.currentPassword, "ChangePassword")
 
         val violations = PasswordService.validate(request.newPassword, user.username, user.password_hash)
         if (violations.isNotEmpty()) {

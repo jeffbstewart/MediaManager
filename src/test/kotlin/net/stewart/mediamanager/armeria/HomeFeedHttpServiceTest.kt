@@ -153,11 +153,11 @@ internal class HomeFeedHttpServiceTest : ArmeriaTestBase() {
     fun `homeFeed counts open ProblemReports for admins`() {
         val admin = getOrCreateUser("admin", level = 2)
         ProblemReport(
-            user_id = admin.id!!, status = ReportStatus.OPEN.name,
+            reporter_username = admin.username, status = ReportStatus.OPEN.name,
             description = "bug 1", created_at = LocalDateTime.now(),
         ).save()
         ProblemReport(
-            user_id = admin.id!!, status = ReportStatus.RESOLVED.name,
+            reporter_username = admin.username, status = ReportStatus.RESOLVED.name,
             description = "fixed", created_at = LocalDateTime.now(),
         ).save()
 

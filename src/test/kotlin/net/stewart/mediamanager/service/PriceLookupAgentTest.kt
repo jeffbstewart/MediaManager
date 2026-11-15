@@ -246,7 +246,7 @@ internal class PriceLookupAgentTest {
         ).apply { save() }
         val item = seedItem(amazonOrderId = "order-123")
         AmazonOrder(
-            user_id = owner.id!!, order_id = "order-123",
+            order_id = "order-123",
             asin = "B00ORDER", product_name = "Some Movie",
             linked_media_item_id = item.id,
         ).save()

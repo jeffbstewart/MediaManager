@@ -8,7 +8,7 @@ import java.time.LocalDateTime
 @Table("problem_report")
 data class ProblemReport(
     override var id: Long? = null,
-    var user_id: Long = 0,
+    var reporter_username: String? = null,
     var title_id: Long? = null,
     var title_name: String? = null,
     var season_number: Int? = null,
@@ -16,7 +16,7 @@ data class ProblemReport(
     var description: String = "",
     var status: String = ReportStatus.OPEN.name,
     var admin_notes: String? = null,
-    var resolved_by: Long? = null,
+    var resolver_username: String? = null,
     var created_at: LocalDateTime? = null,
     var updated_at: LocalDateTime? = null
 ) : KEntity<Long> {

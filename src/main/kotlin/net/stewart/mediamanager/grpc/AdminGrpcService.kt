@@ -24,6 +24,7 @@ import net.stewart.mediamanager.entity.Tag as TagEntity
 import net.stewart.mediamanager.entity.Title as TitleEntity
 import net.stewart.mediamanager.entity.Transcode as TranscodeEntity
 import net.stewart.mediamanager.service.DiscoveredFileLinkService
+import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.WebAuthnService
@@ -956,7 +957,7 @@ class AdminGrpcService(
         }
 
         val user = currentUser()
-        val tag = TagService.createTag(name, bgColor, user.id)
+        val tag = TagService.createTag(name, bgColor)
 
         return createTagResponse {
             result = CreateTagResult.CREATE_TAG_RESULT_CREATED
@@ -1157,21 +1158,14 @@ class AdminGrpcService(
             throw StatusException(Status.FAILED_PRECONDITION.withDescription("Cannot delete your own account"))
         }
 
-        val user = AppUser.findById(targetId)
-            ?: throw StatusException(Status.NOT_FOUND.withDescription("User not found"))
-
-        // Prevent deleting the last admin
-        if (user.isAdmin() && AuthService.countAdmins() <= 1) {
-            throw StatusException(
-                Status.FAILED_PRECONDITION.withDescription("Cannot delete the last admin")
-            )
+        when (val result = AccountDeletionService.delete(targetId)) {
+            AccountDeletionService.Result.NotFound ->
+                throw StatusException(Status.NOT_FOUND.withDescription("User not found"))
+            AccountDeletionService.Result.LastAdmin ->
+                throw StatusException(Status.FAILED_PRECONDITION.withDescription("Cannot delete the last admin"))
+            is AccountDeletionService.Result.Deleted ->
+                log.info("Admin '{}' deleted user '{}' (id={})", caller.username, result.username, targetId)
         }
-
-        AuthService.invalidateUserSessions(targetId)
-        user.delete()
-        AuthService.invalidateHasUsersCache()
-
-        log.info("Admin deleted user '{}' (id={})", user.username, targetId)
 
         return empty {}
     }
@@ -1334,7 +1328,7 @@ class AdminGrpcService(
             } else {
                 AmazonImportService.parseCsv(request.csvData.newInput())
             }
-            val result = AmazonImportService.importRows(user.id!!, rows)
+            val result = AmazonImportService.importRows(rows)
             importAmazonOrdersResponse {
                 imported = result.inserted
                 skipped = result.skipped
@@ -1351,7 +1345,6 @@ class AdminGrpcService(
         val query = if (request.hasQuery()) request.query else ""
         val limit = if (request.limit > 0) request.limit else 200
         val orders = AmazonImportService.searchOrders(
-            userId = user.id!!,
             query = query,
             mediaOnly = request.mediaOnly,
             unlinkedOnly = request.unlinkedOnly,
@@ -1364,32 +1357,24 @@ class AdminGrpcService(
     }
 
     override suspend fun linkAmazonOrder(request: LinkAmazonOrderRequest): Empty {
-        val user = currentUser()
-        val order = net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
+        net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Order not found"))
-        if (order.user_id != user.id) {
-            throw StatusException(Status.PERMISSION_DENIED.withDescription("Not your order"))
-        }
         AmazonImportService.linkToMediaItem(request.amazonOrderId, request.mediaItemId)
         return empty {}
     }
 
     override suspend fun unlinkAmazonOrder(request: AmazonOrderIdRequest): Empty {
-        val user = currentUser()
-        val order = net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
+        net.stewart.mediamanager.entity.AmazonOrder.findById(request.amazonOrderId)
             ?: throw StatusException(Status.NOT_FOUND.withDescription("Order not found"))
-        if (order.user_id != user.id) {
-            throw StatusException(Status.PERMISSION_DENIED.withDescription("Not your order"))
-        }
         AmazonImportService.unlinkFromMediaItem(request.amazonOrderId)
         return empty {}
     }
 
     override suspend fun getAmazonOrderSummary(request: Empty): AmazonOrderSummaryResponse {
         val user = currentUser()
-        val (total, _, linked) = AmazonImportService.countOrders(user.id!!)
+        val (total, _, linked) = AmazonImportService.countOrders()
         // Count media-related separately
-        val allOrders = AmazonImportService.searchOrders(user.id!!, "", mediaOnly = true, unlinkedOnly = false, hideCancelled = false, limit = 100000)
+        val allOrders = AmazonImportService.searchOrders("", mediaOnly = true, unlinkedOnly = false, hideCancelled = false, limit = 100000)
         return amazonOrderSummaryResponse {
             this.total = total
             this.mediaRelated = allOrders.size

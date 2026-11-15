@@ -255,3 +255,58 @@ test.describe('profile — hidden titles', () => {
   });
 });
 
+
+// -------- Delete account --------
+
+test.describe('profile — delete account', () => {
+  const openDialog = async (page: Page) => {
+    await page.locator('app-profile button.delete-account-btn').click();
+    await expect(page.locator('app-profile .delete-account-dialog')).toBeVisible();
+  };
+  const confirmButton = (page: Page) =>
+    page.locator('app-profile .delete-account-dialog button.action-btn.danger');
+
+  test('the button opens a confirm dialog; Delete stays disabled until a password is typed', async ({ page }) => {
+    await setup(page);
+    await openDialog(page);
+    await expect(confirmButton(page)).toBeDisabled();
+    await page.getByLabel('Password', { exact: true }).fill('pw');
+    await expect(confirmButton(page)).toBeEnabled();
+    await page.locator('app-profile .delete-account-dialog button.close-btn').click();
+    await expect(page.locator('app-profile .delete-account-dialog')).toHaveCount(0);
+  });
+
+  test('confirm POSTs the password, then signs out', async ({ page }) => {
+    await setup(page);
+    await page.route('**/api/v2/profile/delete-account', r =>
+      r.fulfill({ json: { ok: true } })
+    );
+    await openDialog(page);
+    await page.getByLabel('Password', { exact: true }).fill('my_password');
+    const del = page.waitForRequest(r =>
+      r.method() === 'POST' && r.url().endsWith('/api/v2/profile/delete-account'),
+      { timeout: 3_000 },
+    );
+    // Signing out is the observable end of a successful delete.
+    const logout = page.waitForRequest(r =>
+      r.method() === 'POST' && r.url().endsWith('/api/v2/auth/logout'),
+      { timeout: 3_000 },
+    );
+    await confirmButton(page).click();
+    expect((await del).postDataJSON()).toEqual({ current_password: 'my_password' });
+    await logout;
+  });
+
+  test('a refusal (wrong password, last admin) shows the server message and stays put', async ({ page }) => {
+    await setup(page);
+    await page.route('**/api/v2/profile/delete-account', r =>
+      r.fulfill({ json: { ok: false, error: 'You are the only administrator' } })
+    );
+    await openDialog(page);
+    await page.getByLabel('Password', { exact: true }).fill('pw');
+    await confirmButton(page).click();
+    await expect(page.locator('app-profile .delete-account-dialog .pw-error'))
+      .toContainText('You are the only administrator');
+    await expect(page).toHaveURL(/\/profile$/);
+  });
+});

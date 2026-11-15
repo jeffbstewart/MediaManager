@@ -24,8 +24,10 @@ import net.stewart.mediamanager.entity.UserFlagType
 import net.stewart.mediamanager.entity.UserTitleFlag
 import net.stewart.mediamanager.entity.WebTheme
 import net.stewart.mediamanager.service.UserTitleFlagService
+import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.PasswordReverifyThrottle
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.WebAuthnService
 import net.stewart.mediamanager.util.toIsoUtc
@@ -136,10 +138,7 @@ class ProfileHttpService {
 
         val fresh = AppUser.findById(user.id!!) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
 
-        // Verify current password
-        if (!PasswordService.verify(currentPassword, fresh.password_hash)) {
-            return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
-        }
+        reverifyPassword(fresh, currentPassword, "change-password")?.let { return it }
 
         // Validate new password
         val violations = PasswordService.validate(newPassword, fresh.username)
@@ -162,6 +161,45 @@ class ProfileHttpService {
 
         log.info("AUDIT: Password changed for user '{}' via Angular profile", fresh.username)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
+    }
+
+    /**
+     * The web half of ProfileService/DeleteAccount: the caller deletes
+     * their own account after re-entering their password.  Legal-exempt
+     * (ArmeriaAuthDecorator), so someone who declines the terms can still
+     * leave.  On success the session cookie is expired in the response.
+     */
+    @Post("/api/v2/profile/delete-account")
+    fun deleteAccount(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java) ?: return badRequest("Invalid JSON")
+        val currentPassword = (map["current_password"] as? String)?.takeIf { it.isNotEmpty() }
+            ?: return badRequest("current_password required")
+
+        val fresh = AppUser.findById(user.id!!) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        reverifyPassword(fresh, currentPassword, "delete-account")?.let { return it }
+
+        return when (AccountDeletionService.delete(fresh.id!!)) {
+            AccountDeletionService.Result.NotFound -> HttpResponse.of(HttpStatus.NOT_FOUND)
+            AccountDeletionService.Result.LastAdmin -> jsonResponse(gson.toJson(mapOf(
+                "ok" to false, "error" to AccountDeletionService.LAST_ADMIN_MESSAGE
+            )))
+            is AccountDeletionService.Result.Deleted -> {
+                log.info("AUDIT: user '{}' deleted their own account via Angular profile", fresh.username)
+                val bytes = gson.toJson(mapOf("ok" to true)).toByteArray(Charsets.UTF_8)
+                HttpResponse.of(
+                    ResponseHeaders.builder(HttpStatus.OK)
+                        .contentType(MediaType.JSON_UTF_8)
+                        .contentLength(bytes.size.toLong())
+                        .add("Set-Cookie", AuthService.buildExpireSessionCookieHeader())
+                        .build(),
+                    HttpData.wrap(bytes)
+                )
+            }
+        }
     }
 
     @Get("/api/v2/profile/sessions")
@@ -361,6 +399,24 @@ class ProfileHttpService {
         UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
+
+    /**
+     * Checks the re-entered password through [PasswordReverifyThrottle].
+     * Returns null when it is correct, otherwise the `{ok:false}` response
+     * to send: a wrong password, or a lockout (which also carries
+     * retry_after_seconds).
+     */
+    private fun reverifyPassword(user: AppUser, password: String, action: String): HttpResponse? =
+        when (val outcome = PasswordReverifyThrottle.verify(user.id!!, user.username, password, user.password_hash, action)) {
+            PasswordReverifyThrottle.Outcome.Verified -> null
+            PasswordReverifyThrottle.Outcome.WrongPassword ->
+                jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
+            is PasswordReverifyThrottle.Outcome.LockedOut -> jsonResponse(gson.toJson(mapOf(
+                "ok" to false,
+                "error" to PasswordReverifyThrottle.lockedOutMessage(outcome.retryAfterSeconds),
+                "retry_after_seconds" to outcome.retryAfterSeconds
+            )))
+        }
 
     private fun jsonResponse(json: String): HttpResponse {
         val bytes = json.toByteArray(Charsets.UTF_8)

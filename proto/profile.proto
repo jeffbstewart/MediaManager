@@ -24,6 +24,20 @@ service ProfileService {
   rpc RegisterPasskey(RegisterPasskeyRequest) returns (PasskeyCredentialInfo);
   rpc ListPasskeys(Empty) returns (ListPasskeysResponse);
   rpc DeletePasskey(DeletePasskeyRequest) returns (Empty);
+
+  // Deletes the caller's own account (App Store Review Guideline
+  // 5.1.1(v)). Gate-exempt like the rest of ProfileService, so someone
+  // who declines the terms or owes a password change can still leave.
+  // Wrong password: UNAUTHENTICATED. The last admin: FAILED_PRECONDITION,
+  // with a description saying what to do instead. On success every
+  // credential the caller holds stops working at once.
+  rpc DeleteAccount(DeleteAccountRequest) returns (Empty);
+}
+
+message DeleteAccountRequest {
+  // Re-authentication, as for ChangePassword: an unlocked phone in
+  // someone else's hands must not be enough to delete the account.
+  string current_password = 1;
 }
 
 message ProfileResponse {

@@ -14,6 +14,7 @@ import com.linecorp.armeria.server.annotation.Get
 import com.linecorp.armeria.server.annotation.Param
 import com.linecorp.armeria.server.annotation.Post
 import net.stewart.mediamanager.entity.AppUser
+import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.WebAuthnService
@@ -163,13 +164,12 @@ class UserManagementHttpService {
         if (!caller.isAdmin()) return HttpResponse.of(HttpStatus.FORBIDDEN)
         if (caller.id == userId) return jsonResponse("""{"ok":false,"error":"Cannot delete yourself"}""")
 
-        val u = AppUser.findById(userId) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
-        if (u.isAdmin() && AuthService.countAdmins() <= 1) return jsonResponse("""{"ok":false,"error":"Cannot delete the last admin"}""")
-
-        AuthService.invalidateUserSessions(userId)
-        u.delete()
-        AuthService.invalidateHasUsersCache()
-        return jsonResponse("""{"ok":true}""")
+        return when (AccountDeletionService.delete(userId)) {
+            AccountDeletionService.Result.NotFound -> HttpResponse.of(HttpStatus.NOT_FOUND)
+            AccountDeletionService.Result.LastAdmin ->
+                jsonResponse("""{"ok":false,"error":"Cannot delete the last admin"}""")
+            is AccountDeletionService.Result.Deleted -> jsonResponse("""{"ok":true}""")
+        }
     }
 
     @Get("/api/v2/admin/users/{userId}/sessions")

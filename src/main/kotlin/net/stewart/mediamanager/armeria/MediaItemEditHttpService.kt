@@ -421,7 +421,7 @@ class MediaItemEditHttpService {
         }
 
         val orders = AmazonImportService.searchOrders(
-            user.id!!, searchQuery, unlinkedOnly = true, limit = 20
+            searchQuery, unlinkedOnly = true, limit = 20
         )
 
         val rows = orders.map { o ->
