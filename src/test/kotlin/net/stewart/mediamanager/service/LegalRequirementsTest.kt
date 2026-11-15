@@ -250,4 +250,152 @@ class LegalRequirementsTest {
         assertFalse(LegalRequirements.isCompliant(u.id!!, isAdmin = false),
             "cache should be cleared by refresh — user is now behind on PP")
     }
+
+    // ---------------------- violations: complete or off ----------------------
+
+    /** A complete setup: every key set, every version 1. */
+    private fun completeSettings(): MutableMap<String, String?> = mutableMapOf(
+        LegalRequirements.PRIVACY_POLICY_URL_KEY to "https://example.com/privacy",
+        LegalRequirements.PRIVACY_POLICY_VERSION_KEY to "1",
+        LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "https://example.com/ios",
+        LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY to "1",
+        LegalRequirements.WEB_TERMS_OF_USE_URL_KEY to "https://example.com/web",
+        LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY to "1",
+        LegalRequirements.ANDROID_TV_TERMS_OF_USE_URL_KEY to "about:blank",
+        LegalRequirements.ANDROID_TV_TERMS_OF_USE_VERSION_KEY to "1",
+    )
+
+    private fun saveAll(values: Map<String, String?>) {
+        for ((key, value) in values) if (value != null) setConfig(key, value)
+    }
+
+    @Test
+    fun `violations is empty when nothing is configured`() {
+        assertTrue(LegalRequirements.violations(emptyMap()).isEmpty())
+    }
+
+    @Test
+    fun `violations is empty for a complete setup, with about-blank standing in for a missing document`() {
+        assertTrue(LegalRequirements.violations(completeSettings()).isEmpty())
+    }
+
+    @Test
+    fun `violations is empty while the privacy policy version is unset, whatever else is filled in`() {
+        val values = completeSettings().apply {
+            remove(LegalRequirements.PRIVACY_POLICY_VERSION_KEY)
+            remove(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY)
+        }
+        assertTrue(LegalRequirements.violations(values).isEmpty())
+    }
+
+    @Test
+    fun `violations names the platform left unset beside one that is set`() {
+        // The configuration that locked iOS users out: privacy policy and
+        // web terms at version 1, iOS terms empty.
+        val values = completeSettings().apply {
+            remove(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY)
+            remove(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY)
+        }
+        val found = LegalRequirements.violations(values)
+        assertEquals(
+            setOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY, LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY),
+            found.map { it.key }.toSet())
+        assertTrue(found.all { "iOS" in it.message }, "each message names the field: $found")
+    }
+
+    @Test
+    fun `violations treats a version of 0 and a blank URL like unset ones`() {
+        val values = completeSettings().apply {
+            put(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, "0")
+            put(LegalRequirements.ANDROID_TV_TERMS_OF_USE_URL_KEY, "   ")
+        }
+        assertEquals(
+            setOf(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, LegalRequirements.ANDROID_TV_TERMS_OF_USE_URL_KEY),
+            LegalRequirements.violations(values).map { it.key }.toSet())
+    }
+
+    @Test
+    fun `violations requires a privacy policy URL once its version is set`() {
+        val values = completeSettings().apply { remove(LegalRequirements.PRIVACY_POLICY_URL_KEY) }
+        assertEquals(listOf(LegalRequirements.PRIVACY_POLICY_URL_KEY),
+            LegalRequirements.violations(values).map { it.key })
+    }
+
+    @Test
+    fun `violations refuses a version that is not a whole number, even with requirements off`() {
+        // "1a" reads as 0, which would silently switch the requirement off.
+        val found = LegalRequirements.violations(
+            mapOf(LegalRequirements.PRIVACY_POLICY_VERSION_KEY to "1a"))
+        assertEquals(listOf(LegalRequirements.PRIVACY_POLICY_VERSION_KEY), found.map { it.key })
+
+        val negative = completeSettings().apply { put(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY, "-1") }
+        assertEquals(setOf(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY),
+            LegalRequirements.violations(negative).map { it.key }.toSet())
+    }
+
+    // ---------------------- rejectionFor: what a save may do ----------------------
+
+    @Test
+    fun `rejectionFor refuses to turn requirements on with a platform unset`() {
+        val rejected = LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.PRIVACY_POLICY_VERSION_KEY to "1"))
+        assertTrue(rejected != null && rejected.isNotEmpty())
+    }
+
+    @Test
+    fun `rejectionFor accepts a complete setup saved in one go`() {
+        assertNull(LegalRequirements.rejectionFor(completeSettings()))
+    }
+
+    @Test
+    fun `rejectionFor refuses to blank a field of a complete setup`() {
+        saveAll(completeSettings())
+        val rejected = LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to ""))
+        assertEquals(listOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY), rejected?.map { it.key })
+    }
+
+    @Test
+    fun `rejectionFor accepts a version bump and a URL change on a complete setup`() {
+        saveAll(completeSettings())
+        assertNull(LegalRequirements.rejectionFor(mapOf(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY to "2")))
+        assertNull(LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "https://example.com/ios-v2")))
+    }
+
+    @Test
+    fun `rejectionFor lets an incomplete setup be repaired one field at a time`() {
+        // An older database: iOS terms never set.
+        saveAll(completeSettings().apply {
+            remove(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY)
+            remove(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY)
+        })
+        // Setting the URL still leaves the version missing, but it is one
+        // problem fewer, so it is allowed.
+        assertNull(LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "about:blank")))
+        // A change that fixes nothing is refused.
+        assertTrue(LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY to "2")) != null)
+    }
+
+    @Test
+    fun `rejectionFor never blocks a save that changes no legal setting`() {
+        val incomplete = completeSettings().apply {
+            remove(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY)
+            remove(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY)
+        }
+        saveAll(incomplete)
+        // The settings form posts every field back; unchanged legal values
+        // must not stop an unrelated setting from saving.
+        assertNull(LegalRequirements.rejectionFor(incomplete + mapOf("keepa_api_key" to "abc")))
+        assertNull(LegalRequirements.rejectionFor(emptyMap()))
+    }
+
+    @Test
+    fun `rejectionFor lets requirements be switched off entirely`() {
+        saveAll(completeSettings())
+        assertNull(LegalRequirements.rejectionFor(
+            mapOf(LegalRequirements.PRIVACY_POLICY_VERSION_KEY to "")))
+    }
 }

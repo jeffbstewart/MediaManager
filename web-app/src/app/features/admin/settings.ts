@@ -1,5 +1,5 @@
 import { Component, inject, signal, computed, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -40,6 +40,8 @@ export class SettingsComponent implements OnInit, CanDeactivateComponent {
   readonly isDocker = signal(false);
   readonly saving = signal(false);
   readonly saved = signal(false);
+  /** Why the last save was refused; empty when there is nothing to report. */
+  readonly saveError = signal('');
 
   // New key dialog
   readonly keyDialogOpen = signal(false);
@@ -87,12 +89,14 @@ export class SettingsComponent implements OnInit, CanDeactivateComponent {
   updateSetting(key: string, event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.settings.update(s => ({ ...s, [key]: value }));
+    this.saveError.set('');
     this.saved.set(false);
   }
 
   updateCheckbox(key: string, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
     this.settings.update(s => ({ ...s, [key]: checked ? 'true' : 'false' }));
+    this.saveError.set('');
     this.saved.set(false);
   }
 
@@ -103,12 +107,19 @@ export class SettingsComponent implements OnInit, CanDeactivateComponent {
   async save(): Promise<void> {
     this.saving.set(true);
     this.saved.set(false);
+    this.saveError.set('');
     try {
       await firstValueFrom(this.http.post('/api/v2/admin/settings', this.settings()));
       // Update pristine so the form is no longer dirty.
       this.pristine.set({ ...this.settings() });
       this.saved.set(true);
-    } catch { /* ignore */ }
+    } catch (e) {
+      // The server refuses a save it will not accept (an incomplete legal
+      // setup, for one) and says why. Nothing was saved, so the form
+      // stays dirty.
+      const reason = e instanceof HttpErrorResponse ? (e.error as { error?: unknown } | null)?.error : null;
+      this.saveError.set(typeof reason === 'string' && reason ? reason : 'Settings were not saved.');
+    }
     this.saving.set(false);
   }
 

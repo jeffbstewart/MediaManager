@@ -84,6 +84,27 @@ test.describe('admin Tier C — heavy forms', () => {
     await page.waitForSelector('app-settings .settings-page');
     await auditA11y(page);
   });
+
+  test('/admin/settings with a refused save renders with zero axe violations', async ({ page }) => {
+    await mockBackend(page, { features: 'admin' });
+    await loginAs(page);
+    await stubImages(page);
+    await page.route('**/api/v2/admin/settings', r => {
+      if (r.request().method() === 'POST') {
+        return r.fulfill({
+          status: 400,
+          json: { error: 'iOS Terms of Use URL is required (about:blank if there is no document).' },
+        });
+      }
+      return r.fallback();
+    });
+    await page.goto('/admin/settings');
+    await page.waitForSelector('app-settings .settings-page');
+    await page.locator('app-settings input[aria-label="Privacy Policy Version"]').fill('1');
+    await page.locator('app-settings .save-row button').first().click();
+    await page.waitForSelector('app-settings .save-row [role="alert"]');
+    await auditA11y(page);
+  });
 });
 
 // -------- Interactive states (search dropdowns + modals) --------

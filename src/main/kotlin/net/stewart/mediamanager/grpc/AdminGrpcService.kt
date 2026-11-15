@@ -1225,6 +1225,18 @@ class AdminGrpcService(
         val configKey = request.key.toConfigKey()
             ?: throw StatusException(Status.INVALID_ARGUMENT.withDescription("Unknown setting key"))
 
+        // Refused before anything is written: an incomplete legal setup
+        // locks users out. This RPC saves one key at a time, so a setup
+        // that is already incomplete may still be repaired field by field
+        // (see LegalRequirements.rejectionFor).
+        if (configKey in LegalRequirements.CONFIG_KEYS) {
+            LegalRequirements.rejectionFor(mapOf(configKey to request.value))?.let { problems ->
+                throw StatusException(
+                    Status.INVALID_ARGUMENT.withDescription(problems.joinToString(". ") { it.message } + ".")
+                )
+            }
+        }
+
         val existing = AppConfig.findAll().firstOrNull { it.config_key == configKey }
         if (existing != null) {
             existing.config_val = request.value

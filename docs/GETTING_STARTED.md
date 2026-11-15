@@ -143,6 +143,8 @@ cp ios/MediaManager/Branding.xcconfig.example ios/MediaManager/Branding.xcconfig
 
 Privacy policy and terms of use URLs are configured on the server (admin Settings page), not in the iOS build. Configure them after first login.
 
+First-user setup starts every platform (iOS, web, and Android TV) on the terms document you give it, at version 1. Each platform can have its own document: change its URL under Settings, Legal Documents. Once the privacy policy has a version, the server refuses a save that leaves any platform without a terms URL or with a version below 1, because that platform's users could not get past the terms screen. Enter `about:blank` for a platform that has no document.
+
 ### Building
 
 ```bash

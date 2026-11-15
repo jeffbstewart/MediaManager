@@ -806,6 +806,11 @@ enum SettingKey {
   SETTING_KEY_IOS_TERMS_OF_USE_VERSION = 19;
   SETTING_KEY_WEB_TERMS_OF_USE_URL = 20;
   SETTING_KEY_WEB_TERMS_OF_USE_VERSION = 21;
+  // Android TV has its own terms like the other platforms. Without
+  // these, a client that saves settings over gRPC could not complete
+  // the legal setup, which the server now requires to be complete.
+  SETTING_KEY_ANDROID_TV_TERMS_OF_USE_URL = 22;
+  SETTING_KEY_ANDROID_TV_TERMS_OF_USE_VERSION = 23;
 }
 
 message Setting {
