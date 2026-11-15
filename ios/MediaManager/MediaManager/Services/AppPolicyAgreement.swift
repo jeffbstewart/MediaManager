@@ -30,11 +30,16 @@ final class AppPolicyAgreement {
     /// keeps the comparison alphabetic-safe.
     static let currentVersion = "2026-05-08"
 
-    /// Public URLs the user can review before tapping Agree. Privacy
-    /// is live on TermsFeed; ToS placeholder is replaced when the
-    /// authored doc lands. Open via SwiftUI's openURL action.
-    static let privacyPolicyURL = URL(string: "https://www.termsfeed.com/live/f2ada3d7-fd0b-415d-94c7-650832091463")!
-    static let termsOfServiceURL = URL(string: "https://www.termsfeed.com/live/511d6461-45ee-4d45-8874-9e4935017042")!
+    /// Public URLs the user can review before tapping Agree, hosted on
+    /// the app's own site. The App Store Connect listing names the same
+    /// privacy policy URL; change both together. Open via SwiftUI's
+    /// openURL action.
+    ///
+    /// Moving these from TermsFeed (2026-11) did not bump
+    /// `currentVersion`: the hosted text differs from the TermsFeed
+    /// originals only in the contact address and the app's name.
+    static let privacyPolicyURL = URL(string: "https://frereetienne.app/disc-keeper/privacy.html")!
+    static let termsOfServiceURL = URL(string: "https://frereetienne.app/disc-keeper/terms.html")!
 
     /// MIT license / source repository. Surfaced as a small link on
     /// the agreement screen — partly transparency, partly liability:
