@@ -1348,26 +1348,40 @@ public extension MMSubmitBarcodeResult {
 }
 
 public extension MMSettingKey {
-    public var configKey: String? {
-        switch self {
-        case .nasRootPath: "nas_root_path"
-        case .ffmpegPath: "ffmpeg_path"
-        case .go2RtcPath: "go2rtc_path"
-        case .publicBaseURL: "public_base_url"
-        case .go2RtcApiPort: "go2rtc_api_port"
-        case .personalVideoEnabled: "personal_video_enabled"
-        case .forMobileEnabled: "for_mobile_enabled"
-        case .keepaEnabled: "keepa_enabled"
-        case .personalVideoNasDir: "personal_video_nas_dir"
-        case .buddyLeaseDurationMinutes: "buddy_lease_duration_minutes"
-        case .keepaApiKey: "keepa_api_key"
-        case .keepaTokensPerMinute: "keepa_tokens_per_minute"
-        case .liveTvMinRating: "live_tv_min_rating"
-        case .liveTvMaxStreams: "live_tv_max_streams"
-        case .liveTvIdleTimeoutSeconds: "live_tv_idle_timeout_seconds"
-        default: nil
-        }
-    }
+    /// Every setting the app can read or write, paired with the
+    /// server's `app_config` key. One table drives both directions
+    /// (`configKey` and `fromConfigKey`), so a key added here is both
+    /// loaded and saved. Two separate switches used to drift: the
+    /// legal keys were missing from both, so the admin screen showed
+    /// them blank and saved them as `.unknown`. Mirrors
+    /// `SETTING_KEY_TO_CONFIG` in the server's ProtoMappers.kt.
+    static let configKeys: [MMSettingKey: String] = [
+        .nasRootPath: "nas_root_path",
+        .ffmpegPath: "ffmpeg_path",
+        .go2RtcPath: "go2rtc_path",
+        .publicBaseURL: "public_base_url",
+        .go2RtcApiPort: "go2rtc_api_port",
+        .personalVideoEnabled: "personal_video_enabled",
+        .forMobileEnabled: "for_mobile_enabled",
+        .keepaEnabled: "keepa_enabled",
+        .personalVideoNasDir: "personal_video_nas_dir",
+        .buddyLeaseDurationMinutes: "buddy_lease_duration_minutes",
+        .keepaApiKey: "keepa_api_key",
+        .keepaTokensPerMinute: "keepa_tokens_per_minute",
+        .liveTvMinRating: "live_tv_min_rating",
+        .liveTvMaxStreams: "live_tv_max_streams",
+        .liveTvIdleTimeoutSeconds: "live_tv_idle_timeout_seconds",
+        .privacyPolicyURL: "privacy_policy_url",
+        .privacyPolicyVersion: "privacy_policy_version",
+        .iosTermsOfUseURL: "ios_terms_of_use_url",
+        .iosTermsOfUseVersion: "ios_terms_of_use_version",
+        .webTermsOfUseURL: "web_terms_of_use_url",
+        .webTermsOfUseVersion: "web_terms_of_use_version",
+        .androidTvTermsOfUseURL: "android_tv_terms_of_use_url",
+        .androidTvTermsOfUseVersion: "android_tv_terms_of_use_version",
+    ]
+
+    var configKey: String? { Self.configKeys[self] }
 }
 
 // MARK: - AcquisitionStatus proto mapping
@@ -1386,25 +1400,11 @@ public extension AcquisitionStatus {
 }
 
 public extension MMSettingKey {
-    public static func fromConfigKey(_ key: String) -> MMSettingKey {
-        switch key {
-        case "nas_root_path": .nasRootPath
-        case "ffmpeg_path": .ffmpegPath
-        case "go2rtc_path": .go2RtcPath
-        case "public_base_url": .publicBaseURL
-        case "go2rtc_api_port": .go2RtcApiPort
-        case "personal_video_enabled": .personalVideoEnabled
-        case "for_mobile_enabled": .forMobileEnabled
-        case "keepa_enabled": .keepaEnabled
-        case "personal_video_nas_dir": .personalVideoNasDir
-        case "buddy_lease_duration_minutes": .buddyLeaseDurationMinutes
-        case "keepa_api_key": .keepaApiKey
-        case "keepa_tokens_per_minute": .keepaTokensPerMinute
-        case "live_tv_min_rating": .liveTvMinRating
-        case "live_tv_max_streams": .liveTvMaxStreams
-        case "live_tv_idle_timeout_seconds": .liveTvIdleTimeoutSeconds
-        default: .unknown
-        }
+    private static let byConfigKey: [String: MMSettingKey] =
+        Dictionary(uniqueKeysWithValues: configKeys.map { ($1, $0) })
+
+    static func fromConfigKey(_ key: String) -> MMSettingKey {
+        byConfigKey[key] ?? .unknown
     }
 }
 
