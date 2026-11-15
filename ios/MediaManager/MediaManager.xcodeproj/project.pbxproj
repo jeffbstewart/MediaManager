@@ -7,14 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB000031 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000021 /* GRPCCore */; };
+		BB000032 /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000025 /* MediaManagerCore */; };
 		C731DE882F705F5000A84CB7 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000010 /* SwiftProtobuf */; };
 		C731DE892F705F5000A84CB7 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000011 /* GRPCCore */; };
 		C731DE8A2F705F5000A84CB7 /* GRPCNIOTransportHTTP2 in Frameworks */ = {isa = PBXBuildFile; productRef = CC000012 /* GRPCNIOTransportHTTP2 */; };
 		C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000013 /* GRPCProtobuf */; };
 		C7AFC8892FDF782600602BDA /* MediaManagerProtos in Frameworks */ = {isa = PBXBuildFile; productRef = CC000014 /* MediaManagerProtos */; };
 		C7AFC88A2FDF782600602BDA /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000015 /* MediaManagerCore */; };
-		BB000031 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000021 /* GRPCCore */; };
-		BB000032 /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000025 /* MediaManagerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
