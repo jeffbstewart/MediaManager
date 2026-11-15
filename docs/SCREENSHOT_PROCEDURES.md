@@ -163,8 +163,8 @@ address. The `-MMSnapshotMode` launch arg turns on screenshot mode
 (`ScreenshotMode` in `ios/MediaManagerCore`), which does three things:
 
 - **Names.** Every title, episode, album, track, person, character,
-  synopsis and biography is replaced with an invented one, as is the
-  signed-in user's display name. A name is chosen by hashing the real
+  synopsis and biography is replaced with an invented one, as are
+  users' login names (the greeting, wish list voters). A name is chosen by hashing the real
   one (`Fiction`), so the same title reads the same on every screen and
   a library of any size is covered. The vocabulary is the one behind
   the web screenshots' `fictional-names.ts`. Tags, genres and playlist

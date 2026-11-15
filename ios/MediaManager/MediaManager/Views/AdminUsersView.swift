@@ -24,7 +24,7 @@ struct AdminUsersView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
-                                    Text(user.displayName ?? user.username)
+                                    Text(user.username)
                                         .fontWeight(.medium)
                                     Spacer()
                                     if user.isAdmin {
@@ -142,7 +142,6 @@ struct AdminUserDetailView: View {
                 // Info
                 Section(header: MMSectionHeader("Account")) {
                     LabeledContent("Username", value: user.username)
-                    LabeledContent("Display Name", value: user.displayName ?? "-")
                     LabeledContent("Role", value: user.isAdmin ? "Admin" : "Viewer")
                     LabeledContent("Rating Limit", value: user.ratingCeilingLabel ?? "Unrestricted")
                     if user.locked {
@@ -245,7 +244,7 @@ struct AdminUserDetailView: View {
                 }
             }
             .mmListChrome()
-            .navigationTitle(user.displayName ?? user.username)
+            .navigationTitle(user.username)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -417,7 +416,6 @@ struct AdminCreateUserView: View {
     let onComplete: () async -> Void
 
     @State private var username = ""
-    @State private var displayName = ""
     @State private var password = ""
     @State private var forceChange = true
     @State private var error: String?
@@ -431,7 +429,6 @@ struct AdminCreateUserView: View {
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                    TextField("Display Name", text: $displayName)
                     SecureField("Password", text: $password)
                         .textContentType(.newPassword)
                     Toggle("Require change on login", isOn: $forceChange)
@@ -454,7 +451,7 @@ struct AdminCreateUserView: View {
                     .buttonStyle(.mmPrimary)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
-                    .disabled(username.isEmpty || displayName.isEmpty || password.count < 8 || saving)
+                    .disabled(username.isEmpty || password.count < 8 || saving)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
@@ -475,7 +472,7 @@ struct AdminCreateUserView: View {
         saving = true
         error = nil
         do {
-            try await dataModel.createUser(username: username, password: password, displayName: displayName, accessLevel: 1)
+            try await dataModel.createUser(username: username, password: password, accessLevel: 1)
             await onComplete()
             dismiss()
         } catch {

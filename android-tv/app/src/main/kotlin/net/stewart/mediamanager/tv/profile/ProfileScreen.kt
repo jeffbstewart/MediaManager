@@ -77,10 +77,6 @@ fun ProfileScreen(
                 // Profile info
                 Column(modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp)) {
                     Text(p.username, style = MaterialTheme.typography.headlineMedium)
-                    if (p.hasDisplayName()) {
-                        Text(p.displayName, style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(top = 8.dp)) {
                         if (p.isAdmin) Text("Admin", color = Color(0xFF4CAF50))
                         if (p.hasRatingCeilingLabel()) Text("Rating: ${p.ratingCeilingLabel}")

@@ -104,8 +104,10 @@ struct HomeView: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         let base = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
-        if let info = dataModel.userInfo, !info.displayName.isEmpty {
-            return "\(base), \(info.displayName)"
+        // A user is known by their login name only; there is no
+        // separate display name.
+        if let info = dataModel.userInfo, !info.username.isEmpty {
+            return "\(base), \(Fiction.userName(info.username))"
         }
         return base
     }
@@ -135,15 +137,23 @@ struct HomeView: View {
     }
 
     private var browseTargets: [BrowseTarget] {
+        // The same server gating as the sidebar (`ServerFeatures`).
+        let features = dataModel.features
         var targets: [BrowseTarget] = [
             BrowseTarget(label: "Movies", icon: "film", route: .movies),
             BrowseTarget(label: "TV Shows", icon: "tv", route: .tvShows),
-            BrowseTarget(label: "Books", icon: "books.vertical", route: .books),
-            BrowseTarget(label: "Music", icon: "music.note", route: .music),
         ]
+        if features.hasBooks {
+            targets.append(BrowseTarget(label: "Books", icon: "books.vertical", route: .books))
+        }
+        if features.hasMusic {
+            targets.append(BrowseTarget(label: "Music", icon: "music.note", route: .music))
+        }
         if !isOffline {
             targets.append(BrowseTarget(label: "Collections", icon: "square.stack", route: .collections))
-            targets.append(BrowseTarget(label: "Live TV", icon: "antenna.radiowaves.left.and.right", route: .liveTv))
+            if features.hasLiveTv {
+                targets.append(BrowseTarget(label: "Live TV", icon: "antenna.radiowaves.left.and.right", route: .liveTv))
+            }
         }
         return targets
     }

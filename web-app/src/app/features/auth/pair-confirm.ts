@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, inject, signal, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
+import { AccountService } from '../../core/account.service';
 
 type PageState = 'loading' | 'confirm' | 'success' | 'error' | 'already_paired';
 
@@ -19,9 +20,14 @@ type PageState = 'loading' | 'confirm' | 'success' | 'error' | 'already_paired';
 export class PairConfirmComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
+  private readonly accounts = inject(AccountService);
 
   readonly state = signal<PageState>('loading');
-  readonly displayName = signal('');
+  /**
+   * The account the device will be linked to: the signed-in user's
+   * login name. A user has no other name.
+   */
+  readonly username = computed(() => this.accounts.account()?.username ?? '');
   readonly deviceName = signal('');
   readonly errorMessage = signal('');
   readonly pairedUser = signal('');
@@ -39,7 +45,7 @@ export class PairConfirmComponent implements OnInit {
 
     try {
       const info = await firstValueFrom(this.http.get<{
-        status: string; username?: string; display_name?: string;
+        status: string; username?: string;
       }>('/api/v2/pair/info', { params: { code: this.code } }));
 
       if (info.status === 'paired') {
@@ -49,7 +55,7 @@ export class PairConfirmComponent implements OnInit {
         this.errorMessage.set('This pairing code has expired or is invalid. Please start a new pairing on your device.');
         this.state.set('error');
       } else {
-        this.displayName.set(info.display_name ?? '');
+        void this.accounts.load();
         this.state.set('confirm');
       }
     } catch {

@@ -94,12 +94,12 @@ public enum Fiction {
         return pick(firstNames, hash(real) >> 5)
     }
 
-    /// The signed-in user's own name, as in "Good evening, ...".
-    public static func displayName(_ real: String) -> String {
+    /// A user of the server, as in "Good evening, ..." or the name
+    /// beside a wish. Users are known by their login names.
+    public static func userName(_ real: String) -> String {
         guard ScreenshotMode.isActive, !real.isEmpty else { return real }
         return pick(firstNames, hash(real) >> 3)
     }
-    public static func displayName(_ real: String?) -> String? { real.map { displayName($0) } }
 
     // MARK: Longer text
 

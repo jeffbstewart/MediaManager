@@ -122,3 +122,56 @@ final class ReaderUITests: XCTestCase {
         }
     }
 }
+
+/// A title page whose text is hidden by moving it far off-screen must
+/// still be one page long (issue #34).
+///
+/// Standard Ebooks and others show the title as artwork and keep the
+/// text for assistive technology with `position: absolute; left:
+/// -999em`. epub.js sizes a paginated section by measuring its
+/// content, counted that text, and laid the title page out dozens of
+/// pages wide: one real page, then a run of blank ones.
+///
+/// Uses `test-offscreen-title.epub`, the fixture the web reader's test
+/// uses: a title page with the off-screen rule, then an imprint, then
+/// a chapter.
+@MainActor
+final class ReaderOffscreenTitleTests: XCTestCase {
+
+    let app = XCUIApplication()
+
+    override func setUp() async throws {
+        try await super.setUp()
+        continueAfterFailure = false
+        app.launchArguments = ["-MMReaderTestMode", "-MMReaderTestBook", "test-offscreen-title.epub"]
+        app.launch()
+    }
+
+    func testTitlePageIsOnePage() {
+        // The TOC button enables when epub.js reports ready.
+        let tocButton = app.buttons["list.bullet"]
+        XCTAssertTrue(tocButton.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: tocButton)
+        waitForExpectations(timeout: 15)
+
+        // The page text is inside epub.js's iframe, which the test
+        // cannot read, so position is judged by the percent label. The
+        // book has three one-page documents: 0%, 50% and 100%. Two
+        // page turns from the title page must reach the third. With
+        // blank pages after the title page, two turns reach the second
+        // at best.
+        XCTAssertTrue(app.staticTexts["0%"].waitForExistence(timeout: 5), "the book should open on the title page")
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 5))
+        let nextPage = web.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+
+        nextPage.tap()
+        XCTAssertTrue(
+            app.staticTexts["50%"].waitForExistence(timeout: 5),
+            "one page turn from the title page should reach the imprint")
+        nextPage.tap()
+        XCTAssertTrue(
+            app.staticTexts["100%"].waitForExistence(timeout: 5),
+            "two page turns should reach the chapter; staying short of it means the title or imprint page is more than one page long")
+    }
+}
