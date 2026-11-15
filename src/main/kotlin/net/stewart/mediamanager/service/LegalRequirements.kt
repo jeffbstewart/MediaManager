@@ -38,7 +38,8 @@ object LegalRequirements {
     )
 
     // Platform ids as clients send them in the gRPC x-client-platform header
-    // (web-app client-platform.ts, android-tv GrpcClient.kt) and as the
+    // (web-app client-platform.ts, android-tv GrpcClient.kt, iOS
+    // ClientPlatformInterceptor.swift) and as the
     // ClientPlatform proto enum maps to them. Each platform has its own terms
     // of use; the privacy policy is shared. Wire contract: an installed
     // client keeps sending the id it was built with, so never rename one;

@@ -51,8 +51,9 @@ internal val ORIGIN_KEY: Metadata.Key<String> =
 /**
  * Optional metadata key a client sends to name its platform for the legal
  * gate; the values are LegalRequirements.PLATFORM_IOS and siblings. Wire
- * contract: the SPA (client-platform.ts) and Android TV (GrpcClient.kt)
- * send it by this name, so do not rename it.
+ * contract: the SPA (client-platform.ts), Android TV (GrpcClient.kt) and
+ * iOS (ClientPlatformInterceptor.swift) send it by this name, so do not
+ * rename it.
  */
 internal val CLIENT_PLATFORM_KEY: Metadata.Key<String> =
     Metadata.Key.of("x-client-platform", Metadata.ASCII_STRING_MARSHALLER)

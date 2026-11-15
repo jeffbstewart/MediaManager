@@ -120,7 +120,12 @@ public actor GrpcClient {
             target: .dns(host: host, port: port),
             transportSecurity: security
         )
-        let client = GRPCClient(transport: transport)
+        // The interceptor names the platform on every RPC this client makes
+        // (see ClientPlatformInterceptor); reconnect() comes through here too.
+        let client = GRPCClient(
+            transport: transport,
+            interceptors: [ClientPlatformInterceptor()]
+        )
 
         // Start the client's connection management background task
         Task { try await client.runConnections() }
