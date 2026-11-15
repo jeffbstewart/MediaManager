@@ -13,6 +13,8 @@
 		C731DE8B2F705F5000A84CB7 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = CC000013 /* GRPCProtobuf */; };
 		C7AFC8892FDF782600602BDA /* MediaManagerProtos in Frameworks */ = {isa = PBXBuildFile; productRef = CC000014 /* MediaManagerProtos */; };
 		C7AFC88A2FDF782600602BDA /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000015 /* MediaManagerCore */; };
+		BB000031 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000021 /* GRPCCore */; };
+		BB000032 /* MediaManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CC000025 /* MediaManagerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +78,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB000032 /* MediaManagerCore in Frameworks */,
+				BB000031 /* GRPCCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -158,6 +162,10 @@
 				BB000020 /* MediaManagerUITests */,
 			);
 			name = MediaManagerUITests;
+			packageProductDependencies = (
+				CC000021 /* GRPCCore */,
+				CC000025 /* MediaManagerCore */,
+			);
 			productName = MediaManagerUITests;
 			productReference = BB000010 /* MediaManagerUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -569,6 +577,15 @@
 			productName = MediaManagerProtos;
 		};
 		CC000015 /* MediaManagerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MediaManagerCore;
+		};
+		CC000021 /* GRPCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC000002 /* XCRemoteSwiftPackageReference "grpc-swift-2" */;
+			productName = GRPCCore;
+		};
+		CC000025 /* MediaManagerCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MediaManagerCore;
 		};

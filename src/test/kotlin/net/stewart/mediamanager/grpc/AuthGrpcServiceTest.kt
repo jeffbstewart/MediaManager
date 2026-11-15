@@ -46,6 +46,9 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         private const val REQUIRED_WEB_TOU_VERSION = 2
         private const val STALE_WEB_TOU_VERSION = REQUIRED_WEB_TOU_VERSION - 1
         private const val REQUIRED_IOS_TOU_VERSION = 5
+        private const val STALE_IOS_TOU_VERSION = REQUIRED_IOS_TOU_VERSION - 1
+        /** A web terms version above the iOS one, so the strictest version is not the iOS one. */
+        private const val WEB_TOU_VERSION_AHEAD_OF_IOS = REQUIRED_IOS_TOU_VERSION + 1
         private const val NO_TERMS = 0
         private const val PRIVACY_URL = "https://example.test/privacy"
         private const val TOU_URL = "https://example.test/tou"
@@ -303,6 +306,71 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         try {
             val stub = CatalogServiceGrpcKt.CatalogServiceCoroutineStub(channel)
             assertNotNull(stub.getFeatures(Empty.getDefaultInstance()))
+        } finally {
+            channel.shutdownNow()
+        }
+    }
+
+    /**
+     * The layout that locked iOS users out (issue #33): the web terms are
+     * ahead of the iOS terms, so the strictest version is one the iOS terms
+     * screen never offers.
+     */
+    private fun configureWebTermsAheadOfIos() {
+        setConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, REQUIRED_PRIVACY_VERSION)
+        setConfig(LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY, REQUIRED_IOS_TOU_VERSION)
+        setConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, WEB_TOU_VERSION_AHEAD_OF_IOS)
+        LegalRequirements.refresh()
+    }
+
+    /** A viewer who agreed to the privacy policy and to [touVersion] of the terms of use. */
+    private fun viewerAgreedToTerms(name: String, touVersion: Int): AppUser =
+        privacyOnlyViewer(name).apply {
+            terms_of_use_version = touVersion
+            terms_of_use_accepted_at = LocalDateTime.now()
+            save()
+        }
+
+    @Test
+    fun `a bearer caller that names the ios platform is gated by the ios terms version, not the strictest`() = runBlocking<Unit> {
+        // What the iOS app sends once it carries the header: Bearer plus
+        // x-client-platform: ios. The viewer agreed to the iOS terms, which
+        // is everything the app showed them.
+        configureWebTermsAheadOfIos()
+        val viewer = viewerAgreedToTerms("ios-bearer-viewer", REQUIRED_IOS_TOU_VERSION)
+
+        val withHeader = authenticatedChannel(viewer, platform = LegalRequirements.PLATFORM_IOS)
+        try {
+            val stub = CatalogServiceGrpcKt.CatalogServiceCoroutineStub(withHeader)
+            assertNotNull(stub.getFeatures(Empty.getDefaultInstance()))
+        } finally {
+            withHeader.shutdownNow()
+        }
+
+        // The same viewer without the header is held to the web version,
+        // the higher of the two: the refusal the header exists to prevent.
+        val withoutHeader = authenticatedChannel(viewer)
+        try {
+            val stub = CatalogServiceGrpcKt.CatalogServiceCoroutineStub(withoutHeader)
+            val ex = assertFailsWith<StatusException> { stub.getFeatures(Empty.getDefaultInstance()) }
+            assertEquals(Status.Code.PERMISSION_DENIED, ex.status.code)
+            assertEquals(AuthInterceptor.LEGAL_AGREEMENT_REQUIRED, ex.status.description)
+        } finally {
+            withoutHeader.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `a bearer caller that names the ios platform is still refused on stale ios terms`() = runBlocking {
+        // The header narrows the gate to the iOS version; it does not open it.
+        configureWebTermsAheadOfIos()
+        val viewer = viewerAgreedToTerms("ios-stale-viewer", STALE_IOS_TOU_VERSION)
+        val channel = authenticatedChannel(viewer, platform = LegalRequirements.PLATFORM_IOS)
+        try {
+            val stub = CatalogServiceGrpcKt.CatalogServiceCoroutineStub(channel)
+            val ex = assertFailsWith<StatusException> { stub.getFeatures(Empty.getDefaultInstance()) }
+            assertEquals(Status.Code.PERMISSION_DENIED, ex.status.code)
+            assertEquals(AuthInterceptor.LEGAL_AGREEMENT_REQUIRED, ex.status.description)
         } finally {
             channel.shutdownNow()
         }
