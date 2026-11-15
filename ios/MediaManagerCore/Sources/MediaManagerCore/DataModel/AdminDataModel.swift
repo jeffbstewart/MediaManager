@@ -21,12 +21,12 @@ import MediaManagerProtos
     func purchaseWishes() async throws -> AdminPurchaseWishListResponse
     func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws
     func adminUsers() async throws -> AdminUserListResponse
-    func createUser(username: String, password: String, accessLevel: Int) async throws
+    func createUser(username: String, password: String, passwordChange: PasswordChangeRequirement) async throws
     func updateUserRole(id: UserID, accessLevel: Int) async throws
     func updateUserRatingCeiling(id: UserID, ceiling: Int?) async throws
     func unlockUser(id: UserID) async throws
     func forcePasswordChange(id: UserID) async throws
-    func resetPassword(id: UserID, newPassword: String) async throws
+    func resetPassword(id: UserID, newPassword: String, passwordChange: PasswordChangeRequirement) async throws
     func deleteUser(id: UserID) async throws
     func submitBarcode(upc: String) async throws -> MMSubmitBarcodeResponse
     func monitorScanProgress(onUpdate: @Sendable @escaping (MMScanProgressUpdate) async -> Void) async throws

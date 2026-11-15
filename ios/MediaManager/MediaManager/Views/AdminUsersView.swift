@@ -340,7 +340,7 @@ struct AdminResetPasswordView: View {
     let onComplete: () async -> Void
 
     @State private var newPassword = ""
-    @State private var forceChange = true
+    @State private var passwordChange = PasswordChangeRequirement.requiredAtNextSignIn
     @State private var error: String?
     @State private var saving = false
 
@@ -357,7 +357,9 @@ struct AdminResetPasswordView: View {
                 Section {
                     SecureField("New Password", text: $newPassword)
                         .textContentType(.newPassword)
-                    Toggle("Require change on login", isOn: $forceChange)
+                    Toggle("Require change on login", isOn: Binding(
+                        get: { passwordChange.isRequired },
+                        set: { passwordChange = PasswordChangeRequirement(isRequired: $0) }))
                 }
                 .mmRow()
 
@@ -398,7 +400,7 @@ struct AdminResetPasswordView: View {
         saving = true
         error = nil
         do {
-            try await dataModel.resetPassword(id: user.id, newPassword: newPassword)
+            try await dataModel.resetPassword(id: user.id, newPassword: newPassword, passwordChange: passwordChange)
             await onComplete()
             dismiss()
         } catch {
@@ -417,7 +419,7 @@ struct AdminCreateUserView: View {
 
     @State private var username = ""
     @State private var password = ""
-    @State private var forceChange = true
+    @State private var passwordChange = PasswordChangeRequirement.requiredAtNextSignIn
     @State private var error: String?
     @State private var saving = false
 
@@ -431,7 +433,9 @@ struct AdminCreateUserView: View {
                         .textInputAutocapitalization(.never)
                     SecureField("Password", text: $password)
                         .textContentType(.newPassword)
-                    Toggle("Require change on login", isOn: $forceChange)
+                    Toggle("Require change on login", isOn: Binding(
+                        get: { passwordChange.isRequired },
+                        set: { passwordChange = PasswordChangeRequirement(isRequired: $0) }))
                 }
                 .mmRow()
 
@@ -472,7 +476,7 @@ struct AdminCreateUserView: View {
         saving = true
         error = nil
         do {
-            try await dataModel.createUser(username: username, password: password, accessLevel: 1)
+            try await dataModel.createUser(username: username, password: password, passwordChange: passwordChange)
             await onComplete()
             dismiss()
         } catch {

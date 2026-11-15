@@ -1636,11 +1636,11 @@ public actor GrpcClient {
         }
     }
 
-    public func adminCreateUser(username: String, password: String) async throws {
+    public func adminCreateUser(username: String, password: String, passwordChange: PasswordChangeRequirement) async throws {
         var request = MMCreateUserRequest()
         request.username = username
         request.password = password
-        request.forceChange = true
+        request.forceChange = passwordChange.isRequired
         _ = try await callRPC {
             try await self.adminService.createUser(request, metadata: authMetadata())
         }
@@ -1682,11 +1682,11 @@ public actor GrpcClient {
         }
     }
 
-    public func adminResetPassword(id: Int64, newPassword: String) async throws {
+    public func adminResetPassword(id: Int64, newPassword: String, passwordChange: PasswordChangeRequirement) async throws {
         var request = MMResetPasswordRequest()
         request.userID = id
         request.newPassword = newPassword
-        request.forceChange = true
+        request.forceChange = passwordChange.isRequired
         _ = try await callRPC {
             try await self.adminService.resetPassword(request, metadata: authMetadata())
         }
