@@ -125,6 +125,13 @@ public actor ReadingProgressQueue {
 
     public var count: Int { entries.count }
 
+    /// Drop every queued write. Used when the account is deleted: the
+    /// server has nothing left to apply them to.
+    public func clear() {
+        entries.removeAll()
+        persist()
+    }
+
     // MARK: - Disk persistence
 
     private func persist() {

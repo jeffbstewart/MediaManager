@@ -202,6 +202,21 @@ public actor ImageDiskCache {
         }
     }
 
+    /// Delete every cached image, pinned ones included, and the
+    /// manifest. Used when the account is deleted.
+    public func clear() {
+        loaded = true
+        memoryCache.removeAllObjects()
+        manifest.removeAll()
+        lastAccess.removeAll()
+        pinnedKeys.removeAll()
+        manifestDirty = false
+        let fm = FileManager.default
+        for url in (try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.removeItem(at: url)
+        }
+    }
+
     // MARK: - Manifest Persistence
 
     private var manifestURL: URL { cacheDir.appendingPathComponent("manifest.json") }

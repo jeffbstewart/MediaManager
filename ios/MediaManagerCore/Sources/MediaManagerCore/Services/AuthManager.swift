@@ -719,6 +719,74 @@ public final class AuthManager {
         lastAgreedVersions = nil
     }
 
+    // MARK: - Account deletion
+
+    /// Set from the moment the server confirms a deletion until this
+    /// device's data is wiped, so a wipe interrupted by the app being
+    /// killed finishes on the next launch.
+    private static let pendingAccountWipeKey = "pendingAccountWipe"
+
+    /// Ask the server to delete the signed-in account. Throws
+    /// `AccountDeletionError`, whose text is fit to show, and changes
+    /// nothing locally on failure.
+    ///
+    /// On success the server has already revoked every credential, so
+    /// the stored tokens go and background work that would use them
+    /// stops at once. Everything else stays until the user has read
+    /// the confirmation and calls `completeAccountDeletion()`.
+    public func deleteAccount(currentPassword: String) async throws {
+        do {
+            try await grpcClient.deleteAccount(currentPassword: currentPassword)
+        } catch {
+            throw AccountDeletionError(error)
+        }
+        logger.info("deleteAccount: the server deleted this account")
+        UserDefaults.standard.set(true, forKey: Self.pendingAccountWipeKey)
+        KeychainService.delete(key: .accessToken)
+        KeychainService.delete(key: .refreshToken)
+        refreshTask?.cancel()
+        refreshTask = nil
+        await logStreamer.stop()
+        AppServices.shared.audioPlayer?.stop(recordProgress: false)
+    }
+
+    /// Remove everything this device holds for the deleted account,
+    /// then return to the sign-in screen: playback, video, music and
+    /// book downloads, progress and queued progress writes, cached
+    /// images and HTTP responses, cookies, tokens, and the per-account
+    /// preferences. The server address stays, so signing in to another
+    /// account on the same server is one step. App-wide preferences
+    /// (reader theme, the app's own terms agreement) are not the
+    /// account's and stay too.
+    public func completeAccountDeletion() async {
+        logger.info("completeAccountDeletion: wiping local data")
+        let services = AppServices.shared
+        services.audioPlayer?.stop(recordProgress: false)
+        await services.dataModel?.downloads.removeAllDownloads()
+        services.audioCache?.removeAllDownloads()
+        services.bookCache?.removeAllDownloads()
+        await LocalProgressStore.shared.clear()
+        await ReadingProgressQueue.shared.clear()
+        await ListeningProgressQueue.shared.clear()
+        await ImageDiskCache.shared.clear()
+        URLCache.shared.removeAllCachedResponses()
+        let cookies = HTTPCookieStorage.shared
+        for cookie in cookies.cookies ?? [] { cookies.deleteCookie(cookie) }
+        UserDefaults.standard.removeObject(forKey: "cachedCapabilities")
+        biometricLoginEnabled = false
+        await logout()
+        UserDefaults.standard.removeObject(forKey: Self.pendingAccountWipeKey)
+        logger.info("completeAccountDeletion: done")
+    }
+
+    /// Finish a wipe the app was killed in the middle of. Call once at
+    /// launch, after `AppServices` is populated.
+    public func resumePendingAccountDeletionIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: Self.pendingAccountWipeKey) else { return }
+        logger.info("resumePendingAccountDeletionIfNeeded: finishing an interrupted wipe")
+        Task { await completeAccountDeletion() }
+    }
+
     // MARK: - Password change
 
     /// Change the signed-in user's password. The server invalidates

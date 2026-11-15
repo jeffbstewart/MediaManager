@@ -8,6 +8,7 @@ struct TermsAgreementView: View {
     @State private var agreedToPrivacy = false
     @State private var agreedToTerms = false
     @State private var isSubmitting = false
+    @State private var showDeleteAccount = false
 
     private var status: MMLegalStatusResponse? { authManager.legalStatus }
 
@@ -85,6 +86,15 @@ struct TermsAgreementView: View {
                 }
                 .font(MarqueeTheme.Fonts.control)
                 .foregroundStyle(MarqueeTheme.Colors.text3)
+
+                // Someone who won't agree to the terms must still be
+                // able to leave; DeleteAccount is gate-exempt.
+                Button("Delete account") {
+                    showDeleteAccount = true
+                }
+                .font(MarqueeTheme.Fonts.control)
+                .foregroundStyle(MarqueeTheme.Colors.text3)
+                .accessibilityIdentifier("server-terms-delete-account")
                 .padding(.bottom)
             }
             .padding()
@@ -92,6 +102,9 @@ struct TermsAgreementView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .mmGlowPage()
             .navigationTitle("")
+            .sheet(isPresented: $showDeleteAccount) {
+                DeleteAccountView()
+            }
         }
     }
 

@@ -734,6 +734,15 @@ public actor GrpcClient {
         }
     }
 
+    /// Deletes the caller's own account. Gate-exempt on the server.
+    public func deleteAccount(currentPassword: String) async throws {
+        var request = MMDeleteAccountRequest()
+        request.currentPassword = currentPassword
+        _ = try await callRPC {
+            try await self.profileService.deleteAccount(request, metadata: authMetadata())
+        }
+    }
+
     // MARK: - Live RPCs
 
     public func listCameras() async throws -> MMCameraListResponse {

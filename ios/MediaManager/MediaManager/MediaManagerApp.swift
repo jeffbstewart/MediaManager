@@ -169,6 +169,9 @@ struct MediaManagerApp: App {
             audioCache: ac,
             bookCache: bc,
             imageProvider: ip)
+        // An account deleted just before the app was killed still has
+        // its downloads and caches on this device; finish clearing them.
+        am.resumePendingAccountDeletionIfNeeded()
     }
 
     var body: some Scene {

@@ -171,6 +171,19 @@ public final class DownloadManager {
         }
     }
 
+    /// Cancel every video download and delete every downloaded video,
+    /// with the TV metadata kept beside them, and leave offline mode.
+    /// Used when the account is deleted.
+    public func removeAllDownloads() async {
+        for task in downloadTasks.values { task.cancel() }
+        downloadTasks.removeAll()
+        await store.removeAll()
+        try? FileManager.default.removeItem(
+            at: store.downloadsDir.appendingPathComponent("tv", isDirectory: true))
+        isOfflineMode = false
+        await reloadEntries()
+    }
+
     public func localVideoURL(for transcodeId: Int64) -> URL? {
         guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
               entry.state == .completed else { return nil }
