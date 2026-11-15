@@ -450,15 +450,26 @@ test.describe('reader — EPUB', () => {
     await expect.poll(fontSizeOf, { timeout: 5_000 }).toBeGreaterThan(baseline);
   });
 
-  test('one page turn from the title page reaches the next document when the title text is hidden off-screen', async ({ page }) => {
-    // Regression for the "dozens of blank pages after the title page"
-    // bug. Some publishers show the title as artwork and hide the
-    // title text with `position: absolute; left: -999em`. epub.js
-    // sizes a paginated section by measuring its content, counted
-    // the off-screen text, and laid the title page out ~16,000px
-    // wide: one real page followed by a run of blank ones. The
-    // fixture's title page uses that rule; its second document is
-    // the imprint.
+  // Regression for the "dozens of blank pages after the title page"
+  // bug. Some publishers show the title as artwork and hide the
+  // title text with `position: absolute; left: -999em`. epub.js
+  // sizes a paginated section by measuring its content, counted
+  // the off-screen text, and laid the title page out ~16,000px
+  // wide: one real page followed by a run of blank ones. The
+  // fixture's title page uses that rule; its second document is
+  // the imprint.
+  //
+  // Run at desktop width (a two-page spread) and at phone width (one
+  // narrow column). The phone case is the stricter one: a hidden
+  // element that ends up outside the page margin costs a whole blank
+  // page there.
+  const OFFSCREEN_TITLE_VIEWPORTS = [
+    { name: 'desktop width', size: null },
+    { name: 'phone width', size: { width: 390, height: 844 } },
+  ] as const;
+  for (const viewport of OFFSCREEN_TITLE_VIEWPORTS) {
+  test(`one page turn from the title page reaches the next document when the title text is hidden off-screen (${viewport.name})`, async ({ page }) => {
+    if (viewport.size) await page.setViewportSize(viewport.size);
     await page.route(`**/ebook/${EPUB_OFFSCREEN_TITLE_ITEM_ID}`, route => {
       const headers = { 'Content-Type': 'application/epub+zip' };
       if (route.request().method() === 'HEAD') {
@@ -485,7 +496,9 @@ test.describe('reader — EPUB', () => {
     await expect(epubFrame.locator('#hidden-title')).toHaveText('Test Book');
 
     // The title page is one page wide: the section's rendered width
-    // is the reader's own width, not a multiple of it.
+    // is the reader's own width, not a multiple of it. Read once, with
+    // no retry: the section must already be the right width when its
+    // content shows, not at some later tick.
     // (epub.js mounts its own .epub-container inside the reader's; the
     // first match is the reader's.)
     const widths = await page.locator('app-reader .epub-container').first().evaluate((el) => {
@@ -497,6 +510,7 @@ test.describe('reader — EPUB', () => {
     await page.locator('app-reader button[aria-label="Next page"]').click();
     await expect(epubFrame.locator('#imprint-text')).toBeVisible({ timeout: 10_000 });
   });
+  }
 
   test('reader uses the saved CFI to jump on open', async ({ page }) => {
     await page.goto(`/reader/${EPUB_ITEM_ID}`);

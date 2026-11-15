@@ -25,14 +25,25 @@ interface EpubJsContents {
   document: Document;
   window: Window;
 }
+/** One section's view: the iframe epub.js sized to hold that section. */
+interface EpubJsView {
+  contents?: EpubJsContents;
+  /** epub.js's own re-measure; it reframes only if the size changed. */
+  expand?(): void;
+}
 interface EpubJsRendition {
   display(target?: string): Promise<unknown>;
   on(event: 'relocated', handler: (loc: EpubJsLocation) => void): void;
   themes: EpubJsThemes;
   hooks: {
-    /** Runs for each section once its document has loaded. */
-    content: { register(hook: (contents: EpubJsContents) => void): void };
+    /**
+     * Runs for each section once its document has loaded. epub.js waits
+     * for a promise returned from a hook before it goes on.
+     */
+    content: { register(hook: (contents: EpubJsContents) => void | Promise<void>): void };
   };
+  /** Internal to epub.js, so every level is optional here. */
+  manager?: { views?: { _views?: EpubJsView[] } };
   next(): void;
   prev(): void;
   destroy(): void;
@@ -199,7 +210,7 @@ export class ReaderComponent implements OnInit, OnDestroy {
     });
     rendition.themes.select('mm-reader');
     rendition.themes.fontSize(`${this.fontSize()}%`);
-    rendition.hooks.content.register(contents => rehideOffscreenText(contents));
+    rendition.hooks.content.register(contents => rehideOffscreenText(rendition, contents));
     // Track CFI on every relocated event. We only update the displayed
     // percent against the locations index (built below) — `loc.start.
     // percentage` is 0 until then.
@@ -266,30 +277,107 @@ const OFFSCREEN_PX = 2000;
  *
  * Hide such elements a different way: in place, clipped to nothing.
  * They stay in the document and readable by assistive technology, and
- * no longer widen the section.
+ * no longer widen the section. Keyed on the computed position, not on
+ * one publisher's class names.
+ *
+ * The iOS reader (ios/.../Reader/reader.html) has the same three
+ * functions. Keep the two alike.
  */
-function rehideOffscreenText(contents: EpubJsContents): void {
+function rehideOffscreenText(rendition: EpubJsRendition, contents: EpubJsContents): void | Promise<void> {
+  // The rule lives in the book's stylesheet, which can still be loading
+  // when this hook runs: the elements would look unpositioned and be
+  // skipped. epub.js waits for a promise returned from a content hook,
+  // so hold it until the stylesheets are in (or a second has passed,
+  // for one that never arrives).
+  const pending = Array.from(
+    contents.document.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]'),
+  ).filter(link => !link.sheet);
+  if (pending.length === 0) {
+    rehideNow(rendition, contents);
+    return;
+  }
+  return new Promise<void>(resolve => {
+    let left = pending.length;
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      try {
+        rehideNow(rendition, contents);
+      } catch (e) {
+        console.warn('rehideOffscreenText failed', e);
+      }
+      resolve();
+    };
+    const one = (): void => {
+      left -= 1;
+      if (left <= 0) finish();
+    };
+    for (const link of pending) {
+      link.addEventListener('load', one);
+      link.addEventListener('error', one);
+    }
+    setTimeout(finish, STYLESHEET_WAIT_MS);
+  });
+}
+
+/** How long to wait for a section's stylesheets before going on without them. */
+const STYLESHEET_WAIT_MS = 1000;
+
+/**
+ * Offsets go back to `auto`, which leaves the element where it would
+ * have sat in the text. It must stay inside the page's margins: epub.js
+ * measures from the leftmost content, and a box pinned to the page edge
+ * (`left: 0` with a negative margin, the usual screen-reader-only
+ * recipe) sits outside the margin and costs one blank page on a
+ * phone-width column.
+ */
+const OFFSCREEN_REHIDE: Readonly<Record<string, string>> = {
+  left: 'auto',
+  right: 'auto',
+  top: 'auto',
+  bottom: 'auto',
+  width: '1px',
+  height: '1px',
+  margin: '0',
+  padding: '0',
+  overflow: 'hidden',
+  'clip-path': 'inset(50%)',
+  'white-space': 'nowrap',
+};
+
+function rehideNow(rendition: EpubJsRendition, contents: EpubJsContents): void {
   const view = contents.window;
+  let changed = false;
   for (const el of Array.from(contents.document.body.querySelectorAll<HTMLElement>('*'))) {
     const style = view.getComputedStyle(el);
     if (style.position !== 'absolute' && style.position !== 'fixed') continue;
     const offsets = [style.left, style.right, style.top, style.bottom].map(v => parseFloat(v));
     if (!offsets.some(px => px <= -OFFSCREEN_PX)) continue;
-    const hide: Record<string, string> = {
-      left: '0',
-      right: 'auto',
-      top: 'auto',
-      bottom: 'auto',
-      width: '1px',
-      height: '1px',
-      margin: '-1px',
-      padding: '0',
-      overflow: 'hidden',
-      'clip-path': 'inset(50%)',
-      'white-space': 'nowrap',
-    };
-    for (const [prop, value] of Object.entries(hide)) {
+    for (const [prop, value] of Object.entries(OFFSCREEN_REHIDE)) {
       el.style.setProperty(prop, value, 'important');
+    }
+    changed = true;
+  }
+  if (changed) remeasure(rendition, contents);
+}
+
+/**
+ * epub.js has already sized the section by the time a content hook
+ * runs, off-screen text included, so the section is dozens of pages
+ * wide at this point. Left alone, epub.js notices the change from a
+ * timer driven by requestAnimationFrame, which a browser can hold back
+ * (a background tab, a busy frame): until it fires, the title page
+ * stays wide and a page turn lands on a blank page. Ask the section's
+ * view to measure again now.
+ */
+function remeasure(rendition: EpubJsRendition, contents: EpubJsContents): void {
+  for (const view of rendition.manager?.views?._views ?? []) {
+    if (view.contents !== contents || typeof view.expand !== 'function') continue;
+    try {
+      view.expand();
+    } catch (e) {
+      console.warn('reader remeasure failed', e);
     }
   }
 }
