@@ -747,7 +747,7 @@ public final class AuthManager {
         refreshTask?.cancel()
         refreshTask = nil
         await logStreamer.stop()
-        AppServices.shared.audioPlayer?.stop(recordProgress: false)
+        AppServices.shared.audioPlayer?.stop(finalPosition: .discard)
     }
 
     /// Remove everything this device holds for the deleted account,
@@ -761,7 +761,7 @@ public final class AuthManager {
     public func completeAccountDeletion() async {
         logger.info("completeAccountDeletion: wiping local data")
         let services = AppServices.shared
-        services.audioPlayer?.stop(recordProgress: false)
+        services.audioPlayer?.stop(finalPosition: .discard)
         await services.dataModel?.downloads.removeAllDownloads()
         services.audioCache?.removeAllDownloads()
         services.bookCache?.removeAllDownloads()
