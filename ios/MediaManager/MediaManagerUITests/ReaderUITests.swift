@@ -147,6 +147,14 @@ final class ReaderOffscreenTitleTests: XCTestCase {
         app.launch()
     }
 
+    /// The percent label only moves once epub.js has finished indexing
+    /// the book's locations, which runs in the background after the
+    /// reader reports ready. Under the test runner that can take
+    /// several seconds, so a page turn made before it finishes shows
+    /// its percent late. A blank-page fault never shows the right
+    /// percent, however long the wait.
+    private static let percentTimeout: TimeInterval = 20
+
     func testTitlePageIsOnePage() {
         // The TOC button enables when epub.js reports ready.
         let tocButton = app.buttons["list.bullet"]
@@ -167,11 +175,11 @@ final class ReaderOffscreenTitleTests: XCTestCase {
 
         nextPage.tap()
         XCTAssertTrue(
-            app.staticTexts["50%"].waitForExistence(timeout: 5),
+            app.staticTexts["50%"].waitForExistence(timeout: Self.percentTimeout),
             "one page turn from the title page should reach the imprint")
         nextPage.tap()
         XCTAssertTrue(
-            app.staticTexts["100%"].waitForExistence(timeout: 5),
+            app.staticTexts["100%"].waitForExistence(timeout: Self.percentTimeout),
             "two page turns should reach the chapter; staying short of it means the title or imprint page is more than one page long")
     }
 }

@@ -165,6 +165,7 @@
       function rehideNow(contents) {
         var view = contents.window;
         var all = contents.document.body.querySelectorAll('*');
+        var changed = false;
         // Offsets go back to `auto`, which leaves the element where it
         // would have sat in the text. It must stay inside the page's
         // margins: epub.js measures from the leftmost content, and a
@@ -188,6 +189,28 @@
           if (!far) continue;
           for (var prop in hide) {
             el.style.setProperty(prop, hide[prop], 'important');
+          }
+          changed = true;
+        }
+        if (changed) remeasure(contents);
+      }
+
+      // epub.js has already sized the section by the time a content
+      // hook runs, off-screen text included, so the section is dozens
+      // of pages wide at this point. Left alone, epub.js notices the
+      // change from a timer driven by requestAnimationFrame, which a
+      // WKWebView sometimes holds back: for a while, or for good, the
+      // title page stays wide and a page turn lands on a blank page.
+      // Ask the section's view to measure again now. `expand()` is
+      // epub.js's own re-measure; it reframes only if the size changed.
+      function remeasure(contents) {
+        var views = rendition && rendition.manager && rendition.manager.views &&
+          rendition.manager.views._views;
+        if (!views) return;
+        for (var v = 0; v < views.length; v++) {
+          var view = views[v];
+          if (view && view.contents === contents && typeof view.expand === 'function') {
+            try { view.expand(); } catch (err) { console.warn('remeasure failed', err); }
           }
         }
       }
