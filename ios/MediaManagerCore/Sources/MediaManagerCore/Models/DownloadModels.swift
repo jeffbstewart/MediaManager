@@ -6,7 +6,7 @@ import MediaManagerProtos
 // This file retains only the view-layer helpers and adapters.
 
 public extension MMQuality {
-    public var downloadQuality: MMDownloadQuality {
+    var downloadQuality: MMDownloadQuality {
         switch self {
         case .sd: .sd
         case .fhd: .fhd

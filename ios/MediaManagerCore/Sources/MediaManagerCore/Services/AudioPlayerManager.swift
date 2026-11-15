@@ -160,7 +160,12 @@ public final class AudioPlayerManager {
             forInterval: CMTime(seconds: 0.25, preferredTimescale: CMTimeScale(NSEC_PER_SEC)),
             queue: .main
         ) { [weak self] time in
-            self?.handleTimeUpdate(time)
+            // queue: .main above, so this block already runs on the
+            // main actor; say so rather than hopping through a Task,
+            // which would reorder ticks.
+            MainActor.assumeIsolated {
+                self?.handleTimeUpdate(time)
+            }
         }
         rateObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
             Task { @MainActor [weak self] in self?.refreshIsPlaying() }

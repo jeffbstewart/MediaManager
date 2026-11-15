@@ -150,7 +150,7 @@ struct ProfileView: View {
 }
 
 struct ChangePasswordView: View {
-    @Environment(OnlineDataModel.self) private var dataModel
+    @Environment(AuthManager.self) private var authManager
     @Environment(\.dismiss) private var dismiss
     @State private var currentPassword = ""
     @State private var newPassword = ""
@@ -216,10 +216,10 @@ struct ChangePasswordView: View {
 
         saving = true
         do {
-            try await dataModel.changePassword(current: currentPassword, new: newPassword)
+            // Also adopts the new token pair: the server ends every
+            // session when the password changes.
+            try await authManager.changePassword(current: currentPassword, new: newPassword)
             dismiss()
-        } catch APIClientError.httpError(_, let msg) {
-            error = msg == "invalid_credentials" ? "Current password is incorrect" : msg
         } catch {
             self.error = error.localizedDescription
         }

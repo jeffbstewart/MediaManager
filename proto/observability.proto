@@ -6,7 +6,6 @@ option java_package = "net.stewart.mediamanager.grpc";
 option java_multiple_files = true;
 option swift_prefix = "MM";
 
-import "common.proto";
 import "time.proto";
 
 // Client log forwarding to Binnacle. iOS / Android TV / web clients

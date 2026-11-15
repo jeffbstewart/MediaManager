@@ -106,7 +106,6 @@ struct RootView: View {
 }
 
 struct ForcedPasswordChangeView: View {
-    @Environment(OnlineDataModel.self) private var dataModel
     @Environment(AuthManager.self) private var authManager
     @State private var currentPassword = ""
     @State private var newPassword = ""
@@ -128,45 +127,26 @@ struct ForcedPasswordChangeView: View {
                     .foregroundStyle(MarqueeTheme.Colors.text)
                     .multilineTextAlignment(.center)
 
-                Text("Your administrator requires you to change your password before continuing. Enter the temporary password you were given, then pick a new one.")
-                    .font(MarqueeTheme.Fonts.body)
-                    .foregroundStyle(MarqueeTheme.Colors.text2)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                VStack(spacing: 12) {
-                    SecureField("Current Password", text: $currentPassword)
-                        .textFieldStyle(.mmPill)
-                        .textContentType(.password)
-
-                    SecureField("New Password", text: $newPassword)
-                        .textFieldStyle(.mmPill)
-                        .textContentType(.newPassword)
-
-                    SecureField("Confirm New Password", text: $confirmPassword)
-                        .textFieldStyle(.mmPill)
-                        .textContentType(.newPassword)
-
-                    if let error {
-                        Text(error)
-                            .foregroundStyle(MarqueeTheme.Colors.pink)
-                            .font(.callout)
-                            .multilineTextAlignment(.center)
-                    }
+                if let problem = authManager.passwordGateProblem {
+                    // The change went through but the server still
+                    // refuses: another change would not help.
+                    Text(problem)
+                        .font(MarqueeTheme.Fonts.body)
+                        .foregroundStyle(MarqueeTheme.Colors.text2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .accessibilityIdentifier("password-gate-problem")
 
                     Button {
-                        Task { await changePassword() }
+                        Task { await authManager.logout() }
                     } label: {
-                        Text(saving ? "Saving..." : "Change Password")
-                            .frame(maxWidth: .infinity)
+                        Text("Sign Out").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.mmPrimary)
-                    .disabled(currentPassword.isEmpty
-                              || newPassword.isEmpty
-                              || newPassword != confirmPassword
-                              || saving)
+                    .padding(.horizontal)
+                } else {
+                    passwordForm
                 }
-                .padding(.horizontal)
 
                 Spacer()
                 Spacer()
@@ -177,6 +157,49 @@ struct ForcedPasswordChangeView: View {
             .mmGlowPage()
             .interactiveDismissDisabled()
         }
+    }
+
+    @ViewBuilder
+    private var passwordForm: some View {
+        Text("Your administrator requires you to change your password before continuing. Enter the temporary password you were given, then pick a new one.")
+            .font(MarqueeTheme.Fonts.body)
+            .foregroundStyle(MarqueeTheme.Colors.text2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
+
+        VStack(spacing: 12) {
+            SecureField("Current Password", text: $currentPassword)
+                .textFieldStyle(.mmPill)
+                .textContentType(.password)
+
+            SecureField("New Password", text: $newPassword)
+                .textFieldStyle(.mmPill)
+                .textContentType(.newPassword)
+
+            SecureField("Confirm New Password", text: $confirmPassword)
+                .textFieldStyle(.mmPill)
+                .textContentType(.newPassword)
+
+            if let error {
+                Text(error)
+                    .foregroundStyle(MarqueeTheme.Colors.pink)
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                Task { await changePassword() }
+            } label: {
+                Text(saving ? "Saving..." : "Change Password")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.mmPrimary)
+            .disabled(currentPassword.isEmpty
+                      || newPassword.isEmpty
+                      || newPassword != confirmPassword
+                      || saving)
+        }
+        .padding(.horizontal)
     }
 
     private func changePassword() async {
@@ -191,10 +214,12 @@ struct ForcedPasswordChangeView: View {
             // even on the forced-change path — the server treats it
             // as a fresh credential proof so a borrowed unlocked
             // phone can't rotate the password to lock the real owner
-            // out. Matches the web flow.
-            try await dataModel.changePassword(
+            // out. Matches the web flow. On success AuthManager adopts
+            // the new token pair and dismisses this sheet; a refusal
+            // (wrong current password, a rule the new one breaks)
+            // comes back as text for the line above the button.
+            try await authManager.changePassword(
                 current: currentPassword, new: newPassword)
-            authManager.clearPasswordChangeRequired()
         } catch {
             self.error = error.localizedDescription
         }

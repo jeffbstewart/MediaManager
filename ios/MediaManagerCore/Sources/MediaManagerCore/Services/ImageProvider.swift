@@ -96,63 +96,63 @@ public final class ImageProvider {
 // MARK: - ImageRef convenience constructors
 
 public extension MMImageRef {
-    public static func posterThumbnail(titleId: Int64) -> MMImageRef {
+    static func posterThumbnail(titleId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .posterThumbnail
         ref.titleID = titleId
         return ref
     }
 
-    public static func posterFull(titleId: Int64) -> MMImageRef {
+    static func posterFull(titleId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .posterFull
         ref.titleID = titleId
         return ref
     }
 
-    public static func backdrop(titleId: Int64) -> MMImageRef {
+    static func backdrop(titleId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .backdrop
         ref.titleID = titleId
         return ref
     }
 
-    public static func headshot(tmdbPersonId: Int32) -> MMImageRef {
+    static func headshot(tmdbPersonId: Int32) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .headshot
         ref.tmdbPersonID = tmdbPersonId
         return ref
     }
 
-    public static func collectionPoster(tmdbCollectionId: Int32) -> MMImageRef {
+    static func collectionPoster(tmdbCollectionId: Int32) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .collectionPoster
         ref.tmdbCollectionID = tmdbCollectionId
         return ref
     }
 
-    public static func localImage(uuid: String) -> MMImageRef {
+    static func localImage(uuid: String) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .localImage
         ref.uuid = uuid
         return ref
     }
 
-    public static func ownershipPhoto(uuid: String) -> MMImageRef {
+    static func ownershipPhoto(uuid: String) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .ownershipPhoto
         ref.uuid = uuid
         return ref
     }
 
-    public static func cameraSnapshot(cameraId: Int64) -> MMImageRef {
+    static func cameraSnapshot(cameraId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .cameraSnapshot
         ref.cameraID = cameraId
         return ref
     }
 
-    public static func tmdbPoster(tmdbId: Int32, mediaType: MMMediaType) -> MMImageRef {
+    static func tmdbPoster(tmdbId: Int32, mediaType: MMMediaType) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .tmdbPoster
         var media = MMTmdbMediaId()
@@ -162,7 +162,7 @@ public extension MMImageRef {
         return ref
     }
 
-    public static func authorHeadshot(authorId: Int64) -> MMImageRef {
+    static func authorHeadshot(authorId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .authorHeadshot
         ref.authorID = authorId
@@ -171,7 +171,7 @@ public extension MMImageRef {
 
     /// Open Library cover by abstract work id (e.g. "OL45804W"). Used for
     /// unowned bibliography entries and missing series volumes.
-    public static func openlibraryCover(workId: String) -> MMImageRef {
+    static func openlibraryCover(workId: String) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .openlibraryCover
         ref.openlibraryWorkID = workId
@@ -182,7 +182,7 @@ public extension MMImageRef {
     /// grid card and ArtistDetailView's hero — falls back to the
     /// first owned album's cover when the artist record has no real
     /// headshot (parallel to authorHeadshot's fallback strategy).
-    public static func artistHeadshot(artistId: Int64) -> MMImageRef {
+    static func artistHeadshot(artistId: Int64) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .artistHeadshot
         ref.artistID = artistId
@@ -192,7 +192,7 @@ public extension MMImageRef {
     /// Cover Art Archive release-group cover, keyed by MBID. Used by
     /// unowned discography entries on ArtistDetailView and album
     /// wish rows. Square aspect (1:1) — album covers, not posters.
-    public static func coverArtArchiveReleaseGroup(releaseGroupId: String) -> MMImageRef {
+    static func coverArtArchiveReleaseGroup(releaseGroupId: String) -> MMImageRef {
         var ref = MMImageRef()
         ref.type = .caaReleaseGroup
         ref.musicbrainzReleaseGroupID = releaseGroupId

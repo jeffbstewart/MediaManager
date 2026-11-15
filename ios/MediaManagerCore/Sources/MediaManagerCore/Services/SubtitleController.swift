@@ -46,18 +46,17 @@ public final class SubtitleController {
             return
         }
         let capturedCues = self.cues
-        var lastText: String?
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             let seconds = time.seconds
             guard seconds.isFinite else { return }
-            let cue = SubtitleParser.activeCue(at: seconds, in: capturedCues)
-            let newText = cue?.text
-            if newText != lastText {
-                lastText = newText
-            }
-            Task { @MainActor [weak self] in
-                self?.currentText = newText
+            let newText = SubtitleParser.activeCue(at: seconds, in: capturedCues)?.text
+            // queue: .main above, so this already runs on the main
+            // actor. Only publish a change, so observers don't redraw
+            // four times a second for the same line.
+            MainActor.assumeIsolated {
+                guard let self, self.currentText != newText else { return }
+                self.currentText = newText
             }
         }
     }

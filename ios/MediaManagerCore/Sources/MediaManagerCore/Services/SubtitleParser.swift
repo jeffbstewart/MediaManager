@@ -1,7 +1,7 @@
 import Foundation
 import MediaManagerProtos
 
-public struct SubtitleCue {
+public struct SubtitleCue: Sendable {
     public let start: TimeInterval
     public let end: TimeInterval
     public let text: String

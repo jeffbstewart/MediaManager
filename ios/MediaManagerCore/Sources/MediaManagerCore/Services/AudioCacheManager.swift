@@ -310,7 +310,7 @@ public final class AudioCacheManager {
             logger.warning("cachedAlbumDetail: read failed for titleId=\(titleId)")
             return nil
         }
-        guard let proto = try? MMTitleDetail(serializedData: data) else {
+        guard let proto = try? MMTitleDetail(serializedBytes: data) else {
             logger.warning("cachedAlbumDetail: deserialize failed for titleId=\(titleId), bytes=\(data.count)")
             return nil
         }
@@ -397,7 +397,7 @@ public final class AudioCacheManager {
         let path = playlistDir(playlistId: playlistId).appendingPathComponent("detail.pb")
         guard FileManager.default.fileExists(atPath: path.path),
               let data = try? Data(contentsOf: path),
-              let proto = try? MMPlaylistDetail(serializedData: data) else {
+              let proto = try? MMPlaylistDetail(serializedBytes: data) else {
             return nil
         }
         return ApiPlaylistDetail(proto: proto)

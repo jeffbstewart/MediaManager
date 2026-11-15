@@ -420,7 +420,7 @@ public final class DownloadManager {
         return urls.compactMap { url -> ApiSeason? in
             guard url.lastPathComponent.hasPrefix("season-") else { return nil }
             guard let data = try? Data(contentsOf: url),
-                  let proto = try? MMSeason(serializedData: data) else { return nil }
+                  let proto = try? MMSeason(serializedBytes: data) else { return nil }
             return ApiSeason(proto: proto)
         }.sorted { $0.seasonNumber < $1.seasonNumber }
     }
@@ -433,7 +433,7 @@ public final class DownloadManager {
         return urls.compactMap { url -> ApiEpisode? in
             guard url.lastPathComponent.hasPrefix(prefix) else { return nil }
             guard let data = try? Data(contentsOf: url),
-                  let proto = try? MMEpisode(serializedData: data) else { return nil }
+                  let proto = try? MMEpisode(serializedBytes: data) else { return nil }
             return ApiEpisode(proto: proto)
         }.sorted { $0.episodeNumber < $1.episodeNumber }
     }
@@ -444,7 +444,7 @@ public final class DownloadManager {
         guard let entry = entries.first(where: { $0.titleID == titleId.protoValue }) else { return nil }
         let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.detail.pb", entry.sequence))
         guard let data = try? Data(contentsOf: path),
-              let proto = try? MMTitleDetail(serializedData: data) else { return nil }
+              let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
         return ApiTitleDetail(proto: proto)
     }
 

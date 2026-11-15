@@ -782,7 +782,6 @@ public final class OfflineDataModel: DataModel {
 
     public func profile() async throws -> ProfileResponse { throw DataModelError.offline }
     public func updateTvQuality(_ quality: Int) async throws { throw DataModelError.offline }
-    public func changePassword(current: String, new: String) async throws { throw DataModelError.offline }
     public func sessions() async throws -> ApiSessionListResponse { throw DataModelError.offline }
     public func deleteSession(id: SessionID, type: SessionType) async throws { throw DataModelError.offline }
     public func deleteOtherSessions() async throws { throw DataModelError.offline }

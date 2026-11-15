@@ -4,7 +4,7 @@ import MediaManagerProtos
 // MARK: - Proto Enum Display Extensions
 
 public extension MMQuality {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .sd: return "SD"
         case .fhd: return "FHD"
@@ -15,7 +15,7 @@ public extension MMQuality {
 }
 
 public extension MMContentRating {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .g: return "G"
         case .pg: return "PG"
@@ -35,7 +35,7 @@ public extension MMContentRating {
 }
 
 public extension MMMediaFormat {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .dvd: return "DVD"
         case .bluray: return "Blu-ray"
@@ -62,7 +62,7 @@ public extension MMMediaFormat {
 }
 
 public extension MMMediaType {
-    public var appMediaType: MediaType? {
+    var appMediaType: MediaType? {
         switch self {
         case .movie: return .movie
         case .tv: return .tv
@@ -78,7 +78,7 @@ public extension MMMediaType {
 public extension MediaType {
     /// Conversion to the proto enum, used when constructing requests or
     /// `MMImageRef.tmdbPoster(tmdbId:mediaType:)` from app-side state.
-    public var protoMediaType: MMMediaType {
+    var protoMediaType: MMMediaType {
         switch self {
         case .movie: return .movie
         case .tv: return .tv
@@ -88,7 +88,7 @@ public extension MediaType {
 }
 
 public extension MMSearchResultType {
-    public var appType: SearchResultType? {
+    var appType: SearchResultType? {
         switch self {
         case .movie: return .movie
         case .series: return .series
@@ -104,7 +104,7 @@ public extension MMSearchResultType {
         }
     }
 
-    public var displayString: String {
+    var displayString: String {
         switch self {
         case .movie: return "movie"
         case .series: return "series"
@@ -127,7 +127,7 @@ public extension MMSearchResultType {
 }
 
 public extension MMAcquisitionStatus {
-    public var appStatus: AcquisitionStatus? {
+    var appStatus: AcquisitionStatus? {
         switch self {
         case .unknown, .UNRECOGNIZED: return nil
         case .notAvailable: return .notAvailable
@@ -140,7 +140,7 @@ public extension MMAcquisitionStatus {
 }
 
 public extension MMWishLifecycleStage {
-    public var appStage: WishLifecycleStage? {
+    var appStage: WishLifecycleStage? {
         switch self {
         case .unknown, .UNRECOGNIZED: return nil
         case .wishedFor: return .wishedFor
@@ -156,7 +156,7 @@ public extension MMWishLifecycleStage {
 }
 
 public extension MMWishStatus {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .active: return "active"
         case .fulfilled: return "fulfilled"
@@ -166,7 +166,7 @@ public extension MMWishStatus {
 }
 
 public extension MMAuthMethod {
-    public var displayString: String {
+    var displayString: String {
         switch self {
         case .jwt: return "jwt"
         case .unknown, .UNRECOGNIZED: return "unknown"
@@ -175,7 +175,7 @@ public extension MMAuthMethod {
 }
 
 public extension MMCapability {
-    public var displayString: String {
+    var displayString: String {
         switch self {
         case .catalog: return "catalog"
         case .streaming: return "streaming"
@@ -190,11 +190,11 @@ public extension MMCapability {
 // MARK: - Helper: MMTimestamp -> Date
 
 public extension MMTimestamp {
-    public var date: Date {
+    var date: Date {
         Date(timeIntervalSince1970: TimeInterval(secondsSinceEpoch))
     }
 
-    public var isoString: String {
+    var isoString: String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
@@ -205,7 +205,7 @@ public extension MMTimestamp {
 
 public extension MMCalendarDate {
     /// Formats as "YYYY-MM-DD" for compatibility with old API string dates.
-    public var dateString: String? {
+    var dateString: String? {
         guard year > 0, month != .unknown else { return nil }
         return String(format: "%04d-%02d-%02d", year, month.rawValue, day)
     }
@@ -1268,7 +1268,7 @@ public struct AdminUnmatchedResponse: Sendable {
 // MARK: - Admin Enum Display Extensions
 
 public extension MMLeaseStatus {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .claimed: "CLAIMED"
         case .inProgress: "IN_PROGRESS"
@@ -1281,7 +1281,7 @@ public extension MMLeaseStatus {
 }
 
 public extension MMLeaseType {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .transcode: "TRANSCODE"
         case .thumbnails: "THUMBNAILS"
@@ -1294,7 +1294,7 @@ public extension MMLeaseType {
 }
 
 public extension MMEnrichmentStatus {
-    public var displayString: String? {
+    var displayString: String? {
         switch self {
         case .pending: "PENDING"
         case .enriched: "ENRICHED"
@@ -1308,7 +1308,7 @@ public extension MMEnrichmentStatus {
 }
 
 public extension MMScanStatus {
-    public var displayString: String {
+    var displayString: String {
         switch self {
         case .submitted: "Submitted"
         case .upcFound: "Found"
@@ -1321,14 +1321,14 @@ public extension MMScanStatus {
         }
     }
 
-    public var isTerminal: Bool {
+    var isTerminal: Bool {
         switch self {
         case .upcNotFound, .enriched, .enrichmentFailed, .noMatch: true
         default: false
         }
     }
 
-    public var needsTmdbAction: Bool {
+    var needsTmdbAction: Bool {
         switch self {
         case .noMatch, .enrichmentFailed: true
         default: false
@@ -1337,7 +1337,7 @@ public extension MMScanStatus {
 }
 
 public extension MMSubmitBarcodeResult {
-    public var displayString: String {
+    var displayString: String {
         switch self {
         case .created: "Created"
         case .duplicate: "Duplicate"
@@ -1387,7 +1387,7 @@ public extension MMSettingKey {
 // MARK: - AcquisitionStatus proto mapping
 
 public extension AcquisitionStatus {
-    public var protoValue: MMAcquisitionStatus {
+    var protoValue: MMAcquisitionStatus {
         switch self {
         case .unknown: .unknown
         case .notAvailable: .notAvailable
