@@ -10,7 +10,6 @@ import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.PairingService
-import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.WebAuthnService
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
@@ -93,9 +92,7 @@ class ProfileGrpcService : ProfileServiceGrpcKt.ProfileServiceCoroutineImplBase(
         if (request.currentPassword.isBlank()) {
             throw StatusException(Status.INVALID_ARGUMENT.withDescription("Current password required"))
         }
-        if (!PasswordService.verify(request.currentPassword, user.password_hash)) {
-            throw StatusException(Status.UNAUTHENTICATED.withDescription("Invalid current password"))
-        }
+        requireReverifiedPassword(user, request.currentPassword, "DeleteAccount")
 
         when (AccountDeletionService.delete(user.id!!)) {
             AccountDeletionService.Result.NotFound ->

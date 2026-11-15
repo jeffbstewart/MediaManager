@@ -27,6 +27,7 @@ import net.stewart.mediamanager.service.UserTitleFlagService
 import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.PasswordReverifyThrottle
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.WebAuthnService
 import net.stewart.mediamanager.util.toIsoUtc
@@ -137,10 +138,7 @@ class ProfileHttpService {
 
         val fresh = AppUser.findById(user.id!!) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
 
-        // Verify current password
-        if (!PasswordService.verify(currentPassword, fresh.password_hash)) {
-            return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
-        }
+        reverifyPassword(fresh, currentPassword, "change-password")?.let { return it }
 
         // Validate new password
         val violations = PasswordService.validate(newPassword, fresh.username)
@@ -182,9 +180,7 @@ class ProfileHttpService {
             ?: return badRequest("current_password required")
 
         val fresh = AppUser.findById(user.id!!) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
-        if (!PasswordService.verify(currentPassword, fresh.password_hash)) {
-            return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
-        }
+        reverifyPassword(fresh, currentPassword, "delete-account")?.let { return it }
 
         return when (AccountDeletionService.delete(fresh.id!!)) {
             AccountDeletionService.Result.NotFound -> HttpResponse.of(HttpStatus.NOT_FOUND)
@@ -403,6 +399,24 @@ class ProfileHttpService {
         UserTitleFlagService.clearFlagForUser(user.id!!, titleId, UserFlagType.HIDDEN)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
     }
+
+    /**
+     * Checks the re-entered password through [PasswordReverifyThrottle].
+     * Returns null when it is correct, otherwise the `{ok:false}` response
+     * to send: a wrong password, or a lockout (which also carries
+     * retry_after_seconds).
+     */
+    private fun reverifyPassword(user: AppUser, password: String, action: String): HttpResponse? =
+        when (val outcome = PasswordReverifyThrottle.verify(user.id!!, user.username, password, user.password_hash, action)) {
+            PasswordReverifyThrottle.Outcome.Verified -> null
+            PasswordReverifyThrottle.Outcome.WrongPassword ->
+                jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
+            is PasswordReverifyThrottle.Outcome.LockedOut -> jsonResponse(gson.toJson(mapOf(
+                "ok" to false,
+                "error" to PasswordReverifyThrottle.lockedOutMessage(outcome.retryAfterSeconds),
+                "retry_after_seconds" to outcome.retryAfterSeconds
+            )))
+        }
 
     private fun jsonResponse(json: String): HttpResponse {
         val bytes = json.toByteArray(Charsets.UTF_8)

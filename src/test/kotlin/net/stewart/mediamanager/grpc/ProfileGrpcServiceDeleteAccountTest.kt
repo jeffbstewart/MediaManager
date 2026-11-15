@@ -18,6 +18,7 @@ import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.LegalRequirements
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.PasswordReverifyThrottle
 import net.stewart.mediamanager.service.RefreshResult
 import java.time.LocalDateTime
 import kotlin.test.Test
@@ -129,6 +130,44 @@ class ProfileGrpcServiceDeleteAccountTest : GrpcTestBase() {
         val user = createViewerUser(username = "da-wrongpw")
         val ex = assertFailsWith<StatusException> { deleteAccount(user, password = "not-it") }
         assertEquals(Status.Code.UNAUTHENTICATED, ex.status.code)
+        assertNotNull(AppUser.findById(user.id!!))
+    }
+
+    @Test
+    fun `repeated wrong passwords lock the user out, even for the right one`() {
+        createAdminUser(username = "da-admin")
+        val user = createViewerUser(username = "da-fisher")
+        repeat(PasswordReverifyThrottle.SHORT_THRESHOLD) {
+            val ex = assertFailsWith<StatusException> { deleteAccount(user, password = "guess-$it") }
+            assertEquals(Status.Code.UNAUTHENTICATED, ex.status.code)
+        }
+        val ex = assertFailsWith<StatusException> { deleteAccount(user) }
+        assertEquals(Status.Code.RESOURCE_EXHAUSTED, ex.status.code)
+        assertTrue(ex.status.description!!.startsWith("Too many incorrect passwords"))
+        assertNotNull(AppUser.findById(user.id!!))
+    }
+
+    @Test
+    fun `wrong passwords on ChangePassword count toward the DeleteAccount lockout`() {
+        createAdminUser(username = "da-admin")
+        val user = createViewerUser(username = "da-hopper")
+        val channel = authenticatedChannel(user)
+        try {
+            repeat(PasswordReverifyThrottle.SHORT_THRESHOLD) {
+                assertFailsWith<StatusException> {
+                    runBlocking {
+                        AuthServiceGrpcKt.AuthServiceCoroutineStub(channel).changePassword(changePasswordRequest {
+                            currentPassword = "guess-$it"
+                            newPassword = "N3w-Passw0rd!"
+                        })
+                    }
+                }
+            }
+        } finally {
+            channel.shutdownNow()
+        }
+        val ex = assertFailsWith<StatusException> { deleteAccount(user) }
+        assertEquals(Status.Code.RESOURCE_EXHAUSTED, ex.status.code)
         assertNotNull(AppUser.findById(user.id!!))
     }
 

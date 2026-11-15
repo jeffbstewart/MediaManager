@@ -11,6 +11,7 @@ import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.UserFlagType
 import net.stewart.mediamanager.entity.UserTitleFlag
 import net.stewart.mediamanager.entity.WebTheme
+import net.stewart.mediamanager.service.PasswordReverifyThrottle
 import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.UserTitleFlagService
 import org.junit.AfterClass
@@ -51,6 +52,7 @@ internal class ProfileHttpServiceTest : ArmeriaTestBase() {
         Title.deleteAll()
         AppUser.deleteAll()
         AppConfig.deleteAll()
+        PasswordReverifyThrottle.resetForTests()
     }
 
     // ---------------------- /api/v2/profile ----------------------
@@ -548,6 +550,34 @@ internal class ProfileHttpServiceTest : ArmeriaTestBase() {
         val viewer = getOrCreateUser("viewer", level = 1)
         val body = readJsonObject(deleteAccount(viewer, """{"current_password": "wrong-pw"}"""))
         assertEquals(false, body.get("ok").asBoolean)
+        assertNotNull(AppUser.findById(viewer.id!!))
+    }
+
+    @Test
+    fun `deleteAccount locks out after repeated wrong passwords, even for the right one`() {
+        getOrCreateUser("admin", level = 2)
+        val viewer = getOrCreateUser("viewer", level = 1)
+        repeat(PasswordReverifyThrottle.SHORT_THRESHOLD) {
+            val body = readJsonObject(deleteAccount(viewer, """{"current_password": "wrong-pw"}"""))
+            assertEquals("Current password is incorrect", body.get("error").asString)
+        }
+        val body = readJsonObject(deleteAccount(viewer, """{"current_password": "Test1234!@#"}"""))
+        assertEquals(false, body.get("ok").asBoolean)
+        assertTrue(body.get("error").asString.startsWith("Too many incorrect passwords"))
+        assertTrue(body.get("retry_after_seconds").asLong > 0)
+        assertNotNull(AppUser.findById(viewer.id!!))
+    }
+
+    @Test
+    fun `wrong passwords on change-password count toward the delete-account lockout`() {
+        getOrCreateUser("admin", level = 2)
+        val viewer = getOrCreateUser("viewer", level = 1)
+        repeat(PasswordReverifyThrottle.SHORT_THRESHOLD) {
+            service.changePassword(ctxFor("/api/v2/profile/change-password", method = HttpMethod.POST,
+                user = viewer, jsonBody = """{"current_password": "wrong-pw", "new_password": "N3w-Passw0rd!"}"""))
+        }
+        val body = readJsonObject(deleteAccount(viewer, """{"current_password": "Test1234!@#"}"""))
+        assertTrue(body.get("error").asString.startsWith("Too many incorrect passwords"))
         assertNotNull(AppUser.findById(viewer.id!!))
     }
 
