@@ -134,6 +134,48 @@
         </div>
       }
     </div>
+
+    <!-- Delete Account -->
+    <h3>Delete Account</h3>
+    <p class="section-hint">
+      Permanently deletes your account, wish list, playlists and watch, listening and
+      reading progress, and signs you out everywhere. The household's catalog is not affected.
+    </p>
+    <button class="action-btn danger delete-account-btn" (click)="openDeleteDialog()">
+      <mat-icon>delete_forever</mat-icon> Delete Account
+    </button>
+  }
+
+  <!-- Delete Account Modal -->
+  @if (showDeleteDialog()) {
+    <div class="modal-overlay" (click)="closeDeleteDialog()">
+      <div class="modal-content delete-account-dialog" role="dialog" aria-modal="true"
+           aria-labelledby="delete-account-title" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3 id="delete-account-title">Delete Account</h3>
+          <button class="close-btn" aria-label="Close" (click)="closeDeleteDialog()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+        <div class="pw-form">
+          <p class="section-hint">This cannot be undone. Enter your password to confirm.</p>
+          <label class="pw-label" for="delete-account-password">Password</label>
+          <input id="delete-account-password" type="password" class="pw-input"
+                 autocomplete="current-password" [value]="deletePassword()"
+                 (input)="updateDeletePassword($event)" />
+          @if (deleteError()) {
+            <span class="pw-error" role="alert">{{ deleteError() }}</span>
+          }
+          <button class="action-btn danger" [disabled]="deletePassword().length === 0 || deleteSubmitting()"
+                  (click)="submitDeleteAccount()">
+            @if (deleteSubmitting()) {
+              <mat-spinner aria-label="Deleting" diameter="16" />
+            }
+            Delete My Account
+          </button>
+        </div>
+      </div>
+    </div>
   }
 
   <!-- Change Password Modal -->

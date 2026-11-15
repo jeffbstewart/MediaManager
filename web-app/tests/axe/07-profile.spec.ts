@@ -19,4 +19,15 @@ test.describe('/profile (axe)', () => {
     await page.waitForSelector('app-profile .quality-row');
     await auditA11y(page);
   });
+
+  test('delete-account dialog renders with zero axe violations', async ({ page }) => {
+    await mockBackend(page);
+    await loginAs(page);
+    await stubImages(page);
+    await page.goto('/profile');
+    await page.waitForSelector('app-profile .quality-row');
+    await page.locator('app-profile button.delete-account-btn').click();
+    await page.waitForSelector('app-profile .delete-account-dialog');
+    await auditA11y(page);
+  });
 });

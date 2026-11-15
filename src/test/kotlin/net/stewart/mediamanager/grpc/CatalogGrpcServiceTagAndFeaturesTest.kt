@@ -162,7 +162,7 @@ class CatalogGrpcServiceTagAndFeaturesTest : GrpcTestBase() {
         createTitle(name = "Pending Movie",
             mediaType = MediaTypeEntity.MOVIE.name,
             enrichmentStatus = EnrichmentStatus.PENDING.name)
-        ProblemReport(user_id = viewer.id!!, description = "x",
+        ProblemReport(reporter_username = viewer.username, description = "x",
             status = ReportStatus.OPEN.name,
             created_at = LocalDateTime.now()).save()
 

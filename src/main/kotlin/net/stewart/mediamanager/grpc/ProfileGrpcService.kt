@@ -6,9 +6,11 @@ import net.stewart.mediamanager.entity.AppUser
 import net.stewart.mediamanager.entity.DeviceToken
 import net.stewart.mediamanager.entity.RefreshToken
 import net.stewart.mediamanager.entity.SessionToken
+import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.JwtService
 import net.stewart.mediamanager.service.PairingService
+import net.stewart.mediamanager.service.PasswordService
 import net.stewart.mediamanager.service.WebAuthnService
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
@@ -81,6 +83,27 @@ class ProfileGrpcService : ProfileServiceGrpcKt.ProfileServiceCoroutineImplBase(
                 }
             }
             else -> throw StatusException(Status.INVALID_ARGUMENT.withDescription("Invalid session type"))
+        }
+        return Empty.getDefaultInstance()
+    }
+
+    override suspend fun deleteAccount(request: DeleteAccountRequest): Empty {
+        val user = currentUser()
+
+        if (request.currentPassword.isBlank()) {
+            throw StatusException(Status.INVALID_ARGUMENT.withDescription("Current password required"))
+        }
+        if (!PasswordService.verify(request.currentPassword, user.password_hash)) {
+            throw StatusException(Status.UNAUTHENTICATED.withDescription("Invalid current password"))
+        }
+
+        when (AccountDeletionService.delete(user.id!!)) {
+            AccountDeletionService.Result.NotFound ->
+                throw StatusException(Status.NOT_FOUND.withDescription("User not found"))
+            AccountDeletionService.Result.LastAdmin ->
+                throw StatusException(Status.FAILED_PRECONDITION.withDescription(AccountDeletionService.LAST_ADMIN_MESSAGE))
+            is AccountDeletionService.Result.Deleted ->
+                log.info("AUDIT: user '{}' deleted their own account", user.username)
         }
         return Empty.getDefaultInstance()
     }

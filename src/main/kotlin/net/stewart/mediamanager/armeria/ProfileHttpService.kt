@@ -24,6 +24,7 @@ import net.stewart.mediamanager.entity.UserFlagType
 import net.stewart.mediamanager.entity.UserTitleFlag
 import net.stewart.mediamanager.entity.WebTheme
 import net.stewart.mediamanager.service.UserTitleFlagService
+import net.stewart.mediamanager.service.AccountDeletionService
 import net.stewart.mediamanager.service.AuthService
 import net.stewart.mediamanager.service.PairingService
 import net.stewart.mediamanager.service.PasswordService
@@ -162,6 +163,47 @@ class ProfileHttpService {
 
         log.info("AUDIT: Password changed for user '{}' via Angular profile", fresh.username)
         return jsonResponse(gson.toJson(mapOf("ok" to true)))
+    }
+
+    /**
+     * The web half of ProfileService/DeleteAccount: the caller deletes
+     * their own account after re-entering their password.  Legal-exempt
+     * (ArmeriaAuthDecorator), so someone who declines the terms can still
+     * leave.  On success the session cookie is expired in the response.
+     */
+    @Post("/api/v2/profile/delete-account")
+    fun deleteAccount(ctx: ServiceRequestContext): HttpResponse {
+        val user = ArmeriaAuthDecorator.getUser(ctx)
+            ?: return HttpResponse.of(HttpStatus.UNAUTHORIZED)
+
+        val body = ctx.request().aggregate().join().contentUtf8()
+        val map = gson.fromJson(body, Map::class.java) ?: return badRequest("Invalid JSON")
+        val currentPassword = (map["current_password"] as? String)?.takeIf { it.isNotEmpty() }
+            ?: return badRequest("current_password required")
+
+        val fresh = AppUser.findById(user.id!!) ?: return HttpResponse.of(HttpStatus.NOT_FOUND)
+        if (!PasswordService.verify(currentPassword, fresh.password_hash)) {
+            return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Current password is incorrect")))
+        }
+
+        return when (AccountDeletionService.delete(fresh.id!!)) {
+            AccountDeletionService.Result.NotFound -> HttpResponse.of(HttpStatus.NOT_FOUND)
+            AccountDeletionService.Result.LastAdmin -> jsonResponse(gson.toJson(mapOf(
+                "ok" to false, "error" to AccountDeletionService.LAST_ADMIN_MESSAGE
+            )))
+            is AccountDeletionService.Result.Deleted -> {
+                log.info("AUDIT: user '{}' deleted their own account via Angular profile", fresh.username)
+                val bytes = gson.toJson(mapOf("ok" to true)).toByteArray(Charsets.UTF_8)
+                HttpResponse.of(
+                    ResponseHeaders.builder(HttpStatus.OK)
+                        .contentType(MediaType.JSON_UTF_8)
+                        .contentLength(bytes.size.toLong())
+                        .add("Set-Cookie", AuthService.buildExpireSessionCookieHeader())
+                        .build(),
+                    HttpData.wrap(bytes)
+                )
+            }
+        }
     }
 
     @Get("/api/v2/profile/sessions")

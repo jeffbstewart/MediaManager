@@ -524,4 +524,56 @@ internal class ProfileHttpServiceTest : ArmeriaTestBase() {
         assertEquals(HttpStatus.OK, statusOf(resp))
         assertEquals(0, UserTitleFlagService.getHiddenTitleIdsForUser(admin.id!!).size)
     }
+
+    // ---------------------- deleteAccount ----------------------
+
+    private fun deleteAccount(user: AppUser?, body: String) = service.deleteAccount(
+        ctxFor("/api/v2/profile/delete-account", method = HttpMethod.POST, user = user, jsonBody = body)
+    )
+
+    @Test
+    fun `deleteAccount returns 401 unauthenticated`() {
+        assertEquals(HttpStatus.UNAUTHORIZED, statusOf(deleteAccount(null, "{}")))
+    }
+
+    @Test
+    fun `deleteAccount returns 400 without a password`() {
+        val viewer = getOrCreateUser("viewer", level = 1)
+        assertEquals(HttpStatus.BAD_REQUEST, statusOf(deleteAccount(viewer, "{}")))
+        assertNotNull(AppUser.findById(viewer.id!!))
+    }
+
+    @Test
+    fun `deleteAccount reports ok=false on a wrong password and keeps the account`() {
+        val viewer = getOrCreateUser("viewer", level = 1)
+        val body = readJsonObject(deleteAccount(viewer, """{"current_password": "wrong-pw"}"""))
+        assertEquals(false, body.get("ok").asBoolean)
+        assertNotNull(AppUser.findById(viewer.id!!))
+    }
+
+    @Test
+    fun `deleteAccount refuses the last admin with the explanation`() {
+        val admin = getOrCreateUser("admin", level = 2)
+        val body = readJsonObject(deleteAccount(admin, """{"current_password": "Test1234!@#"}"""))
+        assertEquals(false, body.get("ok").asBoolean)
+        assertEquals(
+            net.stewart.mediamanager.service.AccountDeletionService.LAST_ADMIN_MESSAGE,
+            body.get("error").asString,
+        )
+        assertNotNull(AppUser.findById(admin.id!!))
+    }
+
+    @Test
+    fun `deleteAccount deletes the caller and expires the session cookie`() {
+        getOrCreateUser("admin", level = 2)
+        val viewer = getOrCreateUser("viewer", level = 1)
+        val resp = deleteAccount(viewer, """{"current_password": "Test1234!@#"}""")
+        val agg = resp.aggregate().get()
+        assertEquals(HttpStatus.OK, agg.status())
+        assertTrue(agg.contentUtf8().contains("\"ok\":true"))
+        val setCookie = agg.headers().getAll("set-cookie").joinToString("\n")
+        assertTrue(setCookie.contains("${net.stewart.mediamanager.service.AuthService.COOKIE_NAME}="),
+            "expected the session cookie to be expired, got: $setCookie")
+        assertNull(AppUser.findById(viewer.id!!))
+    }
 }

@@ -57,7 +57,7 @@ class TagManagementHttpService {
         if (name.isBlank()) return badRequest("name required")
         if (!TagService.isNameUnique(name)) return jsonResponse(gson.toJson(mapOf("ok" to false, "error" to "Name already exists")))
 
-        val tag = TagService.createTag(name, bgColor, user.id)
+        val tag = TagService.createTag(name, bgColor)
         return jsonResponse(gson.toJson(mapOf("ok" to true, "id" to tag.id)))
     }
 

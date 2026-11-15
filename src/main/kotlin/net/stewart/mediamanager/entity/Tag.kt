@@ -10,7 +10,6 @@ data class Tag(
     var bg_color: String = "#6B7280",
     var source_type: String = TagSourceType.MANUAL.name,
     var source_key: String? = null,
-    var created_by: Long? = null,
     var created_at: LocalDateTime? = null
 ) : KEntity<Long> {
     companion object : Dao<Tag, Long>(Tag::class.java)

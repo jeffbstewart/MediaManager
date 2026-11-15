@@ -9,7 +9,6 @@ import java.time.LocalDateTime
 @Table("amazon_order")
 data class AmazonOrder(
     override var id: Long? = null,
-    var user_id: Long = 0,
     var order_id: String = "",
     var asin: String = "",
     var product_name: String = "",

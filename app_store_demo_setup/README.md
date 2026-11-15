@@ -161,6 +161,23 @@ document "logged in as `viewer`" without exposing real-looking
 credentials. Copy `secrets/example.env` to `secrets/.env` and fill
 in values once.
 
+### Account deletion during review
+
+The app lets a signed-in user delete their own account (Guideline
+5.1.1(v); `ProfileService/DeleteAccount`). Reviewers get both an
+admin (`reviewer-admin`) and viewers, and the demo server keeps its
+own `admin` that is never shared, so a reviewer can never reach the
+one refusal: the server will not delete its last administrator.
+Paste this into App Store Connect's notes for review:
+
+> To try account deletion, sign in as reviewer-admin, create a
+> throwaway user from the admin user-management screen, sign in as
+> that user, and delete it from its profile. If you delete the reviewer
+> viewer account instead, reviewer-admin can recreate it the same way.
+
+After a review window, re-run `seed-users` to restore any shared
+account a reviewer deleted.
+
 ## Why a Kotlin tool, not shell scripts
 
 This started as `bash` scripts. Killed by the realization that
