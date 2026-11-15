@@ -224,6 +224,14 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
         val configKeys = AppConfig.findAll().map { it.config_key }.toSet()
         assertTrue(LegalRequirements.PRIVACY_POLICY_URL_KEY in configKeys)
         assertTrue(LegalRequirements.WEB_TERMS_OF_USE_URL_KEY in configKeys)
+        // Every platform is seeded, not only the web: a platform left at
+        // version 0 beside one at version 1 locks its users out.
+        val config = AppConfig.findAll().associate { it.config_key to it.config_val }
+        assertTrue(LegalRequirements.violations(config).isEmpty(),
+            "setup must leave a complete legal configuration: $config")
+        assertEquals("1", config[LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY])
+        assertEquals("1", config[LegalRequirements.ANDROID_TV_TERMS_OF_USE_VERSION_KEY])
+        assertEquals("about:blank", config[LegalRequirements.IOS_TERMS_OF_USE_URL_KEY])
     }
 
     @Test

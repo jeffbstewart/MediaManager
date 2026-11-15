@@ -54,6 +54,35 @@ test.describe('admin settings — save', () => {
     await page.locator('app-settings .save-row button').first().click();
     await req;
   });
+
+  test('a refused save shows the server\'s reason and keeps the edits', async ({ page }) => {
+    await setup(page);
+    // The server refuses an incomplete legal setup with a 400 that names
+    // the fields. Registered after setup(), so it wins for POST.
+    const REASON = 'iOS Terms of Use URL is required (about:blank if there is no document). ' +
+      'iOS Terms of Use Version must be 1 or more.';
+    await page.route('**/api/v2/admin/settings', r => {
+      if (r.request().method() === 'POST') {
+        return r.fulfill({ status: 400, json: { error: REASON } });
+      }
+      return r.fallback();
+    });
+
+    await page.locator('app-settings input[aria-label="Privacy Policy Version"]').fill('1');
+    await page.locator('app-settings .save-row button').first().click();
+
+    const alert = page.locator('app-settings .save-row [role="alert"]');
+    await expect(alert).toContainText('Not saved.');
+    await expect(alert).toContainText('iOS Terms of Use URL is required');
+    // Nothing was saved: the form is still dirty and says so.
+    await expect(page.locator('app-settings .dirty-label')).toBeVisible();
+    await expect(page.locator('app-settings .saved-label')).toHaveCount(0);
+    await expect(page.locator('app-settings input[aria-label="Privacy Policy Version"]')).toHaveValue('1');
+
+    // Editing a field clears the stale message.
+    await page.locator('app-settings input[aria-label="iOS Terms of Use URL"]').fill('about:blank');
+    await expect(alert).toHaveCount(0);
+  });
 });
 
 test.describe('admin settings — buddy keys', () => {

@@ -104,15 +104,76 @@ class AdminGrpcServiceSettingsAndExpansionsTest : GrpcTestBase() {
         val authed = authenticatedChannel(admin)
         try {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
-            // Confirm starting state — version 0.
-            assertEquals(0, LegalRequirements.privacyPolicyVersion)
+            // Confirm starting state: nothing configured.
+            assertNull(LegalRequirements.privacyPolicyUrl)
 
             stub.updateSetting(updateSettingRequest {
-                key = SettingKey.SETTING_KEY_PRIVACY_POLICY_VERSION
-                value = "5"
+                key = SettingKey.SETTING_KEY_PRIVACY_POLICY_URL
+                value = "https://example.com/privacy"
             })
-            assertEquals(5, LegalRequirements.privacyPolicyVersion,
+            assertEquals("https://example.com/privacy", LegalRequirements.privacyPolicyUrl,
                 "LegalRequirements should auto-refresh after a legal-key update")
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `updateSetting refuses to turn legal requirements on while a platform's terms are unset`() = runBlocking {
+        val admin = createAdminUser(username = "setting-legal-incomplete")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            val ex = assertFailsWith<StatusException> {
+                stub.updateSetting(updateSettingRequest {
+                    key = SettingKey.SETTING_KEY_PRIVACY_POLICY_VERSION
+                    value = "1"
+                })
+            }
+            assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
+            assertTrue("iOS Terms of Use" in (ex.status.description ?: ""),
+                "the refusal names the fields still to fill in: ${ex.status.description}")
+            // Nothing was written.
+            assertEquals(0, LegalRequirements.privacyPolicyVersion)
+            assertTrue(AppConfig.findAll().none { it.config_key == LegalRequirements.PRIVACY_POLICY_VERSION_KEY })
+        } finally {
+            authed.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `updateSetting turns legal requirements on once every URL and terms version is set, privacy version last`() = runBlocking {
+        val admin = createAdminUser(username = "setting-legal-complete")
+        val authed = authenticatedChannel(admin)
+        try {
+            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
+            // One key per call, which is all this RPC offers. Android TV's
+            // keys are settable here too, or the setup could not be finished.
+            val steps = listOf(
+                SettingKey.SETTING_KEY_PRIVACY_POLICY_URL to "https://example.com/privacy",
+                SettingKey.SETTING_KEY_IOS_TERMS_OF_USE_URL to "https://example.com/ios",
+                SettingKey.SETTING_KEY_IOS_TERMS_OF_USE_VERSION to "1",
+                SettingKey.SETTING_KEY_WEB_TERMS_OF_USE_URL to "https://example.com/web",
+                SettingKey.SETTING_KEY_WEB_TERMS_OF_USE_VERSION to "1",
+                SettingKey.SETTING_KEY_ANDROID_TV_TERMS_OF_USE_URL to "about:blank",
+                SettingKey.SETTING_KEY_ANDROID_TV_TERMS_OF_USE_VERSION to "1",
+                SettingKey.SETTING_KEY_PRIVACY_POLICY_VERSION to "1",
+            )
+            for ((settingKey, settingValue) in steps) {
+                stub.updateSetting(updateSettingRequest { key = settingKey; value = settingValue })
+            }
+            assertEquals(1, LegalRequirements.privacyPolicyVersion)
+            assertEquals(1, LegalRequirements.androidTvTermsOfUseVersion)
+
+            // Complete now, so blanking a field is refused.
+            val ex = assertFailsWith<StatusException> {
+                stub.updateSetting(updateSettingRequest {
+                    key = SettingKey.SETTING_KEY_IOS_TERMS_OF_USE_VERSION
+                    value = "0"
+                })
+            }
+            assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
+            assertEquals(1, LegalRequirements.iosTermsOfUseVersion)
         } finally {
             authed.shutdownNow()
         }

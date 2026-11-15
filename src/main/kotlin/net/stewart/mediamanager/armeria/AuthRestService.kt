@@ -157,8 +157,14 @@ class AuthRestService {
 
         saveConfig(LegalRequirements.PRIVACY_POLICY_URL_KEY, privacyPolicyUrl)
         saveConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, INITIAL_LEGAL_VERSION.toString())
-        saveConfig(LegalRequirements.WEB_TERMS_OF_USE_URL_KEY, termsOfUseUrl)
-        saveConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, INITIAL_LEGAL_VERSION.toString())
+        // Every platform starts on the one terms document setup collects.
+        // Seeding only the web's left the others at version 0, an
+        // incomplete setup that locks their users out; an admin can give
+        // a platform its own document later in Settings.
+        for ((urlKey, versionKey) in LegalRequirements.TERMS_OF_USE_KEY_PAIRS) {
+            saveConfig(urlKey, termsOfUseUrl)
+            saveConfig(versionKey, INITIAL_LEGAL_VERSION.toString())
+        }
         LegalRequirements.refresh()
 
         // Record the user's agreement to the initial versions

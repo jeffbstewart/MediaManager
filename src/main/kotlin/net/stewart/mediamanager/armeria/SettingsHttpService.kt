@@ -89,6 +89,11 @@ class SettingsHttpService {
         @Suppress("UNCHECKED_CAST")
         val settings = gson.fromJson(body, Map::class.java) as Map<String, String?>
 
+        // Checked before anything is written, so a refused save changes
+        // nothing: an incomplete legal setup locks users out.
+        LegalRequirements.rejectionFor(settings.filterKeys { it in LegalRequirements.CONFIG_KEYS })
+            ?.let { problems -> return badRequest(problems.joinToString(". ") { it.message } + ".") }
+
         for ((key, value) in settings) {
             if (key !in configKeys) continue
             if (isDocker && key in listOf("nas_root_path", "ffmpeg_path")) continue

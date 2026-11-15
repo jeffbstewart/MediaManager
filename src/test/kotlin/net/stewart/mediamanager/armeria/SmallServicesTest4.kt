@@ -20,6 +20,7 @@ import net.stewart.mediamanager.entity.TagSourceType
 import net.stewart.mediamanager.entity.Title
 import net.stewart.mediamanager.entity.TitleTag
 import net.stewart.mediamanager.entity.Transcode
+import net.stewart.mediamanager.service.LegalRequirements
 import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
@@ -228,6 +229,73 @@ internal class SettingsHttpServiceTest : ArmeriaTestBase() {
     // saveSettings expects body with key→string entries; skipping the
     // happy path here — covered indirectly by the gRPC AdminGrpcService
     // settings tests.
+
+    // ---------------------- legal settings: complete or off ----------------------
+
+    private val completeLegal = mapOf(
+        LegalRequirements.PRIVACY_POLICY_URL_KEY to "https://example.com/privacy",
+        LegalRequirements.PRIVACY_POLICY_VERSION_KEY to "1",
+        LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "https://example.com/ios",
+        LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY to "1",
+        LegalRequirements.WEB_TERMS_OF_USE_URL_KEY to "https://example.com/web",
+        LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY to "1",
+        LegalRequirements.ANDROID_TV_TERMS_OF_USE_URL_KEY to "about:blank",
+        LegalRequirements.ANDROID_TV_TERMS_OF_USE_VERSION_KEY to "1",
+    )
+
+    private fun save(settings: Map<String, String>): HttpResponse =
+        service.saveSettings(ctxFor("/api/v2/admin/settings", method = HttpMethod.POST,
+            user = getOrCreateUser("admin", level = 2),
+            jsonBody = com.google.gson.Gson().toJson(settings)))
+
+    @Test
+    fun `saveSettings refuses a legal setup with a platform left unset and writes nothing`() {
+        // What locked iOS users out: privacy policy and web terms set, the
+        // iOS fields left empty. An unrelated field rides along, as it
+        // does from the settings form, and must not be saved either.
+        val incomplete = completeLegal +
+            mapOf(LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "",
+                LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY to "",
+                "books_root_path" to "/media/books")
+        val resp = save(incomplete).aggregate().join()
+        assertEquals(HttpStatus.BAD_REQUEST, resp.status())
+        val error = resp.contentUtf8()
+        assertTrue("iOS Terms of Use URL" in error && "iOS Terms of Use Version" in error,
+            "the refusal names both fields: $error")
+        assertTrue(AppConfig.findAll().isEmpty(), "a refused save changes nothing")
+        LegalRequirements.refresh()
+        assertEquals(0, LegalRequirements.privacyPolicyVersion)
+    }
+
+    @Test
+    fun `saveSettings accepts a complete legal setup, about-blank included`() {
+        assertEquals(HttpStatus.OK, statusOf(save(completeLegal)))
+        assertEquals(1, LegalRequirements.privacyPolicyVersion)
+        assertEquals(1, LegalRequirements.iosTermsOfUseVersion)
+        assertEquals(1, LegalRequirements.androidTvTermsOfUseVersion)
+        assertEquals("about:blank", LegalRequirements.androidTvTermsOfUseUrl)
+        AppConfig.deleteAll()
+        LegalRequirements.refresh()
+    }
+
+    @Test
+    fun `saveSettings does not block an unrelated setting on a database that is already incomplete`() {
+        // An older database, written before the check existed.
+        val stored = completeLegal - LegalRequirements.IOS_TERMS_OF_USE_URL_KEY -
+            LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY
+        for ((key, value) in stored) AppConfig(config_key = key, config_val = value).save()
+
+        // The form posts every field back, the legal ones unchanged.
+        val resp = save(stored + mapOf(
+            LegalRequirements.IOS_TERMS_OF_USE_URL_KEY to "",
+            LegalRequirements.IOS_TERMS_OF_USE_VERSION_KEY to "",
+            "books_root_path" to "/media/books"))
+        assertEquals(HttpStatus.OK, statusOf(resp))
+        assertEquals("/media/books",
+            AppConfig.findAll().single { it.config_key == "books_root_path" }.config_val)
+        AppConfig.deleteAll()
+        LegalRequirements.refresh()
+    }
 }
 
 internal class CameraSettingsHttpServiceTest : ArmeriaTestBase() {

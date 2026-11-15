@@ -19,6 +19,9 @@
           } @else if (isDirty()) {
             <span class="dirty-label"><mat-icon>edit</mat-icon> Unsaved changes</span>
           }
+          @if (saveError()) {
+            <span class="save-error" role="alert"><mat-icon>error</mat-icon> Not saved. {{ saveError() }}</span>
+          }
         </div>
 
         <!-- Basic Configuration -->
@@ -172,7 +175,7 @@
 
         <!-- Legal Documents -->
         <h3>Legal Documents</h3>
-        <span class="section-desc">Privacy policy and terms of use URLs shown during login. Bumping a version invalidates all sessions.</span>
+        <span class="section-desc">Privacy policy and terms of use URLs shown during login. Bumping a version invalidates all sessions. Once the privacy policy has a version, every platform needs a terms URL and a version of 1 or more. Enter about:blank for a platform with no document.</span>
         <div class="field-group">
           <label class="field-label">Privacy Policy URL</label>
           <input class="field-input" type="url" [value]="settings()['privacy_policy_url']"

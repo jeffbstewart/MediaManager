@@ -104,6 +104,15 @@ h3 {
   mat-icon { font-size: 18px; width: 18px; height: 18px; color: #f57c00; }
 }
 
+// Why a save was refused. Text keeps the normal ink so it meets contrast;
+// the icon carries the error color. Takes the rest of the row and wraps.
+.save-error {
+  display: flex; align-items: flex-start; gap: 0.25rem;
+  flex: 1 1 16rem; min-width: 0;
+  color: var(--mat-sys-on-surface); font-size: 0.875rem;
+  mat-icon { flex: none; font-size: 18px; width: 18px; height: 18px; color: var(--mat-sys-error); }
+}
+
 // Modal
 .modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
