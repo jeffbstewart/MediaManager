@@ -695,8 +695,8 @@ public final class OnlineDataModel: DataModel {
         return AdminUserListResponse(proto: response)
     }
 
-    public func createUser(username: String, password: String, accessLevel: Int) async throws {
-        try await grpcClient.adminCreateUser(username: username, password: password)
+    public func createUser(username: String, password: String, forceChange: Bool) async throws {
+        try await grpcClient.adminCreateUser(username: username, password: password, forceChange: forceChange)
     }
 
     public func updateUserRole(id: UserID, accessLevel: Int) async throws {
@@ -715,8 +715,8 @@ public final class OnlineDataModel: DataModel {
         try await grpcClient.adminForcePasswordChange(id: id.protoValue)
     }
 
-    public func resetPassword(id: UserID, newPassword: String) async throws {
-        try await grpcClient.adminResetPassword(id: id.protoValue, newPassword: newPassword)
+    public func resetPassword(id: UserID, newPassword: String, forceChange: Bool) async throws {
+        try await grpcClient.adminResetPassword(id: id.protoValue, newPassword: newPassword, forceChange: forceChange)
     }
 
     public func deleteUser(id: UserID) async throws {

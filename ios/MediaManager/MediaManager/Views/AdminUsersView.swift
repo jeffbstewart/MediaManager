@@ -398,7 +398,7 @@ struct AdminResetPasswordView: View {
         saving = true
         error = nil
         do {
-            try await dataModel.resetPassword(id: user.id, newPassword: newPassword)
+            try await dataModel.resetPassword(id: user.id, newPassword: newPassword, forceChange: forceChange)
             await onComplete()
             dismiss()
         } catch {
@@ -472,7 +472,7 @@ struct AdminCreateUserView: View {
         saving = true
         error = nil
         do {
-            try await dataModel.createUser(username: username, password: password, accessLevel: 1)
+            try await dataModel.createUser(username: username, password: password, forceChange: forceChange)
             await onComplete()
             dismiss()
         } catch {

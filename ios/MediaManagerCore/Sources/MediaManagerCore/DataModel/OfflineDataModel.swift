@@ -827,12 +827,12 @@ public final class OfflineDataModel: DataModel {
     public func purchaseWishes() async throws -> AdminPurchaseWishListResponse { throw DataModelError.offline }
     public func updatePurchaseWishStatus(tmdbId: TmdbID, mediaType: MediaType, seasonNumber: Int?, status: AcquisitionStatus) async throws { throw DataModelError.offline }
     public func adminUsers() async throws -> AdminUserListResponse { throw DataModelError.offline }
-    public func createUser(username: String, password: String, accessLevel: Int) async throws { throw DataModelError.offline }
+    public func createUser(username: String, password: String, forceChange: Bool) async throws { throw DataModelError.offline }
     public func updateUserRole(id: UserID, accessLevel: Int) async throws { throw DataModelError.offline }
     public func updateUserRatingCeiling(id: UserID, ceiling: Int?) async throws { throw DataModelError.offline }
     public func unlockUser(id: UserID) async throws { throw DataModelError.offline }
     public func forcePasswordChange(id: UserID) async throws { throw DataModelError.offline }
-    public func resetPassword(id: UserID, newPassword: String) async throws { throw DataModelError.offline }
+    public func resetPassword(id: UserID, newPassword: String, forceChange: Bool) async throws { throw DataModelError.offline }
     public func deleteUser(id: UserID) async throws { throw DataModelError.offline }
     public func unmatchedFiles() async throws -> AdminUnmatchedResponse { throw DataModelError.offline }
     public func acceptUnmatched(id: UnmatchedFileID) async throws { throw DataModelError.offline }
