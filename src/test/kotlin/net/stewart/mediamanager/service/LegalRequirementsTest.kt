@@ -129,7 +129,7 @@ class LegalRequirementsTest {
     @Test
     fun `isCompliant returns true when no versions are configured`() {
         // privacyPolicyVersion=0 means "not configured" — everyone is compliant.
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x").apply { save() }
+        val u = AppUser(username = "u", password_hash = "x").apply { save() }
         assertTrue(LegalRequirements.isCompliant(u.id!!, isAdmin = false))
     }
 
@@ -139,7 +139,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, "2")
         LegalRequirements.refresh()
 
-        val admin = AppUser(username = "a", display_name = "A", password_hash = "x",
+        val admin = AppUser(username = "a", password_hash = "x",
             access_level = AppUser.ACCESS_LEVEL_ADMIN).apply { save() }
         // Admin has agreed to nothing, but is still compliant.
         assertTrue(LegalRequirements.isCompliant(admin.id!!, isAdmin = true))
@@ -150,7 +150,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, "3")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x",
+        val u = AppUser(username = "u", password_hash = "x",
             privacy_policy_version = null).apply { save() }
         assertFalse(LegalRequirements.isCompliant(u.id!!, isAdmin = false),
             "null agreed PP version is non-compliant")
@@ -168,7 +168,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, "2")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x",
+        val u = AppUser(username = "u", password_hash = "x",
             privacy_policy_version = 3, terms_of_use_version = 2).apply { save() }
         assertTrue(LegalRequirements.isCompliant(u.id!!, isAdmin = false,
             requiredTou = 2))
@@ -179,7 +179,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, "3")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x",
+        val u = AppUser(username = "u", password_hash = "x",
             privacy_policy_version = 3, terms_of_use_version = 1).apply { save() }
         assertFalse(LegalRequirements.isCompliant(u.id!!, isAdmin = false,
             requiredTou = 2))
@@ -204,7 +204,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.WEB_TERMS_OF_USE_VERSION_KEY, "2")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x").apply { save() }
+        val u = AppUser(username = "u", password_hash = "x").apply { save() }
         // First call seeds the cache from the DB (null, null) -> non-compliant.
         assertFalse(LegalRequirements.isCompliant(u.id!!, isAdmin = false, requiredTou = 2))
 
@@ -219,7 +219,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, "3")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x",
+        val u = AppUser(username = "u", password_hash = "x",
             privacy_policy_version = 3).apply { save() }
         assertTrue(LegalRequirements.isCompliant(u.id!!, isAdmin = false))
 
@@ -238,7 +238,7 @@ class LegalRequirementsTest {
         setConfig(LegalRequirements.PRIVACY_POLICY_VERSION_KEY, "3")
         LegalRequirements.refresh()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x",
+        val u = AppUser(username = "u", password_hash = "x",
             privacy_policy_version = 3).apply { save() }
         assertTrue(LegalRequirements.isCompliant(u.id!!, isAdmin = false))
 

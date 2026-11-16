@@ -49,7 +49,6 @@ class JwtServiceTest {
         AppUser.deleteAll()
         user = AppUser(
             username = "testuser",
-            display_name = "Test User",
             password_hash = "x",
             access_level = AppUser.ACCESS_LEVEL_VIEWER
         )

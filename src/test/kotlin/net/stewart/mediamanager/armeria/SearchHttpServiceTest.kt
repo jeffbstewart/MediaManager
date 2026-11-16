@@ -63,7 +63,6 @@ class SearchHttpServiceTest {
         AppUser.findAll().firstOrNull { it.username == "searchtest-admin" }
             ?: AppUser(
                 username = "searchtest-admin",
-                display_name = "Search Test",
                 password_hash = "x",
                 access_level = AppUser.ACCESS_LEVEL_ADMIN,
                 created_at = LocalDateTime.now(),

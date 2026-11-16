@@ -71,9 +71,9 @@ class PlaybackProgressServiceTest {
         Title.deleteAll()
         AppUser.deleteAll()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x")
+        val u = AppUser(username = "u", password_hash = "x")
         u.save(); userId = u.id!!
-        val o = AppUser(username = "o", display_name = "O", password_hash = "x")
+        val o = AppUser(username = "o", password_hash = "x")
         o.save(); otherUserId = o.id!!
 
         val movie = Title(

@@ -70,11 +70,11 @@ class PlaylistServiceTest {
 
         val now = LocalDateTime.now()
         alice = AppUser(
-            username = "alice", display_name = "Alice", password_hash = "x",
+            username = "alice", password_hash = "x",
             access_level = AppUser.ACCESS_LEVEL_ADMIN, created_at = now, updated_at = now
         ).also { it.save() }
         bob = AppUser(
-            username = "bob", display_name = "Bob", password_hash = "x",
+            username = "bob", password_hash = "x",
             access_level = AppUser.ACCESS_LEVEL_ADMIN, created_at = now, updated_at = now
         ).also { it.save() }
 

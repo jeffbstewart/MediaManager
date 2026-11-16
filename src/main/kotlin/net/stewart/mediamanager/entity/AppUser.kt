@@ -9,7 +9,6 @@ import java.time.LocalDateTime
 data class AppUser(
     override var id: Long? = null,
     var username: String = "",
-    var display_name: String = "",
     var password_hash: String = "",
     var access_level: Int = ACCESS_LEVEL_VIEWER,
     var rating_ceiling: Int? = null,

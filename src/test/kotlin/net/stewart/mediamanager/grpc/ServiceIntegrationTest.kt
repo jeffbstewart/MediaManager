@@ -171,7 +171,6 @@ class ServiceIntegrationTest : GrpcTestBase() {
             val createResp = stub.createUser(createUserRequest {
                 username = "newuser"
                 password = "NewUser1234!@#\$"
-                displayName = "New User"
                 forceChange = true
             })
             assertEquals("newuser", createResp.username)

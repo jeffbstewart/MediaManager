@@ -67,9 +67,9 @@ message LegalDocumentInfo {
 message ServerUserInfo {
   int64 id = 1;
   string username = 2;
-  // Never set since #29: accounts have only a username. Kept so older
-  // clients still parse; reserve once no supported client reads it.
-  optional string display_name = 3;
+  // Was display_name (#29): accounts have only a username.
+  reserved 3;
+  reserved "display_name";
   bool is_admin = 4;
 }
 

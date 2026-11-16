@@ -108,7 +108,7 @@ internal abstract class RokuServiceTestBase {
     protected fun seedUser(username: String = "viewer", level: Int = 1): AppUser {
         val now = LocalDateTime.now()
         return AppUser(
-            username = username, display_name = username,
+            username = username,
             password_hash = "x", access_level = level,
             created_at = now, updated_at = now,
         ).apply { save() }

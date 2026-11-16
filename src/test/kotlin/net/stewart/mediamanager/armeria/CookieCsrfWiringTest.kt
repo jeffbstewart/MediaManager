@@ -49,7 +49,7 @@ class CookieCsrfWiringTest {
 
             val now = LocalDateTime.now()
             val user = AppUser(
-                username = "csrf-viewer", display_name = "csrf-viewer",
+                username = "csrf-viewer",
                 password_hash = PasswordService.hash("Test1234!@#"),
                 access_level = AppUser.ACCESS_LEVEL_VIEWER, created_at = now, updated_at = now,
             ).apply { save() }

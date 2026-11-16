@@ -120,7 +120,7 @@ abstract class ArmeriaTestBase {
         if (existing != null) return existing
         val now = LocalDateTime.now()
         return AppUser(
-            username = username, display_name = username,
+            username = username,
             password_hash = PasswordService.hash("Test1234!@#"),
             access_level = level,
             created_at = now, updated_at = now,

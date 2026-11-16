@@ -78,7 +78,6 @@ class AuthServiceTest {
 
         val u = AppUser(
             username = "alice",
-            display_name = "Alice",
             password_hash = hashedPassword,
             access_level = AppUser.ACCESS_LEVEL_ADMIN
         )
@@ -402,7 +401,7 @@ class AuthServiceTest {
         val tokenIds = SessionToken.findAll().map { it.id!! }
 
         // Different caller — refused.
-        val otherUserId = AppUser(username = "bob", display_name = "Bob",
+        val otherUserId = AppUser(username = "bob",
             password_hash = "x").apply { save() }.id!!
         assertFalse(AuthService.revokeSession(tokenIds[0], otherUserId, currentTokenHash = null))
 
@@ -451,7 +450,7 @@ class AuthServiceTest {
         AuthService.createSession(user, "a")
         AuthService.createSession(user, "b")
         // Other user's token should be untouched.
-        val otherUserId = AppUser(username = "bob", display_name = "Bob",
+        val otherUserId = AppUser(username = "bob",
             password_hash = "x").apply { save() }.id!!
         SessionToken(user_id = otherUserId, token_hash = "h", user_agent = "ua",
             expires_at = LocalDateTime.now().plusDays(1)).save()
@@ -496,8 +495,8 @@ class AuthServiceTest {
     @Test
     fun `countAdmins counts users at access_level 2 and above`() {
         // One admin from setup. Add a viewer + another admin.
-        AppUser(username = "v", display_name = "V", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER).save()
-        AppUser(username = "a2", display_name = "A2", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_ADMIN).save()
+        AppUser(username = "v", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER).save()
+        AppUser(username = "a2", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_ADMIN).save()
         assertEquals(2L, AuthService.countAdmins())
     }
 

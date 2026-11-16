@@ -832,7 +832,6 @@ Reuses M7's similar-artist cache to surface a **Discover** page &mdash; for each
 
 ### Per-User Settings
 
-- **Display name** &mdash; Shown in the profile menu and session list
 - **Content rating ceiling** &mdash; Maximum MPAA/TV rating this user can see (e.g., PG-13 hides R and NC-17 titles)
 - **Subtitles** &mdash; Default subtitle preference for browser and Roku playback
 

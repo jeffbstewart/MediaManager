@@ -70,7 +70,7 @@ Or click **Deploy the stack** in Portainer.
 
 ### 4. Create your admin account
 
-Open **http://your-host:9090**. On first launch, you're redirected to the setup page. Create your admin account (username, display name, password). This account has full access to all features.
+Open **http://your-host:9090**. On first launch, you're redirected to the setup page. Create your admin account (username and password). This account has full access to all features.
 
 > **Networking note:** The server binds gRPC, HTTP, and the Angular SPA on a single port (default 9090) via Armeria. In production, terminate TLS at a reverse proxy that supports HTTP/2 end-to-end (HAProxy works well; the DSM built-in nginx proxy does **not** support gRPC). Port 8081 is an internal-only port that serves `/health` and `/metrics`; don't expose it on the internet.
 

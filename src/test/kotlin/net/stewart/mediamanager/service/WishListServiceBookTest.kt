@@ -54,7 +54,7 @@ class WishListServiceBookTest {
         Author.deleteAll()
         AppUser.deleteAll()
 
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER)
+        val u = AppUser(username = "u", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER)
         u.save()
         userId = u.id!!
     }

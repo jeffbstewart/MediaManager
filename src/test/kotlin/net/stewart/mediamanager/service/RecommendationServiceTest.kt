@@ -114,7 +114,6 @@ class RecommendationServiceTest {
 
         user = AppUser(
             username = "rectestuser",
-            display_name = "Rec Test",
             password_hash = "x",
             access_level = AppUser.ACCESS_LEVEL_ADMIN,
             created_at = now, updated_at = now
