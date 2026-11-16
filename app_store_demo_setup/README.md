@@ -149,12 +149,12 @@ To go further and also clear the media library, pass `--full`:
 
 ## Test user accounts (from `fixtures/users.tsv`)
 
-| username | role | display_name | rating ceiling | purpose |
-|---|---|---|---|---|
-| `admin` | admin | Test Admin | none | catalog management screenshots |
-| `viewer` | viewer | Sample Viewer | none | populated library, watch history |
-| `kid` | viewer | Kid Account | PG-13 | content-rating-gate screenshots |
-| `empty` | viewer | New User | none | empty-state screenshots |
+| username | role | rating ceiling | purpose |
+|---|---|---|---|
+| `admin` | admin | none | catalog management screenshots |
+| `viewer` | viewer | none | populated library, watch history |
+| `kid` | viewer | PG-13 | content-rating-gate screenshots |
+| `empty` | viewer | none | empty-state screenshots |
 
 Passwords live in `secrets/.env` (gitignored). The repo can
 document "logged in as `viewer`" without exposing real-looking
