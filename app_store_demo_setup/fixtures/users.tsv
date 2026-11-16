@@ -6,11 +6,6 @@
 #   username         Bare username (NOT an email — the auth layer
 #                    accepts plain usernames intentionally).
 #   role             "admin" or "viewer".
-#   display_name     Shown in the profile / Now Playing surfaces.
-#                    Currently unused by the user-create endpoint
-#                    (server stamps "TOBEREMOVED" until display_name
-#                    is removed from the schema entirely); kept here
-#                    for future use.
 #   rating_ceiling   Ordinal level (0–6) per ContentRating.ceiling
 #                    Choices: 0=TV-Y, 1=TV-Y7, 2=G/TV-G, 3=PG/TV-PG,
 #                    4=PG-13/TV-14, 5=R/TV-MA, 6=NC-17.
@@ -36,10 +31,10 @@
 # their terms_of_use_accepted_at stays NULL so the ToS dialog still
 # appears.
 #
-username	role	display_name	rating_ceiling	password_env
-viewer	viewer	Sample Viewer		DEMO_VIEWER_PASSWORD
-kid	viewer	Kid Account	4	DEMO_KID_PASSWORD
-empty	viewer	New User		DEMO_EMPTY_PASSWORD
-reviewer-admin	admin	App Review Admin		DEMO_REVIEWER_ADMIN_PASSWORD
-reviewer	viewer	App Review Viewer		DEMO_REVIEWER_PASSWORD
-reviewer-kid	viewer	App Review Kid	0	DEMO_REVIEWER_KID_PASSWORD
+username	role	rating_ceiling	password_env
+viewer	viewer		DEMO_VIEWER_PASSWORD
+kid	viewer	4	DEMO_KID_PASSWORD
+empty	viewer		DEMO_EMPTY_PASSWORD
+reviewer-admin	admin		DEMO_REVIEWER_ADMIN_PASSWORD
+reviewer	viewer		DEMO_REVIEWER_PASSWORD
+reviewer-kid	viewer	0	DEMO_REVIEWER_KID_PASSWORD
