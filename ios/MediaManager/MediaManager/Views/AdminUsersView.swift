@@ -94,7 +94,12 @@ struct AdminUsersView: View {
             Text(error ?? "")
         }
         .sheet(item: $selectedUser) { user in
-            AdminUserDetailView(user: user) { await loadUsers() }
+            // The sheet refreshes its own copy after each change: reload
+            // the list, then hand back this user's new state.
+            AdminUserDetailView(user: user) {
+                await loadUsers()
+                return users.first { $0.id == user.id }
+            }
         }
         .sheet(isPresented: $showCreateUser) {
             AdminCreateUserView { await loadUsers() }
@@ -118,8 +123,24 @@ struct AdminUsersView: View {
 struct AdminUserDetailView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(\.dismiss) private var dismiss
-    let user: AdminUser
-    let onComplete: () async -> Void
+    /// This sheet's copy of the user, replaced after every change. It
+    /// used to be a `let` taken when the sheet opened, so after
+    /// Promote the Role row still said Viewer and the button still
+    /// offered Promote until the sheet was reopened.
+    @State private var user: AdminUser
+    /// Reloads the users list and returns this user's current state,
+    /// or nil if they are gone.
+    let refresh: () async -> AdminUser?
+
+    init(user: AdminUser, refresh: @escaping () async -> AdminUser?) {
+        _user = State(initialValue: user)
+        self.refresh = refresh
+    }
+
+    /// After a change: pick up the server's view of the user.
+    private func onComplete() async {
+        if let fresh = await refresh() { user = fresh }
+    }
 
     @State private var showResetPassword = false
     @State private var showDeleteConfirm = false
@@ -143,7 +164,7 @@ struct AdminUserDetailView: View {
                 Section(header: MMSectionHeader("Account")) {
                     LabeledContent("Username", value: user.username)
                     LabeledContent("Role", value: user.isAdmin ? "Admin" : "Viewer")
-                    LabeledContent("Rating Limit", value: user.ratingCeilingLabel ?? "Unrestricted")
+                    LabeledContent("Rating Limit", value: ratingLimitLabel)
                     if user.locked {
                         LabeledContent("Status", value: "Locked")
                             .foregroundStyle(MarqueeTheme.Colors.pink)
@@ -268,13 +289,22 @@ struct AdminUserDetailView: View {
         }
     }
 
+    /// The Rating Limit row, from the same table as the checkmarks.
+    /// `AdminUser.ratingCeilingLabel` is always nil (the proto has no
+    /// label), which left this row reading "Unrestricted" whatever the
+    /// limit was.
+    private var ratingLimitLabel: String {
+        ratingOptions.first { $0.value == user.ratingCeiling }?.label ?? "Unrestricted"
+    }
+
     private func toggleRole() async {
         error = nil
-        let newLevel = user.isAdmin ? 1 : 2
+        // Decided before the refresh, which flips `user.isAdmin`.
+        let promoting = !user.isAdmin
         do {
-            try await dataModel.updateUserRole(id: user.id, accessLevel: newLevel)
+            try await dataModel.updateUserRole(id: user.id, accessLevel: promoting ? 2 : 1)
             await onComplete()
-            showSuccess(user.isAdmin ? "Demoted to Viewer" : "Promoted to Admin")
+            showSuccess(promoting ? "Promoted to Admin" : "Demoted to Viewer")
         } catch {
             self.error = error.localizedDescription
         }
