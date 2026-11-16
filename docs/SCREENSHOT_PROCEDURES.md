@@ -94,22 +94,21 @@ fine at that width even though their intrinsic height is much taller.
 App Store Connect takes 1 to 10 screenshots per device size, PNG or
 JPEG with no transparency, at sizes it lists per device class
 ([screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications),
-read 2026-11-13). The capture uses the newest simulator in each class:
+read 2026-11-13). The capture covers the three slots App Store Connect
+shows for this app (2026-11-16); the Apple Watch slot is unused:
 
-| Device | Size | App Store Connect class |
-|--------|------|-------------------------|
-| iPhone 18 Pro Max | 1320x2868 | iPhone with Dynamic Island, large display |
+| Device | Size | App Store Connect slot |
+|--------|------|------------------------|
 | iPhone 18 Pro | 1206x2622 | iPhone with Dynamic Island, medium display |
-| iPad Pro 13-inch (M5) | 2064x2752 | iPad 13" display (required when the app runs on iPad) |
 | iPhone Duo, outer display | 1398x2034 | iPhone Duo |
+| iPhone Duo, inner display | 2853x2007 (landscape) | iPhone Duo (same slot as the outer display) |
+| iPad Pro 13-inch (M5) | 2064x2752 | iPad 13" display (required when the app runs on iPad) |
 
-The iPhone Duo's inner display (2007x2853) is not captured yet; see
-"iPhone Duo" below.
-
-Smaller and older classes are scaled from these by App Store Connect.
-Duo screenshots become required in April 2027 for apps built with the
-iOS 27.1 SDK or later. None of these sizes has yet been through a real
-submission: the app has only been on TestFlight.
+Both Duo displays go into the one iPhone Duo slot. The large iPhone
+(Pro Max, 1320x2868) is no longer captured: App Store Connect doesn't
+show it as a slot of its own, and a second iPhone set only got in the
+way of uploading. Duo screenshots become required in April 2027 for
+apps built with the iOS 27.1 SDK or later.
 
 **Driver:** `lifecycle/capture-ios-screenshots.sh [prelogin|viewer|all]`.
 It takes the server address and accounts from the environment, from
@@ -147,15 +146,38 @@ until an account agrees to them.
   book started, a playlist, a few wishes, so Home has rows to show.
 
 **iPhone Duo.** The outer display is captured like any other device.
-The inner display is not: its entry in the script's device list is
-commented out, and
-[issue #30](https://github.com/jeffbstewart/MediaManager/issues/30)
-records what was tried. In short, the simulator can only be unfolded
-by hand, with the fold control in the Device Hub window, and once it
-is unfolded the UI test still photographs the outer display. The
-simulator's own `simctl io screenshot --display=N` does capture the
-inner display, so the likely fix is to take the pictures from the
-script, cued by the test.
+The inner display can't be photographed from inside the UI test
+([issue #30](https://github.com/jeffbstewart/MediaManager/issues/30)):
+the test's screenshot is of the outer display even when unfolded. So on
+the `MM-Snap-iPhone-Duo-Inner` run the test asks and the script takes
+the picture:
+
+1. With `MM_SNAPSHOT_EXTERNAL_CAPTURE=1`, `SnapshotTests.attach(name:)`
+   writes `<name>.request` into the test runner's data container
+   (`tmp/mm-snapshot-requests`) and waits.
+2. The script, polling that folder, checks the inner display is lit
+   (by brightness: a folded display gives a black frame, whose file
+   size is no guide). If it isn't, it rings the bell, posts a macOS
+   notification and waits (up to 15 minutes) for someone to **unfold
+   the simulator with the fold control in Device Hub**. Only a person
+   can do this; unfolding while the simulator boots also works, and
+   then no prompt appears. The check runs before every shot, because
+   the fold has been seen to revert mid-run.
+3. It captures with `simctl io screenshot --display=<inner>`. Unfolded,
+   the app lays out in landscape, but simctl returns the raw 2007x2853
+   panel with the picture a quarter-turn clockwise, so the script turns
+   it back (`sips -r 270`) to an upright 2853x2007, rejects a black
+   frame, and writes `<name>.done`; the test carries on.
+
+The inner-display shots are therefore **landscape** (2853x2007), a
+choice made on 2026-11-16 and not yet confirmed by an App Store Connect
+upload; if the slot refuses them, rotate the unfolded simulator to
+portrait in Device Hub and change the rotation in
+`capture_inner_shot`. A full run needs someone at the Mac for each of
+the two inner-display runs (one per phase, each on a fresh simulator).
+There is no command to unfold the simulator: `simctl io screenConfig
+--display=<inner> power on` succeeds but leaves the display black
+(tried 2026-11-16).
 
 **Screenshot mode:** published screenshots must not name real films,
 shows, books or albums, show their artwork, or show the server's

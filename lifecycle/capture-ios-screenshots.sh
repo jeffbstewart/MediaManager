@@ -46,8 +46,12 @@
 # accounts are enough; do not use an admin account.
 #
 # iPhone Duo: the outer display is captured like any other device. The
-# inner display is not captured yet (issue #30); its entry in DEVICES
-# is commented out.
+# inner display can't be captured from inside the test (issue #30), so
+# for it the test asks and the script takes each picture from the host
+# with `simctl io screenshot --display=<inner>`. Nothing can unfold the
+# simulator but a person: before each inner shot the script checks the
+# display is lit, and if not, posts a notification and waits for you to
+# unfold it with the fold control in Device Hub.
 #
 # Prerequisites:
 #   - A reachable server and an account on it (above)
@@ -118,31 +122,28 @@ runtime_for_device_type() {
             | last.identifier // empty'
 }
 
-# Device matrix: the newest simulator in each class App Store Connect
-# asks for (developer.apple.com/help/app-store-connect/reference/
-# screenshot-specifications, read 2026-11-13).
-#   - iPhone with Dynamic Island, large display: 1320x2868.
+# Device matrix: one simulator per screenshot slot App Store Connect
+# shows for this app (2026-11-16): iPhone with Dynamic Island (medium
+# display), iPhone Duo, and iPad 13" display. The Apple Watch slot is
+# unused. Pixel sizes per developer.apple.com/help/app-store-connect/
+# reference/screenshot-specifications (read 2026-11-13):
 #   - iPhone with Dynamic Island, medium display: 1206x2622.
 #   - iPad 13" display: 2064x2752.
-# Smaller and older classes are scaled from these by App Store Connect.
-#   - iPhone Duo, outer display 1398x2034 and inner display 2007x2853
-#     (required from April 2027 for apps built with the iOS 27.1 SDK
-#     or later).
+#   - iPhone Duo: one slot for both displays, outer 1398x2034 and
+#     inner 2853x2007 landscape (required from April 2027 for apps built with
+#     the iOS 27.1 SDK or later).
+# The large iPhone (1320x2868) is no longer captured: it isn't a slot
+# of its own, and a second iPhone set only got in the way of uploading.
 # Each entry is "simulator name|device type name|option"; an exact
-# device type name wins over a partial match. The option `unfold`
-# waits for the simulator to be unfolded by hand before the test runs;
-# nothing uses it while the Duo's inner display is disabled.
+# device type name wins over a partial match. The option `inner`
+# captures the Duo's inner display from the host (see the header).
 # MM_SNAPSHOT_DEVICES, a space-separated list of simulator names,
 # limits a run to some of them.
 DEVICES=(
-    "MM-Snap-iPhone-18-Pro-Max|iPhone 18 Pro Max|"
     "MM-Snap-iPhone-18-Pro|iPhone 18 Pro|"
     "MM-Snap-iPad-Pro-13|iPad Pro 13-inch|"
     "MM-Snap-iPhone-Duo-Outer|iPhone Duo|"
-    # Disabled: the inner display cannot be captured yet (issue #30).
-    # The simulator can be unfolded by hand and `wait_for_unfold` sees
-    # it, but the test's screenshot is of the outer display.
-    # "MM-Snap-iPhone-Duo-Inner|iPhone Duo|unfold"
+    "MM-Snap-iPhone-Duo-Inner|iPhone Duo|inner"
 )
 if [ -n "${MM_SNAPSHOT_DEVICES:-}" ]; then
     SELECTED=()
@@ -155,32 +156,132 @@ fi
 # Pixel width of the Duo's inner display, used to find it among the
 # simulator's displays.
 DUO_INNER_WIDTH=2007
+DUO_INNER_HEIGHT=2853
 
-wait_for_unfold() {
-    # Blocks until the simulator's inner display shows a picture. A
-    # folded Duo reports the inner display as a black frame, which
-    # compresses to a few kilobytes; a lit one is hundreds.
-    local udid="$1" probe="$BUILD_DIR/unfold-probe.png" display size waited=0
-    display=$(xcrun simctl io "$udid" screenshot "$probe" 2>&1 \
-        | sed -nE "s/.*--display=([0-9]+) .* ${DUO_INNER_WIDTH}x[0-9]+.*/\\1/p" | head -n 1)
-    if [ -z "$display" ]; then
-        echo "    ERROR: could not find the inner display on $udid" >&2
-        return 1
-    fi
-    echo "    Waiting for the simulator to be unfolded: use the fold control in Device Hub."
+# The UI test runner's bundle id: the UI test target's id plus
+# `.xctrunner`. SnapshotTests writes capture requests into this app's
+# data container (tmp/mm-snapshot-requests).
+RUNNER_BUNDLE_ID="net.stewart.mediamanager.uitests.xctrunner"
+
+find_inner_display() {
+    # Prints the display number of the Duo's inner display. With no
+    # --display, simctl refuses (non-zero exit) and lists every display
+    # and its size, which is the point; `|| true` keeps `set -e` and
+    # pipefail from ending the script there.
+    local udid="$1"
+    { xcrun simctl io "$udid" screenshot "$BUILD_DIR/display-probe.png" 2>&1 || true; } \
+        | sed -nE "s/.*--display=([0-9]+) .* ${DUO_INNER_WIDTH}x[0-9]+.*/\\1/p" | head -n 1
+}
+
+frame_brightness() {
+    # Mean RGB value (0-255) of the image $1, from a 32px thumbnail
+    # read as BMP. Alpha is skipped: it is 255 on every pixel and would
+    # make a black frame look grey.
+    local img="$1" bmp="$BUILD_DIR/brightness-probe.bmp" off bpp
+    sips -Z 32 -s format bmp "$img" --out "$bmp" >/dev/null 2>&1 || { echo 0; return; }
+    off=$(od -An -tu4 -j 10 -N 4 "$bmp" | tr -d ' ')
+    bpp=$(od -An -tu2 -j 28 -N 2 "$bmp" | tr -d ' ')
+    od -An -tu1 -v -j "$off" "$bmp" | tr -s ' ' '\n' \
+        | awk -v c=$((bpp / 8)) 'NF { i++; if (c == 4 && i % 4 == 0) next; n++; s += $1 }
+                                END { printf "%d\n", (n ? s / n : 0) }'
+}
+
+inner_display_lit() {
+    # A folded Duo reports the inner display as a black frame. Its
+    # compressed size is no guide (about 106 KB on Xcode 27.2, against
+    # the "few kilobytes" #30 saw), so measure it: a black frame's mean
+    # brightness is 0, and the darkest real screen (the wish list) is
+    # about 36.
+    local udid="$1" display="$2" probe="$BUILD_DIR/unfold-probe.png"
+    rm -f "${probe:?}"
+    xcrun simctl io "$udid" screenshot --display="$display" "$probe" >/dev/null 2>&1 || return 1
+    [ "$(frame_brightness "$probe")" -gt 8 ]
+}
+
+wait_until_unfolded() {
+    # Returns once the inner display is lit, asking a person to unfold
+    # the simulator if it isn't. The fold has been seen to revert during
+    # a run (issue #30), so this runs before every inner shot.
+    local udid="$1" display="$2" waited=0
+    inner_display_lit "$udid" "$display" && return 0
+    echo "    >>> Unfold the iPhone Duo simulator: use the fold control in Device Hub. Waiting..."
+    printf '\a'
+    osascript -e 'display notification "Unfold the iPhone Duo simulator (fold control in Device Hub) to continue." with title "iOS screenshot capture" sound name "Glass"' \
+        >/dev/null 2>&1 || true
     while [ "$waited" -lt 900 ]; do
-        rm -f "${probe:?}"
-        xcrun simctl io "$udid" screenshot --display="$display" "$probe" >/dev/null 2>&1 || true
-        size=$(stat -f%z "$probe" 2>/dev/null || echo 0)
-        if [ "$size" -gt 100000 ]; then
-            echo "    Unfolded."
-            return 0
-        fi
         sleep 3
         waited=$((waited + 3))
+        if inner_display_lit "$udid" "$display"; then
+            echo "    Unfolded."
+            # Let the app finish redrawing for the larger display.
+            sleep 3
+            return 0
+        fi
     done
     echo "    ERROR: the simulator was not unfolded within 15 minutes" >&2
     return 1
+}
+
+capture_inner_shot() {
+    # Photographs the inner display into $3 as an upright landscape PNG
+    # (2853x2007), or fails.
+    #
+    # Unfolded, the simulator runs the inner display in landscape and the
+    # app lays out wide, but simctl hands back the raw panel: a
+    # 2007x2853 frame with the picture turned a quarter-turn clockwise.
+    # A quarter-turn back (sips -r 270) makes it upright. Landscape was
+    # chosen over rotating the simulator to portrait (2026-11-16); if App
+    # Store Connect refuses it, capture in portrait instead.
+    local udid="$1" display="$2" out="$3" w h
+    rm -f "${out:?}"
+    xcrun simctl io "$udid" screenshot --display="$display" "$out" >/dev/null 2>&1 || return 1
+    w=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
+    h=$(sips -g pixelHeight "$out" | awk '/pixelHeight/ {print $2}')
+    if [ "$w" = "$DUO_INNER_WIDTH" ] && [ "$h" = "$DUO_INNER_HEIGHT" ]; then
+        sips -r "${DUO_INNER_ROTATION:-270}" "$out" >/dev/null
+        w=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
+        h=$(sips -g pixelHeight "$out" | awk '/pixelHeight/ {print $2}')
+    fi
+    if [ "$w" != "$DUO_INNER_HEIGHT" ] || [ "$h" != "$DUO_INNER_WIDTH" ]; then
+        echo "    ERROR: inner capture is ${w}x${h}, expected ${DUO_INNER_HEIGHT}x${DUO_INNER_WIDTH}" >&2
+        return 1
+    fi
+    if [ "$(frame_brightness "$out")" -le 8 ]; then
+        echo "    ERROR: inner capture is black (the simulator folded again?)" >&2
+        return 1
+    fi
+}
+
+store_shot() {
+    # Files one captured PNG ($2, attachment stem $1) under the device's
+    # fastlane folder and, as <device>_<screen>.jpg, in the committed
+    # set it belongs to. Prints nothing; returns 1 for a stem that isn't
+    # one of ours.
+    local stem="$1" src="$2" out_device_dir="$3" device_name="$4" set_dir screen
+    # `app-store` is the set to upload, in the order listed in
+    # docs/SCREENSHOT_PROCEDURES.md; `reference` is kept for the record
+    # and not uploaded.
+    case "$stem" in
+        04-home)            set_dir=app-store; screen=home ;;
+        05-catalog-movies)  set_dir=app-store; screen=movies ;;
+        06-title-detail-tv) set_dir=app-store; screen=tv-show ;;
+        08-books)           set_dir=app-store; screen=books ;;
+        09-music)           set_dir=app-store; screen=music ;;
+        10-wish-list)       set_dir=app-store; screen=wish-list ;;
+        01-server-setup)    set_dir=app-store; screen=server-setup ;;
+        02-app-policy)      set_dir=reference; screen=app-policy ;;
+        03-login)           set_dir=reference; screen=login ;;
+        07-server-terms)    set_dir=reference; screen=server-terms ;;
+        *) return 1 ;;
+    esac
+    cp "$src" "$out_device_dir/$stem.png"
+    # The committed copy, and the one to upload: JPEG at quality 90.
+    # About a fifth the size of the PNG, which matters because git keeps
+    # every past capture forever. Uploading what is committed keeps the
+    # record and the store listing the same.
+    mkdir -p "$DOCS_ROOT/$set_dir"
+    sips -s format jpeg -s formatOptions 90 "$src" \
+        --out "$DOCS_ROOT/$set_dir/${device_name}_${screen}.jpg" >/dev/null
 }
 
 resolve_device_type() {
@@ -291,13 +392,17 @@ for run in "${RUNS[@]}"; do
     xcrun simctl status_bar "$udid" override --time "9:41" \
         --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 \
         >/dev/null 2>&1 || true
-    if [ "$option" = "unfold" ]; then
+    inner_display=""
+    if [ "$option" = "inner" ]; then
         xcrun simctl bootstatus "$udid" >/dev/null 2>&1 || true
-        if ! wait_for_unfold "$udid"; then
+        inner_display=$(find_inner_display "$udid")
+        if [ -z "$inner_display" ]; then
+            echo "    ERROR: could not find the inner display on $udid" >&2
             LEFTOVER_UDIDS+=("$udid ($sim_name)")
             OVERALL_STATUS=1
             continue
         fi
+        echo "    Inner display: $inner_display (captured from the host)"
     fi
 
     # Files are replaced by name, not the whole directory: a `viewer`
@@ -308,15 +413,21 @@ for run in "${RUNS[@]}"; do
 
     xcresult="$BUILD_DIR/$run_name.xcresult"
     rm -rf "${xcresult:?}"
+    host_shots="$BUILD_DIR/$run_name-host-shots"
+    rm -rf "${host_shots:?}"
+    mkdir -p "$host_shots"
 
     # TEST_RUNNER_* prefix instructs xcodebuild to forward the env
     # var (with the prefix stripped) to the running test process.
     # XCUITest then propagates these into the app via
     # app.launchEnvironment — see SnapshotTests.setUp.
+    external_capture=0
+    [ -n "$inner_display" ] && external_capture=1
     set +e
     TEST_RUNNER_MM_SNAPSHOT_SERVER_URL="$MM_SNAPSHOT_SERVER_URL" \
     TEST_RUNNER_MM_SNAPSHOT_USERNAME="$run_username" \
     TEST_RUNNER_MM_SNAPSHOT_PASSWORD="$run_password" \
+    TEST_RUNNER_MM_SNAPSHOT_EXTERNAL_CAPTURE="$external_capture" \
     xcodebuild \
         -project "$IOS_PROJECT" \
         -scheme MediaManager \
@@ -327,15 +438,59 @@ for run in "${RUNS[@]}"; do
         -resultBundlePath "$xcresult" \
         CODE_SIGNING_ALLOWED=NO \
         test-without-building \
-        > "$BUILD_DIR/$run_name.log" 2>&1
+        > "$BUILD_DIR/$run_name.log" 2>&1 &
+    test_pid=$!
+
+    # Inner display: answer the test's capture requests until it ends.
+    # Each request is a file in the runner's data container; the reply
+    # is the picture (kept here) and a `.done` file beside the request.
+    capture_failed=0
+    if [ -n "$inner_display" ]; then
+        while kill -0 "$test_pid" 2>/dev/null; do
+            container=$(xcrun simctl get_app_container "$udid" "$RUNNER_BUNDLE_ID" data 2>/dev/null || true)
+            req_dir="$container/tmp/mm-snapshot-requests"
+            if [ -n "$container" ] && [ -d "$req_dir" ]; then
+                for req in "$req_dir"/*.request; do
+                    [ -e "$req" ] || continue
+                    shot=$(basename "$req" .request)
+                    if ! wait_until_unfolded "$udid" "$inner_display" \
+                        || ! capture_inner_shot "$udid" "$inner_display" "$host_shots/$shot.png"; then
+                        echo "    ERROR: could not capture $shot from the inner display" >&2
+                        capture_failed=1
+                        kill "$test_pid" 2>/dev/null || true
+                        break 2
+                    fi
+                    echo "    Captured $shot (inner display)"
+                    rm -f "$req"
+                    : > "$req_dir/$shot.done"
+                done
+            fi
+            sleep 0.5
+        done
+    fi
+    wait "$test_pid"
     test_status=$?
     set -e
+    [ $capture_failed -ne 0 ] && test_status=1
 
     if [ $test_status -ne 0 ]; then
         echo "    ERROR: $test_name failed on $sim_name (see $BUILD_DIR/$run_name.log)" >&2
         echo "    Leaving simulator $udid alive for forensics." >&2
         LEFTOVER_UDIDS+=("$udid ($sim_name)")
         OVERALL_STATUS=1
+        continue
+    fi
+
+    if [ -n "$inner_display" ]; then
+        count=0
+        for src in "$host_shots"/*.png; do
+            [ -e "$src" ] || continue
+            store_shot "$(basename "$src" .png)" "$src" "$out_device_dir" "$device_name" \
+                && count=$((count + 1))
+        done
+        echo "    Captured $count screenshots → $out_device_dir/"
+        xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+        xcrun simctl delete "$udid"
         continue
     fi
 
@@ -376,37 +531,12 @@ for run in "${RUNS[@]}"; do
         # debug attachments (UI hierarchy dumps, screen recordings,
         # synthesized event logs).
         stem=$(printf '%s' "$name" | sed -E 's/_[0-9]+_[A-F0-9-]+\.[A-Za-z0-9]+$//')
-        # The committed name and folder for each shot. `app-store` is
-        # the set to upload, in the order listed in
-        # docs/SCREENSHOT_PROCEDURES.md; `reference` is kept for the
-        # record and not uploaded.
-        case "$stem" in
-            04-home)            set_dir=app-store; screen=home ;;
-            05-catalog-movies)  set_dir=app-store; screen=movies ;;
-            06-title-detail-tv) set_dir=app-store; screen=tv-show ;;
-            08-books)           set_dir=app-store; screen=books ;;
-            09-music)           set_dir=app-store; screen=music ;;
-            10-wish-list)       set_dir=app-store; screen=wish-list ;;
-            01-server-setup)    set_dir=app-store; screen=server-setup ;;
-            02-app-policy)      set_dir=reference; screen=app-policy ;;
-            03-login)           set_dir=reference; screen=login ;;
-            07-server-terms)    set_dir=reference; screen=server-terms ;;
-            *) continue ;;
-        esac
         src="$attach_tmp/$file"
         if [ ! -f "$src" ]; then
             echo "    WARN: attachment $name -> $file missing on disk" >&2
             continue
         fi
-        cp "$src" "$out_device_dir/$stem.png"
-        # The committed copy, and the one to upload:
-        # <device>_<screen>.jpg, JPEG at quality 90. About a fifth the
-        # size of the PNG, which matters because git keeps every past
-        # capture forever. Uploading what is committed keeps the record
-        # and the store listing the same.
-        mkdir -p "$DOCS_ROOT/$set_dir"
-        sips -s format jpeg -s formatOptions 90 "$src" \
-            --out "$DOCS_ROOT/$set_dir/${device_name}_${screen}.jpg" >/dev/null
+        store_shot "$stem" "$src" "$out_device_dir" "$device_name" || continue
         count=$((count + 1))
     done <<< "$mapping"
 
