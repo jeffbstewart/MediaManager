@@ -58,6 +58,9 @@ struct MediaManagerApp: App {
     /// policy + ToS before any other view renders. Stored in
     /// UserDefaults; never transmitted to any server.
     @State private var appPolicy: AppPolicyAgreement
+    /// Adults-only gate, ahead of the app policy: asks Apple's age
+    /// range service once per device and refuses known minors.
+    @State private var ageGate: AgeGate
 
     /// MetricKit subscriber that ships iOS crash diagnostics from
     /// previous launches into Binnacle. Held onto for the app
@@ -126,6 +129,7 @@ struct MediaManagerApp: App {
         _dataModel = State(initialValue: dataModel)
         _imageProvider = State(initialValue: ip)
         _appPolicy = State(initialValue: AppPolicyAgreement())
+        _ageGate = State(initialValue: AgeGate())
 
         // Configure + publish AppServices in init() rather than the
         // RootView.onAppear that used to run this block. CarPlay
@@ -193,6 +197,15 @@ struct MediaManagerApp: App {
                 .environment(audioCache)
                 .environment(dataModel)
                 .environment(imageProvider)
+            } else if ageGate.refusesService {
+                // Apple says the owner is under 18. Terminal: nothing
+                // else renders until the app is deleted.
+                AgeGateRefusedView()
+            } else if ageGate.needsAsking {
+                // First of all on a device not yet asked: the adults-
+                // only explanation, then Apple's age-range sheet.
+                AgeGateIntroView()
+                    .environment(ageGate)
             } else if !appPolicy.hasAgreed {
                 // Hard gate: nothing else renders until the user
                 // accepts the app-level privacy policy + ToS. Per
