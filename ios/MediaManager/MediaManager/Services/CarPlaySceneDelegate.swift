@@ -41,6 +41,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let hasRefresh = KeychainService.load(key: .refreshToken) != nil
         logger.info("CarPlay scene connected: appServicesReady=\(isReady) hasAccessToken=\(hasToken) hasRefreshToken=\(hasRefresh)")
         self.interfaceController = interfaceController
+        // CarPlay doesn't pass through the phone's first screens, so it
+        // honours the adults-only gate itself.
+        if AgeGate.storedStatus.map({ AgeGatePolicy.refusesService(stored: $0) }) == true {
+            logger.info("CarPlay scene: age gate refuses service")
+            interfaceController.setRootTemplate(adultsOnlyTemplate(), animated: false, completion: nil)
+            return
+        }
         AppServices.shared.isCarPlayConnected = true
         AppServices.shared.whenReady { [weak self] in
             logger.info("CarPlay scene: AppServices ready, refreshing tokens before loading data")
@@ -67,6 +74,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     // MARK: - Templates
+
+    private func adultsOnlyTemplate() -> CPListTemplate {
+        let item = CPListItem(
+            text: "Only available to adults",
+            detailText: "Household Disc Keeper isn't available on this phone.")
+        return CPListTemplate(title: "Household Disc Keeper", sections: [CPListSection(items: [item])])
+    }
 
     private func loadingTemplate() -> CPListTemplate {
         let item = CPListItem(text: "Loading…", detailText: nil)
