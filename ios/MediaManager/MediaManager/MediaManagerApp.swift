@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import Intents
 import MediaManagerCore
 import MediaManagerProtos
 
@@ -25,21 +24,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             return cfg
         }
         return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
-    }
-
-    /// SiriKit hook. Called when Siri (or a Shortcuts action) wants
-    /// to run an INIntent against our app. We handle media playback
-    /// in-process — no Intents Extension target. NSSiriUsageDescription
-    /// + INIntentsSupported + INSupportedMediaCategories in Info.plist
-    /// register us as a media app for Siri's classifier.
-    nonisolated func application(
-        _ application: UIApplication,
-        handlerFor intent: INIntent
-    ) -> Any? {
-        if intent is INPlayMediaIntent {
-            return SiriIntentHandler()
-        }
-        return nil
     }
 }
 
