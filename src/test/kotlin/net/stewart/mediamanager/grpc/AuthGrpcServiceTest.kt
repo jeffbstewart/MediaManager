@@ -208,20 +208,31 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
         val ex = assertFailsWith<StatusException> {
             stub.createFirstUser(createFirstUserRequest {
-                username = ""; password = "x"; displayName = "x"
+                username = ""; password = "x"
             })
         }
         assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
     }
 
     @Test
-    fun `createFirstUser does not need a display name`() = runBlocking {
+    fun `createFirstUser still accepts the display name iOS 1_3 sends as field 3`() = runBlocking {
+        // display_name = 3 is reserved now (#29), but iOS builds up to 1.3 (17)
+        // still send it. It must arrive as an unknown field and be skipped.
+        val legacyField3 = com.google.protobuf.UnknownFieldSet.newBuilder()
+            .addField(3, com.google.protobuf.UnknownFieldSet.Field.newBuilder()
+                .addLengthDelimited(ByteString.copyFromUtf8("legacy")).build())
+            .build()
+        val request = createFirstUserRequest {
+            username = "legacy-ios"; password = PLAINTEXT
+        }.toBuilder().setUnknownFields(legacyField3).build()
+        assertTrue(request.toByteArray().size > createFirstUserRequest {
+            username = "legacy-ios"; password = PLAINTEXT
+        }.toByteArray().size, "the request really carries field 3")
+
         val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
-        val resp = stub.createFirstUser(createFirstUserRequest {
-            username = "nameless"; password = PLAINTEXT
-        })
+        val resp = stub.createFirstUser(request)
         assertFalse(resp.accessToken.isEmpty)
-        assertEquals("", AppUser.findAll().single { it.username == "nameless" }.display_name)
+        assertTrue(AppUser.findAll().single { it.username == "legacy-ios" }.isAdmin())
     }
 
     @Test
@@ -229,7 +240,7 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         val stub = AuthServiceGrpcKt.AuthServiceCoroutineStub(channel)
         val ex = assertFailsWith<StatusException> {
             stub.createFirstUser(createFirstUserRequest {
-                username = "newadmin"; password = WEAK_PASSWORD; displayName = "New Admin"
+                username = "newadmin"; password = WEAK_PASSWORD
             })
         }
         assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
@@ -241,21 +252,17 @@ class AuthGrpcServiceTest : GrpcTestBase() {
         // First call on a fresh DB succeeds.
         val resp = stub.createFirstUser(createFirstUserRequest {
             username = "rootadmin"; password = PLAINTEXT
-            displayName = "Root Admin"
         })
         assertFalse(resp.accessToken.isEmpty)
 
         // The first user is always an admin.
         val created = AppUser.findAll().single { it.username == "rootadmin" }
         assertTrue(created.isAdmin(), "the first user is an admin")
-        // iOS 1.3 still sends a display name; it is accepted and not stored (#29).
-        assertEquals("", created.display_name)
 
         // Second call must be refused — setup is now complete.
         val ex = assertFailsWith<StatusException> {
             stub.createFirstUser(createFirstUserRequest {
                 username = "second"; password = PLAINTEXT
-                displayName = "Second"
             })
         }
         assertEquals(Status.Code.ALREADY_EXISTS, ex.status.code)

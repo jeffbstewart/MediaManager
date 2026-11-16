@@ -178,7 +178,6 @@ open class GrpcTestBase {
         val now = LocalDateTime.now()
         val user = AppUser(
             username = username,
-            display_name = username,
             password_hash = PasswordService.hash(password),
             access_level = AppUser.ACCESS_LEVEL_ADMIN,
             created_at = now,
@@ -195,7 +194,6 @@ open class GrpcTestBase {
         val now = LocalDateTime.now()
         val user = AppUser(
             username = username,
-            display_name = username,
             password_hash = PasswordService.hash(password),
             access_level = AppUser.ACCESS_LEVEL_VIEWER,
             created_at = now,

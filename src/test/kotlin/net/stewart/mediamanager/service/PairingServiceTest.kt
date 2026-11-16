@@ -56,9 +56,9 @@ class PairingServiceTest {
         SessionToken.deleteAll()
         AppUser.deleteAll()
 
-        userId = AppUser(username = "alice", display_name = "Alice",
+        userId = AppUser(username = "alice",
             password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER).apply { save() }.id!!
-        otherUserId = AppUser(username = "bob", display_name = "Bob",
+        otherUserId = AppUser(username = "bob",
             password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER).apply { save() }.id!!
     }
 

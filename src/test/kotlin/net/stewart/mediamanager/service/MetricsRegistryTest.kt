@@ -196,8 +196,8 @@ class MetricsRegistryTest {
         LiveTvTuner.deleteAll()
         LoginAttempt.deleteAll()
 
-        val u1 = AppUser(username = "u1", display_name = "U1", password_hash = "x").apply { save() }
-        val u2 = AppUser(username = "u2", display_name = "U2", password_hash = "x",
+        val u1 = AppUser(username = "u1", password_hash = "x").apply { save() }
+        val u2 = AppUser(username = "u2", password_hash = "x",
             locked = true).apply { save() }
         SessionToken(user_id = u1.id!!, token_hash = "t1", user_agent = "ua",
             expires_at = LocalDateTime.now().plusDays(1)).save()

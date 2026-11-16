@@ -174,7 +174,6 @@ object PlaybackProgressService {
         return AppUser.findAll().firstOrNull { it.username == ROKU_USERNAME }
             ?: AppUser(
                 username = ROKU_USERNAME,
-                display_name = "Roku",
                 access_level = AppUser.ACCESS_LEVEL_VIEWER,
                 password_hash = "!nologin",
                 created_at = LocalDateTime.now()

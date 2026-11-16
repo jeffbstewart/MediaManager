@@ -57,7 +57,7 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
             val ex = assertFailsWith<StatusException> {
                 stub.createUser(createUserRequest {
-                    username = "   "; password = GOOD_PW; displayName = "x"
+                    username = "   "; password = GOOD_PW
                 })
             }
             assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
@@ -76,7 +76,7 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
             val ex = assertFailsWith<StatusException> {
                 stub.createUser(createUserRequest {
-                    username = "BOB"; password = GOOD_PW; displayName = "x"
+                    username = "BOB"; password = GOOD_PW
                 })
             }
             assertEquals(Status.Code.ALREADY_EXISTS, ex.status.code)
@@ -93,7 +93,7 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
             val ex = assertFailsWith<StatusException> {
                 stub.createUser(createUserRequest {
-                    username = "newviewer"; password = "abc"; displayName = "New"
+                    username = "newviewer"; password = "abc"
                 })
             }
             assertEquals(Status.Code.INVALID_ARGUMENT, ex.status.code)
@@ -111,31 +111,14 @@ class AdminGrpcServiceUsersTest : GrpcTestBase() {
             val resp = stub.createUser(createUserRequest {
                 username = "ViewerOne"
                 password = GOOD_PW
-                displayName = "Viewer One"
                 forceChange = true
             })
             assertTrue(resp.id > 0)
             val saved = AppUser.findById(resp.id)!!
             assertEquals("ViewerOne", saved.username)
-            assertEquals("", saved.display_name, "display names are ignored (#29)")
             assertEquals(1, saved.access_level, "new users default to viewer")
             assertTrue(saved.must_change_password)
             assertTrue(PasswordService.verify(GOOD_PW, saved.password_hash))
-        } finally {
-            authed.shutdownNow()
-        }
-    }
-
-    @Test
-    fun `createUser ignores a displayName in the request`() = runBlocking {
-        val admin = createAdminUser(username = "u-create-noname")
-        val authed = authenticatedChannel(admin)
-        try {
-            val stub = AdminServiceGrpcKt.AdminServiceCoroutineStub(authed)
-            val resp = stub.createUser(createUserRequest {
-                username = "JustUser"; password = GOOD_PW; displayName = "Just A. User"
-            })
-            assertEquals("", AppUser.findById(resp.id)!!.display_name)
         } finally {
             authed.shutdownNow()
         }

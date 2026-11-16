@@ -65,7 +65,7 @@ internal class WebAuthnServiceTest {
     private fun seedUser(username: String = "alice"): AppUser {
         val now = LocalDateTime.now()
         return AppUser(
-            username = username, display_name = username,
+            username = username,
             password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER,
             created_at = now, updated_at = now,
         ).apply { save() }

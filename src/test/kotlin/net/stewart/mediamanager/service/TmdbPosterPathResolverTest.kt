@@ -62,7 +62,6 @@ class TmdbPosterPathResolverTest {
         val now = LocalDateTime.now()
         val u = AppUser(
             username = "u${System.nanoTime()}",
-            display_name = "Test",
             password_hash = PasswordService.hash("Sufficient1!"),
             access_level = AppUser.ACCESS_LEVEL_VIEWER,
             created_at = now, updated_at = now

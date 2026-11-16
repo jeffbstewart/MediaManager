@@ -235,7 +235,7 @@ internal class HomeFeedHttpServiceTest : ArmeriaTestBase() {
     @Test
     fun `clearProgress deletes only the calling user's row for the target transcode`() {
         val admin = getOrCreateUser("admin", level = 2)
-        val other = AppUser(username = "other", display_name = "other",
+        val other = AppUser(username = "other",
             password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER,
             created_at = LocalDateTime.now(), updated_at = LocalDateTime.now()).apply { save() }
         val title = Title(name = "Movie", media_type = MediaType.MOVIE.name,

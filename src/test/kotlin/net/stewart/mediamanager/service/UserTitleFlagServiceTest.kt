@@ -46,10 +46,10 @@ class UserTitleFlagServiceTest {
         Title.deleteAll()
         AppUser.deleteAll()
         // Create test users for FK constraints
-        val u1 = AppUser(username = "testuser1", display_name = "Test User 1", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_ADMIN)
+        val u1 = AppUser(username = "testuser1", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_ADMIN)
         u1.save()
         user1Id = u1.id!!
-        val u2 = AppUser(username = "testuser2", display_name = "Test User 2", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER)
+        val u2 = AppUser(username = "testuser2", password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER)
         u2.save()
         user2Id = u2.id!!
     }

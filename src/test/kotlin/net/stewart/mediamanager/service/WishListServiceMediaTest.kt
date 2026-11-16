@@ -68,9 +68,9 @@ class WishListServiceMediaTest {
         MediaItem.deleteAll()
         AppUser.deleteAll()
 
-        userId = AppUser(username = "u", display_name = "User One",
+        userId = AppUser(username = "u",
             password_hash = "x").apply { save() }.id!!
-        otherUserId = AppUser(username = "o", display_name = "User Two",
+        otherUserId = AppUser(username = "o",
             password_hash = "x").apply { save() }.id!!
 
         movieTitleId = Title(name = "The Movie", media_type = MediaType.MOVIE.name,

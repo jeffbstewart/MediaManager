@@ -240,7 +240,7 @@ internal class PriceLookupAgentTest {
     fun `processBatch with linked AmazonOrder uses the order ASIN`() {
         val now = LocalDateTime.now()
         val owner = net.stewart.mediamanager.entity.AppUser(
-            username = "owner", display_name = "owner",
+            username = "owner",
             password_hash = "x", access_level = AppUser.ACCESS_LEVEL_VIEWER,
             created_at = now, updated_at = now,
         ).apply { save() }

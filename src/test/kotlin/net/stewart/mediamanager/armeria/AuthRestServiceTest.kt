@@ -282,7 +282,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     @Test
     fun `login returns 401 for the wrong password`() {
         val now = LocalDateTime.now()
-        AppUser(username = "loginuser", display_name = "loginuser",
+        AppUser(username = "loginuser",
             password_hash = PasswordService.hash("CorrectHorse1234!"),
             access_level = AppUser.ACCESS_LEVEL_VIEWER, created_at = now, updated_at = now).save()
 
@@ -295,7 +295,7 @@ internal class AuthRestServiceTest : ArmeriaTestBase() {
     @Test
     fun `login happy path returns access_token and password_change_required flag`() {
         val now = LocalDateTime.now()
-        AppUser(username = "happyuser", display_name = "Happy User",
+        AppUser(username = "happyuser",
             password_hash = PasswordService.hash("CorrectHorse1234!"),
             access_level = AppUser.ACCESS_LEVEL_VIEWER, created_at = now, updated_at = now).save()
 

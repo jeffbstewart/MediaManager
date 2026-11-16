@@ -19,7 +19,6 @@ class ContentRatingFilterTest {
     private fun user(accessLevel: Int = 1, ratingCeiling: Int? = null) = AppUser(
         id = 1L,
         username = "test",
-        display_name = "Test",
         password_hash = "",
         access_level = accessLevel,
         rating_ceiling = ratingCeiling

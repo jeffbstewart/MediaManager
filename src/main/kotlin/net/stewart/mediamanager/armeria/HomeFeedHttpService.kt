@@ -250,8 +250,7 @@ class HomeFeedHttpService {
 
         val result = mapOf(
             "status" to status.status,
-            "username" to status.username,
-            "display_name" to user.username
+            "username" to status.username
         )
         return HttpResponse.builder().status(HttpStatus.OK)
             .content(MediaType.JSON_UTF_8, gson.toJson(result)).build()

@@ -211,7 +211,7 @@ class MusicIngestionServiceTest {
 
     @Test
     fun `ingest fulfills active album wishes for the same release-group across users`() {
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x")
+        val u = AppUser(username = "u", password_hash = "x")
             .apply { save() }.id!!
         WishListService.addAlbumWishForUser(u, WishListService.AlbumWishInput(
             musicBrainzReleaseGroupId = "rg-la-woman",

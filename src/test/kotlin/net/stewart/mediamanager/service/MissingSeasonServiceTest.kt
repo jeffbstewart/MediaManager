@@ -70,7 +70,7 @@ class MissingSeasonServiceTest {
         MediaItem.deleteAll()
         AppUser.deleteAll()
 
-        userId = AppUser(username = "u", display_name = "U", password_hash = "x")
+        userId = AppUser(username = "u", password_hash = "x")
             .apply { save() }.id!!
 
         showAlphaId = Title(name = "Alpha", media_type = MediaType.TV.name,

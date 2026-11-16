@@ -74,7 +74,6 @@ class AuthInterceptorTest : GrpcTestBase() {
         val response = stub.createFirstUser(createFirstUserRequest {
             username = "firstadmin"
             password = "Test1234!@#\$"
-            displayName = "First Admin"
             deviceName = "Test Device"
         })
         assertFalse(response.accessToken.isEmpty)
@@ -90,7 +89,6 @@ class AuthInterceptorTest : GrpcTestBase() {
             stub.createFirstUser(createFirstUserRequest {
                 username = "secondadmin"
                 password = "Test1234!@#\$"
-                displayName = "Second Admin"
             })
         }
         assertEquals(io.grpc.Status.ALREADY_EXISTS.code, ex.status.code)
@@ -103,7 +101,6 @@ class AuthInterceptorTest : GrpcTestBase() {
             stub.createFirstUser(createFirstUserRequest {
                 username = "admin"
                 password = "short"
-                displayName = "Admin"
             })
         }
         assertEquals(io.grpc.Status.INVALID_ARGUMENT.code, ex.status.code)

@@ -185,7 +185,7 @@ class AddTitleServiceTest {
 
     @Test
     fun `addFromTmdb fulfills active media wishes for the same TMDB key`() {
-        val u = AppUser(username = "u", display_name = "U", password_hash = "x")
+        val u = AppUser(username = "u", password_hash = "x")
             .apply { save() }.id!!
         // Create a stale FULFILLED wish — the legacy fulfillMediaWishes
         // re-activates these so the new lifecycle can render.

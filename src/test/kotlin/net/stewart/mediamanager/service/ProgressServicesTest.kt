@@ -68,9 +68,9 @@ class ProgressServicesTest {
 
         // FK chain: reading_progress.media_item_id → media_item.id;
         //           listening_progress.track_id → track.id → title.id.
-        val u1 = AppUser(username = "u1", display_name = "U1", password_hash = "x")
+        val u1 = AppUser(username = "u1", password_hash = "x")
         u1.save(); userOneId = u1.id!!
-        val u2 = AppUser(username = "u2", display_name = "U2", password_hash = "x")
+        val u2 = AppUser(username = "u2", password_hash = "x")
         u2.save(); userTwoId = u2.id!!
 
         val itemA = MediaItem().apply { save() }
