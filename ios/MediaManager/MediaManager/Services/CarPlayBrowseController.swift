@@ -65,9 +65,7 @@ final class CarPlayBrowseController {
     /// allowed-classes list = {TabBar, List, Alert, VoiceControl,
     /// Grid, ActionSheet, NowPlaying} — seen in build 5). Apple
     /// Music's search tab uses a private CarPlay capability we
-    /// don't get. Future option: INPlayMediaIntent + an Intents
-    /// extension to route "Hey Siri, play X" voice queries. Until
-    /// that lands, browse is the only access path.
+    /// don't get, so browse is the only access path.
     private let albumsTab: CPListTemplate
     private let playlistsTab: CPListTemplate
     private let smartTab: CPListTemplate
