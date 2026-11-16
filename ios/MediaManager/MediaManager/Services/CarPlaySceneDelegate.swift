@@ -68,7 +68,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
         logger.info("CarPlay scene disconnected")
-        AppServices.shared.isCarPlayConnected = false
         self.interfaceController = nil
         self.browseController = nil
     }

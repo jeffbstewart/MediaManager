@@ -97,7 +97,7 @@ When the phone briefly loses or reconnects to the network — for example, getti
 
 ## Known limitations
 
-- **Search isn't wired in CarPlay yet.** The phone supports voice and text search, but CarPlay's search surface is currently deferred. Use the Albums / Playlists / Smart Playlists tabs to navigate. Voice-driven "play X" via Siri is on the roadmap.
+- **No search in CarPlay.** CarPlay doesn't offer its search screen to audio apps like this one, so use the Albums / Playlists / Smart Playlists tabs to navigate. Search stays on the phone.
 - **Video playback isn't a CarPlay feature.** Apple's CarPlay framework only supports audio apps. Video stays on the phone.
 - **Album art on the Now Playing screen is loaded lazily** — first-listen on a brand-new track may show a blank hero for a moment while the server image fetch completes. Cached art (typical after browsing an album in the phone or CarPlay) appears instantly.
 
