@@ -48,7 +48,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             interfaceController.setRootTemplate(adultsOnlyTemplate(), animated: false, completion: nil)
             return
         }
-        AppServices.shared.isCarPlayConnected = true
         AppServices.shared.whenReady { [weak self] in
             logger.info("CarPlay scene: AppServices ready, refreshing tokens before loading data")
             self?.refreshTokensAndInstallBrowseHierarchy()
