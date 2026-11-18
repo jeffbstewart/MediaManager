@@ -58,6 +58,9 @@ public enum BookCacheError: LocalizedError {
     case downloadInFlight(mediaItemId: Int64)
     case notDownloaded(mediaItemId: Int64)
     case grpcUnavailable
+    /// No server and account are bound, so a download has nowhere
+    /// to go.
+    case notSignedIn
     case ioFailure(underlying: Error)
 
     public var errorDescription: String? {
@@ -70,6 +73,8 @@ public enum BookCacheError: LocalizedError {
             return "Book \(id) isn't downloaded."
         case .grpcUnavailable:
             return "Server connection isn't ready yet."
+        case .notSignedIn:
+            return "Sign in to download books."
         case .ioFailure(let underlying):
             return "Disk error: \(underlying.localizedDescription)"
         }
@@ -85,12 +90,19 @@ public enum BookCacheError: LocalizedError {
 /// stay separate by design: convenience-cache files are disposable;
 /// downloads are pinned and survive storage-pressure eviction.
 ///
-/// **Disk layout:**
+/// **Disk layout:** the `books` area of the current storage scope
+/// (see `StorageScope`), since ids are the server's own:
 /// ```
-/// <Application Support>/Downloads/Books/
+/// <Application Support>/Scoped/servers/<server>/accounts/<user id>/books/
 ///     index.json                           // [DownloadedBook]
 ///     <mediaItemId>.epub                   // raw EPUB bytes
+///     <titleId>.detail.pb                  // serialized MMTitleDetail
 /// ```
+///
+/// With no scope bound, nothing is downloaded and nothing starts. A
+/// scope change cancels downloads in progress, drops the index, and
+/// loads the new scope's. Books kept in `Downloads/Books` before
+/// scopes are claimed on the first bind.
 ///
 /// The directory is excluded from iCloud backup (matches the video
 /// downloads dir) — books re-download on a new device, no need to
@@ -103,7 +115,7 @@ public enum BookCacheError: LocalizedError {
 /// doesn't duplicate the network monitor.
 @Observable
 @MainActor
-public final class BookCacheManager {
+public final class BookCacheManager: StorageScopeParticipant {
 
     /// Current set of fully-downloaded books. Mirrors `index.json` on
     /// disk; mutations go through [BookCacheManager.persistIndex] so
@@ -127,44 +139,60 @@ public final class BookCacheManager {
     /// partial file in the catch handler.
     private var downloadTasks: [Int64: Task<Void, Never>] = [:]
 
-    private let booksDir: URL
-    private let indexPath: URL
+    /// The `books` area of the current storage scope, and the
+    /// downloads writing into it.
+    private let area: ScopedDownloadArea
+    private static let indexFileName = "index.json"
 
-    public init() {
+    /// The bound scope's Books folder; nil when nothing is bound.
+    private var booksDir: URL? { area.folder }
+
+    public convenience init() {
         let appSupport = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let downloadsRoot = appSupport.appendingPathComponent("Downloads", isDirectory: true)
-        booksDir = downloadsRoot.appendingPathComponent("Books", isDirectory: true)
-        indexPath = booksDir.appendingPathComponent("index.json")
+        self.init(
+            scope: .shared,
+            legacyFolder: appSupport
+                .appendingPathComponent("Downloads", isDirectory: true)
+                .appendingPathComponent("Books", isDirectory: true))
+    }
 
-        // Best-effort directory creation here. If it fails (e.g. the
-        // sandbox isn't fully set up yet on first launch),
-        // [ensureBooksDir] is called again before each download as a
-        // defensive backstop — earlier versions silently swallowed
-        // this error and every download then failed with a confusing
-        // "file doesn't exist" from FileHandle.
-        do {
-            try FileManager.default.createDirectory(at: booksDir, withIntermediateDirectories: true)
-        } catch {
-            logger.error("init: createDirectory failed at \(booksDir.path): \(error.localizedDescription)")
+    /// `scope` supplies the folder, and `legacyFolder` is where books
+    /// were kept before scopes; tests pass temp folders for both.
+    init(scope: StorageScope, legacyFolder: URL?) {
+        area = ScopedDownloadArea(scope: scope, area: .books, legacyFolder: legacyFolder)
+        // Register before the first read of `scope.current`, so no
+        // change is missed. On launch the scope may already be bound,
+        // restored from disk.
+        scope.register(self)
+        load()
+    }
+
+    /// Load the bound scope's index, claiming books stored before
+    /// scopes. With no scope bound, nothing is downloaded.
+    private func load() {
+        dropState()
+        guard let folder = area.bind() else {
+            logger.info("load: no storage scope bound; no book downloads")
+            return
         }
+        downloads = Self.loadIndex(at: folder.appendingPathComponent(Self.indexFileName))
+        logger.info("load: \(downloads.count) downloaded books")
+    }
 
-        // Exclude from iCloud backup — books re-download cleanly on
-        // a new device and we don't want to bloat user iCloud quotas.
-        var dir = booksDir
-        var rv = URLResourceValues()
-        rv.isExcludedFromBackup = true
-        try? dir.setResourceValues(rv)
-
-        downloads = Self.loadIndex(at: indexPath)
-        logger.info("BookCacheManager initialised; \(downloads.count) downloaded books at \(booksDir.path)")
+    /// Forget everything held in memory for the current scope.
+    private func dropState() {
+        downloadTasks.removeAll()
+        activeDownloads.removeAll()
+        failedDownloads.removeAll()
+        downloads.removeAll()
     }
 
     /// Defensive directory-existence check. Cheap when the dir already
     /// exists (a single `fileExists` syscall); creates it otherwise.
     /// Throws so the caller surfaces a real error instead of the
     /// downstream "file doesn't exist" from FileHandle later.
-    private func ensureBooksDir() throws {
+    private func ensureBooksDir(_ booksDir: URL) throws {
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: booksDir.path, isDirectory: &isDir)
         if exists && isDir.boolValue { return }
@@ -189,8 +217,8 @@ public final class BookCacheManager {
     // this cache when offline. Author headshots are pinned at the
     // same moment so the hero art renders without network.
 
-    private func bookDetailPath(titleId: Int64) -> URL {
-        booksDir.appendingPathComponent("\(titleId).detail.pb")
+    private func bookDetailPath(titleId: Int64) -> URL? {
+        booksDir?.appendingPathComponent("\(titleId).detail.pb")
     }
 
     /// Persist an ApiTitleDetail proto for offline browse. Callers
@@ -199,8 +227,8 @@ public final class BookCacheManager {
     /// AuthorDetailView / BookSeriesDetailView. Idempotent — safe
     /// to call repeatedly.
     public func cacheTitleDetail(_ detail: ApiTitleDetail) {
-        let path = bookDetailPath(titleId: detail.id.protoValue)
-        guard let data = try? detail.proto.serializedData() else { return }
+        guard let path = bookDetailPath(titleId: detail.id.protoValue),
+              let data = try? detail.proto.serializedData() else { return }
         try? data.write(to: path)
 
         // Pin the cover (already used by every book surface) and
@@ -220,8 +248,8 @@ public final class BookCacheManager {
     /// migration wiped pre-existing book caches, so all current
     /// downloads carry a detail.pb).
     public func loadCachedTitleDetail(titleId: Int64) -> ApiTitleDetail? {
-        let path = bookDetailPath(titleId: titleId)
-        guard let data = try? Data(contentsOf: path),
+        guard let path = bookDetailPath(titleId: titleId),
+              let data = try? Data(contentsOf: path),
               let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
         return ApiTitleDetail(proto: proto)
     }
@@ -299,7 +327,7 @@ public final class BookCacheManager {
     /// the book isn't downloaded or the file went missing (e.g.
     /// user deleted via Files app).
     public func localBookURL(_ mediaItemId: Int64) -> URL? {
-        guard isDownloaded(mediaItemId) else { return nil }
+        guard isDownloaded(mediaItemId), let booksDir else { return nil }
         let url = booksDir.appendingPathComponent("\(mediaItemId).epub")
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
@@ -337,6 +365,9 @@ public final class BookCacheManager {
     ) throws {
         if isDownloaded(mediaItemId) { throw BookCacheError.alreadyDownloaded(mediaItemId: mediaItemId) }
         if downloadTasks[mediaItemId] != nil { throw BookCacheError.downloadInFlight(mediaItemId: mediaItemId) }
+        // No storage scope bound (signed out, or changing server):
+        // there is nowhere this download belongs.
+        guard let booksDir else { throw BookCacheError.notSignedIn }
         guard let grpcClient else { throw BookCacheError.grpcUnavailable }
 
         // Clear any prior failure for this book so the UI returns to
@@ -348,7 +379,7 @@ public final class BookCacheManager {
         // FileHandle below throws "file doesn't exist" with no
         // visible explanation in the UI.
         do {
-            try ensureBooksDir()
+            try ensureBooksDir(booksDir)
         } catch {
             recordFailure(mediaItemId: mediaItemId,
                 message: "Couldn't prepare downloads folder: \(error.localizedDescription)")
@@ -386,8 +417,13 @@ public final class BookCacheManager {
         // Strong self capture — matches the existing DownloadManager
         // pattern. The Task is bounded by the gRPC streaming call;
         // BookCacheManager itself lives for the app lifetime, so no
-        // retain cycle to worry about.
-        let task = Task {
+        // retain cycle to worry about. `area.run` tracks it, so a
+        // change of storage scope cancels it and waits for the
+        // partial file to be removed before the folder can go.
+        let task = area.run {
+            // Still the scope this download started in? After a
+            // change, nothing it learns may touch the new scope's state.
+            let sameScope = { self.booksDir == booksDir }
             do {
                 let handle = try FileHandle(forWritingTo: dest)
                 defer { try? handle.close() }
@@ -405,6 +441,8 @@ public final class BookCacheManager {
                         logger.error("download chunk write failed", error: error)
                     }
                 }
+                try Task.checkCancellation()
+                guard sameScope() else { throw CancellationError() }
                 self.finishDownload(
                     mediaItemId: mediaItemId,
                     titleId: titleId,
@@ -414,14 +452,15 @@ public final class BookCacheManager {
             } catch is CancellationError {
                 logger.info("download cancelled for mediaItemId=\(mediaItemId)")
                 try? FileManager.default.removeItem(at: dest)
-                self.clearActive(mediaItemId)
+                if sameScope() { self.clearActive(mediaItemId) }
             } catch {
                 let detail = error.localizedDescription
                 // Inline the underlying message so log scrapes (Binnacle
                 // / os_log) carry it in the message field rather than
                 // an opaque `error:` attribute that some viewers strip.
-                logger.error("download failed for mediaItemId=\(mediaItemId) at \(dest.path): \(detail)")
+                logger.error("download failed for mediaItemId=\(mediaItemId): \(detail)")
                 try? FileManager.default.removeItem(at: dest)
+                guard sameScope() else { return }
                 self.clearActive(mediaItemId)
                 self.recordFailure(mediaItemId: mediaItemId, message: detail)
             }
@@ -449,7 +488,8 @@ public final class BookCacheManager {
     /// downloaded — callers can swallow this to be idempotent if
     /// they want.
     public func deleteDownload(_ mediaItemId: Int64) throws {
-        guard let idx = downloads.firstIndex(where: { $0.mediaItemId == mediaItemId }) else {
+        guard let idx = downloads.firstIndex(where: { $0.mediaItemId == mediaItemId }),
+              let booksDir else {
             throw BookCacheError.notDownloaded(mediaItemId: mediaItemId)
         }
         let url = booksDir.appendingPathComponent("\(mediaItemId).epub")
@@ -503,14 +543,13 @@ public final class BookCacheManager {
         downloadTasks.removeValue(forKey: mediaItemId)
     }
 
-    /// Cancel every download and delete every downloaded book. Used
-    /// when the account is deleted. The Books directory itself stays.
+    /// Cancel every download and delete every downloaded book of the
+    /// current scope. Used when the account is deleted. The Books
+    /// directory itself stays.
     public func removeAllDownloads() {
         for task in downloadTasks.values { task.cancel() }
-        downloadTasks.removeAll()
-        activeDownloads.removeAll()
-        failedDownloads.removeAll()
-        downloads.removeAll()
+        dropState()
+        guard let booksDir else { return }
         let fm = FileManager.default
         for url in (try? fm.contentsOfDirectory(at: booksDir, includingPropertiesForKeys: nil)) ?? [] {
             try? fm.removeItem(at: url)
@@ -519,9 +558,27 @@ public final class BookCacheManager {
         logger.info("removeAllDownloads: book downloads cleared")
     }
 
+    // MARK: - Storage scope
+
+    /// The folder may be deleted once this returns: stop serving it,
+    /// cancel downloads and wait for them to clean up, and forget the
+    /// scope's index.
+    public func storageScopeWillChange() async {
+        area.unbind()
+        dropState()
+        await area.cancelAndAwaitWriters()
+        dropState()
+    }
+
+    public func storageScopeDidChange(to scope: StorageScopeID?) async {
+        load()
+    }
+
     // MARK: - Index persistence
 
     private func persistIndex() {
+        guard let booksDir else { return }
+        let indexPath = booksDir.appendingPathComponent(Self.indexFileName)
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601

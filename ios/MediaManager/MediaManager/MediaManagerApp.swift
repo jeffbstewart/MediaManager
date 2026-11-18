@@ -145,6 +145,12 @@ struct MediaManagerApp: App {
         pf.configure(grpcClient: am.grpcClient)
         ac.configure(apiClient: am.apiClient)
         ap.configure(apiClient: am.apiClient, imageProvider: ip, audioCache: ac)
+        // A change of server or account stops a downloaded track
+        // before its file may go; its position belongs to the
+        // account being left, so it is not saved.
+        ac.configurePlayback(
+            currentTrackId: { [weak ap] in ap?.currentTrack?.id },
+            stop: { [weak ap] in ap?.stop(finalPosition: .discard) })
         // Back-channel for AudioPlayerManager → DownloadManager.flushPendingListeningProgress.
         // See the previous in-onAppear comment block for why.
         ap.configureProgressFlusher { [dm] in

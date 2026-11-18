@@ -165,8 +165,9 @@ deleted. The old image cache is always discarded (`discardLegacy`).
 **Offline + progress:**
 
 - `Services/DownloadManager.swift` — video transcode downloads, listening-progress queue
-- `Services/BookCacheManager.swift` — ebook downloads, cached `MMTitleDetail` mirrors
-- `Services/AudioCacheManager.swift` — album track downloads
+- `Services/BookCacheManager.swift` — ebook downloads, cached `MMTitleDetail` mirrors (`books` storage area)
+- `Services/AudioCacheManager.swift` — album and playlist track downloads (`audio` storage area); stops a downloaded track that is playing when the scope changes
+- `Services/ScopedDownloadArea.swift` — the folder those two keep in their area, legacy claiming, and cancel-and-await of their downloads
 - `Services/LocalProgressStore.swift` — per-device shadow of playback / reading positions, survives the online→offline transition
 - `Services/ReadingProgressQueue.swift` + `Services/ProgressFlusher.swift` — reader → server flush queue (mirrors to `LocalProgressStore` so flushed entries don't disappear)
 - `Services/ListeningProgressQueue.swift` — music → server flush queue, drained by `DownloadManager.flushPendingListeningProgress`
