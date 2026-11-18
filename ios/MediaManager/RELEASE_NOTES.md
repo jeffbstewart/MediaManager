@@ -35,6 +35,26 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   options and the current size; the menu stays open while you tap, so
   you can change the size in several steps. [#66]
 
+### In progress: content kept per server and account [#68]
+
+Not complete yet; finish this entry, and add it to the What's New
+draft, when #70–#75 have merged. When done:
+
+- After you switch to a different server, its own posters and
+  artwork show. Previously the old server's images could show on
+  unrelated titles, and other images never loaded.
+- Switching to a different server removes the previous server's
+  downloads, cached images and saved progress from the device.
+  Signing in as a different account does the same for the previous
+  account. Signing out and back in to the same account keeps them.
+- After the update, existing downloads and progress are kept if they
+  belong to the server the app is set up for.
+
+Merged so far:
+
+- Shared storage that tracks the current server and account, with no
+  visible change on its own. [#69]
+
 ### What's New draft
 
 > Fixed the book reader's toolbar running off the edge of the screen
