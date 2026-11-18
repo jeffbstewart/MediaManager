@@ -5,15 +5,38 @@ import MediaManagerProtos
 /// Loads images from server endpoints that require JWT authentication.
 /// Standard AsyncImage can't add Authorization headers, so this handles
 /// authenticated image fetching with in-memory caching.
+///
+/// Paths carry the server's own ids, so the cache is emptied on every
+/// storage scope change (a different server or account, or signing
+/// out), and a fetch that started before the change is not cached.
 @MainActor
-final class AuthenticatedImageLoader {
+final class AuthenticatedImageLoader: StorageScopeParticipant {
     static let shared = AuthenticatedImageLoader()
 
     private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
+    /// Goes up on each scope change; a fetch caches its result only if
+    /// it is unchanged.
+    private var scopeEpoch: UInt64 = 0
 
     private init() {
         cache.countLimit = 500
+        StorageScope.shared.register(self)
+    }
+
+    nonisolated func storageScopeWillChange() async {
+        await dropEverything()
+    }
+
+    nonisolated func storageScopeDidChange(to scope: StorageScopeID?) async {
+        await dropEverything()
+    }
+
+    private func dropEverything() {
+        scopeEpoch &+= 1
+        for task in inFlight.values { task.cancel() }
+        inFlight.removeAll()
+        cache.removeAllObjects()
     }
 
     func image(for path: String, using apiClient: APIClient) async -> UIImage? {
@@ -29,12 +52,14 @@ final class AuthenticatedImageLoader {
             return await existing.value
         }
 
+        let epoch = scopeEpoch
         let task = Task<UIImage?, Never> {
             do {
                 let data: Data = try await apiClient.getRaw(path)
                 guard let image = UIImage(data: data) else { return nil }
-                cache.object(forKey: path as NSString)
-                cache.setObject(image, forKey: path as NSString)
+                if epoch == scopeEpoch {
+                    cache.setObject(image, forKey: path as NSString)
+                }
                 return image
             } catch {
                 return nil
@@ -42,7 +67,9 @@ final class AuthenticatedImageLoader {
         }
         inFlight[path] = task
         let result = await task.value
-        inFlight.removeValue(forKey: path)
+        if epoch == scopeEpoch {
+            inFlight.removeValue(forKey: path)
+        }
         return result
     }
 }

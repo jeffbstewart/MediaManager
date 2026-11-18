@@ -62,6 +62,10 @@ Merged so far:
   are kept for the server and account that recorded them. Progress
   saved under one account or server is no longer sent to another,
   even if you switch while it is being sent. [#74]
+- Cached posters and artwork are now kept per server and account, so
+  another server's posters no longer show on your titles. The image
+  cache starts empty once after the update, so images load again the
+  first time you see them. [#71]
 
 ### What's New draft
 
