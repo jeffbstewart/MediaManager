@@ -7,14 +7,54 @@ import MediaManagerProtos
 private let logger = MMLogger(category: "ImageDiskCache")
 
 /// Disk-backed LRU image cache with in-memory front layer.
-/// Stores up to `maxCount` images on disk in Library/Caches/images/.
+/// Stores up to `maxCount` images on disk in the `images` area of the
+/// current storage scope (see `StorageScope`), so each server and
+/// account has its own cache: image refs carry the server's own ids,
+/// and the same ref on two servers is two different images.
 /// Each entry tracks an etag for conditional gRPC revalidation.
-public actor ImageDiskCache {
-    public static let shared = ImageDiskCache()
+///
+/// While no scope is bound (signed out, changing server) nothing is
+/// served from disk and nothing is written. A scope change drops the
+/// memory layer, the manifest and the pins, and loads the new scope's
+/// manifest. The cache from before scopes (`Library/Caches/images`)
+/// may hold another server's posters and is always deleted.
+public actor ImageDiskCache: StorageScopeParticipant {
+    public static let shared = ImageDiskCache(
+        scope: .shared,
+        legacyDirectory: FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("images", isDirectory: true),
+        urlCache: .shared,
+        defaultsSuite: nil)
 
     private let maxCount = 500
-    private let cacheDir: URL
+    private let scope: StorageScope
+    /// The unscoped cache from before scopes existed; deleted on sight.
+    private let legacyDirectory: URL?
+    /// HTTP responses, cleared when the bound server changes.
+    private let urlCache: URLCache
+    /// The `UserDefaults` suite (nil: standard) that remembers the last
+    /// server bound, across launches, for `urlCache`.
+    private let defaultsSuite: String?
+    private var defaults: UserDefaults {
+        defaultsSuite.flatMap { UserDefaults(suiteName: $0) } ?? .standard
+    }
     private let memoryCache = NSCache<NSString, UIImage>()
+
+    private enum Binding {
+        /// `StorageScope.current` has not been read yet (launch).
+        case notYetRead
+        /// No scope bound: serve nothing, write nothing.
+        case unbound
+        /// The current scope's `images` folder.
+        case bound(URL)
+    }
+    private var binding: Binding = .notYetRead
+
+    /// Goes up on every scope change. A caller that fetches from the
+    /// server reads it first and passes it to `store`, so an image
+    /// fetched for one scope is never written into the next.
+    public private(set) var scopeEpoch: UInt64 = 0
 
     /// In-memory manifest: cache_key → (etag, contentType, fileURL)
     private var manifest: [String: CacheEntry] = [:]
@@ -25,15 +65,15 @@ public actor ImageDiskCache {
     /// `maxCount` cap — runs at most once per save burst.
     private var lastAccess: [String: UInt64] = [:]
     private var accessClock: UInt64 = 0
-    private var pinnedKeys: Set<String> = [] // never evicted
+    /// Never evicted. Belong to the scope bound when they were made;
+    /// pins made while unbound carry into the next scope bound.
+    private var pinnedKeys: Set<String> = []
 
     struct CacheEntry {
         let etag: String
         let contentType: String
         let fileURL: URL
     }
-
-    private var loaded = false
 
     // MARK: - Manifest debounce
     //
@@ -53,24 +93,90 @@ public actor ImageDiskCache {
     private var manifestDirty: Bool = false
     private var manifestFlushScheduled: Bool = false
 
-    private init() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        cacheDir = caches.appendingPathComponent("images", isDirectory: true)
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+    static let lastServerKey = "imageDiskCache.lastServer"
+
+    /// `scope` supplies the folder; tests pass one over temp folders.
+    init(scope: StorageScope, legacyDirectory: URL?, urlCache: URLCache, defaultsSuite: String?) {
+        self.scope = scope
+        self.legacyDirectory = legacyDirectory
+        self.urlCache = urlCache
+        self.defaultsSuite = defaultsSuite
         memoryCache.countLimit = 200
+        // Register before the first read of `scope.current`
+        // (`bindIfNotYetRead`), so no change is missed.
+        scope.register(self)
     }
 
-    private func ensureLoaded() {
-        guard !loaded else { return }
-        loaded = true
-        loadManifest()
+    // MARK: - Scope
+
+    public func storageScopeWillChange() {
+        // Save what this scope has, while its folder still exists:
+        // signing back in to the same account finds it again.
+        if manifestDirty {
+            manifestDirty = false
+            writeManifestNow()
+        }
+        scopeEpoch &+= 1
+        binding = .unbound
+        dropScopeContent()
+        pinnedKeys.removeAll()
+    }
+
+    public func storageScopeDidChange(to newScope: StorageScopeID?) {
+        bind(to: newScope)
+    }
+
+    /// On launch the scope may already be bound, restored from disk.
+    private func bindIfNotYetRead() {
+        guard case .notYetRead = binding else { return }
+        bind(to: scope.current)
+    }
+
+    private func bind(to newScope: StorageScopeID?) {
+        scopeEpoch &+= 1
+        dropScopeContent()
+        if let legacyDirectory {
+            scope.discardLegacy(at: legacyDirectory)
+        }
+        guard let newScope, let folder = scope.directory(for: .images) else {
+            binding = .unbound
+            return
+        }
+        binding = .bound(folder)
+        noteServer(newScope.serverFingerprint)
+        loadManifest(from: folder)
+    }
+
+    /// The folder to read and write, or nil when unbound.
+    private var cacheDir: URL? {
+        bindIfNotYetRead()
+        if case .bound(let folder) = binding { return folder }
+        return nil
+    }
+
+    private func dropScopeContent() {
+        memoryCache.removeAllObjects()
+        manifest.removeAll()
+        lastAccess.removeAll()
+        manifestDirty = false
+    }
+
+    /// Clear the HTTP response cache when the bound server differs from
+    /// the last one, across launches too: it holds the old server's
+    /// responses.
+    private func noteServer(_ fingerprint: String) {
+        let folder = StorageScope.serverFolderName(fingerprint)
+        guard defaults.string(forKey: Self.lastServerKey) != folder else { return }
+        urlCache.removeAllCachedResponses()
+        defaults.set(folder, forKey: Self.lastServerKey)
+        logger.info("Server changed; cleared cached HTTP responses")
     }
 
     // MARK: - Public API
 
     /// Returns cached image + etag if available. Nil if cache miss.
     public func get(for ref: MMImageRef) -> (UIImage, String)? {
-        ensureLoaded()
+        guard cacheDir != nil else { return nil }
         let key = cacheKey(for: ref)
 
         // Memory cache
@@ -97,12 +203,17 @@ public actor ImageDiskCache {
 
     /// Returns just the etag for conditional requests, without loading the image.
     public func etag(for ref: MMImageRef) -> String? {
-        ensureLoaded()
+        guard cacheDir != nil else { return nil }
         return manifest[cacheKey(for: ref)]?.etag
     }
 
-    /// Store image data on disk and in memory.
-    public func store(ref: MMImageRef, data: Data, contentType: String, etag: String) {
+    /// Store image data on disk and in memory. Pass the `scopeEpoch`
+    /// read before fetching: if the scope has changed since, nothing is
+    /// stored. Nothing is stored while unbound.
+    public func store(ref: MMImageRef, data: Data, contentType: String, etag: String,
+                      scopeEpoch fetchedIn: UInt64? = nil) {
+        guard let cacheDir else { return }
+        if let fetchedIn, fetchedIn != scopeEpoch { return }
         let key = cacheKey(for: ref)
         let fileURL = cacheDir.appendingPathComponent(key)
 
@@ -124,8 +235,11 @@ public actor ImageDiskCache {
         scheduleManifestSave()
     }
 
-    /// Remove a specific entry.
-    public func remove(for ref: MMImageRef) {
+    /// Remove a specific entry. With `scopeEpoch`, only if the scope
+    /// has not changed since it was read.
+    public func remove(for ref: MMImageRef, scopeEpoch fetchedIn: UInt64? = nil) {
+        guard cacheDir != nil else { return }
+        if let fetchedIn, fetchedIn != scopeEpoch { return }
         let key = cacheKey(for: ref)
         if let entry = manifest.removeValue(forKey: key) {
             try? FileManager.default.removeItem(at: entry.fileURL)
@@ -145,6 +259,10 @@ public actor ImageDiskCache {
     /// Unpin an image ref, allowing normal LRU eviction.
     public func unpin(ref: MMImageRef) {
         pinnedKeys.remove(cacheKey(for: ref))
+    }
+
+    func isPinned(_ ref: MMImageRef) -> Bool {
+        pinnedKeys.contains(cacheKey(for: ref))
     }
 
     // MARK: - Cache Key
@@ -202,24 +320,31 @@ public actor ImageDiskCache {
         }
     }
 
-    /// Delete every cached image, pinned ones included, and the
-    /// manifest. Used when the account is deleted.
+    /// Delete every cached image of the current scope, pinned ones
+    /// included, and the manifest. Used when the account is deleted.
     public func clear() {
-        loaded = true
-        memoryCache.removeAllObjects()
-        manifest.removeAll()
-        lastAccess.removeAll()
+        let folder = cacheDir
+        dropScopeContent()
         pinnedKeys.removeAll()
-        manifestDirty = false
+        guard let folder else { return }
         let fm = FileManager.default
-        for url in (try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil)) ?? [] {
+        for url in (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] {
             try? fm.removeItem(at: url)
         }
     }
 
     // MARK: - Manifest Persistence
 
-    private var manifestURL: URL { cacheDir.appendingPathComponent("manifest.json") }
+    private struct ManifestEntry: Codable {
+        let key: String
+        let etag: String
+        let contentType: String
+        let fileName: String
+    }
+
+    private static func manifestURL(in folder: URL) -> URL {
+        folder.appendingPathComponent("manifest.json")
+    }
 
     /// Mark the manifest dirty and ensure exactly one save task is
     /// pending. Multiple stores in the same quiet period collapse
@@ -241,13 +366,10 @@ public actor ImageDiskCache {
         writeManifestNow()
     }
 
+    /// Writes the manifest into the bound scope's folder; nothing
+    /// while unbound.
     private func writeManifestNow() {
-        struct ManifestEntry: Codable {
-            let key: String
-            let etag: String
-            let contentType: String
-            let fileName: String
-        }
+        guard case .bound(let folder) = binding else { return }
         // Persist in access order (oldest first → newest last) so a
         // future load can reconstruct relative recency without
         // needing the raw clock value on disk.
@@ -262,23 +384,17 @@ public actor ImageDiskCache {
                     fileName: entry.fileURL.lastPathComponent)
             }
         if let data = try? JSONEncoder().encode(ordered) {
-            try? data.write(to: manifestURL)
+            try? data.write(to: Self.manifestURL(in: folder))
         }
     }
 
-    private func loadManifest() {
-        struct ManifestEntry: Codable {
-            let key: String
-            let etag: String
-            let contentType: String
-            let fileName: String
-        }
-        guard let data = try? Data(contentsOf: manifestURL),
+    private func loadManifest(from folder: URL) {
+        guard let data = try? Data(contentsOf: Self.manifestURL(in: folder)),
               let entries = try? JSONDecoder().decode([ManifestEntry].self, from: data) else {
             return
         }
         for entry in entries {
-            let fileURL = cacheDir.appendingPathComponent(entry.fileName)
+            let fileURL = folder.appendingPathComponent(entry.fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 manifest[entry.key] = CacheEntry(etag: entry.etag, contentType: entry.contentType, fileURL: fileURL)
                 // File ordering preserves relative recency; assign

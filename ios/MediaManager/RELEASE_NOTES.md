@@ -58,6 +58,10 @@ Merged so far:
   out, change server, or sign in as someone else; before, they kept
   coming from the previous server. Posters the previous server left in
   the image cache can still show until the cache change lands. [#70]
+- Cached posters and artwork are now kept per server and account, so
+  another server's posters no longer show on your titles. The image
+  cache starts empty once after the update, so images load again the
+  first time you see them. [#71]
 
 ### What's New draft
 
