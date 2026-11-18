@@ -54,6 +54,10 @@ Merged so far:
 
 - Shared storage that tracks the current server and account, with no
   visible change on its own. [#69]
+- Images now come from the server you are signed in to after you sign
+  out, change server, or sign in as someone else; before, they kept
+  coming from the previous server. Posters the previous server left in
+  the image cache can still show until the cache change lands. [#70]
 
 ### What's New draft
 

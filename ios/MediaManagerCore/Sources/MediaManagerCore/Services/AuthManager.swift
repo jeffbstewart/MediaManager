@@ -54,6 +54,10 @@ public final class AuthManager {
 
     public let apiClient = APIClient()
     public let grpcClient = GrpcClient()
+    /// The image stream, closed on sign-out and server changes so no
+    /// image request goes to the old server as the old account.
+    /// `ImageProvider` fetches through it.
+    public let imageStream: ImageStreamClient
     /// Told which server and account are current, so each store keeps
     /// its content per server and account (see `StorageScope`).
     public let storageScope = StorageScope.shared
@@ -116,6 +120,7 @@ public final class AuthManager {
 
     public init() {
         self.logStreamer = LogStreamer(grpcClient: grpcClient, identity: .current())
+        self.imageStream = ImageStreamClient(grpcClient: grpcClient)
         purgeKeychainIfFreshInstall()
         // The first launch with per-server storage records which server
         // the existing, unscoped content came from; later sends are
@@ -541,6 +546,7 @@ public final class AuthManager {
         KeychainService.delete(key: .refreshToken)
         await apiClient.setAccessToken(nil)
         await grpcClient.setAccessToken(nil)
+        await imageStream.close()
         // Stores stop serving this account's content but keep it, in
         // case the same account signs back in.
         storageScope.send(.suspend(.signedOut))
@@ -586,6 +592,7 @@ public final class AuthManager {
         Task {
             await logStreamer.stop()
             await grpcClient.close()
+            await imageStream.close()
         }
         state = .needsServer
     }
@@ -638,6 +645,7 @@ public final class AuthManager {
         Task {
             await logStreamer.stop()
             await grpcClient.close()
+            await imageStream.close()
         }
         state = .needsServer
     }

@@ -119,7 +119,7 @@ struct MediaManagerApp: App {
         let ap = AudioPlayerManager()
         let ac = AudioCacheManager()
         let dataModel = OnlineDataModel(authManager: am, downloadManager: dm)
-        let ip = ImageProvider(grpcClient: am.grpcClient)
+        let ip = ImageProvider(grpcClient: am.grpcClient, imageStream: am.imageStream)
         _authManager = State(initialValue: am)
         _downloadManager = State(initialValue: dm)
         _bookCache = State(initialValue: bc)
