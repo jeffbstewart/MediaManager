@@ -62,6 +62,10 @@ Merged so far:
   downloaded them. Signing out, changing server or signing in as
   someone else hides them and stops a downloaded song that is playing;
   signing back in to the same account brings them back. [#73]
+- Cached posters and artwork are now kept per server and account, so
+  another server's posters no longer show on your titles. The image
+  cache starts empty once after the update, so images load again the
+  first time you see them. [#71]
 
 ### What's New draft
 
