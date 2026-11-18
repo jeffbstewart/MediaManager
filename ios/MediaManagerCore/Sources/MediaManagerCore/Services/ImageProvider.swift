@@ -16,8 +16,32 @@ public final class ImageProvider {
     private let streamClient: ImageStreamClient
     private let cache = ImageDiskCache.shared
 
-    public init(grpcClient: GrpcClient) {
-        self.streamClient = ImageStreamClient(grpcClient: grpcClient)
+    /// The gRPC client's connection generation, mirrored here so views
+    /// can key their image loads on it: an image already on screen
+    /// reloads after a server or account change (`CachedImage`).
+    public private(set) var connectionGeneration: UInt64 = 0
+
+    /// `imageStream` is the one `AuthManager` closes on sign-out and
+    /// server changes; it must talk through `grpcClient`.
+    public init(grpcClient: GrpcClient, imageStream: ImageStreamClient) {
+        self.streamClient = imageStream
+        let (generations, continuation) = AsyncStream.makeStream(of: UInt64.self)
+        Task { [weak self] in
+            let current = await grpcClient.setConnectionGenerationHandler { generation in
+                continuation.yield(generation)
+            }
+            self?.noteConnectionGeneration(current)
+            for await generation in generations {
+                self?.noteConnectionGeneration(generation)
+            }
+        }
+    }
+
+    /// The value only goes up, whatever order updates arrive in.
+    private func noteConnectionGeneration(_ generation: UInt64) {
+        if generation > connectionGeneration {
+            connectionGeneration = generation
+        }
     }
 
     /// Load an image by reference. Returns nil if not found or on error.

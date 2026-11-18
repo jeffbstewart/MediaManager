@@ -145,7 +145,10 @@ struct CachedImage: View {
         let tmdb = ref.hasTmdbMedia
             ? "\(ref.tmdbMedia.tmdbID)/\(ref.tmdbMedia.mediaType.rawValue)"
             : ""
+        // The connection generation goes up on a server or account
+        // change, so an image already on screen reloads from the new one.
         return [
+            "\(imageProvider.connectionGeneration)",
             "\(ref.type.rawValue)",
             "\(ref.titleID)",
             "\(ref.tmdbPersonID)",

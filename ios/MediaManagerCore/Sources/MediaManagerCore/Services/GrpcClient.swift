@@ -167,13 +167,47 @@ public actor GrpcClient {
         self.configuredHost = host
         self.configuredPort = port
         self.configuredUseTLS = useTLS
+        advanceConnectionGeneration()
         logger.info("configure: client created and running for \(host):\(port)")
     }
 
     public func setAccessToken(_ token: Data?) {
         let hasToken = token != nil
         logger.info("setAccessToken: hasToken=\(hasToken)")
+        let hadToken = accessToken != nil
         self.accessToken = token
+        // Clearing the token, or setting one where there was none, means
+        // the signed-in account may have changed. A refresh (one token
+        // replacing another) is the same account and does not count.
+        if hadToken != hasToken {
+            advanceConnectionGeneration()
+        }
+    }
+
+    // MARK: - Connection generation
+
+    /// Goes up whenever the connection or the signed-in account may have
+    /// changed: `configure` (and so `reconnect`), `close`, and the access
+    /// token being cleared or set where there was none. Long-lived
+    /// streams (`ImageStreamClient`) record it when they open and reopen
+    /// when it moves, because a graceful shutdown lets a running stream
+    /// carry on talking to the old server as the old account.
+    public private(set) var connectionGeneration: UInt64 = 0
+
+    private var connectionGenerationHandler: (@Sendable (UInt64) -> Void)?
+
+    /// Called with the new value each time `connectionGeneration` goes
+    /// up. Returns the current value, so the caller misses nothing that
+    /// happened before the handler was set. Set by `ImageProvider`.
+    @discardableResult
+    public func setConnectionGenerationHandler(_ handler: (@Sendable (UInt64) -> Void)?) -> UInt64 {
+        connectionGenerationHandler = handler
+        return connectionGeneration
+    }
+
+    private func advanceConnectionGeneration() {
+        connectionGeneration += 1
+        connectionGenerationHandler?(connectionGeneration)
     }
 
     /// Push the effective offline state from DownloadManager into the
@@ -195,6 +229,7 @@ public actor GrpcClient {
     public func close() {
         logger.info("close: shutting down")
         grpcClient?.beginGracefulShutdown()
+        advanceConnectionGeneration()
     }
 
     // MARK: - Auth Metadata
@@ -295,9 +330,21 @@ public actor GrpcClient {
         )
     }
 
-    /// Auth metadata for long-lived streams (ImageStreamClient needs this).
-    public func authMetadataForImageStream() -> Metadata {
-        return authMetadata()
+    /// Open the bidirectional image stream (`ImageStreamClient`), signed
+    /// in with the current access token. Runs until the stream ends.
+    public func streamImages(
+        requestProducer: @Sendable @escaping (RPCWriter<MMImageRequest>) async throws -> Void,
+        onMessage: @Sendable @escaping (MMImageResponse) async -> Void
+    ) async throws {
+        try await imageService.streamImages(
+            metadata: authMetadata(),
+            requestProducer: requestProducer,
+            onResponse: { response in
+                for try await message in response.messages {
+                    await onMessage(message)
+                }
+            }
+        )
     }
 
     // MARK: - Auth RPCs (unauthenticated)
