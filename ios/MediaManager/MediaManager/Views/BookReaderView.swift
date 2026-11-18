@@ -275,10 +275,33 @@ struct BookReaderView: View {
                     .disabled(status != .reading)
                     Button { cycleTheme() } label: { Image(systemName: theme.icon) }
                         .disabled(status != .reading)
-                    Button { decreaseFont() } label: { Image(systemName: "textformat.size.smaller") }
-                        .disabled(status != .reading || fontPct <= 60)
-                    Button { increaseFont() } label: { Image(systemName: "textformat.size.larger") }
-                        .disabled(status != .reading || fontPct >= 200)
+                    // Font size lives behind one menu rather than two
+                    // toolbar buttons: with the percent, chapters and
+                    // theme beside it, five items overflowed the
+                    // trailing pill off the right edge on a 440pt
+                    // iPhone (16 Pro Max). The menu stays open while
+                    // the user taps A−/A+ so they can step several
+                    // sizes and watch the page reflow behind it.
+                    Menu {
+                        ControlGroup {
+                            Button { decreaseFont() } label: {
+                                Label("Smaller", systemImage: "textformat.size.smaller")
+                            }
+                            .disabled(fontPct <= 60)
+                            Button { increaseFont() } label: {
+                                Label("Larger", systemImage: "textformat.size.larger")
+                            }
+                            .disabled(fontPct >= 200)
+                        } label: {
+                            Text("Text size \(fontPct)%")
+                        }
+                        .controlGroupStyle(.compactMenu)
+                    } label: {
+                        Image(systemName: "textformat.size")
+                    }
+                    .menuActionDismissBehavior(.disabled)
+                    .accessibilityLabel("Text size")
+                    .disabled(status != .reading)
                 }
             }
         }
