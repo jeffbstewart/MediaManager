@@ -34,13 +34,54 @@ sealed class RefreshResult {
  * Uses HMAC-SHA256 with an auto-generated signing key stored in app_config.
  * Supports dual-key validation during key rotation (current + previous key).
  *
- * Key rotation procedure:
+ * ## The signing key is also the server's identity
+ *
+ * One random 256-bit key, the `jwt_signing_key` row of `app_config`,
+ * generated on first use by [getOrCreateSigningKey]. It does four jobs:
+ *
+ * 1. Signs access tokens (this file).
+ * 2. Signs passkey challenges (`WebAuthnService`).
+ * 3. Signs public album-art tokens (`PublicArtTokenService`).
+ * 4. **Names the server.** [getSigningKeyFingerprint] (SHA-256 of the key)
+ *    goes out unauthenticated in `InfoService/Discover` as
+ *    `server_fingerprint`. Clients treat it as the server's identity:
+ *    - iOS pins it on first connect and shows a "fingerprint changed"
+ *      screen when a later Discover differs.
+ *    - iOS stores downloads, cached images, progress and queued progress
+ *      writes per fingerprint (`StorageScope` in `MediaManagerCore`, see
+ *      `docs/IOS_ARCHITECTURE.md`). When a user accepts a new fingerprint,
+ *      the device deletes everything it stored for the old one: a
+ *      different fingerprint is a different server, whose catalog ids
+ *      mean different titles.
+ *
+ * Consequences for anyone changing this code or the row:
+ * - **Rotating the key** (below), deleting the row, or changing how the
+ *   fingerprint is derived (hash, encoding, input) changes the server's
+ *   identity for every client at once. Each iOS device shows the
+ *   fingerprint screen and, once the user accepts, loses its downloads
+ *   and unsent progress for this server. Do it deliberately, and warn
+ *   users first.
+ * - **Copying the key to another server**, by restoring this database
+ *   into a second instance or copying the row, makes the two
+ *   indistinguishable to clients: they will mix the two catalogs' content
+ *   on the device. Each server also accepts the other's access tokens
+ *   until they expire. Never seed a new server from another server's
+ *   database without rotating its key first.
+ * - The fingerprint is public. It tells servers apart; it does not prove
+ *   who a server is (an impostor can repeat it). TLS does that.
+ * - Never generate a key anywhere but [getOrCreateSigningKey], and never
+ *   regenerate one automatically (on an error, a parse failure, or a
+ *   schema change): that is a silent rotation.
+ *
+ * Key rotation procedure (changes the server's identity; see above):
  * 1. Copy current jwt_signing_key value to jwt_signing_key_previous in app_config
  * 2. Delete the jwt_signing_key row (a new key is auto-generated on next use)
  * 3. Restart the server
  * 4. For 15 minutes, JWTs signed with either key are accepted (dual-key validation)
  * 5. After access tokens expire (15min), remove jwt_signing_key_previous from app_config
  * 6. All users must re-authenticate via refresh tokens (which are DB-based, not affected)
+ * 7. iOS devices see the fingerprint-changed screen on their next connect;
+ *    accepting it deletes their downloads and unsent progress for this server
  */
 object JwtService {
     private val log = LoggerFactory.getLogger(JwtService::class.java)
@@ -51,8 +92,23 @@ object JwtService {
     private const val REFRESH_TOKEN_DAYS = 30L
     private const val GRACE_PERIOD_SECONDS = 60L
     private const val MAX_REFRESH_FAMILIES_PER_USER = 10
+    /**
+     * `app_config` key of the signing key, which is also the server's
+     * identity (see the class comment). Persisted: never rename without a
+     * migration, and a migration must carry the value over unchanged.
+     */
     private const val CONFIG_KEY_SIGNING = "jwt_signing_key"
     private const val CONFIG_KEY_SIGNING_PREVIOUS = "jwt_signing_key_previous"
+
+    /**
+     * The row's `description`, for whoever opens `app_config` directly.
+     * V106 writes the same text onto rows created before it; keep the two
+     * in step.
+     */
+    internal const val SIGNING_KEY_DESCRIPTION =
+        "Server signing key AND the server's identity: its SHA-256 is the " +
+            "fingerprint clients pin and store content under. Changing, deleting " +
+            "or copying it to another server has client-visible effects; see JwtService."
 
     /** Scheme prefix of an Authorization header value that carries an access token. Fixed by RFC 6750. */
     const val BEARER_PREFIX = "Bearer "
@@ -343,10 +399,16 @@ object JwtService {
     }
 
     /**
-     * Returns a SHA-256 fingerprint of the JWT signing key for TOFU verification.
-     * Clients store this on first connection and verify it on reconnect to detect
-     * server spoofing (MITM via SSDP). The fingerprint is stable across restarts
-     * and only changes during deliberate key rotation.
+     * The server's identity: SHA-256 of the signing key, as lowercase hex,
+     * sent in `InfoService/Discover`. Clients pin it on first connection and
+     * key the content they store on it (see the class comment). It is
+     * stable across restarts and changes only when the key does.
+     *
+     * The derivation is a wire contract. Changing it (hash, encoding, or
+     * hashing the bytes instead of the hex string) is a key rotation for
+     * every client at once. The value is public: it tells servers apart
+     * and catches pointing a client at the wrong one by mistake, but an
+     * impostor can repeat it; TLS is what authenticates the server.
      */
     fun getSigningKeyFingerprint(): String {
         val key = getOrCreateSigningKey()
@@ -355,9 +417,21 @@ object JwtService {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
-    /** Returns the raw signing key bytes for HMAC operations (used by WebAuthnService for challenge signing). */
+    /**
+     * Returns the raw signing key bytes for HMAC operations (WebAuthnService
+     * challenges, PublicArtTokenService tokens). Never log, return, or
+     * derive anything public from these bytes except through
+     * [getSigningKeyFingerprint].
+     */
     fun getSigningKeyBytes(): ByteArray = hexToBytes(getOrCreateSigningKey())
 
+    /**
+     * The only place a signing key is created, and only when the row is
+     * absent: on a new server's first use, or after the deliberate
+     * rotation in the class comment. Creating one changes the server's
+     * identity for every client, so nothing else may delete or replace
+     * the row, and this must never be changed to regenerate on an error.
+     */
     private fun getOrCreateSigningKey(): String {
         val existing = getConfigValue(CONFIG_KEY_SIGNING)
         if (existing != null) return existing
@@ -366,7 +440,7 @@ object JwtService {
         AppConfig(
             config_key = CONFIG_KEY_SIGNING,
             config_val = key,
-            description = "JWT HMAC-SHA256 signing key (auto-generated)"
+            description = SIGNING_KEY_DESCRIPTION
         ).save()
         log.info("Generated new JWT signing key")
         return key

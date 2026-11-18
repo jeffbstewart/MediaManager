@@ -1,5 +1,6 @@
 package net.stewart.mediamanager.service
 
+import com.github.vokorm.findAll
 import com.gitlab.mvysny.jdbiorm.JdbiOrm
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -9,6 +10,7 @@ import org.junit.AfterClass
 import org.junit.Before
 import org.junit.BeforeClass
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -159,5 +161,28 @@ class JwtServiceTest {
         val mid = JwtService.refresh(midTokens[2]) // Device-5
         assertTrue(mid is RefreshResult.Success,
             "Mid-stack family Device-5 must still refresh; got $mid")
+    }
+
+    // The fingerprint is the server's identity on every client (#68): its
+    // derivation is a wire contract, so pin it here.
+    @Test
+    fun `the fingerprint is the SHA-256 of the stored key hex and stays put`() {
+        val first = JwtService.getSigningKeyFingerprint()
+        val stored = AppConfig.findAll().single { it.config_key == "jwt_signing_key" }
+        val expected = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(stored.config_val!!.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        assertEquals(expected, first)
+        assertEquals(first, JwtService.getSigningKeyFingerprint())
+        assertEquals(JwtService.SIGNING_KEY_DESCRIPTION, stored.description)
+    }
+
+    @Test
+    fun `V106 writes the same description new signing-key rows get`() {
+        val sql = javaClass.getResource("/db/migration/V106__describe_signing_key_identity.sql")!!
+            .readText()
+            .replace("''", "'")
+        assertTrue(sql.contains("SET description = '${JwtService.SIGNING_KEY_DESCRIPTION}'"),
+            "V106 and JwtService.SIGNING_KEY_DESCRIPTION have drifted apart")
     }
 }

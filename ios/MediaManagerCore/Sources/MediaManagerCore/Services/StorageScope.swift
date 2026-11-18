@@ -35,9 +35,12 @@ public enum StorageArea: String, CaseIterable, Sendable {
 }
 
 /// The server and account that content on this device belongs to.
-/// The server is named by the fingerprint its Discover answer carries
-/// (its token-signing key), which survives a change of address; the
-/// account by its user id on that server.
+/// The server is named by the fingerprint its Discover answer carries:
+/// a hash of its signing key, which survives restarts and a change of
+/// address and changes only when the server's key is rotated (see
+/// `JwtService` on the server). A rotation therefore reads as a new
+/// server, and its content here is deleted. The account is named by its
+/// user id on that server.
 public struct StorageScopeID: Codable, Hashable, Sendable, CustomStringConvertible {
     public let serverFingerprint: String
     public let accountId: Int64

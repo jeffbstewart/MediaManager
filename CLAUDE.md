@@ -237,6 +237,17 @@ a server-set, HttpOnly, `SameSite=Lax` `mm_session` cookie (30-day
 tokens are cached ~60s to avoid a DB hit per request, and expired rows are
 purged on startup.
 
+**The signing key is the server's identity.** `JwtService`'s key
+(`app_config` row `jwt_signing_key`) signs access tokens, passkey
+challenges and album-art tokens. Its SHA-256 is the `server_fingerprint`
+Discover returns, which clients pin, and which the iOS app stores all its
+content under (`StorageScope`). Changing the key, the row, or how the
+fingerprint is derived makes every iOS device delete its downloads and
+progress for the server; copying the key to another server makes clients
+treat the two as one. Read `JwtService`'s class comment before touching
+any of it; the admin-facing version is in `docs/ADMIN_GUIDE.md`, "Server
+Signing Key and Server Identity".
+
 **First-user setup:** When `app_user` is empty, `AuthService.hasUsers()` is
 false — the HTTP decorator returns 403 and only the unauthenticated
 `AuthService/CreateFirstUser` RPC is reachable, which the SPA's setup flow
