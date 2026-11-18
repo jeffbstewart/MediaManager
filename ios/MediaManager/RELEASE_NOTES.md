@@ -58,6 +58,10 @@ Merged so far:
   out, change server, or sign in as someone else; before, they kept
   coming from the previous server. Posters the previous server left in
   the image cache can still show until the cache change lands. [#70]
+- Downloaded books and music are kept for the server and account that
+  downloaded them. Signing out, changing server or signing in as
+  someone else hides them and stops a downloaded song that is playing;
+  signing back in to the same account brings them back. [#73]
 - Cached posters and artwork are now kept per server and account, so
   another server's posters no longer show on your titles. The image
   cache starts empty once after the update, so images load again the
