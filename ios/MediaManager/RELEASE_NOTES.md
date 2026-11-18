@@ -61,6 +61,10 @@ Merged so far:
 - After you switch to a different server, the terms screen and the
   Downloads tab follow the new server from the start; before, they
   could reflect the previous server until the new one answered. [#75]
+- Cached posters and artwork are now kept per server and account, so
+  another server's posters no longer show on your titles. The image
+  cache starts empty once after the update, so images load again the
+  first time you see them. [#71]
 
 ### What's New draft
 
