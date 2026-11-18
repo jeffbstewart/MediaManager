@@ -58,6 +58,9 @@ Merged so far:
   out, change server, or sign in as someone else; before, they kept
   coming from the previous server. Posters the previous server left in
   the image cache can still show until the cache change lands. [#70]
+- After you switch to a different server, the terms screen and the
+  Downloads tab follow the new server from the start; before, they
+  could reflect the previous server until the new one answered. [#75]
 
 ### What's New draft
 
