@@ -15,7 +15,11 @@ class PathContainmentTest {
 
     @BeforeTest
     fun setUp() {
-        base = Files.createTempDirectory("pathcontain").toFile()
+        // Canonical, so the fixture contains no symlinks except the ones a
+        // test makes. On macOS the temp folder is under /var, itself a link
+        // to /private/var; without this, every path here crosses a link
+        // and "requested via the canonical root" was not canonical at all.
+        base = Files.createTempDirectory("pathcontain").toFile().canonicalFile
         root = File(base, "media").apply { mkdirs() }
     }
 
