@@ -52,12 +52,16 @@ public final class ImageProvider {
             return GeneratedArt.image(for: ref)
         }
 
+        // Read before anything else: if the server or account changes
+        // while this request runs, what it fetched is not stored.
+        let scopeEpoch = await cache.scopeEpoch
+
         // 1. Check cache (memory + disk)
         if let (cached, etag) = await cache.get(for: ref) {
             // Have a cached copy — do a conditional revalidation in the background
             // (don't block the UI waiting for it)
             Task {
-                await revalidate(ref: ref, etag: etag)
+                await revalidate(ref: ref, etag: etag, scopeEpoch: scopeEpoch)
             }
             return cached
         }
@@ -71,7 +75,8 @@ public final class ImageProvider {
         switch response.result {
         case .data(let imageData):
             let data = imageData.content
-            await cache.store(ref: ref, data: data, contentType: imageData.contentType, etag: imageData.etag)
+            await cache.store(ref: ref, data: data, contentType: imageData.contentType,
+                              etag: imageData.etag, scopeEpoch: scopeEpoch)
             return UIImage(data: data)
         case .notModified:
             // Cache still valid — shouldn't happen on a miss, but handle gracefully
@@ -99,18 +104,19 @@ public final class ImageProvider {
 
     // MARK: - Background revalidation
 
-    private func revalidate(ref: MMImageRef, etag: String) async {
+    private func revalidate(ref: MMImageRef, etag: String, scopeEpoch: UInt64) async {
         let response = await streamClient.fetch(ref: ref, etag: etag)
         guard let response else { return }
 
         switch response.result {
         case .data(let imageData):
             // Image changed — update cache
-            await cache.store(ref: ref, data: imageData.content, contentType: imageData.contentType, etag: imageData.etag)
+            await cache.store(ref: ref, data: imageData.content, contentType: imageData.contentType,
+                              etag: imageData.etag, scopeEpoch: scopeEpoch)
         case .notModified:
             break // Cache is still valid, nothing to do
         case .notFound:
-            await cache.remove(for: ref)
+            await cache.remove(for: ref, scopeEpoch: scopeEpoch)
         case .permissionDenied, nil:
             break
         }
