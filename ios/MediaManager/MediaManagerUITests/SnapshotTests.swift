@@ -256,19 +256,59 @@ final class SnapshotTests: XCTestCase {
         row.tap()
     }
 
-    /// Capture the current screen as an XCTAttachment with `.keepAlways`
-    /// so the wrapper script can pull the PNG out of the .xcresult.
-    /// The name becomes the filename stem on disk.
+    /// Capture the current screen. Normally an XCTAttachment with
+    /// `.keepAlways`, which the wrapper script pulls out of the
+    /// .xcresult; the name becomes the filename stem on disk.
+    ///
+    /// With `MM_SNAPSHOT_EXTERNAL_CAPTURE` set, the host takes the
+    /// picture instead (see `requestExternalCapture`).
     private func attach(name: String) {
+        if ProcessInfo.processInfo.environment["MM_SNAPSHOT_EXTERNAL_CAPTURE"] == "1" {
+            requestExternalCapture(name: name)
+            return
+        }
         // `XCUIScreen.main` is the device's first display. On an
         // unfolded iPhone Duo that is still the outer one, and
         // `app.screenshot()` comes back black there, so the Duo's
-        // inner display cannot be captured from here (issue #30).
+        // inner display is captured from the host instead (issue #30).
         let screenshot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// Directory the host watches: `<runner data container>/tmp/
+    /// mm-snapshot-requests`. The capture script finds it with
+    /// `simctl get_app_container`, so neither side needs a path into
+    /// the other's file system.
+    private static let externalCaptureDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("mm-snapshot-requests", isDirectory: true)
+
+    /// Hands a shot to the host and waits for it. Used for the iPhone
+    /// Duo's inner display, which only `simctl io screenshot
+    /// --display=<inner>` can capture (issue #30). Writes
+    /// `<name>.request`; the host captures the display, writes the
+    /// picture under its own name, then `<name>.done`. The wait is long
+    /// because the host may first have to ask a person to unfold the
+    /// simulator.
+    private func requestExternalCapture(name: String) {
+        let fm = FileManager.default
+        let dir = Self.externalCaptureDirectory
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let done = dir.appendingPathComponent("\(name).done")
+        try? fm.removeItem(at: done)
+        let request = dir.appendingPathComponent("\(name).request")
+        XCTAssertTrue(fm.createFile(atPath: request.path, contents: Data()),
+                      "could not write the capture request for \(name)")
+        let deadline = Date().addingTimeInterval(20 * 60)
+        while !fm.fileExists(atPath: done.path) {
+            if Date() > deadline {
+                XCTFail("the host did not capture \(name) within 20 minutes")
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
     }
 
     /// On a fresh simulator, iOS posts a system notification banner
