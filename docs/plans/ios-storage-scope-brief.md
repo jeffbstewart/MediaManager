@@ -7,8 +7,8 @@ whole context; you have no memory of earlier runs.
 
 You run **on the operator's Mac** in your own git worktree. Cloud
 sandboxes cannot build iOS, so this work is not a cloud chain row and
-`docs/plans/chain-agent-brief.md` does not apply. Other agents are
-working on the sibling issues at the same time in other worktrees.
+`docs/plans/chain-agent-brief.md` does not apply. Agents run one
+issue at a time; the PRs for earlier issues may be open or merged.
 
 ## Read first, in this order
 
@@ -61,9 +61,10 @@ working on the sibling issues at the same time in other worktrees.
 - Add one plain-language line for your change at the end of the
   "Merged so far" list under **In progress: content kept per server and
   account** in `ios/MediaManager/RELEASE_NOTES.md`, ending with
-  `[#<issue>]`. Say what a user would notice, if anything. Other agents
-  add lines in the same place; a merge conflict there is expected and
-  the operator resolves it. Do not edit the rest of that entry.
+  `[#<issue>]`. Say what a user would notice, if anything. An earlier
+  agent may have added a line there in a PR not yet merged; a conflict
+  there is expected and the operator resolves it. Do not edit the rest
+  of that entry.
 - Open the PR against `main` with `gh pr create`. The body says
   `Fixes #<issue>.` and covers what changed, how it was tested, and
   what was **not** tested. End it with the attribution line the
@@ -74,7 +75,7 @@ working on the sibling issues at the same time in other worktrees.
 
 PR CI does not build iOS, so these runs are the only check.
 
-1. Use your own simulator so you do not collide with other agents:
+1. Use your own simulator, not the one the operator has signed in:
    `xcrun simctl clone "iPhone 17 Pro Max" "Agent-<issue>"`. If that fails,
    pick any available iPhone simulator not already booted, and boot it
    with `xcrun simctl boot`. Delete your clone when you are done.
