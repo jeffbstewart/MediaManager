@@ -106,13 +106,22 @@ public struct PlaylistDownloadProgress: Sendable, Hashable {
 /// in-memory list of completed downloads + dict of in-flight
 /// progress, both projected from / to a JSON index on disk.
 ///
-/// **Disk layout:**
+/// **Disk layout:** the `audio` area of the current storage scope
+/// (see `StorageScope`), since ids are the server's own:
 /// ```
-/// <Application Support>/Downloads/Audio/
+/// <Application Support>/Scoped/servers/<server>/accounts/<user id>/audio/
 ///     index.json                       // [DownloadedAlbum]
-///     <titleId>.detail.pb              // serialized MMTitleDetail
-///     <titleId>/<trackId>              // raw audio bytes
+///     playlists.json                   // [DownloadedPlaylist]
+///     <titleId>/detail.pb              // serialized MMTitleDetail
+///     <titleId>/<trackId>.<ext>        // raw audio bytes
+///     playlist-<playlistId>/...        // same shape, per playlist
 /// ```
+///
+/// With no scope bound, nothing is downloaded and nothing starts. A
+/// scope change stops playback of a downloaded track (see
+/// `configurePlayback`), cancels downloads in progress, drops the
+/// indices, and loads the new scope's. Audio kept in
+/// `Downloads/Audio` before scopes is claimed on the first bind.
 ///
 /// The directory is excluded from iCloud backup; albums re-download
 /// cleanly on a new device.
@@ -122,7 +131,7 @@ public struct PlaylistDownloadProgress: Sendable, Hashable {
 /// uses local files when the album has been downloaded.
 @Observable
 @MainActor
-public final class AudioCacheManager {
+public final class AudioCacheManager: StorageScopeParticipant {
 
     /// Albums whose tracks have all landed. Persisted to index.json.
     public private(set) var downloads: [DownloadedAlbum] = []
@@ -160,37 +169,104 @@ public final class AudioCacheManager {
     private var downloadTasks: [Int64: Task<Void, Never>] = [:]
     private var playlistDownloadTasks: [Int64: Task<Void, Never>] = [:]
 
-    private let audioDir: URL
-    private let indexPath: URL
-    private let playlistIndexPath: URL
+    /// The `audio` area of the current storage scope, and the
+    /// downloads writing into it.
+    private let area: ScopedDownloadArea
+    private static let indexFileName = "index.json"
+    private static let playlistIndexFileName = "playlists.json"
 
-    public init() {
+    /// The bound scope's Audio folder; nil when nothing is bound.
+    private var audioDir: URL? { area.folder }
+
+    /// The track the player has loaded, and how to stop it. Set by
+    /// `configurePlayback`; the app owns the player.
+    private var currentTrackId: (@MainActor () -> Int64?)?
+    private var stopPlayback: (@MainActor () -> Void)?
+
+    public convenience init() {
         let appSupport = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let downloadsRoot = appSupport.appendingPathComponent("Downloads", isDirectory: true)
-        audioDir = downloadsRoot.appendingPathComponent("Audio", isDirectory: true)
-        indexPath = audioDir.appendingPathComponent("index.json")
-        playlistIndexPath = audioDir.appendingPathComponent("playlists.json")
+        self.init(
+            scope: .shared,
+            legacyFolder: appSupport
+                .appendingPathComponent("Downloads", isDirectory: true)
+                .appendingPathComponent("Audio", isDirectory: true))
+    }
 
-        do {
-            try FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
-        } catch {
-            logger.error("init: createDirectory failed at \(self.audioDir.path): \(error.localizedDescription)")
-        }
-        // iCloud-exclude — audio re-downloads cleanly.
-        var dir = audioDir
-        var rv = URLResourceValues()
-        rv.isExcludedFromBackup = true
-        try? dir.setResourceValues(rv)
-
-        downloads = Self.loadIndex(at: indexPath)
-        playlistDownloads = Self.loadPlaylistIndex(at: playlistIndexPath)
-        rebuildTrackIndex()
-        logger.info("AudioCacheManager initialised; \(self.downloads.count) albums + \(self.playlistDownloads.count) playlists at \(self.audioDir.path)")
+    /// `scope` supplies the folder, and `legacyFolder` is where audio
+    /// was kept before scopes; tests pass temp folders for both.
+    init(scope: StorageScope, legacyFolder: URL?) {
+        area = ScopedDownloadArea(scope: scope, area: .audio, legacyFolder: legacyFolder)
+        // Register before the first read of `scope.current`, so no
+        // change is missed. On launch the scope may already be bound,
+        // restored from disk.
+        scope.register(self)
+        load()
     }
 
     public func configure(apiClient: APIClient) {
         self.apiClient = apiClient
+    }
+
+    /// Tell the store what the player is playing and how to stop it,
+    /// so a change of storage scope stops a downloaded track before
+    /// its file may be deleted. The position is discarded: it belongs
+    /// to the scope being left.
+    public func configurePlayback(
+        currentTrackId: @escaping @MainActor () -> Int64?,
+        stop: @escaping @MainActor () -> Void
+    ) {
+        self.currentTrackId = currentTrackId
+        self.stopPlayback = stop
+    }
+
+    /// Load the bound scope's indices, claiming audio stored before
+    /// scopes. With no scope bound, nothing is downloaded.
+    private func load() {
+        dropState()
+        guard let folder = area.bind() else {
+            logger.info("load: no storage scope bound; no audio downloads")
+            return
+        }
+        downloads = Self.loadIndex(at: folder.appendingPathComponent(Self.indexFileName))
+        playlistDownloads = Self.loadPlaylistIndex(
+            at: folder.appendingPathComponent(Self.playlistIndexFileName))
+        rebuildTrackIndex()
+        logger.info("load: \(self.downloads.count) albums + \(self.playlistDownloads.count) playlists")
+    }
+
+    /// Forget everything held in memory for the current scope.
+    private func dropState() {
+        downloadTasks.removeAll()
+        playlistDownloadTasks.removeAll()
+        activeDownloads.removeAll()
+        activePlaylistDownloads.removeAll()
+        failedDownloads.removeAll()
+        failedPlaylistDownloads.removeAll()
+        downloads.removeAll()
+        playlistDownloads.removeAll()
+        rebuildTrackIndex()
+    }
+
+    // MARK: - Storage scope
+
+    /// The folder may be deleted once this returns: stop a downloaded
+    /// track that is playing, stop serving the folder, cancel
+    /// downloads and wait for them to clean up, and forget the
+    /// scope's indices.
+    public func storageScopeWillChange() async {
+        if let trackId = currentTrackId?(), localTrackURL(trackId: trackId) != nil {
+            logger.info("storageScopeWillChange: stopping playback of downloaded track \(trackId)")
+            stopPlayback?()
+        }
+        area.unbind()
+        dropState()
+        await area.cancelAndAwaitWriters()
+        dropState()
+    }
+
+    public func storageScopeDidChange(to scope: StorageScopeID?) async {
+        load()
     }
 
     // MARK: - Public API
@@ -264,14 +340,16 @@ public final class AudioCacheManager {
         // hard-link into this same file (same inode), so checking
         // the album directory wins for the common case.
         if let titleId = trackToAlbum[trackId],
-           let url = findTrackFile(in: albumDir(titleId: titleId), trackId: trackId) {
+           let dir = albumDir(titleId: titleId),
+           let url = findTrackFile(in: dir, trackId: trackId) {
             return url
         }
         // Fall back to any playlist directory carrying the track —
         // tracks downloaded as part of a playlist whose parent album
         // wasn't (or has since been deleted) live there.
         for playlistId in trackToPlaylists[trackId] ?? [] {
-            if let url = findTrackFile(in: playlistDir(playlistId: playlistId), trackId: trackId) {
+            if let dir = playlistDir(playlistId: playlistId),
+               let url = findTrackFile(in: dir, trackId: trackId) {
                 return url
             }
         }
@@ -301,7 +379,9 @@ public final class AudioCacheManager {
     /// Cached album detail for offline browsing. AlbumDetailView
     /// falls back to this when the dataModel call throws .offline.
     public func cachedAlbumDetail(titleId: Int64) -> ApiTitleDetail? {
-        let path = albumDir(titleId: titleId).appendingPathComponent("detail.pb")
+        guard let path = albumDir(titleId: titleId)?.appendingPathComponent("detail.pb") else {
+            return nil
+        }
         guard FileManager.default.fileExists(atPath: path.path) else {
             logger.warning("cachedAlbumDetail: missing file for titleId=\(titleId) at \(path.path)")
             return nil
@@ -326,6 +406,11 @@ public final class AudioCacheManager {
     public func downloadAlbum(detail: ApiTitleDetail, album: ApiAlbum) {
         let titleId = detail.id.protoValue
         if isDownloaded(titleId: titleId) || isDownloading(titleId: titleId) { return }
+        // No storage scope bound: there is nowhere this belongs.
+        guard audioDir != nil else {
+            failedDownloads[titleId] = "Sign in to download music."
+            return
+        }
         let playable = album.tracks.filter { $0.playable }
         guard !playable.isEmpty else {
             failedDownloads[titleId] = "No playable tracks on this album."
@@ -338,7 +423,9 @@ public final class AudioCacheManager {
             tracksCompleted: 0,
             tracksTotal: playable.count)
 
-        downloadTasks[titleId] = Task { [weak self] in
+        // `area.run` tracks the task, so a change of storage scope
+        // cancels it and waits for its partial files to go.
+        downloadTasks[titleId] = area.run { [weak self] in
             await self?.performAlbumDownload(detail: detail, album: album, tracks: playable)
         }
     }
@@ -351,7 +438,7 @@ public final class AudioCacheManager {
         activeDownloads.removeValue(forKey: titleId)
         // Tear down the partial album dir — half-downloaded tracks
         // would otherwise sit there confusing the next run.
-        try? FileManager.default.removeItem(at: albumDir(titleId: titleId))
+        if let dir = albumDir(titleId: titleId) { try? FileManager.default.removeItem(at: dir) }
     }
 
     /// Remove a downloaded album. Wipes the album dir and updates
@@ -361,7 +448,8 @@ public final class AudioCacheManager {
         downloadTasks[titleId]?.cancel()
         downloadTasks.removeValue(forKey: titleId)
         activeDownloads.removeValue(forKey: titleId)
-        try? FileManager.default.removeItem(at: albumDir(titleId: titleId))
+        guard let dir = albumDir(titleId: titleId) else { return }
+        try? FileManager.default.removeItem(at: dir)
         downloads.removeAll { $0.titleId == titleId }
         rebuildTrackIndex()
         persistIndex()
@@ -394,8 +482,8 @@ public final class AudioCacheManager {
     /// Cached playlist detail for offline browsing. PlaylistDetailView
     /// falls back to this when the dataModel call throws .offline.
     public func cachedPlaylistDetail(playlistId: Int64) -> ApiPlaylistDetail? {
-        let path = playlistDir(playlistId: playlistId).appendingPathComponent("detail.pb")
-        guard FileManager.default.fileExists(atPath: path.path),
+        guard let path = playlistDir(playlistId: playlistId)?.appendingPathComponent("detail.pb"),
+              FileManager.default.fileExists(atPath: path.path),
               let data = try? Data(contentsOf: path),
               let proto = try? MMPlaylistDetail(serializedBytes: data) else {
             return nil
@@ -412,6 +500,11 @@ public final class AudioCacheManager {
     public func downloadPlaylist(detail: ApiPlaylistDetail) {
         let playlistId = detail.summary.id
         if isPlaylistDownloaded(playlistId: playlistId) || isPlaylistDownloading(playlistId: playlistId) { return }
+        // No storage scope bound: there is nowhere this belongs.
+        guard audioDir != nil else {
+            failedPlaylistDownloads[playlistId] = "Sign in to download music."
+            return
+        }
         let playable = detail.tracks.filter { $0.track.playable }
         guard !playable.isEmpty else {
             failedPlaylistDownloads[playlistId] = "No playable tracks on this playlist."
@@ -424,7 +517,7 @@ public final class AudioCacheManager {
             tracksCompleted: 0,
             tracksTotal: playable.count)
 
-        playlistDownloadTasks[playlistId] = Task { [weak self] in
+        playlistDownloadTasks[playlistId] = area.run { [weak self] in
             await self?.performPlaylistDownload(detail: detail, entries: playable)
         }
     }
@@ -433,7 +526,7 @@ public final class AudioCacheManager {
         playlistDownloadTasks[playlistId]?.cancel()
         playlistDownloadTasks.removeValue(forKey: playlistId)
         activePlaylistDownloads.removeValue(forKey: playlistId)
-        try? FileManager.default.removeItem(at: playlistDir(playlistId: playlistId))
+        if let dir = playlistDir(playlistId: playlistId) { try? FileManager.default.removeItem(at: dir) }
     }
 
     public func deletePlaylist(playlistId: Int64) {
@@ -444,7 +537,8 @@ public final class AudioCacheManager {
         // Files that were hard-linked from an album (same inode) stay
         // alive on disk via the album's reference; standalone-
         // downloaded tracks (no album link) are freed here.
-        try? FileManager.default.removeItem(at: playlistDir(playlistId: playlistId))
+        guard let dir = playlistDir(playlistId: playlistId) else { return }
+        try? FileManager.default.removeItem(at: dir)
         playlistDownloads.removeAll { $0.playlistId == playlistId }
         rebuildTrackIndex()
         persistPlaylistIndex()
@@ -459,7 +553,8 @@ public final class AudioCacheManager {
             return
         }
         let titleId = detail.id.protoValue
-        let dir = albumDir(titleId: titleId)
+        // The scope may have changed before this task first ran.
+        guard !Task.isCancelled, let folder = audioDir, let dir = albumDir(titleId: titleId) else { return }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
@@ -506,9 +601,12 @@ public final class AudioCacheManager {
             }
         }
 
-        if Task.isCancelled {
+        // Cancelled, or the scope changed while the tracks came in:
+        // what was fetched is not kept, and nothing of it may touch
+        // the next scope's state.
+        if Task.isCancelled || audioDir != folder {
             try? FileManager.default.removeItem(at: dir)
-            activeDownloads.removeValue(forKey: titleId)
+            if audioDir == folder { activeDownloads.removeValue(forKey: titleId) }
             return
         }
         guard !downloadedTrackIds.isEmpty else {
@@ -557,7 +655,9 @@ public final class AudioCacheManager {
             return
         }
         let playlistId = detail.summary.id
-        let dir = playlistDir(playlistId: playlistId)
+        // The scope may have changed before this task first ran.
+        guard !Task.isCancelled, let folder = audioDir,
+              let dir = playlistDir(playlistId: playlistId) else { return }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
@@ -627,9 +727,10 @@ public final class AudioCacheManager {
             }
         }
 
-        if Task.isCancelled {
+        // Cancelled, or the scope changed while the tracks came in.
+        if Task.isCancelled || audioDir != folder {
             try? FileManager.default.removeItem(at: dir)
-            activePlaylistDownloads.removeValue(forKey: playlistId)
+            if audioDir == folder { activePlaylistDownloads.removeValue(forKey: playlistId) }
             return
         }
         guard !downloadedTrackIds.isEmpty else {
@@ -656,37 +757,31 @@ public final class AudioCacheManager {
 
     // MARK: - Persistence
 
-    private func albumDir(titleId: Int64) -> URL {
-        audioDir.appendingPathComponent("\(titleId)", isDirectory: true)
+    private func albumDir(titleId: Int64) -> URL? {
+        audioDir?.appendingPathComponent("\(titleId)", isDirectory: true)
     }
 
     /// Playlist directory naming uses a `playlist-` prefix so we
     /// can't collide with album directories (album titleId and
     /// playlistId could share an integer value across the two
     /// namespaces).
-    private func playlistDir(playlistId: Int64) -> URL {
-        audioDir.appendingPathComponent("playlist-\(playlistId)", isDirectory: true)
+    private func playlistDir(playlistId: Int64) -> URL? {
+        audioDir?.appendingPathComponent("playlist-\(playlistId)", isDirectory: true)
     }
 
     /// Cancel every download and delete every downloaded album and
-    /// playlist. Used when the account is deleted. The Audio directory
-    /// itself stays, so later downloads still have somewhere to land.
+    /// playlist of the current scope. Used when the account is
+    /// deleted. The Audio directory itself stays, so later downloads
+    /// still have somewhere to land.
     public func removeAllDownloads() {
         for task in downloadTasks.values { task.cancel() }
         for task in playlistDownloadTasks.values { task.cancel() }
-        downloadTasks.removeAll()
-        playlistDownloadTasks.removeAll()
-        activeDownloads.removeAll()
-        activePlaylistDownloads.removeAll()
-        failedDownloads.removeAll()
-        failedPlaylistDownloads.removeAll()
-        downloads.removeAll()
-        playlistDownloads.removeAll()
+        dropState()
+        guard let audioDir else { return }
         let fm = FileManager.default
         for url in (try? fm.contentsOfDirectory(at: audioDir, includingPropertiesForKeys: nil)) ?? [] {
             try? fm.removeItem(at: url)
         }
-        rebuildTrackIndex()
         persistIndex()
         persistPlaylistIndex()
         logger.info("removeAllDownloads: audio downloads cleared")
@@ -709,14 +804,16 @@ public final class AudioCacheManager {
     }
 
     private func persistIndex() {
+        guard let audioDir else { return }
         if let data = try? JSONEncoder().encode(downloads) {
-            try? data.write(to: indexPath, options: .atomic)
+            try? data.write(to: audioDir.appendingPathComponent(Self.indexFileName), options: .atomic)
         }
     }
 
     private func persistPlaylistIndex() {
+        guard let audioDir else { return }
         if let data = try? JSONEncoder().encode(playlistDownloads) {
-            try? data.write(to: playlistIndexPath, options: .atomic)
+            try? data.write(to: audioDir.appendingPathComponent(Self.playlistIndexFileName), options: .atomic)
         }
     }
 

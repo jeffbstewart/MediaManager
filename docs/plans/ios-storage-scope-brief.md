@@ -105,7 +105,34 @@ if `MediaManager/Generated/` is missing in your worktree.
 - Delete with a path variable that is not guarded (`"${DIR:?}"`), and
   check the target before deleting.
 
+## When a command is refused
+
+A refused command is the operator's permission decision, even when the
+command looks harmless. Do not work around it: do not wrap it in a
+script, run it through another tool or interpreter, or get the same
+effect some other way.
+
+One retry is allowed. Ordinary commands are sometimes refused when
+they are part of a long shell chain (pipes, `&&`/`;` sequences,
+subshells, loops, redirections). If a refused command was part of
+such a chain, you may break it into a series of simpler commands, one
+action per call, and try those. Each one must still do only what the
+original was meant to do.
+
+If the simpler commands are refused too, or the refused command was
+already simple, **stop**. Open no PR, push nothing more, and report:
+
+- the exact command or commands that were refused, and the simpler
+  ones you tried;
+- what you were trying to do with them, and why the step needed it;
+- where the work stands: branch, commits, what is verified and what
+  is not.
+
+End that report with `STATUS: TROUBLE — command refused`.
+
 ## Report
 
 End with: the issue, the PR URL, the result of each verification step,
-what you did not test, and anything the operator must decide.
+what you did not test, and anything the operator must decide. Say
+whether any command was refused, and if so, the simpler commands you
+tried instead.
