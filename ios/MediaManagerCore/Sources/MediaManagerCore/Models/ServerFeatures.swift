@@ -41,7 +41,9 @@ public struct ServerFeatures: Codable, Equatable, Sendable {
 
     // MARK: Last-known answer
 
-    private static let defaultsKey = "mm.serverFeatures"
+    /// Persisted; do not rename. Cleared with the other server answers
+    /// by `ServerSettingsCache` when the server changes.
+    static let defaultsKey = "mm.serverFeatures"
 
     static func loadCached() -> ServerFeatures? {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }

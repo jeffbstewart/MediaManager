@@ -67,8 +67,12 @@ public final class AuthManager {
     /// stays single-consumer for the lifetime of the app.
     public let logStreamer: LogStreamer
     private var refreshTask: Task<Void, Never>?
+    /// The server's answers cached in UserDefaults, cleared when the
+    /// app connects to a different server.
+    private let serverSettings = ServerSettingsCache()
 
-    private static let legalDocsKey = "cachedLegalDocs"
+    private static let legalDocsKey = ServerSettingsCache.legalDocsKey
+    private static let capabilitiesKey = ServerSettingsCache.capabilitiesKey
     private static let biometricEnabledKey = "biometricLoginEnabled"
 
     /// Version of the persisted server endpoint, stamped into the
@@ -172,7 +176,7 @@ public final class AuthManager {
         // container carried over from a previous run, so this is an
         // update: seed the flag and leave the Keychain alone. From the
         // next launch on, the flag itself is the signal.
-        let containerCarriedOver = [Self.legalDocsKey, "cachedCapabilities",
+        let containerCarriedOver = [Self.legalDocsKey, Self.capabilitiesKey,
                                     "offlineMode", Self.biometricEnabledKey]
             .contains { defaults.object(forKey: $0) != nil }
         guard !containerCarriedOver else {
@@ -212,6 +216,7 @@ public final class AuthManager {
         // recorded yet; on later launches it changes nothing.
         if let fingerprint = KeychainService.load(key: .serverFingerprint) {
             storageScope.send(.serverConnected(serverFingerprint: fingerprint))
+            noteServer(fingerprint, source: .pinned)
         }
 
         Task {
@@ -330,6 +335,16 @@ public final class AuthManager {
         ServerFeatures.clearCache()
     }
 
+    /// Clear the cached server answers if `fingerprint` names a
+    /// different server from the one they came from, along with the
+    /// legal docs held in memory. Call where `.serverConnected` is
+    /// sent, before writing the new server's answers.
+    private func noteServer(_ fingerprint: String, source: ServerSettingsCache.Source) {
+        if serverSettings.serverConnected(fingerprint, source: source) {
+            legalDocs = nil
+        }
+    }
+
     public func connectToServer(urlString: String) async {
         logger.info("connectToServer: '\(urlString)'")
         error = nil
@@ -389,8 +404,12 @@ public final class AuthManager {
             // Content on the device is kept for one server: a different
             // one deletes the old server's. A server too old to send a
             // fingerprint is known by its address instead.
-            storageScope.send(.serverConnected(
-                serverFingerprint: discovery.serverFingerprint ?? "url:\(secureURLString)"))
+            let scopeFingerprint = discovery.serverFingerprint ?? "url:\(secureURLString)"
+            storageScope.send(.serverConnected(serverFingerprint: scopeFingerprint))
+            // Before the legal docs below are written: a different
+            // server clears the old one's cached answers, and this
+            // server's are then written fresh.
+            noteServer(scopeFingerprint, source: .discovered)
 
             // The secure URL Discover reports is the server's canonical
             // public address, and one address now covers everything —
@@ -815,7 +834,7 @@ public final class AuthManager {
         URLCache.shared.removeAllCachedResponses()
         let cookies = HTTPCookieStorage.shared
         for cookie in cookies.cookies ?? [] { cookies.deleteCookie(cookie) }
-        UserDefaults.standard.removeObject(forKey: "cachedCapabilities")
+        UserDefaults.standard.removeObject(forKey: Self.capabilitiesKey)
         biometricLoginEnabled = false
         await logout()
         UserDefaults.standard.removeObject(forKey: Self.pendingAccountWipeKey)
@@ -952,7 +971,7 @@ public final class AuthManager {
     }
 
     public var cachedCapabilities: [String] {
-        UserDefaults.standard.stringArray(forKey: "cachedCapabilities") ?? []
+        UserDefaults.standard.stringArray(forKey: Self.capabilitiesKey) ?? []
     }
 
     private func refreshServerInfo() async {
@@ -969,7 +988,7 @@ public final class AuthManager {
             // The server blocks gated RPCs with PERMISSION_DENIED if must_change_password is set.
             // Check if user needs password change from profile
             if let caps = serverInfo?.capabilities {
-                UserDefaults.standard.set(caps, forKey: "cachedCapabilities")
+                UserDefaults.standard.set(caps, forKey: Self.capabilitiesKey)
             }
             serverUnreachable = false
         } catch {
