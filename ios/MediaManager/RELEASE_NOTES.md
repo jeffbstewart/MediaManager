@@ -58,6 +58,10 @@ Merged so far:
   out, change server, or sign in as someone else; before, they kept
   coming from the previous server. Posters the previous server left in
   the image cache can still show until the cache change lands. [#70]
+- Resume positions, and reading and listening progress not yet sent,
+  are kept for the server and account that recorded them. Progress
+  saved under one account or server is no longer sent to another,
+  even if you switch while it is being sent. [#74]
 
 ### What's New draft
 

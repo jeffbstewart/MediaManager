@@ -16,8 +16,22 @@ private let logger = MMLogger(category: "LocalProgressStore")
 /// rewrite the entire file on every record() — keeps the
 /// load/save logic trivial and the disk footprint small enough not to
 /// care about deltas.
-public actor LocalProgressStore {
-    public static let shared = LocalProgressStore()
+///
+/// Both files live in the `progress` area of the current storage scope
+/// (see `StorageScope`): ids are the server's own, so a position is
+/// only meaningful for the server and account that recorded it. With
+/// no scope bound, reads return nothing and writes are dropped. A
+/// scope change drops what is held in memory and reloads from the new
+/// scope's folder. The files from before scopes, at the top of
+/// Application Support, are claimed on the first bind.
+public actor LocalProgressStore: StorageScopeParticipant {
+    public static let shared = LocalProgressStore(
+        scope: .shared,
+        legacyDirectory: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+
+    static let playbackFileName = "playback-progress.json"
+    static let readingFileName = "reading-progress.json"
 
     // MARK: - Playback (video)
 
@@ -44,47 +58,68 @@ public actor LocalProgressStore {
 
     private var playback: [Int64: PlaybackEntry] = [:]
     private var reading: [Int64: ReadingEntry] = [:]
-    private let playbackFile: URL
-    private let readingFile: URL
-    private var loaded = false
+    private let scope: StorageScope
+    /// Where the files were kept before scopes; claimed on bind.
+    private let legacyDirectory: URL?
+    private var binding: ScopedFolderBinding = .notYetRead
 
-    private init() {
-        let base: URL
-        if let support = try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true) {
-            base = support
-        } else {
-            // Documents is gitignored on the device and always writable;
-            // fine as the fallback when Application Support isn't.
-            base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-                ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        }
-        playbackFile = base.appendingPathComponent("playback-progress.json")
-        readingFile = base.appendingPathComponent("reading-progress.json")
+    /// `scope` supplies the folder; tests pass one over temp folders.
+    init(scope: StorageScope, legacyDirectory: URL?) {
+        self.scope = scope
+        self.legacyDirectory = legacyDirectory
+        // Register before the first read of `scope.current`, so no
+        // change is missed.
+        scope.register(self)
     }
 
-    private func loadIfNeeded() {
-        guard !loaded else { return }
-        loaded = true
-        if let data = try? Data(contentsOf: playbackFile),
+    // MARK: - Scope
+
+    public func storageScopeWillChange() {
+        // Every write is saved as it happens; nothing to finish.
+        binding = .unbound
+        playback.removeAll()
+        reading.removeAll()
+    }
+
+    public func storageScopeDidChange(to newScope: StorageScopeID?) {
+        bind()
+    }
+
+    private func bind() {
+        playback.removeAll()
+        reading.removeAll()
+        binding = .unbound
+        guard scope.current != nil, let folder = scope.directory(for: .progress) else { return }
+        if let legacyDirectory {
+            for name in [Self.playbackFileName, Self.readingFileName] {
+                scope.claimLegacy(at: legacyDirectory.appendingPathComponent(name),
+                                  into: .progress, as: name)
+            }
+        }
+        binding = .bound(folder)
+        if let data = try? Data(contentsOf: folder.appendingPathComponent(Self.playbackFileName)),
            let decoded = try? JSONDecoder().decode([Int64: PlaybackEntry].self, from: data) {
             playback = decoded
             logger.info("loaded \(decoded.count) playback entries")
         }
-        if let data = try? Data(contentsOf: readingFile),
+        if let data = try? Data(contentsOf: folder.appendingPathComponent(Self.readingFileName)),
            let decoded = try? JSONDecoder().decode([Int64: ReadingEntry].self, from: data) {
             reading = decoded
             logger.info("loaded \(decoded.count) reading entries")
         }
     }
 
+    /// The bound scope's folder, or nil when nothing is bound. On
+    /// launch the scope may already be bound, restored from disk.
+    private var folder: URL? {
+        if case .notYetRead = binding { bind() }
+        return binding.folder
+    }
+
     /// Forget every position and write the empty state to disk. Used
     /// when the account is deleted.
     public func clear() {
-        loaded = true
+        _ = folder
         playback.removeAll()
         reading.removeAll()
         savePlayback()
@@ -92,19 +127,19 @@ public actor LocalProgressStore {
     }
 
     private func savePlayback() {
-        guard let data = try? JSONEncoder().encode(playback) else { return }
-        try? data.write(to: playbackFile, options: .atomic)
+        guard let folder, let data = try? JSONEncoder().encode(playback) else { return }
+        try? data.write(to: folder.appendingPathComponent(Self.playbackFileName), options: .atomic)
     }
 
     private func saveReading() {
-        guard let data = try? JSONEncoder().encode(reading) else { return }
-        try? data.write(to: readingFile, options: .atomic)
+        guard let folder, let data = try? JSONEncoder().encode(reading) else { return }
+        try? data.write(to: folder.appendingPathComponent(Self.readingFileName), options: .atomic)
     }
 
     // MARK: - Playback API
 
     public func recordPlayback(transcodeId: Int64, position: Double, duration: Double?) {
-        loadIfNeeded()
+        guard folder != nil else { return }
         // Skip near-zero updates so a freshly-opened-but-not-watched
         // session doesn't clobber a real prior position. The video
         // player reports position=0 once before the seek lands.
@@ -119,15 +154,14 @@ public actor LocalProgressStore {
     }
 
     public func playback(transcodeId: Int64) -> PlaybackEntry? {
-        loadIfNeeded()
+        guard folder != nil else { return nil }
         return playback[transcodeId]
     }
 
     // MARK: - Reading API
 
     public func recordReading(mediaItemId: Int64, locator: String, fraction: Double?) {
-        loadIfNeeded()
-        guard !locator.isEmpty else { return }
+        guard folder != nil, !locator.isEmpty else { return }
         var entry = reading[mediaItemId]
             ?? ReadingEntry(mediaItemId: mediaItemId, locator: locator, fraction: nil, updatedAt: Date())
         entry.locator = locator
@@ -138,7 +172,7 @@ public actor LocalProgressStore {
     }
 
     public func reading(mediaItemId: Int64) -> ReadingEntry? {
-        loadIfNeeded()
+        guard folder != nil else { return nil }
         return reading[mediaItemId]
     }
 
@@ -149,7 +183,7 @@ public actor LocalProgressStore {
     /// than the older "Recently Downloaded Books" carousel which
     /// stalls once the user's downloaded a few dozen).
     public func readingEntriesByRecency() -> [ReadingEntry] {
-        loadIfNeeded()
+        guard folder != nil else { return [] }
         return reading.values.sorted { $0.updatedAt > $1.updatedAt }
     }
 
