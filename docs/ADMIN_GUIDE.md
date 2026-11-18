@@ -48,6 +48,16 @@ Failed password sign-ins are throttled per username and, separately, per client 
 
 The **locked** flag on a user is separate: it is never set automatically, and a locked account cannot sign in or use its paired devices until an admin unlocks it in **Users**.
 
+### Server Signing Key and Server Identity
+
+Each server creates a random signing key the first time it needs one and stores it in the database, in the `jwt_signing_key` row of `app_config`. The key signs access tokens, passkey challenges, and lock-screen album-art links. Its SHA-256 hash, the **server fingerprint**, is also the server's identity: clients receive it when they connect and remember it.
+
+- **Apps keep their content per fingerprint.** The iOS app stores downloads, cached images, and reading and playback progress for one server, the one with the fingerprint it remembers. If the fingerprint changes, the app says so before going further. Accepting the change deletes everything the device stored for the old fingerprint, because to the app it is a different server.
+- **Rotating the key changes the fingerprint.** To rotate (for example, if the database may have leaked), copy the `jwt_signing_key` value to a new `jwt_signing_key_previous` row, delete the `jwt_signing_key` row, and restart; remove `jwt_signing_key_previous` after 15 minutes. Every iOS device then shows the fingerprint-changed screen once and, when the user accepts, loses its downloads and unsent progress for this server. Warn users before rotating.
+- **Never start a second server from a copy of this database** (a demo or test server, say) without rotating the copy's key. Both servers would have the same fingerprint, so apps would treat them as one server and mix their content, and each server would accept the other's sign-in tokens for up to 15 minutes.
+- **Restoring this server from a backup** keeps the key, and with it the fingerprint, so devices continue as before.
+- The fingerprint is not secret, and it does not prove a server is genuine. HTTPS does that.
+
 ---
 
 ## Command-Line Flags

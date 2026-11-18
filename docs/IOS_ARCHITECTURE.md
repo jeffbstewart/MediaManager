@@ -123,6 +123,39 @@ server-issued, not address-bound) so re-pointing resumes the session;
 network — the revoke RPC is fired to the side — so both work with the
 server dark.
 
+**Per-server, per-account storage** (`MediaManagerCore/Services/StorageScope.swift`, #68/#69).
+Ids in the catalog are each server's own database ids, so content stored
+on the device is meaningful only for the server, and the account, it
+came from. `StorageScope` names the current server, by the fingerprint
+Discover returns, and the current account, by the user id `GetInfo`
+returns. It gives each store a folder:
+
+    {Application Support | Library/Caches}/Scoped/servers/<hash of fingerprint>/accounts/<user id>/<area>/
+
+Durable areas (`downloads`, `books`, `audio`, `progress`) go under
+Application Support; cache areas (`images`) under Library/Caches.
+
+| Event | Sent by `AuthManager` from | Effect |
+|---|---|---|
+| `serverConnected` | `connectToServer`, and `restoreSession` from the pinned fingerprint | A different server deletes every other server's content |
+| `accountSignedIn` | `refreshServerInfo` (`GetInfo`) | Binds the scope; a different account deletes the previous one's content on that server |
+| `suspend(.signedOut)` / `suspend(.serverChanging)` | `logout` / `changeServer` | Unbinds the scope and keeps the files |
+| `resumeLastAccount` | the offline launch path | Rebinds the last account, unless someone signed out since |
+| `forgetEverything` | `disconnectServer` | Deletes all scoped content |
+| `forgetCurrentAccount` | `completeAccountDeletion` | Deletes the account's content |
+
+The one-account-per-device rule is `StorageScope.accountsToKeep`;
+supporting several accounts later starts there. A store takes part by
+conforming to `StorageScopeParticipant` and registering. It is told
+before a change, to close files and drop what it holds in memory, and
+after it, with the new scope or nil, and then reads its folder from
+`directory(for:)`. With no scope bound, a store serves and writes
+nothing. Content stored before scopes existed is claimed once with
+`claimLegacy(at:into:as:)`. On the first launch with this code, the
+pinned fingerprint is recorded as the owner of that content; the first
+account bound on that server adopts it, and in every other case it is
+deleted. The old image cache is always discarded (`discardLegacy`).
+
 **Data model layer:**
 
 - `DataModel/OnlineDataModel.swift` — primary, routes to the offline delegate when `isOnline == false`

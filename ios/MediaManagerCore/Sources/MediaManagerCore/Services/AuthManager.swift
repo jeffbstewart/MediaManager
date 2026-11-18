@@ -54,6 +54,9 @@ public final class AuthManager {
 
     public let apiClient = APIClient()
     public let grpcClient = GrpcClient()
+    /// Told which server and account are current, so each store keeps
+    /// its content per server and account (see `StorageScope`).
+    public let storageScope = StorageScope.shared
     /// Ships os.Logger output to Binnacle via ObservabilityService.StreamLogs.
     /// Started once an authenticated grpcClient is available; stopped on logout.
     /// One streamer per AuthManager instance so the underlying LogBuffer iterator
@@ -114,6 +117,11 @@ public final class AuthManager {
     public init() {
         self.logStreamer = LogStreamer(grpcClient: grpcClient, identity: .current())
         purgeKeychainIfFreshInstall()
+        // The first launch with per-server storage records which server
+        // the existing, unscoped content came from; later sends are
+        // ignored. Before `restoreSession`, which may connect.
+        storageScope.send(.recordLegacyOwner(
+            serverFingerprint: KeychainService.load(key: .serverFingerprint)))
         restoreLegalDocs()
         restoreSession()
         // Let LogStreamer ask us to rotate the access token when the
@@ -193,6 +201,13 @@ public final class AuthManager {
             return
         }
         logger.info("restoreSession: server URL = \(urlString)")
+        // The pinned fingerprint is the server this device is set up
+        // for. Saying so here, not only in connectToServer, matters on
+        // the first launch with per-server storage, which has no server
+        // recorded yet; on later launches it changes nothing.
+        if let fingerprint = KeychainService.load(key: .serverFingerprint) {
+            storageScope.send(.serverConnected(serverFingerprint: fingerprint))
+        }
 
         Task {
             await configureClients(for: url)
@@ -255,6 +270,9 @@ public final class AuthManager {
         // refresh automatically once connectivity returns.
         if UserDefaults.standard.bool(forKey: "offlineMode") {
             logger.info("resumeStoredSession: offline mode — skipping token refresh, going straight to authenticated")
+            // No GetInfo to say who is signed in: bind the last account,
+            // which StorageScope allows only if nobody has signed out since.
+            storageScope.send(.resumeLastAccount)
             state = .authenticated(serverURL: url)
             scheduleTokenRefresh()
             return
@@ -363,6 +381,11 @@ public final class AuthManager {
                 }
                 KeychainService.save(key: .serverFingerprint, value: receivedFingerprint)
             }
+            // Content on the device is kept for one server: a different
+            // one deletes the old server's. A server too old to send a
+            // fingerprint is known by its address instead.
+            storageScope.send(.serverConnected(
+                serverFingerprint: discovery.serverFingerprint ?? "url:\(secureURLString)"))
 
             // The secure URL Discover reports is the server's canonical
             // public address, and one address now covers everything —
@@ -518,6 +541,9 @@ public final class AuthManager {
         KeychainService.delete(key: .refreshToken)
         await apiClient.setAccessToken(nil)
         await grpcClient.setAccessToken(nil)
+        // Stores stop serving this account's content but keep it, in
+        // case the same account signs back in.
+        storageScope.send(.suspend(.signedOut))
         awaitingBiometric = false
         serverInfo = nil
         legalStatus = nil
@@ -553,6 +579,10 @@ public final class AuthManager {
         serverUnreachable = false
         error = nil
         resetGateState()
+        // Content is kept until we know where we are going: the same
+        // server at a new address keeps it, a different one deletes it
+        // (connectToServer).
+        storageScope.send(.suspend(.serverChanging))
         Task {
             await logStreamer.stop()
             await grpcClient.close()
@@ -603,6 +633,8 @@ public final class AuthManager {
         serverUnreachable = false
         resetGateState()
         persistLegalDocs(nil)
+        // Nothing is kept for a server the device has forgotten.
+        storageScope.send(.forgetEverything)
         Task {
             await logStreamer.stop()
             await grpcClient.close()
@@ -769,6 +801,9 @@ public final class AuthManager {
         await ReadingProgressQueue.shared.clear()
         await ListeningProgressQueue.shared.clear()
         await ImageDiskCache.shared.clear()
+        // Everything stored for the account, in whichever store it is.
+        storageScope.send(.forgetCurrentAccount)
+        await storageScope.settled()
         URLCache.shared.removeAllCachedResponses()
         let cookies = HTTPCookieStorage.shared
         for cookie in cookies.cookies ?? [] { cookies.deleteCookie(cookie) }
@@ -917,6 +952,11 @@ public final class AuthManager {
         do {
             let protoInfo = try await grpcClient.getInfo()
             serverInfo = ServerInfo(proto: protoInfo)
+            // The server's word on who is signed in binds the storage
+            // scope; a different account's content is deleted.
+            if protoInfo.hasUser {
+                storageScope.send(.accountSignedIn(accountId: protoInfo.user.id))
+            }
             // password_change_required is set during login (from TokenResponse).
             // The server blocks gated RPCs with PERMISSION_DENIED if must_change_password is set.
             // Check if user needs password change from profile

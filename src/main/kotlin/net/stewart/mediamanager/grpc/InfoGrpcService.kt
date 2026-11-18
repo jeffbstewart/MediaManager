@@ -11,6 +11,7 @@ class InfoGrpcService : InfoServiceGrpcKt.InfoServiceCoroutineImplBase() {
     override suspend fun discover(request: DiscoverRequest): DiscoverResponse = discoverResponse {
         apiVersions.add(1)
         authMethods.add(AuthMethod.AUTH_METHOD_JWT)
+        // The server's identity on every client; see JwtService's class comment.
         serverFingerprint = JwtService.getSigningKeyFingerprint()
         setupRequired = !AuthService.hasUsers()
 

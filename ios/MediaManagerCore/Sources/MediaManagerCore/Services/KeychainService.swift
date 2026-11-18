@@ -18,6 +18,11 @@ public enum KeychainService {
         case deprecatedHttpBaseURL = "http_base_url"
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
+        /// The pinned server identity from Discover: a hash of the
+        /// server's signing key (JwtService on the server). It also
+        /// names the server for StorageScope, so replacing it, as
+        /// acceptFingerprintChange does, leads to the old server's
+        /// stored content being deleted.
         case serverFingerprint = "server_fingerprint"
         /// Stamped alongside serverURL. See AuthManager.serverConfigVersion.
         case serverConfigVersion = "server_config_version"

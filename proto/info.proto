@@ -47,6 +47,13 @@ message DiscoverRequest {
 message DiscoverResponse {
   repeated int32 api_versions = 1;
   repeated AuthMethod auth_methods = 2;
+  // The server's identity: SHA-256 (lowercase hex) of its signing key,
+  // stable across restarts and address changes, and changed only by a
+  // deliberate key rotation. Clients pin it on first connect, and iOS
+  // stores downloads, images and progress per fingerprint, deleting a
+  // server's content when a different fingerprint is accepted. Public:
+  // it tells servers apart but does not authenticate one (TLS does).
+  // See JwtService before changing how it is derived.
   string server_fingerprint = 3;
   optional string secure_url = 4;
   optional LegalDocumentInfo legal = 5;
