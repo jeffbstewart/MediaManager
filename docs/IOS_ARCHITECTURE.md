@@ -170,6 +170,8 @@ deleted. The old image cache is always discarded (`discardLegacy`).
 - `Services/ScopedDownloadArea.swift` — the folder those two keep in their area, legacy claiming, and cancel-and-await of their downloads
 - `Services/LocalProgressStore.swift` — per-device shadow of playback / reading positions, survives the online→offline transition
 - `Services/ReadingProgressQueue.swift` + `Services/ProgressFlusher.swift` — reader → server flush queue (mirrors to `LocalProgressStore` so flushed entries don't disappear)
+- `Services/ListeningProgressQueue.swift` — music → server flush queue, drained by `DownloadManager.flushPendingListeningProgress`
+- All three keep their files in the scope's `progress` area. The queues send their own entries (`flush(_:)`): each send happens only while the scope is the one the entries came from, and a scope change cancels and awaits the send in progress
 
 **Media playback:**
 

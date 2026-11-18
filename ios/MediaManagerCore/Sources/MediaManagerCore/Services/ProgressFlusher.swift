@@ -2,8 +2,6 @@ import Foundation
 import Observation
 import MediaManagerProtos
 
-private let logger = MMLogger(category: "ProgressFlusher")
-
 /// Drains [ReadingProgressQueue] to the server when reachable.
 ///
 /// Lives at app scope; not tied to any single view. Two firing paths:
@@ -48,30 +46,19 @@ public final class ProgressFlusher {
     /// Drain the queue once, immediately. Called by lifecycle hooks
     /// (book close, app foreground) where waiting for the next timer
     /// tick would leak progress data on a quick subsequent launch.
+    ///
+    /// The queue does the sending (`ReadingProgressQueue.flush`), so a
+    /// change of server or account part-way through stops it before
+    /// another entry goes out.
     public func flushNow() async {
         guard !downloads.isEffectivelyOffline else { return }
         guard let grpcClient else { return }
-
-        let entries = await queue.pending()
-        if entries.isEmpty { return }
-        logger.info("flushing \(entries.count) pending reading-progress entries")
-
-        for entry in entries {
-            do {
-                try await grpcClient.reportReadingProgress(
-                    mediaItemId: entry.mediaItemId,
-                    locator: entry.locator,
-                    fraction: entry.fraction,
-                    clientRecordedAt: entry.recordedAt)
-                await queue.markFlushed(
-                    mediaItemId: entry.mediaItemId,
-                    asOf: entry.recordedAt)
-            } catch {
-                // Single failure shouldn't abort the rest — partial
-                // progress beats none. Next tick re-tries the
-                // unflushed entries.
-                logger.warning("flush failed for mediaItemId=\(entry.mediaItemId): \(error.localizedDescription)")
-            }
+        await queue.flush { entry in
+            try await grpcClient.reportReadingProgress(
+                mediaItemId: entry.mediaItemId,
+                locator: entry.locator,
+                fraction: entry.fraction,
+                clientRecordedAt: entry.recordedAt)
         }
     }
 

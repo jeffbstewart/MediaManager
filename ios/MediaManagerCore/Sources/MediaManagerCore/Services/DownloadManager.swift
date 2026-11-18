@@ -316,8 +316,18 @@ public final class DownloadManager {
 
     public func flushPendingProgress() async {
         guard let grpcClient else { return }
-        let unsynced = await store.entries.filter { !$0.positionSynced && $0.playbackPosition.seconds > 0 }
+        // Positions are the server's transcode ids: send them only
+        // while the server and account they were recorded under are
+        // still the bound ones, checked again before each send.
+        // (The download store itself becomes per-scope in #72.)
+        let startedIn = StorageScope.shared.current
+        let unsynced = startedIn == nil ? []
+            : await store.entries.filter { !$0.positionSynced && $0.playbackPosition.seconds > 0 }
         for entry in unsynced {
+            guard StorageScope.shared.current == startedIn else {
+                logger.info("flushPendingProgress: stopped, the storage scope changed")
+                break
+            }
             do {
                 try await grpcClient.reportProgress(
                     transcodeId: entry.transcodeID,
@@ -336,23 +346,15 @@ public final class DownloadManager {
     /// ReportListeningProgress RPC removes the corresponding entry;
     /// failures stay queued for the next flush. Called on
     /// network restore (alongside the video flush) and at startup
-    /// after configure().
+    /// after configure(). The queue does the sending, so a change of
+    /// server or account part-way through stops it.
     public func flushPendingListeningProgress() async {
         guard let grpcClient else { return }
-        let pending = await ListeningProgressQueue.shared.pending()
-        for entry in pending {
-            do {
-                try await grpcClient.reportListeningProgress(
-                    trackId: entry.trackId,
-                    position: entry.position,
-                    duration: entry.duration)
-                await ListeningProgressQueue.shared.remove(trackId: entry.trackId)
-            } catch {
-                // Leave on the queue; the next flush picks it up.
-                // Don't break the loop — a one-track-not-found failure
-                // shouldn't block the rest.
-                continue
-            }
+        await ListeningProgressQueue.shared.flush { entry in
+            try await grpcClient.reportListeningProgress(
+                trackId: entry.trackId,
+                position: entry.position,
+                duration: entry.duration)
         }
     }
 
