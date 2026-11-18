@@ -14,6 +14,7 @@ Each iOS TestFlight / App Store build is git-tagged immediately after submission
 - **Tag prefix:** `ios/` so these don't fire the server release workflow (which triggers on `v*` tags).
 - **How to tag:** run `lifecycle/tag-ios-build.sh` right after submitting to TestFlight. It reads the marketing + build versions from the pbxproj and pushes the tag.
 - **Deriving the next changelog:** `git log ios/<previous-tag>..HEAD -- ios/MediaManager/`.
+- **Between submissions:** user-visible iOS changes made since the build in App Review are listed as they land in `ios/MediaManager/RELEASE_NOTES.md`, which also holds the draft App Store "What's New" text.
 
 Server / Android TV / Roku get their own tag schemes (or none — the server is rolling).
 
