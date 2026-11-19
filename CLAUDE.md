@@ -641,3 +641,10 @@ self-signed cert.
 
 The read path is unauthenticated by design — Binnacle assumes it's
 behind a trusted network. Ingest is API-key gated on a different port.
+
+**Delivery is best effort.** App logs can arrive late (sent after the
+app reconnects; `time` is when it was logged, `ingest` when it arrived),
+a few can be lost (in flight when an app's connection drops, or past the
+on-device or export queue limits), and an export retry can duplicate a
+batch. Nothing deduplicates. A missing line does not prove an event did
+not happen. Details: `docs/ADMIN_GUIDE.md`, "Log Delivery".

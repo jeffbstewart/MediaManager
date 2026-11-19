@@ -17,7 +17,12 @@ import java.util.concurrent.TimeUnit
  * instance via OTLP/HTTP. Backed by the OTel Java SDK's
  * [BatchLogRecordProcessor] so the logging path is never blocked on
  * network I/O — records are queued in memory and flushed in the
- * background.
+ * background. With OpenTelemetry's defaults, which this file does not
+ * change: queue 2048 (new records dropped when full), batches of up to
+ * 512 about once a second, and the exporter's default retry policy, so a
+ * timed-out export can reach Binnacle twice. Export failures go to
+ * OpenTelemetry's internal logger, not to Binnacle. See
+ * docs/ADMIN_GUIDE.md, "Log Delivery".
  *
  * Opt-in: if the env vars are absent, [init] returns
  * [Status.NOT_CONFIGURED] and [emit] is a no-op.

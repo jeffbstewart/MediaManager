@@ -31,6 +31,12 @@ struct LogStreamConnectionChanged: Error {}
 /// Records logged before `start()` (during login or session restore, say)
 /// wait in the buffer and go out on the first successful connect.
 ///
+/// Delivery is best effort; what can be delayed, lost or duplicated is
+/// written down in `docs/ADMIN_GUIDE.md`, "Log Delivery". In particular a
+/// successful `writer.write` only means gRPC accepted the record, not that
+/// the server got it, so a record in flight when the connection drops is
+/// lost. Only a write that throws puts its record back.
+///
 /// Recovery (#84):
 /// - The buffer survives cancellation, so a connection dropped while the
 ///   app is in the background, or a `stop()`, never silences later logs.
