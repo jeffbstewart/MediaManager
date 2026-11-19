@@ -34,6 +34,11 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   are now one **Aa** button that opens a menu with smaller and larger
   options and the current size; the menu stays open while you tap, so
   you can change the size in several steps. [#66]
+- Diagnostic logs: the app keeps sending its logs to the server after
+  it has been in the background or after you sign out and back in.
+  Before, it stopped after the first time, until the app was closed
+  and reopened. Not visible in the app; it helps diagnose problems you
+  report. [#84]
 
 ### In progress: content kept per server and account [#68]
 

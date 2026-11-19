@@ -940,6 +940,25 @@ HTTP access logs and application log records are shipped to Binnacle via
 SLF4J (`http.access` and per-class loggers flow through `BinnacleExporter`).
 Query them there rather than on the server itself.
 
+### Log Delivery
+
+Log delivery is **best effort**: good for diagnosis, not an audit trail.
+The apps (iOS, Android TV) send their logs to the server over a
+long-lived gRPC stream (`ObservabilityService/StreamLogs`), and the
+server forwards those, along with its own logs, to Binnacle over
+OpenTelemetry (OTLP over HTTP). Nothing along the way gives a record an
+id, and nothing deduplicates.
+
+| Outcome | When |
+|---|---|
+| **Never partial** | A record is one gRPC message. It arrives whole or not at all; a connection cut mid-message discards the partial message. |
+| **Delayed** | Records logged while an app has no connection (backgrounded, offline, signed out) wait on the device and go out when it reconnects. Binnacle shows them at the time they were logged; only their `ingest` time is late. The app's timestamps are whole seconds, so records from the same second can come back in a different order. The server batches what it forwards and sends about once a second. |
+| **Lost** | A record the app had already handed to gRPC when the connection dropped (a backgrounded iOS app loses its connection; usually a few records at most). App records beyond the on-device limit (iOS: 2000, oldest dropped first). Records still on the device when the app is killed. On the server: records past the export queue (2048) while Binnacle is slow or down, a batch whose export finally fails, and whatever is queued when the server stops without a clean shutdown. Server-side losses are reported only to OpenTelemetry's internal logger, not to Binnacle. |
+| **Duplicated (rare)** | The server's exporter retries failed exports (OpenTelemetry's default retry policy), so a batch Binnacle stored but whose reply timed out can arrive twice. The app re-sends a record only when its write to gRPC failed, which does not duplicate it. |
+
+So a missing log line is not proof that the event did not happen, and a
+repeated line is not proof that it happened twice.
+
 ### Health Check
 
 **`/health`** (internal port 8081, not on main app port) &mdash; Returns HTTP 200 when the server is running. Used by Docker health checks and monitoring tools. In Docker, mapped to LAN port 16002. Not internet-accessible.

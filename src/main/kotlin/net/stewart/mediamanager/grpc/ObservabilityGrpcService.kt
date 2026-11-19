@@ -8,6 +8,11 @@ import org.slf4j.event.Level
 import java.time.Instant
 
 /**
+ * Each record is forwarded as soon as it arrives, so records already
+ * received are kept when a client's stream is later cancelled (as a
+ * backgrounded iOS app's always is). Delivery end to end is best effort;
+ * see docs/ADMIN_GUIDE.md, "Log Delivery".
+ *
  * gRPC service that forwards log records from iOS / Android TV / web
  * clients to Binnacle. Each client opens a long-lived client-streaming
  * RPC ([streamLogs]) and emits [LogRecord] messages as events occur.

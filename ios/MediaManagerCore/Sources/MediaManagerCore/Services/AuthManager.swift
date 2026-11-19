@@ -63,8 +63,8 @@ public final class AuthManager {
     public let storageScope = StorageScope.shared
     /// Ships os.Logger output to Binnacle via ObservabilityService.StreamLogs.
     /// Started once an authenticated grpcClient is available; stopped on logout.
-    /// One streamer per AuthManager instance so the underlying LogBuffer iterator
-    /// stays single-consumer for the lifetime of the app.
+    /// One streamer per AuthManager instance: `LogBuffer` has a single
+    /// consumer, and a second running streamer would take records from it.
     public let logStreamer: LogStreamer
     private var refreshTask: Task<Void, Never>?
     /// The server's answers cached in UserDefaults, cleared when the

@@ -97,32 +97,108 @@ public struct PendingLogRecord: Sendable {
     public let attributes: [String: String]
 }
 
-/// Bounded ring buffer between call sites and the network streamer.
-/// Single producer side (anywhere `MMLogger` is called) and single
-/// consumer side (the live `LogStreamer` instance).
+/// Bounded queue between call sites and the network streamer. Any number
+/// of producers (wherever `MMLogger` is called) and one consumer (the live
+/// `LogStreamer`).
 ///
-/// Backed by an `AsyncStream` with a drop-oldest buffering policy so that
-/// log calls never block and never grow memory unboundedly during outages.
-/// Records yielded before the streamer starts iterating are buffered and
-/// drained in order on first iteration.
+/// Log calls never block, and memory stays bounded during outages: past
+/// `capacity`, the oldest records are dropped. Records enqueued before the
+/// streamer starts are kept and delivered, in order, when it does.
+///
+/// Cancellation-safe by design (#84). This used to be an `AsyncStream`,
+/// and cancelling a task that is waiting on an `AsyncStream` iterator ends
+/// the stream for good. gRPC cancels the log upload's request producer
+/// whenever the connection drops, which on iOS happens every time the app
+/// goes to the background, and so does `LogStreamer.stop()`. After the
+/// first of either, nothing more was ever delivered until the process
+/// was killed. Here a cancelled `next()` just returns nil; the queue and
+/// everything in it stay usable.
 public final class LogBuffer: @unchecked Sendable {
     public static let shared = LogBuffer(capacity: 2000)
 
-    public let stream: AsyncStream<PendingLogRecord>
-    private let continuation: AsyncStream<PendingLogRecord>.Continuation
+    private let capacity: Int
+    private let lock = NSLock()
+    /// Guarded by `lock`. Oldest first.
+    private var records: [PendingLogRecord] = []
+    /// Guarded by `lock`. The consumer waiting in `next()`, if any.
+    private var waiter: (id: UInt64, continuation: CheckedContinuation<PendingLogRecord?, Never>)?
+    /// Guarded by `lock`.
+    private var nextWaiterId: UInt64 = 0
 
     public init(capacity: Int) {
-        var storedContinuation: AsyncStream<PendingLogRecord>.Continuation!
-        self.stream = AsyncStream(
-            PendingLogRecord.self,
-            bufferingPolicy: .bufferingNewest(capacity)
-        ) { c in
-            storedContinuation = c
-        }
-        self.continuation = storedContinuation
+        self.capacity = max(1, capacity)
+    }
+
+    /// Records waiting to be taken. For tests and diagnostics.
+    public var count: Int {
+        lock.withLock { records.count }
     }
 
     public func enqueue(_ record: PendingLogRecord) {
-        continuation.yield(record)
+        let waiting: CheckedContinuation<PendingLogRecord?, Never>? = lock.withLock {
+            if let w = waiter {
+                waiter = nil
+                return w.continuation
+            }
+            records.append(record)
+            if records.count > capacity {
+                records.removeFirst(records.count - capacity)
+            }
+            return nil
+        }
+        waiting?.resume(returning: record)
+    }
+
+    /// Put back a record that was taken but not delivered, so it goes
+    /// out first next time. Dropped if the queue has filled up meanwhile.
+    public func pushFront(_ record: PendingLogRecord) {
+        let waiting: CheckedContinuation<PendingLogRecord?, Never>? = lock.withLock {
+            if let w = waiter {
+                waiter = nil
+                return w.continuation
+            }
+            if records.count < capacity {
+                records.insert(record, at: 0)
+            }
+            return nil
+        }
+        waiting?.resume(returning: record)
+    }
+
+    /// The oldest record, waiting for one if the queue is empty. Returns
+    /// nil only when the calling task is cancelled; nothing is lost and
+    /// the queue stays usable. One consumer at a time: a second waiter
+    /// replaces the first, which gets nil.
+    public func next() async -> PendingLogRecord? {
+        let id: UInt64 = lock.withLock {
+            nextWaiterId &+= 1
+            return nextWaiterId
+        }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<PendingLogRecord?, Never>) in
+                let (immediate, replaced): (PendingLogRecord??, CheckedContinuation<PendingLogRecord?, Never>?) = lock.withLock {
+                    if !records.isEmpty {
+                        return (.some(records.removeFirst()), nil)
+                    }
+                    if Task.isCancelled {
+                        return (.some(nil), nil)
+                    }
+                    let previous = waiter?.continuation
+                    waiter = (id, continuation)
+                    return (nil, previous)
+                }
+                replaced?.resume(returning: nil)
+                if let immediate {
+                    continuation.resume(returning: immediate)
+                }
+            }
+        } onCancel: {
+            let cancelled: CheckedContinuation<PendingLogRecord?, Never>? = lock.withLock {
+                guard let w = waiter, w.id == id else { return nil }
+                waiter = nil
+                return w.continuation
+            }
+            cancelled?.resume(returning: nil)
+        }
     }
 }
