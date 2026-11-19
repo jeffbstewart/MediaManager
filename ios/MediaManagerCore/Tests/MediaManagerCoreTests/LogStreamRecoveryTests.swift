@@ -15,11 +15,12 @@ private func record(_ message: String) -> PendingLogRecord {
                      exceptionMessage: nil, attributes: [:])
 }
 
-/// Polls `condition` until it holds or `seconds` pass.
-private func eventually(_ seconds: Double = 5,
+/// Polls `condition` until it holds or `timeout` passes.
+private func eventually(_ timeout: Duration = .seconds(5),
                         _ condition: @Sendable () async -> Bool) async -> Bool {
-    let deadline = Date().addingTimeInterval(seconds)
-    while Date() < deadline {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while clock.now < deadline {
         if await condition() { return true }
         try? await Task.sleep(for: .milliseconds(10))
     }
@@ -139,10 +140,23 @@ private struct WriteFailed: Error {}
 @Suite("Log streamer recovery")
 struct LogStreamerRecoveryTests {
 
+    @Test func backoffDoublesFromTwoUnitsUpToSixtyPlusAtMostHalfAUnitOfJitter() {
+        let unit: Duration = .seconds(1)
+        let expected: [Duration] = [.seconds(2), .seconds(4), .seconds(8),
+                                    .seconds(16), .seconds(32), .seconds(60)]
+        for (attempt, base) in expected.enumerated() {
+            for _ in 0..<20 {
+                let delay = LogStreamer.backoff(attempt: attempt, unit: unit)
+                #expect(delay >= base)
+                #expect(delay <= base + .milliseconds(500))
+            }
+        }
+    }
+
     private func makeStreamer(_ transport: FakeLogTransport, _ buffer: LogBuffer) -> LogStreamer {
         LogStreamer(transport: transport,
                     identity: .init(serviceVersion: "test", baseAttributes: [:]),
-                    buffer: buffer, backoffUnit: 0.005)
+                    buffer: buffer, backoffUnit: .milliseconds(5))
     }
 
     @Test func logsKeepFlowingAfterTheConnectionDropsWhileIdle() async {

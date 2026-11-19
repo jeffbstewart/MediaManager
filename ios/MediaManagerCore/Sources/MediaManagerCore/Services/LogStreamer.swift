@@ -74,22 +74,36 @@ public actor LogStreamer {
     /// per 30 seconds; the retry-loop's exponential backoff handles the
     /// rest.
     private var onAuthFailed: (@Sendable () async -> Void)?
-    private var lastAuthRefreshAt: Date = .distantPast
+    /// When the last token refresh was requested; nil if never.
+    private var lastAuthRefreshAt: ContinuousClock.Instant?
+    private static let authRefreshInterval: Duration = .seconds(30)
+    private let clock = ContinuousClock()
 
-    /// Base of the retry delay, in seconds (2s, 4s, ... capped at 60s).
-    /// Tests shrink it.
-    private let backoffUnit: Double
+    /// Unit of the retry delay: the delay is 2, 4, 8, 16, 32, then 60
+    /// units, plus up to half a unit of jitter. One second in the app;
+    /// tests shrink it.
+    private let backoffUnit: Duration
 
     public init(grpcClient: GrpcClient, identity: Identity) {
         self.init(transport: grpcClient, identity: identity)
     }
 
     init(transport: any LogStreamTransport, identity: Identity,
-         buffer: LogBuffer = .shared, backoffUnit: Double = 1.0) {
+         buffer: LogBuffer = .shared, backoffUnit: Duration = .seconds(1)) {
         self.transport = transport
         self.identity = identity
         self.buffer = buffer
         self.backoffUnit = backoffUnit
+    }
+
+    /// The wait before reconnect attempt `attempt` (0 after a clean end):
+    /// `2^(attempt+1)` units, capped at 60 units, plus 0 to 500
+    /// thousandths of a unit of jitter so reconnects across restarts
+    /// don't line up. Integer arithmetic on `Duration` throughout.
+    static func backoff(attempt: Int, unit: Duration) -> Duration {
+        let base = min(unit * 60, unit * (1 << (attempt + 1)))
+        let jitter = unit / 1000 * Int.random(in: 0...500)
+        return base + jitter
     }
 
     /// Register the callback that AuthManager uses to refresh the
@@ -144,10 +158,11 @@ public actor LogStreamer {
                 // forever on UNAUTHENTICATED and Binnacle goes silent.
                 // Throttle to one nudge per 30s so a stuck refresh
                 // path doesn't get hammered.
+                let now = clock.now
                 if isUnauthenticatedError(error),
                    let handler = onAuthFailed,
-                   Date().timeIntervalSince(lastAuthRefreshAt) > 30 {
-                    lastAuthRefreshAt = Date()
+                   lastAuthRefreshAt.map({ now - $0 > Self.authRefreshInterval }) ?? true {
+                    lastAuthRefreshAt = now
                     log.warning("stream session rejected with UNAUTHENTICATED — requesting token refresh")
                     Task { await handler() }
                 }
@@ -155,9 +170,7 @@ public actor LogStreamer {
             // Exponential backoff: 2s → 4s → 8s → 16s → 32s → 60s, with up
             // to 500ms of jitter so reconnect storms don't synchronise across
             // restarts.
-            let base = min(60.0, pow(2.0, Double(attempt + 1))) * backoffUnit
-            let delay = base + Double.random(in: 0...0.5) * backoffUnit
-            try? await Task.sleep(for: .seconds(delay))
+            try? await Task.sleep(for: Self.backoff(attempt: attempt, unit: backoffUnit))
         }
     }
 
