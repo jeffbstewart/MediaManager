@@ -48,52 +48,40 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   page often showed no bar, so there was no way to pause it in the
   app until you moved to another page. [#86]
 
-### In progress: content kept per server and account [#68]
+### Content kept per server and account [#68]
 
-Not complete yet; finish this entry, and add it to the What's New
-draft, when #70–#75 have merged. When done:
+The app now keeps everything it stores for the server and account it
+came from. Fixes posters from one server showing on another server's
+titles after you switch servers, and images that never loaded.
 
-- After you switch to a different server, its own posters and
-  artwork show. Previously the old server's images could show on
-  unrelated titles, and other images never loaded.
+- After you switch to a different server, its own posters and artwork
+  show, and images already on screen reload. [#70, #71]
 - Switching to a different server removes the previous server's
-  downloads, cached images and saved progress from the device.
-  Signing in as a different account does the same for the previous
-  account. Signing out and back in to the same account keeps them.
-- After the update, existing downloads and progress are kept if they
-  belong to the server the app is set up for.
-
-Merged so far:
-
-- Shared storage that tracks the current server and account, with no
-  visible change on its own. [#69]
-- Images now come from the server you are signed in to after you sign
-  out, change server, or sign in as someone else; before, they kept
-  coming from the previous server. Posters the previous server left in
-  the image cache can still show until the cache change lands. [#70]
-- Resume positions, and reading and listening progress not yet sent,
-  are kept for the server and account that recorded them. Progress
-  saved under one account or server is no longer sent to another,
-  even if you switch while it is being sent. [#74]
+  downloads, cached images and saved progress from the device. Signing
+  in as a different account does the same for the previous account.
+  [#69]
+- Signing out and back in to the same account keeps your downloads,
+  cached images and progress. While signed out, downloads are hidden
+  and downloads in progress pause; signing back in brings them back
+  and resumes the downloads, and a downloaded song playing when you
+  sign out stops. [#72, #73]
+- Reading and listening progress not yet sent to the server is kept
+  for the server and account that recorded it, and is never sent to
+  another one, even if you switch while it is being sent. [#74]
 - After you switch to a different server, the terms screen and the
-  Downloads tab follow the new server from the start; before, they
-  could reflect the previous server until the new one answered. [#75]
-- Downloaded books and music are kept for the server and account that
-  downloaded them. Signing out, changing server or signing in as
-  someone else hides them and stops a downloaded song that is playing;
-  signing back in to the same account brings them back. [#73]
-- Cached posters and artwork are now kept per server and account, so
-  another server's posters no longer show on your titles. The image
-  cache starts empty once after the update, so images load again the
-  first time you see them. [#71]
-- Downloaded videos are kept for the server and account that
-  downloaded them, so another server's downloads no longer show beside
-  its catalog. Signing out, changing server or signing in as someone
-  else hides them and pauses downloads in progress; signing back in to
-  the same account brings them back and resumes the downloads. [#72]
+  Downloads tab follow the new server straight away. [#75]
+- After the update, existing downloads and progress are kept if they
+  belong to the server the app is set up for. The image cache starts
+  empty once, so images load again the first time you see them.
 
 ### What's New draft
 
-> Fixed the book reader's toolbar running off the edge of the screen
-> on larger iPhones. Text size is now under a single Aa button, and
-> its menu stays open so you can step the size up or down.
+> - Switching servers now works cleanly. Each server's posters,
+>   downloads and progress are kept separately: another server's
+>   artwork no longer shows on your titles, and switching to a
+>   different server or account clears the previous one's content from
+>   this device. Signing out and back in keeps everything.
+> - Music starts playing without waiting for its cover art, and the
+>   playback bar appears on every page as soon as a track starts.
+> - The book reader's toolbar fits on larger iPhones. Text size is now
+>   under a single Aa button whose menu stays open while you adjust it.
