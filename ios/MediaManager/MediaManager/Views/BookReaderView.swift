@@ -69,17 +69,6 @@ struct BookReaderView: View {
     @Environment(OnlineDataModel.self) private var dataModel
     @Environment(BookCacheManager.self) private var bookCache
     @Environment(ProgressFlusher.self) private var progressFlusher
-    /// Observed so the reader can manually reserve space for the
-    /// mini-player when audio is playing. ContentView's
-    /// `.safeAreaInset(.bottom)` reserves that space at the
-    /// container level — but the reservation doesn't propagate to
-    /// NavigationStack destinations pushed from inside a
-    /// NavigationSplitView (verified empirically: WebView innerH
-    /// stayed at the full 724pt even with safeAreaInset active).
-    /// Observing AudioPlayerManager.currentTrack directly and
-    /// padding by hand is more reliable than chasing the
-    /// SwiftUI-internals reason for the missed propagation.
-    @Environment(AudioPlayerManager.self) private var audio
     /// Local progress queue is a process-wide actor singleton — see
     /// the type's class doc for why it isn't injected via @Environment.
     private let progressQueue = ReadingProgressQueue.shared
@@ -203,7 +192,7 @@ struct BookReaderView: View {
             // error overlays sit on top of it.
             //
             // No `.ignoresSafeArea` on the WebView: when audio is
-            // playing, ContentView's `safeAreaInset(.bottom)` reserves
+            // playing, this page's mini-player inset reserves
             // space for MiniPlayerBar. Letting the WebView respect
             // that inset is what keeps the reader's text from being
             // overlapped by the mini-player (retired-repo issue #68).
@@ -237,13 +226,11 @@ struct BookReaderView: View {
                 EmptyView()
             }
         }
-        // Manually reserve space for the mini-player when audio is
-        // playing — see comment on `audio` for why we can't rely on
-        // ContentView's safeAreaInset reaching this destination.
-        // 52pt matches the bar's content height (40pt artwork + 6pt
-        // vertical padding × 2). When no track is queued the bar
-        // isn't rendered and no padding is needed.
-        .padding(.bottom, audio.currentTrack != nil ? 52 : 0)
+        // No manual padding for the mini-player: this page carries its
+        // own inset (`mmMiniPlayerInset` on the reader's destination in
+        // ContentView), which shrinks the WebView while audio plays.
+        // A stack-level inset never reached pushed pages, which is why
+        // this used to pad by hand (#86).
         // Theme-coloured backdrop. As a `.background()` modifier (not
         // a ZStack sibling), `ignoresSafeArea()` only extends THIS
         // drawing into the safe-area zones — it doesn't grow the
@@ -348,8 +335,8 @@ struct BookReaderView: View {
             // once the reader is dismissed.
             ReaderThemeBroadcaster.shared.current = nil
         }
-        // Publish the current theme so the mini-player (mounted at
-        // ContentView level via safeAreaInset and therefore not in
+        // Publish the current theme so the mini-player (drawn by the
+        // inset ContentView wraps around this view, so not in
         // our view tree) can tint itself to match. Fires on first
         // appear and on every theme cycle.
         .onAppear { ReaderThemeBroadcaster.shared.current = theme.colors }

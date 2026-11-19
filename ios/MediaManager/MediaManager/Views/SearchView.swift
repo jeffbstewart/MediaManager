@@ -59,6 +59,7 @@ struct SearchView: View {
         }
         .navigationDestination(item: $pendingTrackSearch) { filters in
             TrackSearchResultsView(filters: filters)
+                .mmMiniPlayerInset()
         }
         .onChange(of: query) { _, newValue in
             searchTask?.cancel()

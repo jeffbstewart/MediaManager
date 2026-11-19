@@ -313,6 +313,9 @@ struct ContentView: View {
                 // stable. Same idea applied per-view in AuthorsView,
                 // generalized here so every tab gets it.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The root page carries its own mini-player, as every
+                // pushed page below does (#86; see `mmMiniPlayerInset`).
+                .mmMiniPlayerInset()
                 .navigationDestination(for: BrowseRoute.self) { route in
                     // "Browse Your Library" chips on Home open the
                     // same views the sidebar tabs show, pushed.
@@ -327,6 +330,7 @@ struct ContentView: View {
                         }
                     }
                     .mmMeasureWidth()
+                    .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: ApiTitle.self) { title in
                     // Books get a dedicated detail page; the movie-centric
@@ -344,46 +348,57 @@ struct ContentView: View {
                         }
                     }
                     .mmMeasureWidth()
+                    .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: AuthorRoute.self) { route in
                     AuthorDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: ArtistRoute.self) { route in
                     ArtistDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: BrowseArtistsRoute.self) { _ in
                     ArtistsView()
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: SmartPlaylistRoute.self) { route in
                     SmartPlaylistDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: PlaylistRoute.self) { route in
                     PlaylistDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: AllPlaylistsRoute.self) { _ in
                     PlaylistsView()
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: BookSeriesRoute.self) { route in
                     BookSeriesDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: BookReaderRoute.self) { route in
                     BookReaderView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: TvShowRoute.self) { route in
                     SeasonsView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: SeasonRoute.self) { route in
                     EpisodesView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: PlaybackRoute.self) { route in
                     Color.clear.onAppear {
@@ -396,32 +411,32 @@ struct ContentView: View {
                 .navigationDestination(for: ActorRoute.self) { route in
                     ActorView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: CollectionRoute.self) { route in
                     CollectionDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: TagRoute.self) { route in
                     TagDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
                 .navigationDestination(for: GenreRoute.self) { route in
                     GenreDetailView(route: route)
                         .mmMeasureWidth()
+                        .mmMiniPlayerInset()
                 }
             }
-            // Pin the mini-player inside the detail's NavigationStack
-            // so its safeAreaInset propagates into the destination
-            // view's ScrollView contentInsets. Outer-level placement
-            // on NavigationSplitView visually positioned the bar but
-            // didn't shorten the column's ScrollView, leaving tall
-            // pages (MusicView's Browse Artists row, AuthorsView's
-            // grid + search bar) with their last items covered by
-            // the bar. Stable bar height comes from MiniPlayerBar's
-            // explicit .frame(height: 52).
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                MiniPlayerBar()
-            }
+            // No mini-player inset on the stack itself: each page,
+            // the root and every pushed destination, carries its own
+            // (`mmMiniPlayerInset`). An inset here only reached the
+            // root page live; pages already pushed kept the inset they
+            // were pushed with, so playback started on an album page
+            // showed no bar (#86). Outer-level placement on the
+            // NavigationSplitView was tried earlier and didn't shorten
+            // the column's ScrollView either.
             // Column width for the poster grids (`MarqueeLayout.gridCellWidth`).
             .mmMeasureWidth()
         }

@@ -39,6 +39,14 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   Before, it stopped after the first time, until the app was closed
   and reopened. Not visible in the app; it helps diagnose problems you
   report. [#84]
+- Music: a track starts playing without waiting for its cover art.
+  The art appears when it arrives. Before, a track could fail to
+  start at all while the cover was still loading, even a downloaded
+  one. [#85]
+- Music: the playback bar appears on every page as soon as a track
+  starts. Before, starting a track from an album, artist or playlist
+  page often showed no bar, so there was no way to pause it in the
+  app until you moved to another page. [#86]
 
 ### In progress: content kept per server and account [#68]
 
