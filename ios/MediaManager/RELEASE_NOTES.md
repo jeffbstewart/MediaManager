@@ -78,6 +78,11 @@ Merged so far:
   another server's posters no longer show on your titles. The image
   cache starts empty once after the update, so images load again the
   first time you see them. [#71]
+- Downloaded videos are kept for the server and account that
+  downloaded them, so another server's downloads no longer show beside
+  its catalog. Signing out, changing server or signing in as someone
+  else hides them and pauses downloads in progress; signing back in to
+  the same account brings them back and resumes the downloads. [#72]
 
 ### What's New draft
 

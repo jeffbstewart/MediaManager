@@ -6,9 +6,23 @@ import MediaManagerProtos
 
 private let logger = MMLogger(category: "DownloadManager")
 
+/// Video downloads.
+///
+/// **Disk layout:** the `downloads` area of the current storage scope
+/// (see `StorageScope`), since transcode and title ids are the
+/// server's own: the `DownloadStore` database and its backup,
+/// `posters/`, the media and supporting files, and `tv/` metadata.
+///
+/// With no scope bound, the list is empty and no transfer starts. A
+/// scope change cancels transfers in progress and waits for them, drops
+/// the store, and opens one on the new scope's folder, where downloads
+/// that were interrupted resume. Video downloads kept in `Downloads/`
+/// before scopes are claimed on the first bind; `Downloads/Books` and
+/// `Downloads/Audio` are left to `BookCacheManager` and
+/// `AudioCacheManager`.
 @Observable
 @MainActor
-public final class DownloadManager {
+public final class DownloadManager: StorageScopeParticipant {
 
     public private(set) var entries: [MMDownloadEntry] = []
     public var isOfflineMode: Bool {
@@ -26,20 +40,88 @@ public final class DownloadManager {
     private var apiClient: APIClient?
     private var downloadTasks: [Int64: Task<Void, Never>] = [:] // transcodeId → active download task
     private var networkMonitor: NWPathMonitor?
-    private let store = DownloadStore.shared
+
+    /// The `downloads` area of the current storage scope, and the work
+    /// writing into it: transfers and every store write go through
+    /// `area.run`, so a scope change can cancel and await them.
+    private let area: ScopedDownloadArea
+    /// The store opened on the bound scope's folder; nil when nothing
+    /// is bound, and from the moment a change is announced.
+    private var store: DownloadStore?
+    /// The bound scope's folder; nil when nothing is bound.
+    private var downloadsDir: URL? { store?.downloadsDir }
+    /// The load started by the last bind, so tests can wait for it.
+    private var loadTask: Task<Void, Never>?
 
     private static let maxConcurrentDownloads = 3
     /// Persist bytesDownloaded every N chunks to avoid excessive disk writes.
     private static let persistIntervalChunks = 10
 
-    public init() {
-        self.isOfflineMode = UserDefaults.standard.bool(forKey: "offlineMode")
-        logger.info("DownloadManager initialized")
-        Task {
-            await reloadEntries()
-            await store.cleanOrphans()
-        }
+    public convenience init() {
+        let appSupport = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        self.init(
+            scope: .shared,
+            legacyFolder: appSupport.appendingPathComponent("Downloads", isDirectory: true))
         startNetworkMonitor()
+    }
+
+    /// `scope` supplies the folder, and `legacyFolder` is where videos
+    /// were kept before scopes; tests pass temp folders for both, and
+    /// get no network monitor.
+    init(scope: StorageScope, legacyFolder: URL?) {
+        self.isOfflineMode = UserDefaults.standard.bool(forKey: "offlineMode")
+        area = ScopedDownloadArea(scope: scope, area: .downloads, legacyFolder: legacyFolder,
+                                  leaving: ["Books", "Audio"])
+        logger.info("DownloadManager initialized")
+        // Register before the first read of `scope.current`, so no
+        // change is missed. On launch the scope may already be bound,
+        // restored from disk.
+        scope.register(self)
+        bind()
+    }
+
+    // MARK: - Storage scope
+
+    /// Open the bound scope's store, claiming videos stored before
+    /// scopes, and resume downloads it had in progress. With no scope
+    /// bound, nothing is downloaded.
+    private func bind() {
+        dropState()
+        guard let folder = area.bind() else {
+            logger.info("bind: no storage scope bound; no video downloads")
+            return
+        }
+        store = DownloadStore(folder: folder)
+        resumeInterruptedDownloads()
+    }
+
+    /// Forget everything held in memory for the current scope.
+    private func dropState() {
+        store = nil
+        downloadTasks.removeAll()
+        entries = []
+        loadTask = nil
+    }
+
+    /// The folder may be deleted once this returns: stop serving it,
+    /// cancel transfers and store writes and wait for them, and drop
+    /// the store. Interrupted transfers keep their state in the
+    /// database and resume when the scope is bound again.
+    public func storageScopeWillChange() async {
+        area.unbind()
+        dropState()
+        await area.cancelAndAwaitWriters()
+        dropState()
+    }
+
+    public func storageScopeDidChange(to scope: StorageScopeID?) async {
+        bind()
+    }
+
+    /// Returns once the store opened by the last bind has loaded.
+    func loaded() async {
+        await loadTask?.value
     }
 
     public func configure(apiClient: APIClient, grpcClient: GrpcClient) {
@@ -69,20 +151,23 @@ public final class DownloadManager {
         Task { await client.setOfflineGated(offline) }
     }
 
-    /// Restart downloads that were active or queued before the app was killed.
+    /// Load the store's entries and restart downloads that were active
+    /// or queued before the app was killed or the scope last changed.
+    /// Transfers start only once `configure` has supplied the clients.
     private func resumeInterruptedDownloads() {
-        Task {
+        guard let store else { return }
+        loadTask = area.run {
             // Ensure entries are loaded from disk first
-            await reloadEntries()
+            await self.reloadEntries()
             await store.cleanOrphans()
-            await reloadEntries()
+            await self.reloadEntries()
 
             // Re-queue any that were mid-download — they'll resume from saved offset
-            for entry in entries where entry.state == .downloading || entry.state == .fetchingMetadata {
+            for entry in self.entries where entry.state == .downloading || entry.state == .fetchingMetadata {
                 await store.updateEntry(transcodeId: entry.transcodeID) { $0.state = .queued }
             }
-            await reloadEntries()
-            startNextQueued()
+            await self.reloadEntries()
+            if self.grpcClient != nil { self.startNextQueued() }
         }
     }
 
@@ -92,7 +177,13 @@ public final class DownloadManager {
                        quality: MMDownloadQuality, year: Int32, mediaType: MMMediaType,
                        contentRating: MMContentRating,
                        seasonNumber: Int32 = 0, episodeNumber: Int32 = 0, episodeTitle: String = "") {
-        Task {
+        // No storage scope bound (signed out, or changing server):
+        // there is nowhere this download belongs.
+        guard let store else {
+            logger.warning("startDownload tcId=\(transcodeId): no storage scope bound; not starting")
+            return
+        }
+        area.run {
             guard await store.entry(for: transcodeId) == nil else { return }
 
             var entry = MMDownloadEntry()
@@ -112,30 +203,32 @@ public final class DownloadManager {
             entry.addedAt = MMTimestamp.with { $0.secondsSinceEpoch = Int64(Date().timeIntervalSince1970) }
 
             _ = await store.addEntry(entry)
-            await reloadEntries()
+            await self.reloadEntries()
 
             // Kick the queue (synchronous check + start, no suspension between check and start)
-            startNextQueued()
+            self.startNextQueued()
         }
     }
 
     public func pauseDownload(transcodeId: Int64) {
         downloadTasks[transcodeId]?.cancel()
         downloadTasks.removeValue(forKey: transcodeId)
-        Task {
+        guard let store else { return }
+        area.run {
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.state = .paused
             }
-            await reloadEntries()
+            await self.reloadEntries()
         }
     }
 
     public func resumeDownload(transcodeId: Int64) {
-        guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
+        guard let store,
+              let entry = entries.first(where: { $0.transcodeID == transcodeId }),
               entry.state == .paused || entry.state == .failed else { return }
 
         logger.info("resumeDownload tcId=\(transcodeId): manual retry — resetting retryCount from \(entry.retryCount)")
-        Task {
+        area.run {
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.state = .downloading
                 e.errorMessage = ""
@@ -147,7 +240,7 @@ public final class DownloadManager {
                 // succeed without a delete-and-redownload cycle.
                 e.retryCount = 0
             }
-            await reloadEntries()
+            await self.reloadEntries()
         }
         beginDownload(transcodeId: transcodeId, sequence: entries.first(where: { $0.transcodeID == transcodeId })?.sequence ?? 0)
     }
@@ -165,30 +258,36 @@ public final class DownloadManager {
             }
         }
 
-        Task {
+        guard let store else { return }
+        area.run {
             await store.removeEntry(transcodeId: transcodeId)
-            await reloadEntries()
+            await self.reloadEntries()
         }
     }
 
-    /// Cancel every video download and delete every downloaded video,
-    /// with the TV metadata kept beside them, and leave offline mode.
-    /// Used when the account is deleted.
+    /// Cancel every video download and delete every downloaded video
+    /// of the current scope, with the TV metadata kept beside them, and
+    /// leave offline mode. Used when the account is deleted.
     public func removeAllDownloads() async {
-        for task in downloadTasks.values { task.cancel() }
+        await area.cancelAndAwaitWriters()
         downloadTasks.removeAll()
+        isOfflineMode = false
+        guard let store else {
+            entries = []
+            return
+        }
         await store.removeAll()
         try? FileManager.default.removeItem(
             at: store.downloadsDir.appendingPathComponent("tv", isDirectory: true))
-        isOfflineMode = false
         await reloadEntries()
     }
 
     public func localVideoURL(for transcodeId: Int64) -> URL? {
-        guard let entry = entries.first(where: { $0.transcodeID == transcodeId }),
+        guard let downloadsDir,
+              let entry = entries.first(where: { $0.transcodeID == transcodeId }),
               entry.state == .completed else { return nil }
         let seq = String(format: "%07d.mp4", entry.sequence)
-        let url = DownloadStore.shared.downloadsDir.appendingPathComponent(seq)
+        let url = downloadsDir.appendingPathComponent(seq)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
@@ -292,7 +391,7 @@ public final class DownloadManager {
     public func localDir(for transcodeId: TranscodeID) -> URL? {
         guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
               entry.state == .completed else { return nil }
-        return store.downloadsDir
+        return downloadsDir
     }
 
     public func sequencePrefix(for transcodeId: TranscodeID) -> String? {
@@ -304,7 +403,8 @@ public final class DownloadManager {
     // MARK: - Progress Queue
 
     public func queueProgressUpdate(transcodeId: Int64, position: Double, duration: Double?) {
-        Task {
+        guard let store else { return }
+        area.run {
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.playbackPosition = MMPlaybackOffset.with { $0.seconds = position }
                 if let duration { e.duration = MMPlaybackOffset.with { $0.seconds = duration } }
@@ -318,13 +418,17 @@ public final class DownloadManager {
         guard let grpcClient else { return }
         // Positions are the server's transcode ids: send them only
         // while the server and account they were recorded under are
-        // still the bound ones, checked again before each send.
-        // (The download store itself becomes per-scope in #72.)
-        let startedIn = StorageScope.shared.current
-        let unsynced = startedIn == nil ? []
-            : await store.entries.filter { !$0.positionSynced && $0.playbackPosition.seconds > 0 }
+        // still the bound ones, checked again before each send. The
+        // store is the one opened for that scope, so a sent position
+        // is marked synced there and nowhere else.
+        let startedIn = area.scope.current
+        let store = self.store
+        var unsynced: [MMDownloadEntry] = []
+        if startedIn != nil, let store {
+            unsynced = await store.entries.filter { !$0.positionSynced && $0.playbackPosition.seconds > 0 }
+        }
         for entry in unsynced {
-            guard StorageScope.shared.current == startedIn else {
+            guard let store, self.store === store, area.scope.current == startedIn else {
                 logger.info("flushPendingProgress: stopped, the storage scope changed")
                 break
             }
@@ -398,8 +502,9 @@ public final class DownloadManager {
     // don't speculatively prefetch metadata for shows they're only
     // browsing.
 
-    private func tvMetadataDir(for titleId: Int64) -> URL {
-        store.downloadsDir
+    /// Nil when no storage scope is bound: nothing is read or written.
+    private func tvMetadataDir(for titleId: Int64) -> URL? {
+        downloadsDir?
             .appendingPathComponent("tv", isDirectory: true)
             .appendingPathComponent("\(titleId)", isDirectory: true)
     }
@@ -408,7 +513,7 @@ public final class DownloadManager {
     /// offline. Called by SeasonsView before kicking off downloads
     /// and by EpisodesView when starting any per-episode download.
     public func cacheSeasonMetadata(titleId: TitleID, season: ApiSeason) {
-        let dir = tvMetadataDir(for: titleId.protoValue)
+        guard let dir = tvMetadataDir(for: titleId.protoValue) else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent("season-\(season.seasonNumber).pb")
         guard let data = try? season.proto.serializedData() else { return }
@@ -418,7 +523,7 @@ public final class DownloadManager {
     /// Persist an episode's metadata. Called whenever an episode
     /// download starts (single or bulk).
     public func cacheEpisodeMetadata(titleId: TitleID, episode: ApiEpisode) {
-        let dir = tvMetadataDir(for: titleId.protoValue)
+        guard let dir = tvMetadataDir(for: titleId.protoValue) else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent("episode-\(episode.seasonNumber)x\(episode.episodeNumber).pb")
         guard let data = try? episode.proto.serializedData() else { return }
@@ -430,8 +535,8 @@ public final class DownloadManager {
     /// show — OfflineDataModel falls back to throwing in that case
     /// so the user just doesn't see the show in the offline list.
     public func loadCachedSeasons(for titleId: TitleID) -> [ApiSeason] {
-        let dir = tvMetadataDir(for: titleId.protoValue)
-        guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
+        guard let dir = tvMetadataDir(for: titleId.protoValue),
+              let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
         return urls.compactMap { url -> ApiSeason? in
             guard url.lastPathComponent.hasPrefix("season-") else { return nil }
             guard let data = try? Data(contentsOf: url),
@@ -442,8 +547,8 @@ public final class DownloadManager {
 
     /// Cached episodes for one season, sorted by episode number.
     public func loadCachedEpisodes(for titleId: TitleID, season: Int) -> [ApiEpisode] {
-        let dir = tvMetadataDir(for: titleId.protoValue)
-        guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
+        guard let dir = tvMetadataDir(for: titleId.protoValue),
+              let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
         let prefix = "episode-\(season)x"
         return urls.compactMap { url -> ApiEpisode? in
             guard url.lastPathComponent.hasPrefix(prefix) else { return nil }
@@ -456,8 +561,9 @@ public final class DownloadManager {
     /// Load cached title detail protobuf for offline browse.
     public func loadCachedTitleDetail(for titleId: TitleID) -> ApiTitleDetail? {
         // Find any download entry for this title that has a cached detail
-        guard let entry = entries.first(where: { $0.titleID == titleId.protoValue }) else { return nil }
-        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.detail.pb", entry.sequence))
+        guard let downloadsDir,
+              let entry = entries.first(where: { $0.titleID == titleId.protoValue }) else { return nil }
+        let path = downloadsDir.appendingPathComponent(String(format: "%07d.detail.pb", entry.sequence))
         guard let data = try? Data(contentsOf: path),
               let proto = try? MMTitleDetail(serializedBytes: data) else { return nil }
         return ApiTitleDetail(proto: proto)
@@ -465,17 +571,19 @@ public final class DownloadManager {
 
     /// Returns the local chapters file URL for a downloaded transcode, if it exists.
     public func localChaptersURL(for transcodeId: TranscodeID) -> URL? {
-        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+        guard let downloadsDir,
+              let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
               entry.hasChapters_p else { return nil }
-        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.chapters.json", entry.sequence))
+        let path = downloadsDir.appendingPathComponent(String(format: "%07d.chapters.json", entry.sequence))
         return FileManager.default.fileExists(atPath: path.path) ? path : nil
     }
 
     /// Returns the local subtitle file URL for a downloaded transcode, if it exists.
     public func localSubtitleURL(for transcodeId: TranscodeID) -> URL? {
-        guard let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
+        guard let downloadsDir,
+              let entry = entries.first(where: { $0.transcodeID == transcodeId.protoValue }),
               entry.hasSubtitles_p else { return nil }
-        let path = store.downloadsDir.appendingPathComponent(String(format: "%07d.subs.vtt", entry.sequence))
+        let path = downloadsDir.appendingPathComponent(String(format: "%07d.subs.vtt", entry.sequence))
         return FileManager.default.fileExists(atPath: path.path) ? path : nil
     }
 
@@ -483,20 +591,28 @@ public final class DownloadManager {
 
     // MARK: - Private: Download Flow
 
+    /// Start a transfer into the bound scope's store. `area.run` tracks
+    /// it, so a scope change cancels it and waits for it to finish
+    /// with that store before the folder can go. Every step of the
+    /// transfer writes to the store it started with, never a later one.
     private func beginDownload(transcodeId: Int64, sequence: Int32) {
-        downloadTasks[transcodeId] = Task {
-            await performDownload(transcodeId: transcodeId, sequence: sequence)
+        guard let store else {
+            logger.info("beginDownload tcId=\(transcodeId): no storage scope bound; not starting")
+            return
+        }
+        downloadTasks[transcodeId] = area.run {
+            await self.performDownload(transcodeId: transcodeId, sequence: sequence, store: store)
         }
     }
 
-    private func performDownload(transcodeId: Int64, sequence: Int32) async {
+    private func performDownload(transcodeId: Int64, sequence: Int32, store: DownloadStore) async {
         logger.info("performDownload: transcodeId=\(transcodeId) seq=\(sequence)")
         await store.updateEntry(transcodeId: transcodeId) { $0.state = .fetchingMetadata }
         await reloadEntries()
 
         guard let grpcClient else {
             logger.error("performDownload tcId=\(transcodeId): grpcClient is nil — not configured")
-            await markFailed(transcodeId: transcodeId,
+            await markFailed(store: store, transcodeId: transcodeId,
                              error: "Not configured — app didn't finish connecting to the server before download started")
             return
         }
@@ -514,7 +630,7 @@ public final class DownloadManager {
             logger.info("Manifest fetched: \(manifest.fileSizeBytes) bytes")
         } catch {
             logger.error("performDownload tcId=\(transcodeId): manifest fetch failed: \(String(describing: error))")
-            await scheduleRetry(transcodeId: transcodeId,
+            await scheduleRetry(store: store, transcodeId: transcodeId,
                                 sequence: sequence,
                                 lastError: "Manifest: \(error.localizedDescription)",
                                 isRetryable: true)
@@ -528,7 +644,7 @@ public final class DownloadManager {
             if let free = try? FileManager.default.attributesOfFileSystem(
                 forPath: NSHomeDirectory())[.systemFreeSize] as? Int64, free < required {
                 logger.error("performDownload tcId=\(transcodeId): not enough space (need \(required), have \(free))")
-                await markFailed(transcodeId: transcodeId,
+                await markFailed(store: store, transcodeId: transcodeId,
                                  error: "Not enough space — need \(required / 1_000_000) MB free")
                 return
             }
@@ -536,7 +652,7 @@ public final class DownloadManager {
 
         // Download supporting files
         if let entry = await store.entry(for: transcodeId) {
-            await downloadSupportingFiles(entry: entry)
+            await downloadSupportingFiles(entry: entry, store: store)
         }
 
         // Start gRPC streaming download
@@ -559,7 +675,7 @@ public final class DownloadManager {
         // Wicked.mp4. Finalize directly and skip the stream.
         if manifestSize > 0 && resumeOffset >= manifestSize {
             await finalizeAlreadyDownloaded(
-                entry: entry, sequence: sequence, downloadingPath: filePath)
+                entry: entry, sequence: sequence, downloadingPath: filePath, store: store)
             return
         }
 
@@ -569,7 +685,7 @@ public final class DownloadManager {
             if resumeOffset > 0 {
                 guard FileManager.default.fileExists(atPath: filePath.path) else {
                     await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = 0 }
-                    await performDownload(transcodeId: transcodeId, sequence: sequence)
+                    await performDownload(transcodeId: transcodeId, sequence: sequence, store: store)
                     return
                 }
             } else {
@@ -593,7 +709,7 @@ public final class DownloadManager {
                     // Flush to disk before persisting metadata so the file size
                     // matches bytesDownloaded on crash/cancel recovery
                     try? fileHandle.synchronize()
-                    await self.store.updateEntry(transcodeId: transcodeId) { e in
+                    await store.updateEntry(transcodeId: transcodeId) { e in
                         e.bytesDownloaded = newTotal
                     }
                     await self.reloadEntries()
@@ -633,7 +749,7 @@ public final class DownloadManager {
             await store.updateEntry(transcodeId: transcodeId) { e in
                 e.bytesDownloaded = saved
             }
-            await scheduleRetry(transcodeId: transcodeId,
+            await scheduleRetry(store: store, transcodeId: transcodeId,
                                 sequence: sequence,
                                 lastError: error.localizedDescription,
                                 isRetryable: true)
@@ -656,7 +772,7 @@ public final class DownloadManager {
     ///   - neither exists    → bytesDownloaded is lying; reset and
     ///                          re-enter performDownload from offset 0
     private func finalizeAlreadyDownloaded(
-        entry: MMDownloadEntry, sequence: Int32, downloadingPath: URL
+        entry: MMDownloadEntry, sequence: Int32, downloadingPath: URL, store: DownloadStore
     ) async {
         let transcodeId = entry.transcodeID
         let finalPath = await store.videoPath(for: entry, downloading: false)
@@ -677,7 +793,7 @@ public final class DownloadManager {
             case (false, false):
                 logger.warning("finalizeAlreadyDownloaded tcId=\(transcodeId): bytesDownloaded=\(entry.bytesDownloaded) but no file on disk — restarting from offset 0")
                 await store.updateEntry(transcodeId: transcodeId) { $0.bytesDownloaded = 0 }
-                await performDownload(transcodeId: transcodeId, sequence: sequence)
+                await performDownload(transcodeId: transcodeId, sequence: sequence, store: store)
                 return
             }
 
@@ -695,7 +811,7 @@ public final class DownloadManager {
             startNextQueued()
         } catch {
             logger.error("finalizeAlreadyDownloaded tcId=\(transcodeId): \(String(describing: error))")
-            await scheduleRetry(transcodeId: transcodeId, sequence: sequence,
+            await scheduleRetry(store: store, transcodeId: transcodeId, sequence: sequence,
                                 lastError: "Finalize: \(error.localizedDescription)",
                                 isRetryable: true)
         }
@@ -714,6 +830,7 @@ public final class DownloadManager {
     /// resolve within 5–15 seconds in practice, so 8 attempts is
     /// generous headroom.
     private func scheduleRetry(
+        store: DownloadStore,
         transcodeId: Int64, sequence: Int32, lastError: String, isRetryable: Bool
     ) async {
         // Persist + bump the attempt counter so a subsequent crash /
@@ -725,7 +842,7 @@ public final class DownloadManager {
         guard isRetryable, attempt < 8 else {
             logger.error("scheduleRetry tcId=\(transcodeId): giving up after \(attempt) attempts. Last error: \(lastError)")
             await markFailed(
-                transcodeId: transcodeId,
+                store: store, transcodeId: transcodeId,
                 error: "Failed after \(attempt) attempt\(attempt == 1 ? "" : "s"): \(lastError)")
             return
         }
@@ -748,10 +865,10 @@ public final class DownloadManager {
 
         await store.updateEntry(transcodeId: transcodeId) { $0.errorMessage = "" }
         await reloadEntries()
-        await performDownload(transcodeId: transcodeId, sequence: sequence)
+        await performDownload(transcodeId: transcodeId, sequence: sequence, store: store)
     }
 
-    private func downloadSupportingFiles(entry: MMDownloadEntry) async {
+    private func downloadSupportingFiles(entry: MMDownloadEntry, store: DownloadStore) async {
         guard let apiClient else { return }
         let tcId = entry.transcodeID
 
@@ -796,7 +913,7 @@ public final class DownloadManager {
 
     // MARK: - Private: Helpers
 
-    private func markFailed(transcodeId: Int64, error: String) async {
+    private func markFailed(store: DownloadStore, transcodeId: Int64, error: String) async {
         // Final-failure log so Binnacle has a record even when the
         // auto-retry path didn't fire (e.g. permanent storage error,
         // misconfiguration). scheduleRetry already logs each
@@ -810,8 +927,16 @@ public final class DownloadManager {
         downloadTasks.removeValue(forKey: transcodeId)
     }
 
+    /// Refresh `entries` from the bound scope's store. Empty when
+    /// nothing is bound; a read that finishes after a scope change is
+    /// dropped.
     private func reloadEntries() async {
-        entries = await store.entries
+        guard let store else {
+            entries = []
+            return
+        }
+        let loaded = await store.entries
+        if self.store === store { entries = loaded }
     }
 
     /// Start queued downloads up to the concurrency limit.
