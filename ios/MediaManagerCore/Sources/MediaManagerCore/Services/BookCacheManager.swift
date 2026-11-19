@@ -143,6 +143,8 @@ public final class BookCacheManager: StorageScopeParticipant {
     /// downloads writing into it.
     private let area: ScopedDownloadArea
     private static let indexFileName = "index.json"
+    /// Where downloaded books' cover and author images are pinned.
+    private let imageCache: ImageDiskCache
 
     /// The bound scope's Books folder; nil when nothing is bound.
     private var booksDir: URL? { area.folder }
@@ -158,14 +160,38 @@ public final class BookCacheManager: StorageScopeParticipant {
     }
 
     /// `scope` supplies the folder, and `legacyFolder` is where books
-    /// were kept before scopes; tests pass temp folders for both.
-    init(scope: StorageScope, legacyFolder: URL?) {
+    /// were kept before scopes; tests pass temp folders for both, and
+    /// their own image cache.
+    init(scope: StorageScope, legacyFolder: URL?, imageCache: ImageDiskCache = .shared) {
         area = ScopedDownloadArea(scope: scope, area: .books, legacyFolder: legacyFolder)
+        self.imageCache = imageCache
         // Register before the first read of `scope.current`, so no
         // change is missed. On launch the scope may already be bound,
         // restored from disk.
         scope.register(self)
         load()
+        Task { [weak self] in await self?.repinDownloadedImages() }
+    }
+
+    /// Pin the images every downloaded book needs offline (#91). Pins
+    /// live in memory only and `ImageDiskCache` drops them on every scope
+    /// change, so they are set again whenever this store loads a scope,
+    /// not just when a book is downloaded. Reads `downloads` as it is
+    /// now, so a call that runs after another scope change pins that
+    /// scope's books.
+    func repinDownloadedImages() async {
+        for titleId in Set(downloads.map(\.titleId)) {
+            await pinImages(titleId: titleId, detail: loadCachedTitleDetail(titleId: titleId))
+        }
+    }
+
+    /// Cover and author headshot for one book.
+    private func pinImages(titleId: Int64, detail: ApiTitleDetail?) async {
+        await imageCache.pin(ref: .posterThumbnail(titleId: titleId))
+        await imageCache.pin(ref: .posterFull(titleId: titleId))
+        for author in detail?.book?.authors ?? [] where author.hasHeadshot {
+            await imageCache.pin(ref: .authorHeadshot(authorId: author.id.protoValue))
+        }
     }
 
     /// Load the bound scope's index, claiming books stored before
@@ -233,13 +259,9 @@ public final class BookCacheManager: StorageScopeParticipant {
 
         // Pin the cover (already used by every book surface) and
         // author headshot so AuthorDetailView's hero loads offline.
+        // Pinned again on every scope load (`repinDownloadedImages`).
         Task { [titleId = detail.id.protoValue] in
-            let cache = ImageDiskCache.shared
-            await cache.pin(ref: .posterThumbnail(titleId: titleId))
-            await cache.pin(ref: .posterFull(titleId: titleId))
-            for author in detail.book?.authors ?? [] where author.hasHeadshot {
-                await cache.pin(ref: .authorHeadshot(authorId: author.id.protoValue))
-            }
+            await self.pinImages(titleId: titleId, detail: detail)
         }
     }
 
@@ -572,6 +594,7 @@ public final class BookCacheManager: StorageScopeParticipant {
 
     public func storageScopeDidChange(to scope: StorageScopeID?) async {
         load()
+        await repinDownloadedImages()
     }
 
     // MARK: - Index persistence

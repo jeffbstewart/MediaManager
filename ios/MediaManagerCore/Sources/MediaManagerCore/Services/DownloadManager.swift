@@ -52,6 +52,9 @@ public final class DownloadManager: StorageScopeParticipant {
     private var downloadsDir: URL? { store?.downloadsDir }
     /// The load started by the last bind, so tests can wait for it.
     private var loadTask: Task<Void, Never>?
+    /// Where downloaded titles' posters, backdrops and cast headshots
+    /// are pinned.
+    private let imageCache: ImageDiskCache
 
     private static let maxConcurrentDownloads = 3
     /// Persist bytesDownloaded every N chunks to avoid excessive disk writes.
@@ -68,8 +71,9 @@ public final class DownloadManager: StorageScopeParticipant {
 
     /// `scope` supplies the folder, and `legacyFolder` is where videos
     /// were kept before scopes; tests pass temp folders for both, and
-    /// get no network monitor.
-    init(scope: StorageScope, legacyFolder: URL?) {
+    /// get no network monitor, and pass their own image cache.
+    init(scope: StorageScope, legacyFolder: URL?, imageCache: ImageDiskCache = .shared) {
+        self.imageCache = imageCache
         self.isOfflineMode = UserDefaults.standard.bool(forKey: "offlineMode")
         area = ScopedDownloadArea(scope: scope, area: .downloads, legacyFolder: legacyFolder,
                                   leaving: ["Books", "Audio"])
@@ -161,6 +165,15 @@ public final class DownloadManager: StorageScopeParticipant {
             await self.reloadEntries()
             await store.cleanOrphans()
             await self.reloadEntries()
+
+            // Pin the images of completed downloads (#91). Pins live in
+            // memory only and ImageDiskCache drops them on every scope
+            // change, so they are set again on every bind. Inside
+            // area.run, so a scope change cancels this with the rest.
+            for titleId in Set(self.entries.filter { $0.state == .completed }.map(\.titleID)) {
+                guard !Task.isCancelled else { break }
+                await self.pinImagesForTitle(titleId)
+            }
 
             // Re-queue any that were mid-download — they'll resume from saved offset
             for entry in self.entries where entry.state == .downloading || entry.state == .fetchingMetadata {
@@ -464,7 +477,7 @@ public final class DownloadManager: StorageScopeParticipant {
 
     /// Pin images for a downloaded title so they survive cache eviction.
     public func pinImagesForTitle(_ titleId: Int64) async {
-        let cache = ImageDiskCache.shared
+        let cache = imageCache
         await cache.pin(ref: .posterThumbnail(titleId: titleId))
         await cache.pin(ref: .posterFull(titleId: titleId))
         await cache.pin(ref: .backdrop(titleId: titleId))
@@ -479,7 +492,7 @@ public final class DownloadManager: StorageScopeParticipant {
 
     /// Unpin images for a title being deleted.
     public func unpinImagesForTitle(_ titleId: Int64) async {
-        let cache = ImageDiskCache.shared
+        let cache = imageCache
         await cache.unpin(ref: .posterThumbnail(titleId: titleId))
         await cache.unpin(ref: .posterFull(titleId: titleId))
         await cache.unpin(ref: .backdrop(titleId: titleId))
