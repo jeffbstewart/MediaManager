@@ -3,14 +3,44 @@ import GRPCCore
 import UIKit
 import MediaManagerProtos
 
-/// Drains `LogBuffer.shared` onto a long-lived `ObservabilityService.StreamLogs`
+/// What `LogStreamer` needs from the gRPC layer. `GrpcClient` conforms;
+/// tests use a fake.
+public protocol LogStreamTransport: Sendable {
+    /// Goes up whenever the connection or the signed-in account may have
+    /// changed (see `GrpcClient.connectionGeneration`).
+    var connectionGeneration: UInt64 { get async }
+
+    /// Run one `ObservabilityService/StreamLogs` call: `producer` writes
+    /// records until it returns, then the server's ack comes back.
+    func streamLogs(
+        producer: @Sendable @escaping (RPCWriter<MMLogRecord>) async throws -> Void
+    ) async throws -> MMStreamLogsAck
+}
+
+extension GrpcClient: LogStreamTransport {}
+
+/// Thrown out of a session to end it early because the connection or
+/// account changed under it; the run loop reconnects at once.
+struct LogStreamConnectionChanged: Error {}
+
+/// Drains `LogBuffer` onto a long-lived `ObservabilityService.StreamLogs`
 /// client-streaming RPC. Started after authentication succeeds; stopped on
 /// logout or app shutdown. Reconnects with exponential backoff on stream
 /// failure.
 ///
-/// Records yielded into `LogBuffer` before `start()` runs (e.g. logs emitted
-/// during login or session restore) are buffered and shipped on first
-/// successful connect.
+/// Records logged before `start()` (during login or session restore, say)
+/// wait in the buffer and go out on the first successful connect.
+///
+/// Recovery (#84):
+/// - The buffer survives cancellation, so a connection dropped while the
+///   app is in the background, or a `stop()`, never silences later logs.
+/// - A record taken but not delivered (the write failed, or the session
+///   was cancelled) goes back to the front of the buffer.
+/// - Each session records `connectionGeneration` when it opens. Before each
+///   write it checks again; if the connection or account has changed, it
+///   puts the record back and ends, and the next session opens on the
+///   current connection. A graceful shutdown would otherwise let the old
+///   session carry on, on a connection that may be dead.
 public actor LogStreamer {
     /// Snapshot of process / device identity stamped onto every record.
     /// Constructed off-actor (typically on @MainActor where UIDevice can be
@@ -24,18 +54,12 @@ public actor LogStreamer {
         }
     }
 
-    private let grpcClient: GrpcClient
+    private let transport: any LogStreamTransport
+    private let buffer: LogBuffer
     private let identity: Identity
     private let log = MMLogger(category: "LogStreamer")
 
     private var streamTask: Task<Void, Never>?
-    /// Iterator survives across reconnect attempts so buffered records aren't
-    /// lost. Wrapped in a class so the mutating `next()` doesn't conflict
-    /// with actor-isolated property access rules.
-    /// Created lazily on first `start()` so a discarded LogStreamer (e.g. the
-    /// throwaway AuthManager built before SwiftUI's @State takes over) never
-    /// claims the singleton AsyncStream's only consumer iterator.
-    private var iterator: IteratorBox?
 
     /// Called when the server rejects the stream's Bearer token with
     /// UNAUTHENTICATED. Wired by AuthManager to `performTokenRefresh()`
@@ -46,9 +70,20 @@ public actor LogStreamer {
     private var onAuthFailed: (@Sendable () async -> Void)?
     private var lastAuthRefreshAt: Date = .distantPast
 
+    /// Base of the retry delay, in seconds (2s, 4s, ... capped at 60s).
+    /// Tests shrink it.
+    private let backoffUnit: Double
+
     public init(grpcClient: GrpcClient, identity: Identity) {
-        self.grpcClient = grpcClient
+        self.init(transport: grpcClient, identity: identity)
+    }
+
+    init(transport: any LogStreamTransport, identity: Identity,
+         buffer: LogBuffer = .shared, backoffUnit: Double = 1.0) {
+        self.transport = transport
         self.identity = identity
+        self.buffer = buffer
+        self.backoffUnit = backoffUnit
     }
 
     /// Register the callback that AuthManager uses to refresh the
@@ -61,18 +96,14 @@ public actor LogStreamer {
     /// Start the drain loop. No-op if already running.
     public func start() {
         guard streamTask == nil else { return }
-        if iterator == nil {
-            iterator = IteratorBox(LogBuffer.shared.stream.makeAsyncIterator())
-        }
         log.info("starting log stream to Binnacle")
         streamTask = Task { [weak self] in
             await self?.runLoop()
         }
     }
 
-    /// Cancel the drain loop. The current in-flight stream session will end
-    /// at its next iteration; any records yielded after this point stay in
-    /// `LogBuffer` until `start()` is called again.
+    /// Cancel the drain loop. Records logged from now on wait in the
+    /// buffer (up to its capacity) until `start()` is called again.
     public func stop() {
         guard let task = streamTask else { return }
         log.info("stopping log stream")
@@ -87,11 +118,20 @@ public actor LogStreamer {
                 let ack = try await streamSession()
                 log.info("stream session ended cleanly: forwarded=\(ack.recordsForwarded) rejected=\(ack.recordsRejected)")
                 attempt = 0
+            } catch is LogStreamConnectionChanged {
+                // Not a failure: reopen on the current connection now.
+                log.info("connection changed; reopening the log stream")
+                attempt = 0
+                continue
             } catch is CancellationError {
-                break
+                if Task.isCancelled { break }
+                // The session was cancelled by the transport (connection
+                // dropped), not by stop(): treat it as a failure and retry.
+                attempt = min(attempt + 1, 5)
+                log.warning("stream session cancelled by the connection (attempt #\(attempt))")
             } catch {
                 attempt = min(attempt + 1, 5)
-                log.warning("stream session failed (attempt #\(attempt)): \(error.localizedDescription)")
+                log.warning("stream session failed (attempt #\(attempt)): \(Self.describe(error))")
                 // If the server kicked us out for an expired / invalid
                 // token, nudge AuthManager to rotate before the next
                 // reconnect — without this the retry loop spins
@@ -109,25 +149,46 @@ public actor LogStreamer {
             // Exponential backoff: 2s → 4s → 8s → 16s → 32s → 60s, with up
             // to 500ms of jitter so reconnect storms don't synchronise across
             // restarts.
-            let base = min(60.0, pow(2.0, Double(attempt + 1)))
-            let delay = base + Double.random(in: 0...0.5)
+            let base = min(60.0, pow(2.0, Double(attempt + 1))) * backoffUnit
+            let delay = base + Double.random(in: 0...0.5) * backoffUnit
             try? await Task.sleep(for: .seconds(delay))
         }
     }
 
     private func streamSession() async throws -> MMStreamLogsAck {
-        try await grpcClient.streamLogs { [weak self] writer in
+        let generation = await transport.connectionGeneration
+        let buffer = self.buffer
+        let transport = self.transport
+        return try await transport.streamLogs { [weak self] writer in
             guard let self else { return }
-            while !Task.isCancelled {
-                guard let pending = await self.nextRecord() else { return }
+            while true {
+                // nil only when this task is cancelled; nothing is lost.
+                guard let pending = await buffer.next() else {
+                    throw CancellationError()
+                }
+                if await transport.connectionGeneration != generation {
+                    buffer.pushFront(pending)
+                    throw LogStreamConnectionChanged()
+                }
                 let record = await self.buildRecord(pending)
-                try await writer.write(record)
+                do {
+                    try await writer.write(record)
+                } catch {
+                    buffer.pushFront(pending)
+                    throw error
+                }
             }
         }
     }
 
-    private func nextRecord() async -> PendingLogRecord? {
-        await iterator?.next()
+    /// For the log: the gRPC status and message, not the user-facing text
+    /// (`localizedDescription` of an `RPCError` here reads "Something went
+    /// wrong on the server", which says nothing about what happened).
+    static func describe(_ error: Error) -> String {
+        if let rpc = error as? RPCError {
+            return rpc.message.isEmpty ? "\(rpc.code)" : "\(rpc.code): \(rpc.message)"
+        }
+        return String(describing: error)
     }
 
     /// Match swift-grpc's UNAUTHENTICATED across both the typed
@@ -156,16 +217,6 @@ public actor LogStreamer {
         record.attributes = attrs
         return record
     }
-}
-
-/// Class wrapper that lets the actor call the iterator's mutating `next()`
-/// without Swift complaining about mutating a stored actor property. Only
-/// ever touched by the owning `LogStreamer` actor, so unchecked Sendable
-/// conformance is safe.
-private final class IteratorBox: @unchecked Sendable {
-    private var iter: AsyncStream<PendingLogRecord>.AsyncIterator
-    public init(_ iter: AsyncStream<PendingLogRecord>.AsyncIterator) { self.iter = iter }
-    public func next() async -> PendingLogRecord? { await iter.next() }
 }
 
 public extension LogStreamer.Identity {
