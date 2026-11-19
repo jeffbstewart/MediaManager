@@ -536,6 +536,15 @@ simulator keeps the signed-in session, so **never navigate into the
 server administration screens** (the sidebar's Catalog, Transcodes,
 Purchases and System groups); ask the user for those clicks.
 
+**CarPlay.** This Xcode's simulator has no CarPlay display. Use Apple's
+CarPlay Simulator ("Additional Tools for Xcode" > Hardware) with the
+user's iPhone connected by USB; it runs the app installed on the phone.
+To see it, `lifecycle/carplay-shot.sh start` launches a helper whose
+macOS window picker the user answers by choosing the CarPlay Simulator
+window; then `shot NAME` saves `data/screenshots/carplay/NAME.png` and
+`stop` ends it. It needs no Screen Recording permission, and it can only
+see the window the user picked.
+
 ## Screenshots
 
 Save all Playwright screenshots to `data/screenshots/` (e.g., `data/screenshots/navbar-test.png`). The `data/` directory is gitignored so screenshots never enter version control.
