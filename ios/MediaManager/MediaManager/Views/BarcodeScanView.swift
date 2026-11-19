@@ -95,6 +95,7 @@ struct BarcodeScanView: View {
         }
         .navigationDestination(for: Int64.self) { scanId in
             ScanDetailView(scanId: scanId)
+                .mmMiniPlayerInset()
         }
         .sheet(isPresented: $showCamera) {
             NavigationStack {

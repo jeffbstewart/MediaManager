@@ -169,3 +169,20 @@ struct MiniPlayerBar: View {
         return parts.joined(separator: " · ")
     }
 }
+
+extension View {
+    /// Reserve the bottom edge of this page for the mini-player, and draw
+    /// it there while something is playing.
+    ///
+    /// Apply it to each page of the detail NavigationStack (the root and
+    /// every `navigationDestination`), never to the stack itself. An inset
+    /// on the stack reached only the root page as it changed: pages already
+    /// pushed kept the inset they had when pushed, so starting playback on
+    /// an album page showed no bar until the user navigated (#86). A page
+    /// that carries its own inset updates the moment playback starts.
+    func mmMiniPlayerInset() -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) {
+            MiniPlayerBar()
+        }
+    }
+}

@@ -122,6 +122,11 @@ public final class AudioPlayerManager {
     /// — playback gracefully falls through to streaming.
     private var audioCache: AudioCacheManager?
 
+    /// How long a track waits for its cover art before playing without
+    /// it (#85). Long enough for a cache hit or a quick fetch to make the
+    /// first CarPlay Now Playing render; short enough not to be noticed.
+    static let artworkHeadStart: Duration = .seconds(1)
+
     /// Track id whose progress was most recently enqueued. Drives
     /// the "report a final position when the track changes" hook —
     /// when this differs from `currentTrack?.id` we know we just
@@ -574,16 +579,21 @@ public final class AudioPlayerManager {
         player.removeAllItems()
         player.insert(item, after: nil)
         // CarPlay snapshots MPNowPlayingInfoCenter the moment play()
-        // hits — anything set after lands too late for the initial
-        // Now Playing render and only catches up on the next track
-        // change. So populate text AND artwork before play(). The
-        // typical case is a cache hit (ImageProvider short-circuits
-        // to memory/disk), so this is near-instant; a cold first
-        // listen pays one image fetch of latency before audio
-        // starts, which is preferable to a hero-less playback
-        // screen for the rest of the track.
+        // hits, so artwork set before play() shows on the first Now
+        // Playing render. Populate the text, then give the artwork a
+        // short head start: a cache hit (ImageProvider answers from
+        // memory or disk) is near-instant and makes it in. But never
+        // let artwork hold up the music (#85): it comes over the image
+        // stream, which has no deadline, and on a dead connection it
+        // never came, so play() was never reached, even for downloaded
+        // tracks. After `artworkHeadStart` we play anyway; the fetch
+        // carries on and sets the artwork when it lands
+        // (updateNowPlayingArtwork checks the track hasn't changed).
         updateNowPlayingInfo()
-        await updateNowPlayingArtwork()
+        let artwork = Task { await self.updateNowPlayingArtwork() }
+        if await valueIfReady(of: artwork, within: Self.artworkHeadStart) == nil {
+            logger.info("artwork not ready within \(Self.artworkHeadStart) for trackId=\(track.id); playing without it")
+        }
         player.play()
         refreshIsPlaying()
     }
