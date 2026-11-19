@@ -51,6 +51,10 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   videos stay on the device after the app restarts or you sign back
   in, so they show offline. Before, they could be cleared from the
   image cache like any other image. [#91]
+- CarPlay: lists and messages are readable again. The app's dark-only
+  setting reached CarPlay too, which drew black text on a dark
+  background (about 1.7:1 contrast); CarPlay now follows the car's own
+  light or dark setting, and the app on the phone stays dark. [#88]
 
 ### Content kept per server and account [#68]
 
@@ -89,3 +93,5 @@ titles after you switch servers, and images that never loaded.
 >   playback bar appears on every page as soon as a track starts.
 > - The book reader's toolbar fits on larger iPhones. Text size is now
 >   under a single Aa button whose menu stays open while you adjust it.
+> - CarPlay is readable again: it follows your car's light or dark
+>   setting instead of showing dark text on a dark background.

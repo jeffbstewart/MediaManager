@@ -543,7 +543,13 @@ To see it, `lifecycle/carplay-shot.sh start` launches a helper whose
 macOS window picker the user answers by choosing the CarPlay Simulator
 window; then `shot NAME` saves `data/screenshots/carplay/NAME.png` and
 `stop` ends it. It needs no Screen Recording permission, and it can only
-see the window the user picked.
+see the window the user picked. `lifecycle/carplay-contrast.sh [NAME]`
+takes a shot and fails if any text on the car screen is below 4.5:1
+(WCAG AA); it reads the text with on-device OCR and lists each line
+with its contrast. `--file PNG` checks an existing screenshot. Never
+set `UIUserInterfaceStyle` in the app's Info.plist: it reaches the
+CarPlay scene too (#88); the phone's dark look comes from
+`.preferredColorScheme(.dark)` on the SwiftUI root.
 
 ## Screenshots
 
