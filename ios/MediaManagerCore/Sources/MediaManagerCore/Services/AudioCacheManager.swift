@@ -174,6 +174,8 @@ public final class AudioCacheManager: StorageScopeParticipant {
     private let area: ScopedDownloadArea
     private static let indexFileName = "index.json"
     private static let playlistIndexFileName = "playlists.json"
+    /// Where downloaded albums' covers are pinned.
+    private let imageCache: ImageDiskCache
 
     /// The bound scope's Audio folder; nil when nothing is bound.
     private var audioDir: URL? { area.folder }
@@ -194,14 +196,28 @@ public final class AudioCacheManager: StorageScopeParticipant {
     }
 
     /// `scope` supplies the folder, and `legacyFolder` is where audio
-    /// was kept before scopes; tests pass temp folders for both.
-    init(scope: StorageScope, legacyFolder: URL?) {
+    /// was kept before scopes; tests pass temp folders for both, and
+    /// their own image cache.
+    init(scope: StorageScope, legacyFolder: URL?, imageCache: ImageDiskCache = .shared) {
         area = ScopedDownloadArea(scope: scope, area: .audio, legacyFolder: legacyFolder)
+        self.imageCache = imageCache
         // Register before the first read of `scope.current`, so no
         // change is missed. On launch the scope may already be bound,
         // restored from disk.
         scope.register(self)
         load()
+        Task { [weak self] in await self?.repinDownloadedImages() }
+    }
+
+    /// Pin the covers of every downloaded album (#91). Pins live in
+    /// memory only and `ImageDiskCache` drops them on every scope change,
+    /// so they are set again whenever this store loads a scope, not just
+    /// when an album finishes downloading.
+    func repinDownloadedImages() async {
+        for titleId in Set(downloads.map(\.titleId)) {
+            await imageCache.pin(ref: .posterThumbnail(titleId: titleId))
+            await imageCache.pin(ref: .posterFull(titleId: titleId))
+        }
     }
 
     public func configure(apiClient: APIClient) {
@@ -267,6 +283,7 @@ public final class AudioCacheManager: StorageScopeParticipant {
 
     public func storageScopeDidChange(to scope: StorageScopeID?) async {
         load()
+        await repinDownloadedImages()
     }
 
     // MARK: - Public API
@@ -453,8 +470,8 @@ public final class AudioCacheManager: StorageScopeParticipant {
         downloads.removeAll { $0.titleId == titleId }
         rebuildTrackIndex()
         persistIndex()
-        Task { await ImageDiskCache.shared.unpin(ref: .posterThumbnail(titleId: titleId)) }
-        Task { await ImageDiskCache.shared.unpin(ref: .posterFull(titleId: titleId)) }
+        Task { await self.imageCache.unpin(ref: .posterThumbnail(titleId: titleId)) }
+        Task { await self.imageCache.unpin(ref: .posterFull(titleId: titleId)) }
     }
 
     /// Aggregate disk usage across all downloaded albums + playlists.
@@ -633,8 +650,8 @@ public final class AudioCacheManager: StorageScopeParticipant {
         downloadTasks.removeValue(forKey: titleId)
         // Pin cover images so the album survives cache eviction
         // for offline browsing.
-        Task { await ImageDiskCache.shared.pin(ref: .posterThumbnail(titleId: titleId)) }
-        Task { await ImageDiskCache.shared.pin(ref: .posterFull(titleId: titleId)) }
+        Task { await self.imageCache.pin(ref: .posterThumbnail(titleId: titleId)) }
+        Task { await self.imageCache.pin(ref: .posterFull(titleId: titleId)) }
     }
 
     /// Download every playable track in a playlist. For each track:

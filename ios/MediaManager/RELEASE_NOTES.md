@@ -47,6 +47,10 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   starts. Before, starting a track from an album, artist or playlist
   page often showed no bar, so there was no way to pause it in the
   app until you moved to another page. [#86]
+- Downloads: covers and artwork for downloaded books, music and
+  videos stay on the device after the app restarts or you sign back
+  in, so they show offline. Before, they could be cleared from the
+  image cache like any other image. [#91]
 
 ### Content kept per server and account [#68]
 
