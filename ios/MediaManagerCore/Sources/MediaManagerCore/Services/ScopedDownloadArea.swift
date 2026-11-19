@@ -3,10 +3,10 @@ import Foundation
 private let logger = MMLogger(category: "ScopedDownloadArea")
 
 /// The folder a download store keeps in one `StorageScope` area, and
-/// the downloads writing into it. Shared by `BookCacheManager` and
-/// `AudioCacheManager`, which stay the scope participants: they call
-/// `bind()` on launch and after a change, and `unbind()` plus
-/// `cancelAndAwaitWriters()` before one.
+/// the downloads writing into it. Shared by `BookCacheManager`,
+/// `AudioCacheManager` and `DownloadManager`, which stay the scope
+/// participants: they call `bind()` on launch and after a change, and
+/// `unbind()` plus `cancelAndAwaitWriters()` before one.
 @MainActor
 final class ScopedDownloadArea {
     let scope: StorageScope
@@ -14,6 +14,10 @@ final class ScopedDownloadArea {
     /// Where the store kept its files before scopes. Each item in it is
     /// claimed into the area on bind, then the emptied folder goes.
     let legacyFolder: URL?
+    /// Items in `legacyFolder` that belong to another store and are
+    /// left where they are (the video store's old folder held the
+    /// book and audio folders too).
+    let leaving: Set<String>
 
     /// The bound scope's folder for `area`; nil when nothing is bound,
     /// and from the moment a change is announced.
@@ -22,10 +26,12 @@ final class ScopedDownloadArea {
     /// Work writing into `folder`, so a change can cancel and await it.
     private var writers: [UUID: Task<Void, Never>] = [:]
 
-    init(scope: StorageScope, area: StorageArea, legacyFolder: URL?) {
+    init(scope: StorageScope, area: StorageArea, legacyFolder: URL?,
+         leaving: Set<String> = []) {
         self.scope = scope
         self.area = area
         self.legacyFolder = legacyFolder
+        self.leaving = leaving
     }
 
     /// Read the bound scope's folder and claim content from before
@@ -75,7 +81,8 @@ final class ScopedDownloadArea {
         guard let legacyFolder else { return }
         let fm = FileManager.default
         guard fm.fileExists(atPath: legacyFolder.path) else { return }
-        let items = (try? fm.contentsOfDirectory(at: legacyFolder, includingPropertiesForKeys: nil)) ?? []
+        let items = ((try? fm.contentsOfDirectory(at: legacyFolder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { !leaving.contains($0.lastPathComponent) }
         var outcomes: [LegacyClaimOutcome] = []
         for item in items {
             outcomes.append(scope.claimLegacy(at: item, into: area, as: item.lastPathComponent))

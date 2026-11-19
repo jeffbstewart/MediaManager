@@ -7,12 +7,14 @@ private let logger = MMLogger(category: "DownloadStore")
 
 /// Atomic protobuf-encoded persistence for download metadata.
 ///
-/// Files live in Library/Application Support/Downloads/.
+/// Files live in one folder: the `downloads` area of a storage scope
+/// (see `StorageScope`), since transcode and title ids are the server's
+/// own. `DownloadManager` opens a store on the bound scope's folder and
+/// drops it when the scope changes, so a store never outlives the
+/// scope it was opened for.
 /// Metadata is a single `DownloadDatabase` protobuf serialized to `downloads.meta.db`.
 /// Write protocol: backup → rename → write. Startup: try .db → .backup → wipe.
 public actor DownloadStore {
-    public static let shared = DownloadStore()
-
     public let downloadsDir: URL
     private let dbPath: URL
     private let backupPath: URL
@@ -20,9 +22,9 @@ public actor DownloadStore {
 
     private var db: MMDownloadDatabase
 
-    private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        downloadsDir = appSupport.appendingPathComponent("Downloads", isDirectory: true)
+    /// Open the store kept in `folder`, creating it if missing.
+    public init(folder: URL) {
+        downloadsDir = folder
         dbPath = downloadsDir.appendingPathComponent("downloads.meta.db")
         backupPath = downloadsDir.appendingPathComponent("downloads.meta.db.backup")
         postersDir = downloadsDir.appendingPathComponent("posters", isDirectory: true)
@@ -137,13 +139,12 @@ public actor DownloadStore {
 
         // Delete orphan files. Top-level subdirectories we manage
         // out-of-band are preserved by name: `posters/` (handled by
-        // DownloadStore itself), `tv/` (per-show season + episode
+        // DownloadStore itself) and `tv/` (per-show season + episode
         // metadata written by DownloadManager.cacheSeasonMetadata /
-        // cacheEpisodeMetadata), `Audio/` and `Books/` (separate
-        // cache managers own their own subtrees).
+        // cacheEpisodeMetadata).
         let protectedNames: Set<String> = [
             "downloads.meta.db", "downloads.meta.db.backup",
-            "posters", "tv", "Audio", "Books"
+            "posters", "tv"
         ]
         if let contents = try? fm.contentsOfDirectory(at: downloadsDir, includingPropertiesForKeys: nil) {
             for fileURL in contents {
