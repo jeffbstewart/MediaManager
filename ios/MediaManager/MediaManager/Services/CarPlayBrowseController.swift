@@ -12,7 +12,7 @@ private let logger = MMLogger(category: "CarPlayBrowse")
 private func userFriendlyErrorMessage(_ error: Error) -> String {
     if let rpc = error as? RPCError {
         if rpc.code == .unauthenticated {
-            return CarPlayUnavailableReason.notSignedIn.detail
+            return String(localized: CarPlayUnavailableReason.notSignedIn.detail)
         }
         // Network / other transient errors — generic message
         return "Couldn't connect. Check your phone's network connection."

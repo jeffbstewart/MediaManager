@@ -1,8 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "carplay.unavailable.notSignedIn.detail" : {
-      "comment" : "CarPlay, second line under “Not signed in”. Read by a driver: it must say the fix waits until they are not driving, and must never ask them to act now.",
+    "carPlayNotSignedInDetail" : {
+      "comment" : "CarPlay, second line under “Not signed in”. Read by a driver: say the fix waits until they are not driving; never ask them to act now.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12,8 +13,9 @@
         }
       }
     },
-    "carplay.unavailable.notSignedIn.title" : {
+    "carPlayNotSignedInTitle" : {
       "comment" : "CarPlay, the only row shown when the phone has no signed-in account, so there is no music to offer.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -23,8 +25,9 @@
         }
       }
     },
-    "carplay.unavailable.serverChanged.detail" : {
-      "comment" : "CarPlay, second line under “Server changed”. Read by a driver: it must say the fix waits until they are not driving, and must never ask them to act now.",
+    "carPlayServerChangedDetail" : {
+      "comment" : "CarPlay, second line under “Server changed”. Read by a driver: say the fix waits until they are not driving; never ask them to act now.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -34,8 +37,9 @@
         }
       }
     },
-    "carplay.unavailable.serverChanged.title" : {
+    "carPlayServerChangedTitle" : {
       "comment" : "CarPlay, the only row shown when the server no longer matches the one the phone trusted (its identity changed), so there is no music to offer.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -45,8 +49,9 @@
         }
       }
     },
-    "carplay.unavailable.termsNotAccepted.detail" : {
-      "comment" : "CarPlay, second line under “Server terms not accepted”; “them” is the terms. Read by a driver: it must say the fix waits until they are not driving, and must never ask them to act now.",
+    "carPlayTermsNotAcceptedDetail" : {
+      "comment" : "CarPlay, second line under “Server terms not accepted”; “them” is the terms. Read by a driver: say the fix waits until they are not driving; never ask them to act now.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -56,8 +61,9 @@
         }
       }
     },
-    "carplay.unavailable.termsNotAccepted.title" : {
+    "carPlayTermsNotAcceptedTitle" : {
       "comment" : "CarPlay, the only row shown when the account hasn't accepted the server's terms of use yet, so there is no music to offer.",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {

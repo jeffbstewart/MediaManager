@@ -122,7 +122,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func unavailableTemplate(_ reason: CarPlayUnavailableReason) -> CPListTemplate {
-        let item = CPListItem(text: reason.title, detailText: reason.detail)
+        let item = CPListItem(text: String(localized: reason.title), detailText: String(localized: reason.detail))
         return CPListTemplate(title: Self.appName, sections: [CPListSection(items: [item])])
     }
 

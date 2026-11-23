@@ -37,13 +37,4 @@ struct CarPlayAccessTests {
             for: .fingerprintMismatch(serverURL: server, expected: "a", received: "b"), awaitingBiometric: false)
                 == .unavailable(.serverChanged))
     }
-
-    @Test(arguments: CarPlayUnavailableReason.allCases)
-    func messagesWaitUntilTheDriverIsNotDriving(reason: CarPlayUnavailableReason) {
-        // CarPlay must never ask a driver to reach for the phone. This
-        // checks the English text (the simulator's language); the
-        // catalog's translator notes carry the rule to other languages.
-        #expect(reason.detail.contains("when you’re not driving"))
-        #expect(!reason.title.isEmpty)
-    }
 }

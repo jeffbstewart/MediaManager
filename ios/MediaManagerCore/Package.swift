@@ -3,7 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "MediaManagerCore",
-    defaultLocalization: "en",
     platforms: [
         .iOS(.v18),
     ],
@@ -35,9 +34,7 @@ let package = Package(
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
                 .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
-            ],
-            // Localizable.xcstrings: text this package shows to people.
-            resources: [.process("Resources")]
+            ]
         ),
         // Pure-logic tests. iOS-only package, so run on a simulator:
         // xcodebuild test -scheme MediaManagerCore -destination 'platform=iOS Simulator,name=…'

@@ -523,6 +523,20 @@ Follow this exact sequence when debugging Roku channel behavior. Do NOT skip ste
 
 **Key names:** `Home`, `Rev`, `Fwd`, `Play`, `Select`, `Left`, `Right`, `Down`, `Up`, `Back`, `InstantReplay`, `Info`, `Backspace`, `Search`, `Enter`, `VolumeDown`, `VolumeUp`, `VolumeMute`
 
+## iOS Display Strings
+
+Text people see belongs to the UI layer, never to `MediaManagerCore`:
+core code returns an enum (for example `CarPlayUnavailableReason`) and
+the app maps it to words. New text goes in the app target's
+`Localizable.xcstrings` as a hand-added key with English text and a
+note for translators; the target generates a Swift symbol per key
+(`STRING_CATALOG_GENERATE_SYMBOLS`), so code writes
+`String(localized: .carPlayNotSignedInTitle)` and a missing key fails
+the build. `lifecycle/check-string-catalogs.sh` (in CI) fails when a
+hand-added key has no English. Tests check which enum case comes back,
+never the wording. English is the only shipping language; most older
+screens still have literal text, moved over as they are touched.
+
 ## iOS Simulator Driving
 
 `lifecycle/sim-drive.sh` drives the app in the booted simulator over
