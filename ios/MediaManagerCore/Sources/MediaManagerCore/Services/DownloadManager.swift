@@ -29,6 +29,10 @@ public final class DownloadManager: StorageScopeParticipant {
         didSet {
             UserDefaults.standard.set(isOfflineMode, forKey: "offlineMode")
             propagateOfflineState()
+            // Back online: fetch any downloaded album's missing covers.
+            if oldValue && !isEffectivelyOffline {
+                Task { await AppServices.shared.audioCache?.fetchMissingCovers() }
+            }
         }
     }
     public private(set) var hasNetworkConnectivity = true
@@ -980,6 +984,7 @@ public final class DownloadManager: StorageScopeParticipant {
                 self.propagateOfflineState()
                 if wasOffline && !self.isEffectivelyOffline {
                     await self.flushPendingProgress()
+                    await AppServices.shared.audioCache?.fetchMissingCovers()
                 }
             }
         }

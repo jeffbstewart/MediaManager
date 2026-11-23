@@ -69,4 +69,10 @@ struct NowPlayingCoverTests {
         #expect(size == full.size)
         #expect(artwork.bounds.size == full.size)
     }
+
+    @Test func thePlaceholderIsASquareCover() {
+        // It replaces the previous album's cover, so it must be a
+        // cover CarPlay accepts: square, 1024 on a side.
+        #expect(NowPlayingCover.placeholder.size == CGSize(width: 1024, height: 1024))
+    }
 }
