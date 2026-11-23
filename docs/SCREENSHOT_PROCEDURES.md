@@ -93,22 +93,34 @@ fine at that width even though their intrinsic height is much taller.
 
 App Store Connect takes 1 to 10 screenshots per device size, PNG or
 JPEG with no transparency, at sizes it lists per device class
-([screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications),
-read 2026-11-13). The capture covers the three slots App Store Connect
-shows for this app (2026-11-16); the Apple Watch slot is unused:
+([screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/),
+read 2026-11-20). The capture covers four slots; the Apple Watch slot
+is unused:
 
 | Device | Size | App Store Connect slot |
 |--------|------|------------------------|
-| iPhone 18 Pro | 1206x2622 | iPhone with Dynamic Island, medium display |
+| iPhone 18 Pro | 1206x2622 | iPhone with Dynamic Island, medium display (required) |
+| iPhone 18 Pro Max | 1320x2868 | iPhone with Dynamic Island, large display |
 | iPhone Duo, outer display | 1398x2034 | iPhone Duo |
 | iPhone Duo, inner display | 2853x2007 (landscape) | iPhone Duo (same slot as the outer display) |
 | iPad Pro 13-inch (M5) | 2064x2752 | iPad 13" display (required when the app runs on iPad) |
 
-Both Duo displays go into the one iPhone Duo slot. The large iPhone
-(Pro Max, 1320x2868) is no longer captured: App Store Connect doesn't
-show it as a slot of its own, and a second iPhone set only got in the
-way of uploading. Duo screenshots become required in April 2027 for
-apps built with the iOS 27.1 SDK or later.
+Both Duo displays go into the one iPhone Duo slot. Duo screenshots
+become required in April 2027 for apps built with the iOS 27.1 SDK or
+later.
+
+**The large iPhone slots.** App Store Connect lists only some sizes by
+default; the rest are in its media library. Two of those
+matter. Pro Max phones show the **Dynamic Island, large display** set,
+and when it is empty they fall back to the **Face ID, large display**
+set (older Plus and Pro Max models), which is required whenever the
+Dynamic Island large set is empty. Version 1.3 shipped with no Dynamic
+Island large set and an old Face ID large set, so Pro Max phones showed
+outdated screenshots while the store page on a Mac showed the current
+ones. Fill Dynamic Island (large) from the Pro Max capture, then delete
+the Face ID (large) set: once the Dynamic Island large set exists, the
+Face ID one is optional and falls back to it. The specifications page never says a
+smaller set is ever scaled up for a larger phone.
 
 **Driver:** `lifecycle/capture-ios-screenshots.sh [prelogin|viewer|all]`.
 It takes the server address and accounts from the environment, from

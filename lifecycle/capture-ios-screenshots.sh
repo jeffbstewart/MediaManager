@@ -132,8 +132,14 @@ runtime_for_device_type() {
 #   - iPhone Duo: one slot for both displays, outer 1398x2034 and
 #     inner 2853x2007 landscape (required from April 2027 for apps built with
 #     the iOS 27.1 SDK or later).
-# The large iPhone (1320x2868) is no longer captured: it isn't a slot
-# of its own, and a second iPhone set only got in the way of uploading.
+#   - iPhone with Dynamic Island, large display (the Pro Max models):
+#     1320x2868. Not among the slots App Store Connect lists by default
+#     (it is in the media library), but needed: without it, Pro Max phones
+#     fall back to the "iPhone with Face ID (large display)" set, and
+#     that slot is required unless this one is filled. 1.3 shipped with
+#     an old Face ID set there, so Pro Max phones showed old images.
+#     Upload this set to Dynamic Island (large), then delete the
+#     Face ID (large) set.
 # Each entry is "simulator name|device type name|option"; an exact
 # device type name wins over a partial match. The option `inner`
 # captures the Duo's inner display from the host (see the header).
@@ -141,6 +147,7 @@ runtime_for_device_type() {
 # limits a run to some of them.
 DEVICES=(
     "MM-Snap-iPhone-18-Pro|iPhone 18 Pro|"
+    "MM-Snap-iPhone-18-Pro-Max|iPhone 18 Pro Max|"
     "MM-Snap-iPad-Pro-13|iPad Pro 13-inch|"
     "MM-Snap-iPhone-Duo-Outer|iPhone Duo|"
     "MM-Snap-iPhone-Duo-Inner|iPhone Duo|inner"
