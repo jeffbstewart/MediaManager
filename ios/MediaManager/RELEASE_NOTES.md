@@ -4,10 +4,10 @@ A running list of user-visible iOS changes made since the build that
 App Review last reviewed. It is the source for the next submission's
 App Store "What's New" text and TestFlight notes.
 
-**Baseline: iOS 1.3 (21)**, submitted to App Review in November 2026
-as the proposed first public version. It was built from `main` at
-`77e3b68` (the merge of #65). For the full developer history since
-then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
+**Baseline: iOS 1.3.1 (27)**, submitted to App Review on 2026-11-23,
+tagged `ios/1.3.1-27` once built. For the developer history since,
+run `git log ios/1.3.1-27..HEAD -- ios/MediaManager/`. (The first App
+Store version, 1.3 (21), was built from `main` at `77e3b68`.)
 
 ## How to keep this file
 
@@ -24,7 +24,15 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 
 ---
 
-## Unreleased (1.3.1, build 26)
+## Unreleased
+
+Nothing yet.
+
+---
+
+## 1.3.1 (27): submitted to App Review 2026-11-23
+
+Everything since 1.3 (21). Also in `CHANGELOG.md`.
 
 ### Fixes
 
@@ -105,18 +113,13 @@ titles after you switch servers, and images that never loaded.
   belong to the server the app is set up for. The image cache starts
   empty once, so images load again the first time you see them.
 
-### What's New draft
+### What's New (as submitted)
 
-> - Switching servers now works cleanly. Each server's posters,
->   downloads and progress are kept separately: another server's
->   artwork no longer shows on your titles, and switching to a
->   different server or account clears the previous one's content from
->   this device. Signing out and back in keeps everything.
-> - Music starts playing without waiting for its cover art, and the
->   playback bar appears on every page as soon as a track starts.
-> - The book reader's toolbar fits on larger iPhones. Text size is now
->   under a single Aa button whose menu stays open while you adjust it.
-> - CarPlay is readable again: it follows your car's light or dark
->   setting instead of showing dark text on a dark background. When
->   your phone isn't signed in, CarPlay now says so, and offline it
->   plays the music you've downloaded.
+> - CarPlay: easier to read, plays your downloaded music offline, and
+>   tells you when you need to sign in.
+> - Music starts right away and the playback bar shows on every page.
+> - Stays signed in when your network is slow to connect.
+> - Switching servers works cleanly; signing out and back in keeps
+>   your downloads.
+> - The book reader's toolbar fits larger iPhones, with text size
+>   under one Aa button.
