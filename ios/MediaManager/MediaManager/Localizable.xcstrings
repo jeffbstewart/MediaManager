@@ -37,26 +37,26 @@
         }
       }
     },
-    "carPlayOfflineModeDetail" : {
-      "comment" : "CarPlay, second line under “Offline Mode is on”. States the limitation only; never ask the driver to change anything.",
+    "carPlayOfflineNothingDownloadedDetail" : {
+      "comment" : "CarPlay, second line under “Offline”: together they read “Offline, but there’s no music downloaded”. States the situation only; never ask the driver to act.",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Downloaded music isn’t in CarPlay yet."
+            "value" : "There’s no music downloaded on this phone."
           }
         }
       }
     },
-    "carPlayOfflineModeTitle" : {
-      "comment" : "CarPlay, the only row shown when the phone is signed in but Offline Mode is on; CarPlay cannot yet offer downloaded music, so there is nothing to play. “Offline Mode” is the name of the app setting.",
+    "carPlayOfflineNothingDownloadedTitle" : {
+      "comment" : "CarPlay, the only row shown when the phone is offline (Offline Mode, or no network) and no music is downloaded, so there is nothing to play.",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Offline Mode is on"
+            "value" : "Offline"
           }
         }
       }

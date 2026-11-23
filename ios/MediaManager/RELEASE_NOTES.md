@@ -58,9 +58,14 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 - CarPlay: when the phone isn't signed in, CarPlay says so ("Sign in
   on your phone when you're not driving.") instead of showing tabs
   that fail with "Couldn't connect". It switches to the music by
-  itself once the phone signs in. In Offline Mode it says "Offline
-  Mode is on" (downloaded music isn't in CarPlay yet), and its error
-  messages no longer ask the driver to do anything. [#99]
+  itself once the phone signs in, and its error messages no longer
+  ask the driver to do anything. [#99]
+- CarPlay: offline (in Offline Mode, or with no network), CarPlay
+  lists and plays the music downloaded to the phone. Before, a
+  downloaded track could sit without playing while the app waited
+  for its cover art [#85]. If the phone goes offline mid-drive, the
+  lists switch to the downloads; with nothing downloaded, CarPlay
+  says "Offline: there's no music downloaded on this phone." [#87]
 
 ### Content kept per server and account [#68]
 
@@ -101,4 +106,5 @@ titles after you switch servers, and images that never loaded.
 >   under a single Aa button whose menu stays open while you adjust it.
 > - CarPlay is readable again: it follows your car's light or dark
 >   setting instead of showing dark text on a dark background. When
->   your phone isn't signed in, CarPlay now says so.
+>   your phone isn't signed in, CarPlay now says so, and offline it
+>   plays the music you've downloaded.
