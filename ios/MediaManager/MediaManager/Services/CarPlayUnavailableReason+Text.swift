@@ -12,6 +12,7 @@ extension CarPlayUnavailableReason {
         case .notSignedIn: .carPlayNotSignedInTitle
         case .termsNotAccepted: .carPlayTermsNotAcceptedTitle
         case .serverChanged: .carPlayServerChangedTitle
+        case .offlineMode: .carPlayOfflineModeTitle
         }
     }
 
@@ -20,6 +21,7 @@ extension CarPlayUnavailableReason {
         case .notSignedIn: .carPlayNotSignedInDetail
         case .termsNotAccepted: .carPlayTermsNotAcceptedDetail
         case .serverChanged: .carPlayServerChangedDetail
+        case .offlineMode: .carPlayOfflineModeDetail
         }
     }
 }

@@ -1,6 +1,18 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "carPlayListLoadFailed" : {
+      "comment" : "CarPlay, the row shown in place of a list that failed to load for any other reason. States what happened; never ask the driver to act.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t load this list."
+          }
+        }
+      }
+    },
     "carPlayNotSignedInDetail" : {
       "comment" : "CarPlay, second line under “Not signed in”. Read by a driver: say the fix waits until they are not driving; never ask them to act now.",
       "extractionState" : "manual",
@@ -25,6 +37,30 @@
         }
       }
     },
+    "carPlayOfflineModeDetail" : {
+      "comment" : "CarPlay, second line under “Offline Mode is on”. States the limitation only; never ask the driver to change anything.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloaded music isn’t in CarPlay yet."
+          }
+        }
+      }
+    },
+    "carPlayOfflineModeTitle" : {
+      "comment" : "CarPlay, the only row shown when the phone is signed in but Offline Mode is on; CarPlay cannot yet offer downloaded music, so there is nothing to play. “Offline Mode” is the name of the app setting.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline Mode is on"
+          }
+        }
+      }
+    },
     "carPlayServerChangedDetail" : {
       "comment" : "CarPlay, second line under “Server changed”. Read by a driver: say the fix waits until they are not driving; never ask them to act now.",
       "extractionState" : "manual",
@@ -45,6 +81,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Server changed"
+          }
+        }
+      }
+    },
+    "carPlayServerUnreachable" : {
+      "comment" : "CarPlay, the row shown in place of a list when the phone can’t reach the user’s media server. States what happened; never ask the driver to act.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can’t reach your server right now."
           }
         }
       }

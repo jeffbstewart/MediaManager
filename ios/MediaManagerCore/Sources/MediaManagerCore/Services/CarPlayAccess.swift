@@ -21,6 +21,9 @@ public enum CarPlayUnavailableReason: Equatable, Sendable, CaseIterable {
     case termsNotAccepted
     /// The server no longer matches the one this phone trusted.
     case serverChanged
+    /// Offline Mode is on, and CarPlay can only browse the server.
+    /// Goes away when CarPlay offers downloaded music (#87).
+    case offlineMode
 }
 
 public enum CarPlayAccessPolicy {
@@ -28,14 +31,21 @@ public enum CarPlayAccessPolicy {
     /// is waiting for Face ID before showing it. CarPlay launched in
     /// the background can't ask for Face ID, and it has always used
     /// the stored session in that state, so it counts as signed in.
-    public static func access(for state: AuthManager.State, awaitingBiometric: Bool) -> CarPlayAccess {
+    ///
+    /// `offlineMode` is the phone's Offline Mode setting. It matters
+    /// only once signed in: a signed-out phone has no music either way,
+    /// and signing in is the thing to explain.
+    public static func access(
+        for state: AuthManager.State, awaitingBiometric: Bool, offlineMode: Bool
+    ) -> CarPlayAccess {
+        let signedIn: CarPlayAccess = offlineMode ? .unavailable(.offlineMode) : .ready
         switch state {
         case .restoring:
             return .waiting
         case .authenticated:
-            return .ready
+            return signedIn
         case .needsLogin:
-            return awaitingBiometric ? .ready : .unavailable(.notSignedIn)
+            return awaitingBiometric ? signedIn : .unavailable(.notSignedIn)
         case .needsServer, .needsSetup:
             return .unavailable(.notSignedIn)
         case .needsLegalAgreement:

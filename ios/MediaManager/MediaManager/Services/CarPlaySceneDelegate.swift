@@ -78,13 +78,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// it (Face ID completing, say) doesn't rebuild the tabs.
     private var shownAccess: CarPlayAccess?
 
-    /// Shows what the phone's sign-in state allows, and follows it: a
-    /// phone that signs in at a stop gets its music tabs, and one that
-    /// is signed out mid-drive gets the explanation (#99).
+    /// Shows what the phone's sign-in state and Offline Mode allow, and
+    /// follows both: a phone that signs in at a stop gets its music
+    /// tabs, and one signed out or switched to Offline Mode mid-drive
+    /// gets the explanation (#99).
     private func followAccess() {
         guard interfaceController != nil, let auth = AppServices.shared.authManager else { return }
         let access = withObservationTracking {
-            CarPlayAccessPolicy.access(for: auth.state, awaitingBiometric: auth.awaitingBiometric)
+            CarPlayAccessPolicy.access(
+                for: auth.state, awaitingBiometric: auth.awaitingBiometric,
+                offlineMode: AppServices.shared.dataModel?.downloads.isOfflineMode ?? false)
         } onChange: {
             Task { @MainActor [weak self] in self?.followAccess() }
         }

@@ -58,7 +58,9 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 - CarPlay: when the phone isn't signed in, CarPlay says so ("Sign in
   on your phone when you're not driving.") instead of showing tabs
   that fail with "Couldn't connect". It switches to the music by
-  itself once the phone signs in. [#99]
+  itself once the phone signs in. In Offline Mode it says "Offline
+  Mode is on" (downloaded music isn't in CarPlay yet), and its error
+  messages no longer ask the driver to do anything. [#99]
 
 ### Content kept per server and account [#68]
 
