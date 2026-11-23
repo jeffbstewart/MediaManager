@@ -173,7 +173,7 @@ struct DownloadsView: View {
                 }
             }
             Spacer()
-            Text("\(count)")
+            Text(count, format: .number)
                 .foregroundStyle(MarqueeTheme.Colors.text3)
         }
     }
@@ -255,8 +255,8 @@ struct DownloadsView: View {
                     .font(MarqueeTheme.Fonts.body.weight(.semibold))
                     .lineLimit(1)
                 if let total = progress.totalBytes, total > 0 {
-                    let pct = Int((Double(progress.bytesReceived) / Double(total)) * 100)
-                    Text("\(pct)% (\(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))")
+                    let fraction = Double(progress.bytesReceived) / Double(total)
+                    Text(verbatim: "\(fraction.formatted(.wholePercent)) (\(ByteCountFormatter.string(fromByteCount: progress.bytesReceived, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))")
                         .font(MarqueeTheme.Fonts.meta)
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                 } else {
@@ -490,7 +490,7 @@ struct DownloadsView: View {
                 HStack {
                     Text("Pending")
                     Spacer()
-                    Text("+ \(ByteCountFormatter.string(fromByteCount: remaining, countStyle: .file))")
+                    Text(verbatim: "+ \(ByteCountFormatter.string(fromByteCount: remaining, countStyle: .file))")
                         .foregroundStyle(MarqueeTheme.Colors.orange)
                 }
             }

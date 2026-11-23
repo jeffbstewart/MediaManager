@@ -88,7 +88,7 @@ struct LoginView: View {
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .mmGlowPage()
-            .navigationTitle("")
+            .navigationTitle(Text(verbatim: ""))
             .onAppear {
                 if authManager.awaitingBiometric {
                     Task { await authManager.authenticateWithBiometric() }

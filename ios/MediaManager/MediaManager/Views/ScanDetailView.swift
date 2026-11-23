@@ -133,7 +133,7 @@ struct ScanDetailView: View {
                         ), displayedComponents: .date)
 
                         HStack {
-                            Text("$")
+                            Text(verbatim: "$")
                             TextField("Price", text: $purchasePrice)
                                 .keyboardType(.decimalPad)
                                 .onChange(of: purchasePrice) { debounceSave() }

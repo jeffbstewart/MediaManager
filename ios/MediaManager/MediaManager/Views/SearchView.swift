@@ -314,13 +314,13 @@ struct SearchResultRow: View {
                     Text(resultTypeLabel)
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                     if let context = audioContextLabel {
-                        Text("·").foregroundStyle(MarqueeTheme.Colors.text3)
+                        Text(verbatim: "·").foregroundStyle(MarqueeTheme.Colors.text3)
                         Text(context)
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                             .lineLimit(1)
                     }
                     if let year = result.year {
-                        Text("(\(String(year)))")
+                        Text(verbatim: "(\(String(year)))")
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let quality = result.quality {

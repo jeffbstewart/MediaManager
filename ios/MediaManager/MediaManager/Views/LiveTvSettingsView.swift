@@ -189,7 +189,7 @@ struct TunerDetailSheet: View {
                         ForEach(channels, id: \.id) { ch in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text("\(ch.guideNumber) \(ch.guideName)")
+                                    Text(verbatim: "\(ch.guideNumber) \(ch.guideName)")
                                         .font(MarqueeTheme.Fonts.cardTitle)
                                     HStack(spacing: 4) {
                                         if ch.hasNetworkAffiliation {

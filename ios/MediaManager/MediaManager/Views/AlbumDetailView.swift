@@ -136,11 +136,11 @@ struct AlbumDetailView: View {
                 HStack(spacing: 8) {
                     if let year = detail.year { Text(String(year)) }
                     if let count = album.trackCount {
-                        Text("•")
+                        Text(verbatim: "•")
                         Text("\(count) track\(count == 1 ? "" : "s")")
                     }
                     if let secs = album.totalDurationSeconds {
-                        Text("•")
+                        Text(verbatim: "•")
                         Text(formatDuration(secs))
                     }
                 }
@@ -218,7 +218,7 @@ struct AlbumDetailView: View {
                         .progressViewStyle(.circular)
                         .controlSize(.small)
                         .tint(MarqueeTheme.Colors.accent)
-                    Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
+                    Text(verbatim: "\(progress.tracksCompleted)/\(progress.tracksTotal)")
                         .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity)
@@ -280,7 +280,7 @@ struct AlbumDetailView: View {
                         .foregroundStyle(MarqueeTheme.Colors.accent)
                         .frame(width: 28)
                 } else {
-                    Text("\(track.trackNumber)")
+                    Text(track.trackNumber, format: .number)
                         .font(MarqueeTheme.Fonts.meta.monospacedDigit())
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                         .frame(width: 28, alignment: .trailing)

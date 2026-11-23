@@ -177,7 +177,7 @@ struct WishRow: View {
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let year = wish.releaseYear {
-                        Text("(\(String(year)))")
+                        Text(verbatim: "(\(String(year)))")
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let season = wish.seasonNumber {
@@ -214,7 +214,7 @@ struct WishRow: View {
                     Image(systemName: wish.voted ? "heart.fill" : "heart")
                         .foregroundStyle(wish.voted ? MarqueeTheme.Colors.pink : MarqueeTheme.Colors.text3)
                     if wish.voteCount > 1 {
-                        Text("\(wish.voteCount)")
+                        Text(wish.voteCount, format: .number)
                             .font(MarqueeTheme.Fonts.meta)
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
@@ -263,7 +263,7 @@ struct FulfilledWishRow: View {
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let year = wish.releaseYear {
-                        Text("(\(String(year)))")
+                        Text(verbatim: "(\(String(year)))")
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                     if let season = wish.seasonNumber {
@@ -409,7 +409,7 @@ struct TmdbSearchRow: View {
                     Text(item.mediaType == .tv ? "TV Series" : "Movie")
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                     if let year = item.releaseYear {
-                        Text("(\(String(year)))")
+                        Text(verbatim: "(\(String(year)))")
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }
                 }

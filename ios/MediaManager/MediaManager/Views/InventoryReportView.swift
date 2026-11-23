@@ -63,7 +63,7 @@ struct InventoryReportView: View {
                                         .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 if row.photoCount > 0 {
-                                    Label("\(row.photoCount)", systemImage: "camera")
+                                    Label { Text(row.photoCount, format: .number) } icon: { Image(systemName: "camera") }
                                         .font(MarqueeTheme.Fonts.meta)
                                         .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }

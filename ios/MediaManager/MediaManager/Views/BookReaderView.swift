@@ -251,7 +251,7 @@ struct BookReaderView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
                     if status == .reading {
-                        Text("\(Int(progressPct * 100))%")
+                        Text(Double(progressPct), format: .wholePercent)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()

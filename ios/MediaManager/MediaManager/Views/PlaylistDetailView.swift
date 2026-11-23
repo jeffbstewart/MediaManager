@@ -244,7 +244,7 @@ struct PlaylistDetailView: View {
                         .progressViewStyle(.circular)
                         .controlSize(.small)
                         .tint(MarqueeTheme.Colors.accent)
-                    Text("\(progress.tracksCompleted)/\(progress.tracksTotal)")
+                    Text(verbatim: "\(progress.tracksCompleted)/\(progress.tracksTotal)")
                         .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity)

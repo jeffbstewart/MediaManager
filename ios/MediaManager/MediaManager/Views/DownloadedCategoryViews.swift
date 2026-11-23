@@ -425,8 +425,8 @@ struct DownloadedBooksView: View {
                     HStack(spacing: 8) {
                         Text(formatBytes(book.sizeBytes))
                         if book.completedFraction > 0 {
-                            Text("·")
-                            Text("\(Int(book.completedFraction * 100))%")
+                            Text(verbatim: "·")
+                            Text(Double(book.completedFraction), format: .wholePercent)
                                 .foregroundStyle(.tint)
                         }
                     }

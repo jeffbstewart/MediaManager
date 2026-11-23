@@ -213,7 +213,7 @@ struct ContentView: View {
             .listSectionSpacing(16)
             .scrollContentBackground(.hidden)
             .mmGlowPage()
-            .navigationTitle("")
+            .navigationTitle(Text(verbatim: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // The brand wordmark stands in for the title (web
@@ -540,7 +540,7 @@ private struct SidebarRow: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             if let count, count > 0 {
-                Text("\(count)")
+                Text(count, format: .number)
                     .font(MarqueeTheme.Fonts.badge)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)

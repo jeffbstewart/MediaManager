@@ -28,7 +28,7 @@ struct AdminTagsView: View {
                         Text(tag.name)
                             .fontWeight(.medium)
                         Spacer()
-                        Text("\(tag.titleCount)")
+                        Text(tag.titleCount, format: .number)
                             .font(MarqueeTheme.Fonts.meta)
                             .foregroundStyle(MarqueeTheme.Colors.text3)
                     }

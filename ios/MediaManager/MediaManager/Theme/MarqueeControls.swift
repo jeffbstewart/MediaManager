@@ -187,15 +187,23 @@ struct MMBrandWordmark: View {
         return parts.isEmpty ? ["media", "manager"] : parts
     }
 
+    /// The words joined by accent-coloured slashes. An AttributedString,
+    /// not Texts joined by interpolation: that made a localizable
+    /// "%@%@%@", and a brand isn't translated.
+    static func mark(_ words: [String]) -> AttributedString {
+        var slash = AttributedString("/")
+        slash.foregroundColor = MarqueeTheme.Colors.accent
+        return words.dropFirst().reduce(AttributedString(words.first ?? "")) { mark, word in
+            mark + slash + AttributedString(word)
+        }
+    }
+
     var body: some View {
         let words = Self.words
         // One Text, not a row of them: when the name has to shrink to
         // fit, the whole wordmark scales together. As separate views
         // only the longest word shrank.
-        let slash = Text("/").foregroundStyle(MarqueeTheme.Colors.accent)
-        words.dropFirst().reduce(Text(words[0])) { mark, word in
-            Text("\(mark)\(slash)\(Text(word))")
-        }
+        Text(Self.mark(words))
         .font(MarqueeTheme.Fonts.display(size, relativeTo: .title))
         .foregroundStyle(MarqueeTheme.Colors.text)
         .tracking(-1)
