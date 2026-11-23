@@ -24,7 +24,7 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 
 ---
 
-## Unreleased (1.3.1, build 25)
+## Unreleased (1.3.1, build 26)
 
 ### Fixes
 
@@ -74,8 +74,10 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 - CarPlay and the lock screen: the Now Playing cover is always the
   current album's. Offline, a previous album's cover could stay up
   through several albums. Covers of downloaded albums are now kept on
-  the phone with the download, and until the full cover is there the
-  smaller one from the album lists is shown. [#112]
+  the phone with the download; until the full cover is there, the
+  smaller one from the album lists is shown, or a plain music-note
+  cover if neither is on the phone. Changing albums changes the title
+  and cover together. [#112]
 
 ### Content kept per server and account [#68]
 

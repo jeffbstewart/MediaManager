@@ -671,6 +671,13 @@ public final class AuthManager {
 
     /// After successful login or session restore, check legal compliance
     /// and transition to either needsLegalAgreement or authenticated.
+    /// Downloads whose covers aren't on the phone get them now. Needs
+    /// a sign-in and the server, so it runs here rather than at launch
+    /// (#112); online-again is handled by DownloadManager.
+    private func fetchMissingCovers() {
+        Task { await AppServices.shared.audioCache?.fetchMissingCovers() }
+    }
+
     private func transitionAfterAuth(serverURL: URL, retried: Bool = false) async {
         do {
             let status = try await grpcClient.getLegalStatus()
@@ -678,6 +685,7 @@ public final class AuthManager {
             if status.compliant {
                 state = .authenticated(serverURL: serverURL)
                 await logStreamer.start()
+                fetchMissingCovers()
                 await refreshServerInfo()
             } else {
                 logger.info("transitionAfterAuth: legal agreement required")
@@ -730,6 +738,7 @@ public final class AuthManager {
             if case .needsLegalAgreement(let url) = state {
                 state = .authenticated(serverURL: url)
                 await logStreamer.start()
+                fetchMissingCovers()
                 await refreshServerInfo()
             }
         } catch {

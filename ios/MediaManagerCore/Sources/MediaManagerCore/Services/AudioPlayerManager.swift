@@ -599,6 +599,10 @@ public final class AudioPlayerManager {
         // tracks. After `artworkHeadStart` we play anyway; the fetch
         // carries on and sets the artwork when it lands
         // (updateNowPlayingArtwork checks the track hasn't changed).
+        // The cover first, from what's on the phone, then the text: one
+        // publish changes both, so the previous album's cover never
+        // shows beside this track's title, not even for a moment.
+        await prepareNowPlayingCover(for: track)
         updateNowPlayingInfo()
         let artwork = Task { await self.updateNowPlayingArtwork() }
         if await valueIfReady(of: artwork, within: Self.artworkHeadStart) == nil {
@@ -738,19 +742,34 @@ public final class AudioPlayerManager {
     /// SQUARE — call sites that render album covers in the iOS UI
     /// frame square too; here we just hand the bytes through to the
     /// system, which sizes per surface (lock screen, Watch, CarPlay).
+    /// Puts `track`'s cover in `nowPlayingInfo` without publishing, for
+    /// `updateNowPlayingInfo` to publish with the track's text. Uses
+    /// what's on the phone, at once: the full cover, else the thumbnail
+    /// CarPlay's lists show, else a plain placeholder. The placeholder
+    /// replaces the previous album's cover rather than removing it,
+    /// because a removed cover can leave the old one on screen.
+    private func prepareNowPlayingCover(for track: QueuedTrack) async {
+        // The same album keeps the cover it has.
+        if artworkTitleId == track.titleId { return }
+        var cached: (image: UIImage, isFull: Bool)?
+        if let imageProvider {
+            cached = await NowPlayingCover.cached(titleId: track.titleId, lookup: { await imageProvider.cachedImage(for: $0) })
+        }
+        guard currentTrack?.id == track.id else { return }
+        if let cached {
+            applyArtwork(cached.image, titleId: track.titleId, isFull: cached.isFull)
+        } else {
+            applyArtwork(NowPlayingCover.placeholder, titleId: track.titleId, isFull: false)
+        }
+    }
+
+    /// Fetches the full cover when the phone doesn't have it, and shows
+    /// it when it arrives. Offline it may never come; the cached cover
+    /// or placeholder stays up.
     private func updateNowPlayingArtwork() async {
         guard let track = currentTrack, let imageProvider else { return }
         // Same album, full cover already showing: nothing to do.
         if artworkTitleId == track.titleId && artworkIsFull { return }
-        // First whatever cover is already on the phone, at once: the
-        // full one, else the thumbnail CarPlay's lists show. Offline,
-        // the full cover may never come (a download pins it but didn't
-        // always fetch it), and this keeps the right album's art up.
-        if let cached = await NowPlayingCover.cached(titleId: track.titleId, lookup: { await imageProvider.cachedImage(for: $0) }) {
-            guard currentTrack?.id == track.id else { return }
-            setArtwork(cached.image, titleId: track.titleId, isFull: cached.isFull)
-            if cached.isFull { return }
-        }
         let ref = MMImageRef.posterFull(titleId: track.titleId)
         guard let image = await imageProvider.image(for: ref) else {
             logger.warning("artwork fetch returned nil for trackId=\(track.id) titleId=\(track.titleId)")
@@ -765,6 +784,13 @@ public final class AudioPlayerManager {
     }
 
     private func setArtwork(_ image: UIImage, titleId: Int64, isFull: Bool) {
+        applyArtwork(image, titleId: titleId, isFull: isFull)
+        publishNowPlayingInfo()
+    }
+
+    /// Stores `image` as the cover in `nowPlayingInfo`; the caller
+    /// publishes.
+    private func applyArtwork(_ image: UIImage, titleId: Int64, isFull: Bool) {
         logger.info("artwork set for titleId=\(titleId) full=\(isFull) size=\(Int(image.size.width))x\(Int(image.size.height))")
         // Pre-render into a square 1024×1024 canvas. Source covers
         // occasionally come in slightly off-square (e.g. 500×499
@@ -794,7 +820,6 @@ public final class AudioPlayerManager {
         nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         artworkTitleId = titleId
         artworkIsFull = isFull
-        publishNowPlayingInfo()
     }
 
     // MARK: - Remote commands

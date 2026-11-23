@@ -224,8 +224,9 @@ public final class AudioCacheManager: StorageScopeParticipant {
     /// yet. A pin only keeps an image already cached; downloads pinned
     /// the full cover without fetching it, so offline the Now Playing
     /// screen had at best the thumbnail. Online only, and only what's
-    /// missing; called when a download finishes and when the app's
-    /// services start.
+    /// missing; called when a download finishes, after sign-in, and when
+    /// the phone comes back online. (Not at launch: the image stream
+    /// needs the sign-in, which isn't restored yet then.)
     public func fetchMissingCovers() async {
         guard let provider = AppServices.shared.imageProvider,
               AppServices.shared.dataModel?.downloads.isEffectivelyOffline == false else { return }
