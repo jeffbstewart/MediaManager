@@ -11,6 +11,13 @@
 </p>
 
 <p align="center">
+  <a href="https://apps.apple.com/us/app/household-disc-keeper/id6761338526">
+    <img src="docs/images/app-store-badge.svg" alt="Download Household Disc Keeper on the App Store" height="48">
+  </a><br>
+  <sub>The iPhone and iPad app is <strong>Household Disc Keeper</strong>; it connects to your own server.</sub>
+</p>
+
+<p align="center">
   <a href="docs/images/screenshots/home-top.png" target="_blank">
     <img src="docs/images/screenshots/home-top.png" alt="Home page: welcome, featured title, library chips, and Continue Watching" width="720">
   </a>
@@ -35,7 +42,7 @@ See the [architecture diagram](docs/index.md#architecture) for a visual overview
 | Surface | Notes |
 |---------|-------|
 | Web browser | Full feature surface — catalog, playback, admin |
-| iOS (iPhone / iPad) | Native SwiftUI app: browse, download for offline, video + ebook + audio playback |
+| iOS (iPhone / iPad) | [Household Disc Keeper](https://apps.apple.com/us/app/household-disc-keeper/id6761338526) on the App Store. Native SwiftUI app: browse, download for offline, video + ebook + audio playback |
 | CarPlay | Music browse + Shuffle Library + AirPods transport, works offline against downloaded albums |
 | Android TV / Google TV | Native Compose-for-TV app with D-pad navigation |
 | Roku | Sideloaded BrightScript channel driving the same catalog |
