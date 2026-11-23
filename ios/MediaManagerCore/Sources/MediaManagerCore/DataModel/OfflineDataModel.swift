@@ -230,7 +230,25 @@ public final class OfflineDataModel: DataModel {
            let bookDetail = bookCache.loadCachedTitleDetail(titleId: id.protoValue) {
             return bookDetail
         }
+        // Downloaded albums. The phone's album page reads the audio
+        // cache itself; CarPlay comes through here, which had no album
+        // branch, so every album failed to open offline (#87).
+        if let audioCache = AppServices.shared.audioCache,
+           let downloaded = audioCache.downloads.first(where: { $0.titleId == id.protoValue }),
+           let albumDetail = audioCache.cachedAlbumDetail(titleId: id.protoValue) {
+            return Self.keepingDownloadedTracks(albumDetail, onDisk: Set(downloaded.trackIds))
+        }
         throw DataModelError.offline
+    }
+
+    /// `detail` with only the tracks that are on the phone, so an album
+    /// whose download didn't finish lists only what can play offline
+    /// (as `libraryShuffle` does).
+    static func keepingDownloadedTracks(_ detail: ApiTitleDetail, onDisk: Set<Int64>) -> ApiTitleDetail {
+        guard detail.proto.hasAlbum else { return detail }
+        var proto = detail.proto
+        proto.album.tracks.removeAll { !onDisk.contains($0.id) }
+        return ApiTitleDetail(proto: proto)
     }
 
     public func seasons(titleId: TitleID) async throws -> [ApiSeason] {
