@@ -6,18 +6,18 @@ import MediaManagerProtos
 
 private let logger = MMLogger(category: "CarPlayBrowse")
 
-/// Turns a gRPC failure into a user-friendly string for CarPlay display.
-/// Auth failures get a specific message telling the user to sign in on the phone;
-/// other errors are kept generic to avoid technical jargon.
-private func userFriendlyErrorMessage(_ error: Error) -> String {
+/// What a failed load says on the CarPlay screen. It states what
+/// happened and never asks the driver to do anything now (#99): a
+/// rejected sign-in waits until they're not driving, and anything else
+/// is reported without technical detail (which goes to the log).
+private func failureText(_ error: Error) -> (text: LocalizedStringResource, detail: LocalizedStringResource?) {
     if let rpc = error as? RPCError {
         if rpc.code == .unauthenticated {
-            return "Please sign in on your phone to continue"
+            return (CarPlayUnavailableReason.notSignedIn.title, CarPlayUnavailableReason.notSignedIn.detail)
         }
-        // Network / other transient errors — generic message
-        return "Couldn't connect. Check your phone's network connection."
+        return (.carPlayServerUnreachable, nil)
     }
-    return "Couldn't load. Please try again."
+    return (.carPlayListLoadFailed, nil)
 }
 
 /// Turns a gRPC failure into a detailed string for Binnacle logging.
@@ -130,7 +130,7 @@ final class CarPlayBrowseController {
             logger.info("loadAlbums: homeFeed returned \(titles.count) albums")
         } catch {
             logger.error("loadAlbums: homeFeed failed: \(describeErrorForLogging(error))")
-            albumsTab.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+            albumsTab.updateSections([Self.errorSection(for: error)])
         }
     }
 
@@ -184,7 +184,7 @@ final class CarPlayBrowseController {
                 template.updateSections([CPListSection(items: items)])
             } catch {
                 logger.error("openAlbum: titleDetail failed for titleId=\(title.id.protoValue): \(describeErrorForLogging(error))")
-                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+                template.updateSections([Self.errorSection(for: error)])
             }
         }
     }
@@ -227,7 +227,7 @@ final class CarPlayBrowseController {
             logger.info("loadPlaylists: playlists returned \(summaries.count) entries")
         } catch {
             logger.error("loadPlaylists: playlists failed: \(describeErrorForLogging(error))")
-            playlistsTab.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+            playlistsTab.updateSections([Self.errorSection(for: error)])
         }
     }
 
@@ -258,7 +258,7 @@ final class CarPlayBrowseController {
                 template.updateSections([CPListSection(items: items)])
             } catch {
                 logger.error("openPlaylist: playlist(id=\(id)) failed: \(describeErrorForLogging(error))")
-                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+                template.updateSections([Self.errorSection(for: error)])
             }
         }
     }
@@ -318,7 +318,7 @@ final class CarPlayBrowseController {
             logger.error("loadSmartPlaylists: smartPlaylists failed: \(describeErrorForLogging(error))")
             smartTab.updateSections([
                 CPListSection(items: [makeShuffleLibraryItem()]),
-                Self.errorSection(message: userFriendlyErrorMessage(error)),
+                Self.errorSection(for: error),
             ])
         }
     }
@@ -390,7 +390,7 @@ final class CarPlayBrowseController {
                 template.updateSections([CPListSection(items: items)])
             } catch {
                 logger.error("openSmartPlaylist: smartPlaylist(key=\(key)) failed: \(describeErrorForLogging(error))")
-                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+                template.updateSections([Self.errorSection(for: error)])
             }
         }
     }
@@ -429,7 +429,7 @@ final class CarPlayBrowseController {
                 }
             } catch {
                 logger.error("openArtist: artistDetail(id=\(artistId.protoValue)) failed: \(describeErrorForLogging(error))")
-                template.updateSections([Self.errorSection(message: userFriendlyErrorMessage(error))])
+                template.updateSections([Self.errorSection(for: error)])
             }
         }
     }
@@ -547,6 +547,14 @@ final class CarPlayBrowseController {
 
     private static func errorSection(rpc: String, message: String) -> CPListSection {
         let item = CPListItem(text: "Couldn't load \(rpc)", detailText: message)
+        return CPListSection(items: [item])
+    }
+
+    /// The row shown when a load fails; see `failureText`.
+    private static func errorSection(for error: Error) -> CPListSection {
+        let text = failureText(error)
+        let item = CPListItem(text: String(localized: text.text),
+                              detailText: text.detail.map { String(localized: $0) })
         return CPListSection(items: [item])
     }
 

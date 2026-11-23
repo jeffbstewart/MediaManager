@@ -26,6 +26,10 @@ jobs:
       - name: Build and test
         run: ./gradlew --no-daemon build
 
+      # iOS isn't built here; this only reads the String Catalogs (jq).
+      - name: iOS string catalogs have English
+        run: lifecycle/check-string-catalogs.sh
+
       # The forge's own merge-path protections (forge-lint
       # docs/requirements.md R1-R8), asserted against this repo's pinned
       # expectations.  The
