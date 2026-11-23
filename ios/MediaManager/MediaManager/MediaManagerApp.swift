@@ -76,7 +76,9 @@ struct MediaManagerApp: App {
         crashReporter = CrashReporter()
 
         // Marquee look: navigation bar, list backing views, tint.
-        // The app is dark only (Info.plist UIUserInterfaceStyle).
+        // The phone UI is dark only, set by .preferredColorScheme(.dark)
+        // on the root below, not in Info.plist, so CarPlay keeps its
+        // own appearance (#88).
         MarqueeTheme.install()
 
         // Run any pending on-disk migrations BEFORE the cache

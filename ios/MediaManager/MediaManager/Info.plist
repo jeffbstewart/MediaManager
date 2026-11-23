@@ -45,10 +45,20 @@
 	<array>
 		<string>Figtree-ExtraBold.ttf</string>
 	</array>
-	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
+	<!--
+	  No UIUserInterfaceStyle here. The phone UI is dark only, but
+	  that is set on the SwiftUI root (.preferredColorScheme(.dark) in
+	  MediaManagerApp). This key would apply to every scene, CarPlay
+	  included, and CarPlay then drew black text on a dark backdrop
+	  (#88). CarPlay follows the car's own light or dark setting.
+	  The launch screen gets the page colour so it does not flash
+	  white in light mode.
+	-->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
