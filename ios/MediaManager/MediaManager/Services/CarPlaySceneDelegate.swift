@@ -89,8 +89,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 for: auth.state, awaitingBiometric: auth.awaitingBiometric,
                 offline: AppServices.shared.dataModel?.downloads.isEffectivelyOffline ?? false,
                 hasDownloadedMusic: Self.hasDownloadedMusic)
-        } onChange: {
-            Task { @MainActor [weak self] in self?.followAccess() }
+        } onChange: { [weak self] in
+            // Weak here, not only in the Task: the observation keeps
+            // this closure until the next change, and must not keep
+            // a disconnected scene's delegate alive with it.
+            Task { @MainActor in self?.followAccess() }
         }
         guard access != shownAccess else { return }
         shownAccess = access
