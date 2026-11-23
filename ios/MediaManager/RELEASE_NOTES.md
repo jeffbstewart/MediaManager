@@ -24,7 +24,7 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
 
 ---
 
-## Unreleased (1.3.1, build 24)
+## Unreleased (1.3.1, build 25)
 
 ### Fixes
 
