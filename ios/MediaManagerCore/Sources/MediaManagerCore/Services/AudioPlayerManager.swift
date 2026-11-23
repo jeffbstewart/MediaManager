@@ -790,16 +790,7 @@ public final class AudioPlayerManager {
             }
             image.draw(in: drawRect)
         }
-        // Use the eager `init(image:)` over the closure-based
-        // `init(boundsSize:requestHandler:)` — CarPlay simulator
-        // doesn't render the closure variant on iOS 26 (system
-        // accepts the bytes into MediaRemote per the log line, but
-        // CPNowPlayingTemplate's hero slot stays blank and the
-        // text fields collapse onto each other). The closure form
-        // is meant for very large multi-size assets; we already
-        // have a 1024² UIImage in memory, so no reason to add the
-        // lazy indirection.
-        let artwork = MPMediaItemArtwork(image: squareImage)
+        let artwork = NowPlayingCover.artwork(squareImage)
         nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         artworkTitleId = titleId
         artworkIsFull = isFull

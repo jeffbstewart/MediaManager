@@ -1,3 +1,4 @@
+import MediaPlayer
 import UIKit
 
 /// Which album cover the Now Playing screen (lock screen, CarPlay,
@@ -5,6 +6,18 @@ import UIKit
 /// tested.
 @MainActor
 enum NowPlayingCover {
+
+    /// `image` as Now Playing artwork, through the closure-based
+    /// initializer (`init(image:)` is deprecated). MediaPlayer calls
+    /// the closure on a background thread, so it's made here, outside
+    /// the main actor: a closure made inside `AudioPlayerManager` would
+    /// be bound to the main actor, and calling it off the main thread
+    /// fails. That is the likely reason an earlier try left CarPlay's
+    /// cover blank. Every size asked for gets the same image; the
+    /// system scales it.
+    nonisolated static func artwork(_ image: UIImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+    }
 
     /// Whether the cover on screen can stay for the next track: only
     /// when it is that track's album. Otherwise it's removed straight

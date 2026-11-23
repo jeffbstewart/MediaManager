@@ -1,3 +1,4 @@
+import MediaPlayer
 import Testing
 import UIKit
 @testable import MediaManagerCore
@@ -56,5 +57,16 @@ struct NowPlayingCoverTests {
             return nil
         }
         #expect(asked == [.posterFull(titleId: 42), .posterThumbnail(titleId: 42)])
+    }
+
+    @Test func artworkAnswersFromABackgroundThread() async {
+        // Made on the main actor, as AudioPlayerManager does; MediaPlayer
+        // then asks for the image off the main thread, where a closure
+        // bound to the main actor would fail. The handoff is MediaPlayer's
+        // to make, hence nonisolated(unsafe) here.
+        nonisolated(unsafe) let artwork = NowPlayingCover.artwork(full)
+        let size = await Task.detached { artwork.image(at: CGSize(width: 300, height: 300))?.size }.value
+        #expect(size == full.size)
+        #expect(artwork.bounds.size == full.size)
     }
 }
