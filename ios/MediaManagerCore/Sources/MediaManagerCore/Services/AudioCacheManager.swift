@@ -220,6 +220,23 @@ public final class AudioCacheManager: StorageScopeParticipant {
         }
     }
 
+    /// Fetch every downloaded album's covers that aren't on the phone
+    /// yet. A pin only keeps an image already cached; downloads pinned
+    /// the full cover without fetching it, so offline the Now Playing
+    /// screen had at best the thumbnail. Online only, and only what's
+    /// missing; called when a download finishes and when the app's
+    /// services start.
+    public func fetchMissingCovers() async {
+        guard let provider = AppServices.shared.imageProvider,
+              AppServices.shared.dataModel?.downloads.isEffectivelyOffline == false else { return }
+        for titleId in Set(downloads.map(\.titleId)) {
+            for ref in [MMImageRef.posterFull(titleId: titleId), .posterThumbnail(titleId: titleId)]
+            where await provider.cachedImage(for: ref) == nil {
+                _ = await provider.image(for: ref)
+            }
+        }
+    }
+
     public func configure(apiClient: APIClient) {
         self.apiClient = apiClient
     }
@@ -649,9 +666,13 @@ public final class AudioCacheManager: StorageScopeParticipant {
         activeDownloads.removeValue(forKey: titleId)
         downloadTasks.removeValue(forKey: titleId)
         // Pin cover images so the album survives cache eviction
-        // for offline browsing.
-        Task { await self.imageCache.pin(ref: .posterThumbnail(titleId: titleId)) }
-        Task { await self.imageCache.pin(ref: .posterFull(titleId: titleId)) }
+        // for offline browsing, then fetch any not on the phone yet:
+        // a pin alone doesn't fetch.
+        Task {
+            await self.imageCache.pin(ref: .posterThumbnail(titleId: titleId))
+            await self.imageCache.pin(ref: .posterFull(titleId: titleId))
+            await self.fetchMissingCovers()
+        }
     }
 
     /// Download every playable track in a playlist. For each track:

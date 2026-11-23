@@ -49,6 +49,9 @@ public final class AppServices {
         self.audioCache = audioCache
         self.bookCache = bookCache
         self.imageProvider = imageProvider
+        // Downloads made before covers were fetched with them have only
+        // what browsing happened to cache; fill in the rest while online.
+        Task { await audioCache.fetchMissingCovers() }
         let pending = readyCallbacks
         readyCallbacks.removeAll()
         for cb in pending { cb() }
