@@ -71,6 +71,11 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   renewed in time (no signal yet, VPN still connecting) signed the
   phone out, and you had to sign in again; it now stays signed in and
   renews when the server can be reached. [#101]
+- CarPlay and the lock screen: the Now Playing cover is always the
+  current album's. Offline, a previous album's cover could stay up
+  through several albums. Covers of downloaded albums are now kept on
+  the phone with the download, and until the full cover is there the
+  smaller one from the album lists is shown. [#112]
 
 ### Content kept per server and account [#68]
 

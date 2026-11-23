@@ -93,6 +93,14 @@ public final class AudioPlayerManager {
     /// "artwork loaded" log line.
     private var nowPlayingInfo: [String: Any] = [:]
 
+    /// The album (title id) whose cover `nowPlayingInfo` holds, and
+    /// whether it's the full cover or the stand-in thumbnail. Cleared
+    /// when the track moves to another album, so a cover never
+    /// outlives its album (it used to, offline, after #85 stopped
+    /// playback waiting for the new one).
+    private var artworkTitleId: Int64?
+    private var artworkIsFull = false
+
     // MARK: - Radio state
 
     /// Opaque session id (server-assigned, 4h TTL). nil when not in a
@@ -304,6 +312,8 @@ public final class AudioPlayerManager {
         duration = 0
         isPlaying = false
         nowPlayingInfo.removeAll()
+        artworkTitleId = nil
+        artworkIsFull = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
@@ -690,8 +700,17 @@ public final class AudioPlayerManager {
     private func updateNowPlayingInfo() {
         guard let track = currentTrack else {
             nowPlayingInfo.removeAll()
+            artworkTitleId = nil
+            artworkIsFull = false
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
+        }
+        // Another album: drop the old cover now. The next track of the
+        // same album keeps it, so it doesn't flicker.
+        if !NowPlayingCover.keepsArtwork(showingTitleId: artworkTitleId, nextTitleId: track.titleId) {
+            nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
+            artworkTitleId = nil
+            artworkIsFull = false
         }
         nowPlayingInfo[MPMediaItemPropertyTitle] = track.title
         // Empty-string artist/album make CarPlay's Now Playing layout
@@ -721,6 +740,17 @@ public final class AudioPlayerManager {
     /// system, which sizes per surface (lock screen, Watch, CarPlay).
     private func updateNowPlayingArtwork() async {
         guard let track = currentTrack, let imageProvider else { return }
+        // Same album, full cover already showing: nothing to do.
+        if artworkTitleId == track.titleId && artworkIsFull { return }
+        // First whatever cover is already on the phone, at once: the
+        // full one, else the thumbnail CarPlay's lists show. Offline,
+        // the full cover may never come (a download pins it but didn't
+        // always fetch it), and this keeps the right album's art up.
+        if let cached = await NowPlayingCover.cached(titleId: track.titleId, lookup: { await imageProvider.cachedImage(for: $0) }) {
+            guard currentTrack?.id == track.id else { return }
+            setArtwork(cached.image, titleId: track.titleId, isFull: cached.isFull)
+            if cached.isFull { return }
+        }
         let ref = MMImageRef.posterFull(titleId: track.titleId)
         guard let image = await imageProvider.image(for: ref) else {
             logger.warning("artwork fetch returned nil for trackId=\(track.id) titleId=\(track.titleId)")
@@ -731,7 +761,11 @@ public final class AudioPlayerManager {
         // don't want to clobber the new track's artwork with the old
         // one's bytes.
         guard currentTrack?.id == track.id else { return }
-        logger.info("artwork loaded for trackId=\(track.id) size=\(Int(image.size.width))x\(Int(image.size.height))")
+        setArtwork(image, titleId: track.titleId, isFull: true)
+    }
+
+    private func setArtwork(_ image: UIImage, titleId: Int64, isFull: Bool) {
+        logger.info("artwork set for titleId=\(titleId) full=\(isFull) size=\(Int(image.size.width))x\(Int(image.size.height))")
         // Pre-render into a square 1024×1024 canvas. Source covers
         // occasionally come in slightly off-square (e.g. 500×499
         // from CAA / TMDB chroma-rounding); CarPlay (and some real
@@ -767,6 +801,8 @@ public final class AudioPlayerManager {
         // lazy indirection.
         let artwork = MPMediaItemArtwork(image: squareImage)
         nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        artworkTitleId = titleId
+        artworkIsFull = isFull
         publishNowPlayingInfo()
     }
 

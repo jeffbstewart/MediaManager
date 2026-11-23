@@ -44,6 +44,15 @@ public final class ImageProvider {
         }
     }
 
+    /// The image if it's already on the phone (memory or disk), without
+    /// asking the server and without revalidating. Answers at once,
+    /// online or offline; `image(for:)` waits on the image stream for a
+    /// miss, which offline never answers.
+    public func cachedImage(for ref: MMImageRef) async -> UIImage? {
+        if ScreenshotMode.isActive { return GeneratedArt.image(for: ref) }
+        return await cache.get(for: ref)?.0
+    }
+
     /// Load an image by reference. Returns nil if not found or on error.
     public func image(for ref: MMImageRef) async -> UIImage? {
         // Screenshot mode: generated artwork only. Nothing real is
