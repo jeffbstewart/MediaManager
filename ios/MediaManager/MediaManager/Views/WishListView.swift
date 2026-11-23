@@ -55,12 +55,17 @@ struct WishListView: View {
                     }
 
                     if !active.isEmpty {
-                        Section(ready.isEmpty ? "" : "Wishes") {
+                        // Titled only when the ready list above it is shown. Not
+                        // Section(cond ? "" : "Wishes"): both literals become
+                        // localizable keys, and "" isn't text.
+                        Section {
                             ForEach(active) { wish in
                                 WishRow(wish: wish) {
                                     await toggleVote(wish)
                                 }
                             }
+                        } header: {
+                            if !ready.isEmpty { Text("Wishes") }
                         }
                         .mmRow()
                     }
