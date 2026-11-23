@@ -105,22 +105,31 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - Templates
 
+    /// The name under the app's icon, which a localized InfoPlist can
+    /// translate and a branded build can change; never typed here.
+    private static var appName: String {
+        let info = Bundle.main.localizedInfoDictionary ?? Bundle.main.infoDictionary
+        return ["CFBundleDisplayName", "CFBundleName"]
+            .compactMap { info?[$0] as? String }
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
+    }
+
     private func adultsOnlyTemplate() -> CPListTemplate {
         let item = CPListItem(
             text: "Only available to adults",
             detailText: "Household Disc Keeper isn't available on this phone.")
-        return CPListTemplate(title: "Household Disc Keeper", sections: [CPListSection(items: [item])])
+        return CPListTemplate(title: Self.appName, sections: [CPListSection(items: [item])])
     }
 
     private func unavailableTemplate(_ reason: CarPlayUnavailableReason) -> CPListTemplate {
         let item = CPListItem(text: reason.title, detailText: reason.detail)
-        return CPListTemplate(title: "Household Disc Keeper", sections: [CPListSection(items: [item])])
+        return CPListTemplate(title: Self.appName, sections: [CPListSection(items: [item])])
     }
 
     private func loadingTemplate() -> CPListTemplate {
         let item = CPListItem(text: "Loading…", detailText: nil)
         let section = CPListSection(items: [item])
-        return CPListTemplate(title: "Household Disc Keeper", sections: [section])
+        return CPListTemplate(title: Self.appName, sections: [section])
     }
 
     /// Refresh tokens (in case they expired while the app was suspended),

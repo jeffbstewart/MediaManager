@@ -23,21 +23,40 @@ public enum CarPlayUnavailableReason: Equatable, Sendable, CaseIterable {
     /// The server no longer matches the one this phone trusted.
     case serverChanged
 
+    // The text lives in this package's Localizable.xcstrings under the
+    // keys below, each with a note for translators; the default values
+    // here are the English source. Keys are stable names, not the
+    // English text, so rewording English doesn't orphan translations.
+    // Strings are resolved when read, in the phone's language.
+
     /// The row's main line.
     public var title: String {
         switch self {
-        case .notSignedIn: "Not signed in"
-        case .termsNotAccepted: "Server terms not accepted"
-        case .serverChanged: "Server changed"
+        case .notSignedIn:
+            String(localized: "carplay.unavailable.notSignedIn.title",
+                   defaultValue: "Not signed in", bundle: .module)
+        case .termsNotAccepted:
+            String(localized: "carplay.unavailable.termsNotAccepted.title",
+                   defaultValue: "Server terms not accepted", bundle: .module)
+        case .serverChanged:
+            String(localized: "carplay.unavailable.serverChanged.title",
+                   defaultValue: "Server changed", bundle: .module)
         }
     }
 
-    /// The row's second line.
+    /// The row's second line. Every language must keep the rule: the
+    /// fix waits until the driver is not driving.
     public var detail: String {
         switch self {
-        case .notSignedIn: "Sign in on your phone when you're not driving."
-        case .termsNotAccepted: "Accept them on your phone when you're not driving."
-        case .serverChanged: "Check the server on your phone when you're not driving."
+        case .notSignedIn:
+            String(localized: "carplay.unavailable.notSignedIn.detail",
+                   defaultValue: "Sign in on your phone when you’re not driving.", bundle: .module)
+        case .termsNotAccepted:
+            String(localized: "carplay.unavailable.termsNotAccepted.detail",
+                   defaultValue: "Accept them on your phone when you’re not driving.", bundle: .module)
+        case .serverChanged:
+            String(localized: "carplay.unavailable.serverChanged.detail",
+                   defaultValue: "Check the server on your phone when you’re not driving.", bundle: .module)
         }
     }
 }
