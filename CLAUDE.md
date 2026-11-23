@@ -536,6 +536,10 @@ the build. `lifecycle/check-string-catalogs.sh` (in CI) fails when a
 hand-added key has no English. Tests check which enum case comes back,
 never the wording. English is the only shipping language; most older
 screens still have literal text, moved over as they are touched.
+Xcode also copies every literal SwiftUI string into the catalog on
+each build (keyed by its English text, state "new"); commit those
+changes with the code that caused them, so the catalog stays a full
+list of the app's text. The CI check ignores them.
 
 ## iOS Simulator Driving
 
