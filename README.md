@@ -13,7 +13,10 @@
 <p align="center">
   <a href="https://apps.apple.com/us/app/household-disc-keeper/id6761338526">
     <img src="docs/images/app-store-badge.svg" alt="Download Household Disc Keeper on the App Store" height="48">
-  </a><br>
+  </a>
+</p>
+
+<p align="center">
   <sub>The iPhone and iPad app is <strong>Household Disc Keeper</strong>; it connects to your own server.</sub>
 </p>
 
