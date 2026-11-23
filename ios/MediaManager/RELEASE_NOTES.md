@@ -66,6 +66,11 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   for its cover art [#85]. If the phone goes offline mid-drive, the
   lists switch to the downloads; with nothing downloaded, CarPlay
   says "Offline: there's no music downloaded on this phone." [#87]
+- Sign-in: the app no longer signs itself out when it starts before
+  the network is up. Before, an expired sign-in that couldn't be
+  renewed in time (no signal yet, VPN still connecting) signed the
+  phone out, and you had to sign in again; it now stays signed in and
+  renews when the server can be reached. [#101]
 
 ### Content kept per server and account [#68]
 

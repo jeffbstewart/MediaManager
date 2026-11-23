@@ -671,7 +671,7 @@ public final class AuthManager {
 
     /// After successful login or session restore, check legal compliance
     /// and transition to either needsLegalAgreement or authenticated.
-    private func transitionAfterAuth(serverURL: URL) async {
+    private func transitionAfterAuth(serverURL: URL, retried: Bool = false) async {
         do {
             let status = try await grpcClient.getLegalStatus()
             legalStatus = status
@@ -684,12 +684,27 @@ public final class AuthManager {
                 state = .needsLegalAgreement(serverURL: serverURL)
             }
         } catch let rpcError as RPCError where rpcError.code == .unauthenticated {
-            // The access token was rejected (revoked server-side, expired
-            // beyond what performTokenRefresh could rescue, etc.). Don't
-            // proceed to .authenticated — the user would land on empty
-            // screens with no valid token. Force a clean logout.
-            logger.info("transitionAfterAuth: legal-status returned UNAUTHENTICATED, logging out")
-            await logout()
+            // The access token was rejected. Usually it expired while
+            // the refresh before this call couldn't reach the server
+            // (the app started before the network was up); signing out
+            // here threw away a valid session (#101). Refresh, then
+            // decide by how that went.
+            let refresh = await performTokenRefresh()
+            let action = SessionRecovery.afterRejectedAccessToken(refresh: refresh, alreadyRetried: retried)
+            logger.info("transitionAfterAuth: access token rejected; refresh \(String(describing: refresh)) → \(String(describing: action))")
+            switch action {
+            case .retry:
+                await transitionAfterAuth(serverURL: serverURL, retried: true)
+            case .alreadySignedOut:
+                return
+            case .staySignedIn:
+                // As for any other failure below: the server enforces
+                // the gates on every call once it's reachable again.
+                state = .authenticated(serverURL: serverURL)
+                await refreshServerInfo()
+            case .signOut:
+                await logout()
+            }
         } catch {
             // Network / unreachable / other transient — proceed
             // optimistically; the server's AuthInterceptor enforces
@@ -924,11 +939,15 @@ public final class AuthManager {
         }
     }
 
-    private func performTokenRefresh() async {
+    /// Only the server's rejection of the refresh token signs out; a
+    /// refresh that gets no answer keeps the tokens and tries again in
+    /// 30 seconds (see `TokenRefreshOutcome`).
+    @discardableResult
+    private func performTokenRefresh() async -> TokenRefreshOutcome {
         guard let refreshBase64 = KeychainService.load(key: .refreshToken),
               let refreshData = Data(base64Encoded: refreshBase64) else {
             await logout()
-            return
+            return .sessionEnded
         }
         do {
             let response = try await grpcClient.refresh(token: refreshData)
@@ -936,11 +955,19 @@ public final class AuthManager {
 
             serverUnreachable = false
             scheduleTokenRefresh(expiresIn: Int(response.expiresIn))
-        } catch let rpcError as RPCError where rpcError.code == .unauthenticated {
-            await logout()
+            return .refreshed
         } catch {
-            serverUnreachable = true
-            scheduleTokenRefresh(expiresIn: 30)
+            let outcome = TokenRefreshOutcome(refreshError: error)
+            switch outcome {
+            case .sessionEnded:
+                logger.info("performTokenRefresh: refresh token rejected, signing out")
+                await logout()
+            case .unreachable, .refreshed:
+                logger.info("performTokenRefresh: no answer (\(error.localizedDescription)), keeping tokens")
+                serverUnreachable = true
+                scheduleTokenRefresh(expiresIn: 30)
+            }
+            return outcome
         }
     }
 
