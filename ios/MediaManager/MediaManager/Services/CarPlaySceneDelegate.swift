@@ -1,4 +1,5 @@
 import CarPlay
+import Observation
 import UIKit
 import MediaManagerCore
 import MediaManagerProtos
@@ -10,11 +11,10 @@ private let logger = MMLogger(category: "CarPlay")
 /// CPInterfaceController for its lifetime — that's the navigation
 /// stack equivalent for CarPlay templates.
 ///
-/// First-pass scope: render a single "MediaManager" CPListTemplate
-/// with a placeholder row so we can verify the scene plumbing fires
-/// in the simulator. Subsequent passes wire albums / playlists /
-/// recently-played + Play All, all routed through the same
-/// AudioPlayerManager the in-app mini-player uses.
+/// The root follows the phone's sign-in state (`CarPlayAccessPolicy`):
+/// "Loading…" while the session restores, the music tabs
+/// (`CarPlayBrowseController`) when signed in, and otherwise one row
+/// saying why there is no music, to be fixed once not driving.
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
@@ -49,8 +49,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         AppServices.shared.whenReady { [weak self] in
-            logger.info("CarPlay scene: AppServices ready, refreshing tokens before loading data")
-            self?.refreshTokensAndInstallBrowseHierarchy()
+            logger.info("CarPlay scene: AppServices ready, following sign-in state")
+            self?.followAccess()
         }
         // Show a loading placeholder right away so the head unit
         // doesn't sit on a blank screen during the cold-launch race
@@ -69,6 +69,38 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         logger.info("CarPlay scene disconnected")
         self.interfaceController = nil
         self.browseController = nil
+        self.shownAccess = nil
+    }
+
+    // MARK: - Sign-in state
+
+    /// What the screen shows now, so a state change that doesn't change
+    /// it (Face ID completing, say) doesn't rebuild the tabs.
+    private var shownAccess: CarPlayAccess?
+
+    /// Shows what the phone's sign-in state allows, and follows it: a
+    /// phone that signs in at a stop gets its music tabs, and one that
+    /// is signed out mid-drive gets the explanation (#99).
+    private func followAccess() {
+        guard interfaceController != nil, let auth = AppServices.shared.authManager else { return }
+        let access = withObservationTracking {
+            CarPlayAccessPolicy.access(for: auth.state, awaitingBiometric: auth.awaitingBiometric)
+        } onChange: {
+            Task { @MainActor [weak self] in self?.followAccess() }
+        }
+        guard access != shownAccess else { return }
+        shownAccess = access
+        logger.info("CarPlay access: \(String(describing: access))")
+        switch access {
+        case .waiting:
+            browseController = nil
+            interfaceController?.setRootTemplate(loadingTemplate(), animated: false, completion: nil)
+        case .ready:
+            refreshTokensAndInstallBrowseHierarchy()
+        case .unavailable(let reason):
+            browseController = nil
+            interfaceController?.setRootTemplate(unavailableTemplate(reason), animated: false, completion: nil)
+        }
     }
 
     // MARK: - Templates
@@ -77,6 +109,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let item = CPListItem(
             text: "Only available to adults",
             detailText: "Household Disc Keeper isn't available on this phone.")
+        return CPListTemplate(title: "Household Disc Keeper", sections: [CPListSection(items: [item])])
+    }
+
+    private func unavailableTemplate(_ reason: CarPlayUnavailableReason) -> CPListTemplate {
+        let item = CPListItem(text: reason.title, detailText: reason.detail)
         return CPListTemplate(title: "Household Disc Keeper", sections: [CPListSection(items: [item])])
     }
 
@@ -106,7 +143,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func installBrowseHierarchy() {
-        guard let interfaceController else { return }
+        // The refresh can sign the phone out; the explanation shown
+        // since then must not be replaced by tabs that would fail.
+        guard let interfaceController, shownAccess == .ready else { return }
         let controller = CarPlayBrowseController(interfaceController: interfaceController)
         browseController = controller
         controller.install()

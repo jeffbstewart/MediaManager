@@ -7,12 +7,12 @@ import MediaManagerProtos
 private let logger = MMLogger(category: "CarPlayBrowse")
 
 /// Turns a gRPC failure into a user-friendly string for CarPlay display.
-/// Auth failures get a specific message telling the user to sign in on the phone;
+/// Auth failures say to sign in on the phone once not driving (#99);
 /// other errors are kept generic to avoid technical jargon.
 private func userFriendlyErrorMessage(_ error: Error) -> String {
     if let rpc = error as? RPCError {
         if rpc.code == .unauthenticated {
-            return "Please sign in on your phone to continue"
+            return CarPlayUnavailableReason.notSignedIn.detail
         }
         // Network / other transient errors — generic message
         return "Couldn't connect. Check your phone's network connection."

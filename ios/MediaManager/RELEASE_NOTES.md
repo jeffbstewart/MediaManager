@@ -55,6 +55,10 @@ then, run `git log 77e3b68..HEAD -- ios/MediaManager/`.
   setting reached CarPlay too, which drew black text on a dark
   background (about 1.7:1 contrast); CarPlay now follows the car's own
   light or dark setting, and the app on the phone stays dark. [#88]
+- CarPlay: when the phone isn't signed in, CarPlay says so ("Sign in
+  on your phone when you're not driving.") instead of showing tabs
+  that fail with "Couldn't connect". It switches to the music by
+  itself once the phone signs in. [#99]
 
 ### Content kept per server and account [#68]
 
@@ -94,4 +98,5 @@ titles after you switch servers, and images that never loaded.
 > - The book reader's toolbar fits on larger iPhones. Text size is now
 >   under a single Aa button whose menu stays open while you adjust it.
 > - CarPlay is readable again: it follows your car's light or dark
->   setting instead of showing dark text on a dark background.
+>   setting instead of showing dark text on a dark background. When
+>   your phone isn't signed in, CarPlay now says so.
