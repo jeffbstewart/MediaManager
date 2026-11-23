@@ -539,7 +539,13 @@ screens still have literal text, moved over as they are touched.
 Xcode also copies every literal SwiftUI string into the catalog on
 each build (keyed by its English text, state "new"); commit those
 changes with the code that caused them, so the catalog stays a full
-list of the app's text. The CI check ignores them.
+list of the app's text. Only text goes through localization: a
+separator or assembled value uses `Text(verbatim:)`, a number
+`Text(n, format: .number)` (never for years, which would group as
+"2,024"), and a percentage `Text(fraction, format: .wholePercent)`.
+The CI check fails on an extracted key with no words, apart from an
+allow-list in the script. Xcode marks keys the code no longer
+produces "stale" instead of deleting them; delete those by hand.
 
 ## iOS Simulator Driving
 

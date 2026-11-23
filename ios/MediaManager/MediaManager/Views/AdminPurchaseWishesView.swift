@@ -57,7 +57,7 @@ struct AdminPurchaseWishesView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "hand.thumbsup.fill")
                                         .font(MarqueeTheme.Fonts.meta)
-                                    Text("\(wish.voteCount)")
+                                    Text(wish.voteCount, format: .number)
                                         .font(MarqueeTheme.Fonts.meta)
                                         .fontWeight(.medium)
                                     Text(wish.voters.joined(separator: ", "))

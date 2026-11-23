@@ -119,7 +119,7 @@ struct ValuationItemRow: View {
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                 }
                 if item.photoCount > 0 {
-                    Label("\(item.photoCount)", systemImage: "camera")
+                    Label { Text(item.photoCount, format: .number) } icon: { Image(systemName: "camera") }
                         .font(MarqueeTheme.Fonts.meta)
                         .foregroundStyle(MarqueeTheme.Colors.text3)
                 }

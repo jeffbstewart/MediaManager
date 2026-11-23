@@ -36,7 +36,7 @@ struct AdminUnmatchedView: View {
                                         .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
                                 if let year = file.parsedYear {
-                                    Text("(\(year))")
+                                    Text(verbatim: "(\(year))")
                                         .font(MarqueeTheme.Fonts.meta)
                                         .foregroundStyle(MarqueeTheme.Colors.text3)
                                 }
@@ -59,7 +59,7 @@ struct AdminUnmatchedView: View {
                                                 Text(suggestion.titleName)
                                                     .font(MarqueeTheme.Fonts.meta)
                                                 Spacer()
-                                                Text("\(Int(suggestion.score * 100))%")
+                                                Text(Double(suggestion.score), format: .wholePercent)
                                                     .font(MarqueeTheme.Fonts.meta)
                                                     .foregroundStyle(MarqueeTheme.Colors.text3)
                                             }

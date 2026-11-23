@@ -137,7 +137,7 @@ struct AdvancedSearchSheet: View {
                     .keyboardType(.numberPad)
                     .frame(maxWidth: 80)
                     .onChange(of: bpmMinText) { _, _ in activePresetKey = nil }
-                Text("–").foregroundStyle(MarqueeTheme.Colors.text3)
+                Text(verbatim: "–").foregroundStyle(MarqueeTheme.Colors.text3)
                 TextField("Max", text: $bpmMaxText)
                     .keyboardType(.numberPad)
                     .frame(maxWidth: 80)

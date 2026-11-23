@@ -101,7 +101,7 @@ struct TermsAgreementView: View {
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .mmGlowPage()
-            .navigationTitle("")
+            .navigationTitle(Text(verbatim: ""))
             .sheet(isPresented: $showDeleteAccount) {
                 DeleteAccountView()
             }

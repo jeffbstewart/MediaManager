@@ -184,7 +184,7 @@ struct EpisodeRow: View {
         HStack(spacing: 12) {
             // Episode number badge (display face, like the wide
             // card's overlay title).
-            Text("\(episode.episodeNumber)")
+            Text(episode.episodeNumber, format: .number)
                 .font(MarqueeTheme.Fonts.cardOverlay)
                 .foregroundStyle(MarqueeTheme.Colors.text3)
                 .frame(width: 30)

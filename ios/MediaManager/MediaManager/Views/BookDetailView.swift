@@ -142,7 +142,7 @@ struct BookDetailView: View {
                         Text(String(year))
                     }
                     if let pages = detail.book?.pageCount {
-                        Text("•")
+                        Text(verbatim: "•")
                         Text("\(pages) pages")
                     }
                 }
@@ -236,8 +236,8 @@ struct BookDetailView: View {
                     ProgressView()
                         .controlSize(.small)
                     if let total = active.totalBytes, total > 0 {
-                        let pct = Int((Double(active.bytesReceived) / Double(total)) * 100)
-                        Text("\(pct)%")
+                        let fraction = Double(active.bytesReceived) / Double(total)
+                        Text(fraction, format: .wholePercent)
                     } else {
                         Text("Downloading…")
                     }
@@ -376,7 +376,7 @@ struct BookDetailView: View {
                         Text(format(edition.format))
                             .foregroundStyle(MarqueeTheme.Colors.text)
                         if let location = edition.storageLocation {
-                            Text("•")
+                            Text(verbatim: "•")
                                 .foregroundStyle(MarqueeTheme.Colors.text3)
                             Text(location)
                                 .foregroundStyle(MarqueeTheme.Colors.text3)

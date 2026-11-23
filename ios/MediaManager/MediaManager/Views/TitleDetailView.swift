@@ -36,7 +36,7 @@ struct TitleDetailView: View {
                     .mmPage()
             }
         }
-        .navigationTitle("")
+        .navigationTitle(Text(verbatim: ""))
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadDetail() }
         .sheet(isPresented: $showEditTags) {
@@ -394,7 +394,7 @@ struct TitleDetailView: View {
                     ProgressView(value: entry.progress)
                         .tint(MarqueeTheme.Colors.accent)
                         .frame(width: 48)
-                    Text("\(Int(entry.progress * 100))%")
+                    Text(Double(entry.progress), format: .wholePercent)
                 }
                 .font(MarqueeTheme.Fonts.control)
                 .padding(.horizontal, 16)
