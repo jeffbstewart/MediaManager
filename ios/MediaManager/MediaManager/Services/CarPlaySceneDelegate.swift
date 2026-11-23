@@ -78,16 +78,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// it (Face ID completing, say) doesn't rebuild the tabs.
     private var shownAccess: CarPlayAccess?
 
-    /// Shows what the phone's sign-in state and Offline Mode allow, and
+    /// Shows what the phone's sign-in state and connection allow, and
     /// follows both: a phone that signs in at a stop gets its music
-    /// tabs, and one signed out or switched to Offline Mode mid-drive
-    /// gets the explanation (#99).
+    /// tabs, one signed out mid-drive gets the explanation (#99), and
+    /// one that goes offline gets its downloaded music instead (#87).
     private func followAccess() {
         guard interfaceController != nil, let auth = AppServices.shared.authManager else { return }
         let access = withObservationTracking {
             CarPlayAccessPolicy.access(
                 for: auth.state, awaitingBiometric: auth.awaitingBiometric,
-                offlineMode: AppServices.shared.dataModel?.downloads.isOfflineMode ?? false)
+                offline: AppServices.shared.dataModel?.downloads.isEffectivelyOffline ?? false,
+                hasDownloadedMusic: Self.hasDownloadedMusic)
         } onChange: {
             Task { @MainActor [weak self] in self?.followAccess() }
         }
@@ -98,12 +99,24 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         case .waiting:
             browseController = nil
             interfaceController?.setRootTemplate(loadingTemplate(), animated: false, completion: nil)
-        case .ready:
+        case .ready(.server):
             refreshTokensAndInstallBrowseHierarchy()
+        case .ready(.downloads):
+            // Offline: the data model answers from downloads, and a
+            // token refresh could only fail.
+            installBrowseHierarchy()
         case .unavailable(let reason):
             browseController = nil
             interfaceController?.setRootTemplate(unavailableTemplate(reason), animated: false, completion: nil)
         }
+    }
+
+    /// Whether any album or playlist is downloaded. Read inside the
+    /// observation above, so a download finishing or being deleted
+    /// updates the screen.
+    private static var hasDownloadedMusic: Bool {
+        guard let cache = AppServices.shared.audioCache else { return false }
+        return !cache.downloads.isEmpty || !cache.playlistDownloads.isEmpty
     }
 
     // MARK: - Templates
@@ -157,7 +170,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func installBrowseHierarchy() {
         // The refresh can sign the phone out; the explanation shown
         // since then must not be replaced by tabs that would fail.
-        guard let interfaceController, shownAccess == .ready else { return }
+        guard let interfaceController, case .ready = shownAccess else { return }
         let controller = CarPlayBrowseController(interfaceController: interfaceController)
         browseController = controller
         controller.install()
